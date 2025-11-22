@@ -17,9 +17,9 @@ import androidx.compose.ui.Modifier
 import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import link.socket.kore.data.DEFAULT_JSON
 import link.socket.kore.agents.events.EventRepository
 import link.socket.kore.agents.events.messages.MessageRepository
+import link.socket.kore.data.DEFAULT_JSON
 import link.socket.kore.data.RepositoryFactory
 import link.socket.kore.data.UserConversationRepository
 import link.socket.kore.domain.agent.KoreAgent

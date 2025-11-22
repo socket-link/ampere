@@ -96,12 +96,12 @@ data object ReleaseManagementAgent : AgentDefinition.Bundled(
         value = "Minor Release",
         possibleValues = listOf(
             "Major Release",
-            "Minor Release", 
+            "Minor Release",
             "Patch Release",
             "Pre-release",
             "Hotfix",
-            "Release Candidate"
-        )
+            "Release Candidate",
+        ),
     )
 
     private val versionSchemeArg = AgentInput.EnumArgs(
@@ -111,8 +111,8 @@ data object ReleaseManagementAgent : AgentDefinition.Bundled(
         possibleValues = listOf(
             "Semantic Versioning",
             "Calendar Versioning",
-            "Sequential Versioning"
-        )
+            "Sequential Versioning",
+        ),
     )
 
     override val requiredInputs: List<AgentInput>

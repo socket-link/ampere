@@ -252,7 +252,7 @@ abstract class MinimalAutonomousAgent(
             rememberOutcome(outcome)
             outcome
         }.reduce { runningOutcome, outcome ->
-            if (runningOutcome !is Outcome.Success ) {
+            if (runningOutcome !is Outcome.Success) {
                 runningOutcome
             } else {
                 outcome

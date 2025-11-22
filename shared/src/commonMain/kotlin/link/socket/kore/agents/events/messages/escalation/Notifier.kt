@@ -44,8 +44,8 @@ class ConsoleNotifier : Notifier.Human() {
             Reason: $reason
             Context: ${context?.entries?.joinToString("\n    ") { "${it.key}: ${it.value}" }}
             ════════════════════════════════════════
-            """.trimIndent()
-                )
+                """.trimIndent()
+                ),
         )
     }
 }

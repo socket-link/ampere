@@ -26,7 +26,7 @@ fun ModelLimitsSection(
             modifier = Modifier
                 .fillMaxWidth(),
             verticalAlignment = Alignment
-                .CenterVertically
+                .CenterVertically,
         ) {
             ModelTokenInfo(
                 modifier = Modifier

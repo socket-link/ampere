@@ -73,12 +73,12 @@ data object DocumentationAgent : AgentDefinition.Bundled(
         value = "API Documentation",
         possibleValues = listOf(
             "API Documentation",
-            "User Guide", 
+            "User Guide",
             "README",
             "Release Notes",
             "Developer Guide",
             "Tutorial",
-        )
+        ),
     )
 
     private val audienceArg = AgentInput.EnumArgs(
@@ -88,10 +88,10 @@ data object DocumentationAgent : AgentDefinition.Bundled(
         possibleValues = listOf(
             "Developers",
             "End Users",
-            "Technical Writers", 
+            "Technical Writers",
             "Product Managers",
             "QA Engineers",
-        )
+        ),
     )
 
     override val prompt: String

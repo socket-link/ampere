@@ -4,9 +4,9 @@ package link.socket.kore.domain.agent
 
 import kotlinx.coroutines.CoroutineScope
 import link.socket.kore.domain.agent.bundled.AgentDefinition
+import link.socket.kore.domain.ai.configuration.AIConfiguration
 import link.socket.kore.domain.capability.AgentCapability
 import link.socket.kore.domain.capability.IOCapability
-import link.socket.kore.domain.ai.configuration.AIConfiguration
 import link.socket.kore.domain.tool.FunctionProvider
 
 data class KoreAgent(

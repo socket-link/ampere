@@ -30,7 +30,7 @@ class CoreAgentTypesTest {
     fun `Idea can be created with name and description`() {
         val idea = Idea(
             name = "Test Idea",
-            description = "A detailed description"
+            description = "A detailed description",
         )
         assertEquals("Test Idea", idea.name)
         assertEquals("A detailed description", idea.description)
@@ -59,7 +59,7 @@ class CoreAgentTypesTest {
     fun `Plan can be created with tasks`() {
         val plan = Plan(
             estimatedComplexity = 5,
-            tasks = listOf(Task.blank)
+            tasks = listOf(Task.blank),
         )
         assertEquals(5, plan.estimatedComplexity)
         assertEquals(1, plan.tasks.size)
@@ -69,7 +69,7 @@ class CoreAgentTypesTest {
     fun `Plan can have multiple tasks`() {
         val plan = Plan(
             estimatedComplexity = 8,
-            tasks = listOf(Task.blank, Task.blank, Task.blank)
+            tasks = listOf(Task.blank, Task.blank, Task.blank),
         )
         assertEquals(8, plan.estimatedComplexity)
         assertEquals(3, plan.tasks.size)
@@ -155,7 +155,7 @@ class CoreAgentTypesTest {
         val perception = Perception(
             ideas = emptyList(),
             currentState = state,
-            timestamp = timestamp
+            timestamp = timestamp,
         )
 
         assertTrue(perception.ideas.isEmpty())
@@ -167,14 +167,14 @@ class CoreAgentTypesTest {
     fun `Perception can be created with multiple ideas`() {
         val ideas = listOf(
             Idea(name = "Idea 1"),
-            Idea(name = "Idea 2")
+            Idea(name = "Idea 2"),
         )
         val state = AgentState()
         val timestamp = Clock.System.now()
         val perception = Perception(
             ideas = ideas,
             currentState = state,
-            timestamp = timestamp
+            timestamp = timestamp,
         )
 
         assertEquals(2, perception.ideas.size)
@@ -188,12 +188,12 @@ class CoreAgentTypesTest {
         val plan = Plan(estimatedComplexity = 5, tasks = emptyList())
         val state = AgentState(
             currentIdea = idea,
-            currentPlan = plan
+            currentPlan = plan,
         )
         val perception = Perception(
             ideas = listOf(idea),
             currentState = state,
-            timestamp = Clock.System.now()
+            timestamp = Clock.System.now(),
         )
 
         val retrievedState = perception.currentState as AgentState
@@ -249,7 +249,7 @@ class CoreAgentTypesTest {
         val state = AgentState(
             currentIdea = idea,
             currentPlan = plan,
-            ideaHistory = ideaHistory
+            ideaHistory = ideaHistory,
         )
 
         assertEquals(idea, state.currentIdea)

@@ -8,7 +8,7 @@ private const val NAME: String = "Empty System Prompt"
 private const val DESCRIPTION = "Flexible testing agent with customizable system prompts for experimental AI interactions and prompt testing scenarios"
 
 data class TestAgentAgent(
-    override val prompt: String
+    override val prompt: String,
 ) : AgentDefinition.Bundled(
     name = NAME,
     description = DESCRIPTION,

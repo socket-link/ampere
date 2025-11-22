@@ -184,7 +184,7 @@ private fun MetricChip(
             .padding(
                 horizontal = 12.dp,
                 vertical = 8.dp,
-        ),
+            ),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
@@ -214,5 +214,5 @@ data class FilteredModelCell(
 enum class Suitability {
     Suitable,
     Warning,
-    Unsuitable;
+    Unsuitable,
 }

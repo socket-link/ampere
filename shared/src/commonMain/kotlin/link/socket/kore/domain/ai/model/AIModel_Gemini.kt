@@ -82,7 +82,6 @@ sealed class AIModel_Gemini(
 
         private val _2_0_Flash_Lite_TOOLS = emptyList<ProvidedTool<AITool_Gemini>>()
 
-
         // ---- Rate Limits ----
 
         private const val TIER_FREE_2_5_PRO_RPM = 5
@@ -200,7 +199,6 @@ sealed class AIModel_Gemini(
             tier3TPM = TokenCount._30m,
         )
 
-
         // ---- Token Limits ----
 
         private val CONTEXT_WINDOW_TOKENS = TokenCount._1m
@@ -219,7 +217,6 @@ sealed class AIModel_Gemini(
         )
 
         private val _2_0_Flash_Lite_TOKEN_LIMITS = _2_0_Flash_TOKEN_LIMITS
-
 
         // ---- Limits ----
 
@@ -248,7 +245,6 @@ sealed class AIModel_Gemini(
             token = _2_0_Flash_Lite_TOKEN_LIMITS,
         )
 
-
         // ---- Training Cutoffs ----
 
         private val _2_5_Pro_CUTOFF = GMTDate(
@@ -274,7 +270,6 @@ sealed class AIModel_Gemini(
 
         private val _2_0_Flash_Lite_CUTOFF = _2_0_Flash_CUTOFF
 
-
         // --- Supported Inputs ----
 
         private val _2_5_Pro_SUPPORTED_INPUTS = SupportedInputs.ALL
@@ -287,7 +282,6 @@ sealed class AIModel_Gemini(
         private val _2_5_Flash_Lite_SUPPORTED_INPUTS = _2_5_Pro_SUPPORTED_INPUTS
         private val _2_0_Flash_SUPPORTED_INPUTS = _2_5_Flash_SUPPORTED_INPUTS
         private val _2_0_Flash_Lite_SUPPORTED_INPUTS = _2_0_Flash_SUPPORTED_INPUTS
-
 
         // ---- Model Features ----
 
@@ -331,7 +325,6 @@ sealed class AIModel_Gemini(
             trainingCutoffDate = _2_0_Flash_Lite_CUTOFF,
         )
 
-
         // ---- Model Names ----
 
         private const val _2_5_Pro_NAME = "gemini-2.5-pro"
@@ -353,7 +346,6 @@ sealed class AIModel_Gemini(
         private const val _2_0_Flash_Lite_NAME = "gemini-2.0-flash-lite"
         private const val _2_0_Flash_Lite_DISPLAY_NAME = "Gemini 2.0 Flash Lite"
         private const val _2_0_Flash_Lite_DESCRIPTION = "A Gemini 2.0 Flash model optimized for cost efficiency and low latency."
-
 
         // ---- Models ----
 

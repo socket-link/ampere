@@ -28,7 +28,7 @@ fun ModelSupportedInputsSection(
         modifier = modifier
             .fillMaxWidth(),
         horizontalArrangement = Arrangement
-            .spacedBy(10.dp)
+            .spacedBy(10.dp),
     ) {
         InputTypeChip("Text", supportedInputs.text, Modifier.weight(1f))
         InputTypeChip("Image", supportedInputs.image, Modifier.weight(1f))

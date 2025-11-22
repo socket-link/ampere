@@ -136,7 +136,7 @@ data object PerformanceOptimizationAgent : AgentDefinition.Bundled(
             "UI Performance",
             "Battery Optimization",
             "Startup Time",
-        )
+        ),
     )
 
     private val platformArg = AgentInput.EnumArgs(
@@ -149,7 +149,7 @@ data object PerformanceOptimizationAgent : AgentDefinition.Bundled(
             "iOS",
             "Desktop/JVM",
             "Mobile Platforms",
-        )
+        ),
     )
 
     override val prompt: String

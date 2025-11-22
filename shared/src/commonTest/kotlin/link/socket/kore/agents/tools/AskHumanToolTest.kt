@@ -28,7 +28,7 @@ class AskHumanToolTest {
     @Test
     fun `execute returns success with human response`() = runBlocking {
         val tool = AskHumanTool { q -> "Response to: $q" }
-        val result = tool.execute(stubSourceTask, mapOf("question" to "Proceed?") )
+        val result = tool.execute(stubSourceTask, mapOf("question" to "Proceed?"))
         assertIs<Outcome.Success.Full>(result)
         assertEquals("Response to: Proceed?", result.value)
     }

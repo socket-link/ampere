@@ -197,7 +197,8 @@ class MeetingRepository(
                 val now = Clock.System.now().toEpochMilliseconds()
                 val messagingDetails = when (status) {
                     is MeetingStatus.Scheduled,
-                    is MeetingStatus.Delayed -> null
+                    is MeetingStatus.Delayed,
+                    -> null
                     is MeetingStatus.InProgress -> status.messagingDetails
                     is MeetingStatus.Completed -> status.messagingDetails
                     is MeetingStatus.Canceled -> status.messagingDetails
@@ -424,13 +425,13 @@ class MeetingRepository(
             "PENDING" -> Task.Status.Pending(
                 reason = statusPayload?.let {
                     try { json.decodeFromString<String>(it) } catch (e: Exception) { null }
-                }
+                },
             )
             "IN_PROGRESS" -> Task.Status.InProgress
             "BLOCKED" -> Task.Status.Blocked(
                 reason = statusPayload?.let {
                     try { json.decodeFromString<String>(it) } catch (e: Exception) { null }
-                }
+                },
             )
             "COMPLETED" -> statusPayload?.let {
                 try {

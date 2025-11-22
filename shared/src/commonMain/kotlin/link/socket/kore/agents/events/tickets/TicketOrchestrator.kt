@@ -58,7 +58,7 @@ class TicketOrchestrator(
         // Validate inputs
         if (title.isBlank()) {
             return Result.failure(
-                TicketError.ValidationError("Ticket title cannot be blank")
+                TicketError.ValidationError("Ticket title cannot be blank"),
             )
         }
 
@@ -86,7 +86,7 @@ class TicketOrchestrator(
                 throwable = createResult.exceptionOrNull(),
             )
             return Result.failure(
-                createResult.exceptionOrNull() ?: TicketError.DatabaseError(Exception("Unknown error"))
+                createResult.exceptionOrNull() ?: TicketError.DatabaseError(Exception("Unknown error")),
             )
         }
 
@@ -112,7 +112,7 @@ class TicketOrchestrator(
                 createdBy = createdByAgentId,
                 timestamp = now,
                 urgency = priorityToUrgency(createdTicket.priority),
-            )
+            ),
         )
 
         return Result.success(createdTicket to thread)
@@ -136,7 +136,7 @@ class TicketOrchestrator(
         val ticketResult = ticketRepository.getTicket(ticketId)
         if (ticketResult.isFailure) {
             return Result.failure(
-                ticketResult.exceptionOrNull() ?: TicketError.TicketNotFound(ticketId)
+                ticketResult.exceptionOrNull() ?: TicketError.TicketNotFound(ticketId),
             )
         }
 
@@ -148,8 +148,8 @@ class TicketOrchestrator(
             return Result.failure(
                 TicketError.ValidationError(
                     "Agent $actorAgentId does not have permission to modify ticket $ticketId. " +
-                        "Only the assigned agent or creator can modify this ticket."
-                )
+                        "Only the assigned agent or creator can modify this ticket.",
+                ),
             )
         }
 
@@ -159,7 +159,7 @@ class TicketOrchestrator(
                 TicketError.InvalidStateTransition(
                     fromState = currentTicket.status,
                     toState = newStatus,
-                )
+                ),
             )
         }
 
@@ -174,7 +174,7 @@ class TicketOrchestrator(
                 throwable = updateResult.exceptionOrNull(),
             )
             return Result.failure(
-                updateResult.exceptionOrNull() ?: TicketError.DatabaseError(Exception("Unknown error"))
+                updateResult.exceptionOrNull() ?: TicketError.DatabaseError(Exception("Unknown error")),
             )
         }
 
@@ -193,7 +193,7 @@ class TicketOrchestrator(
                 changedBy = actorAgentId,
                 timestamp = now,
                 urgency = priorityToUrgency(updatedTicket.priority),
-            )
+            ),
         )
 
         // Post status update message to ticket thread
@@ -231,7 +231,7 @@ class TicketOrchestrator(
         val ticketResult = ticketRepository.getTicket(ticketId)
         if (ticketResult.isFailure) {
             return Result.failure(
-                ticketResult.exceptionOrNull() ?: TicketError.TicketNotFound(ticketId)
+                ticketResult.exceptionOrNull() ?: TicketError.TicketNotFound(ticketId),
             )
         }
 
@@ -243,8 +243,8 @@ class TicketOrchestrator(
             return Result.failure(
                 TicketError.ValidationError(
                     "Agent $assignerAgentId does not have permission to assign ticket $ticketId. " +
-                        "Only the assigned agent or creator can assign this ticket."
-                )
+                        "Only the assigned agent or creator can assign this ticket.",
+                ),
             )
         }
 
@@ -258,7 +258,7 @@ class TicketOrchestrator(
                 throwable = assignResult.exceptionOrNull(),
             )
             return Result.failure(
-                assignResult.exceptionOrNull() ?: TicketError.DatabaseError(Exception("Unknown error"))
+                assignResult.exceptionOrNull() ?: TicketError.DatabaseError(Exception("Unknown error")),
             )
         }
 
@@ -276,7 +276,7 @@ class TicketOrchestrator(
                 assignedBy = assignerAgentId,
                 timestamp = now,
                 urgency = priorityToUrgency(updatedTicket.priority),
-            )
+            ),
         )
 
         // Post assignment notification to ticket thread
@@ -309,7 +309,7 @@ class TicketOrchestrator(
         val ticketResult = ticketRepository.getTicket(ticketId)
         if (ticketResult.isFailure) {
             return Result.failure(
-                ticketResult.exceptionOrNull() ?: TicketError.TicketNotFound(ticketId)
+                ticketResult.exceptionOrNull() ?: TicketError.TicketNotFound(ticketId),
             )
         }
 
@@ -322,7 +322,7 @@ class TicketOrchestrator(
                 TicketError.InvalidStateTransition(
                     fromState = currentTicket.status,
                     toState = TicketStatus.BLOCKED,
-                )
+                ),
             )
         }
 
@@ -372,7 +372,7 @@ class TicketOrchestrator(
                 reportedBy = reportedByAgentId,
                 timestamp = now,
                 urgency = Urgency.HIGH,
-            )
+            ),
         )
 
         // Automatically schedule a decision meeting if blocker indicates need
@@ -400,7 +400,7 @@ class TicketOrchestrator(
                         topic = "Discuss blocker: $blockingReason",
                         assignedTo = updatedTicket.assignedAgentId?.let { AssignedTo.Agent(it) },
                         status = Task.Status.Pending(),
-                    )
+                    ),
                 )
 
                 scheduleTicketMeeting(
@@ -412,7 +412,9 @@ class TicketOrchestrator(
                     optionalParticipants = null,
                 )
             } else {
-                logger.logError("Could not determine participant for blocker meeting: $blockingReason, ticket: $ticketId")
+                logger.logError(
+                    "Could not determine participant for blocker meeting: $blockingReason, ticket: $ticketId",
+                )
             }
         }
 
@@ -456,7 +458,7 @@ class TicketOrchestrator(
         val ticketResult = ticketRepository.getTicket(ticketId)
         if (ticketResult.isFailure) {
             return Result.failure(
-                ticketResult.exceptionOrNull() ?: TicketError.TicketNotFound(ticketId)
+                ticketResult.exceptionOrNull() ?: TicketError.TicketNotFound(ticketId),
             )
         }
 
@@ -491,7 +493,7 @@ class TicketOrchestrator(
                 throwable = meetingResult.exceptionOrNull(),
             )
             return Result.failure(
-                meetingResult.exceptionOrNull() ?: TicketError.DatabaseError(Exception("Failed to schedule meeting"))
+                meetingResult.exceptionOrNull() ?: TicketError.DatabaseError(Exception("Failed to schedule meeting")),
             )
         }
 
@@ -530,7 +532,7 @@ class TicketOrchestrator(
                 scheduledBy = messageApi.agentId,
                 timestamp = now,
                 urgency = priorityToUrgency(ticket.priority),
-            )
+            ),
         )
 
         return Result.success(scheduledMeeting.id)

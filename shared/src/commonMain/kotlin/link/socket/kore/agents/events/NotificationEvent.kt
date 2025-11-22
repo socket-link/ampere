@@ -6,12 +6,12 @@ import link.socket.kore.agents.core.AgentId
 import link.socket.kore.agents.events.subscription.Subscription
 
 @Serializable
-sealed class NotificationEvent <S : Subscription>(
+sealed class NotificationEvent<S : Subscription>(
     val subscription: @Serializable S?,
 ) : Event {
 
     @Serializable
-    data class ToAgent <S : Subscription>(
+    data class ToAgent<S : Subscription>(
         val agentId: AgentId,
         val event: Event,
         val eventSubscription: S?,
@@ -30,7 +30,7 @@ sealed class NotificationEvent <S : Subscription>(
     }
 
     @Serializable
-    data class ToHuman <S : Subscription>(
+    data class ToHuman<S : Subscription>(
         val event: Event,
         val eventSubscription: S?,
     ) : NotificationEvent<S>(eventSubscription) {

@@ -70,7 +70,7 @@ class MeetingEventsTest {
             eventId = "e-5",
             meetingId = meeting.id,
             outcomes = listOf(
-                MeetingOutcome.DecisionMade("mo-1", "Ship feature", EventSource.Agent("agent-1"))
+                MeetingOutcome.DecisionMade("mo-1", "Ship feature", EventSource.Agent("agent-1")),
             ),
             completedAt = now,
             completedBy = stubEventSource,

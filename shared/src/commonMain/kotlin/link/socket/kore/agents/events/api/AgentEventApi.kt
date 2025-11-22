@@ -26,7 +26,7 @@ open class EventHandler<E : Event, S : Subscription>(
 
 class EventFilter<E : Event>(
     val execute: (E) -> Boolean,
-)  {
+) {
     companion object {
         fun <E : Event> noFilter(): EventFilter<E> =
             EventFilter(
@@ -158,7 +158,7 @@ class AgentEventApi(
         eventBus.subscribe<Event.CodeSubmitted, EventSubscription.ByEventClassType>(
             agentId = agentId,
             eventClassType = Event.CodeSubmitted.EVENT_CLASS_TYPE,
-        ) { event, subscription  ->
+        ) { event, subscription ->
             if (filter.execute(event)) {
                 handler(event, subscription)
             }

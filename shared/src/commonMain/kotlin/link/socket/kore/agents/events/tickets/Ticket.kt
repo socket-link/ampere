@@ -14,12 +14,15 @@ typealias TicketId = String
 enum class TicketType {
     /** New functionality to be implemented. */
     FEATURE,
+
     /** Defect to be fixed. */
     BUG,
+
     /** General task or chore. */
     TASK,
+
     /** Research or investigation task. */
-    SPIKE;
+    SPIKE,
 }
 
 /**
@@ -30,7 +33,7 @@ enum class TicketPriority {
     LOW,
     MEDIUM,
     HIGH,
-    CRITICAL
+    CRITICAL,
 }
 
 /**
@@ -47,16 +50,23 @@ enum class TicketPriority {
 enum class TicketStatus {
     /** Ticket is in the backlog, not yet prioritized for work. */
     BACKLOG,
+
     /** Ticket is ready to be picked up for work. */
     READY,
+
     /** Ticket is actively being worked on. */
     IN_PROGRESS,
+
     /** Ticket is blocked by external dependencies or issues. */
     BLOCKED,
+
     /** Ticket work is complete and awaiting review. */
     IN_REVIEW,
+
     /** Ticket is complete. */
-    DONE;
+    DONE,
+
+    ;
 
     /**
      * Returns the set of valid statuses this status can transition to.
@@ -107,7 +117,7 @@ data class Ticket(
     /** Timestamp of the last modification. */
     val updatedAt: Instant,
     /** Optional due date for completion. */
-    val dueDate: Instant? = null
+    val dueDate: Instant? = null,
 ) {
     /**
      * Creates a copy of this ticket with an updated status, validating the transition.

@@ -3,9 +3,9 @@ package link.socket.kore.agents.events.messages.escalation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import link.socket.kore.agents.core.AgentId
-import link.socket.kore.agents.events.bus.EventBus
-import link.socket.kore.agents.events.api.EventHandler
 import link.socket.kore.agents.events.MessageEvent
+import link.socket.kore.agents.events.api.EventHandler
+import link.socket.kore.agents.events.bus.EventBus
 import link.socket.kore.agents.events.subscription.Subscription
 
 /**
@@ -37,7 +37,7 @@ class EscalationEventHandler(
                 handler = EventHandler { event, subscription ->
                     val escalationEvent = event as MessageEvent.EscalationRequested
                     invoke(escalationEvent, subscription)
-                }
+                },
             )
         }
     }

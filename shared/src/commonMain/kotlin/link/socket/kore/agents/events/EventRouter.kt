@@ -23,7 +23,7 @@ class EventRouter(
         }
 
         getSubscribedAgentsFor(Event.QuestionRaised.EVENT_CLASS_TYPE).forEach { agentId ->
-            eventApi.onQuestionRaised  { event, subscription ->
+            eventApi.onQuestionRaised { event, subscription ->
                 NotificationEvent.ToAgent(
                     agentId = agentId,
                     event = event,
@@ -56,9 +56,9 @@ class EventRouter(
                         eventClassTypes = newEventClassTypes,
                     )
                 } ?: EventSubscription.ByEventClassType(
-                    agentIdOverride = agentId,
-                    eventClassTypes = setOf(eventClassType),
-                )
+                agentIdOverride = agentId,
+                eventClassTypes = setOf(eventClassType),
+            )
 
         eventsByEventClassTypeSubscriptions[agentId] = updatedSubscription
 
@@ -76,7 +76,7 @@ class EventRouter(
         return updatedSubscription
     }
 
-    //** Function to get all agents that are subscribed to an event type. */
+    // ** Function to get all agents that are subscribed to an event type. */
     fun getSubscribedAgentsFor(
         eventClassType: EventClassType,
     ): List<AgentId> =

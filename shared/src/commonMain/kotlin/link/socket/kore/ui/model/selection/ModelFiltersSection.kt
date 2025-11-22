@@ -43,7 +43,7 @@ fun ModelFiltersSection(
         modifier = modifier
             .background(colors.background)
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(16.dp),
     ) {
         Row(
             modifier = Modifier
@@ -126,9 +126,9 @@ fun ModelFiltersSection(
                 }
 
                 onStateChange(
-                    state.copy(providers = updatedProviders)
+                    state.copy(providers = updatedProviders),
                 )
-            }
+            },
         )
 
         Spacer(Modifier.height(12.dp))
@@ -140,7 +140,7 @@ fun ModelFiltersSection(
                 checked = state.showUnsuitable,
                 onCheckedChange = { isChecked ->
                     onStateChange(
-                        state.copy(showUnsuitable = isChecked)
+                        state.copy(showUnsuitable = isChecked),
                     )
                 },
             )
@@ -174,7 +174,7 @@ private fun FilterSlider(
             .fillMaxWidth()
             .clip(shapes.medium)
             .background(colors.surface)
-            .padding(16.dp)
+            .padding(16.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -237,7 +237,7 @@ private fun ProviderChips(
             .fillMaxWidth()
             .clip(shapes.medium)
             .background(colors.surface)
-            .padding(16.dp)
+            .padding(16.dp),
     ) {
         Row(
             modifier = Modifier
@@ -311,7 +311,7 @@ private fun formatValue(
     prefix: String?,
 ): String {
     val base: String = if (value >= 1000f) {
-        "${(value/1000f).toInt()}k"
+        "${(value / 1000f).toInt()}k"
     } else {
         toTwoDecimals(value)
     }

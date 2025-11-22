@@ -20,7 +20,7 @@ class TicketTest {
     private fun createTicket(
         status: TicketStatus = TicketStatus.BACKLOG,
         type: TicketType = TicketType.FEATURE,
-        priority: TicketPriority = TicketPriority.MEDIUM
+        priority: TicketPriority = TicketPriority.MEDIUM,
     ): Ticket = Ticket(
         id = "ticket-1",
         title = "Test Ticket",
@@ -32,7 +32,7 @@ class TicketTest {
         createdByAgentId = creatorAgentId,
         createdAt = now,
         updatedAt = now,
-        dueDate = null
+        dueDate = null,
     )
 
     // =============================================================================

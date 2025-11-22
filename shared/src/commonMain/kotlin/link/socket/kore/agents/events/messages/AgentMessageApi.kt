@@ -2,15 +2,15 @@ package link.socket.kore.agents.events.messages
 
 import kotlinx.datetime.Clock
 import link.socket.kore.agents.core.AgentId
-import link.socket.kore.agents.events.utils.ConsoleEventLogger
-import link.socket.kore.agents.events.bus.EventBus
-import link.socket.kore.agents.events.api.EventFilter
-import link.socket.kore.agents.events.api.EventHandler
-import link.socket.kore.agents.events.utils.EventLogger
 import link.socket.kore.agents.events.EventSource
 import link.socket.kore.agents.events.EventStatus
 import link.socket.kore.agents.events.MessageEvent
+import link.socket.kore.agents.events.api.EventFilter
+import link.socket.kore.agents.events.api.EventHandler
+import link.socket.kore.agents.events.bus.EventBus
 import link.socket.kore.agents.events.subscription.Subscription
+import link.socket.kore.agents.events.utils.ConsoleEventLogger
+import link.socket.kore.agents.events.utils.EventLogger
 import link.socket.kore.util.randomUUID
 
 /**
@@ -311,7 +311,7 @@ class AgentMessageApi(
                 if (filter.execute(messageEvent)) {
                     handler(event, subscription)
                 }
-            }
+            },
         )
 
     /** Subscribe to message posted events in channel. */
@@ -328,7 +328,7 @@ class AgentMessageApi(
                 if (messageEvent.channel == channel && filter.execute(messageEvent)) {
                     handler(messageEvent, subscription)
                 }
-            }
+            },
         )
 
     /** Subscribe to message posted event in thread. */
@@ -345,7 +345,7 @@ class AgentMessageApi(
                 if (messageEvent.threadId == threadId && filter(messageEvent)) {
                     handler(messageEvent, subscription)
                 }
-            }
+            },
         )
 
     /** Subscribe to thread status changed events. */
@@ -377,7 +377,6 @@ class AgentMessageApi(
                 }
             },
         )
-
 
     /** Retrieve a thread by id. */
     suspend fun getThread(threadId: MessageThreadId): Result<MessageThread> =

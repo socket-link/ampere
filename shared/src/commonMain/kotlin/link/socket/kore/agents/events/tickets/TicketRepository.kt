@@ -19,7 +19,7 @@ sealed class TicketError : Exception() {
      */
     data class InvalidStateTransition(
         val fromState: TicketStatus,
-        val toState: TicketStatus
+        val toState: TicketStatus,
     ) : TicketError() {
         override val message: String
             get() = "Invalid state transition: cannot transition from $fromState to $toState. " +
@@ -30,7 +30,7 @@ sealed class TicketError : Exception() {
      * Error when a ticket is not found.
      */
     data class TicketNotFound(
-        val ticketId: TicketId
+        val ticketId: TicketId,
     ) : TicketError() {
         override val message: String
             get() = "Ticket not found: $ticketId"
@@ -40,7 +40,7 @@ sealed class TicketError : Exception() {
      * Error wrapping database exceptions.
      */
     data class DatabaseError(
-        override val cause: Throwable
+        override val cause: Throwable,
     ) : TicketError() {
         override val message: String
             get() = "Database error: ${cause.message}"
@@ -50,7 +50,7 @@ sealed class TicketError : Exception() {
      * Error for validation failures.
      */
     data class ValidationError(
-        override val message: String
+        override val message: String,
     ) : TicketError()
 }
 
@@ -86,7 +86,7 @@ class TicketRepository(
                     created_by_agent_id = ticket.createdByAgentId,
                     created_at = ticket.createdAt.toEpochMilliseconds(),
                     updated_at = ticket.updatedAt.toEpochMilliseconds(),
-                    due_date = ticket.dueDate?.toEpochMilliseconds()
+                    due_date = ticket.dueDate?.toEpochMilliseconds(),
                 )
                 Result.success(ticket)
             } catch (e: Exception) {
@@ -113,8 +113,8 @@ class TicketRepository(
                     return@withContext Result.failure(
                         TicketError.InvalidStateTransition(
                             fromState = currentTicket.status,
-                            toState = newStatus
-                        )
+                            toState = newStatus,
+                        ),
                     )
                 }
 
@@ -123,7 +123,7 @@ class TicketRepository(
                 ticketQueries.updateTicketStatus(
                     status = newStatus.name,
                     updated_at = now,
-                    id = ticketId
+                    id = ticketId,
                 )
 
                 Result.success(Unit)
@@ -150,7 +150,7 @@ class TicketRepository(
                 ticketQueries.updateTicketAssignment(
                     assigned_agent_id = agentId,
                     updated_at = now,
-                    id = ticketId
+                    id = ticketId,
                 )
 
                 Result.success(Unit)
@@ -297,7 +297,7 @@ class TicketRepository(
         title: String? = null,
         description: String? = null,
         priority: TicketPriority? = null,
-        dueDate: Instant? = null
+        dueDate: Instant? = null,
     ): Result<Ticket> =
         withContext(Dispatchers.IO) {
             try {
@@ -312,7 +312,7 @@ class TicketRepository(
                     priority = (priority ?: currentTicket.priority).name,
                     due_date = (dueDate ?: currentTicket.dueDate)?.toEpochMilliseconds(),
                     updated_at = now,
-                    id = ticketId
+                    id = ticketId,
                 )
 
                 // Return updated ticket
@@ -356,7 +356,7 @@ class TicketRepository(
                 ticketMeetingQueries.insertTicketMeeting(
                     ticket_id = ticketId,
                     meeting_id = meetingId,
-                    created_at = now.toEpochMilliseconds()
+                    created_at = now.toEpochMilliseconds(),
                 )
                 Result.success(TicketMeeting(ticketId, meetingId, now))
             } catch (e: Exception) {
@@ -379,7 +379,7 @@ class TicketRepository(
                         TicketMeeting(
                             ticketId = ticketId,
                             meetingId = row.meeting_id,
-                            createdAt = Instant.fromEpochMilliseconds(row.created_at)
+                            createdAt = Instant.fromEpochMilliseconds(row.created_at),
                         )
                     }
                 Result.success(meetings)
@@ -403,7 +403,7 @@ class TicketRepository(
                         TicketMeeting(
                             ticketId = row.ticket_id,
                             meetingId = meetingId,
-                            createdAt = Instant.fromEpochMilliseconds(row.created_at)
+                            createdAt = Instant.fromEpochMilliseconds(row.created_at),
                         )
                     }
                 Result.success(tickets)
@@ -455,7 +455,7 @@ class TicketRepository(
             createdByAgentId = row.created_by_agent_id,
             createdAt = Instant.fromEpochMilliseconds(row.created_at),
             updatedAt = Instant.fromEpochMilliseconds(row.updated_at),
-            dueDate = row.due_date?.let { Instant.fromEpochMilliseconds(it) }
+            dueDate = row.due_date?.let { Instant.fromEpochMilliseconds(it) },
         )
     }
 }

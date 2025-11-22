@@ -89,7 +89,7 @@ data object QATestingAgent : AgentDefinition.Bundled(
             "End-to-End Tests",
             "Performance Tests",
             "Security Tests",
-        )
+        ),
     )
 
     private val platformArg = AgentInput.EnumArgs(
@@ -102,7 +102,7 @@ data object QATestingAgent : AgentDefinition.Bundled(
             "Desktop/JVM",
             "iOS",
             "All Platforms",
-        )
+        ),
     )
 
     override val prompt: String

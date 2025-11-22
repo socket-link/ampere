@@ -14,7 +14,7 @@ typealias EventClassType = Pair<KClass<out Event>, String>
 enum class Urgency {
     LOW,
     MEDIUM,
-    HIGH;
+    HIGH,
 }
 
 /** Source of an event, either an agent or a human. */
@@ -37,9 +37,10 @@ sealed class EventSource {
 enum class EventStatus {
     OPEN,
     WAITING_FOR_HUMAN,
-    RESOLVED;
+    RESOLVED,
+    ;
 
-    //** Validation function that checks if the status transition is valid. */
+    // ** Validation function that checks if the status transition is valid. */
     fun canTransitionTo(newStatus: EventStatus): Boolean = when (this) {
         OPEN -> when (newStatus) {
             OPEN, WAITING_FOR_HUMAN, RESOLVED -> true

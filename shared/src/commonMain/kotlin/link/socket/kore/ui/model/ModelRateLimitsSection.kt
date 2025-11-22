@@ -114,7 +114,7 @@ fun ModelRateLimitsSection(
                             onClick = {
                                 selectedTier.value = tier
                                 dropdownExpanded.value = false
-                            }
+                            },
                         ) {
                             Text(text = tier.displayName)
                         }
@@ -214,7 +214,7 @@ private fun RateLimitItem(
             modifier = Modifier
                 .background(
                     color = color.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
                 )
                 .border(
                     border = BorderStroke(

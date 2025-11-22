@@ -15,7 +15,6 @@ import link.socket.kore.agents.events.api.AgentEventApiFactory
 import link.socket.kore.agents.events.bus.EventBus
 import link.socket.kore.agents.events.bus.EventBusFactory
 import link.socket.kore.data.DEFAULT_JSON
-import link.socket.kore.agents.events.EventRepository
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AgentEventBusIntegrationTest {
@@ -62,7 +61,7 @@ class AgentEventBusIntegrationTest {
                 taskId = "TASK-001",
                 urgency = Urgency.HIGH,
                 description = "Implement event bus",
-                assignedTo = "code-writer"
+                assignedTo = "code-writer",
             )
 
             val event = received.await()
@@ -79,7 +78,7 @@ class AgentEventBusIntegrationTest {
                 urgency = Urgency.HIGH,
                 filePath = "EventBus.kt",
                 changeDescription = "Initial implementation",
-                reviewRequired = true
+                reviewRequired = true,
             )
 
             delay(100)
@@ -89,7 +88,7 @@ class AgentEventBusIntegrationTest {
             api2.publishQuestionRaised(
                 questionText = "Should we add error handling?",
                 context = "Reviewing EventBus.kt",
-                urgency = Urgency.HIGH
+                urgency = Urgency.HIGH,
             )
 
             // Verify all events are in history

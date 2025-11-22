@@ -40,7 +40,7 @@ class MeetingOrchestrator(
         // Validate meeting data
         if (meeting.status !is MeetingStatus.Scheduled) {
             return Result.failure(
-                IllegalArgumentException("Meeting must have Scheduled status to be scheduled")
+                IllegalArgumentException("Meeting must have Scheduled status to be scheduled"),
             )
         }
 
@@ -49,13 +49,15 @@ class MeetingOrchestrator(
         val now = Clock.System.now()
         if (scheduledTime <= now) {
             return Result.failure(
-                IllegalArgumentException("Meeting must be scheduled for a future time. Scheduled: $scheduledTime, Now: $now")
+                IllegalArgumentException(
+                    "Meeting must be scheduled for a future time. Scheduled: $scheduledTime, Now: $now",
+                ),
             )
         }
 
         if (meeting.invitation.requiredParticipants.isEmpty()) {
             return Result.failure(
-                IllegalArgumentException("Meeting must have at least one required participant")
+                IllegalArgumentException("Meeting must have at least one required participant"),
             )
         }
 
@@ -115,7 +117,7 @@ class MeetingOrchestrator(
                 eventId = generateUUID(createdMeeting.id),
                 meeting = createdMeeting,
                 scheduledBy = scheduledBy,
-            )
+            ),
         )
 
         return createdMeetingResult
@@ -141,7 +143,9 @@ class MeetingOrchestrator(
         // Validate meeting is in SCHEDULED status
         if (meeting.status !is MeetingStatus.Scheduled) {
             return Result.failure(
-                IllegalStateException("Meeting must be in SCHEDULED status to start. Current status: ${meeting.status::class.simpleName}")
+                IllegalStateException(
+                    "Meeting must be in SCHEDULED status to start. Current status: ${meeting.status::class.simpleName}",
+                ),
             )
         }
 
@@ -187,7 +191,7 @@ class MeetingOrchestrator(
                 threadId = thread.id,
                 startedAt = now,
                 startedBy = EventSource.Agent(messageApi.agentId),
-            )
+            ),
         )
 
         return Result.success(Unit)
@@ -212,7 +216,9 @@ class MeetingOrchestrator(
 
         if (meeting.status !is MeetingStatus.InProgress) {
             return Result.failure(
-                IllegalStateException("Meeting must be in IN_PROGRESS status to advance agenda. Current status: ${meeting.status::class.simpleName}")
+                IllegalStateException(
+                    "Meeting must be in IN_PROGRESS status to advance agenda. Current status: ${meeting.status::class.simpleName}",
+                ),
             )
         }
 
@@ -248,7 +254,7 @@ class MeetingOrchestrator(
                 agendaItem = updatedItem,
                 startedBy = EventSource.Agent(messageApi.agentId),
                 timestamp = Clock.System.now(),
-            )
+            ),
         )
 
         // Post a message to the meeting thread about the agenda item
@@ -284,7 +290,9 @@ class MeetingOrchestrator(
         // Validate meeting is in IN_PROGRESS status
         val inProgressStatus = meeting.status as? MeetingStatus.InProgress
             ?: return Result.failure(
-                IllegalStateException("Meeting must be in IN_PROGRESS status to complete. Current status: ${meeting.status::class.simpleName}")
+                IllegalStateException(
+                    "Meeting must be in IN_PROGRESS status to complete. Current status: ${meeting.status::class.simpleName}",
+                ),
             )
 
         val now = Clock.System.now()
@@ -319,7 +327,7 @@ class MeetingOrchestrator(
                 outcomes = outcomes,
                 completedAt = now,
                 completedBy = EventSource.Agent(messageApi.agentId),
-            )
+            ),
         )
 
         // Post summary message to the meeting thread
@@ -352,13 +360,15 @@ class MeetingOrchestrator(
         return buildString {
             append("Meeting started: ${meeting.invitation.title}\n")
             append("Participants: ")
-            append(meeting.invitation.requiredParticipants.joinToString(", ") {
-                when (it) {
-                    is AssignedTo.Agent -> it.agentId
-                    is AssignedTo.Human -> "human"
-                    is AssignedTo.Team -> it.teamId
-                }
-            })
+            append(
+                meeting.invitation.requiredParticipants.joinToString(", ") {
+                    when (it) {
+                        is AssignedTo.Agent -> it.agentId
+                        is AssignedTo.Human -> "human"
+                        is AssignedTo.Team -> it.teamId
+                    }
+                },
+            )
             append("\n\nAgenda:\n")
             meeting.invitation.agenda.forEachIndexed { index, item ->
                 append("${index + 1}. ${item.topic}\n")

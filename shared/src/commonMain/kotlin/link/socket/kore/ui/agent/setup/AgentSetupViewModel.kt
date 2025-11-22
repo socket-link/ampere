@@ -52,7 +52,7 @@ class AgentSetupViewModel(
             ),
             tags = listOf("test", "test2"),
         )
-    
+
     private val suggestedSelectableModelBackups: List<SelectableModel> =
         suggestedModelBackups.map { (provider, model) ->
             SelectableModel(
@@ -71,7 +71,7 @@ class AgentSetupViewModel(
         AgentSetupState(
             modelSuggestionDefault = suggestedSelectableModel,
             modelSuggestionBackups = suggestedSelectableModelBackups,
-        )
+        ),
     )
 
     val stateFlow: StateFlow<AgentSetupState> =

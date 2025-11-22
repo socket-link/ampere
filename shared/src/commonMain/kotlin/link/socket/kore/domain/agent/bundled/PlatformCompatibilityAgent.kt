@@ -106,7 +106,7 @@ data object PlatformCompatibilityAgent : AgentDefinition.Bundled(
             "Desktop Only",
             "Mobile Only",
             "Native Platforms",
-        )
+        ),
     )
 
     private val checkTypeArg = AgentInput.EnumArgs(
@@ -120,7 +120,7 @@ data object PlatformCompatibilityAgent : AgentDefinition.Bundled(
             "Feature Completeness",
             "Dependency Validation",
             "Build Configuration",
-        )
+        ),
     )
 
     override val prompt: String

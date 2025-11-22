@@ -151,7 +151,7 @@ class MeetingRepositoryTest {
         assertEquals(meeting.invitation.title, loaded.invitation.title)
         assertIs<MeetingType.Standup>(loaded.type)
         assertIs<MeetingStatus.Scheduled>(loaded.status)
-    }}
+    } }
 
     @Test
     fun `retrieve meeting preserves all invitation fields`() { runBlocking {
@@ -171,7 +171,7 @@ class MeetingRepositoryTest {
         assertNotNull(loaded.invitation.optionalParticipants)
         assertEquals(1, loaded.invitation.optionalParticipants.size)
         assertIs<AssignedTo.Human>(loaded.invitation.optionalParticipants[0])
-    }}
+    } }
 
     @Test
     fun `retrieve meeting with agenda item assignments`() { runBlocking {
@@ -188,7 +188,7 @@ class MeetingRepositoryTest {
         val secondItem = loaded.invitation.agenda[1]
         assertNotNull(secondItem.assignedTo)
         assertEquals("agent-beta", secondItem.assignedTo.getIdentifier())
-    }}
+    } }
 
     @Test
     fun `create and retrieve completed meeting with outcomes`() { runBlocking {
@@ -205,7 +205,7 @@ class MeetingRepositoryTest {
         assertNotNull(completedStatus.outcomes)
         assertEquals(1, completedStatus.outcomes!!.size)
         assertIs<MeetingOutcome.DecisionMade>(completedStatus.outcomes!![0])
-    }}
+    } }
 
     @Test
     fun `update meeting status from scheduled to in_progress`() { runBlocking {
@@ -229,7 +229,7 @@ class MeetingRepositoryTest {
 
         val inProgressStatus = loaded.status
         assertEquals("channel-1", inProgressStatus.messagingDetails.messageChannelId)
-    }}
+    } }
 
     @Test
     fun `update meeting status to completed with outcomes and attendees`() { runBlocking {
@@ -266,7 +266,7 @@ class MeetingRepositoryTest {
         assertEquals(2, status.attendedBy.size)
         assertEquals(1, status.outcomes?.size)
         assertIs<MeetingOutcome.ActionItem>(status.outcomes!![0])
-    }}
+    } }
 
     @Test
     fun `add outcome to meeting`() { runBlocking {
@@ -288,7 +288,7 @@ class MeetingRepositoryTest {
         val outcomeRows = database.meetingStoreQueries.getOutcomesForMeeting(meeting.id).executeAsList()
         assertEquals(1, outcomeRows.size)
         assertEquals("BLOCKER_RAISED", outcomeRows[0].outcomeType)
-    }}
+    } }
 
     @Test
     fun `get scheduled meetings before time`() { runBlocking {
@@ -314,7 +314,7 @@ class MeetingRepositoryTest {
         assertNotNull(result)
         assertEquals(1, result.size)
         assertEquals("meeting-soon", result[0].id)
-    }}
+    } }
 
     @Test
     fun `get meetings for participant`() { runBlocking {
@@ -343,7 +343,7 @@ class MeetingRepositoryTest {
         val betaMeetings = repo.getMeetingsForParticipant("agent-beta").getOrNull()
         assertNotNull(betaMeetings)
         assertEquals(1, betaMeetings.size)
-    }}
+    } }
 
     @Test
     fun `delete meeting removes all related records`() { runBlocking {
@@ -367,13 +367,13 @@ class MeetingRepositoryTest {
         assertTrue(queries.getAgendaItemsForMeeting(meeting.id).executeAsList().isEmpty())
         assertTrue(queries.getOutcomesForMeeting(meeting.id).executeAsList().isEmpty())
         assertTrue(queries.getAttendeesForMeeting(meeting.id).executeAsList().isEmpty())
-    }}
+    } }
 
     @Test
     fun `get nonexistent meeting returns null`() { runBlocking {
         val loaded = repo.getMeeting("nonexistent-id").getOrNull()
         assertNull(loaded)
-    }}
+    } }
 
     @Test
     fun `mapping preserves meeting type details`() { runBlocking {
@@ -411,7 +411,7 @@ class MeetingRepositoryTest {
         assertEquals("https://github.com/org/repo/pull/123", codeReviewType.prUrl)
         assertIs<EventSource.Agent>(codeReviewType.author)
         assertEquals("agent-author", (codeReviewType.author as EventSource.Agent).agentId)
-    }}
+    } }
 
     @Test
     fun `mapping preserves agenda item status`() { runBlocking {
@@ -459,7 +459,7 @@ class MeetingRepositoryTest {
 
         val blockedItem = loaded.invitation.agenda[2]
         assertIs<Task.Status.Blocked>(blockedItem.status)
-    }}
+    } }
 
     @Test
     fun `multiple outcomes are preserved correctly`() { runBlocking {
@@ -499,5 +499,5 @@ class MeetingRepositoryTest {
         assertTrue(status.outcomes!!.any { it is MeetingOutcome.DecisionMade })
         assertTrue(status.outcomes!!.any { it is MeetingOutcome.ActionItem })
         assertTrue(status.outcomes!!.any { it is MeetingOutcome.BlockerRaised })
-    }}
+    } }
 }

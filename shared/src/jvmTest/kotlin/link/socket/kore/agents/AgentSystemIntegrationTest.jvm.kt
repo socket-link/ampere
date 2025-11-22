@@ -24,7 +24,7 @@ class AgentSystemIntegrationTest {
                 "ask_human" to AskHumanTool { question -> "Approved: $question" },
                 "write_code_file" to WriteCodeFileTool(tempDir.absolutePath),
                 "read_codebase" to ReadCodebaseTool(tempDir.absolutePath),
-                "run_tests" to RunTestsTool(tempDir.absolutePath)
+                "run_tests" to RunTestsTool(tempDir.absolutePath),
             )
 
             // TODO: Write agent autonomy testing here

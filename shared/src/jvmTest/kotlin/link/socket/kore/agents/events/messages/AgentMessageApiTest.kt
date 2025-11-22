@@ -13,13 +13,12 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import link.socket.kore.agents.events.Database
-import link.socket.kore.agents.events.bus.EventBus
-import link.socket.kore.agents.events.bus.EventBusFactory
+import link.socket.kore.agents.events.EventRepository
 import link.socket.kore.agents.events.EventStatus
 import link.socket.kore.agents.events.MessageEvent
+import link.socket.kore.agents.events.bus.EventBus
+import link.socket.kore.agents.events.bus.EventBusFactory
 import link.socket.kore.data.DEFAULT_JSON
-import link.socket.kore.agents.events.EventRepository
-import link.socket.kore.agents.events.messages.MessageRepository
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AgentMessageApiTest {
@@ -140,7 +139,7 @@ class AgentMessageApiTest {
             assertTrue(received.any { it is MessageEvent.EscalationRequested })
             assertTrue(received.count { it is MessageEvent.ThreadStatusChanged } >= 2)
 
-            //** TODO: Test subscriptions can be unsubscribed from. */
+            // ** TODO: Test subscriptions can be unsubscribed from. */
         }
     }
 
@@ -234,7 +233,10 @@ class AgentMessageApiTest {
                 errorMessage = e.message
             }
             assertTrue(threw, "Should throw when reopening a non-WAITING_FOR_HUMAN thread")
-            assertTrue(errorMessage?.contains("waiting for human") == true, "Error message should mention waiting for human, was: $errorMessage")
+            assertTrue(
+                errorMessage?.contains("waiting for human") == true,
+                "Error message should mention waiting for human, was: $errorMessage",
+            )
         }
     }
 }

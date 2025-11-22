@@ -19,7 +19,6 @@ import link.socket.kore.agents.events.api.filterForEventsCreatedByMe
 import link.socket.kore.agents.events.bus.EventBus
 import link.socket.kore.agents.events.bus.EventBusFactory
 import link.socket.kore.data.DEFAULT_JSON
-import link.socket.kore.agents.events.EventRepository
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AgentEventApiTest {
@@ -73,7 +72,7 @@ class AgentEventApiTest {
             assertEquals("task-123", event.taskId)
             assertEquals(true, event.eventId.isNotBlank())
 
-            //** TODO: Test [subscription] can be unsubscribed from. */
+            // ** TODO: Test [subscription] can be unsubscribed from. */
         }
     }
 
@@ -137,7 +136,7 @@ class AgentEventApiTest {
             }
 
             val subscription2 = api2.onTaskCreated(
-                filter = api2.filterForEventsCreatedByMe()
+                filter = api2.filterForEventsCreatedByMe(),
             ) { event, _ ->
                 received2.complete(event)
             }
@@ -152,7 +151,7 @@ class AgentEventApiTest {
             assertEquals(stubAgentId2, e2.eventSource.getIdentifier())
             assertNotEquals(e1.eventId, e2.eventId)
 
-            //** TODO: Test [subscription1] and [subscription2] can be unsubscribed from. */
+            // ** TODO: Test [subscription1] and [subscription2] can be unsubscribed from. */
         }
     }
 
@@ -177,7 +176,7 @@ class AgentEventApiTest {
             assertEquals("/tmp/a.kt", e.filePath)
             assertEquals(true, e.reviewRequired)
 
-            //** TODO: Test [subscription] can be unsubscribed from. */
+            // ** TODO: Test [subscription] can be unsubscribed from. */
         }
     }
 }

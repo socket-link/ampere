@@ -78,28 +78,28 @@ class TicketOrchestratorTest {
             eventClassType = TicketEvent.TicketCreated.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
-            }
+            },
         )
         eventBus.subscribe(
             agentId = "test-subscriber",
             eventClassType = TicketEvent.TicketStatusChanged.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
-            }
+            },
         )
         eventBus.subscribe(
             agentId = "test-subscriber",
             eventClassType = TicketEvent.TicketAssigned.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
-            }
+            },
         )
         eventBus.subscribe(
             agentId = "test-subscriber",
             eventClassType = TicketEvent.TicketBlocked.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
-            }
+            },
         )
 
         publishedEvents.clear()
@@ -640,13 +640,17 @@ class TicketOrchestratorTest {
 
             // Creator can modify
             val creatorResult = ticketOrchestrator.transitionTicketStatus(
-                ticket.id, TicketStatus.READY, stubCreatorAgentId
+                ticket.id,
+                TicketStatus.READY,
+                stubCreatorAgentId,
             )
             assertTrue(creatorResult.isSuccess)
 
             // Unauthorized agent cannot modify
             val unauthorizedResult = ticketOrchestrator.transitionTicketStatus(
-                ticket.id, TicketStatus.IN_PROGRESS, stubUnauthorizedAgentId
+                ticket.id,
+                TicketStatus.IN_PROGRESS,
+                stubUnauthorizedAgentId,
             )
             assertTrue(unauthorizedResult.isFailure)
 
@@ -655,13 +659,17 @@ class TicketOrchestratorTest {
 
             // Assigned agent can now modify
             val assignedResult = ticketOrchestrator.transitionTicketStatus(
-                ticket.id, TicketStatus.IN_PROGRESS, stubAssignedAgentId
+                ticket.id,
+                TicketStatus.IN_PROGRESS,
+                stubAssignedAgentId,
             )
             assertTrue(assignedResult.isSuccess)
 
             // Unauthorized agent still cannot modify
             val stillUnauthorizedResult = ticketOrchestrator.transitionTicketStatus(
-                ticket.id, TicketStatus.DONE, stubUnauthorizedAgentId
+                ticket.id,
+                TicketStatus.DONE,
+                stubUnauthorizedAgentId,
             )
             assertTrue(stillUnauthorizedResult.isFailure)
         }

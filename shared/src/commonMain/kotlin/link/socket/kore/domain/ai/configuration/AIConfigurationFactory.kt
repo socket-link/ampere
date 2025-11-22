@@ -24,7 +24,7 @@ class AIConfigurationFactory {
                     provider = AIProvider_OpenAI,
                     model = AIModel_OpenAI.GPT_4_1,
                 ),
-            )
+            ),
         )
 
     fun aiConfiguration(

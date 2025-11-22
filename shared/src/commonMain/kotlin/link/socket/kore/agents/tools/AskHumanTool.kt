@@ -10,7 +10,7 @@ import link.socket.kore.agents.events.tasks.Task
  * response in an [Outcome].
  */
 class AskHumanTool(
-    private val humanInterface: (String) -> String
+    private val humanInterface: (String) -> String,
 ) : Tool {
     override val id: ToolId = "ask_human"
     override val name: String = "Ask a Human"

@@ -115,7 +115,6 @@ sealed class AIModel_Claude(
 
         private val Haiku_3_TOOLS = emptyList<ProvidedTool<AITool_Claude>>()
 
-
         // ---- Rate Limits ----
 
         private const val TIER_FREE_RPM = 5
@@ -159,7 +158,6 @@ sealed class AIModel_Claude(
         )
         private val Haiku_3_RATE_LIMITS = Haiku_3_5_RATE_LIMITS
 
-
         // ---- Token Limits ----
 
         private val CONTEXT_WINDOW_TOKENS = TokenCount._200k
@@ -185,7 +183,6 @@ sealed class AIModel_Claude(
             contextWindow = CONTEXT_WINDOW_TOKENS,
             maxOutput = TokenCount._4096,
         )
-
 
         // ---- Limits ----
 
@@ -218,7 +215,6 @@ sealed class AIModel_Claude(
             rate = Haiku_3_RATE_LIMITS,
             token = Haiku_3_TOKEN_LIMITS,
         )
-
 
         // ---- Training Cutoffs ----
 
@@ -261,7 +257,6 @@ sealed class AIModel_Claude(
             seconds = 0,
         )
 
-
         // ---- Supported Inputs ----
 
         private val Opus_4_1_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
@@ -270,7 +265,6 @@ sealed class AIModel_Claude(
         private val Sonnet_3_7_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
         private val Haiku_3_5_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
         private val Haiku_3_SUPPORTED_INPUTS = TEXT_AND_IMAGE
-
 
         // ---- Model Features ----
 
@@ -314,7 +308,6 @@ sealed class AIModel_Claude(
             trainingCutoffDate = cutoffDate,
         )
 
-
         // ---- Model Names ----
 
         private const val Opus_4_1_NAME = "claude-opus-4-1"
@@ -340,7 +333,6 @@ sealed class AIModel_Claude(
         private const val Haiku_3_NAME = "claude-3-haiku-20240307"
         private const val Haiku_3_DISPLAY_NAME = "Claude Haiku 3"
         private const val Haiku_3_DESCRIPTION = "Fast and compact model for near-instant responsiveness. Quick and accurate targeted performance."
-
 
         // ---- Models ----
 

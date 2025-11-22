@@ -17,10 +17,10 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.kore.agents.events.Database
 import link.socket.kore.agents.events.Event
+import link.socket.kore.agents.events.EventRepository
 import link.socket.kore.agents.events.EventSource
 import link.socket.kore.agents.events.Urgency
 import link.socket.kore.data.DEFAULT_JSON
-import link.socket.kore.agents.events.EventRepository
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventRepositoryTest {
@@ -69,7 +69,7 @@ class EventRepositoryTest {
         eventSource = stubEventSourceA,
         questionText = "Why?",
         context = "UnitTest",
-        urgency = Urgency.MEDIUM
+        urgency = Urgency.MEDIUM,
     )
 
     @Test

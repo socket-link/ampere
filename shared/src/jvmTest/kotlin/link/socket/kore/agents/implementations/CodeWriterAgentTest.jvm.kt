@@ -130,7 +130,7 @@ actual class CodeWriterAgentTest {
 
         val agent = createAgent(
             tool,
-            perceiveResult = expectedIdea
+            perceiveResult = expectedIdea,
         )
 
         runBlocking {
@@ -151,7 +151,7 @@ actual class CodeWriterAgentTest {
 
         val agent = createAgent(
             tool,
-            planResult = expectedPlan
+            planResult = expectedPlan,
         )
 
         runBlocking {
@@ -172,7 +172,7 @@ actual class CodeWriterAgentTest {
 
         val agent = createAgent(
             tool,
-            executeResult = expectedOutcome
+            executeResult = expectedOutcome,
         )
 
         runBlocking {
@@ -193,7 +193,7 @@ actual class CodeWriterAgentTest {
         val tool = WriteCodeFileTool(tempDir.absolutePathString())
         val agent = createAgent(
             tool,
-            executeResult = Outcome.Success.Full(Task.blank, "Done")
+            executeResult = Outcome.Success.Full(Task.blank, "Done"),
         )
 
         runBlocking {
@@ -217,7 +217,7 @@ actual class CodeWriterAgentTest {
 
         val agent = createAgent(
             tool,
-            executeResult = failureOutcome
+            executeResult = failureOutcome,
         )
 
         runBlocking {
@@ -240,7 +240,7 @@ actual class CodeWriterAgentTest {
 
         val agent = createAgent(
             tool,
-            executeResult = expectedOutcome
+            executeResult = expectedOutcome,
         )
 
         runBlocking {
@@ -261,7 +261,7 @@ actual class CodeWriterAgentTest {
 
         val agent = createAgent(
             tool,
-            toolResult = expectedOutcome
+            toolResult = expectedOutcome,
         )
 
         runBlocking {
@@ -280,7 +280,7 @@ actual class CodeWriterAgentTest {
 
         val agent = createAgent(
             tool,
-            evaluateResult = expectedIdea
+            evaluateResult = expectedIdea,
         )
 
         runBlocking {
@@ -303,7 +303,7 @@ actual class CodeWriterAgentTest {
         val ideas = listOf(
             Idea(name = "First Idea"),
             Idea(name = "Second Idea"),
-            Idea(name = "Third Idea")
+            Idea(name = "Third Idea"),
         )
 
         val agent = CodeWriterAgent(
@@ -314,7 +314,7 @@ actual class CodeWriterAgentTest {
             runLLMToExecuteTask = { Outcome.blank },
             runLLMToExecuteTool = { _, _ -> Outcome.blank },
             runLLMToEvaluate = { Idea.blank },
-            aiConfiguration = FakeAIConfiguration()
+            aiConfiguration = FakeAIConfiguration(),
         )
 
         runBlocking {
@@ -341,7 +341,7 @@ actual class CodeWriterAgentTest {
         val tool = WriteCodeFileTool(tempDir.absolutePathString())
         val agent = createAgent(
             tool,
-            executeResult = Outcome.Success.Full(Task.blank, "Done")
+            executeResult = Outcome.Success.Full(Task.blank, "Done"),
         )
 
         runBlocking {
@@ -389,7 +389,7 @@ actual class CodeWriterAgentTest {
             perceiveResult = Idea(name = "Write Code", description = "Create a new function"),
             planResult = Plan(estimatedComplexity = 2, tasks = listOf(task)),
             executeResult = Outcome.Success.Full(task, "Function created"),
-            evaluateResult = Idea(name = "Complete", description = "Task finished")
+            evaluateResult = Idea(name = "Complete", description = "Task finished"),
         )
 
         runBlocking {
@@ -428,7 +428,7 @@ actual class CodeWriterAgentTest {
         planResult: Plan = Plan(estimatedComplexity = 1, tasks = emptyList()),
         executeResult: Outcome = Outcome.Success.Full(Task.blank, "Done"),
         toolResult: Outcome = Outcome.Success.Full(Task.blank, "Tool done"),
-        evaluateResult: Idea = Idea(name = "Default Evaluation")
+        evaluateResult: Idea = Idea(name = "Default Evaluation"),
     ): CodeWriterAgent = CodeWriterAgent(
         coroutineScope = testScope,
         writeCodeFileTool = tool,
@@ -437,6 +437,6 @@ actual class CodeWriterAgentTest {
         runLLMToExecuteTask = { executeResult },
         runLLMToExecuteTool = { _, _ -> toolResult },
         runLLMToEvaluate = { evaluateResult },
-        aiConfiguration = FakeAIConfiguration()
+        aiConfiguration = FakeAIConfiguration(),
     )
 }

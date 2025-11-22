@@ -8,7 +8,7 @@ import link.socket.kore.domain.tool.AITool_OpenAI
 private const val ID = "openai"
 private const val NAME = "OpenAI"
 
-data object AIProvider_OpenAI: AIProvider<AITool_OpenAI, AIModel_OpenAI> {
+data object AIProvider_OpenAI : AIProvider<AITool_OpenAI, AIModel_OpenAI> {
 
     override val id: ProviderId = ID
     override val name: String = NAME

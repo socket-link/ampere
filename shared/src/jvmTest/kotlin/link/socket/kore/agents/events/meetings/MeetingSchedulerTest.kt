@@ -74,14 +74,14 @@ class MeetingSchedulerTest {
             eventClassType = MeetingEvent.MeetingScheduled.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
-            }
+            },
         )
         eventBus.subscribe(
             agentId = "test-subscriber",
             eventClassType = MeetingEvent.MeetingStarted.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
-            }
+            },
         )
 
         orchestrator = MeetingOrchestrator(

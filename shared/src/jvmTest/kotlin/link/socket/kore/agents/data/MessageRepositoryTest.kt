@@ -19,12 +19,12 @@ import link.socket.kore.agents.events.EventStatus
 import link.socket.kore.agents.events.messages.Message
 import link.socket.kore.agents.events.messages.MessageChannel
 import link.socket.kore.agents.events.messages.MessageId
+import link.socket.kore.agents.events.messages.MessageRepository
 import link.socket.kore.agents.events.messages.MessageSender
 import link.socket.kore.agents.events.messages.MessageSenderId
 import link.socket.kore.agents.events.messages.MessageThread
 import link.socket.kore.agents.events.messages.MessageThreadId
 import link.socket.kore.data.DEFAULT_JSON
-import link.socket.kore.agents.events.messages.MessageRepository
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MessageRepositoryTest {

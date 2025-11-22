@@ -34,7 +34,7 @@ data class SelectableModel(
 @Immutable
 enum class Importance {
     CRITICAL,
-    NOT_CRITICAL;
+    NOT_CRITICAL,
 }
 
 @Immutable
@@ -57,10 +57,10 @@ class ModelSelectionViewModel() {
                             label = model.provider.name,
                             isSelected = true,
                         )
-                   },
+                    },
                 ),
                 filteredResults = ALL_FILTERED_MODEL_ROWS,
-            )
+            ),
         )
 
     val stateFlow: StateFlow<ModelSelectionState> = _stateFlow.asStateFlow()
@@ -75,7 +75,7 @@ class ModelSelectionViewModel() {
 
     fun onFilterStateReset() {
         onFilterStateChanged(
-            FilterState()
+            FilterState(),
         )
     }
 }

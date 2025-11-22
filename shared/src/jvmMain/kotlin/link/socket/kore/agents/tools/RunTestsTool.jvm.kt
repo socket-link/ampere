@@ -10,7 +10,7 @@ import link.socket.kore.agents.events.tasks.Task
  * Uses ProcessBuilder to invoke the Gradle wrapper and returns combined output.
  */
 actual class RunTestsTool actual constructor(
-    private val projectRoot: String
+    private val projectRoot: String,
 ) : Tool {
     actual override val id: ToolId = "run_tests"
     actual override val name: String = "Verify Gradle Tests"

@@ -8,7 +8,7 @@ import link.socket.kore.agents.core.Outcome
  * Android actual for ReadCodebaseTool. Restricts reads to a sandboxed root.
  */
 actual class ReadCodebaseTool actual constructor(
-    private val rootDirectory: String
+    private val rootDirectory: String,
 ) : Tool {
     actual override val name: String = "read_codebase"
     actual override val description: String = "Reads file content or directory structure"

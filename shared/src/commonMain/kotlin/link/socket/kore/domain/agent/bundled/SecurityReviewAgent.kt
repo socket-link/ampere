@@ -144,8 +144,8 @@ data object SecurityReviewAgent : AgentDefinition.Bundled(
             "Data Protection",
             "Network Security",
             "Dependency Vulnerabilities",
-            "Code Injection Prevention"
-        )
+            "Code Injection Prevention",
+        ),
     )
 
     private val threatModelArg = AgentInput.EnumArgs(
@@ -157,8 +157,8 @@ data object SecurityReviewAgent : AgentDefinition.Bundled(
             "Client Application",
             "Enterprise Application",
             "Mobile Application",
-            "Web Service"
-        )
+            "Web Service",
+        ),
     )
 
     override val prompt: String

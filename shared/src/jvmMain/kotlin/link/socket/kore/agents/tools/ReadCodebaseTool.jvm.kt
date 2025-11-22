@@ -10,7 +10,7 @@ import link.socket.kore.agents.events.tasks.Task
  * Prevents reading paths outside the configured [rootDirectory].
  */
 actual class ReadCodebaseTool actual constructor(
-    private val rootDirectory: String
+    private val rootDirectory: String,
 ) : Tool {
     actual override val id: ToolId = "read_codebase"
     actual override val name: String = "View Code"

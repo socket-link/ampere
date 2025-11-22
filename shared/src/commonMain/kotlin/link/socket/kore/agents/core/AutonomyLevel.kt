@@ -22,5 +22,5 @@ enum class AutonomyLevel {
     /**
      * Agent acts, self-reviews, and iterates without human involvement
      */
-    SELF_CORRECTING
+    SELF_CORRECTING,
 }

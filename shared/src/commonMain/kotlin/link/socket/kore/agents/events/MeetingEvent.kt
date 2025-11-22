@@ -23,11 +23,12 @@ sealed class MeetingEvent(
         override val eventId: EventId,
         val meeting: Meeting,
         val scheduledBy: EventSource,
-        override val urgency: Urgency = Urgency.MEDIUM
+        override val urgency: Urgency = Urgency.MEDIUM,
     ) : MeetingEvent(source = scheduledBy) {
 
         @Transient
         override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+
         @Transient
         override val timestamp: Instant = meeting.lastUpdatedAt() ?: Instant.DISTANT_PAST
 
@@ -50,6 +51,7 @@ sealed class MeetingEvent(
 
         @Transient
         override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+
         @Transient
         override val timestamp: Instant = startedAt
 
@@ -92,6 +94,7 @@ sealed class MeetingEvent(
 
         @Transient
         override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+
         @Transient
         override val timestamp: Instant = completedAt
 
@@ -114,6 +117,7 @@ sealed class MeetingEvent(
 
         @Transient
         override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+
         @Transient
         override val timestamp: Instant = completedAt
 
@@ -136,6 +140,7 @@ sealed class MeetingEvent(
 
         @Transient
         override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+
         @Transient
         override val timestamp: Instant = canceledAt
 

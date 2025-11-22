@@ -26,7 +26,7 @@ fun ModelToolsSection(
 ) {
     LazyRow(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         items(tools) { tool ->
             val toolName = remember(tool) {

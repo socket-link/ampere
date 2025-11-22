@@ -9,8 +9,8 @@ import com.aallam.openai.api.core.Parameters
 import com.aallam.openai.api.model.ModelId
 import kotlinx.coroutines.CoroutineScope
 import link.socket.kore.domain.agent.LLMAgent
-import link.socket.kore.domain.chat.Chat
 import link.socket.kore.domain.ai.configuration.AIConfiguration
+import link.socket.kore.domain.chat.Chat
 import link.socket.kore.domain.tool.FunctionProvider
 
 @OptIn(BetaOpenAI::class)

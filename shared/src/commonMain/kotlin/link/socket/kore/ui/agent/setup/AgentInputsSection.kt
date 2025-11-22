@@ -107,7 +107,7 @@ fun AgentInputsSection(
                     modifier = Modifier
                         .padding(
                             bottom = 12.dp,
-                        )
+                        ),
                 ) {
                     inputComposable(input)
                 }

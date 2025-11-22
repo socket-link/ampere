@@ -1,11 +1,11 @@
 package link.socket.kore.agents.events.messages
 
 import link.socket.kore.agents.core.AgentId
-import link.socket.kore.agents.events.bus.EventBus
 import link.socket.kore.agents.events.EventClassType
-import link.socket.kore.agents.events.subscription.MessageSubscription
 import link.socket.kore.agents.events.NotificationEvent
+import link.socket.kore.agents.events.bus.EventBus
 import link.socket.kore.agents.events.messages.escalation.EscalationEventHandler
+import link.socket.kore.agents.events.subscription.MessageSubscription
 
 class MessageRouter(
     private val messageApi: AgentMessageApi,
@@ -113,8 +113,8 @@ class MessageRouter(
         val updatedThreadIds = subscription.threadIds.minus(threadId)
 
         val updatedSubscription = if (updatedThreadIds.isEmpty()) {
-            messagesByThreadsSubscriptions.remove(subscription.agentId) ?:
-                MessageSubscription.ByThreads(subscription.agentId, emptySet())
+            messagesByThreadsSubscriptions.remove(subscription.agentId)
+                ?: MessageSubscription.ByThreads(subscription.agentId, emptySet())
         } else {
             MessageSubscription.ByThreads(subscription.agentId, updatedThreadIds)
         }

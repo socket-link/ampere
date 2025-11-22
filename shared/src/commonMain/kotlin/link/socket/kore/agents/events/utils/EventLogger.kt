@@ -27,7 +27,9 @@ interface EventLogger {
 class ConsoleEventLogger : EventLogger {
 
     override fun logPublish(event: Event) {
-        println("[EventBus][PUBLISH] type=${event.eventClassType} id=${event.eventId} ts=${event.timestamp} src=${event.eventSource.getIdentifier()}")
+        println(
+            "[EventBus][PUBLISH] type=${event.eventClassType} id=${event.eventId} ts=${event.timestamp} src=${event.eventSource.getIdentifier()}",
+        )
     }
 
     override fun logSubscription(eventClassType: EventClassType, subscription: Subscription) {

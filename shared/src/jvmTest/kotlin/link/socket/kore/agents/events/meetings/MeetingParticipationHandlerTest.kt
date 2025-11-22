@@ -68,7 +68,7 @@ class MeetingParticipationHandlerTest {
         aiConfiguration = AIConfiguration_Default(
             provider = AIProvider_Google,
             model = AIModel_Gemini.Pro_2_5,
-        )
+        ),
     )
 
     private val stubScheduledBy = EventSource.Agent("scheduler-agent")
@@ -226,7 +226,7 @@ class MeetingParticipationHandlerTest {
             val meeting = createTestMeeting(
                 requiredParticipants = listOf(
                     AssignedTo.Agent("agent-alpha"),
-                )
+                ),
             )
             val alphaEvents = mutableListOf<MeetingEvent>()
             val gammaEvents = mutableListOf<MeetingEvent>()

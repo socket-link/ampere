@@ -56,7 +56,7 @@ fun ModelFeaturesSection(
                         .fillMaxWidth(),
                     features = features,
                 )
-                
+
                 ModelSupportedInputsSection(
                     modifier = Modifier
                         .fillMaxWidth(),

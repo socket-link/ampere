@@ -137,7 +137,6 @@ sealed class AIModel_OpenAI(
         private val o3_TOOLS: List<ProvidedTool<AITool_OpenAI>> = listOf()
         private val o3_mini_TOOLS: List<ProvidedTool<AITool_OpenAI>> = listOf()
 
-
         // ---- Rate Limits ----
 
         // TODO: Verify
@@ -230,7 +229,6 @@ sealed class AIModel_OpenAI(
             tier5TPM = TokenCount._150m,
         )
 
-
         // ---- Token Limits ----
 
         private val GPT_5_CONTEXT_WINDOW_TOKENS = TokenCount._400k
@@ -269,7 +267,6 @@ sealed class AIModel_OpenAI(
 
         private val o3_TOKEN_LIMITS = o4_mini_TOKEN_LIMITS
         private val o3_mini_TOKEN_LIMITS = o3_TOKEN_LIMITS
-
 
         // ---- Limits ----
 
@@ -319,7 +316,6 @@ sealed class AIModel_OpenAI(
             rate = o3_mini_RATE_LIMITS,
             token = o3_mini_TOKEN_LIMITS,
         )
-
 
         // ---- Training Cutoffs ----
 
@@ -376,7 +372,7 @@ sealed class AIModel_OpenAI(
 
         private val o3_CUTOFF = o4_mini_CUTOFF
 
-        private val o3_mini_CUTOFF= GMTDate(
+        private val o3_mini_CUTOFF = GMTDate(
             year = 2024,
             month = Month.OCTOBER,
             dayOfMonth = 1,
@@ -384,7 +380,6 @@ sealed class AIModel_OpenAI(
             minutes = 0,
             seconds = 0,
         )
-
 
         // ---- Supported Inputs ----
 
@@ -398,7 +393,6 @@ sealed class AIModel_OpenAI(
         private val o4_mini_SUPPORTED_INPUTS = TEXT_AND_IMAGE
         private val o3_SUPPORTED_INPUTS = TEXT_AND_IMAGE
         private val o3_mini_SUPPORTED_INPUTS = TEXT
-
 
         // ---- Model Features ----
 
@@ -482,7 +476,6 @@ sealed class AIModel_OpenAI(
             trainingCutoffDate = o3_mini_CUTOFF,
         )
 
-
         // ---- Model Names ----
 
         private const val GPT_5_NAME = "gpt-5"
@@ -524,7 +517,6 @@ sealed class AIModel_OpenAI(
         private const val o3_mini_NAME = "o3-mini"
         private const val o3_mini_DISPLAY_NAME = "o3-mini"
         private const val o3_mini_DESCRIPTION = "o3-mini is our newest small reasoning model, providing high intelligence at the same cost and latency targets of o1-mini. o3-mini supports key developer features, like Structured Outputs, function calling, and Batch API."
-
 
         // ---- Models ----
 

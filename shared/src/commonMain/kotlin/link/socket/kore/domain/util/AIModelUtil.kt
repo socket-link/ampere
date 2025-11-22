@@ -23,7 +23,7 @@ fun AIModel.toKoogLLMModel(): LLModel? = when (this) {
         is AIModel_OpenAI.GPT_4o -> OpenAIModels.Chat.GPT4o
         is AIModel_OpenAI.GPT_4o_mini -> OpenAIModels.CostOptimized.GPT4oMini
         is AIModel_OpenAI.o4_mini -> OpenAIModels.Reasoning.O4Mini
-        is AIModel_OpenAI.o3-> OpenAIModels.Reasoning.O3
+        is AIModel_OpenAI.o3 -> OpenAIModels.Reasoning.O3
         is AIModel_OpenAI.o3_mini -> OpenAIModels.Reasoning.O3Mini
     }
     is AIModel_Gemini -> when (this) {

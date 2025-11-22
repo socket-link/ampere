@@ -109,7 +109,7 @@ fun ListInput(
     Column(
         modifier = modifier.wrapContentHeight(),
     ) {
-        for (index in 0 ..< itemCount.value) {
+        for (index in 0..<itemCount.value) {
             val textFieldValue: MutableState<TextFieldValue> = remember { mutableStateOf(TextFieldValue()) }
 
             TextField(

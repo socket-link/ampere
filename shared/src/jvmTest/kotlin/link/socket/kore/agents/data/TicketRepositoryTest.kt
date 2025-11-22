@@ -55,7 +55,7 @@ class TicketRepositoryTest {
         createdByAgentId: String = creatorAgentId,
         createdAt: Instant = now,
         updatedAt: Instant = now,
-        dueDate: Instant? = null
+        dueDate: Instant? = null,
     ): Ticket = Ticket(
         id = id,
         title = title,
@@ -67,7 +67,7 @@ class TicketRepositoryTest {
         createdByAgentId = createdByAgentId,
         createdAt = createdAt,
         updatedAt = updatedAt,
-        dueDate = dueDate
+        dueDate = dueDate,
     )
 
     // =============================================================================
@@ -92,7 +92,7 @@ class TicketRepositoryTest {
         assertEquals(ticket.type, retrieved.type)
         assertEquals(ticket.priority, retrieved.priority)
         assertEquals(ticket.status, retrieved.status)
-    }}
+    } }
 
     @Test
     fun `createTicket preserves all ticket fields`() { runBlocking {
@@ -105,7 +105,7 @@ class TicketRepositoryTest {
             priority = TicketPriority.CRITICAL,
             status = TicketStatus.READY,
             assignedAgentId = assigneeAgentId,
-            dueDate = dueDate
+            dueDate = dueDate,
         )
 
         repo.createTicket(ticket)
@@ -119,7 +119,7 @@ class TicketRepositoryTest {
         assertEquals(TicketStatus.READY, retrieved.status)
         assertEquals(assigneeAgentId, retrieved.assignedAgentId)
         assertNotNull(retrieved.dueDate)
-    }}
+    } }
 
     @Test
     fun `createTicket returns error for duplicate id`() { runBlocking {
@@ -132,7 +132,7 @@ class TicketRepositoryTest {
         assertTrue(result.isFailure)
         val error = result.exceptionOrNull()
         assertIs<TicketError.DatabaseError>(error)
-    }}
+    } }
 
     // =============================================================================
     // GET TICKET TESTS
@@ -144,7 +144,7 @@ class TicketRepositoryTest {
 
         assertTrue(result.isSuccess)
         assertNull(result.getOrNull())
-    }}
+    } }
 
     @Test
     fun `getTicket returns ticket for existing id`() { runBlocking {
@@ -156,7 +156,7 @@ class TicketRepositoryTest {
         assertTrue(result.isSuccess)
         assertNotNull(result.getOrNull())
         assertEquals(ticket.id, result.getOrNull()?.id)
-    }}
+    } }
 
     // =============================================================================
     // UPDATE STATUS TESTS
@@ -174,7 +174,7 @@ class TicketRepositoryTest {
         val updated = repo.getTicket(ticket.id).getOrNull()
         assertNotNull(updated)
         assertEquals(TicketStatus.READY, updated.status)
-    }}
+    } }
 
     @Test
     fun `updateStatus accepts valid transition READY to IN_PROGRESS`() { runBlocking {
@@ -186,7 +186,7 @@ class TicketRepositoryTest {
         assertTrue(result.isSuccess)
         val updated = repo.getTicket(ticket.id).getOrNull()
         assertEquals(TicketStatus.IN_PROGRESS, updated?.status)
-    }}
+    } }
 
     @Test
     fun `updateStatus accepts valid transition IN_PROGRESS to DONE`() { runBlocking {
@@ -198,7 +198,7 @@ class TicketRepositoryTest {
         assertTrue(result.isSuccess)
         val updated = repo.getTicket(ticket.id).getOrNull()
         assertEquals(TicketStatus.DONE, updated?.status)
-    }}
+    } }
 
     @Test
     fun `updateStatus rejects invalid transition BACKLOG to IN_PROGRESS`() { runBlocking {
@@ -212,7 +212,7 @@ class TicketRepositoryTest {
         assertIs<TicketError.InvalidStateTransition>(error)
         assertEquals(TicketStatus.BACKLOG, error.fromState)
         assertEquals(TicketStatus.IN_PROGRESS, error.toState)
-    }}
+    } }
 
     @Test
     fun `updateStatus rejects invalid transition READY to DONE`() { runBlocking {
@@ -226,7 +226,7 @@ class TicketRepositoryTest {
         assertIs<TicketError.InvalidStateTransition>(error)
         assertEquals(TicketStatus.READY, error.fromState)
         assertEquals(TicketStatus.DONE, error.toState)
-    }}
+    } }
 
     @Test
     fun `updateStatus rejects invalid transition DONE to any status`() { runBlocking {
@@ -238,7 +238,7 @@ class TicketRepositoryTest {
         assertTrue(result.isFailure)
         val error = result.exceptionOrNull()
         assertIs<TicketError.InvalidStateTransition>(error)
-    }}
+    } }
 
     @Test
     fun `updateStatus returns TicketNotFound for nonexistent ticket`() { runBlocking {
@@ -248,7 +248,7 @@ class TicketRepositoryTest {
         val error = result.exceptionOrNull()
         assertIs<TicketError.TicketNotFound>(error)
         assertEquals("nonexistent", error.ticketId)
-    }}
+    } }
 
     @Test
     fun `updateStatus updates the updatedAt timestamp`() { runBlocking {
@@ -263,7 +263,7 @@ class TicketRepositoryTest {
         val updated = repo.getTicket(ticket.id).getOrNull()
         assertNotNull(updated)
         assertTrue(updated.updatedAt > ticket.updatedAt)
-    }}
+    } }
 
     // =============================================================================
     // ASSIGN TICKET TESTS
@@ -279,7 +279,7 @@ class TicketRepositoryTest {
         assertTrue(result.isSuccess)
         val updated = repo.getTicket(ticket.id).getOrNull()
         assertEquals(assigneeAgentId, updated?.assignedAgentId)
-    }}
+    } }
 
     @Test
     fun `assignTicket can unassign ticket with null`() { runBlocking {
@@ -291,7 +291,7 @@ class TicketRepositoryTest {
         assertTrue(result.isSuccess)
         val updated = repo.getTicket(ticket.id).getOrNull()
         assertNull(updated?.assignedAgentId)
-    }}
+    } }
 
     @Test
     fun `assignTicket returns TicketNotFound for nonexistent ticket`() { runBlocking {
@@ -300,7 +300,7 @@ class TicketRepositoryTest {
         assertTrue(result.isFailure)
         val error = result.exceptionOrNull()
         assertIs<TicketError.TicketNotFound>(error)
-    }}
+    } }
 
     // =============================================================================
     // GET TICKETS BY STATUS TESTS
@@ -318,7 +318,7 @@ class TicketRepositoryTest {
         val tickets = result.getOrNull()!!
         assertEquals(2, tickets.size)
         assertTrue(tickets.all { it.status == TicketStatus.BACKLOG })
-    }}
+    } }
 
     @Test
     fun `getTicketsByStatus returns empty list when no matches`() { runBlocking {
@@ -328,7 +328,7 @@ class TicketRepositoryTest {
 
         assertTrue(result.isSuccess)
         assertEquals(0, result.getOrNull()?.size)
-    }}
+    } }
 
     @Test
     fun `getTicketsByStatus orders by priority DESC then createdAt ASC`() { runBlocking {
@@ -347,7 +347,7 @@ class TicketRepositoryTest {
         assertEquals(TicketPriority.HIGH, tickets[0].priority)
         assertEquals(TicketPriority.HIGH, tickets[1].priority)
         assertEquals(TicketPriority.LOW, tickets[2].priority)
-    }}
+    } }
 
     // =============================================================================
     // GET TICKETS BY AGENT TESTS
@@ -365,7 +365,7 @@ class TicketRepositoryTest {
         val tickets = result.getOrNull()!!
         assertEquals(2, tickets.size)
         assertTrue(tickets.all { it.assignedAgentId == "agent-1" })
-    }}
+    } }
 
     @Test
     fun `getTicketsByAgent returns empty list for unassigned agent`() { runBlocking {
@@ -375,7 +375,7 @@ class TicketRepositoryTest {
 
         assertTrue(result.isSuccess)
         assertEquals(0, result.getOrNull()?.size)
-    }}
+    } }
 
     // =============================================================================
     // GET ALL TICKETS TESTS
@@ -391,7 +391,7 @@ class TicketRepositoryTest {
 
         assertTrue(result.isSuccess)
         assertEquals(3, result.getOrNull()?.size)
-    }}
+    } }
 
     @Test
     fun `getAllTickets returns empty list when no tickets exist`() { runBlocking {
@@ -399,7 +399,7 @@ class TicketRepositoryTest {
 
         assertTrue(result.isSuccess)
         assertEquals(0, result.getOrNull()?.size)
-    }}
+    } }
 
     // =============================================================================
     // GET TICKETS BY PRIORITY TESTS
@@ -417,7 +417,7 @@ class TicketRepositoryTest {
         val tickets = result.getOrNull()!!
         assertEquals(2, tickets.size)
         assertTrue(tickets.all { it.priority == TicketPriority.CRITICAL })
-    }}
+    } }
 
     // =============================================================================
     // GET TICKETS BY TYPE TESTS
@@ -435,7 +435,7 @@ class TicketRepositoryTest {
         val tickets = result.getOrNull()!!
         assertEquals(2, tickets.size)
         assertTrue(tickets.all { it.type == TicketType.BUG })
-    }}
+    } }
 
     // =============================================================================
     // GET TICKETS BY CREATOR TESTS
@@ -453,7 +453,7 @@ class TicketRepositoryTest {
         val tickets = result.getOrNull()!!
         assertEquals(2, tickets.size)
         assertTrue(tickets.all { it.createdByAgentId == "creator-1" })
-    }}
+    } }
 
     // =============================================================================
     // UPDATE TICKET DETAILS TESTS
@@ -464,14 +464,14 @@ class TicketRepositoryTest {
         val ticket = createTicket(
             title = "Original Title",
             description = "Original Description",
-            priority = TicketPriority.LOW
+            priority = TicketPriority.LOW,
         )
         repo.createTicket(ticket)
 
         val result = repo.updateTicketDetails(
             ticketId = ticket.id,
             title = "New Title",
-            priority = TicketPriority.HIGH
+            priority = TicketPriority.HIGH,
         )
 
         assertTrue(result.isSuccess)
@@ -479,19 +479,19 @@ class TicketRepositoryTest {
         assertEquals("New Title", updated.title)
         assertEquals("Original Description", updated.description) // unchanged
         assertEquals(TicketPriority.HIGH, updated.priority)
-    }}
+    } }
 
     @Test
     fun `updateTicketDetails returns TicketNotFound for nonexistent ticket`() { runBlocking {
         val result = repo.updateTicketDetails(
             ticketId = "nonexistent",
-            title = "New Title"
+            title = "New Title",
         )
 
         assertTrue(result.isFailure)
         val error = result.exceptionOrNull()
         assertIs<TicketError.TicketNotFound>(error)
-    }}
+    } }
 
     // =============================================================================
     // DELETE TICKET TESTS
@@ -506,14 +506,14 @@ class TicketRepositoryTest {
 
         assertTrue(result.isSuccess)
         assertNull(repo.getTicket(ticket.id).getOrNull())
-    }}
+    } }
 
     @Test
     fun `deleteTicket succeeds even for nonexistent ticket`() { runBlocking {
         val result = repo.deleteTicket("nonexistent")
 
         assertTrue(result.isSuccess)
-    }}
+    } }
 
     // =============================================================================
     // ERROR MESSAGE TESTS
@@ -529,7 +529,7 @@ class TicketRepositoryTest {
         val error = result.exceptionOrNull() as TicketError.InvalidStateTransition
         assertTrue(error.message.contains("BACKLOG"))
         assertTrue(error.message.contains("IN_REVIEW"))
-    }}
+    } }
 
     @Test
     fun `TicketNotFound error message contains ticketId`() {

@@ -26,7 +26,6 @@ import link.socket.kore.agents.events.bus.EventBusFactory
 import link.socket.kore.agents.events.bus.subscribe
 import link.socket.kore.agents.events.subscription.EventSubscription
 import link.socket.kore.data.DEFAULT_JSON
-import link.socket.kore.agents.events.EventRepository
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventBusIntegrationTest {
@@ -85,7 +84,7 @@ class EventBusIntegrationTest {
             val driver1 = JdbcSqliteDriver("jdbc:sqlite:$dbFile")
             Database.Schema.create(driver1)
             val bus1 = eventBusFactory.create()
-            
+
             val e1 = taskEvent("evt-bus-1", ts = Instant.fromEpochSeconds((10_000)))
             val e2 = questionEvent("evt-bus-2", ts = Instant.fromEpochSeconds(20_000))
             val api1 = AgentEventApiFactory(eventRepository, bus1).create("agent-A")
@@ -98,7 +97,7 @@ class EventBusIntegrationTest {
             val driver2 = JdbcSqliteDriver("jdbc:sqlite:$dbFile")
             val bus2 = eventBusFactory.create()
             val api2 = AgentEventApiFactory(eventRepository, bus2).create("agent-A")
-            
+
             // History query
             val history = api2.getEventHistory()
             assertEquals(2, history.size)

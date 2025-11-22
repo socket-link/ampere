@@ -4,7 +4,6 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -148,7 +147,7 @@ class MinimalAutonomousAgentTest {
         val perception = Perception(
             ideas = listOf(Idea(name = "Test")),
             currentState = AgentState(),
-            timestamp = kotlinx.datetime.Clock.System.now()
+            timestamp = kotlinx.datetime.Clock.System.now(),
         )
         agent.testRememberPerception(perception)
 
@@ -456,7 +455,7 @@ class MinimalAutonomousAgentTest {
     fun `executePlan stops at first failure`() {
         runBlocking {
             val failingAgent = TestAutonomousAgent(
-                executeResult = Outcome.Failure(Task.blank, "Failed")
+                executeResult = Outcome.Failure(Task.blank, "Failed"),
             )
 
             val task1 = CodeChange(id = "1", description = "First")
@@ -493,7 +492,7 @@ class MinimalAutonomousAgentTest {
                 override val requiredAutonomyLevel = AutonomyLevel.ASK_BEFORE_ACTION
                 override suspend fun execute(
                     sourceTask: Task,
-                    parameters: Map<String, Any?>
+                    parameters: Map<String, Any?>,
                 ) = Outcome.Success.Full(sourceTask, "Done")
                 override fun validateParameters(parameters: Map<String, Any>) = true
             }

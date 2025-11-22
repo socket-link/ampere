@@ -67,7 +67,7 @@ fun SuggestedModelsSection(
                     model = model,
                     onClick = {
                         onModelSelected(model)
-                    }
+                    },
                 )
             }
         }

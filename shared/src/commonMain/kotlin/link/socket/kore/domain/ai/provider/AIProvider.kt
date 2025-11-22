@@ -16,7 +16,8 @@ typealias ProviderId = String
 
 sealed interface AIProvider<
     TD : AITool,
-    L : AIModel> {
+    L : AIModel,
+    > {
 
     val id: ProviderId
     val name: String
@@ -47,7 +48,7 @@ sealed interface AIProvider<
                 ClientHost(
                     baseUrl = hostUrl,
                 )
-            } ?: ClientHost.OpenAI
+            } ?: ClientHost.OpenAI,
         )
     }
 }

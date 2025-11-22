@@ -108,7 +108,7 @@ fun ChatMessage(
             when (message) {
                 is Chat.System,
                 is Chat.Text,
-                    -> {
+                -> {
                     val messageContent = message.chatMessage.content ?: ""
 
                     if (message.role == Role.User) {

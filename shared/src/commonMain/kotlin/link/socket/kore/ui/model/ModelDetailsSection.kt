@@ -62,7 +62,7 @@ fun ModelDetailsSection(
                 color = Color(0xFF4A5568),
                 text = "Supported Inputs",
             )
-            
+
             ModelSupportedInputsSection(
                 modifier = Modifier
                     .fillMaxWidth(),

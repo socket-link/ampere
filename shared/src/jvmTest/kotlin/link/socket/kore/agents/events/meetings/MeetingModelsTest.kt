@@ -45,7 +45,7 @@ class MeetingModelsTest {
             expectedOutcomes = listOf(
                 MeetingOutcome.Type.ACTION_ITEM,
                 MeetingOutcome.Type.DECISION_MADE,
-            )
+            ),
         )
 
         val outcomes = listOf(
@@ -75,14 +75,14 @@ class MeetingModelsTest {
                 messagingDetails = MeetingMessagingDetails(
                     messageChannelId = "channel-1",
                     messageThreadId = "thread-1",
-                )
+                ),
             ),
             invitation = MeetingInvitation(
                 title = "Daily Standup",
                 agenda = agenda,
                 requiredParticipants = listOf(stubAssignedTo),
                 optionalParticipants = listOf(stubAssignedTo),
-            )
+            ),
         )
 
         assert(meeting.type is MeetingType.Standup)

@@ -112,8 +112,8 @@ data object APIDesignAgent : AgentDefinition.Bundled(
             "Breaking Change Analysis",
             "API Evolution Planning",
             "Deprecation Strategy",
-            "New API Design"
-        )
+            "New API Design",
+        ),
     )
 
     private val principleArg = AgentInput.EnumArgs(
@@ -126,8 +126,8 @@ data object APIDesignAgent : AgentDefinition.Bundled(
             "Consistency",
             "Performance",
             "Type Safety",
-            "Backward Compatibility"
-        )
+            "Backward Compatibility",
+        ),
     )
 
     override val prompt: String

@@ -83,21 +83,21 @@ class TicketMeetingIntegrationTest {
             eventClassType = TicketEvent.TicketCreated.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
-            }
+            },
         )
         eventBus.subscribe(
             agentId = "test-subscriber",
             eventClassType = TicketEvent.TicketBlocked.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
-            }
+            },
         )
         eventBus.subscribe(
             agentId = "test-subscriber",
             eventClassType = TicketEvent.TicketMeetingScheduled.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
-            }
+            },
         )
 
         publishedEvents.clear()
@@ -135,7 +135,7 @@ class TicketMeetingIntegrationTest {
                     topic = "Discuss implementation approach",
                     assignedTo = AssignedTo.Agent(stubAssignedAgentId),
                     status = Task.Status.Pending(),
-                )
+                ),
             )
 
             // Schedule a meeting for the ticket

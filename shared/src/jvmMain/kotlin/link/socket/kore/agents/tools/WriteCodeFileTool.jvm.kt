@@ -12,7 +12,7 @@ import link.socket.kore.agents.events.tasks.Task
  * directories as needed and returns an [Outcome] describing the result.
  */
 actual class WriteCodeFileTool actual constructor(
-    private val baseDirectory: String
+    private val baseDirectory: String,
 ) : Tool {
     actual override val id: ToolId = "write_code_file"
     actual override val name: String = "Create Code"

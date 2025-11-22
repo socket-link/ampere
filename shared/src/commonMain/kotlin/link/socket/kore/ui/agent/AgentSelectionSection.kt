@@ -62,7 +62,7 @@ private fun AgentRow(
     modifier: Modifier = Modifier,
 ) {
     val isExpanded: MutableState<Boolean> = remember { mutableStateOf(true) }
-    
+
     Column(modifier = modifier) {
         Surface(
             modifier = Modifier

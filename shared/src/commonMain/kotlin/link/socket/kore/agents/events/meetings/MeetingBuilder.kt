@@ -60,7 +60,7 @@ class MeetingBuilder(
     }
 
     fun scheduledFor(
-        scheduledFor: Instant
+        scheduledFor: Instant,
     ): MeetingBuilder {
         this.scheduledFor = scheduledFor
         return this

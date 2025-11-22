@@ -29,7 +29,7 @@ fun RateLimitChart(
     inputTokensPerMinute: TokenCount?,
     outputTokensPerMinute: TokenCount?,
     rateLimits: RateLimits,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val requestsValue = requestsPerMinute.toLong()
     val inputTokensValue = inputTokensPerMinute?.let { getTokenNumericValue(it) } ?: 0L
@@ -64,25 +64,25 @@ fun RateLimitChart(
 
         if (inputTokensPerMinute != null) {
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             RateLimitBar(
                 label = "Input Tokens/Min",
                 value = inputTokensPerMinute.label,
                 progress = inputProgress,
                 color = Color(0xFF4CAF50),
-                isLarger = inputTokensValue >= outputTokensValue
+                isLarger = inputTokensValue >= outputTokensValue,
             )
         }
 
         if (outputTokensPerMinute != null) {
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             RateLimitBar(
                 label = "Output Tokens/Min",
                 value = outputTokensPerMinute.label,
                 progress = outputProgress,
                 color = Color(0xFF2196F3),
-                isLarger = outputTokensValue >= inputTokensValue
+                isLarger = outputTokensValue >= inputTokensValue,
             )
         }
     }
@@ -95,17 +95,17 @@ private fun RateLimitBar(
     progress: Float,
     color: Color,
     isLarger: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.caption,
             color = MaterialTheme.colors.onSurface.copy(alpha = 0.8f),
-            modifier = Modifier.width(100.dp)
+            modifier = Modifier.width(100.dp),
         )
 
         Spacer(modifier = Modifier.width(8.dp))
@@ -116,8 +116,8 @@ private fun RateLimitBar(
                 .height(8.dp)
                 .background(
                     color = MaterialTheme.colors.onSurface.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(4.dp)
-                )
+                    shape = RoundedCornerShape(4.dp),
+                ),
         ) {
             Box(
                 modifier = Modifier
@@ -125,8 +125,8 @@ private fun RateLimitBar(
                     .height(8.dp)
                     .background(
                         color = color,
-                        shape = RoundedCornerShape(4.dp)
-                    )
+                        shape = RoundedCornerShape(4.dp),
+                    ),
             )
         }
 
@@ -138,7 +138,7 @@ private fun RateLimitBar(
             fontWeight = FontWeight.Bold,
             color = color,
             textAlign = TextAlign.End,
-            modifier = Modifier.width(80.dp)
+            modifier = Modifier.width(80.dp),
         )
     }
 }

@@ -28,5 +28,5 @@ data object DIYAgent : AgentDefinition.Bundled(
             aiConfiguration(AIModel_OpenAI.GPT_5_nano),
             aiConfiguration(AIModel_Claude.Haiku_3_5),
         )
-    }
+    },
 )

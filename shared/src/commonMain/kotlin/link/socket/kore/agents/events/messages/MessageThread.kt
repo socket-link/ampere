@@ -18,7 +18,7 @@ data class MessageThread(
     val createdAt: Instant,
     val updatedAt: Instant,
 ) {
-    //** Function to create a new conversation thread with an initial message and participant. */
+    // ** Function to create a new conversation thread with an initial message and participant. */
     companion object Companion {
         fun create(
             id: String,
@@ -41,20 +41,20 @@ data class MessageThread(
         }
     }
 
-    //** Function to add a participant to the thread. */
+    // ** Function to add a participant to the thread. */
     fun addParticipant(participant: MessageSender): MessageThread =
         copy(
             participants = participants + participant,
             updatedAt = Clock.System.now(),
         )
 
-    //** Function to remove a participant from the thread. */
+    // ** Function to remove a participant from the thread. */
     fun removeParticipant(participant: MessageSender): MessageThread =
         copy(
             participants = participants - participant,
         )
 
-    //** Function to clear all participants, usually after a thread has ended. */
+    // ** Function to clear all participants, usually after a thread has ended. */
     fun removeAllParticipants(): MessageThread =
         copy(
             participants = emptySet(),
@@ -67,7 +67,7 @@ data class MessageThread(
             updatedAt = message.timestamp,
         )
 
-    //** Function to update status after first checking that it's a valid status transition. */
+    // ** Function to update status after first checking that it's a valid status transition. */
     fun updateStatus(newStatus: EventStatus): MessageThread {
         val validStatusTransition = status.canTransitionTo(newStatus)
 

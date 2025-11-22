@@ -1,9 +1,9 @@
 package link.socket.kore.agents.events.meetings
 
 import link.socket.kore.agents.core.AgentId
+import link.socket.kore.agents.events.EventSource
 import link.socket.kore.agents.events.utils.ConsoleEventLogger
 import link.socket.kore.agents.events.utils.EventLogger
-import link.socket.kore.agents.events.EventSource
 
 class AgentMeetingsApi(
     val agentId: AgentId,

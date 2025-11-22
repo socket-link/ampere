@@ -8,7 +8,7 @@ import link.socket.kore.agents.core.Outcome
  * Android actual for RunTestsTool using the Gradle wrapper.
  */
 actual class RunTestsTool actual constructor(
-    private val projectRoot: String
+    private val projectRoot: String,
 ) : Tool {
     actual override val name: String = "run_tests"
     actual override val description: String = "Executes tests and returns results"
@@ -39,7 +39,7 @@ actual class RunTestsTool actual constructor(
             Outcome(
                 success = exitCode == 0,
                 result = output,
-                errorMessage = if (exitCode != 0) "Tests failed" else null
+                errorMessage = if (exitCode != 0) "Tests failed" else null,
             )
         } catch (e: Exception) {
             Outcome(false, null, "Failed to run tests: ${e.message}")

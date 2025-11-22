@@ -78,7 +78,7 @@ fun TokenUsageChart(
             value = maxOutput.label,
             progress = outputProgress,
             color = Color(0xFF2196F3),
-            isLarger = outputValue > contextValue
+            isLarger = outputValue > contextValue,
         )
     }
 }
@@ -90,7 +90,7 @@ private fun TokenBar(
     progress: Float,
     color: Color,
     isLarger: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
@@ -117,8 +117,8 @@ private fun TokenBar(
                 .background(
                     color = MaterialTheme
                         .colors.onSurface.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(4.dp)
-                )
+                    shape = RoundedCornerShape(4.dp),
+                ),
         ) {
             Box(
                 modifier = Modifier
@@ -126,8 +126,8 @@ private fun TokenBar(
                     .height(8.dp)
                     .background(
                         color = color,
-                        shape = RoundedCornerShape(4.dp)
-                    )
+                        shape = RoundedCornerShape(4.dp),
+                    ),
             )
         }
 

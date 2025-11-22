@@ -110,7 +110,6 @@ interface LLMAgent {
             onNewChats(listOf(completionChat))
         }
 
-
         return if (response.finishReason == FinishReason.ToolCalls) {
             val toolChats = response.message.executePendingToolCalls()
             onNewChats(toolChats)

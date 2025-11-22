@@ -20,7 +20,7 @@ actual class WriteCodeFileToolTest {
         val tool = WriteCodeFileTool("/tmp")
         assertEquals(true, tool.validateParameters(mapOf("filePath" to "A.kt", "content" to "fun a() = Unit")))
         assertEquals(false, tool.validateParameters(emptyMap()))
-        assertEquals(false,tool.validateParameters(mapOf("filePath" to 1, "content" to "x")))
+        assertEquals(false, tool.validateParameters(mapOf("filePath" to 1, "content" to "x")))
         assertEquals(false, tool.validateParameters(mapOf("filePath" to "x", "content" to 2)))
     }
 

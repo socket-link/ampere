@@ -50,7 +50,7 @@ data class AIConfiguration_WithBackups(
                 ?: throw IllegalStateException(
                     "Failed to initialize LLM for ${secondBackupConfigurationProvider?.model?.name}",
                 )
-        } else if (usedBackupConfiguration){
+        } else if (usedBackupConfiguration) {
             backupConfigurationProvider?.model
                 ?: throw IllegalStateException(
                     "Failed to initialize LLM for ${backupConfigurationProvider?.model?.name}",

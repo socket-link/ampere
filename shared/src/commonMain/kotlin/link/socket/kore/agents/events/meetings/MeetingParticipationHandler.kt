@@ -5,9 +5,9 @@ import kotlinx.coroutines.sync.withLock
 import link.socket.kore.agents.core.AgentId
 import link.socket.kore.agents.core.AssignedTo
 import link.socket.kore.agents.core.MinimalAutonomousAgent
-import link.socket.kore.agents.events.bus.EventBus
-import link.socket.kore.agents.events.api.EventHandler
 import link.socket.kore.agents.events.MeetingEvent
+import link.socket.kore.agents.events.api.EventHandler
+import link.socket.kore.agents.events.bus.EventBus
 import link.socket.kore.agents.events.tasks.Task
 
 /**
@@ -64,7 +64,7 @@ class MeetingParticipationHandler(
                 if (event is MeetingEvent.MeetingStarted) {
                     handleMeetingStartedEvent(event)
                 }
-            }
+            },
         )
 
         // Subscribe to AgendaItemStarted events
@@ -75,7 +75,7 @@ class MeetingParticipationHandler(
                 if (event is MeetingEvent.AgendaItemStarted) {
                     handleAgendaItemStartedEvent(event)
                 }
-            }
+            },
         )
 
         // Subscribe to MeetingCompleted events
@@ -86,7 +86,7 @@ class MeetingParticipationHandler(
                 if (event is MeetingEvent.MeetingCompleted) {
                     handleMeetingCompletedEvent(event)
                 }
-            }
+            },
         )
     }
 
@@ -181,7 +181,7 @@ class MeetingParticipationHandler(
         if (currentItem != null) {
             val assignmentInfo = when {
                 currentItem.assignedTo is AssignedTo.Agent &&
-                (currentItem.assignedTo as AssignedTo.Agent).agentId == agent.id ->
+                    (currentItem.assignedTo as AssignedTo.Agent).agentId == agent.id ->
                     " You are assigned to present this topic."
                 else -> ""
             }
@@ -214,7 +214,7 @@ class MeetingParticipationHandler(
 
         // Check if agent is assigned to this agenda item
         val isAssigned = event.agendaItem.assignedTo is AssignedTo.Agent &&
-                (event.agendaItem.assignedTo as AssignedTo.Agent).agentId == agent.id
+            (event.agendaItem.assignedTo as AssignedTo.Agent).agentId == agent.id
 
         if (isAssigned) {
             // Agent is assigned - prompt to present/contribute on topic
