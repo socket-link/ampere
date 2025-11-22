@@ -18,6 +18,8 @@ import link.socket.kore.agents.events.Event
 import link.socket.kore.agents.events.TicketEvent
 import link.socket.kore.agents.events.api.EventHandler
 import link.socket.kore.agents.events.bus.EventBus
+import link.socket.kore.agents.events.meetings.MeetingOrchestrator
+import link.socket.kore.agents.events.meetings.MeetingRepository
 import link.socket.kore.agents.events.messages.AgentMessageApi
 import link.socket.kore.agents.events.messages.MessageRepository
 import link.socket.kore.data.DEFAULT_JSON
@@ -26,17 +28,21 @@ class TicketOrchestratorTest {
 
     private lateinit var driver: JdbcSqliteDriver
     private lateinit var database: Database
-    private lateinit var ticketRepository: TicketRepository
+
     private lateinit var messageRepository: MessageRepository
+    private lateinit var meetingRepository: MeetingRepository
+    private lateinit var ticketRepository: TicketRepository
+
     private lateinit var eventBus: EventBus
     private lateinit var messageApi: AgentMessageApi
-    private lateinit var orchestrator: TicketOrchestrator
-    private val testScope = CoroutineScope(Dispatchers.Default)
+    private lateinit var meetingOrchestrator: MeetingOrchestrator
+    private lateinit var ticketOrchestrator: TicketOrchestrator
 
-    private val orchestratorAgentId: AgentId = "orchestrator-agent"
-    private val creatorAgentId: AgentId = "creator-agent"
-    private val assignedAgentId: AgentId = "assigned-agent"
-    private val unauthorizedAgentId: AgentId = "unauthorized-agent"
+    private val testScope = CoroutineScope(Dispatchers.Default)
+    private val stubOrchestratorAgentId: AgentId = "orchestrator-agent"
+    private val stubCreatorAgentId: AgentId = "creator-agent"
+    private val stubAssignedAgentId: AgentId = "assigned-agent"
+    private val stubUnauthorizedAgentId: AgentId = "unauthorized-agent"
 
     private val publishedEvents = mutableListOf<Event>()
 
@@ -46,10 +52,25 @@ class TicketOrchestratorTest {
         Database.Schema.create(driver)
         database = Database.Companion(driver)
 
-        ticketRepository = TicketRepository(database)
         messageRepository = MessageRepository(DEFAULT_JSON, testScope, database)
+        meetingRepository = MeetingRepository(DEFAULT_JSON, testScope, database)
+        ticketRepository = TicketRepository(database)
+
         eventBus = EventBus(testScope)
-        messageApi = AgentMessageApi(orchestratorAgentId, messageRepository, eventBus)
+        messageApi = AgentMessageApi(stubOrchestratorAgentId, messageRepository, eventBus)
+
+        meetingOrchestrator = MeetingOrchestrator(
+            repository = meetingRepository,
+            eventBus = eventBus,
+            messageApi = messageApi,
+        )
+
+        ticketOrchestrator = TicketOrchestrator(
+            ticketRepository = ticketRepository,
+            eventBus = eventBus,
+            messageApi = messageApi,
+            meetingOrchestrator = meetingOrchestrator,
+        )
 
         // Subscribe to capture published events
         eventBus.subscribe(
@@ -81,12 +102,6 @@ class TicketOrchestratorTest {
             }
         )
 
-        orchestrator = TicketOrchestrator(
-            ticketRepository = ticketRepository,
-            eventBus = eventBus,
-            messageApi = messageApi,
-        )
-
         publishedEvents.clear()
     }
 
@@ -100,12 +115,12 @@ class TicketOrchestratorTest {
     @Test
     fun `createTicket creates ticket and thread and publishes event`() {
         runBlocking {
-            val result = orchestrator.createTicket(
+            val result = ticketOrchestrator.createTicket(
                 title = "Test Ticket",
                 description = "Test description",
                 type = TicketType.TASK,
                 priority = TicketPriority.MEDIUM,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
 
             assertTrue(result.isSuccess)
@@ -118,7 +133,7 @@ class TicketOrchestratorTest {
             assertEquals(TicketType.TASK, ticket.type)
             assertEquals(TicketPriority.MEDIUM, ticket.priority)
             assertEquals(TicketStatus.BACKLOG, ticket.status)
-            assertEquals(creatorAgentId, ticket.createdByAgentId)
+            assertEquals(stubCreatorAgentId, ticket.createdByAgentId)
 
             // Verify thread was created
             assertNotNull(thread)
@@ -143,12 +158,12 @@ class TicketOrchestratorTest {
     @Test
     fun `createTicket fails with blank title`() {
         runBlocking {
-            val result = orchestrator.createTicket(
+            val result = ticketOrchestrator.createTicket(
                 title = "",
                 description = "Test description",
                 type = TicketType.TASK,
                 priority = TicketPriority.MEDIUM,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
 
             assertTrue(result.isFailure)
@@ -162,12 +177,12 @@ class TicketOrchestratorTest {
     fun `createTicket sets correct urgency based on priority`() {
         runBlocking {
             // Create a CRITICAL priority ticket
-            orchestrator.createTicket(
+            ticketOrchestrator.createTicket(
                 title = "Critical Ticket",
                 description = "Critical issue",
                 type = TicketType.BUG,
                 priority = TicketPriority.CRITICAL,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
 
             delay(100)
@@ -184,21 +199,21 @@ class TicketOrchestratorTest {
     fun `transitionTicketStatus with valid transition publishes event and updates thread`() {
         runBlocking {
             // Create a ticket first
-            val createResult = orchestrator.createTicket(
+            val createResult = ticketOrchestrator.createTicket(
                 title = "Transition Test",
                 description = "Test",
                 type = TicketType.TASK,
                 priority = TicketPriority.MEDIUM,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
             val (ticket, _) = createResult.getOrNull()!!
             publishedEvents.clear()
 
             // Transition from BACKLOG to READY (valid transition)
-            val result = orchestrator.transitionTicketStatus(
+            val result = ticketOrchestrator.transitionTicketStatus(
                 ticketId = ticket.id,
                 newStatus = TicketStatus.READY,
-                actorAgentId = creatorAgentId,
+                actorAgentId = stubCreatorAgentId,
             )
 
             assertTrue(result.isSuccess)
@@ -221,20 +236,20 @@ class TicketOrchestratorTest {
     fun `transitionTicketStatus fails with invalid state transition`() {
         runBlocking {
             // Create a ticket
-            val createResult = orchestrator.createTicket(
+            val createResult = ticketOrchestrator.createTicket(
                 title = "Invalid Transition",
                 description = "Test",
                 type = TicketType.TASK,
                 priority = TicketPriority.MEDIUM,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
             val (ticket, _) = createResult.getOrNull()!!
 
             // Try invalid transition from BACKLOG to BLOCKED
-            val result = orchestrator.transitionTicketStatus(
+            val result = ticketOrchestrator.transitionTicketStatus(
                 ticketId = ticket.id,
                 newStatus = TicketStatus.BLOCKED,
-                actorAgentId = creatorAgentId,
+                actorAgentId = stubCreatorAgentId,
             )
 
             assertTrue(result.isFailure)
@@ -246,10 +261,10 @@ class TicketOrchestratorTest {
     @Test
     fun `transitionTicketStatus fails for non-existent ticket`() {
         runBlocking {
-            val result = orchestrator.transitionTicketStatus(
+            val result = ticketOrchestrator.transitionTicketStatus(
                 ticketId = "non-existent-id",
                 newStatus = TicketStatus.READY,
-                actorAgentId = creatorAgentId,
+                actorAgentId = stubCreatorAgentId,
             )
 
             assertTrue(result.isFailure)
@@ -262,20 +277,20 @@ class TicketOrchestratorTest {
     fun `transitionTicketStatus rejects unauthorized agent`() {
         runBlocking {
             // Create a ticket
-            val createResult = orchestrator.createTicket(
+            val createResult = ticketOrchestrator.createTicket(
                 title = "Unauthorized Test",
                 description = "Test",
                 type = TicketType.TASK,
                 priority = TicketPriority.MEDIUM,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
             val (ticket, _) = createResult.getOrNull()!!
 
             // Try transition by unauthorized agent
-            val result = orchestrator.transitionTicketStatus(
+            val result = ticketOrchestrator.transitionTicketStatus(
                 ticketId = ticket.id,
                 newStatus = TicketStatus.READY,
-                actorAgentId = unauthorizedAgentId,
+                actorAgentId = stubUnauthorizedAgentId,
             )
 
             assertTrue(result.isFailure)
@@ -289,28 +304,28 @@ class TicketOrchestratorTest {
     fun `transitionTicketStatus allows assigned agent to modify`() {
         runBlocking {
             // Create and assign a ticket
-            val createResult = orchestrator.createTicket(
+            val createResult = ticketOrchestrator.createTicket(
                 title = "Assigned Agent Test",
                 description = "Test",
                 type = TicketType.TASK,
                 priority = TicketPriority.MEDIUM,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
             val (ticket, _) = createResult.getOrNull()!!
 
             // Assign to another agent
-            orchestrator.assignTicket(
+            ticketOrchestrator.assignTicket(
                 ticketId = ticket.id,
-                targetAgentId = assignedAgentId,
-                assignerAgentId = creatorAgentId,
+                targetAgentId = stubAssignedAgentId,
+                assignerAgentId = stubCreatorAgentId,
             )
             publishedEvents.clear()
 
             // Transition by assigned agent should succeed
-            val result = orchestrator.transitionTicketStatus(
+            val result = ticketOrchestrator.transitionTicketStatus(
                 ticketId = ticket.id,
                 newStatus = TicketStatus.READY,
-                actorAgentId = assignedAgentId,
+                actorAgentId = stubAssignedAgentId,
             )
 
             assertTrue(result.isSuccess)
@@ -323,26 +338,26 @@ class TicketOrchestratorTest {
     fun `assignTicket assigns ticket and publishes event`() {
         runBlocking {
             // Create a ticket
-            val createResult = orchestrator.createTicket(
+            val createResult = ticketOrchestrator.createTicket(
                 title = "Assignment Test",
                 description = "Test",
                 type = TicketType.TASK,
                 priority = TicketPriority.MEDIUM,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
             val (ticket, _) = createResult.getOrNull()!!
             publishedEvents.clear()
 
             // Assign to agent
-            val result = orchestrator.assignTicket(
+            val result = ticketOrchestrator.assignTicket(
                 ticketId = ticket.id,
-                targetAgentId = assignedAgentId,
-                assignerAgentId = creatorAgentId,
+                targetAgentId = stubAssignedAgentId,
+                assignerAgentId = stubCreatorAgentId,
             )
 
             assertTrue(result.isSuccess)
             val updatedTicket = result.getOrNull()!!
-            assertEquals(assignedAgentId, updatedTicket.assignedAgentId)
+            assertEquals(stubAssignedAgentId, updatedTicket.assignedAgentId)
 
             // Wait for async event publishing
             delay(100)
@@ -351,8 +366,8 @@ class TicketOrchestratorTest {
             val assignEvents = publishedEvents.filterIsInstance<TicketEvent.TicketAssigned>()
             assertTrue(assignEvents.isNotEmpty(), "TicketAssigned event should be published")
             assertEquals(ticket.id, assignEvents.first().ticketId)
-            assertEquals(assignedAgentId, assignEvents.first().assignedTo)
-            assertEquals(creatorAgentId, assignEvents.first().assignedBy)
+            assertEquals(stubAssignedAgentId, assignEvents.first().assignedTo)
+            assertEquals(stubCreatorAgentId, assignEvents.first().assignedBy)
         }
     }
 
@@ -360,20 +375,20 @@ class TicketOrchestratorTest {
     fun `assignTicket rejects assignment by unauthorized agent`() {
         runBlocking {
             // Create a ticket
-            val createResult = orchestrator.createTicket(
+            val createResult = ticketOrchestrator.createTicket(
                 title = "Unauthorized Assignment",
                 description = "Test",
                 type = TicketType.TASK,
                 priority = TicketPriority.MEDIUM,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
             val (ticket, _) = createResult.getOrNull()!!
 
             // Try assignment by unauthorized agent
-            val result = orchestrator.assignTicket(
+            val result = ticketOrchestrator.assignTicket(
                 ticketId = ticket.id,
-                targetAgentId = assignedAgentId,
-                assignerAgentId = unauthorizedAgentId,
+                targetAgentId = stubAssignedAgentId,
+                assignerAgentId = stubUnauthorizedAgentId,
             )
 
             assertTrue(result.isFailure)
@@ -387,27 +402,27 @@ class TicketOrchestratorTest {
     fun `assignTicket allows unassignment`() {
         runBlocking {
             // Create and assign a ticket
-            val createResult = orchestrator.createTicket(
+            val createResult = ticketOrchestrator.createTicket(
                 title = "Unassignment Test",
                 description = "Test",
                 type = TicketType.TASK,
                 priority = TicketPriority.MEDIUM,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
             val (ticket, _) = createResult.getOrNull()!!
 
-            orchestrator.assignTicket(
+            ticketOrchestrator.assignTicket(
                 ticketId = ticket.id,
-                targetAgentId = assignedAgentId,
-                assignerAgentId = creatorAgentId,
+                targetAgentId = stubAssignedAgentId,
+                assignerAgentId = stubCreatorAgentId,
             )
             publishedEvents.clear()
 
             // Unassign
-            val result = orchestrator.assignTicket(
+            val result = ticketOrchestrator.assignTicket(
                 ticketId = ticket.id,
                 targetAgentId = null,
-                assignerAgentId = creatorAgentId,
+                assignerAgentId = stubCreatorAgentId,
             )
 
             assertTrue(result.isSuccess)
@@ -428,26 +443,26 @@ class TicketOrchestratorTest {
     fun `blockTicket creates thread message requesting human intervention`() {
         runBlocking {
             // Create a ticket and transition to IN_PROGRESS
-            val createResult = orchestrator.createTicket(
+            val createResult = ticketOrchestrator.createTicket(
                 title = "Block Test",
                 description = "Test",
                 type = TicketType.TASK,
                 priority = TicketPriority.HIGH,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
             val (ticket, _) = createResult.getOrNull()!!
 
             // Transition to READY -> IN_PROGRESS
-            orchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, creatorAgentId)
-            orchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, creatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubCreatorAgentId)
             publishedEvents.clear()
 
             // Block the ticket
             val blockReason = "Missing dependencies"
-            val result = orchestrator.blockTicket(
+            val result = ticketOrchestrator.blockTicket(
                 ticketId = ticket.id,
                 blockingReason = blockReason,
-                reportedByAgentId = creatorAgentId,
+                reportedByAgentId = stubCreatorAgentId,
             )
 
             assertTrue(result.isSuccess)
@@ -470,20 +485,20 @@ class TicketOrchestratorTest {
     fun `blockTicket fails for invalid state transition`() {
         runBlocking {
             // Create a ticket in BACKLOG status
-            val createResult = orchestrator.createTicket(
+            val createResult = ticketOrchestrator.createTicket(
                 title = "Invalid Block",
                 description = "Test",
                 type = TicketType.TASK,
                 priority = TicketPriority.MEDIUM,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
             val (ticket, _) = createResult.getOrNull()!!
 
             // Try to block from BACKLOG (invalid - can only block from IN_PROGRESS)
-            val result = orchestrator.blockTicket(
+            val result = ticketOrchestrator.blockTicket(
                 ticketId = ticket.id,
                 blockingReason = "Test reason",
-                reportedByAgentId = creatorAgentId,
+                reportedByAgentId = stubCreatorAgentId,
             )
 
             assertTrue(result.isFailure)
@@ -498,12 +513,12 @@ class TicketOrchestratorTest {
     fun `full ticket lifecycle from creation to completion`() {
         runBlocking {
             // Create ticket
-            val createResult = orchestrator.createTicket(
+            val createResult = ticketOrchestrator.createTicket(
                 title = "Full Lifecycle Test",
                 description = "Test the complete ticket workflow",
                 type = TicketType.FEATURE,
                 priority = TicketPriority.HIGH,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
             assertTrue(createResult.isSuccess)
             val (ticket, _) = createResult.getOrNull()!!
@@ -513,27 +528,27 @@ class TicketOrchestratorTest {
             assertEquals(TicketStatus.BACKLOG, current.status)
 
             // Assign to agent
-            orchestrator.assignTicket(ticket.id, assignedAgentId, creatorAgentId)
+            ticketOrchestrator.assignTicket(ticket.id, stubAssignedAgentId, stubCreatorAgentId)
             current = ticketRepository.getTicket(ticket.id).getOrNull()!!
-            assertEquals(assignedAgentId, current.assignedAgentId)
+            assertEquals(stubAssignedAgentId, current.assignedAgentId)
 
             // Transition: BACKLOG -> READY
-            orchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, creatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, stubCreatorAgentId)
             current = ticketRepository.getTicket(ticket.id).getOrNull()!!
             assertEquals(TicketStatus.READY, current.status)
 
             // Transition: READY -> IN_PROGRESS
-            orchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, assignedAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubAssignedAgentId)
             current = ticketRepository.getTicket(ticket.id).getOrNull()!!
             assertEquals(TicketStatus.IN_PROGRESS, current.status)
 
             // Transition: IN_PROGRESS -> IN_REVIEW
-            orchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_REVIEW, assignedAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_REVIEW, stubAssignedAgentId)
             current = ticketRepository.getTicket(ticket.id).getOrNull()!!
             assertEquals(TicketStatus.IN_REVIEW, current.status)
 
             // Transition: IN_REVIEW -> DONE
-            orchestrator.transitionTicketStatus(ticket.id, TicketStatus.DONE, assignedAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.DONE, stubAssignedAgentId)
             current = ticketRepository.getTicket(ticket.id).getOrNull()!!
             assertEquals(TicketStatus.DONE, current.status)
             assertTrue(current.isComplete)
@@ -544,31 +559,31 @@ class TicketOrchestratorTest {
     fun `ticket lifecycle with blocking and unblocking`() {
         runBlocking {
             // Create and progress ticket to IN_PROGRESS
-            val createResult = orchestrator.createTicket(
+            val createResult = ticketOrchestrator.createTicket(
                 title = "Block Lifecycle",
                 description = "Test blocking workflow",
                 type = TicketType.BUG,
                 priority = TicketPriority.CRITICAL,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
             val (ticket, _) = createResult.getOrNull()!!
 
-            orchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, creatorAgentId)
-            orchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, creatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubCreatorAgentId)
 
             // Block the ticket
-            orchestrator.blockTicket(ticket.id, "Waiting for external API", creatorAgentId)
+            ticketOrchestrator.blockTicket(ticket.id, "Waiting for external API", stubCreatorAgentId)
             var current = ticketRepository.getTicket(ticket.id).getOrNull()!!
             assertEquals(TicketStatus.BLOCKED, current.status)
             assertTrue(current.isBlocked)
 
             // Unblock: BLOCKED -> IN_PROGRESS
-            orchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, creatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubCreatorAgentId)
             current = ticketRepository.getTicket(ticket.id).getOrNull()!!
             assertEquals(TicketStatus.IN_PROGRESS, current.status)
 
             // Complete: IN_PROGRESS -> DONE
-            orchestrator.transitionTicketStatus(ticket.id, TicketStatus.DONE, creatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.DONE, stubCreatorAgentId)
             current = ticketRepository.getTicket(ticket.id).getOrNull()!!
             assertTrue(current.isComplete)
         }
@@ -580,21 +595,21 @@ class TicketOrchestratorTest {
             publishedEvents.clear()
 
             // Create ticket
-            val createResult = orchestrator.createTicket(
+            val createResult = ticketOrchestrator.createTicket(
                 title = "Multiple Events",
                 description = "Test",
                 type = TicketType.TASK,
                 priority = TicketPriority.MEDIUM,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
             val (ticket, _) = createResult.getOrNull()!!
 
             // Assign
-            orchestrator.assignTicket(ticket.id, assignedAgentId, creatorAgentId)
+            ticketOrchestrator.assignTicket(ticket.id, stubAssignedAgentId, stubCreatorAgentId)
 
             // Transition through states
-            orchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, creatorAgentId)
-            orchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, assignedAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubAssignedAgentId)
 
             // Wait for all events
             delay(100)
@@ -614,39 +629,39 @@ class TicketOrchestratorTest {
     fun `permission validation works correctly across different agents`() {
         runBlocking {
             // Create ticket as creator
-            val createResult = orchestrator.createTicket(
+            val createResult = ticketOrchestrator.createTicket(
                 title = "Permission Test",
                 description = "Test",
                 type = TicketType.TASK,
                 priority = TicketPriority.MEDIUM,
-                createdByAgentId = creatorAgentId,
+                createdByAgentId = stubCreatorAgentId,
             )
             val (ticket, _) = createResult.getOrNull()!!
 
             // Creator can modify
-            val creatorResult = orchestrator.transitionTicketStatus(
-                ticket.id, TicketStatus.READY, creatorAgentId
+            val creatorResult = ticketOrchestrator.transitionTicketStatus(
+                ticket.id, TicketStatus.READY, stubCreatorAgentId
             )
             assertTrue(creatorResult.isSuccess)
 
             // Unauthorized agent cannot modify
-            val unauthorizedResult = orchestrator.transitionTicketStatus(
-                ticket.id, TicketStatus.IN_PROGRESS, unauthorizedAgentId
+            val unauthorizedResult = ticketOrchestrator.transitionTicketStatus(
+                ticket.id, TicketStatus.IN_PROGRESS, stubUnauthorizedAgentId
             )
             assertTrue(unauthorizedResult.isFailure)
 
             // Assign to a new agent
-            orchestrator.assignTicket(ticket.id, assignedAgentId, creatorAgentId)
+            ticketOrchestrator.assignTicket(ticket.id, stubAssignedAgentId, stubCreatorAgentId)
 
             // Assigned agent can now modify
-            val assignedResult = orchestrator.transitionTicketStatus(
-                ticket.id, TicketStatus.IN_PROGRESS, assignedAgentId
+            val assignedResult = ticketOrchestrator.transitionTicketStatus(
+                ticket.id, TicketStatus.IN_PROGRESS, stubAssignedAgentId
             )
             assertTrue(assignedResult.isSuccess)
 
             // Unauthorized agent still cannot modify
-            val stillUnauthorizedResult = orchestrator.transitionTicketStatus(
-                ticket.id, TicketStatus.DONE, unauthorizedAgentId
+            val stillUnauthorizedResult = ticketOrchestrator.transitionTicketStatus(
+                ticket.id, TicketStatus.DONE, stubUnauthorizedAgentId
             )
             assertTrue(stillUnauthorizedResult.isFailure)
         }

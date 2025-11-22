@@ -132,6 +132,7 @@ class TicketEventTest {
             is TicketEvent.TicketAssigned -> "assigned"
             is TicketEvent.TicketBlocked -> "blocked"
             is TicketEvent.TicketCompleted -> "completed"
+            is TicketEvent.TicketMeetingScheduled -> "meetingScheduled"
         }
 
         val created = TicketEvent.TicketCreated(

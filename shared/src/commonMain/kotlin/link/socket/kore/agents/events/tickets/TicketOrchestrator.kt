@@ -1,15 +1,28 @@
 package link.socket.kore.agents.events.tickets
 
+import kotlin.time.Duration.Companion.hours
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import link.socket.kore.agents.core.AgentId
+import link.socket.kore.agents.core.AssignedTo
+import link.socket.kore.agents.events.EventSource
 import link.socket.kore.agents.events.TicketEvent
 import link.socket.kore.agents.events.Urgency
 import link.socket.kore.agents.events.bus.EventBus
+import link.socket.kore.agents.events.meetings.Meeting
+import link.socket.kore.agents.events.meetings.MeetingId
+import link.socket.kore.agents.events.meetings.MeetingInvitation
+import link.socket.kore.agents.events.meetings.MeetingOrchestrator
+import link.socket.kore.agents.events.meetings.MeetingStatus
+import link.socket.kore.agents.events.meetings.MeetingType
 import link.socket.kore.agents.events.messages.AgentMessageApi
 import link.socket.kore.agents.events.messages.MessageChannel
 import link.socket.kore.agents.events.messages.MessageThread
+import link.socket.kore.agents.events.tasks.AgendaItem
+import link.socket.kore.agents.events.tasks.Task
 import link.socket.kore.agents.events.utils.ConsoleEventLogger
 import link.socket.kore.agents.events.utils.EventLogger
+import link.socket.kore.agents.events.utils.generateUUID
 import link.socket.kore.util.randomUUID
 
 /**
@@ -20,6 +33,7 @@ class TicketOrchestrator(
     private val ticketRepository: TicketRepository,
     private val eventBus: EventBus,
     private val messageApi: AgentMessageApi,
+    private val meetingOrchestrator: MeetingOrchestrator,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
 
@@ -289,6 +303,7 @@ class TicketOrchestrator(
         ticketId: TicketId,
         blockingReason: String,
         reportedByAgentId: AgentId,
+        assignedToAgentId: AgentId? = null,
     ): Result<Ticket> {
         // Retrieve current ticket
         val ticketResult = ticketRepository.getTicket(ticketId)
@@ -314,15 +329,33 @@ class TicketOrchestrator(
         val now = Clock.System.now()
 
         // Update ticket status to BLOCKED
-        val updateResult = ticketRepository.updateStatus(ticketId, TicketStatus.BLOCKED)
-        if (updateResult.isFailure) {
+        val updateStatusResult = ticketRepository.updateStatus(ticketId, TicketStatus.BLOCKED)
+        if (updateStatusResult.isFailure) {
             logger.logError(
                 message = "Failed to block ticket: $ticketId",
-                throwable = updateResult.exceptionOrNull(),
+                throwable = updateStatusResult.exceptionOrNull(),
             )
             return Result.failure(
-                updateResult.exceptionOrNull() ?: TicketError.DatabaseError(Exception("Unknown error"))
+                updateStatusResult.exceptionOrNull() ?: TicketError.DatabaseError(
+                    Exception("Could not update ticket status to BLOCKED"),
+                ),
             )
+        }
+
+        // Update the ticket's assigned agent if provided
+        if (assignedToAgentId != null) {
+            val updateAssignedAgentResult = ticketRepository.assignTicket(ticketId, assignedToAgentId)
+            if (updateAssignedAgentResult.isFailure) {
+                logger.logError(
+                    message = "Failed to update ticket assignee: $ticketId",
+                    throwable = updateAssignedAgentResult.exceptionOrNull(),
+                )
+                return Result.failure(
+                    updateAssignedAgentResult.exceptionOrNull() ?: TicketError.DatabaseError(
+                        Exception("Could not assign ticket to agent: $assignedToAgentId"),
+                    ),
+                )
+            }
         }
 
         // Get updated ticket
@@ -342,7 +375,49 @@ class TicketOrchestrator(
             )
         )
 
-        // Create escalation message in ticket thread requesting human intervention
+        // Automatically schedule a decision meeting if blocker indicates need
+        // This must happen BEFORE escalation so the meeting message can be posted in the thread before it becomes blocked
+        if (blockerNeedsMeeting(blockingReason)) {
+            val meetingTime = now + 1.hours // TODO: Dynamically set the meeting time based on agent capacity
+
+            // Build participant list
+            val requiredParticipants = buildList {
+                // Always include the assigned agent to the ticket if there is one
+                updatedTicket.assignedAgentId?.let { agentId ->
+                    add(AssignedTo.Agent(agentId))
+                }
+                // Include human if blocker indicates human involvement needed
+                if (blockerNeedsHuman(blockingReason)) {
+                    add(AssignedTo.Human)
+                }
+            }
+
+            // Only schedule if we have required participants
+            if (requiredParticipants.isNotEmpty()) {
+                val agendaItems = listOf(
+                    AgendaItem(
+                        id = randomUUID(),
+                        topic = "Discuss blocker: $blockingReason",
+                        assignedTo = updatedTicket.assignedAgentId?.let { AssignedTo.Agent(it) },
+                        status = Task.Status.Pending(),
+                    )
+                )
+
+                scheduleTicketMeeting(
+                    ticketId = ticketId,
+                    scheduledTime = meetingTime,
+                    meetingTitle = "Blocker Discussion: ${updatedTicket.title}",
+                    agendaItems = agendaItems,
+                    requiredParticipants = requiredParticipants,
+                    optionalParticipants = null,
+                )
+            } else {
+                logger.logError("Could not determine participant for blocker meeting: $blockingReason, ticket: $ticketId")
+            }
+        }
+
+        // Create escalation message in the ticket thread requesting human intervention
+        // This happens AFTER meeting scheduling, so that the thread gets put into WAITING_FOR_HUMAN status
         getOrCreateTicketThread(updatedTicket)?.let { thread ->
             messageApi.escalateToHuman(
                 threadId = thread.id,
@@ -357,6 +432,108 @@ class TicketOrchestrator(
         }
 
         return Result.success(updatedTicket)
+    }
+
+    /**
+     * Schedule a meeting for a ticket requiring decisions or discussions.
+     *
+     * @param ticketId The ID of the ticket to schedule a meeting for.
+     * @param meetingTitle The title for the meeting.
+     * @param agendaItems The agenda items to discuss.
+     * @param requiredParticipants The participants required for the meeting.
+     * @param scheduledTime The time the meeting is scheduled for.
+     * @return Result containing the meeting ID or an error.
+     */
+    suspend fun scheduleTicketMeeting(
+        ticketId: TicketId,
+        meetingTitle: String,
+        scheduledTime: Instant,
+        agendaItems: List<AgendaItem>,
+        requiredParticipants: List<AssignedTo>,
+        optionalParticipants: List<AssignedTo>?,
+    ): Result<MeetingId> {
+        // Retrieve ticket to get context
+        val ticketResult = ticketRepository.getTicket(ticketId)
+        if (ticketResult.isFailure) {
+            return Result.failure(
+                ticketResult.exceptionOrNull() ?: TicketError.TicketNotFound(ticketId)
+            )
+        }
+
+        val ticket = ticketResult.getOrNull()
+            ?: return Result.failure(TicketError.TicketNotFound(ticketId))
+
+        val now = Clock.System.now()
+
+        // Create a meeting with ticket's context in the description
+        val meetingId = generateUUID(ticketId)
+        val meeting = Meeting(
+            id = meetingId,
+            type = MeetingType.AdHoc(reason = "Ticket: ${ticket.title} (${ticket.id})"),
+            status = MeetingStatus.Scheduled(scheduledForOverride = scheduledTime),
+            invitation = MeetingInvitation(
+                title = meetingTitle,
+                agenda = agendaItems,
+                requiredParticipants = requiredParticipants,
+                optionalParticipants = optionalParticipants,
+            ),
+        )
+
+        // Schedule the meeting using MeetingOrchestrator
+        val meetingResult = meetingOrchestrator.scheduleMeeting(
+            meeting = meeting,
+            scheduledBy = EventSource.Agent(messageApi.agentId),
+        )
+
+        if (meetingResult.isFailure) {
+            logger.logError(
+                message = "Failed to schedule meeting for ticket: $ticketId",
+                throwable = meetingResult.exceptionOrNull(),
+            )
+            return Result.failure(
+                meetingResult.exceptionOrNull() ?: TicketError.DatabaseError(Exception("Failed to schedule meeting"))
+            )
+        }
+
+        val scheduledMeeting = meetingResult.getOrNull()
+            ?: return Result.failure(TicketError.DatabaseError(Exception("Scheduled meeting returned null")))
+
+        // Link the meeting to the ticket
+        val linkResult = ticketRepository.addTicketMeeting(ticketId, scheduledMeeting.id)
+        if (linkResult.isFailure) {
+            logger.logError(
+                message = "Failed to link meeting to ticket: $ticketId",
+                throwable = linkResult.exceptionOrNull(),
+            )
+        }
+
+        // Post notification to ticket thread
+        getOrCreateTicketThread(ticket)?.let { thread ->
+            // Reopen thread if it's waiting for human (e.g., after escalation in blockTicket)
+            if (thread.status == link.socket.kore.agents.events.EventStatus.WAITING_FOR_HUMAN) {
+                messageApi.reopenThread(thread.id)
+            }
+            messageApi.postMessage(
+                threadId = thread.id,
+                content = buildMeetingScheduledMessage(ticket, scheduledMeeting, scheduledTime, requiredParticipants),
+            )
+        }
+
+        // Publish TicketMeetingScheduled event
+        eventBus.publish(
+            TicketEvent.TicketMeetingScheduled(
+                eventId = randomUUID(),
+                ticketId = ticketId,
+                meetingId = scheduledMeeting.id,
+                scheduledTime = scheduledTime,
+                requiredParticipants = requiredParticipants,
+                scheduledBy = messageApi.agentId,
+                timestamp = now,
+                urgency = priorityToUrgency(ticket.priority),
+            )
+        )
+
+        return Result.success(scheduledMeeting.id)
     }
 
     // ==================== Helper Methods ====================
@@ -452,5 +629,65 @@ class TicketOrchestrator(
         } else {
             "[${ticket.id}] Ticket unassigned by $assignedBy"
         }
+    }
+
+    private fun buildMeetingScheduledMessage(
+        ticket: Ticket,
+        meeting: Meeting,
+        scheduledTime: Instant,
+        requiredParticipants: List<AssignedTo>,
+    ): String {
+        return buildString {
+            append("[${ticket.id}] Meeting scheduled: ${meeting.invitation.title}\n")
+            append("Time: $scheduledTime\n")
+            append("Participants: ")
+            append(requiredParticipants.joinToString(", ") { it.getIdentifier() })
+        }
+    }
+
+    /**
+     * Check if a blocker reason indicates need for a decision meeting.
+     * Returns true if the reason contains keywords suggesting human or multi-agent decision.
+     */
+    private fun blockerNeedsMeeting(reason: String): Boolean {
+        val decisionKeywords = listOf(
+            "decision",
+            "discuss",
+            "meeting",
+            "approval",
+            "human",
+            "review",
+            "clarification",
+            "architecture",
+            "design",
+            "scope",
+            "priority",
+            "resource",
+            "budget",
+            "timeline",
+        )
+        val lowerReason = reason.lowercase()
+        return decisionKeywords.any { keyword -> lowerReason.contains(keyword) }
+    }
+
+    /**
+     * Check if a blocker reason indicates need for human involvement.
+     */
+    private fun blockerNeedsHuman(reason: String): Boolean {
+        val humanKeywords = listOf(
+            "human",
+            "approval",
+            "permission",
+            "authorize",
+            "sign-off",
+            "signoff",
+            "manager",
+            "stakeholder",
+            "customer",
+            "user",
+            "external",
+        )
+        val lowerReason = reason.lowercase()
+        return humanKeywords.any { keyword -> lowerReason.contains(keyword) }
     }
 }

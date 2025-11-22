@@ -7,6 +7,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.kore.agents.core.AgentId
 import link.socket.kore.agents.events.Database
+import link.socket.kore.agents.events.meetings.MeetingId
 import link.socket.kore.agents.tickets.TicketStore
 
 /**
@@ -62,7 +63,8 @@ sealed class TicketError : Exception() {
 class TicketRepository(
     private val database: Database,
 ) {
-    private val queries get() = database.ticketQueries
+    private val ticketQueries get() = database.ticketQueries
+    private val ticketMeetingQueries get() = database.ticketMeetingQueries
 
     /**
      * Create a new ticket in the database.
@@ -73,7 +75,7 @@ class TicketRepository(
     suspend fun createTicket(ticket: Ticket): Result<Ticket> =
         withContext(Dispatchers.IO) {
             try {
-                queries.insertTicket(
+                ticketQueries.insertTicket(
                     id = ticket.id,
                     title = ticket.title,
                     description = ticket.description,
@@ -118,7 +120,7 @@ class TicketRepository(
 
                 // Perform the update
                 val now = Clock.System.now().toEpochMilliseconds()
-                queries.updateTicketStatus(
+                ticketQueries.updateTicketStatus(
                     status = newStatus.name,
                     updated_at = now,
                     id = ticketId
@@ -145,7 +147,7 @@ class TicketRepository(
                     ?: return@withContext Result.failure(TicketError.TicketNotFound(ticketId))
 
                 val now = Clock.System.now().toEpochMilliseconds()
-                queries.updateTicketAssignment(
+                ticketQueries.updateTicketAssignment(
                     assigned_agent_id = agentId,
                     updated_at = now,
                     id = ticketId
@@ -182,7 +184,7 @@ class TicketRepository(
     suspend fun getTicketsByStatus(status: TicketStatus): Result<List<Ticket>> =
         withContext(Dispatchers.IO) {
             try {
-                val tickets = queries.getTicketsByStatus(status.name)
+                val tickets = ticketQueries.getTicketsByStatus(status.name)
                     .executeAsList()
                     .map { row -> mapRowToTicket(row) }
                 Result.success(tickets)
@@ -200,7 +202,7 @@ class TicketRepository(
     suspend fun getTicketsByAgent(agentId: AgentId): Result<List<Ticket>> =
         withContext(Dispatchers.IO) {
             try {
-                val tickets = queries.getTicketsByAssignedAgent(agentId)
+                val tickets = ticketQueries.getTicketsByAssignedAgent(agentId)
                     .executeAsList()
                     .map { row -> mapRowToTicket(row) }
                 Result.success(tickets)
@@ -217,7 +219,7 @@ class TicketRepository(
     suspend fun getAllTickets(): Result<List<Ticket>> =
         withContext(Dispatchers.IO) {
             try {
-                val tickets = queries.getAllTickets()
+                val tickets = ticketQueries.getAllTickets()
                     .executeAsList()
                     .map { row -> mapRowToTicket(row) }
                 Result.success(tickets)
@@ -235,7 +237,7 @@ class TicketRepository(
     suspend fun getTicketsByPriority(priority: TicketPriority): Result<List<Ticket>> =
         withContext(Dispatchers.IO) {
             try {
-                val tickets = queries.getTicketsByPriority(priority.name)
+                val tickets = ticketQueries.getTicketsByPriority(priority.name)
                     .executeAsList()
                     .map { row -> mapRowToTicket(row) }
                 Result.success(tickets)
@@ -253,7 +255,7 @@ class TicketRepository(
     suspend fun getTicketsByType(type: TicketType): Result<List<Ticket>> =
         withContext(Dispatchers.IO) {
             try {
-                val tickets = queries.getTicketsByType(type.name)
+                val tickets = ticketQueries.getTicketsByType(type.name)
                     .executeAsList()
                     .map { row -> mapRowToTicket(row) }
                 Result.success(tickets)
@@ -271,7 +273,7 @@ class TicketRepository(
     suspend fun getTicketsByCreator(agentId: AgentId): Result<List<Ticket>> =
         withContext(Dispatchers.IO) {
             try {
-                val tickets = queries.getTicketsByCreator(agentId)
+                val tickets = ticketQueries.getTicketsByCreator(agentId)
                     .executeAsList()
                     .map { row -> mapRowToTicket(row) }
                 Result.success(tickets)
@@ -304,7 +306,7 @@ class TicketRepository(
                     ?: return@withContext Result.failure(TicketError.TicketNotFound(ticketId))
 
                 val now = Clock.System.now().toEpochMilliseconds()
-                queries.updateTicketDetails(
+                ticketQueries.updateTicketDetails(
                     title = title ?: currentTicket.title,
                     description = description ?: currentTicket.description,
                     priority = (priority ?: currentTicket.priority).name,
@@ -331,7 +333,96 @@ class TicketRepository(
     suspend fun deleteTicket(ticketId: TicketId): Result<Unit> =
         withContext(Dispatchers.IO) {
             try {
-                queries.deleteTicket(ticketId)
+                ticketQueries.deleteTicket(ticketId)
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Result.failure(TicketError.DatabaseError(e))
+            }
+        }
+
+    // ==================== Ticket-Meeting Association Methods ====================
+
+    /**
+     * Associate a ticket with a meeting.
+     *
+     * @param ticketId The ID of the ticket.
+     * @param meetingId The ID of the meeting.
+     * @return Result containing the created TicketMeeting or a TicketError.
+     */
+    suspend fun addTicketMeeting(ticketId: TicketId, meetingId: MeetingId): Result<TicketMeeting> =
+        withContext(Dispatchers.IO) {
+            try {
+                val now = Clock.System.now()
+                ticketMeetingQueries.insertTicketMeeting(
+                    ticket_id = ticketId,
+                    meeting_id = meetingId,
+                    created_at = now.toEpochMilliseconds()
+                )
+                Result.success(TicketMeeting(ticketId, meetingId, now))
+            } catch (e: Exception) {
+                Result.failure(TicketError.DatabaseError(e))
+            }
+        }
+
+    /**
+     * Get all meetings associated with a ticket.
+     *
+     * @param ticketId The ID of the ticket.
+     * @return Result containing the list of TicketMeetings or a TicketError.
+     */
+    suspend fun getMeetingsForTicket(ticketId: TicketId): Result<List<TicketMeeting>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val meetings = ticketMeetingQueries.getMeetingsByTicket(ticketId)
+                    .executeAsList()
+                    .map { row ->
+                        TicketMeeting(
+                            ticketId = ticketId,
+                            meetingId = row.meeting_id,
+                            createdAt = Instant.fromEpochMilliseconds(row.created_at)
+                        )
+                    }
+                Result.success(meetings)
+            } catch (e: Exception) {
+                Result.failure(TicketError.DatabaseError(e))
+            }
+        }
+
+    /**
+     * Get all tickets associated with a meeting.
+     *
+     * @param meetingId The ID of the meeting.
+     * @return Result containing the list of TicketMeetings or a TicketError.
+     */
+    suspend fun getTicketsForMeeting(meetingId: MeetingId): Result<List<TicketMeeting>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val tickets = ticketMeetingQueries.getTicketsByMeeting(meetingId)
+                    .executeAsList()
+                    .map { row ->
+                        TicketMeeting(
+                            ticketId = row.ticket_id,
+                            meetingId = meetingId,
+                            createdAt = Instant.fromEpochMilliseconds(row.created_at)
+                        )
+                    }
+                Result.success(tickets)
+            } catch (e: Exception) {
+                Result.failure(TicketError.DatabaseError(e))
+            }
+        }
+
+    /**
+     * Remove a ticket-meeting association.
+     *
+     * @param ticketId The ID of the ticket.
+     * @param meetingId The ID of the meeting.
+     * @return Result containing Unit on success or a TicketError.
+     */
+    suspend fun removeTicketMeeting(ticketId: TicketId, meetingId: MeetingId): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            try {
+                ticketMeetingQueries.deleteTicketMeeting(ticketId, meetingId)
                 Result.success(Unit)
             } catch (e: Exception) {
                 Result.failure(TicketError.DatabaseError(e))
@@ -344,7 +435,7 @@ class TicketRepository(
      * Internal helper to get a ticket without wrapping in Result.
      */
     private fun getTicketInternal(ticketId: TicketId): Ticket? {
-        val row = queries.getTicketById(ticketId).executeAsOneOrNull()
+        val row = ticketQueries.getTicketById(ticketId).executeAsOneOrNull()
             ?: return null
         return mapRowToTicket(row)
     }

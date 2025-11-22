@@ -1,0 +1,45 @@
+-- TicketMeeting association table
+-- Links tickets to meetings for decision-making discussions
+CREATE TABLE TicketMeetingStore (
+    ticket_id TEXT NOT NULL,
+    meeting_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (ticket_id, meeting_id),
+    FOREIGN KEY (ticket_id) REFERENCES TicketStore(id) ON DELETE CASCADE,
+    FOREIGN KEY (meeting_id) REFERENCES MeetingStore(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_ticket_meeting_ticket ON TicketMeetingStore(ticket_id);
+CREATE INDEX idx_ticket_meeting_meeting ON TicketMeetingStore(meeting_id);
+
+-- =============================================================================
+-- TICKET MEETING QUERIES
+-- =============================================================================
+
+insertTicketMeeting:
+INSERT INTO TicketMeetingStore(ticket_id, meeting_id, created_at)
+VALUES (?, ?, ?);
+
+getMeetingsByTicket:
+SELECT meeting_id, created_at
+FROM TicketMeetingStore
+WHERE ticket_id = ?
+ORDER BY created_at DESC;
+
+getTicketsByMeeting:
+SELECT ticket_id, created_at
+FROM TicketMeetingStore
+WHERE meeting_id = ?
+ORDER BY created_at DESC;
+
+deleteTicketMeeting:
+DELETE FROM TicketMeetingStore
+WHERE ticket_id = ? AND meeting_id = ?;
+
+deleteAllMeetingsForTicket:
+DELETE FROM TicketMeetingStore
+WHERE ticket_id = ?;
+
+deleteAllTicketsForMeeting:
+DELETE FROM TicketMeetingStore
+WHERE meeting_id = ?;

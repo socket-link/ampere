@@ -4,6 +4,8 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import link.socket.kore.agents.core.AgentId
+import link.socket.kore.agents.core.AssignedTo
+import link.socket.kore.agents.events.meetings.MeetingId
 import link.socket.kore.agents.events.tickets.TicketId
 import link.socket.kore.agents.events.tickets.TicketPriority
 import link.socket.kore.agents.events.tickets.TicketStatus
@@ -119,6 +121,28 @@ sealed class TicketEvent(
         companion object {
             private const val EVENT_TYPE = "TicketCompleted"
             val EVENT_CLASS_TYPE: EventClassType = TicketCompleted::class to EVENT_TYPE
+        }
+    }
+
+    /** Emitted when a meeting is scheduled to specifically discuss one ticket. */
+    @Serializable
+    data class TicketMeetingScheduled(
+        override val eventId: EventId,
+        val ticketId: TicketId,
+        val meetingId: MeetingId,
+        val scheduledTime: Instant,
+        val requiredParticipants: List<AssignedTo>,
+        val scheduledBy: AgentId,
+        override val timestamp: Instant,
+        override val urgency: Urgency = Urgency.MEDIUM,
+    ) : TicketEvent(source = EventSource.Agent(scheduledBy)) {
+
+        @Transient
+        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+
+        companion object {
+            private const val EVENT_TYPE = "TicketMeetingScheduled"
+            val EVENT_CLASS_TYPE: EventClassType = TicketMeetingScheduled::class to EVENT_TYPE
         }
     }
 }
