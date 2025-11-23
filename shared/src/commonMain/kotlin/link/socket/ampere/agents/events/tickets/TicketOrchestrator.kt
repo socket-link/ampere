@@ -380,7 +380,7 @@ class TicketOrchestrator(
 
         // Automatically schedule a meeting based on escalation type
         // This must happen BEFORE escalation so the meeting message can be posted in the thread before it becomes blocked
-        if (escalationType != null && escalationType.process.requiresMeeting) {
+        if (escalationType != null && escalationType.escalationProcess.requiresMeeting) {
             val meetingTime = now + 1.hours // TODO: Dynamically set the meeting time based on agent capacity
 
             // Build participant list based on escalation process
@@ -390,7 +390,7 @@ class TicketOrchestrator(
                     add(AssignedTo.Agent(agentId))
                 }
                 // Include human if escalation process requires human involvement
-                if (escalationType.process.requiresHuman) {
+                if (escalationType.escalationProcess.requiresHuman) {
                     add(AssignedTo.Human)
                 }
             }

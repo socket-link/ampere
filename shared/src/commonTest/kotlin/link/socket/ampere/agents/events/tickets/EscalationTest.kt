@@ -3,9 +3,6 @@ package link.socket.ampere.agents.events.tickets
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EscalationTest {
@@ -45,26 +42,26 @@ class EscalationTest {
     @Test
     fun `Discussion CodeReview uses AgentMeeting process`() {
         val escalation = Escalation.Discussion.CodeReview
-        assertEquals(EscalationProcess.AgentMeeting, escalation.process)
+        assertEquals(EscalationProcess.AgentMeeting, escalation.escalationProcess)
         assertTrue(escalation.description.isNotBlank())
     }
 
     @Test
     fun `Discussion Design uses AgentMeeting process`() {
         val escalation = Escalation.Discussion.Design
-        assertEquals(EscalationProcess.AgentMeeting, escalation.process)
+        assertEquals(EscalationProcess.AgentMeeting, escalation.escalationProcess)
     }
 
     @Test
     fun `Discussion Architecture uses AgentMeeting process`() {
         val escalation = Escalation.Discussion.Architecture
-        assertEquals(EscalationProcess.AgentMeeting, escalation.process)
+        assertEquals(EscalationProcess.AgentMeeting, escalation.escalationProcess)
     }
 
     @Test
     fun `Discussion Requirements uses HumanMeeting process`() {
         val escalation = Escalation.Discussion.Requirements
-        assertEquals(EscalationProcess.HumanMeeting, escalation.process)
+        assertEquals(EscalationProcess.HumanMeeting, escalation.escalationProcess)
     }
 
     // ==================== Decision Escalation Tests ====================
@@ -72,19 +69,19 @@ class EscalationTest {
     @Test
     fun `Decision Technical uses AgentMeeting process`() {
         val escalation = Escalation.Decision.Technical
-        assertEquals(EscalationProcess.AgentMeeting, escalation.process)
+        assertEquals(EscalationProcess.AgentMeeting, escalation.escalationProcess)
     }
 
     @Test
     fun `Decision Product uses HumanMeeting process`() {
         val escalation = Escalation.Decision.Product
-        assertEquals(EscalationProcess.HumanMeeting, escalation.process)
+        assertEquals(EscalationProcess.HumanMeeting, escalation.escalationProcess)
     }
 
     @Test
     fun `Decision Authorization uses HumanApproval process`() {
         val escalation = Escalation.Decision.Authorization
-        assertEquals(EscalationProcess.HumanApproval, escalation.process)
+        assertEquals(EscalationProcess.HumanApproval, escalation.escalationProcess)
     }
 
     // ==================== Budget Escalation Tests ====================
@@ -92,19 +89,19 @@ class EscalationTest {
     @Test
     fun `Budget ResourceAllocation uses HumanMeeting process`() {
         val escalation = Escalation.Budget.ResourceAllocation
-        assertEquals(EscalationProcess.HumanMeeting, escalation.process)
+        assertEquals(EscalationProcess.HumanMeeting, escalation.escalationProcess)
     }
 
     @Test
     fun `Budget CostApproval uses HumanApproval process`() {
         val escalation = Escalation.Budget.CostApproval
-        assertEquals(EscalationProcess.HumanApproval, escalation.process)
+        assertEquals(EscalationProcess.HumanApproval, escalation.escalationProcess)
     }
 
     @Test
     fun `Budget Timeline uses HumanMeeting process`() {
         val escalation = Escalation.Budget.Timeline
-        assertEquals(EscalationProcess.HumanMeeting, escalation.process)
+        assertEquals(EscalationProcess.HumanMeeting, escalation.escalationProcess)
     }
 
     // ==================== Priorities Escalation Tests ====================
@@ -112,19 +109,19 @@ class EscalationTest {
     @Test
     fun `Priorities Conflict uses HumanMeeting process`() {
         val escalation = Escalation.Priorities.Conflict
-        assertEquals(EscalationProcess.HumanMeeting, escalation.process)
+        assertEquals(EscalationProcess.HumanMeeting, escalation.escalationProcess)
     }
 
     @Test
     fun `Priorities Reprioritization uses HumanApproval process`() {
         val escalation = Escalation.Priorities.Reprioritization
-        assertEquals(EscalationProcess.HumanApproval, escalation.process)
+        assertEquals(EscalationProcess.HumanApproval, escalation.escalationProcess)
     }
 
     @Test
     fun `Priorities Dependency uses AgentMeeting process`() {
         val escalation = Escalation.Priorities.Dependency
-        assertEquals(EscalationProcess.AgentMeeting, escalation.process)
+        assertEquals(EscalationProcess.AgentMeeting, escalation.escalationProcess)
     }
 
     // ==================== Scope Escalation Tests ====================
@@ -132,19 +129,19 @@ class EscalationTest {
     @Test
     fun `Scope Expansion uses HumanMeeting process`() {
         val escalation = Escalation.Scope.Expansion
-        assertEquals(EscalationProcess.HumanMeeting, escalation.process)
+        assertEquals(EscalationProcess.HumanMeeting, escalation.escalationProcess)
     }
 
     @Test
     fun `Scope Reduction uses HumanMeeting process`() {
         val escalation = Escalation.Scope.Reduction
-        assertEquals(EscalationProcess.HumanMeeting, escalation.process)
+        assertEquals(EscalationProcess.HumanMeeting, escalation.escalationProcess)
     }
 
     @Test
     fun `Scope Clarification uses HumanMeeting process`() {
         val escalation = Escalation.Scope.Clarification
-        assertEquals(EscalationProcess.HumanMeeting, escalation.process)
+        assertEquals(EscalationProcess.HumanMeeting, escalation.escalationProcess)
     }
 
     // ==================== External Escalation Tests ====================
@@ -152,13 +149,13 @@ class EscalationTest {
     @Test
     fun `External Vendor uses ExternalDependency process`() {
         val escalation = Escalation.External.Vendor
-        assertEquals(EscalationProcess.ExternalDependency, escalation.process)
+        assertEquals(EscalationProcess.ExternalDependency, escalation.escalationProcess)
     }
 
     @Test
     fun `External Customer uses HumanApproval process`() {
         val escalation = Escalation.External.Customer
-        assertEquals(EscalationProcess.HumanApproval, escalation.process)
+        assertEquals(EscalationProcess.HumanApproval, escalation.escalationProcess)
     }
 
     // ==================== Companion Object Tests ====================
@@ -192,75 +189,6 @@ class EscalationTest {
         assertTrue(prompt.contains("Authorization:"))
     }
 
-    // ==================== fromIdentifier Tests ====================
-
-    @Test
-    fun `fromIdentifier parses Discussion types`() {
-        assertIs<Escalation.Discussion.CodeReview>(Escalation.fromIdentifier("Discussion.CodeReview"))
-        assertIs<Escalation.Discussion.Design>(Escalation.fromIdentifier("Design"))
-        assertIs<Escalation.Discussion.Architecture>(Escalation.fromIdentifier("architecture"))
-        assertIs<Escalation.Discussion.Requirements>(Escalation.fromIdentifier("REQUIREMENTS"))
-    }
-
-    @Test
-    fun `fromIdentifier parses Decision types`() {
-        assertIs<Escalation.Decision.Technical>(Escalation.fromIdentifier("Technical"))
-        assertIs<Escalation.Decision.Product>(Escalation.fromIdentifier("product"))
-        assertIs<Escalation.Decision.Authorization>(Escalation.fromIdentifier("AUTHORIZATION"))
-    }
-
-    @Test
-    fun `fromIdentifier parses Budget types`() {
-        assertIs<Escalation.Budget.ResourceAllocation>(Escalation.fromIdentifier("ResourceAllocation"))
-        assertIs<Escalation.Budget.CostApproval>(Escalation.fromIdentifier("costapproval"))
-        assertIs<Escalation.Budget.Timeline>(Escalation.fromIdentifier("Timeline"))
-    }
-
-    @Test
-    fun `fromIdentifier parses Priorities types`() {
-        assertIs<Escalation.Priorities.Conflict>(Escalation.fromIdentifier("Conflict"))
-        assertIs<Escalation.Priorities.Reprioritization>(Escalation.fromIdentifier("reprioritization"))
-        assertIs<Escalation.Priorities.Dependency>(Escalation.fromIdentifier("Dependency"))
-    }
-
-    @Test
-    fun `fromIdentifier parses Scope types`() {
-        assertIs<Escalation.Scope.Expansion>(Escalation.fromIdentifier("Expansion"))
-        assertIs<Escalation.Scope.Reduction>(Escalation.fromIdentifier("reduction"))
-        assertIs<Escalation.Scope.Clarification>(Escalation.fromIdentifier("Clarification"))
-    }
-
-    @Test
-    fun `fromIdentifier parses External types`() {
-        assertIs<Escalation.External.Vendor>(Escalation.fromIdentifier("Vendor"))
-        assertIs<Escalation.External.Customer>(Escalation.fromIdentifier("customer"))
-    }
-
-    @Test
-    fun `fromIdentifier returns null for unknown identifiers`() {
-        assertNull(Escalation.fromIdentifier("Unknown"))
-        assertNull(Escalation.fromIdentifier(""))
-        assertNull(Escalation.fromIdentifier("SomeRandomString"))
-    }
-
-    @Test
-    fun `fromIdentifier is case insensitive`() {
-        assertEquals(
-            Escalation.fromIdentifier("codereview"),
-            Escalation.fromIdentifier("CODEREVIEW"),
-        )
-        assertEquals(
-            Escalation.fromIdentifier("Timeline"),
-            Escalation.fromIdentifier("timeline"),
-        )
-    }
-
-    @Test
-    fun `fromIdentifier handles whitespace`() {
-        assertNotNull(Escalation.fromIdentifier("  CodeReview  "))
-        assertNotNull(Escalation.fromIdentifier("\tDesign\n"))
-    }
-
     // ==================== All Escalations Have Descriptions ====================
 
     @Test
@@ -288,11 +216,11 @@ class EscalationTest {
         agentOnlyEscalations.forEach { escalation ->
             assertEquals(
                 EscalationProcess.AgentMeeting,
-                escalation.process,
+                escalation.escalationProcess,
                 "${escalation::class.simpleName} should use AgentMeeting",
             )
-            assertTrue(escalation.process.requiresMeeting)
-            assertFalse(escalation.process.requiresHuman)
+            assertTrue(escalation.escalationProcess.requiresMeeting)
+            assertFalse(escalation.escalationProcess.requiresHuman)
         }
     }
 
@@ -308,11 +236,11 @@ class EscalationTest {
         humanApprovalEscalations.forEach { escalation ->
             assertEquals(
                 EscalationProcess.HumanApproval,
-                escalation.process,
+                escalation.escalationProcess,
                 "${escalation::class.simpleName} should use HumanApproval",
             )
-            assertFalse(escalation.process.requiresMeeting)
-            assertTrue(escalation.process.requiresHuman)
+            assertFalse(escalation.escalationProcess.requiresMeeting)
+            assertTrue(escalation.escalationProcess.requiresHuman)
         }
     }
 
@@ -332,11 +260,11 @@ class EscalationTest {
         humanMeetingEscalations.forEach { escalation ->
             assertEquals(
                 EscalationProcess.HumanMeeting,
-                escalation.process,
+                escalation.escalationProcess,
                 "${escalation::class.simpleName} should use HumanMeeting",
             )
-            assertTrue(escalation.process.requiresMeeting)
-            assertTrue(escalation.process.requiresHuman)
+            assertTrue(escalation.escalationProcess.requiresMeeting)
+            assertTrue(escalation.escalationProcess.requiresHuman)
         }
     }
 }
