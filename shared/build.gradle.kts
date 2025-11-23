@@ -28,7 +28,7 @@ publishing {
             from(components["kotlin"])
 
             groupId = group.toString()
-            artifactId = "kore-ai"
+            artifactId = "ampere"
             version = "0.0.4"
 
             pom {
@@ -84,7 +84,7 @@ tasks.withType<DokkaTask>().configureEach {
 sqldelight {
     databases {
         create("Database") {
-            packageName.set("link.socket.kore.agents.events")
+            packageName.set("link.socket.ampere.db")
         }
     }
 }
@@ -199,7 +199,7 @@ kotlin {
 
 android {
     compileSdk = (findProperty("android.compileSdk") as String).toInt()
-    namespace = "link.socket.kore"
+    namespace = "link.socket.ampere"
 
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
     sourceSets["main"].res.srcDirs("src/androidMain/res")
@@ -236,7 +236,7 @@ tasks.register("kotlinConfiguration") {
 
     val kotlinConfig = File(generatedSources, "KotlinConfig.kt")
     kotlinConfig.writeText(
-        "package link.kore.shared.config\n\nobject KotlinConfig {\n$properties\n}\n",
+        "package link.socket.ampere.shared.config\n\nobject KotlinConfig {\n$properties\n}\n",
     )
 }
 

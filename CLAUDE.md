@@ -160,7 +160,7 @@ Repository pattern with SQLDelight persistence:
 ## Directory Structure
 
 ```
-shared/src/commonMain/kotlin/link/socket/kore/
+shared/src/commonMain/kotlin/link/socket/ampere/
 ├── domain/
 │   ├── ai/
 │   │   ├── provider/          # AI providers (OpenAI, Anthropic, Google)
