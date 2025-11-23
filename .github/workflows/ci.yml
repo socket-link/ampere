@@ -25,7 +25,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Create local.properties
-        run: touch local.properties
+        run: |
+          cat > local.properties << 'EOF'
+          anthropic_api_key=placeholder
+          google_api_key=placeholder
+          openai_api_key=placeholder
+          EOF
 
       - name: Run JVM tests
         run: ./gradlew jvmTest
