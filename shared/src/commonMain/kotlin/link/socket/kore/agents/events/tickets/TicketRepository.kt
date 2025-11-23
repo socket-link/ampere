@@ -1,5 +1,6 @@
 package link.socket.kore.agents.events.tickets
 
+import kotlin.time.Duration.Companion.days
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
@@ -335,6 +336,119 @@ class TicketRepository(
             try {
                 ticketQueries.deleteTicket(ticketId)
                 Result.success(Unit)
+            } catch (e: Exception) {
+                Result.failure(TicketError.DatabaseError(e))
+            }
+        }
+
+    // ==================== Backlog Analytics Methods ====================
+
+    /**
+     * Get a summary of the current backlog state.
+     *
+     * @return Result containing the BacklogSummary or a TicketError.
+     */
+    suspend fun getBacklogSummary(): Result<BacklogSummary> =
+        withContext(Dispatchers.IO) {
+            try {
+                val allTickets = ticketQueries.getAllTickets()
+                    .executeAsList()
+                    .map { row -> mapRowToTicket(row) }
+
+                val now = Clock.System.now()
+
+                val ticketsByStatus = allTickets
+                    .groupBy { it.status }
+                    .mapValues { it.value.size }
+
+                val ticketsByPriority = allTickets
+                    .groupBy { it.priority }
+                    .mapValues { it.value.size }
+
+                val ticketsByType = allTickets
+                    .groupBy { it.type }
+                    .mapValues { it.value.size }
+
+                val blockedCount = allTickets.count { it.status == TicketStatus.BLOCKED }
+
+                val overdueCount = allTickets.count { ticket ->
+                    ticket.dueDate != null &&
+                        ticket.dueDate < now &&
+                        ticket.status != TicketStatus.DONE
+                }
+
+                Result.success(
+                    BacklogSummary(
+                        totalTickets = allTickets.size,
+                        ticketsByStatus = ticketsByStatus,
+                        ticketsByPriority = ticketsByPriority,
+                        ticketsByType = ticketsByType,
+                        blockedCount = blockedCount,
+                        overdueCount = overdueCount,
+                    ),
+                )
+            } catch (e: Exception) {
+                Result.failure(TicketError.DatabaseError(e))
+            }
+        }
+
+    /**
+     * Get the workload summary for a specific agent.
+     *
+     * @param agentId The ID of the agent.
+     * @return Result containing the AgentWorkload or a TicketError.
+     */
+    suspend fun getAgentWorkload(agentId: AgentId): Result<AgentWorkload> =
+        withContext(Dispatchers.IO) {
+            try {
+                val assignedTickets = ticketQueries.getTicketsByAssignedAgent(agentId)
+                    .executeAsList()
+                    .map { row -> mapRowToTicket(row) }
+
+                val inProgressCount = assignedTickets.count { it.status == TicketStatus.IN_PROGRESS }
+                val blockedCount = assignedTickets.count { it.status == TicketStatus.BLOCKED }
+                val completedCount = assignedTickets.count { it.status == TicketStatus.DONE }
+
+                Result.success(
+                    AgentWorkload(
+                        agentId = agentId,
+                        assignedTickets = assignedTickets,
+                        inProgressCount = inProgressCount,
+                        blockedCount = blockedCount,
+                        completedCount = completedCount,
+                    ),
+                )
+            } catch (e: Exception) {
+                Result.failure(TicketError.DatabaseError(e))
+            }
+        }
+
+    /**
+     * Get tickets with due dates within the specified number of days.
+     *
+     * @param daysAhead Number of days to look ahead for deadlines.
+     * @return Result containing the list of tickets sorted by due date ascending, or a TicketError.
+     */
+    suspend fun getUpcomingDeadlines(daysAhead: Int): Result<List<Ticket>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val now = Clock.System.now()
+                val futureLimit = now + daysAhead.days
+
+                val allTickets = ticketQueries.getAllTickets()
+                    .executeAsList()
+                    .map { row -> mapRowToTicket(row) }
+
+                val upcomingTickets = allTickets
+                    .filter { ticket ->
+                        ticket.dueDate != null &&
+                            ticket.dueDate >= now &&
+                            ticket.dueDate <= futureLimit &&
+                            ticket.status != TicketStatus.DONE
+                    }
+                    .sortedBy { it.dueDate }
+
+                Result.success(upcomingTickets)
             } catch (e: Exception) {
                 Result.failure(TicketError.DatabaseError(e))
             }

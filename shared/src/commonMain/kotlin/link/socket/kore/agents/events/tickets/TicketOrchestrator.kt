@@ -538,6 +538,65 @@ class TicketOrchestrator(
         return Result.success(scheduledMeeting.id)
     }
 
+    // ==================== Analytics Methods ====================
+
+    /**
+     * Get a summary of the current backlog state.
+     *
+     * Provides aggregate statistics about tickets in the system, enabling
+     * PM agents to understand the overall state of work and make informed
+     * decisions about prioritization and assignment.
+     *
+     * @return Result containing the BacklogSummary or an error.
+     */
+    suspend fun getBacklogSummary(): Result<BacklogSummary> {
+        return ticketRepository.getBacklogSummary()
+            .onFailure { throwable ->
+                logger.logError(
+                    message = "Failed to get backlog summary",
+                    throwable = throwable,
+                )
+            }
+    }
+
+    /**
+     * Get the workload summary for a specific agent.
+     *
+     * Enables PM agents to assess capacity before making new assignments
+     * and to identify agents who may be overloaded or blocked.
+     *
+     * @param agentId The ID of the agent to get workload for.
+     * @return Result containing the AgentWorkload or an error.
+     */
+    suspend fun getAgentWorkload(agentId: AgentId): Result<AgentWorkload> {
+        return ticketRepository.getAgentWorkload(agentId)
+            .onFailure { throwable ->
+                logger.logError(
+                    message = "Failed to get workload for agent: $agentId",
+                    throwable = throwable,
+                )
+            }
+    }
+
+    /**
+     * Get tickets with due dates within the specified number of days.
+     *
+     * Helps PM agents identify upcoming deadlines and prioritize work
+     * accordingly to avoid missing important dates.
+     *
+     * @param daysAhead Number of days to look ahead for deadlines.
+     * @return Result containing the list of tickets sorted by due date ascending, or an error.
+     */
+    suspend fun getUpcomingDeadlines(daysAhead: Int): Result<List<Ticket>> {
+        return ticketRepository.getUpcomingDeadlines(daysAhead)
+            .onFailure { throwable ->
+                logger.logError(
+                    message = "Failed to get upcoming deadlines for $daysAhead days",
+                    throwable = throwable,
+                )
+            }
+    }
+
     // ==================== Helper Methods ====================
 
     /**
