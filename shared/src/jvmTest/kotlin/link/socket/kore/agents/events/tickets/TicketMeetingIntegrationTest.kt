@@ -203,11 +203,12 @@ class TicketMeetingIntegrationTest {
 
             publishedEvents.clear()
 
-            // Block with a reason that indicates need for decision meeting
+            // Block with an escalation type that requires a meeting
             val blockTicketResult = ticketOrchestrator.blockTicket(
                 ticketId = ticket.id,
                 blockingReason = "Need architecture decision on database schema",
                 reportedByAgentId = stubAssignedAgentId,
+                escalationType = Escalation.Discussion.Architecture,
                 assignedToAgentId = stubAssignedAgentId,
             )
 
@@ -263,11 +264,12 @@ class TicketMeetingIntegrationTest {
 
             publishedEvents.clear()
 
-            // Block with a reason that indicates need for human approval
+            // Block with an escalation type that requires human meeting
             val result = ticketOrchestrator.blockTicket(
                 ticketId = ticket.id,
                 blockingReason = "Requires human approval for security permission changes",
                 reportedByAgentId = stubAssignedAgentId,
+                escalationType = Escalation.Decision.Product,
                 assignedToAgentId = stubAssignedAgentId,
             )
 
