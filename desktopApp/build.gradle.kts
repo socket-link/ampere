@@ -27,7 +27,7 @@ kotlin {
 
 compose.desktop {
     application {
-        mainClass = "link.socket.kore.MainKt"
+        mainClass = "link.socket.ampere.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)

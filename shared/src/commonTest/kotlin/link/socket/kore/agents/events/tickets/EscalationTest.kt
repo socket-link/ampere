@@ -7,6 +7,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import link.socket.ampere.agents.events.tickets.Escalation
+import link.socket.ampere.agents.events.tickets.EscalationProcess
 
 class EscalationTest {
 

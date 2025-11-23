@@ -1,0 +1,50 @@
+@file:Suppress("EnumEntryName")
+
+package link.socket.ampere.domain.limits
+
+import kotlinx.serialization.Serializable
+
+@Serializable
+enum class TokenCount(val label: String) {
+    _4k("4k"),
+    _5k("5k"),
+    _4096("4,096"),
+    _8k("8k"),
+    _8192("8,192"),
+    _10k("10k"),
+    _15k("15k"),
+    _16k("16k"),
+    _20k("20k"),
+    _25k("25k"),
+    _30k("30k"),
+    _32k("32k"),
+    _35k("35k"),
+    _40k("40k"),
+    _50k("50k"),
+    _64k("64k"),
+    _80k("80k"),
+    _90k("90k"),
+    _100k("100k"),
+    _128k("128k"),
+    _160k("160k"),
+    _200k("200k"),
+    _250k("250k"),
+    _400k("400k"),
+    _450k("450k"),
+    _800k("800k"),
+    _1m("1 million"),
+    _2m("2 million"),
+    _3m("3 million"),
+    _4m("4 million"),
+    _5m("5 million"),
+    _8m("8 million"),
+    _10m("10 million"),
+    _30m("30 million"),
+    _40m("40 million"),
+    _150m("150 million"),
+    _180m("180 million"),
+    _400m("400 million"),
+    _500m("500 million"),
+    _1b("1 billion"),
+    _5b("50 billion"),
+}

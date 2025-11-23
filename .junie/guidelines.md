@@ -2,12 +2,12 @@
 
 ## Project overview
 
-Kore AI is a Kotlin Multiplatform (KMP) project that provides a shared core for building conversational AI agents and
+Ampere is a Kotlin Multiplatform (KMP) project that provides a shared core for building conversational AI agents and
 multiple platform apps that consume this core.
 
 - shared: Multiplatform library containing the domain and model layers for agents, chat, conversations, capabilities,
   and tools.
-    - Common code: `shared/src/commonMain/kotlin/link/socket/kore/...`
+    - Common code: `shared/src/commonMain/kotlin/link/socket/ampere/...`
     - Platform code: `shared/src/{androidMain,iosMain,jvmMain}`
     - Tests: `shared/src/jvmTest`
 - androidApp: Android application that uses the shared module.
@@ -39,7 +39,7 @@ multiple platform apps that consume this core.
 
 ## Notes for this repository
 
-- The main package namespace is `link.socket.kore.*`.
+- The main package namespace is `link.socket.ampere.*`.
 - Key domains in `shared/src/commonMain/kotlin` include:
     - `domain/chat` and `domain/conversation`: Conversation, Chat, and system instructions (tone, seriousness).
     - `domain/capability`: Capability abstractions.
