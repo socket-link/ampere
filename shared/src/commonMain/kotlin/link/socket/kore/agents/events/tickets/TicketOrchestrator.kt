@@ -710,45 +710,12 @@ class TicketOrchestrator(
      * Check if a blocker reason indicates need for a decision meeting.
      * Returns true if the reason contains keywords suggesting human or multi-agent decision.
      */
-    private fun blockerNeedsMeeting(reason: String): Boolean {
-        val decisionKeywords = listOf(
-            "decision",
-            "discuss",
-            "meeting",
-            "approval",
-            "human",
-            "review",
-            "clarification",
-            "architecture",
-            "design",
-            "scope",
-            "priority",
-            "resource",
-            "budget",
-            "timeline",
-        )
-        val lowerReason = reason.lowercase()
-        return decisionKeywords.any { keyword -> lowerReason.contains(keyword) }
-    }
+    private fun blockerNeedsMeeting(reason: String): Boolean =
+        EscalationKeyword.reasonNeedsMeeting(reason)
 
     /**
      * Check if a blocker reason indicates need for human involvement.
      */
-    private fun blockerNeedsHuman(reason: String): Boolean {
-        val humanKeywords = listOf(
-            "human",
-            "approval",
-            "permission",
-            "authorize",
-            "sign-off",
-            "signoff",
-            "manager",
-            "stakeholder",
-            "customer",
-            "user",
-            "external",
-        )
-        val lowerReason = reason.lowercase()
-        return humanKeywords.any { keyword -> lowerReason.contains(keyword) }
-    }
+    private fun blockerNeedsHuman(reason: String): Boolean =
+        EscalationKeyword.reasonNeedsHuman(reason)
 }
