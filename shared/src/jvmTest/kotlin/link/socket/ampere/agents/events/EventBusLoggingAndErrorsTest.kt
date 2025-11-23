@@ -76,6 +76,10 @@ class EventBusLoggingAndErrorsTest {
         override fun logError(message: String, throwable: Throwable?) {
             errors += message
         }
+
+        override fun logInfo(message: String) {
+            // No-op for tests
+        }
     }
 
     @Test

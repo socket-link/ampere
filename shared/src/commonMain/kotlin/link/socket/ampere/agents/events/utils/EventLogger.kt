@@ -19,6 +19,9 @@ interface EventLogger {
 
     /** Log an error without crashing the app. */
     fun logError(message: String, throwable: Throwable? = null)
+
+    /** Log an informational message. */
+    fun logInfo(message: String)
 }
 
 /**
@@ -43,5 +46,9 @@ class ConsoleEventLogger : EventLogger {
     override fun logError(message: String, throwable: Throwable?) {
         println("[EventBus][ERROR] $message" + (throwable?.let { ": ${it::class.simpleName} - ${it.message}" } ?: ""))
         throwable?.printStackTrace()
+    }
+
+    override fun logInfo(message: String) {
+        println("[EventBus][INFO] $message")
     }
 }
