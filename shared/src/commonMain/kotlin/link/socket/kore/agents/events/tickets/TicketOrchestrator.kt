@@ -12,7 +12,7 @@ import link.socket.kore.agents.events.bus.EventBus
 import link.socket.kore.agents.events.meetings.Meeting
 import link.socket.kore.agents.events.meetings.MeetingId
 import link.socket.kore.agents.events.meetings.MeetingInvitation
-import link.socket.kore.agents.events.meetings.MeetingOrchestrator
+import link.socket.kore.agents.events.meetings.MeetingSchedulingService
 import link.socket.kore.agents.events.meetings.MeetingStatus
 import link.socket.kore.agents.events.meetings.MeetingType
 import link.socket.kore.agents.events.messages.AgentMessageApi
@@ -33,7 +33,7 @@ class TicketOrchestrator(
     private val ticketRepository: TicketRepository,
     private val eventBus: EventBus,
     private val messageApi: AgentMessageApi,
-    private val meetingOrchestrator: MeetingOrchestrator,
+    private val meetingSchedulingService: MeetingSchedulingService,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
 
@@ -484,8 +484,8 @@ class TicketOrchestrator(
             ),
         )
 
-        // Schedule the meeting using MeetingOrchestrator
-        val meetingResult = meetingOrchestrator.scheduleMeeting(
+        // Schedule the meeting using MeetingSchedulingService
+        val meetingResult = meetingSchedulingService.scheduleMeeting(
             meeting = meeting,
             scheduledBy = EventSource.Agent(messageApi.agentId),
         )
