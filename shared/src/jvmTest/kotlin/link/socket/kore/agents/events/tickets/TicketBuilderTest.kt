@@ -19,6 +19,7 @@ import link.socket.kore.agents.events.Database
 import link.socket.kore.agents.events.bus.EventBus
 import link.socket.kore.agents.events.meetings.MeetingOrchestrator
 import link.socket.kore.agents.events.meetings.MeetingRepository
+import link.socket.kore.agents.events.meetings.MeetingSchedulingService
 import link.socket.kore.agents.events.messages.AgentMessageApi
 import link.socket.kore.agents.events.messages.MessageRepository
 import link.socket.kore.data.DEFAULT_JSON
@@ -61,11 +62,16 @@ class TicketBuilderTest {
             messageApi = messageApi,
         )
 
+        // Create a MeetingSchedulingService that delegates to the meetingOrchestrator
+        val meetingSchedulingService = MeetingSchedulingService { meeting, scheduledBy ->
+            meetingOrchestrator.scheduleMeeting(meeting, scheduledBy)
+        }
+
         ticketOrchestrator = TicketOrchestrator(
             ticketRepository = ticketRepository,
             eventBus = eventBus,
             messageApi = messageApi,
-            meetingOrchestrator = meetingOrchestrator,
+            meetingSchedulingService = meetingSchedulingService,
         )
     }
 
