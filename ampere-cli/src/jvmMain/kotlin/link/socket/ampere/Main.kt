@@ -12,7 +12,7 @@ class AmpereCommand : CliktCommand(
     help = """
         Animated Multi-Agent (Prompting Technique) -> AniMA
         AniMA Model Protocol -> AMP
-        AMP Environment Runtime Example -> AMPERE
+        AMP Example Runtime Environment -> AMPERE
         
         AMPERE is a tool for running AniMA simulations in a real-time, observable environment.
     """.trimIndent()

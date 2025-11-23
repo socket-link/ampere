@@ -209,10 +209,11 @@ class TicketMeetingIntegrationTest {
 
             publishedEvents.clear()
 
-            // Block with a reason that indicates need for decision meeting
+            // Block with an escalation type that requires a meeting
             val blockTicketResult = ticketOrchestrator.blockTicket(
                 ticketId = ticket.id,
                 blockingReason = "Need architecture decision on database schema",
+                escalationType = Escalation.Budget.ResourceAllocation,
                 reportedByAgentId = stubAssignedAgentId,
                 assignedToAgentId = stubAssignedAgentId,
             )
@@ -230,7 +231,7 @@ class TicketMeetingIntegrationTest {
             val meetingEvents = publishedEvents.filterIsInstance<TicketEvent.TicketMeetingScheduled>()
             assertTrue(meetingEvents.isNotEmpty(), "TicketMeetingScheduled event should be published")
 
-            // Verify meeting was linked to ticket
+            // Verify meeting was linked to the ticket
             val meetingsResult = ticketRepository.getMeetingsForTicket(ticket.id)
             assertTrue(meetingsResult.isSuccess)
             val ticketMeetings = meetingsResult.getOrNull()!!
@@ -269,10 +270,11 @@ class TicketMeetingIntegrationTest {
 
             publishedEvents.clear()
 
-            // Block with a reason that indicates need for human approval
+            // Block with an escalation type that requires human meeting
             val result = ticketOrchestrator.blockTicket(
                 ticketId = ticket.id,
                 blockingReason = "Requires human approval for security permission changes",
+                escalationType = Escalation.Budget.ResourceAllocation,
                 reportedByAgentId = stubAssignedAgentId,
                 assignedToAgentId = stubAssignedAgentId,
             )
@@ -323,6 +325,7 @@ class TicketMeetingIntegrationTest {
             val blockTicketResult = ticketOrchestrator.blockTicket(
                 ticketId = ticket.id,
                 blockingReason = "Waiting for external API to be available",
+                escalationType = Escalation.External.Vendor,
                 reportedByAgentId = stubAssignedAgentId,
             )
 

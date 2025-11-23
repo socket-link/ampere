@@ -4,8 +4,10 @@ import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.int
-import com.github.ajalt.mordant.rendering.TextColors.*
-import com.github.ajalt.mordant.rendering.TextStyles.*
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
 
 class WatchCommand : CliktCommand(
@@ -51,7 +53,7 @@ class WatchCommand : CliktCommand(
 
     override fun run() {
         terminal.println(
-            bold(cyan("AMPERE")) + " - AniMA Perception & Relay Environment"
+            bold(cyan("AMPERE")) + " - AniMA Model Protocol Example Runtime Environment"
         )
         terminal.println(dim("Connecting to event stream..."))
         terminal.println()

@@ -12,6 +12,7 @@ import link.socket.ampere.agents.events.bus.EventBus
 import link.socket.ampere.agents.events.meetings.Meeting
 import link.socket.ampere.agents.events.meetings.MeetingId
 import link.socket.ampere.agents.events.meetings.MeetingInvitation
+import link.socket.ampere.agents.events.meetings.MeetingSchedulingService
 import link.socket.ampere.agents.events.meetings.MeetingStatus
 import link.socket.ampere.agents.events.meetings.MeetingType
 import link.socket.ampere.agents.events.messages.AgentMessageApi
@@ -23,7 +24,6 @@ import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.util.randomUUID
-import link.socket.ampere.agents.events.meetings.MeetingSchedulingService
 
 /**
  * Service layer that coordinates ticket lifecycle operations, integrates with EventBus
@@ -297,11 +297,14 @@ class TicketOrchestrator(
      * @param ticketId The ID of the ticket to block.
      * @param blockingReason The reason the ticket is blocked.
      * @param reportedByAgentId The agent reporting the blocker.
+     * @param escalationType The type of escalation (classified by LLM). If null, no meeting is scheduled.
+     * @param assignedToAgentId Optional agent to assign the ticket to during blocking.
      * @return Result containing the updated ticket.
      */
     suspend fun blockTicket(
         ticketId: TicketId,
         blockingReason: String,
+        escalationType: Escalation,
         reportedByAgentId: AgentId,
         assignedToAgentId: AgentId? = null,
     ): Result<Ticket> {
@@ -375,19 +378,19 @@ class TicketOrchestrator(
             ),
         )
 
-        // Automatically schedule a decision meeting if blocker indicates need
+        // Automatically schedule a meeting based on escalation type
         // This must happen BEFORE escalation so the meeting message can be posted in the thread before it becomes blocked
-        if (blockerNeedsMeeting(blockingReason)) {
+        if (escalationType.escalationProcess.requiresMeeting) {
             val meetingTime = now + 1.hours // TODO: Dynamically set the meeting time based on agent capacity
 
-            // Build participant list
+            // Build participant list based on escalation process
             val requiredParticipants = buildList {
                 // Always include the assigned agent to the ticket if there is one
                 updatedTicket.assignedAgentId?.let { agentId ->
                     add(AssignedTo.Agent(agentId))
                 }
-                // Include human if blocker indicates human involvement needed
-                if (blockerNeedsHuman(blockingReason)) {
+                // Include human if the escalation process requires human involvement
+                if (escalationType.escalationProcess.requiresHuman) {
                     add(AssignedTo.Human)
                 }
             }
@@ -704,51 +707,5 @@ class TicketOrchestrator(
             append("Participants: ")
             append(requiredParticipants.joinToString(", ") { it.getIdentifier() })
         }
-    }
-
-    /**
-     * Check if a blocker reason indicates need for a decision meeting.
-     * Returns true if the reason contains keywords suggesting human or multi-agent decision.
-     */
-    private fun blockerNeedsMeeting(reason: String): Boolean {
-        val decisionKeywords = listOf(
-            "decision",
-            "discuss",
-            "meeting",
-            "approval",
-            "human",
-            "review",
-            "clarification",
-            "architecture",
-            "design",
-            "scope",
-            "priority",
-            "resource",
-            "budget",
-            "timeline",
-        )
-        val lowerReason = reason.lowercase()
-        return decisionKeywords.any { keyword -> lowerReason.contains(keyword) }
-    }
-
-    /**
-     * Check if a blocker reason indicates need for human involvement.
-     */
-    private fun blockerNeedsHuman(reason: String): Boolean {
-        val humanKeywords = listOf(
-            "human",
-            "approval",
-            "permission",
-            "authorize",
-            "sign-off",
-            "signoff",
-            "manager",
-            "stakeholder",
-            "customer",
-            "user",
-            "external",
-        )
-        val lowerReason = reason.lowercase()
-        return humanKeywords.any { keyword -> lowerReason.contains(keyword) }
     }
 }
