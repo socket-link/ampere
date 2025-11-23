@@ -6,7 +6,7 @@ import link.socket.kore.domain.chat.Conversation
 import link.socket.kore.util.toSnakeCase
 
 // Constants for export folder and file extension.
-private const val EXPORT_FOLDER = "KoreAI-Test"
+private const val EXPORT_FOLDER = "Ampere-Test"
 private const val FILE_EXTENSION = ".chatlog"
 
 /**

@@ -1,8 +1,8 @@
-# Contributing to KoreAI
+# Contributing to Ampere
 
 ## Getting Started
 
-Thank you for considering contributing to KoreAI! To get started, please follow the guidelines below.
+Thank you for considering contributing to Ampere! To get started, please follow the guidelines below.
 
 ## Code of Conduct
 

@@ -1,7 +1,7 @@
 [![Maven Central](https://img.shields.io/maven-central/v/link.socket.kore-ai/kore-ai-client?color=blue&label=Download)](https://central.sonatype.com/namespace/link.socket.kore-ai)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-# KoreAI: A KMP Library for AI Agents & Assistants
+# Ampere: A KMP Library for AI Agents & Assistants
 
 <img src="readme_images/banner.png" height="450">
 
@@ -12,7 +12,7 @@
 
 ## 📔 Overview
 
-KoreAI provides a Kotlin Multiplatform library for creating & managing **Agent** and **Assistant** chatbot definitions.
+Ampere provides a Kotlin Multiplatform library for creating & managing **Agent** and **Assistant** chatbot definitions.
 
 ### Core Components
 

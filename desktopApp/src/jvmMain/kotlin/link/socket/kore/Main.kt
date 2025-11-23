@@ -10,7 +10,7 @@ fun main() =
     application {
         Window(
             onCloseRequest = ::exitApplication,
-            title = "KoreAI",
+            title = "Ampere",
             state =
                 WindowState(
                     width = 800.dp,

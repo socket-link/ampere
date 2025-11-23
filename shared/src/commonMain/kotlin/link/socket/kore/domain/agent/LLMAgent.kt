@@ -43,7 +43,7 @@ interface LLMAgent {
      */
     val prompt: String
         get() = """
-            You represent an instance of an AI Agent that is operating within the KoreAI library. \
+            You represent an instance of an AI Agent that is operating within the Ampere library. \
             
            There are two types of humans you will interact with:
             1. **Developers**: They configure your parameters and initialize chat sessions. They are responsible for setting up your environment and providing you with specific instructions.

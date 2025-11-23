@@ -52,7 +52,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## High-Level Architecture
 
-KoreAI is a Kotlin Multiplatform library for creating AI Agents and Assistants with multi-provider support. The architecture follows a layered approach:
+Ampere is a Kotlin Multiplatform library for creating AI Agents and Assistants with multi-provider support. The architecture follows a layered approach:
 
 ### AI Provider Layer (`domain/ai/`)
 Multi-provider AI support with three providers:

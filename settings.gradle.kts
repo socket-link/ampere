@@ -1,4 +1,4 @@
-rootProject.name = "KoreAI"
+rootProject.name = "Ampere"
 
 include(":shared")
 include(":androidApp")

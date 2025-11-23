@@ -32,7 +32,7 @@ publishing {
             version = "0.0.4"
 
             pom {
-                name.set("KoreAI")
+                name.set("Ampere")
                 description.set("A Kotlin Multiplatform library for ...")
                 url.set("https://github.com/yourcompany/mylibrary")
 
