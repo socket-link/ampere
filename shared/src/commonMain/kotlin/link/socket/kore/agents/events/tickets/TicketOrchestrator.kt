@@ -297,12 +297,15 @@ class TicketOrchestrator(
      * @param ticketId The ID of the ticket to block.
      * @param blockingReason The reason the ticket is blocked.
      * @param reportedByAgentId The agent reporting the blocker.
+     * @param escalationType The type of escalation (classified by LLM). If null, no meeting is scheduled.
+     * @param assignedToAgentId Optional agent to assign the ticket to during blocking.
      * @return Result containing the updated ticket.
      */
     suspend fun blockTicket(
         ticketId: TicketId,
         blockingReason: String,
         reportedByAgentId: AgentId,
+        escalationType: Escalation? = null,
         assignedToAgentId: AgentId? = null,
     ): Result<Ticket> {
         // Retrieve current ticket
@@ -375,19 +378,19 @@ class TicketOrchestrator(
             ),
         )
 
-        // Automatically schedule a decision meeting if blocker indicates need
+        // Automatically schedule a meeting based on escalation type
         // This must happen BEFORE escalation so the meeting message can be posted in the thread before it becomes blocked
-        if (blockerNeedsMeeting(blockingReason)) {
+        if (escalationType != null && escalationType.process.requiresMeeting) {
             val meetingTime = now + 1.hours // TODO: Dynamically set the meeting time based on agent capacity
 
-            // Build participant list
+            // Build participant list based on escalation process
             val requiredParticipants = buildList {
                 // Always include the assigned agent to the ticket if there is one
                 updatedTicket.assignedAgentId?.let { agentId ->
                     add(AssignedTo.Agent(agentId))
                 }
-                // Include human if blocker indicates human involvement needed
-                if (blockerNeedsHuman(blockingReason)) {
+                // Include human if escalation process requires human involvement
+                if (escalationType.process.requiresHuman) {
                     add(AssignedTo.Human)
                 }
             }
@@ -706,16 +709,4 @@ class TicketOrchestrator(
         }
     }
 
-    /**
-     * Check if a blocker reason indicates need for a decision meeting.
-     * Returns true if the reason contains keywords suggesting human or multi-agent decision.
-     */
-    private fun blockerNeedsMeeting(reason: String): Boolean =
-        EscalationKeyword.reasonNeedsMeeting(reason)
-
-    /**
-     * Check if a blocker reason indicates need for human involvement.
-     */
-    private fun blockerNeedsHuman(reason: String): Boolean =
-        EscalationKeyword.reasonNeedsHuman(reason)
 }
