@@ -1,0 +1,92 @@
+package link.socket.ampere.agents.events.meetings
+
+import kotlinx.datetime.Instant
+import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.core.AssignedTo
+import link.socket.ampere.agents.events.Event
+import link.socket.ampere.agents.events.tasks.AgendaItem
+import link.socket.ampere.agents.events.tasks.Task
+import link.socket.ampere.agents.events.utils.generateUUID
+
+class MeetingBuilder(
+    private val agentId: AgentId,
+) {
+
+    private var type: MeetingType? = null
+    private var title: String? = null
+    private var scheduledFor: Instant? = null
+
+    private val agendaItems: MutableList<AgendaItem> = mutableListOf()
+    private val participants: MutableList<AssignedTo> = mutableListOf()
+    private val optionalParticipants: MutableList<AssignedTo> = mutableListOf()
+
+    fun ofType(type: MeetingType): MeetingBuilder {
+        this.type = type
+        return this
+    }
+
+    fun withTitle(title: String): MeetingBuilder {
+        this.title = title
+        return this
+    }
+
+    fun addAgendaItem(
+        topic: String,
+        assignedTo: AssignedTo.Agent? = null,
+    ): MeetingBuilder {
+        agendaItems.add(
+            AgendaItem(
+                id = generateUUID(agentId, assignedTo?.agentId ?: ""),
+                topic = topic,
+                status = Task.Status.Pending(),
+                assignedTo = assignedTo,
+            ),
+        )
+        return this
+    }
+
+    fun addParticipant(
+        participant: AssignedTo,
+    ): MeetingBuilder {
+        participants.add(participant)
+        return this
+    }
+
+    fun addOptionalParticipant(
+        participant: AssignedTo,
+    ): MeetingBuilder {
+        optionalParticipants.add(participant)
+        return this
+    }
+
+    fun scheduledFor(
+        scheduledFor: Instant,
+    ): MeetingBuilder {
+        this.scheduledFor = scheduledFor
+        return this
+    }
+
+    fun buildMeeting(
+        meetingTriggeredByEvent: Event? = null,
+    ): Result<Meeting> =
+        runCatching {
+            requireNotNull(type)
+            requireNotNull(title)
+            requireNotNull(scheduledFor)
+            require(participants.isNotEmpty())
+
+            Meeting(
+                id = generateUUID(agentId, meetingTriggeredByEvent?.eventId ?: ""),
+                type = type!!,
+                status = MeetingStatus.Scheduled(scheduledFor!!),
+                invitation = MeetingInvitation(
+                    title = title!!,
+                    agenda = agendaItems,
+                    requiredParticipants = participants,
+                    optionalParticipants = optionalParticipants,
+                    expectedOutcomes = null,
+                ),
+                creationTriggeredBy = meetingTriggeredByEvent,
+            )
+        }
+}

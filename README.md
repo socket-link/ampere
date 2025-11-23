@@ -1,4 +1,4 @@
-[![Maven Central](https://img.shields.io/maven-central/v/link.socket.kore-ai/kore-ai-client?color=blue&label=Download)](https://central.sonatype.com/namespace/link.socket.kore-ai)
+[![Maven Central](https://img.shields.io/maven-central/v/link.socket.ampere/ampere-client?color=blue&label=Download)](https://central.sonatype.com/namespace/link.socket.ampere)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 # Ampere: A KMP Library for AI Agents & Assistants
@@ -8,7 +8,7 @@
 > **Note**  
 > This library, its APIs, and the sample client applications are in Alpha.
 > It may change incompatibly and require manual migration in the future.
-> If you have any issues, please report them on [GitHub](https://github.com/socket-link/kore-ai/issues).
+> If you have any issues, please report them on [GitHub](https://github.com/socket-link/ampere/issues).
 
 ## 📔 Overview
 
@@ -32,7 +32,7 @@ An **Agent** is a specialized AI Chatbot with domain-specific knowledge for well
 - **System Prompt**: Defines the Agent's mindset and approach
 - **User Prompt**: Initial prompt with optional `HumanAssisted` API for dynamic input
 
-### [Bundled Agents](https://github.com/socket-link/kore-ai/tree/main/shared/src/commonMain/kotlin/link/socket/kore/model/agent/bundled)
+### [Bundled Agents](https://github.com/socket-link/ampere/tree/main/shared/src/commonMain/kotlin/link/socket/ampere/model/agent/bundled)
 
 - Save File Agent
 - Modify File Agent  

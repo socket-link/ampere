@@ -3,6 +3,7 @@ rootProject.name = "Ampere"
 include(":shared")
 include(":androidApp")
 include(":desktopApp")
+include(":ampere-cli")
 
 pluginManagement {
     repositories {

@@ -12,13 +12,13 @@ This project adheres to a Contributor Code of Conduct. By participating, you are
 
 ### Reporting Bugs
 
-- Ensure the bug was not already reported by searching on GitHub under [Issues](https://github.com/socket-link/kore-ai/issues).
-- If you have a bug to report, [open a new issue](https://github.com/socket-link/kore-ai/issues/new) and follow the issue template.
+- Ensure the bug was not already reported by searching on GitHub under [Issues](https://github.com/socket-link/ampere/issues).
+- If you have a bug to report, [open a new issue](https://github.com/socket-link/ampere/issues/new) and follow the issue template.
 
 ### Suggesting Enhancements
 
-- Check if the enhancement was already suggested by searching on GitHub under [Issues](https://github.com/socket-link/kore-ai/issues).
-- If you have an enhancement to suggest, [open a new issue](https://github.com/socket-link/kore-ai/issues/new) and follow the issue template.
+- Check if the enhancement was already suggested by searching on GitHub under [Issues](https://github.com/socket-link/ampere/issues).
+- If you have an enhancement to suggest, [open a new issue](https://github.com/socket-link/ampere/issues/new) and follow the issue template.
 
 ### Pull Requests
 
@@ -34,4 +34,3 @@ This project adheres to a Contributor Code of Conduct. By participating, you are
 - Use the present tense ("Add feature" not "Added feature").
 - Use the imperative mood ("Move cursor to..." not "Moves cursor to...").
 - Limit the first line to 72 characters or less.
-

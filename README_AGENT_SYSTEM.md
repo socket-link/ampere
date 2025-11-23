@@ -1,6 +1,6 @@
 # Agent System Overview
 
-This document describes the minimal autonomous agent system added to Kore AI, including core interfaces, tools, and an example workflow using the CodeWriterAgent.
+This document describes the minimal autonomous agent system added to Ampere, including core interfaces, tools, and an example workflow using the CodeWriterAgent.
 
 ## Interfaces
 
@@ -11,7 +11,7 @@ This document describes the minimal autonomous agent system added to Kore AI, in
   - act(): Outcome — execute one step from the plan
   - signal(): Message? — communicate uncertainties or ask for approval
 
-All return types are immutable data classes in link.socket.kore.agents.core.AgentTypes.
+All return types are immutable data classes in link.socket.ampere.agents.core.AgentTypes.
 
 ## Autonomy Levels
 
