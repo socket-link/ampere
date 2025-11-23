@@ -12,6 +12,7 @@ import link.socket.ampere.agents.events.bus.EventBus
 import link.socket.ampere.agents.events.meetings.Meeting
 import link.socket.ampere.agents.events.meetings.MeetingId
 import link.socket.ampere.agents.events.meetings.MeetingInvitation
+import link.socket.ampere.agents.events.meetings.MeetingSchedulingService
 import link.socket.ampere.agents.events.meetings.MeetingStatus
 import link.socket.ampere.agents.events.meetings.MeetingType
 import link.socket.ampere.agents.events.messages.AgentMessageApi
@@ -23,7 +24,6 @@ import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.util.randomUUID
-import link.socket.ampere.agents.events.meetings.MeetingSchedulingService
 
 /**
  * Service layer that coordinates ticket lifecycle operations, integrates with EventBus
@@ -304,8 +304,8 @@ class TicketOrchestrator(
     suspend fun blockTicket(
         ticketId: TicketId,
         blockingReason: String,
+        escalationType: Escalation,
         reportedByAgentId: AgentId,
-        escalationType: Escalation? = null,
         assignedToAgentId: AgentId? = null,
     ): Result<Ticket> {
         // Retrieve current ticket
@@ -380,7 +380,7 @@ class TicketOrchestrator(
 
         // Automatically schedule a meeting based on escalation type
         // This must happen BEFORE escalation so the meeting message can be posted in the thread before it becomes blocked
-        if (escalationType != null && escalationType.escalationProcess.requiresMeeting) {
+        if (escalationType.escalationProcess.requiresMeeting) {
             val meetingTime = now + 1.hours // TODO: Dynamically set the meeting time based on agent capacity
 
             // Build participant list based on escalation process

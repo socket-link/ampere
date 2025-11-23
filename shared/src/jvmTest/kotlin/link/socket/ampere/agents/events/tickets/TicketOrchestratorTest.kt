@@ -175,7 +175,7 @@ class TicketOrchestratorTest {
             assertTrue(result.isFailure)
             val error = result.exceptionOrNull()
             assertIs<TicketError.ValidationError>(error)
-            assertTrue(error.message?.contains("blank") == true)
+            assertEquals(error.message.contains("blank"), true)
         }
     }
 
@@ -302,7 +302,7 @@ class TicketOrchestratorTest {
             assertTrue(result.isFailure)
             val error = result.exceptionOrNull()
             assertIs<TicketError.ValidationError>(error)
-            assertTrue(error.message?.contains("permission") == true)
+            assertEquals(error.message.contains("permission"), true)
         }
     }
 
@@ -400,7 +400,7 @@ class TicketOrchestratorTest {
             assertTrue(result.isFailure)
             val error = result.exceptionOrNull()
             assertIs<TicketError.ValidationError>(error)
-            assertTrue(error.message?.contains("permission") == true)
+            assertEquals(error.message.contains("permission"), true)
         }
     }
 
@@ -468,6 +468,7 @@ class TicketOrchestratorTest {
             val result = ticketOrchestrator.blockTicket(
                 ticketId = ticket.id,
                 blockingReason = blockReason,
+                escalationType = Escalation.Decision.Product,
                 reportedByAgentId = stubCreatorAgentId,
             )
 
@@ -504,6 +505,7 @@ class TicketOrchestratorTest {
             val result = ticketOrchestrator.blockTicket(
                 ticketId = ticket.id,
                 blockingReason = "Test reason",
+                escalationType = Escalation.Decision.Product,
                 reportedByAgentId = stubCreatorAgentId,
             )
 
@@ -578,7 +580,12 @@ class TicketOrchestratorTest {
             ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubCreatorAgentId)
 
             // Block the ticket
-            ticketOrchestrator.blockTicket(ticket.id, "Waiting for external API", stubCreatorAgentId)
+            ticketOrchestrator.blockTicket(
+                ticketId = ticket.id,
+                blockingReason = "Waiting for external API",
+                escalationType = Escalation.Decision.Product,
+                reportedByAgentId = stubCreatorAgentId,
+            )
             var current = ticketRepository.getTicket(ticket.id).getOrNull()!!
             assertEquals(TicketStatus.BLOCKED, current.status)
             assertTrue(current.isBlocked)
