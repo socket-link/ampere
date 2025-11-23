@@ -215,7 +215,6 @@ class TicketMeetingIntegrationTest {
                 blockingReason = "Need architecture decision on database schema",
                 escalationType = Escalation.Budget.ResourceAllocation,
                 reportedByAgentId = stubAssignedAgentId,
-                escalationType = Escalation.Discussion.Architecture,
                 assignedToAgentId = stubAssignedAgentId,
             )
 
@@ -232,7 +231,7 @@ class TicketMeetingIntegrationTest {
             val meetingEvents = publishedEvents.filterIsInstance<TicketEvent.TicketMeetingScheduled>()
             assertTrue(meetingEvents.isNotEmpty(), "TicketMeetingScheduled event should be published")
 
-            // Verify meeting was linked to ticket
+            // Verify meeting was linked to the ticket
             val meetingsResult = ticketRepository.getMeetingsForTicket(ticket.id)
             assertTrue(meetingsResult.isSuccess)
             val ticketMeetings = meetingsResult.getOrNull()!!
@@ -277,7 +276,6 @@ class TicketMeetingIntegrationTest {
                 blockingReason = "Requires human approval for security permission changes",
                 escalationType = Escalation.Budget.ResourceAllocation,
                 reportedByAgentId = stubAssignedAgentId,
-                escalationType = Escalation.Decision.Product,
                 assignedToAgentId = stubAssignedAgentId,
             )
 
