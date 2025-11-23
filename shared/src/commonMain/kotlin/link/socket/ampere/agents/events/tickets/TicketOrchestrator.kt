@@ -708,5 +708,4 @@ class TicketOrchestrator(
             append(requiredParticipants.joinToString(", ") { it.getIdentifier() })
         }
     }
-
 }
