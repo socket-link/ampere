@@ -215,6 +215,7 @@ class TicketMeetingIntegrationTest {
                 blockingReason = "Need architecture decision on database schema",
                 escalationType = Escalation.Budget.ResourceAllocation,
                 reportedByAgentId = stubAssignedAgentId,
+                escalationType = Escalation.Discussion.Architecture,
                 assignedToAgentId = stubAssignedAgentId,
             )
 
@@ -276,6 +277,7 @@ class TicketMeetingIntegrationTest {
                 blockingReason = "Requires human approval for security permission changes",
                 escalationType = Escalation.Budget.ResourceAllocation,
                 reportedByAgentId = stubAssignedAgentId,
+                escalationType = Escalation.Decision.Product,
                 assignedToAgentId = stubAssignedAgentId,
             )
 
