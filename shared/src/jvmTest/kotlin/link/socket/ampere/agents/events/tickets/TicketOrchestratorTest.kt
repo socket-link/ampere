@@ -468,7 +468,7 @@ class TicketOrchestratorTest {
             val result = ticketOrchestrator.blockTicket(
                 ticketId = ticket.id,
                 blockingReason = blockReason,
-                escalationType = Escalation.Decision.Product,
+                escalationType = Escalation.Budget.ResourceAllocation,
                 reportedByAgentId = stubCreatorAgentId,
             )
 
@@ -505,7 +505,7 @@ class TicketOrchestratorTest {
             val result = ticketOrchestrator.blockTicket(
                 ticketId = ticket.id,
                 blockingReason = "Test reason",
-                escalationType = Escalation.Decision.Product,
+                escalationType = Escalation.Budget.ResourceAllocation,
                 reportedByAgentId = stubCreatorAgentId,
             )
 
@@ -583,7 +583,7 @@ class TicketOrchestratorTest {
             ticketOrchestrator.blockTicket(
                 ticketId = ticket.id,
                 blockingReason = "Waiting for external API",
-                escalationType = Escalation.Decision.Product,
+                escalationType = Escalation.Budget.ResourceAllocation,
                 reportedByAgentId = stubCreatorAgentId,
             )
             var current = ticketRepository.getTicket(ticket.id).getOrNull()!!

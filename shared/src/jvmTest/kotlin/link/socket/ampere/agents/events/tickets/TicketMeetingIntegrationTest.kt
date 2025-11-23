@@ -213,8 +213,8 @@ class TicketMeetingIntegrationTest {
             val blockTicketResult = ticketOrchestrator.blockTicket(
                 ticketId = ticket.id,
                 blockingReason = "Need architecture decision on database schema",
+                escalationType = Escalation.Budget.ResourceAllocation,
                 reportedByAgentId = stubAssignedAgentId,
-                escalationType = Escalation.Discussion.Architecture,
                 assignedToAgentId = stubAssignedAgentId,
             )
 
@@ -274,8 +274,8 @@ class TicketMeetingIntegrationTest {
             val result = ticketOrchestrator.blockTicket(
                 ticketId = ticket.id,
                 blockingReason = "Requires human approval for security permission changes",
+                escalationType = Escalation.Budget.ResourceAllocation,
                 reportedByAgentId = stubAssignedAgentId,
-                escalationType = Escalation.Decision.Product,
                 assignedToAgentId = stubAssignedAgentId,
             )
 
@@ -295,60 +295,60 @@ class TicketMeetingIntegrationTest {
         }
     }
 
-    // TODO: Refactor after adding escalation sealed class
-    // @Test
-    // fun `blockTicket without decision keywords does not schedule meeting`() {
-    //     runBlocking {
-    //         // Create a ticket and assign it
-    //         val createTicketResult = ticketOrchestrator.createTicket(
-    //             title = "No Meeting Test",
-    //             description = "Test",
-    //             type = TicketType.BUG,
-    //             priority = TicketPriority.MEDIUM,
-    //             createdByAgentId = stubCreatorAgentId,
-    //         )
-    //         val (ticket, _) = createTicketResult.getOrNull()!!
-    //
-    //         // Assign the ticket
-    //         ticketOrchestrator.assignTicket(
-    //             ticketId = ticket.id,
-    //             targetAgentId = stubAssignedAgentId,
-    //             assignerAgentId = stubCreatorAgentId,
-    //         )
-    //
-    //         // Transition ticket to IN_PROGRESS
-    //         ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, stubCreatorAgentId)
-    //         ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubCreatorAgentId)
-    //
-    //         publishedEvents.clear()
-    //
-    //         // Block with a generic reason that won't trigger a meeting
-    //         val blockTicketResult = ticketOrchestrator.blockTicket(
-    //             ticketId = ticket.id,
-    //             blockingReason = "Waiting for external API to be available",
-    //             reportedByAgentId = stubAssignedAgentId,
-    //         )
-    //
-    //         assertTrue(blockTicketResult.isSuccess)
-    //
-    //         // Wait for async event publishing
-    //         delay(150)
-    //
-    //         // Verify TicketBlocked event was published
-    //         val blockedEvents = publishedEvents.filterIsInstance<TicketEvent.TicketBlocked>()
-    //         assertTrue(blockedEvents.isNotEmpty(), "TicketBlocked event should be published")
-    //
-    //         // Verify no meeting was scheduled
-    //         val meetingEvents = publishedEvents.filterIsInstance<TicketEvent.TicketMeetingScheduled>()
-    //         assertTrue(meetingEvents.isEmpty(), "TicketMeetingScheduled event should NOT be published")
-    //
-    //         // Verify no ticket-meeting association exists
-    //         val meetingsResult = ticketRepository.getMeetingsForTicket(ticket.id)
-    //         assertTrue(meetingsResult.isSuccess)
-    //         val ticketMeetings = meetingsResult.getOrNull()!!
-    //         assertTrue(ticketMeetings.isEmpty(), "No meeting should be linked to ticket")
-    //     }
-    // }
+    @Test
+    fun `blockTicket without decision keywords does not schedule meeting`() {
+        runBlocking {
+            // Create a ticket and assign it
+            val createTicketResult = ticketOrchestrator.createTicket(
+                title = "No Meeting Test",
+                description = "Test",
+                type = TicketType.BUG,
+                priority = TicketPriority.MEDIUM,
+                createdByAgentId = stubCreatorAgentId,
+            )
+            val (ticket, _) = createTicketResult.getOrNull()!!
+
+            // Assign the ticket
+            ticketOrchestrator.assignTicket(
+                ticketId = ticket.id,
+                targetAgentId = stubAssignedAgentId,
+                assignerAgentId = stubCreatorAgentId,
+            )
+
+            // Transition ticket to IN_PROGRESS
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubCreatorAgentId)
+
+            publishedEvents.clear()
+
+            // Block with a generic reason that won't trigger a meeting
+            val blockTicketResult = ticketOrchestrator.blockTicket(
+                ticketId = ticket.id,
+                blockingReason = "Waiting for external API to be available",
+                escalationType = Escalation.External.Vendor,
+                reportedByAgentId = stubAssignedAgentId,
+            )
+
+            assertTrue(blockTicketResult.isSuccess)
+
+            // Wait for async event publishing
+            delay(150)
+
+            // Verify TicketBlocked event was published
+            val blockedEvents = publishedEvents.filterIsInstance<TicketEvent.TicketBlocked>()
+            assertTrue(blockedEvents.isNotEmpty(), "TicketBlocked event should be published")
+
+            // Verify no meeting was scheduled
+            val meetingEvents = publishedEvents.filterIsInstance<TicketEvent.TicketMeetingScheduled>()
+            assertTrue(meetingEvents.isEmpty(), "TicketMeetingScheduled event should NOT be published")
+
+            // Verify no ticket-meeting association exists
+            val meetingsResult = ticketRepository.getMeetingsForTicket(ticket.id)
+            assertTrue(meetingsResult.isSuccess)
+            val ticketMeetings = meetingsResult.getOrNull()!!
+            assertTrue(ticketMeetings.isEmpty(), "No meeting should be linked to ticket")
+        }
+    }
 
     // ==================== Ticket-Meeting Association Tests ====================
 

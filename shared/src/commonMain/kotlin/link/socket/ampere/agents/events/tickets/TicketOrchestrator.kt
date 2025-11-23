@@ -389,7 +389,7 @@ class TicketOrchestrator(
                 updatedTicket.assignedAgentId?.let { agentId ->
                     add(AssignedTo.Agent(agentId))
                 }
-                // Include human if escalation process requires human involvement
+                // Include human if the escalation process requires human involvement
                 if (escalationType.escalationProcess.requiresHuman) {
                     add(AssignedTo.Human)
                 }

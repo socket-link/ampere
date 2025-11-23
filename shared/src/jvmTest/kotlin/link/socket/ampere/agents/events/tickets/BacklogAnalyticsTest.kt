@@ -182,7 +182,7 @@ class BacklogAnalyticsTest {
             ticketOrchestrator.blockTicket(
                 ticketId = ticket1.id,
                 blockingReason = "Waiting for API",
-                escalationType = Escalation.Decision.Product,
+                escalationType = Escalation.Budget.CostApproval,
                 reportedByAgentId = stubDevAgent1Id,
                 assignedToAgentId = stubDevAgent1Id,
             )
@@ -194,7 +194,7 @@ class BacklogAnalyticsTest {
             ticketOrchestrator.blockTicket(
                 ticketId = ticket2.id,
                 blockingReason = "Waiting for external",
-                escalationType = Escalation.Decision.Product,
+                escalationType = Escalation.Budget.CostApproval,
                 reportedByAgentId = stubDevAgent1Id,
                 assignedToAgentId = stubDevAgent1Id,
             )
@@ -293,7 +293,7 @@ class BacklogAnalyticsTest {
             ticketOrchestrator.blockTicket(
                 ticketId = ticket3.id,
                 blockingReason = "Waiting",
-                escalationType = Escalation.Decision.Product,
+                escalationType = Escalation.Budget.CostApproval,
                 reportedByAgentId = stubDevAgent1Id,
                 assignedToAgentId = stubDevAgent1Id,
             )
@@ -577,7 +577,7 @@ class BacklogAnalyticsTest {
             ticketOrchestrator.blockTicket(
                 ticketId = blockedTicket.id,
                 blockingReason = "Waiting",
-                escalationType = Escalation.Decision.Product,
+                escalationType = Escalation.Budget.CostApproval,
                 reportedByAgentId = stubDevAgent1Id,
                 assignedToAgentId = stubDevAgent1Id,
             )
@@ -660,7 +660,7 @@ class BacklogAnalyticsTest {
             ticketOrchestrator.blockTicket(
                 ticketId = blockedTicket.id,
                 blockingReason = "Test",
-                escalationType = Escalation.Decision.Product,
+                escalationType = Escalation.Budget.CostApproval,
                 reportedByAgentId = stubDevAgent1Id,
                 assignedToAgentId = stubDevAgent1Id,
             )
