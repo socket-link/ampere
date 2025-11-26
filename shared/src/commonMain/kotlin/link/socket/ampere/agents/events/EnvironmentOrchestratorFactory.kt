@@ -5,7 +5,6 @@ import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.meetings.AgentMeetingsApiFactory
-import link.socket.ampere.agents.events.meetings.MeetingBuilder
 import link.socket.ampere.agents.events.meetings.MeetingRepository
 import link.socket.ampere.agents.events.messages.AgentMessageApiFactory
 import link.socket.ampere.agents.events.messages.MessageRepository
@@ -57,8 +56,6 @@ class EnvironmentOrchestratorFactory(
         )
 
         val ticketRepository = TicketRepository(
-            json = json,
-            scope = scope,
             database = database,
         )
 
@@ -74,13 +71,16 @@ class EnvironmentOrchestratorFactory(
             database = database,
         )
 
+        // Create a temporary meeting orchestrator for the factory
+        // Note: The actual meeting orchestrator will be created by EnvironmentOrchestrator
+        val tempMeetingOrchestrator = createTemporaryMeetingOrchestrator(
+            meetingRepository = meetingRepository,
+            messageRepository = messageRepository,
+        )
+
         // Create API factories
         val meetingApiFactory = AgentMeetingsApiFactory(
-            meetingBuilder = MeetingBuilder(),
-            meetingOrchestrator = createTemporaryMeetingOrchestrator(
-                meetingRepository = meetingRepository,
-                messageRepository = messageRepository,
-            ),
+            meetingOrchestrator = tempMeetingOrchestrator,
             logger = logger,
         )
 
