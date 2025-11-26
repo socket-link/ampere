@@ -1,12 +1,21 @@
 package link.socket.ampere.agents.events
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.api.EventHandler
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.meetings.AgentMeetingsApi
 import link.socket.ampere.agents.events.meetings.MeetingRepository
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
+import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.agents.events.tickets.TicketRepository
+import link.socket.ampere.agents.events.utils.ConsoleEventLogger
+import link.socket.ampere.agents.events.utils.EventLogger
+import link.socket.ampere.data.DEFAULT_JSON
+import link.socket.ampere.db.Database
 
 /**
  * Service layer that provides convenient access to the environment orchestrator and its components.
@@ -96,6 +105,65 @@ class EnvironmentService(
         orchestrator.meetingApiFactory.create(agentId)
 
     /**
+     * Access to the event bus for subscribing to events.
+     */
+    val eventBus: EventSerialBus
+        get() = orchestrator.eventSerialBus
+
+    /**
+     * Subscribe to events of a specific type.
+     *
+     * @param agentId The agent subscribing to the events
+     * @param eventClassType The type of events to subscribe to
+     * @param handler Handler to process events
+     * @return Subscription that can be used to unsubscribe
+     */
+    fun subscribe(
+        agentId: AgentId,
+        eventClassType: EventClassType,
+        handler: EventHandler<Event, Subscription>,
+    ): Subscription =
+        eventBus.subscribe(agentId, eventClassType, handler)
+
+    /**
+     * Subscribe to all events.
+     *
+     * @param agentId The agent subscribing to the events
+     * @param handler Handler to process events
+     * @return List of subscriptions (one per event type)
+     */
+    fun subscribeToAll(
+        agentId: AgentId,
+        handler: EventHandler<Event, Subscription>,
+    ): List<Subscription> {
+        val eventTypes = listOf(
+            Event.TaskCreated.EVENT_CLASS_TYPE,
+            Event.QuestionRaised.EVENT_CLASS_TYPE,
+            Event.CodeSubmitted.EVENT_CLASS_TYPE,
+            MeetingEvent.MeetingScheduled.EVENT_CLASS_TYPE,
+            MeetingEvent.MeetingStarted.EVENT_CLASS_TYPE,
+            MeetingEvent.AgendaItemStarted.EVENT_CLASS_TYPE,
+            MeetingEvent.AgendaItemCompleted.EVENT_CLASS_TYPE,
+            MeetingEvent.MeetingCompleted.EVENT_CLASS_TYPE,
+            MeetingEvent.MeetingCanceled.EVENT_CLASS_TYPE,
+            TicketEvent.TicketCreated.EVENT_CLASS_TYPE,
+            TicketEvent.TicketStatusChanged.EVENT_CLASS_TYPE,
+            TicketEvent.TicketAssigned.EVENT_CLASS_TYPE,
+            TicketEvent.TicketBlocked.EVENT_CLASS_TYPE,
+            TicketEvent.TicketCompleted.EVENT_CLASS_TYPE,
+            TicketEvent.TicketMeetingScheduled.EVENT_CLASS_TYPE,
+            MessageEvent.ThreadCreated.EVENT_CLASS_TYPE,
+            MessageEvent.MessagePosted.EVENT_CLASS_TYPE,
+            MessageEvent.ThreadStatusChanged.EVENT_CLASS_TYPE,
+            MessageEvent.EscalationRequested.EVENT_CLASS_TYPE,
+        )
+
+        return eventTypes.map { eventType ->
+            subscribe(agentId, eventType, handler)
+        }
+    }
+
+    /**
      * Start all orchestrator services.
      *
      * This starts the event routing system. Should be called once during
@@ -103,5 +171,37 @@ class EnvironmentService(
      */
     fun start() {
         orchestrator.start()
+    }
+
+    companion object {
+        /**
+         * Create an EnvironmentService with all dependencies from a database.
+         *
+         * This is a convenience method for CLI tools and tests that need to quickly
+         * set up a complete environment.
+         *
+         * @param database The database to use
+         * @param scope The coroutine scope for async operations
+         * @param json JSON configuration (defaults to DEFAULT_JSON)
+         * @param logger Event logger (defaults to ConsoleEventLogger)
+         * @return A fully initialized EnvironmentService
+         */
+        fun create(
+            database: Database,
+            scope: CoroutineScope,
+            json: Json = DEFAULT_JSON,
+            logger: EventLogger = ConsoleEventLogger(),
+        ): EnvironmentService {
+            val eventSerialBus = EventSerialBus(scope, logger)
+            val factory = EnvironmentOrchestratorFactory(
+                database = database,
+                json = json,
+                scope = scope,
+                eventSerialBus = eventSerialBus,
+                logger = logger,
+            )
+            val orchestrator = factory.create()
+            return EnvironmentService(orchestrator)
+        }
     }
 }
