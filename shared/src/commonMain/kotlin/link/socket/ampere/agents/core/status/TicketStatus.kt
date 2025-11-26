@@ -18,36 +18,42 @@ sealed interface TicketStatus : Status {
     val name: String
 
     /** Ticket is in the backlog, not yet prioritized for work. */
+    @Serializable
     data object Backlog : TicketStatus {
         override val name: String = "Backlog"
         override val isClosed: Boolean = false
     }
 
     /** Ticket is ready to be picked up for work. */
+    @Serializable
     data object Ready : TicketStatus {
         override val name: String = "Ready"
         override val isClosed: Boolean = false
     }
 
     /** Ticket is actively being worked on. */
+    @Serializable
     data object InProgress : TicketStatus {
         override val name: String = "In Progress"
         override val isClosed: Boolean = false
     }
 
     /** Ticket is blocked by external dependencies or issues. */
+    @Serializable
     data object Blocked : TicketStatus {
         override val name: String = "Blocked"
         override val isClosed: Boolean = false
     }
 
     /** Ticket work is complete and awaiting review. */
+    @Serializable
     data object InReview : TicketStatus {
         override val name: String = "In Review"
         override val isClosed: Boolean = false
     }
 
     /** Ticket is complete. */
+    @Serializable
     data object Done : TicketStatus {
         override val name: String = "Done"
         override val isClosed: Boolean = true
@@ -72,7 +78,7 @@ sealed interface TicketStatus : Status {
         newStatus in validTransitions()
 
     companion object {
-        val values: List<TicketStatus> = listOf(Backlog, Ready, InProgress, Blocked, InReview, Done)
+        val values: List<TicketStatus> by lazy { listOf(Backlog, Ready, InProgress, Blocked, InReview, Done) }
 
         fun fromString(name: String): TicketStatus = when (name) {
             "Backlog" -> Backlog

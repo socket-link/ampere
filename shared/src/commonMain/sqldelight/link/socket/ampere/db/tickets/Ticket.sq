@@ -6,7 +6,7 @@ CREATE TABLE TicketStore (
     description TEXT NOT NULL,
     ticket_type TEXT NOT NULL CHECK (ticket_type IN ('FEATURE', 'BUG', 'TASK', 'SPIKE')),
     priority TEXT NOT NULL CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')),
-    status TEXT NOT NULL CHECK (status IN ('BACKLOG', 'READY', 'IN_PROGRESS', 'BLOCKED', 'IN_REVIEW', 'DONE')),
+    status TEXT NOT NULL CHECK (status IN ('Backlog', 'Ready', 'In Progress', 'Blocked', 'In Review', 'Done')),
     assigned_agent_id TEXT,
     created_by_agent_id TEXT NOT NULL,
     created_at INTEGER NOT NULL,

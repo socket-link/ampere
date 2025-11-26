@@ -36,8 +36,8 @@ sealed class Agent <S : AgentState> {
     abstract suspend fun runTool(tool: Tool<*>, request: ExecutionRequest<*>): ExecutionOutcome
     abstract suspend fun evaluateNextIdeaFromOutcomes(vararg outcomes: Outcome): Idea
 
-    private val _stateFlow: MutableStateFlow<S> = MutableStateFlow(initialState)
-    val stateFlow: StateFlow<S> = _stateFlow.asStateFlow()
+    private val _stateFlow: MutableStateFlow<S> by lazy { MutableStateFlow(initialState) }
+    val stateFlow: StateFlow<S> by lazy { _stateFlow.asStateFlow() }
 
     fun getCurrentState(): S = stateFlow.value
     fun getAIModel(): AIModel = agentConfiguration.aiConfiguration.model

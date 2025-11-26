@@ -294,7 +294,7 @@ class TicketTest {
     @Test
     fun `Done cannot transition to any status`() {
         val ticket = createTicket(status = TicketStatus.Done)
-        TicketStatus.values.filter { it !is TicketStatus.Done }.forEach { status ->
+        TicketStatus.values.forEach { status ->
             assertFalse(ticket.canTransitionTo(status))
         }
     }

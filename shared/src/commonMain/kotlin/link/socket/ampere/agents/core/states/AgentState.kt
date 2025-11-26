@@ -135,8 +135,18 @@ open class AgentState : State {
     }
 
     fun resetCurrentMemoryCell() {
+        val currentMemoryCell = memory.currentMemoryCell
+
+        addToPastMemory(
+            rememberedIdeas = listOf(currentMemoryCell.idea.id),
+            rememberedOutcomes = listOf(currentMemoryCell.outcome.id),
+            rememberedPerceptions = listOf(currentMemoryCell.perception.id),
+            rememberedPlans = listOf(currentMemoryCell.plan.id),
+            rememberedTasks = listOf(currentMemoryCell.task.id),
+        )
+
         memory = memory.copy(
-            currentMemoryCell = AgentMemoryCell.Current.blank
+            currentMemoryCell = AgentMemoryCell.Current.blank,
         )
     }
 

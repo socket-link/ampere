@@ -367,7 +367,7 @@ class MinimalAutonomousAgentTest {
 
             val stateBeforePause = agent.getCurrentState()
             val currentMemoryBeforePause = stateBeforePause.getCurrentMemory()
-            assertEquals("Test", currentMemoryBeforePause.idea.name)
+            assertEquals("Perceived", currentMemoryBeforePause.idea.name)
 
             agent.pauseAgent()
 
