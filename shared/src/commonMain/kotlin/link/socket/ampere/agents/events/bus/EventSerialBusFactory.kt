@@ -5,17 +5,18 @@ import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
 
 /**
- * Factory for creating an [EventBus]. Persistence is handled by higher-level APIs.
+ * Factory for creating an [EventSerialBus]. Persistence is handled by higher-level APIs.
  */
-class EventBusFactory(
+class EventSerialBusFactory(
     private val scope: CoroutineScope,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
     /**
-     * Create a new [EventBus].
+     * Create a new [EventSerialBus].
      */
-    fun create(): EventBus = EventBus(
-        scope = scope,
-        logger = logger,
-    )
+    fun create(): EventSerialBus =
+        EventSerialBus(
+            scope = scope,
+            logger = logger,
+        )
 }

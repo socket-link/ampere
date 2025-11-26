@@ -2,12 +2,12 @@ package link.socket.ampere.agents.events
 
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.events.api.AgentEventApi
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.subscription.EventSubscription
 
 class EventRouter(
     private val eventApi: AgentEventApi,
-    private val eventBus: EventBus,
+    private val eventSerialBus: EventSerialBus,
 ) {
     private val eventsByEventClassTypeSubscriptions = mutableMapOf<AgentId, EventSubscription.ByEventClassType>()
 
@@ -18,7 +18,7 @@ class EventRouter(
                     agentId = agentId,
                     event = event,
                     eventSubscription = subscription,
-                ).let { notificationEvent -> eventBus.publish(notificationEvent) }
+                ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
             }
         }
 
@@ -28,7 +28,7 @@ class EventRouter(
                     agentId = agentId,
                     event = event,
                     eventSubscription = subscription,
-                ).let { notificationEvent -> eventBus.publish(notificationEvent) }
+                ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
             }
         }
 
@@ -38,7 +38,7 @@ class EventRouter(
                     agentId = agentId,
                     event = event,
                     eventSubscription = subscription,
-                ).let { notificationEvent -> eventBus.publish(notificationEvent) }
+                ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
             }
         }
     }

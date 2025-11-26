@@ -16,8 +16,8 @@ import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.MessageEvent
 import link.socket.ampere.agents.events.NotificationEvent
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
-import link.socket.ampere.agents.events.bus.EventBus
-import link.socket.ampere.agents.events.bus.EventBusFactory
+import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.messages.escalation.EscalationEventHandler
 import link.socket.ampere.agents.events.messages.escalation.Notifier
@@ -29,10 +29,10 @@ import link.socket.ampere.db.Database
 class MessageRouterTest {
 
     private val scope = TestScope(UnconfinedTestDispatcher())
-    private val eventBusFactory = EventBusFactory(scope)
+    private val eventSerialBusFactory = EventSerialBusFactory(scope)
 
     private lateinit var driver: JdbcSqliteDriver
-    private lateinit var eventBus: EventBus
+    private lateinit var eventSerialBus: EventSerialBus
     private lateinit var eventRepository: EventRepository
     private lateinit var messageRepository: MessageRepository
     private lateinit var agentMessageApiFactory: AgentMessageApiFactory
@@ -59,10 +59,10 @@ class MessageRouterTest {
         val database = Database(driver)
         eventRepository = EventRepository(DEFAULT_JSON, scope, database)
         messageRepository = MessageRepository(DEFAULT_JSON, scope, database)
-        eventBus = eventBusFactory.create()
-        agentMessageApiFactory = AgentMessageApiFactory(messageRepository, eventBus)
-        agentEventApiFactory = AgentEventApiFactory(eventRepository, eventBus)
-        escalationEventHandler = EscalationEventHandler(scope, fakeHumanNotifier, eventBus)
+        eventSerialBus = eventSerialBusFactory.create()
+        agentMessageApiFactory = AgentMessageApiFactory(messageRepository, eventSerialBus)
+        agentEventApiFactory = AgentEventApiFactory(eventRepository, eventSerialBus)
+        escalationEventHandler = EscalationEventHandler(scope, fakeHumanNotifier, eventSerialBus)
     }
 
     @AfterTest
@@ -74,7 +74,7 @@ class MessageRouterTest {
     fun `routes thread and channel events to subscribed agents`() {
         runBlocking {
             val routerApi = agentMessageApiFactory.create("router-agent")
-            val router = MessageRouter(routerApi, escalationEventHandler, eventBus)
+            val router = MessageRouter(routerApi, escalationEventHandler, eventSerialBus)
 
             val targetAgent = "agent-subscriber"
             val channel = MessageChannel.Public.Engineering
@@ -82,7 +82,7 @@ class MessageRouterTest {
 
             // Capture notifications to agents
             val notifications = mutableListOf<NotificationEvent.ToAgent<*>>()
-            eventBus.subscribe<NotificationEvent.ToAgent<*>, Subscription>(
+            eventSerialBus.subscribe<NotificationEvent.ToAgent<*>, Subscription>(
                 agentId = "observer",
                 eventClassType = NotificationEvent.ToAgent.EVENT_CLASS_TYPE,
             ) { event, _ ->

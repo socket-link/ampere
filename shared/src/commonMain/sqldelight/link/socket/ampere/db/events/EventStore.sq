@@ -37,3 +37,9 @@ SELECT event_id, event_type, source_id, timestamp, payload
 FROM EventStore
 WHERE event_id = ?
 LIMIT 1;
+
+getEventsBetween:
+SELECT event_id, event_type, source_id, timestamp, payload
+FROM EventStore
+WHERE timestamp >= ? AND timestamp <= ?
+ORDER BY timestamp ASC;

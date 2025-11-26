@@ -26,7 +26,7 @@ import link.socket.ampere.agents.core.tasks.MeetingTask.AgendaItem
 import link.socket.ampere.agents.events.Event
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.MeetingEvent
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
 import link.socket.ampere.agents.implementations.CodeWriterAgent
@@ -44,7 +44,7 @@ class MeetingParticipationHandlerTest {
     private lateinit var database: Database
     private lateinit var meetingRepository: MeetingRepository
     private lateinit var messageRepository: MessageRepository
-    private lateinit var eventBus: EventBus
+    private lateinit var eventSerialBus: EventSerialBus
     private lateinit var messageApi: AgentMessageApi
     private lateinit var orchestrator: MeetingOrchestrator
     private lateinit var participationHandler: MeetingParticipationHandler
@@ -86,17 +86,17 @@ class MeetingParticipationHandlerTest {
 
         meetingRepository = MeetingRepository(stubJson, testScope, database)
         messageRepository = MessageRepository(stubJson, testScope, database)
-        eventBus = EventBus(testScope)
-        messageApi = AgentMessageApi(orchestratorAgentId, messageRepository, eventBus)
+        eventSerialBus = EventSerialBus(testScope)
+        messageApi = AgentMessageApi(orchestratorAgentId, messageRepository, eventSerialBus)
 
         orchestrator = MeetingOrchestrator(
             repository = meetingRepository,
-            eventBus = eventBus,
+            eventSerialBus = eventSerialBus,
             messageApi = messageApi,
         )
 
         participationHandler = MeetingParticipationHandler(
-            eventBus = eventBus,
+            eventSerialBus = eventSerialBus,
             messageApi = messageApi,
             meetingRepository = meetingRepository,
         )

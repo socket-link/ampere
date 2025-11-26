@@ -8,7 +8,7 @@ import link.socket.ampere.agents.core.status.TaskStatus
 import link.socket.ampere.agents.core.tasks.MeetingTask
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.MeetingEvent
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageChannel
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
@@ -22,7 +22,7 @@ import link.socket.ampere.util.randomUUID
  */
 class MeetingOrchestrator(
     private val repository: MeetingRepository,
-    private val eventBus: EventBus,
+    private val eventSerialBus: EventSerialBus,
     private val messageApi: AgentMessageApi,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
@@ -114,7 +114,7 @@ class MeetingOrchestrator(
         requireNotNull(createdMeeting) { "Failed to persist meeting ${meeting.id}" }
 
         // Publish MeetingScheduled event
-        eventBus.publish(
+        eventSerialBus.publish(
             MeetingEvent.MeetingScheduled(
                 eventId = generateUUID(createdMeeting.id),
                 meeting = createdMeeting,
@@ -186,7 +186,7 @@ class MeetingOrchestrator(
         }
 
         // Publish MeetingStarted event
-        eventBus.publish(
+        eventSerialBus.publish(
             MeetingEvent.MeetingStarted(
                 eventId = randomUUID(),
                 meetingId = meetingId,
@@ -249,7 +249,7 @@ class MeetingOrchestrator(
         val updatedItem = nextItem.copy(status = TaskStatus.InProgress)
 
         // Publish AgendaItemStarted event
-        eventBus.publish(
+        eventSerialBus.publish(
             MeetingEvent.AgendaItemStarted(
                 eventId = randomUUID(),
                 meetingId = meetingId,
@@ -322,7 +322,7 @@ class MeetingOrchestrator(
         }
 
         // Publish MeetingCompleted event
-        eventBus.publish(
+        eventSerialBus.publish(
             MeetingEvent.MeetingCompleted(
                 eventId = randomUUID(),
                 meetingId = meetingId,

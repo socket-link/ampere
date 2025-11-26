@@ -14,8 +14,8 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.MessageEvent
-import link.socket.ampere.agents.events.bus.EventBus
-import link.socket.ampere.agents.events.bus.EventBusFactory
+import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.AgentMessageApiFactory
 import link.socket.ampere.agents.events.messages.MessageChannel
@@ -31,13 +31,13 @@ import link.socket.ampere.util.randomUUID
 class EscalationEventHandlerTest {
 
     private val scope = TestScope(UnconfinedTestDispatcher())
-    private val eventBusFactory = EventBusFactory(scope)
+    private val eventSerialBusFactory = EventSerialBusFactory(scope)
 
     private lateinit var driver: JdbcSqliteDriver
     private lateinit var database: Database
     private lateinit var eventRepository: EventRepository
     private lateinit var messageRepository: MessageRepository
-    private lateinit var eventBus: EventBus
+    private lateinit var eventSerialBus: EventSerialBus
     private lateinit var apiFactory: AgentMessageApiFactory
 
     private class FakeHumanNotifier : Notifier.Human() {
@@ -69,7 +69,7 @@ class EscalationEventHandlerTest {
     ) = MessageRouter(
         messageApi = api,
         escalationEventHandler = eventHandler,
-        eventBus = eventBus,
+        eventSerialBus = eventSerialBus,
     )
 
     @BeforeTest
@@ -80,9 +80,9 @@ class EscalationEventHandlerTest {
         database = Database(driver)
         eventRepository = EventRepository(DEFAULT_JSON, scope, database)
         messageRepository = MessageRepository(DEFAULT_JSON, scope, database)
-        eventBus = eventBusFactory.create()
-        apiFactory = AgentMessageApiFactory(messageRepository, eventBus)
-        eventHandler = EscalationEventHandler(scope, humanNotifier, eventBus)
+        eventSerialBus = eventSerialBusFactory.create()
+        apiFactory = AgentMessageApiFactory(messageRepository, eventSerialBus)
+        eventHandler = EscalationEventHandler(scope, humanNotifier, eventSerialBus)
     }
 
     @AfterTest
@@ -170,7 +170,7 @@ class EscalationEventHandlerTest {
             val standaloneHandler = EscalationEventHandler(
                 coroutineScope = scope,
                 humanNotifier = humanNotifier,
-                eventBus = eventBus,
+                eventSerialBus = eventSerialBus,
                 agentId = agentId,
             )
 

@@ -10,8 +10,8 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.core.AssignedTo
-import link.socket.ampere.agents.events.bus.EventBus
-import link.socket.ampere.agents.events.bus.EventBusFactory
+import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
 import link.socket.ampere.data.DEFAULT_JSON
@@ -27,11 +27,11 @@ class AgentMeetingsApiTest {
 
     private val json = DEFAULT_JSON
     private val scope = TestScope(UnconfinedTestDispatcher())
-    private val eventBusFactory = EventBusFactory(scope)
+    private val eventSerialBusFactory = EventSerialBusFactory(scope)
 
     private lateinit var meetingBuilder: MeetingBuilder
     private lateinit var driver: JdbcSqliteDriver
-    private lateinit var eventBus: EventBus
+    private lateinit var eventSerialBus: EventSerialBus
 
     private lateinit var meetingRepository: MeetingRepository
     private lateinit var messageRepository: MessageRepository
@@ -46,15 +46,15 @@ class AgentMeetingsApiTest {
         Database.Schema.create(driver)
         val database = Database.Companion(driver)
 
-        eventBus = eventBusFactory.create()
+        eventSerialBus = eventSerialBusFactory.create()
         meetingRepository = MeetingRepository(json, scope, database)
         messageRepository = MessageRepository(json, scope, database)
         meetingBuilder = MeetingBuilder(stubAgentId)
-        messageApi = AgentMessageApi(stubAgentId, messageRepository, eventBus)
+        messageApi = AgentMessageApi(stubAgentId, messageRepository, eventSerialBus)
 
         meetingOrchestrator = MeetingOrchestrator(
             repository = meetingRepository,
-            eventBus = eventBus,
+            eventSerialBus = eventSerialBus,
             messageApi = messageApi,
         )
 

@@ -5,7 +5,7 @@ import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.events.EventClassType
 
 /**
- * Subscription returned by [link.socket.ampere.agents.events.bus.EventBus.subscribe] used to cancel a subscription via [link.socket.ampere.agents.events.bus.EventBus.unsubscribe].
+ * Subscription returned by [link.socket.ampere.agents.events.bus.EventSerialBus.subscribe] used to cancel a subscription via [link.socket.ampere.agents.events.bus.EventSerialBus.unsubscribe].
  */
 @Serializable
 sealed class EventSubscription(

@@ -7,7 +7,7 @@ import link.socket.ampere.agents.events.messages.MessageChannel
 import link.socket.ampere.agents.events.messages.MessageThreadId
 
 /**
- * Subscription returned by [link.socket.ampere.agents.events.bus.EventBus.subscribe] used to cancel a subscription via [link.socket.ampere.agents.events.bus.EventBus.unsubscribe].
+ * Subscription returned by [link.socket.ampere.agents.events.bus.EventSerialBus.subscribe] used to cancel a subscription via [link.socket.ampere.agents.events.bus.EventSerialBus.unsubscribe].
  */
 @Serializable
 sealed class MessageSubscription(

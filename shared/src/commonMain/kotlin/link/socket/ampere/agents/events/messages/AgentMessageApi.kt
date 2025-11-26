@@ -7,7 +7,7 @@ import link.socket.ampere.agents.events.EventStatus
 import link.socket.ampere.agents.events.MessageEvent
 import link.socket.ampere.agents.events.api.EventFilter
 import link.socket.ampere.agents.events.api.EventHandler
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
@@ -20,7 +20,7 @@ import link.socket.ampere.util.randomUUID
 class AgentMessageApi(
     val agentId: AgentId,
     private val messageRepository: MessageRepository,
-    private val eventBus: EventBus,
+    private val eventSerialBus: EventSerialBus,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
 
@@ -68,14 +68,14 @@ class AgentMessageApi(
             .saveThread(thread)
             .onSuccess {
                 // Publish creation and initial message posted events
-                eventBus.publish(
+                eventSerialBus.publish(
                     MessageEvent.ThreadCreated(
                         eventId = randomUUID(),
                         thread = thread,
                     ),
                 )
 
-                eventBus.publish(
+                eventSerialBus.publish(
                     MessageEvent.MessagePosted(
                         eventId = randomUUID(),
                         threadId = thread.id,
@@ -128,7 +128,7 @@ class AgentMessageApi(
         messageRepository
             .addMessageToThread(threadId, message)
             .onSuccess {
-                eventBus.publish(
+                eventSerialBus.publish(
                     MessageEvent.MessagePosted(
                         eventId = randomUUID(),
                         threadId = threadId,
@@ -182,7 +182,7 @@ class AgentMessageApi(
             .onSuccess {
                 val now = Clock.System.now()
 
-                eventBus.publish(
+                eventSerialBus.publish(
                     MessageEvent.EscalationRequested(
                         eventId = randomUUID(),
                         timestamp = now,
@@ -193,7 +193,7 @@ class AgentMessageApi(
                     ),
                 )
 
-                eventBus.publish(
+                eventSerialBus.publish(
                     MessageEvent.ThreadStatusChanged(
                         eventId = randomUUID(),
                         timestamp = now,
@@ -234,7 +234,7 @@ class AgentMessageApi(
         messageRepository
             .updateStatus(threadId, newStatus)
             .onSuccess {
-                eventBus.publish(
+                eventSerialBus.publish(
                     MessageEvent.ThreadStatusChanged(
                         eventId = randomUUID(),
                         timestamp = Clock.System.now(),
@@ -279,7 +279,7 @@ class AgentMessageApi(
         messageRepository
             .updateStatus(threadId, newStatus)
             .onSuccess {
-                eventBus.publish(
+                eventSerialBus.publish(
                     MessageEvent.ThreadStatusChanged(
                         eventId = randomUUID(),
                         timestamp = Clock.System.now(),
@@ -303,7 +303,7 @@ class AgentMessageApi(
         filter: EventFilter<MessageEvent.ThreadCreated> = EventFilter.noFilter(),
         handler: suspend (MessageEvent.ThreadCreated, Subscription?) -> Unit,
     ): Subscription =
-        eventBus.subscribe(
+        eventSerialBus.subscribe(
             agentId = agentId,
             eventClassType = MessageEvent.ThreadCreated.EVENT_CLASS_TYPE,
             handler = EventHandler { event, subscription ->
@@ -320,7 +320,7 @@ class AgentMessageApi(
         filter: EventFilter<MessageEvent.MessagePosted> = EventFilter.noFilter(),
         handler: suspend (MessageEvent.MessagePosted, Subscription?) -> Unit,
     ): Subscription =
-        eventBus.subscribe(
+        eventSerialBus.subscribe(
             agentId = agentId,
             eventClassType = MessageEvent.MessagePosted.EVENT_CLASS_TYPE,
             handler = EventHandler { event, subscription ->
@@ -337,7 +337,7 @@ class AgentMessageApi(
         filter: (MessageEvent.MessagePosted) -> Boolean = { true },
         handler: suspend (MessageEvent.MessagePosted, Subscription?) -> Unit,
     ): Subscription =
-        eventBus.subscribe(
+        eventSerialBus.subscribe(
             agentId = agentId,
             eventClassType = MessageEvent.MessagePosted.EVENT_CLASS_TYPE,
             handler = EventHandler { event, subscription ->
@@ -353,7 +353,7 @@ class AgentMessageApi(
         filter: (MessageEvent.ThreadStatusChanged) -> Boolean = { true },
         handler: suspend (MessageEvent.ThreadStatusChanged, Subscription?) -> Unit,
     ): Subscription =
-        eventBus.subscribe(
+        eventSerialBus.subscribe(
             agentId = agentId,
             eventClassType = MessageEvent.ThreadStatusChanged.EVENT_CLASS_TYPE,
             handler = EventHandler { event, subscription ->
@@ -368,7 +368,7 @@ class AgentMessageApi(
         filter: (MessageEvent.EscalationRequested) -> Boolean = { true },
         handler: suspend (MessageEvent.EscalationRequested, Subscription?) -> Unit,
     ): Subscription =
-        eventBus.subscribe(
+        eventSerialBus.subscribe(
             agentId = agentId,
             eventClassType = MessageEvent.EscalationRequested.EVENT_CLASS_TYPE,
             handler = EventHandler { event, subscription ->

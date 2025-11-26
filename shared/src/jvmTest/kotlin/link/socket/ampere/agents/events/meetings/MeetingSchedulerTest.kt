@@ -28,7 +28,7 @@ import link.socket.ampere.agents.events.Event
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.MeetingEvent
 import link.socket.ampere.agents.events.api.EventHandler
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
 import link.socket.ampere.db.Database
@@ -40,7 +40,7 @@ class MeetingSchedulerTest {
     private lateinit var database: Database
     private lateinit var meetingRepository: MeetingRepository
     private lateinit var messageRepository: MessageRepository
-    private lateinit var eventBus: EventBus
+    private lateinit var eventSerialBus: EventSerialBus
     private lateinit var messageApi: AgentMessageApi
     private lateinit var orchestrator: MeetingOrchestrator
     private lateinit var scheduler: MeetingScheduler
@@ -66,18 +66,18 @@ class MeetingSchedulerTest {
 
         meetingRepository = MeetingRepository(stubJson, testScope, database)
         messageRepository = MessageRepository(stubJson, testScope, database)
-        eventBus = EventBus(testScope)
-        messageApi = AgentMessageApi(orchestratorAgentId, messageRepository, eventBus)
+        eventSerialBus = EventSerialBus(testScope)
+        messageApi = AgentMessageApi(orchestratorAgentId, messageRepository, eventSerialBus)
 
         // Subscribe to capture published events
-        eventBus.subscribe(
+        eventSerialBus.subscribe(
             agentId = "test-subscriber",
             eventClassType = MeetingEvent.MeetingScheduled.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },
         )
-        eventBus.subscribe(
+        eventSerialBus.subscribe(
             agentId = "test-subscriber",
             eventClassType = MeetingEvent.MeetingStarted.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
@@ -87,7 +87,7 @@ class MeetingSchedulerTest {
 
         orchestrator = MeetingOrchestrator(
             repository = meetingRepository,
-            eventBus = eventBus,
+            eventSerialBus = eventSerialBus,
             messageApi = messageApi,
         )
 

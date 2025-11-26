@@ -8,7 +8,7 @@ import link.socket.ampere.agents.events.EventClassType
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.Urgency
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.events.subscription.Subscription
@@ -44,7 +44,7 @@ class EventFilter<E : Event>(
 class AgentEventApi(
     val agentId: AgentId,
     private val eventRepository: EventRepository,
-    private val eventBus: EventBus,
+    private val eventSerialBus: EventSerialBus,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
 
@@ -52,7 +52,7 @@ class AgentEventApi(
     suspend fun publish(event: Event) {
         eventRepository.saveEvent(event)
             .onSuccess {
-                eventBus.publish(event)
+                eventSerialBus.publish(event)
             }
             .onFailure { throwable ->
                 logger.logError(
@@ -127,7 +127,7 @@ class AgentEventApi(
         filter: EventFilter<Event.TaskCreated> = EventFilter.noFilter(),
         handler: suspend (Event.TaskCreated, Subscription?) -> Unit,
     ): Subscription =
-        eventBus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
+        eventSerialBus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
             agentId = agentId,
             eventClassType = Event.TaskCreated.EVENT_CLASS_TYPE,
         ) { event, subscription ->
@@ -141,7 +141,7 @@ class AgentEventApi(
         filter: EventFilter<Event.QuestionRaised> = EventFilter.noFilter(),
         handler: suspend (Event.QuestionRaised, Subscription?) -> Unit,
     ): Subscription =
-        eventBus.subscribe<Event.QuestionRaised, EventSubscription.ByEventClassType>(
+        eventSerialBus.subscribe<Event.QuestionRaised, EventSubscription.ByEventClassType>(
             agentId = agentId,
             eventClassType = Event.QuestionRaised.EVENT_CLASS_TYPE,
         ) { event, subscription ->
@@ -155,7 +155,7 @@ class AgentEventApi(
         filter: EventFilter<Event.CodeSubmitted> = EventFilter.noFilter(),
         handler: suspend (Event.CodeSubmitted, Subscription?) -> Unit,
     ): Subscription =
-        eventBus.subscribe<Event.CodeSubmitted, EventSubscription.ByEventClassType>(
+        eventSerialBus.subscribe<Event.CodeSubmitted, EventSubscription.ByEventClassType>(
             agentId = agentId,
             eventClassType = Event.CodeSubmitted.EVENT_CLASS_TYPE,
         ) { event, subscription ->
@@ -224,7 +224,7 @@ class AgentEventApi(
     ) {
         val events = getRecentEvents(since, eventClassType)
         for (event in events) {
-            eventBus.publish(event)
+            eventSerialBus.publish(event)
         }
     }
 }
