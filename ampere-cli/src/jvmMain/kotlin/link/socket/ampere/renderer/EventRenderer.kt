@@ -5,7 +5,9 @@ import com.github.ajalt.mordant.rendering.TextColors.cyan
 import com.github.ajalt.mordant.rendering.TextColors.gray
 import com.github.ajalt.mordant.rendering.TextColors.green
 import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
 import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
 import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -15,6 +17,7 @@ import link.socket.ampere.agents.events.MeetingEvent
 import link.socket.ampere.agents.events.MessageEvent
 import link.socket.ampere.agents.events.NotificationEvent
 import link.socket.ampere.agents.events.TicketEvent
+import link.socket.ampere.agents.events.Urgency
 
 /**
  * Renders events to terminal with color coding and formatting.
@@ -22,6 +25,12 @@ import link.socket.ampere.agents.events.TicketEvent
  * The goal is to create a visual language where you can quickly scan
  * and understand system activity. Colors and icons act as visual markers
  * for different event categories.
+ *
+ * Color coding:
+ * - Event types: Green (tasks/tickets), Magenta (questions/meetings), Cyan (code),
+ *   Blue (messages), White (notifications)
+ * - Urgency levels: Red (HIGH), Yellow (MEDIUM), Gray (LOW)
+ * - Other: Gray (timestamps, sources)
  */
 class EventRenderer(
     private val terminal: Terminal,
@@ -122,7 +131,7 @@ class EventRenderer(
                     event.assignedTo?.let {
                         append(" (assigned to: $it)")
                     }
-                    append(" [${event.urgency}]")
+                    append(" ${formatUrgency(event.urgency)}")
                     append(" from ${formatSource(event.eventSource)}")
                 }
             }
@@ -133,7 +142,7 @@ class EventRenderer(
                         append(" - Context: ${event.context.take(60)}")
                         if (event.context.length > 60) append("...")
                     }
-                    append(" [${event.urgency}]")
+                    append(" ${formatUrgency(event.urgency)}")
                     append(" from ${formatSource(event.eventSource)}")
                 }
             }
@@ -147,28 +156,28 @@ class EventRenderer(
                             append(" for $it")
                         }
                     }
-                    append(" [${event.urgency}]")
+                    append(" ${formatUrgency(event.urgency)}")
                     append(" from ${formatSource(event.eventSource)}")
                 }
             }
-            is MeetingEvent.MeetingScheduled -> "Meeting scheduled: ${event.meeting.invitation.title} [${event.urgency}] from ${formatSource(event.eventSource)}"
-            is MeetingEvent.MeetingStarted -> "Meeting ${event.meetingId} started (thread: ${event.threadId}) [${event.urgency}]"
-            is MeetingEvent.AgendaItemStarted -> "Agenda item started in meeting ${event.meetingId} [${event.urgency}]"
-            is MeetingEvent.AgendaItemCompleted -> "Agenda item ${event.agendaItemId} completed in meeting ${event.meetingId} [${event.urgency}]"
-            is MeetingEvent.MeetingCompleted -> "Meeting ${event.meetingId} completed with ${event.outcomes.size} outcomes [${event.urgency}]"
-            is MeetingEvent.MeetingCanceled -> "Meeting ${event.meetingId} canceled: ${event.reason} [${event.urgency}]"
-            is TicketEvent.TicketCreated -> "Ticket ${event.ticketId}: ${event.title} (${event.type}, ${event.priority}) [${event.urgency}]"
-            is TicketEvent.TicketStatusChanged -> "Ticket ${event.ticketId} status: ${event.previousStatus} → ${event.newStatus} [${event.urgency}]"
-            is TicketEvent.TicketAssigned -> "Ticket ${event.ticketId} assigned to ${event.assignedTo ?: "unassigned"} [${event.urgency}]"
-            is TicketEvent.TicketBlocked -> "Ticket ${event.ticketId} blocked: ${event.blockingReason} [${event.urgency}]"
-            is TicketEvent.TicketCompleted -> "Ticket ${event.ticketId} completed by ${event.completedBy} [${event.urgency}]"
-            is TicketEvent.TicketMeetingScheduled -> "Meeting ${event.meetingId} scheduled for ticket ${event.ticketId} [${event.urgency}]"
-            is MessageEvent.ThreadCreated -> "Thread created in ${event.thread.channel} [${event.urgency}] from ${formatSource(event.eventSource)}"
-            is MessageEvent.MessagePosted -> "Message posted in ${event.channel} [${event.urgency}] from ${formatSource(event.eventSource)}"
-            is MessageEvent.ThreadStatusChanged -> "Thread ${event.threadId} status: ${event.oldStatus} → ${event.newStatus} [${event.urgency}]"
-            is MessageEvent.EscalationRequested -> "Escalation requested in thread ${event.threadId}: ${event.reason} [${event.urgency}]"
-            is NotificationEvent.ToAgent<*> -> "Notification to ${event.agentId} [${event.urgency}]"
-            is NotificationEvent.ToHuman<*> -> "Notification to human [${event.urgency}]"
+            is MeetingEvent.MeetingScheduled -> "Meeting scheduled: ${event.meeting.invitation.title} ${formatUrgency(event.urgency)} from ${formatSource(event.eventSource)}"
+            is MeetingEvent.MeetingStarted -> "Meeting ${event.meetingId} started (thread: ${event.threadId}) ${formatUrgency(event.urgency)}"
+            is MeetingEvent.AgendaItemStarted -> "Agenda item started in meeting ${event.meetingId} ${formatUrgency(event.urgency)}"
+            is MeetingEvent.AgendaItemCompleted -> "Agenda item ${event.agendaItemId} completed in meeting ${event.meetingId} ${formatUrgency(event.urgency)}"
+            is MeetingEvent.MeetingCompleted -> "Meeting ${event.meetingId} completed with ${event.outcomes.size} outcomes ${formatUrgency(event.urgency)}"
+            is MeetingEvent.MeetingCanceled -> "Meeting ${event.meetingId} canceled: ${event.reason} ${formatUrgency(event.urgency)}"
+            is TicketEvent.TicketCreated -> "Ticket ${event.ticketId}: ${event.title} (${event.type}, ${event.priority}) ${formatUrgency(event.urgency)}"
+            is TicketEvent.TicketStatusChanged -> "Ticket ${event.ticketId} status: ${event.previousStatus} → ${event.newStatus} ${formatUrgency(event.urgency)}"
+            is TicketEvent.TicketAssigned -> "Ticket ${event.ticketId} assigned to ${event.assignedTo ?: "unassigned"} ${formatUrgency(event.urgency)}"
+            is TicketEvent.TicketBlocked -> "Ticket ${event.ticketId} blocked: ${event.blockingReason} ${formatUrgency(event.urgency)}"
+            is TicketEvent.TicketCompleted -> "Ticket ${event.ticketId} completed by ${event.completedBy} ${formatUrgency(event.urgency)}"
+            is TicketEvent.TicketMeetingScheduled -> "Meeting ${event.meetingId} scheduled for ticket ${event.ticketId} ${formatUrgency(event.urgency)}"
+            is MessageEvent.ThreadCreated -> "Thread created in ${event.thread.channel} ${formatUrgency(event.urgency)} from ${formatSource(event.eventSource)}"
+            is MessageEvent.MessagePosted -> "Message posted in ${event.channel} ${formatUrgency(event.urgency)} from ${formatSource(event.eventSource)}"
+            is MessageEvent.ThreadStatusChanged -> "Thread ${event.threadId} status: ${event.oldStatus} → ${event.newStatus} ${formatUrgency(event.urgency)}"
+            is MessageEvent.EscalationRequested -> "Escalation requested in thread ${event.threadId}: ${event.reason} ${formatUrgency(event.urgency)}"
+            is NotificationEvent.ToAgent<*> -> "Notification to ${event.agentId} ${formatUrgency(event.urgency)}"
+            is NotificationEvent.ToHuman<*> -> "Notification to human ${formatUrgency(event.urgency)}"
         }
     }
 
@@ -179,6 +188,20 @@ class EventRenderer(
         return when (source) {
             is EventSource.Agent -> source.agentId
             is EventSource.Human -> EventSource.Human.ID
+        }
+    }
+
+    /**
+     * Formats urgency level with color coding:
+     * - HIGH: Red (needs immediate attention)
+     * - MEDIUM: Yellow (should be addressed soon)
+     * - LOW: Gray (can wait)
+     */
+    private fun formatUrgency(urgency: Urgency): String {
+        return when (urgency) {
+            Urgency.HIGH -> red("[HIGH]")
+            Urgency.MEDIUM -> yellow("[MEDIUM]")
+            Urgency.LOW -> gray("[LOW]")
         }
     }
 }
