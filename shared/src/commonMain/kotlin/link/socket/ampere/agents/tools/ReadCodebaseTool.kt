@@ -1,21 +1,34 @@
 package link.socket.ampere.agents.tools
 
-import link.socket.ampere.agents.core.AutonomyLevel
-import link.socket.ampere.agents.core.Outcome
-import link.socket.ampere.agents.events.tasks.Task
+import link.socket.ampere.agents.core.actions.AgentActionAutonomy
+import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
+import link.socket.ampere.agents.core.outcomes.Outcome
+import link.socket.ampere.agents.core.tasks.Task
+import link.socket.ampere.agents.execution.request.ExecutionContext
+import link.socket.ampere.agents.execution.request.ExecutionRequest
 
-/**
- * Expect declaration for a tool that reads file contents or directory structure
- * within a sandboxed root directory.
- */
-expect class ReadCodebaseTool(rootDirectory: String) : Tool {
-    override val id: ToolId
-    override val name: String
-    override val description: String
-    override val requiredAutonomyLevel: AutonomyLevel
+expect suspend fun executeReadCodebase(
+    context: ExecutionContext.Code.ReadCode,
+): ExecutionOutcome.CodeReading
+
+data class ReadCodebaseTool(
+    override val requiredAgentAutonomy: AgentActionAutonomy,
+) : Tool<ExecutionContext.Code.ReadCode> {
+
+    override val id: ToolId = ID
+    override val name: String = NAME
+    override val description: String = DESCRIPTION
+
     override suspend fun execute(
-        sourceTask: Task,
-        parameters: Map<String, Any?>,
-    ): Outcome
-    override fun validateParameters(parameters: Map<String, Any>): Boolean
+        executionRequest: ExecutionRequest<ExecutionContext.Code.ReadCode>,
+    ): Outcome {
+        // TODO: Handle execution request constraints
+        return executeReadCodebase(executionRequest.context)
+    }
+
+    companion object {
+        const val ID = "read_codebase"
+        const val NAME = "Read Codebase"
+        const val DESCRIPTION = "Reads the codebase of the current workspace."
+    }
 }

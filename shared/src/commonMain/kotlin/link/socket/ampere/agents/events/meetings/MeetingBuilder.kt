@@ -3,9 +3,9 @@ package link.socket.ampere.agents.events.meetings
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.core.AssignedTo
+import link.socket.ampere.agents.core.status.MeetingStatus
+import link.socket.ampere.agents.core.tasks.MeetingTask
 import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.tasks.AgendaItem
-import link.socket.ampere.agents.events.tasks.Task
 import link.socket.ampere.agents.events.utils.generateUUID
 
 class MeetingBuilder(
@@ -16,7 +16,7 @@ class MeetingBuilder(
     private var title: String? = null
     private var scheduledFor: Instant? = null
 
-    private val agendaItems: MutableList<AgendaItem> = mutableListOf()
+    private val agendaItems: MutableList<MeetingTask.AgendaItem> = mutableListOf()
     private val participants: MutableList<AssignedTo> = mutableListOf()
     private val optionalParticipants: MutableList<AssignedTo> = mutableListOf()
 
@@ -32,13 +32,14 @@ class MeetingBuilder(
 
     fun addAgendaItem(
         topic: String,
+        description: String? = null,
         assignedTo: AssignedTo.Agent? = null,
     ): MeetingBuilder {
         agendaItems.add(
-            AgendaItem(
+            MeetingTask.AgendaItem(
                 id = generateUUID(agentId, assignedTo?.agentId ?: ""),
-                topic = topic,
-                status = Task.Status.Pending(),
+                title = topic,
+                description = description,
                 assignedTo = assignedTo,
             ),
         )

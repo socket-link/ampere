@@ -4,16 +4,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import link.socket.ampere.agents.core.AgentConfiguration
 import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.core.Idea
-import link.socket.ampere.agents.core.MinimalAutonomousAgent
-import link.socket.ampere.agents.core.Outcome
-import link.socket.ampere.agents.core.Perception
-import link.socket.ampere.agents.core.Plan
-import link.socket.ampere.agents.events.tasks.Task
+import link.socket.ampere.agents.core.AutonomousAgent
+import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
+import link.socket.ampere.agents.core.outcomes.Outcome
+import link.socket.ampere.agents.core.reasoning.Idea
+import link.socket.ampere.agents.core.reasoning.Perception
+import link.socket.ampere.agents.core.reasoning.Plan
+import link.socket.ampere.agents.core.states.AgentState
+import link.socket.ampere.agents.core.tasks.Task
+import link.socket.ampere.agents.execution.request.ExecutionContext
+import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.tools.Tool
 import link.socket.ampere.agents.tools.WriteCodeFileTool
-import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
-import link.socket.ampere.domain.ai.configuration.AIConfiguration
 
 /**
  * First concrete agent that can read tickets, generate code, and validate results (scaffold).
@@ -23,38 +25,53 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
  * it only relies on commonMain types and contracts.
  */
 class CodeWriterAgent(
-    private val coroutineScope: CoroutineScope,
+    override val initialState: AgentState,
+    override val agentConfiguration: AgentConfiguration,
     private val writeCodeFileTool: WriteCodeFileTool,
-    runLLMToPerceive: (perception: Perception) -> Idea,
-    runLLMToPlan: (ideas: List<Idea>) -> Plan,
-    runLLMToExecuteTask: (task: Task) -> Outcome,
-    runLLMToExecuteTool: (tool: Tool, parameters: Map<String, Any?>) -> Outcome,
-    runLLMToEvaluate: (outcomes: List<Outcome>) -> Idea,
-    aiConfiguration: AIConfiguration,
-) : MinimalAutonomousAgent(
-    runLLMToPerceive,
-    runLLMToPlan,
-    runLLMToExecuteTask,
-    runLLMToExecuteTool,
-    runLLMToEvaluate,
-    AgentConfiguration(
-        agentDefinition = WriteCodeAgent,
-        aiConfiguration = aiConfiguration,
-    ),
-) {
+    private val coroutineScope: CoroutineScope,
+) : AutonomousAgent<AgentState>() {
 
     override val id: AgentId = "CodeWriterAgent"
 
-    override val requiredTools: Set<Tool> =
+    override val requiredTools: Set<Tool<*>> =
         setOf(writeCodeFileTool)
 
+    override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea =
+        { perception ->
+            // TODO: evaluate perception of state with AI model
+            Idea.blank
+        }
+
+    override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan =
+        { task, ideas ->
+            // TODO: plan out actions to take given ideas
+            Plan.blank
+        }
+
+    override val runLLMToExecuteTask: (task: Task) -> Outcome =
+        { task ->
+            // TODO: execute task
+            Outcome.blank
+        }
+
+    override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome =
+        { tool, request ->
+            // TODO: execute tool with parameters
+            ExecutionOutcome.Blank
+        }
+
+    override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea =
+        { outcomes ->
+            // TODO: evaluate outcomes and generate the idea to start the next runtime loop
+            Idea.blank
+        }
+
     private fun writeCodeFile(
-        sourceTask: Task,
-        parameters: Map<String, Any?> = emptyMap(),
+        executionRequest: ExecutionRequest<ExecutionContext.Code.WriteCode>,
         onCodeSubmittedOutcome: (Outcome) -> Unit,
     ) {
         coroutineScope.launch {
-            val outcome = writeCodeFileTool.execute(sourceTask, parameters)
+            val outcome = writeCodeFileTool.execute(executionRequest)
             onCodeSubmittedOutcome(outcome)
         }
     }

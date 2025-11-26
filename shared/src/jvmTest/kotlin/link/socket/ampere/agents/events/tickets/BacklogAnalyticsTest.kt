@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.core.status.TicketStatus
 import link.socket.ampere.agents.events.bus.EventBus
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
@@ -108,12 +109,12 @@ class BacklogAnalyticsTest {
 
             // READY ticket
             val readyTicket = createTestTicket("Ready 1", TicketType.TASK, TicketPriority.LOW)
-            ticketOrchestrator.transitionTicketStatus(readyTicket.id, TicketStatus.READY, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(readyTicket.id, TicketStatus.Ready, stubPmAgentId)
 
             // IN_PROGRESS ticket
             val inProgressTicket = createTestTicket("In Progress 1", TicketType.SPIKE, TicketPriority.HIGH)
-            ticketOrchestrator.transitionTicketStatus(inProgressTicket.id, TicketStatus.READY, stubPmAgentId)
-            ticketOrchestrator.transitionTicketStatus(inProgressTicket.id, TicketStatus.IN_PROGRESS, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(inProgressTicket.id, TicketStatus.Ready, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(inProgressTicket.id, TicketStatus.InProgress, stubPmAgentId)
 
             val result = ticketOrchestrator.getBacklogSummary()
 
@@ -121,9 +122,9 @@ class BacklogAnalyticsTest {
             val summary = result.getOrNull()!!
 
             assertEquals(4, summary.totalTickets)
-            assertEquals(2, summary.ticketsByStatus[TicketStatus.BACKLOG])
-            assertEquals(1, summary.ticketsByStatus[TicketStatus.READY])
-            assertEquals(1, summary.ticketsByStatus[TicketStatus.IN_PROGRESS])
+            assertEquals(2, summary.ticketsByStatus[TicketStatus.Backlog])
+            assertEquals(1, summary.ticketsByStatus[TicketStatus.Ready])
+            assertEquals(1, summary.ticketsByStatus[TicketStatus.InProgress])
         }
     }
 
@@ -177,8 +178,8 @@ class BacklogAnalyticsTest {
             // Create and block some tickets
             val ticket1 = createTestTicket("Blocked 1", TicketType.BUG, TicketPriority.HIGH)
             ticketOrchestrator.assignTicket(ticket1.id, stubDevAgent1Id, stubPmAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket1.id, TicketStatus.READY, stubPmAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket1.id, TicketStatus.IN_PROGRESS, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket1.id, TicketStatus.Ready, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket1.id, TicketStatus.InProgress, stubPmAgentId)
             ticketOrchestrator.blockTicket(
                 ticketId = ticket1.id,
                 blockingReason = "Waiting for API",
@@ -189,8 +190,8 @@ class BacklogAnalyticsTest {
 
             val ticket2 = createTestTicket("Blocked 2", TicketType.FEATURE, TicketPriority.CRITICAL)
             ticketOrchestrator.assignTicket(ticket2.id, stubDevAgent1Id, stubPmAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket2.id, TicketStatus.READY, stubPmAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket2.id, TicketStatus.IN_PROGRESS, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket2.id, TicketStatus.Ready, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket2.id, TicketStatus.InProgress, stubPmAgentId)
             ticketOrchestrator.blockTicket(
                 ticketId = ticket2.id,
                 blockingReason = "Waiting for external",
@@ -243,7 +244,7 @@ class BacklogAnalyticsTest {
                 TicketPriority.LOW,
                 now - 2.days,
             )
-            ticketOrchestrator.transitionTicketStatus(completedOverdue.id, TicketStatus.DONE, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(completedOverdue.id, TicketStatus.Done, stubPmAgentId)
 
             val result = ticketOrchestrator.getBacklogSummary()
 
@@ -283,13 +284,13 @@ class BacklogAnalyticsTest {
 
             val ticket2 = createTestTicket("Ticket 2", TicketType.BUG, TicketPriority.CRITICAL)
             ticketOrchestrator.assignTicket(ticket2.id, stubDevAgent1Id, stubPmAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket2.id, TicketStatus.READY, stubPmAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket2.id, TicketStatus.IN_PROGRESS, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket2.id, TicketStatus.Ready, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket2.id, TicketStatus.InProgress, stubPmAgentId)
 
             val ticket3 = createTestTicket("Ticket 3", TicketType.TASK, TicketPriority.LOW)
             ticketOrchestrator.assignTicket(ticket3.id, stubDevAgent1Id, stubPmAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket3.id, TicketStatus.READY, stubPmAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket3.id, TicketStatus.IN_PROGRESS, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket3.id, TicketStatus.Ready, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket3.id, TicketStatus.InProgress, stubPmAgentId)
             ticketOrchestrator.blockTicket(
                 ticketId = ticket3.id,
                 blockingReason = "Waiting",
@@ -300,7 +301,7 @@ class BacklogAnalyticsTest {
 
             val ticket4 = createTestTicket("Ticket 4", TicketType.SPIKE, TicketPriority.MEDIUM)
             ticketOrchestrator.assignTicket(ticket4.id, stubDevAgent1Id, stubPmAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket4.id, TicketStatus.DONE, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket4.id, TicketStatus.Done, stubPmAgentId)
 
             // Assign ticket to different agent (should not count)
             val ticket5 = createTestTicket("Other Agent", TicketType.TASK, TicketPriority.LOW)
@@ -464,7 +465,7 @@ class BacklogAnalyticsTest {
                 TicketPriority.MEDIUM,
                 now + 2.days,
             )
-            ticketOrchestrator.transitionTicketStatus(completedTicket.id, TicketStatus.DONE, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(completedTicket.id, TicketStatus.Done, stubPmAgentId)
 
             val result = ticketOrchestrator.getUpcomingDeadlines(7)
 
@@ -536,7 +537,7 @@ class BacklogAnalyticsTest {
             val perception = pmAgent.perceive()
 
             assertEquals(3, perception.backlogSummary.totalTickets)
-            assertEquals(3, perception.backlogSummary.ticketsByStatus[TicketStatus.BACKLOG])
+            assertEquals(3, perception.backlogSummary.ticketsByStatus[TicketStatus.Backlog])
         }
     }
 
@@ -572,8 +573,8 @@ class BacklogAnalyticsTest {
             // Create and block a ticket
             val blockedTicket = createTestTicket("Blocked", TicketType.BUG, TicketPriority.HIGH)
             ticketOrchestrator.assignTicket(blockedTicket.id, stubDevAgent1Id, stubPmAgentId)
-            ticketOrchestrator.transitionTicketStatus(blockedTicket.id, TicketStatus.READY, stubPmAgentId)
-            ticketOrchestrator.transitionTicketStatus(blockedTicket.id, TicketStatus.IN_PROGRESS, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(blockedTicket.id, TicketStatus.Ready, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(blockedTicket.id, TicketStatus.InProgress, stubPmAgentId)
             ticketOrchestrator.blockTicket(
                 ticketId = blockedTicket.id,
                 blockingReason = "Waiting",
@@ -655,8 +656,8 @@ class BacklogAnalyticsTest {
             // Create and block a ticket
             val blockedTicket = createTestTicket("Blocked Feature", TicketType.FEATURE, TicketPriority.HIGH)
             ticketOrchestrator.assignTicket(blockedTicket.id, stubDevAgent1Id, stubPmAgentId)
-            ticketOrchestrator.transitionTicketStatus(blockedTicket.id, TicketStatus.READY, stubPmAgentId)
-            ticketOrchestrator.transitionTicketStatus(blockedTicket.id, TicketStatus.IN_PROGRESS, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(blockedTicket.id, TicketStatus.Ready, stubPmAgentId)
+            ticketOrchestrator.transitionTicketStatus(blockedTicket.id, TicketStatus.InProgress, stubPmAgentId)
             ticketOrchestrator.blockTicket(
                 ticketId = blockedTicket.id,
                 blockingReason = "Test",
@@ -677,9 +678,9 @@ class BacklogAnalyticsTest {
         val summary = BacklogSummary(
             totalTickets = 10,
             ticketsByStatus = mapOf(
-                TicketStatus.BACKLOG to 5,
-                TicketStatus.IN_PROGRESS to 3,
-                TicketStatus.DONE to 2,
+                TicketStatus.Backlog to 5,
+                TicketStatus.InProgress to 3,
+                TicketStatus.Done to 2,
             ),
             ticketsByPriority = mapOf(
                 TicketPriority.HIGH to 4,
@@ -713,7 +714,7 @@ class BacklogAnalyticsTest {
                     description = "Description",
                     type = TicketType.FEATURE,
                     priority = TicketPriority.HIGH,
-                    status = TicketStatus.IN_PROGRESS,
+                    status = TicketStatus.InProgress,
                     assignedAgentId = stubDevAgent1Id,
                     createdByAgentId = stubPmAgentId,
                     createdAt = now,

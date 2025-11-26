@@ -1,8 +1,9 @@
 package link.socket.ampere.agents.tools
 
-import link.socket.ampere.agents.core.AutonomyLevel
-import link.socket.ampere.agents.core.Outcome
-import link.socket.ampere.agents.events.tasks.Task
+import link.socket.ampere.agents.core.actions.AgentActionAutonomy
+import link.socket.ampere.agents.core.outcomes.Outcome
+import link.socket.ampere.agents.execution.request.ExecutionContext
+import link.socket.ampere.agents.execution.request.ExecutionRequest
 
 typealias ToolId = String
 
@@ -10,10 +11,9 @@ typealias ToolId = String
  * Base contract for executable tools used by autonomous agents.
  *
  * Implementations should be deterministic and side‑effect aware, returning
- * immutable results via [Outcome]. Tools must also declare the minimum
- * [requiredAutonomyLevel] an agent should have to use them safely.
+ * immutable results via [Outcome].
  */
-interface Tool {
+interface Tool <Context : ExecutionContext> {
 
     /** Unique identifier for this tool instance. */
     val id: ToolId
@@ -35,33 +35,13 @@ interface Tool {
      * human approval. Agents below this level should request human oversight
      * before execution.
      */
-    val requiredAutonomyLevel: AutonomyLevel
+    val requiredAgentAutonomy: AgentActionAutonomy
 
     /**
-     * Execute the tool with the given parameters.
+     * Executes the tool with the given request parameters.
      *
-     * Implementations should handle errors gracefully and return an [Outcome]
-     * indicating success or failure, avoiding exceptions for expected error
-     * conditions. The returned [Outcome.result] should be an immutable value
-     * or data structure.
-     *
-     * @param parameters Arbitrary key-value pairs required for execution.
+     * @param executionRequest parameters, context, and instructions for the execution.
      * @return [Outcome] describing success/failure and any resulting payload.
      */
-    suspend fun execute(
-        sourceTask: Task,
-        parameters: Map<String, Any?>,
-    ): Outcome
-
-    /**
-     * Validate input parameters prior to execution.
-     *
-     * Implementations should perform lightweight checks only (presence, type/
-     * shape validation) and avoid heavy I/O. Detailed validation errors should
-     * be surfaced via [execute] in the returned [Outcome] when appropriate.
-     *
-     * @param parameters Arbitrary key-value pairs required for execution.
-     * @return true if parameters appear valid for execution; false otherwise.
-     */
-    fun validateParameters(parameters: Map<String, Any>): Boolean
+    suspend fun execute(executionRequest: ExecutionRequest<Context>): Outcome
 }

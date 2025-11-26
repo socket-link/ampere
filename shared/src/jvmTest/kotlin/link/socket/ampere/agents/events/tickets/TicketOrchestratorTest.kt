@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.core.status.TicketStatus
 import link.socket.ampere.agents.events.Event
 import link.socket.ampere.agents.events.TicketEvent
 import link.socket.ampere.agents.events.api.EventHandler
@@ -138,7 +139,7 @@ class TicketOrchestratorTest {
             assertEquals("Test description", ticket.description)
             assertEquals(TicketType.TASK, ticket.type)
             assertEquals(TicketPriority.MEDIUM, ticket.priority)
-            assertEquals(TicketStatus.BACKLOG, ticket.status)
+            assertEquals(TicketStatus.Backlog, ticket.status)
             assertEquals(stubCreatorAgentId, ticket.createdByAgentId)
 
             // Verify thread was created
@@ -218,13 +219,13 @@ class TicketOrchestratorTest {
             // Transition from BACKLOG to READY (valid transition)
             val result = ticketOrchestrator.transitionTicketStatus(
                 ticketId = ticket.id,
-                newStatus = TicketStatus.READY,
+                newStatus = TicketStatus.Ready,
                 actorAgentId = stubCreatorAgentId,
             )
 
             assertTrue(result.isSuccess)
             val updatedTicket = result.getOrNull()!!
-            assertEquals(TicketStatus.READY, updatedTicket.status)
+            assertEquals(TicketStatus.Ready, updatedTicket.status)
 
             // Wait for async event publishing
             delay(100)
@@ -233,8 +234,8 @@ class TicketOrchestratorTest {
             val statusEvents = publishedEvents.filterIsInstance<TicketEvent.TicketStatusChanged>()
             assertTrue(statusEvents.isNotEmpty(), "TicketStatusChanged event should be published")
             assertEquals(ticket.id, statusEvents.first().ticketId)
-            assertEquals(TicketStatus.BACKLOG, statusEvents.first().previousStatus)
-            assertEquals(TicketStatus.READY, statusEvents.first().newStatus)
+            assertEquals(TicketStatus.Backlog, statusEvents.first().previousStatus)
+            assertEquals(TicketStatus.Ready, statusEvents.first().newStatus)
         }
     }
 
@@ -254,7 +255,7 @@ class TicketOrchestratorTest {
             // Try invalid transition from BACKLOG to BLOCKED
             val result = ticketOrchestrator.transitionTicketStatus(
                 ticketId = ticket.id,
-                newStatus = TicketStatus.BLOCKED,
+                newStatus = TicketStatus.Blocked,
                 actorAgentId = stubCreatorAgentId,
             )
 
@@ -269,7 +270,7 @@ class TicketOrchestratorTest {
         runBlocking {
             val result = ticketOrchestrator.transitionTicketStatus(
                 ticketId = "non-existent-id",
-                newStatus = TicketStatus.READY,
+                newStatus = TicketStatus.Ready,
                 actorAgentId = stubCreatorAgentId,
             )
 
@@ -295,7 +296,7 @@ class TicketOrchestratorTest {
             // Try transition by unauthorized agent
             val result = ticketOrchestrator.transitionTicketStatus(
                 ticketId = ticket.id,
-                newStatus = TicketStatus.READY,
+                newStatus = TicketStatus.Ready,
                 actorAgentId = stubUnauthorizedAgentId,
             )
 
@@ -330,7 +331,7 @@ class TicketOrchestratorTest {
             // Transition by assigned agent should succeed
             val result = ticketOrchestrator.transitionTicketStatus(
                 ticketId = ticket.id,
-                newStatus = TicketStatus.READY,
+                newStatus = TicketStatus.Ready,
                 actorAgentId = stubAssignedAgentId,
             )
 
@@ -459,8 +460,8 @@ class TicketOrchestratorTest {
             val (ticket, _) = createResult.getOrNull()!!
 
             // Transition to READY -> IN_PROGRESS
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, stubCreatorAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.Ready, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.InProgress, stubCreatorAgentId)
             publishedEvents.clear()
 
             // Block the ticket
@@ -474,7 +475,7 @@ class TicketOrchestratorTest {
 
             assertTrue(result.isSuccess)
             val updatedTicket = result.getOrNull()!!
-            assertEquals(TicketStatus.BLOCKED, updatedTicket.status)
+            assertEquals(TicketStatus.Blocked, updatedTicket.status)
 
             // Wait for async event publishing
             delay(100)
@@ -533,7 +534,7 @@ class TicketOrchestratorTest {
 
             // Verify initial status
             var current = ticketRepository.getTicket(ticket.id).getOrNull()!!
-            assertEquals(TicketStatus.BACKLOG, current.status)
+            assertEquals(TicketStatus.Backlog, current.status)
 
             // Assign to agent
             ticketOrchestrator.assignTicket(ticket.id, stubAssignedAgentId, stubCreatorAgentId)
@@ -541,24 +542,24 @@ class TicketOrchestratorTest {
             assertEquals(stubAssignedAgentId, current.assignedAgentId)
 
             // Transition: BACKLOG -> READY
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.Ready, stubCreatorAgentId)
             current = ticketRepository.getTicket(ticket.id).getOrNull()!!
-            assertEquals(TicketStatus.READY, current.status)
+            assertEquals(TicketStatus.Ready, current.status)
 
             // Transition: READY -> IN_PROGRESS
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubAssignedAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.InProgress, stubAssignedAgentId)
             current = ticketRepository.getTicket(ticket.id).getOrNull()!!
-            assertEquals(TicketStatus.IN_PROGRESS, current.status)
+            assertEquals(TicketStatus.InProgress, current.status)
 
             // Transition: IN_PROGRESS -> IN_REVIEW
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_REVIEW, stubAssignedAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.InReview, stubAssignedAgentId)
             current = ticketRepository.getTicket(ticket.id).getOrNull()!!
-            assertEquals(TicketStatus.IN_REVIEW, current.status)
+            assertEquals(TicketStatus.InReview, current.status)
 
             // Transition: IN_REVIEW -> DONE
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.DONE, stubAssignedAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.Done, stubAssignedAgentId)
             current = ticketRepository.getTicket(ticket.id).getOrNull()!!
-            assertEquals(TicketStatus.DONE, current.status)
+            assertEquals(TicketStatus.Done, current.status)
             assertTrue(current.isComplete)
         }
     }
@@ -576,8 +577,8 @@ class TicketOrchestratorTest {
             )
             val (ticket, _) = createResult.getOrNull()!!
 
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, stubCreatorAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.Ready, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.InProgress, stubCreatorAgentId)
 
             // Block the ticket
             ticketOrchestrator.blockTicket(
@@ -587,16 +588,16 @@ class TicketOrchestratorTest {
                 reportedByAgentId = stubCreatorAgentId,
             )
             var current = ticketRepository.getTicket(ticket.id).getOrNull()!!
-            assertEquals(TicketStatus.BLOCKED, current.status)
+            assertEquals(TicketStatus.Blocked, current.status)
             assertTrue(current.isBlocked)
 
             // Unblock: BLOCKED -> IN_PROGRESS
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.InProgress, stubCreatorAgentId)
             current = ticketRepository.getTicket(ticket.id).getOrNull()!!
-            assertEquals(TicketStatus.IN_PROGRESS, current.status)
+            assertEquals(TicketStatus.InProgress, current.status)
 
             // Complete: IN_PROGRESS -> DONE
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.DONE, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.Done, stubCreatorAgentId)
             current = ticketRepository.getTicket(ticket.id).getOrNull()!!
             assertTrue(current.isComplete)
         }
@@ -621,8 +622,8 @@ class TicketOrchestratorTest {
             ticketOrchestrator.assignTicket(ticket.id, stubAssignedAgentId, stubCreatorAgentId)
 
             // Transition through states
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, stubCreatorAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubAssignedAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.Ready, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.InProgress, stubAssignedAgentId)
 
             // Wait for all events
             delay(100)
@@ -654,7 +655,7 @@ class TicketOrchestratorTest {
             // Creator can modify
             val creatorResult = ticketOrchestrator.transitionTicketStatus(
                 ticket.id,
-                TicketStatus.READY,
+                TicketStatus.Ready,
                 stubCreatorAgentId,
             )
             assertTrue(creatorResult.isSuccess)
@@ -662,7 +663,7 @@ class TicketOrchestratorTest {
             // Unauthorized agent cannot modify
             val unauthorizedResult = ticketOrchestrator.transitionTicketStatus(
                 ticket.id,
-                TicketStatus.IN_PROGRESS,
+                TicketStatus.InProgress,
                 stubUnauthorizedAgentId,
             )
             assertTrue(unauthorizedResult.isFailure)
@@ -673,7 +674,7 @@ class TicketOrchestratorTest {
             // Assigned agent can now modify
             val assignedResult = ticketOrchestrator.transitionTicketStatus(
                 ticket.id,
-                TicketStatus.IN_PROGRESS,
+                TicketStatus.InProgress,
                 stubAssignedAgentId,
             )
             assertTrue(assignedResult.isSuccess)
@@ -681,7 +682,7 @@ class TicketOrchestratorTest {
             // Unauthorized agent still cannot modify
             val stillUnauthorizedResult = ticketOrchestrator.transitionTicketStatus(
                 ticket.id,
-                TicketStatus.DONE,
+                TicketStatus.Done,
                 stubUnauthorizedAgentId,
             )
             assertTrue(stillUnauthorizedResult.isFailure)

@@ -1,8 +1,8 @@
 package link.socket.ampere.agents.tools
 
 import java.io.File
-import link.socket.ampere.agents.core.AutonomyLevel
-import link.socket.ampere.agents.core.Outcome
+import link.socket.ampere.agents.core.actions.AgentActionAutonomy
+import link.socket.ampere.agents.core.outcomes.Outcome
 
 /**
  * Android actual for RunTestsTool using the Gradle wrapper.
@@ -12,7 +12,7 @@ actual class RunTestsTool actual constructor(
 ) : Tool {
     actual override val name: String = "run_tests"
     actual override val description: String = "Executes tests and returns results"
-    actual override val requiredAutonomyLevel: AutonomyLevel = AutonomyLevel.FULLY_AUTONOMOUS
+    actual val agentAutonomy: AgentActionAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS
 
     actual override suspend fun execute(parameters: Map<String, Any?>): Outcome {
         val testPath = parameters["testPath"] as? String

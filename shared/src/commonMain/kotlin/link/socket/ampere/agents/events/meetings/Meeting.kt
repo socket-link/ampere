@@ -2,7 +2,11 @@ package link.socket.ampere.agents.events.meetings
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import link.socket.ampere.agents.core.outcomes.MeetingOutcome
+import link.socket.ampere.agents.core.status.MeetingStatus
 import link.socket.ampere.agents.events.Event
+
+typealias MeetingId = String
 
 /** Aggregate representing a scheduled meeting and its lifecycle state. */
 @Serializable

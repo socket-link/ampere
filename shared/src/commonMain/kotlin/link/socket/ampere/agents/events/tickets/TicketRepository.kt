@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.core.status.TicketStatus
 import link.socket.ampere.agents.events.meetings.MeetingId
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.tickets.TicketStore
@@ -15,6 +16,7 @@ import link.socket.ampere.db.tickets.TicketStore
  * Sealed class representing errors that can occur during ticket operations.
  */
 sealed class TicketError : Exception() {
+
     /**
      * Error when attempting an invalid state transition.
      */
@@ -64,6 +66,7 @@ sealed class TicketError : Exception() {
 class TicketRepository(
     private val database: Database,
 ) {
+
     private val ticketQueries get() = database.ticketQueries
     private val ticketMeetingQueries get() = database.ticketMeetingQueries
 
@@ -369,12 +372,12 @@ class TicketRepository(
                     .groupBy { it.type }
                     .mapValues { it.value.size }
 
-                val blockedCount = allTickets.count { it.status == TicketStatus.BLOCKED }
+                val blockedCount = allTickets.count { it.status == TicketStatus.Blocked }
 
                 val overdueCount = allTickets.count { ticket ->
                     ticket.dueDate != null &&
                         ticket.dueDate < now &&
-                        ticket.status != TicketStatus.DONE
+                        ticket.status != TicketStatus.Done
                 }
 
                 Result.success(
@@ -405,9 +408,9 @@ class TicketRepository(
                     .executeAsList()
                     .map { row -> mapRowToTicket(row) }
 
-                val inProgressCount = assignedTickets.count { it.status == TicketStatus.IN_PROGRESS }
-                val blockedCount = assignedTickets.count { it.status == TicketStatus.BLOCKED }
-                val completedCount = assignedTickets.count { it.status == TicketStatus.DONE }
+                val inProgressCount = assignedTickets.count { it.status == TicketStatus.InProgress }
+                val blockedCount = assignedTickets.count { it.status == TicketStatus.Blocked }
+                val completedCount = assignedTickets.count { it.status == TicketStatus.Done }
 
                 Result.success(
                     AgentWorkload(
@@ -444,7 +447,7 @@ class TicketRepository(
                         ticket.dueDate != null &&
                             ticket.dueDate >= now &&
                             ticket.dueDate <= futureLimit &&
-                            ticket.status != TicketStatus.DONE
+                            ticket.status != TicketStatus.Done
                     }
                     .sortedBy { it.dueDate }
 
@@ -564,7 +567,7 @@ class TicketRepository(
             description = row.description,
             type = TicketType.valueOf(row.ticket_type),
             priority = TicketPriority.valueOf(row.priority),
-            status = TicketStatus.valueOf(row.status),
+            status = TicketStatus.fromString(row.status),
             assignedAgentId = row.assigned_agent_id,
             createdByAgentId = row.created_by_agent_id,
             createdAt = Instant.fromEpochMilliseconds(row.created_at),

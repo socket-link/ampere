@@ -1,60 +1,62 @@
 package link.socket.ampere.agents.tools
 
-import java.io.File
-import link.socket.ampere.agents.core.AutonomyLevel
-import link.socket.ampere.agents.core.Outcome
-import link.socket.ampere.agents.events.tasks.Task
+import kotlinx.datetime.Clock
+import link.socket.ampere.agents.core.errors.ExecutionError
+import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
+import link.socket.ampere.agents.execution.request.ExecutionContext
 
-/**
- * Tool that reads file contents or lists a directory within a sandboxed root directory.
- * Prevents reading paths outside the configured [rootDirectory].
- */
-actual class ReadCodebaseTool actual constructor(
-    private val rootDirectory: String,
-) : Tool {
-    actual override val id: ToolId = "read_codebase"
-    actual override val name: String = "View Code"
-    actual override val description: String = "Reads file content or directory structure"
-    actual override val requiredAutonomyLevel: AutonomyLevel = AutonomyLevel.FULLY_AUTONOMOUS
+actual suspend fun executeReadCodebase(
+    context: ExecutionContext.Code.ReadCode,
+): ExecutionOutcome.CodeReading {
+    val executionStartTimestamp = Clock.System.now()
 
-    private fun resolveSafe(path: String): File {
-        val base = File(rootDirectory).canonicalFile
-        val target = File(base, path).canonicalFile
+    val rootDirectory = context.workspace.baseDirectory
 
-        // Ensure target is within base directory
-        if (!target.path.startsWith(base.path + File.separator) && target != base) {
-            throw SecurityException("Access outside root directory is not allowed: $path")
+    // TODO: Handle reading multiple files
+    val filePath = context.filePathsToRead.first()
+
+    return try {
+        val file = resolveFileSafely(rootDirectory, filePath)
+
+        if (!file.exists()) {
+            return ExecutionOutcome.CodeReading.Failure(
+                executorId = context.executorId,
+                ticketId = context.ticket.id,
+                taskId = context.task.id,
+                executionStartTimestamp = executionStartTimestamp,
+                executionEndTimestamp = Clock.System.now(),
+                error = ExecutionError(
+                    type = ExecutionError.Type.WORKSPACE_ERROR,
+                    message = "Path does not exist: $filePath",
+                )
+            )
         }
-        return target
-    }
 
-    actual override suspend fun execute(
-        sourceTask: Task,
-        parameters: Map<String, Any?>,
-    ): Outcome {
-        val path = parameters["path"] as? String
-            ?: return Outcome.Failure(sourceTask, "Missing 'path' parameter")
-
-        return try {
-            val file = resolveSafe(path)
-            if (!file.exists()) {
-                return Outcome.Failure(sourceTask, "Path does not exist: $path")
-            }
-
-            val result: Any = if (file.isDirectory) {
-                file.listFiles()?.joinToString("\n") { it.name } ?: ""
-            } else {
-                file.readText()
-            }
-            Outcome.Success.Full(sourceTask, result.toString())
-        } catch (e: SecurityException) {
-            Outcome.Failure(sourceTask, e.message ?: "Access outside root directory is not allowed: $path")
-        } catch (e: Exception) {
-            Outcome.Failure(sourceTask, "Failed to read: ${e.message}")
+        val result: Any = if (file.isDirectory) {
+            file.listFiles()?.joinToString("\n") { it.name } ?: ""
+        } else {
+            file.readText()
         }
-    }
 
-    actual override fun validateParameters(parameters: Map<String, Any>): Boolean {
-        return parameters.containsKey("path") && parameters["path"] is String
+        ExecutionOutcome.CodeReading.Success(
+            executorId = context.executorId,
+            ticketId = context.ticket.id,
+            taskId = context.task.id,
+            executionStartTimestamp = executionStartTimestamp,
+            executionEndTimestamp = Clock.System.now(),
+            readFiles = listOf(filePath to result.toString())
+        )
+    } catch (e: SecurityException) {
+        ExecutionOutcome.CodeReading.Failure(
+            executorId = context.executorId,
+            ticketId = context.ticket.id,
+            taskId = context.task.id,
+            executionStartTimestamp = executionStartTimestamp,
+            executionEndTimestamp = Clock.System.now(),
+            error = ExecutionError(
+                type = ExecutionError.Type.WORKSPACE_ERROR,
+                message = "Access outside root directory is not allowed: $filePath. \n ${e.message}",
+            )
+        )
     }
 }

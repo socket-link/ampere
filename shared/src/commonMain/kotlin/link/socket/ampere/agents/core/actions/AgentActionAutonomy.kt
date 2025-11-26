@@ -1,9 +1,9 @@
-package link.socket.ampere.agents.core
+package link.socket.ampere.agents.core.actions
 
 /**
  * Defines the level of autonomy an agent has when using a tool
  */
-enum class AutonomyLevel {
+enum class AgentActionAutonomy {
     /**
      * Agent proposes action, waits for human approval
      */

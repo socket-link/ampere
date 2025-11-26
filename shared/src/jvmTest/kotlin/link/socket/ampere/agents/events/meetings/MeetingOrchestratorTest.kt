@@ -18,6 +18,10 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.core.AssignedTo
+import link.socket.ampere.agents.core.outcomes.MeetingOutcome
+import link.socket.ampere.agents.core.status.MeetingStatus
+import link.socket.ampere.agents.core.status.TaskStatus
+import link.socket.ampere.agents.core.tasks.MeetingTask.AgendaItem
 import link.socket.ampere.agents.events.Event
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.MeetingEvent
@@ -25,8 +29,6 @@ import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventBus
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
-import link.socket.ampere.agents.events.tasks.AgendaItem
-import link.socket.ampere.agents.events.tasks.Task
 import link.socket.ampere.db.Database
 import link.socket.ampere.util.randomUUID
 
@@ -117,14 +119,14 @@ class MeetingOrchestratorTest {
         agendaItems: List<AgendaItem> = listOf(
             AgendaItem(
                 id = randomUUID(),
-                topic = "Topic 1",
-                status = Task.Status.Pending(),
+                title = "Topic 1",
+                status = TaskStatus.Pending,
                 assignedTo = AssignedTo.Agent("agent-alpha"),
             ),
             AgendaItem(
                 id = randomUUID(),
-                topic = "Topic 2",
-                status = Task.Status.Pending(),
+                title = "Topic 2",
+                status = TaskStatus.Pending,
                 assignedTo = AssignedTo.Agent("agent-beta"),
             ),
         ),
@@ -135,7 +137,7 @@ class MeetingOrchestratorTest {
     ): Meeting = Meeting(
         id = id,
         type = MeetingType.AdHoc("Test reason"),
-        status = MeetingStatus.Scheduled(scheduledForOverride = scheduledFor),
+        status = MeetingStatus.Scheduled(scheduledFor = scheduledFor),
         invitation = MeetingInvitation(
             title = title,
             agenda = agendaItems,
@@ -183,7 +185,7 @@ class MeetingOrchestratorTest {
             assertTrue(result.isFailure)
             val error = result.exceptionOrNull()
             assertNotNull(error)
-            assertTrue(error.message?.contains("future time") == true)
+            assertEquals(true, error.message?.contains("future time"))
         }
     }
 
@@ -197,7 +199,7 @@ class MeetingOrchestratorTest {
             assertTrue(result.isFailure)
             val error = result.exceptionOrNull()
             assertNotNull(error)
-            assertTrue(error.message?.contains("participant") == true)
+            assertEquals(true, error.message?.contains("participant"))
         }
     }
 
@@ -259,7 +261,7 @@ class MeetingOrchestratorTest {
             assertTrue(result.isFailure)
             val error = result.exceptionOrNull()
             assertNotNull(error)
-            assertTrue(error.message?.contains("not found") == true)
+            assertEquals(true, error.message?.contains("not found"))
         }
     }
 
@@ -277,7 +279,7 @@ class MeetingOrchestratorTest {
             assertTrue(result.isFailure)
             val error = result.exceptionOrNull()
             assertNotNull(error)
-            assertTrue(error.message?.contains("SCHEDULED") == true)
+            assertEquals(true, error.message?.contains("SCHEDULED"))
         }
     }
 
@@ -290,14 +292,14 @@ class MeetingOrchestratorTest {
             val agendaItems = listOf(
                 AgendaItem(
                     id = "ai-1",
-                    topic = "First Topic",
-                    status = Task.Status.Pending(),
+                    title = "First Topic",
+                    status = TaskStatus.Pending,
                     assignedTo = AssignedTo.Agent("agent-alpha"),
                 ),
                 AgendaItem(
                     id = "ai-2",
-                    topic = "Second Topic",
-                    status = Task.Status.Pending(),
+                    title = "Second Topic",
+                    status = TaskStatus.Pending,
                     assignedTo = AssignedTo.Agent("agent-beta"),
                 ),
             )
@@ -312,8 +314,8 @@ class MeetingOrchestratorTest {
             assertTrue(result.isSuccess)
             val item = result.getOrNull()
             assertNotNull(item)
-            assertEquals("First Topic", item.topic)
-            assertTrue(item.status is Task.Status.InProgress)
+            assertEquals("First Topic", item.title)
+            assertTrue(item.status is TaskStatus.InProgress)
 
             // Wait for async event publishing
             delay(100)
@@ -351,7 +353,7 @@ class MeetingOrchestratorTest {
             assertTrue(result.isFailure)
             val error = result.exceptionOrNull()
             assertNotNull(error)
-            assertTrue(error.message?.contains("IN_PROGRESS") == true)
+            assertEquals(true, error.message?.contains("IN_PROGRESS"))
         }
     }
 
@@ -369,12 +371,12 @@ class MeetingOrchestratorTest {
             // Complete with outcomes
             val outcomes = listOf(
                 MeetingOutcome.DecisionMade(
-                    overrideId = randomUUID(),
+                    id = randomUUID(),
                     description = "We decided to proceed",
                     decidedBy = EventSource.Agent("agent-alpha"),
                 ),
                 MeetingOutcome.ActionItem(
-                    overrideId = randomUUID(),
+                    id = randomUUID(),
                     assignedTo = AssignedTo.Agent("agent-beta"),
                     description = "Implement the feature",
                 ),
@@ -389,8 +391,7 @@ class MeetingOrchestratorTest {
             assertNotNull(retrieved)
             assertTrue(retrieved.status is MeetingStatus.Completed)
 
-            val completedStatus = retrieved.status as MeetingStatus.Completed
-            assertEquals(2, completedStatus.outcomes?.size ?: 0)
+            assertEquals(2, retrieved.status.outcomes?.size ?: 0)
 
             // Wait for async event publishing
             delay(100)
@@ -454,14 +455,14 @@ class MeetingOrchestratorTest {
             val agendaItems = listOf(
                 AgendaItem(
                     id = "lifecycle-ai-1",
-                    topic = "Topic 1",
-                    status = Task.Status.Pending(),
+                    title = "Topic 1",
+                    status = TaskStatus.Pending,
                     assignedTo = AssignedTo.Agent("agent-alpha"),
                 ),
                 AgendaItem(
                     id = "lifecycle-ai-2",
-                    topic = "Topic 2",
-                    status = Task.Status.Pending(),
+                    title = "Topic 2",
+                    status = TaskStatus.Pending,
                     assignedTo = AssignedTo.Agent("agent-beta"),
                 ),
             )
@@ -491,7 +492,7 @@ class MeetingOrchestratorTest {
             // Advance through agenda items
             val firstItem = orchestrator.advanceAgenda(meeting.id).getOrNull()
             assertNotNull(firstItem)
-            assertEquals("Topic 1", firstItem.topic)
+            assertEquals("Topic 1", firstItem.title)
 
             // In a real scenario, we'd mark the first item as completed before advancing
             // For this test, we'll just complete the meeting
@@ -499,7 +500,7 @@ class MeetingOrchestratorTest {
             // Complete
             val outcomes = listOf(
                 MeetingOutcome.DecisionMade(
-                    overrideId = randomUUID(),
+                    id = randomUUID(),
                     description = "Test decision",
                     decidedBy = EventSource.Agent("agent-alpha"),
                 ),
@@ -512,9 +513,8 @@ class MeetingOrchestratorTest {
             assertNotNull(retrieved)
             assertTrue(retrieved.status is MeetingStatus.Completed)
 
-            val completedStatus = retrieved.status as MeetingStatus.Completed
-            assertNotNull(completedStatus.outcomes)
-            assertEquals(1, completedStatus.outcomes?.size)
+            assertNotNull(retrieved.status.outcomes)
+            assertEquals(1, retrieved.status.outcomes.size)
         }
     }
 

@@ -3,9 +3,9 @@ package link.socket.ampere.agents.events
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
+import link.socket.ampere.agents.core.outcomes.MeetingOutcome
+import link.socket.ampere.agents.core.tasks.MeetingTask
 import link.socket.ampere.agents.events.meetings.Meeting
-import link.socket.ampere.agents.events.meetings.MeetingOutcome
-import link.socket.ampere.agents.events.tasks.AgendaItem
 
 /**
  * Meeting lifecycle events flowing through the EventBus.
@@ -66,7 +66,7 @@ sealed class MeetingEvent(
     data class AgendaItemStarted(
         override val eventId: EventId,
         val meetingId: String,
-        val agendaItem: AgendaItem,
+        val agendaItem: MeetingTask.AgendaItem,
         val startedBy: EventSource,
         override val timestamp: Instant,
         override val urgency: Urgency = Urgency.MEDIUM,

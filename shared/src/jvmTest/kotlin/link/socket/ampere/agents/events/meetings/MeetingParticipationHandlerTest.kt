@@ -15,22 +15,24 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
+import link.socket.ampere.agents.core.AgentConfiguration
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.core.AssignedTo
-import link.socket.ampere.agents.core.Idea
-import link.socket.ampere.agents.core.Outcome
-import link.socket.ampere.agents.core.Plan
+import link.socket.ampere.agents.core.actions.AgentActionAutonomy
+import link.socket.ampere.agents.core.states.AgentState
+import link.socket.ampere.agents.core.status.MeetingStatus
+import link.socket.ampere.agents.core.status.TaskStatus
+import link.socket.ampere.agents.core.tasks.MeetingTask.AgendaItem
 import link.socket.ampere.agents.events.Event
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.MeetingEvent
 import link.socket.ampere.agents.events.bus.EventBus
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
-import link.socket.ampere.agents.events.tasks.AgendaItem
-import link.socket.ampere.agents.events.tasks.Task
 import link.socket.ampere.agents.implementations.CodeWriterAgent
 import link.socket.ampere.agents.tools.WriteCodeFileTool
 import link.socket.ampere.db.Database
+import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.provider.AIProvider_Google
@@ -56,19 +58,18 @@ class MeetingParticipationHandlerTest {
     }
 
     private val stubAgent = CodeWriterAgent(
-        coroutineScope = testScope,
+        initialState = AgentState(),
+        agentConfiguration = AgentConfiguration(
+            agentDefinition = WriteCodeAgent,
+            aiConfiguration = AIConfiguration_Default(
+                provider = AIProvider_Google,
+                model = AIModel_Gemini.Pro_2_5,
+            ),
+        ),
         writeCodeFileTool = WriteCodeFileTool(
-            baseDirectory = "",
+            requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
         ),
-        runLLMToPerceive = { _ -> Idea.blank },
-        runLLMToPlan = { _ -> Plan.blank },
-        runLLMToExecuteTask = { _ -> Outcome.blank },
-        runLLMToExecuteTool = { _, _ -> Outcome.blank },
-        runLLMToEvaluate = { _ -> Idea.blank },
-        aiConfiguration = AIConfiguration_Default(
-            provider = AIProvider_Google,
-            model = AIModel_Gemini.Pro_2_5,
-        ),
+        coroutineScope = testScope,
     )
 
     private val stubScheduledBy = EventSource.Agent("scheduler-agent")
@@ -121,14 +122,14 @@ class MeetingParticipationHandlerTest {
         agendaItems: List<AgendaItem> = listOf(
             AgendaItem(
                 id = randomUUID(),
-                topic = "Topic 1",
-                status = Task.Status.Pending(),
+                title = "Topic 1",
+                status = TaskStatus.Pending,
                 assignedTo = AssignedTo.Agent("agent-alpha"),
             ),
             AgendaItem(
                 id = randomUUID(),
-                topic = "Topic 2",
-                status = Task.Status.Pending(),
+                title = "Topic 2",
+                status = TaskStatus.Pending,
                 assignedTo = AssignedTo.Agent("agent-beta"),
             ),
         ),
@@ -139,7 +140,7 @@ class MeetingParticipationHandlerTest {
     ): Meeting = Meeting(
         id = id,
         type = MeetingType.AdHoc("Test reason"),
-        status = MeetingStatus.Scheduled(scheduledForOverride = scheduledFor),
+        status = MeetingStatus.Scheduled(scheduledFor = scheduledFor),
         invitation = MeetingInvitation(
             title = title,
             agenda = agendaItems,
@@ -307,8 +308,8 @@ class MeetingParticipationHandlerTest {
             val agendaItems = listOf(
                 AgendaItem(
                     id = "ai-1",
-                    topic = "Alpha's Topic",
-                    status = Task.Status.Pending(),
+                    title = "Alpha's Topic",
+                    status = TaskStatus.Pending,
                     assignedTo = AssignedTo.Agent("agent-alpha"),
                 ),
             )
@@ -444,8 +445,8 @@ class MeetingParticipationHandlerTest {
             val agendaItems = listOf(
                 AgendaItem(
                     id = "ai-1",
-                    topic = "Alpha's Topic",
-                    status = Task.Status.InProgress,
+                    title = "Alpha's Topic",
+                    status = TaskStatus.InProgress,
                     assignedTo = AssignedTo.Agent("agent-alpha"),
                 ),
             )
@@ -457,7 +458,6 @@ class MeetingParticipationHandlerTest {
 
             delay(100)
             val retrievedMeeting = meetingRepository.getMeeting(meeting.id).getOrNull()!!
-            val inProgressStatus = retrievedMeeting.status as MeetingStatus.InProgress
 
             val event = MeetingEvent.AgendaItemStarted(
                 eventId = randomUUID(),
@@ -481,8 +481,8 @@ class MeetingParticipationHandlerTest {
             val agendaItems = listOf(
                 AgendaItem(
                     id = "ai-1",
-                    topic = "Alpha's Topic",
-                    status = Task.Status.InProgress,
+                    title = "Alpha's Topic",
+                    status = TaskStatus.InProgress,
                     assignedTo = AssignedTo.Agent("agent-alpha"),
                 ),
             )
@@ -494,7 +494,6 @@ class MeetingParticipationHandlerTest {
 
             delay(100)
             val retrievedMeeting = meetingRepository.getMeeting(meeting.id).getOrNull()!!
-            val inProgressStatus = retrievedMeeting.status as MeetingStatus.InProgress
 
             val event = MeetingEvent.AgendaItemStarted(
                 eventId = randomUUID(),
@@ -520,14 +519,14 @@ class MeetingParticipationHandlerTest {
             val meeting = Meeting(
                 id = randomUUID(),
                 type = MeetingType.AdHoc("Test"),
-                status = MeetingStatus.Scheduled(scheduledForOverride = Clock.System.now() + 1.hours),
+                status = MeetingStatus.Scheduled(scheduledFor = Clock.System.now() + 1.hours),
                 invitation = MeetingInvitation(
                     title = "Test Meeting",
                     agenda = listOf(
                         AgendaItem(
                             id = randomUUID(),
-                            topic = "Topic",
-                            status = Task.Status.Pending(),
+                            title = "Topic",
+                            status = TaskStatus.Pending,
                             assignedTo = null,
                         ),
                     ),

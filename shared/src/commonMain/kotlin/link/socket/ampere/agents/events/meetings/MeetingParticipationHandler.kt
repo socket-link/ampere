@@ -4,11 +4,13 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.core.AssignedTo
-import link.socket.ampere.agents.core.MinimalAutonomousAgent
+import link.socket.ampere.agents.core.AutonomousAgent
+import link.socket.ampere.agents.core.states.AgentState
+import link.socket.ampere.agents.core.status.MeetingStatus
+import link.socket.ampere.agents.core.status.TaskStatus
 import link.socket.ampere.agents.events.MeetingEvent
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventBus
-import link.socket.ampere.agents.events.tasks.Task
 
 /**
  * Enables agents to subscribe to meeting events and automatically participate when required.
@@ -161,7 +163,7 @@ class MeetingParticipationHandler(
      */
     suspend fun handleMeetingStart(
         event: MeetingEvent.MeetingStarted,
-        agent: MinimalAutonomousAgent,
+        agent: AutonomousAgent<AgentState>,
     ) {
         // Post a message announcing agent's presence
         messageApi.postMessage(
@@ -174,21 +176,21 @@ class MeetingParticipationHandler(
         if (agendaItemsResult.isFailure) return
 
         val agendaItems = agendaItemsResult.getOrNull() ?: emptyList()
-        val currentItem = agendaItems.firstOrNull { it.status is Task.Status.InProgress }
-            ?: agendaItems.firstOrNull { it.status is Task.Status.Pending }
+        val currentItem = agendaItems.firstOrNull { it.status is TaskStatus.InProgress }
+            ?: agendaItems.firstOrNull { it.status is TaskStatus.Pending }
 
         // Prompt agent to participate based on agenda topic
         if (currentItem != null) {
             val assignmentInfo = when {
                 currentItem.assignedTo is AssignedTo.Agent &&
-                    (currentItem.assignedTo as AssignedTo.Agent).agentId == agent.id ->
+                    currentItem.assignedTo.agentId == agent.id ->
                     " You are assigned to present this topic."
                 else -> ""
             }
 
             messageApi.postMessage(
                 threadId = event.threadId,
-                content = "@${agent.id} The current topic is: ${currentItem.topic}.$assignmentInfo Please share your input.",
+                content = "@${agent.id} The current topic is: ${currentItem.title}.$assignmentInfo Please share your input.",
             )
         }
     }
@@ -202,7 +204,7 @@ class MeetingParticipationHandler(
      */
     suspend fun handleAgendaItem(
         event: MeetingEvent.AgendaItemStarted,
-        agent: MinimalAutonomousAgent,
+        agent: AutonomousAgent<AgentState>,
     ) {
         // Get the meeting to find the thread ID
         val meetingResult = meetingRepository.getMeeting(event.meetingId)
@@ -214,19 +216,19 @@ class MeetingParticipationHandler(
 
         // Check if agent is assigned to this agenda item
         val isAssigned = event.agendaItem.assignedTo is AssignedTo.Agent &&
-            (event.agendaItem.assignedTo as AssignedTo.Agent).agentId == agent.id
+            event.agendaItem.assignedTo.agentId == agent.id
 
         if (isAssigned) {
             // Agent is assigned - prompt to present/contribute on topic
             messageApi.postMessage(
                 threadId = threadId,
-                content = "@${agent.id} You are assigned to present: ${event.agendaItem.topic}. Please share your update or findings.",
+                content = "@${agent.id} You are assigned to present: ${event.agendaItem.title}. Please share your update or findings.",
             )
         } else {
             // Agent is not assigned - prompt to listen and contribute as needed
             messageApi.postMessage(
                 threadId = threadId,
-                content = "@${agent.id} Now discussing: ${event.agendaItem.topic}. Please contribute any relevant insights.",
+                content = "@${agent.id} Now discussing: ${event.agendaItem.title}. Please contribute any relevant insights.",
             )
         }
     }

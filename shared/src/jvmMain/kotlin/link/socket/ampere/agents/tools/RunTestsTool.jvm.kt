@@ -1,61 +1,70 @@
 package link.socket.ampere.agents.tools
 
 import java.io.File
-import link.socket.ampere.agents.core.AutonomyLevel
-import link.socket.ampere.agents.core.Outcome
-import link.socket.ampere.agents.events.tasks.Task
+import kotlinx.datetime.Clock
+import link.socket.ampere.agents.core.errors.ExecutionError
+import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
+import link.socket.ampere.agents.execution.request.ExecutionContext
 
-/**
- * JVM implementation that executes Gradle tests for a project located at [projectRoot].
- * Uses ProcessBuilder to invoke the Gradle wrapper and returns combined output.
- */
-actual class RunTestsTool actual constructor(
-    private val projectRoot: String,
-) : Tool {
-    actual override val id: ToolId = "run_tests"
-    actual override val name: String = "Verify Gradle Tests"
-    actual override val description: String = "Executes tests and returns results"
-    actual override val requiredAutonomyLevel: AutonomyLevel = AutonomyLevel.FULLY_AUTONOMOUS
+actual suspend fun executeRunTests(
+    context: ExecutionContext.Code.ReadCode,
+): ExecutionOutcome.CodeReading {
+    val executionStartTimestamp = Clock.System.now()
 
-    actual override suspend fun execute(
-        sourceTask: Task,
-        parameters: Map<String, Any?>,
-    ): Outcome {
-        val testPath = parameters["testPath"] as? String
+    // TODO: Use resolveFileSafely
+    val rootDirectory = context.workspace.baseDirectory
 
-        return try {
-            val args = mutableListOf("./gradlew")
-            if (testPath != null) {
-                // Use Gradle's --tests filter when provided
-                args.add("test")
-                args.add("--tests")
-                args.add(testPath)
-            } else {
-                args.add("test")
-            }
+    // TODO: Handle reading multiple files
+    val filePath = context.filePathsToRead.first()
 
-            val process = ProcessBuilder()
-                .directory(File(projectRoot))
-                .command(args)
-                .redirectErrorStream(true)
-                .start()
+    return try {
+        val args = mutableListOf("./gradlew")
+        args.add("test")
+        args.add("--tests")
+        args.add(filePath)
 
-            val output = process.inputStream.bufferedReader().readText()
-            val exitCode = process.waitFor()
+        val process = ProcessBuilder()
+            .directory(File(rootDirectory))
+            .command(args)
+            .redirectErrorStream(true)
+            .start()
 
-            if (exitCode == 0) {
-                Outcome.Success.Full(sourceTask, output)
-            } else {
-                Outcome.Failure(sourceTask, "Tests failed")
-            }
-        } catch (e: Exception) {
-            Outcome.Failure(sourceTask, "Failed to run tests: ${e.message}")
+        val output = process.inputStream.bufferedReader().readText()
+        val exitCode = process.waitFor()
+
+        if (exitCode == 0) {
+            ExecutionOutcome.CodeReading.Success(
+                executorId = context.executorId,
+                ticketId = context.ticket.id,
+                taskId = context.task.id,
+                executionStartTimestamp = executionStartTimestamp,
+                executionEndTimestamp = Clock.System.now(),
+                readFiles = listOf(filePath to output),
+            )
+        } else {
+            ExecutionOutcome.CodeReading.Failure(
+                executorId = context.executorId,
+                ticketId = context.ticket.id,
+                taskId = context.task.id,
+                executionStartTimestamp = executionStartTimestamp,
+                executionEndTimestamp = Clock.System.now(),
+                error = ExecutionError(
+                    type = ExecutionError.Type.WORKSPACE_ERROR,
+                    message = "Tests failed",
+                ),
+            )
         }
-    }
-
-    actual override fun validateParameters(parameters: Map<String, Any>): Boolean {
-        // testPath is optional; when provided it must be a String
-        val tp = parameters["testPath"]
-        return tp == null || tp is String
+    } catch (e: Exception) {
+        ExecutionOutcome.CodeReading.Failure(
+            executorId = context.executorId,
+            ticketId = context.ticket.id,
+            taskId = context.task.id,
+            executionStartTimestamp = executionStartTimestamp,
+            executionEndTimestamp = Clock.System.now(),
+            error = ExecutionError(
+                type = ExecutionError.Type.WORKSPACE_ERROR,
+                message = "Failed to run tests: ${e.message}",
+            ),
+        )
     }
 }

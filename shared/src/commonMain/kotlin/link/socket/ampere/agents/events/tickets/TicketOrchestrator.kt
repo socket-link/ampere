@@ -5,6 +5,10 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.core.AssignedTo
+import link.socket.ampere.agents.core.status.MeetingStatus
+import link.socket.ampere.agents.core.status.TaskStatus
+import link.socket.ampere.agents.core.status.TicketStatus
+import link.socket.ampere.agents.core.tasks.MeetingTask
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.TicketEvent
 import link.socket.ampere.agents.events.Urgency
@@ -13,13 +17,10 @@ import link.socket.ampere.agents.events.meetings.Meeting
 import link.socket.ampere.agents.events.meetings.MeetingId
 import link.socket.ampere.agents.events.meetings.MeetingInvitation
 import link.socket.ampere.agents.events.meetings.MeetingSchedulingService
-import link.socket.ampere.agents.events.meetings.MeetingStatus
 import link.socket.ampere.agents.events.meetings.MeetingType
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageChannel
 import link.socket.ampere.agents.events.messages.MessageThread
-import link.socket.ampere.agents.events.tasks.AgendaItem
-import link.socket.ampere.agents.events.tasks.Task
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
 import link.socket.ampere.agents.events.utils.generateUUID
@@ -71,7 +72,7 @@ class TicketOrchestrator(
             description = description,
             type = type,
             priority = priority,
-            status = TicketStatus.BACKLOG,
+            status = TicketStatus.Backlog,
             assignedAgentId = null,
             createdByAgentId = createdByAgentId,
             createdAt = now,
@@ -200,7 +201,7 @@ class TicketOrchestrator(
         getOrCreateTicketThread(updatedTicket)?.let { thread ->
             // If transitioning from BLOCKED, reopen the thread to allow posting messages
             // (the thread is in WAITING_FOR_HUMAN status after blocking)
-            if (previousStatus == TicketStatus.BLOCKED) {
+            if (previousStatus == TicketStatus.Blocked) {
                 messageApi.reopenThread(thread.id)
             }
 
@@ -320,11 +321,11 @@ class TicketOrchestrator(
             ?: return Result.failure(TicketError.TicketNotFound(ticketId))
 
         // Validate ticket can transition to BLOCKED
-        if (!currentTicket.canTransitionTo(TicketStatus.BLOCKED)) {
+        if (!currentTicket.canTransitionTo(TicketStatus.Blocked)) {
             return Result.failure(
                 TicketError.InvalidStateTransition(
                     fromState = currentTicket.status,
-                    toState = TicketStatus.BLOCKED,
+                    toState = TicketStatus.Blocked,
                 ),
             )
         }
@@ -332,7 +333,7 @@ class TicketOrchestrator(
         val now = Clock.System.now()
 
         // Update ticket status to BLOCKED
-        val updateStatusResult = ticketRepository.updateStatus(ticketId, TicketStatus.BLOCKED)
+        val updateStatusResult = ticketRepository.updateStatus(ticketId, TicketStatus.Blocked)
         if (updateStatusResult.isFailure) {
             logger.logError(
                 message = "Failed to block ticket: $ticketId",
@@ -398,11 +399,11 @@ class TicketOrchestrator(
             // Only schedule if we have required participants
             if (requiredParticipants.isNotEmpty()) {
                 val agendaItems = listOf(
-                    AgendaItem(
+                    MeetingTask.AgendaItem(
                         id = randomUUID(),
-                        topic = "Discuss blocker: $blockingReason",
+                        title = "Discuss blocker: $blockingReason",
                         assignedTo = updatedTicket.assignedAgentId?.let { AssignedTo.Agent(it) },
-                        status = Task.Status.Pending(),
+                        status = TaskStatus.Pending,
                     ),
                 )
 
@@ -453,7 +454,7 @@ class TicketOrchestrator(
         ticketId: TicketId,
         meetingTitle: String,
         scheduledTime: Instant,
-        agendaItems: List<AgendaItem>,
+        agendaItems: List<MeetingTask.AgendaItem>,
         requiredParticipants: List<AssignedTo>,
         optionalParticipants: List<AssignedTo>?,
     ): Result<MeetingId> {
@@ -475,7 +476,7 @@ class TicketOrchestrator(
         val meeting = Meeting(
             id = meetingId,
             type = MeetingType.AdHoc(reason = "Ticket: ${ticket.title} (${ticket.id})"),
-            status = MeetingStatus.Scheduled(scheduledForOverride = scheduledTime),
+            status = MeetingStatus.Scheduled(scheduledFor = scheduledTime),
             invitation = MeetingInvitation(
                 title = meetingTitle,
                 agenda = agendaItems,

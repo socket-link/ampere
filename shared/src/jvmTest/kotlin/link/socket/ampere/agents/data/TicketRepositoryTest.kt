@@ -12,11 +12,11 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.core.status.TicketStatus
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketError
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketRepository
-import link.socket.ampere.agents.events.tickets.TicketStatus
 import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.db.Database
 
@@ -50,7 +50,7 @@ class TicketRepositoryTest {
         description: String = "Test Description",
         type: TicketType = TicketType.FEATURE,
         priority: TicketPriority = TicketPriority.MEDIUM,
-        status: TicketStatus = TicketStatus.BACKLOG,
+        status: TicketStatus = TicketStatus.Backlog,
         assignedAgentId: String? = null,
         createdByAgentId: String = creatorAgentId,
         createdAt: Instant = now,
@@ -103,7 +103,7 @@ class TicketRepositoryTest {
             description = "Complete description",
             type = TicketType.BUG,
             priority = TicketPriority.CRITICAL,
-            status = TicketStatus.READY,
+            status = TicketStatus.Ready,
             assignedAgentId = assigneeAgentId,
             dueDate = dueDate,
         )
@@ -116,7 +116,7 @@ class TicketRepositoryTest {
         assertEquals(ticket.description, retrieved.description)
         assertEquals(TicketType.BUG, retrieved.type)
         assertEquals(TicketPriority.CRITICAL, retrieved.priority)
-        assertEquals(TicketStatus.READY, retrieved.status)
+        assertEquals(TicketStatus.Ready, retrieved.status)
         assertEquals(assigneeAgentId, retrieved.assignedAgentId)
         assertNotNull(retrieved.dueDate)
     } }
@@ -164,76 +164,76 @@ class TicketRepositoryTest {
 
     @Test
     fun `updateStatus accepts valid transition BACKLOG to READY`() { runBlocking {
-        val ticket = createTicket(status = TicketStatus.BACKLOG)
+        val ticket = createTicket(status = TicketStatus.Backlog)
         repo.createTicket(ticket)
 
-        val result = repo.updateStatus(ticket.id, TicketStatus.READY)
+        val result = repo.updateStatus(ticket.id, TicketStatus.Ready)
 
         assertTrue(result.isSuccess)
 
         val updated = repo.getTicket(ticket.id).getOrNull()
         assertNotNull(updated)
-        assertEquals(TicketStatus.READY, updated.status)
+        assertEquals(TicketStatus.Ready, updated.status)
     } }
 
     @Test
     fun `updateStatus accepts valid transition READY to IN_PROGRESS`() { runBlocking {
-        val ticket = createTicket(status = TicketStatus.READY)
+        val ticket = createTicket(status = TicketStatus.Ready)
         repo.createTicket(ticket)
 
-        val result = repo.updateStatus(ticket.id, TicketStatus.IN_PROGRESS)
+        val result = repo.updateStatus(ticket.id, TicketStatus.InProgress)
 
         assertTrue(result.isSuccess)
         val updated = repo.getTicket(ticket.id).getOrNull()
-        assertEquals(TicketStatus.IN_PROGRESS, updated?.status)
+        assertEquals(TicketStatus.InProgress, updated?.status)
     } }
 
     @Test
     fun `updateStatus accepts valid transition IN_PROGRESS to DONE`() { runBlocking {
-        val ticket = createTicket(status = TicketStatus.IN_PROGRESS)
+        val ticket = createTicket(status = TicketStatus.InProgress)
         repo.createTicket(ticket)
 
-        val result = repo.updateStatus(ticket.id, TicketStatus.DONE)
+        val result = repo.updateStatus(ticket.id, TicketStatus.Done)
 
         assertTrue(result.isSuccess)
         val updated = repo.getTicket(ticket.id).getOrNull()
-        assertEquals(TicketStatus.DONE, updated?.status)
+        assertEquals(TicketStatus.Done, updated?.status)
     } }
 
     @Test
     fun `updateStatus rejects invalid transition BACKLOG to IN_PROGRESS`() { runBlocking {
-        val ticket = createTicket(status = TicketStatus.BACKLOG)
+        val ticket = createTicket(status = TicketStatus.Backlog)
         repo.createTicket(ticket)
 
-        val result = repo.updateStatus(ticket.id, TicketStatus.IN_PROGRESS)
+        val result = repo.updateStatus(ticket.id, TicketStatus.InProgress)
 
         assertTrue(result.isFailure)
         val error = result.exceptionOrNull()
         assertIs<TicketError.InvalidStateTransition>(error)
-        assertEquals(TicketStatus.BACKLOG, error.fromState)
-        assertEquals(TicketStatus.IN_PROGRESS, error.toState)
+        assertEquals(TicketStatus.Backlog, error.fromState)
+        assertEquals(TicketStatus.InProgress, error.toState)
     } }
 
     @Test
     fun `updateStatus rejects invalid transition READY to DONE`() { runBlocking {
-        val ticket = createTicket(status = TicketStatus.READY)
+        val ticket = createTicket(status = TicketStatus.Ready)
         repo.createTicket(ticket)
 
-        val result = repo.updateStatus(ticket.id, TicketStatus.DONE)
+        val result = repo.updateStatus(ticket.id, TicketStatus.Done)
 
         assertTrue(result.isFailure)
         val error = result.exceptionOrNull()
         assertIs<TicketError.InvalidStateTransition>(error)
-        assertEquals(TicketStatus.READY, error.fromState)
-        assertEquals(TicketStatus.DONE, error.toState)
+        assertEquals(TicketStatus.Ready, error.fromState)
+        assertEquals(TicketStatus.Done, error.toState)
     } }
 
     @Test
     fun `updateStatus rejects invalid transition DONE to any status`() { runBlocking {
-        val ticket = createTicket(status = TicketStatus.DONE)
+        val ticket = createTicket(status = TicketStatus.Done)
         repo.createTicket(ticket)
 
-        val result = repo.updateStatus(ticket.id, TicketStatus.IN_PROGRESS)
+        val result = repo.updateStatus(ticket.id, TicketStatus.InProgress)
 
         assertTrue(result.isFailure)
         val error = result.exceptionOrNull()
@@ -242,7 +242,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `updateStatus returns TicketNotFound for nonexistent ticket`() { runBlocking {
-        val result = repo.updateStatus("nonexistent", TicketStatus.READY)
+        val result = repo.updateStatus("nonexistent", TicketStatus.Ready)
 
         assertTrue(result.isFailure)
         val error = result.exceptionOrNull()
@@ -252,13 +252,13 @@ class TicketRepositoryTest {
 
     @Test
     fun `updateStatus updates the updatedAt timestamp`() { runBlocking {
-        val ticket = createTicket(status = TicketStatus.BACKLOG)
+        val ticket = createTicket(status = TicketStatus.Backlog)
         repo.createTicket(ticket)
 
         // Small delay to ensure different timestamp
         kotlinx.coroutines.delay(10)
 
-        repo.updateStatus(ticket.id, TicketStatus.READY)
+        repo.updateStatus(ticket.id, TicketStatus.Ready)
 
         val updated = repo.getTicket(ticket.id).getOrNull()
         assertNotNull(updated)
@@ -308,23 +308,23 @@ class TicketRepositoryTest {
 
     @Test
     fun `getTicketsByStatus returns tickets with matching status`() { runBlocking {
-        repo.createTicket(createTicket(id = "t1", status = TicketStatus.BACKLOG))
-        repo.createTicket(createTicket(id = "t2", status = TicketStatus.BACKLOG))
-        repo.createTicket(createTicket(id = "t3", status = TicketStatus.READY))
+        repo.createTicket(createTicket(id = "t1", status = TicketStatus.Backlog))
+        repo.createTicket(createTicket(id = "t2", status = TicketStatus.Backlog))
+        repo.createTicket(createTicket(id = "t3", status = TicketStatus.Ready))
 
-        val result = repo.getTicketsByStatus(TicketStatus.BACKLOG)
+        val result = repo.getTicketsByStatus(TicketStatus.Backlog)
 
         assertTrue(result.isSuccess)
         val tickets = result.getOrNull()!!
         assertEquals(2, tickets.size)
-        assertTrue(tickets.all { it.status == TicketStatus.BACKLOG })
+        assertTrue(tickets.all { it.status == TicketStatus.Backlog })
     } }
 
     @Test
     fun `getTicketsByStatus returns empty list when no matches`() { runBlocking {
-        repo.createTicket(createTicket(status = TicketStatus.BACKLOG))
+        repo.createTicket(createTicket(status = TicketStatus.Backlog))
 
-        val result = repo.getTicketsByStatus(TicketStatus.DONE)
+        val result = repo.getTicketsByStatus(TicketStatus.Done)
 
         assertTrue(result.isSuccess)
         assertEquals(0, result.getOrNull()?.size)
@@ -340,7 +340,7 @@ class TicketRepositoryTest {
         repo.createTicket(createTicket(id = "high-new", priority = TicketPriority.HIGH, createdAt = newer))
         repo.createTicket(createTicket(id = "high-old", priority = TicketPriority.HIGH, createdAt = older))
 
-        val result = repo.getTicketsByStatus(TicketStatus.BACKLOG)
+        val result = repo.getTicketsByStatus(TicketStatus.Backlog)
         val tickets = result.getOrNull()!!
 
         // HIGH priority should come first
@@ -521,10 +521,10 @@ class TicketRepositoryTest {
 
     @Test
     fun `InvalidStateTransition error message contains states`() { runBlocking {
-        val ticket = createTicket(status = TicketStatus.BACKLOG)
+        val ticket = createTicket(status = TicketStatus.Backlog)
         repo.createTicket(ticket)
 
-        val result = repo.updateStatus(ticket.id, TicketStatus.IN_REVIEW)
+        val result = repo.updateStatus(ticket.id, TicketStatus.InReview)
 
         val error = result.exceptionOrNull() as TicketError.InvalidStateTransition
         assertTrue(error.message.contains("BACKLOG"))

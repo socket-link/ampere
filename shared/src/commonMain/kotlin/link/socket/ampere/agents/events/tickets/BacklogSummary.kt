@@ -2,6 +2,7 @@ package link.socket.ampere.agents.events.tickets
 
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.core.status.TicketStatus
 
 /**
  * Summary of the current backlog state for PM agent perception.
@@ -35,7 +36,7 @@ data class BacklogSummary(
 
         appendLine("By Status:")
         ticketsByStatus.entries
-            .sortedBy { it.key.ordinal }
+            .sortedBy { it.key.name }
             .forEach { (status, count) ->
                 appendLine("  - $status: $count")
             }
@@ -100,7 +101,7 @@ data class AgentWorkload(
      * Total number of active tickets (not completed).
      */
     val activeCount: Int
-        get() = assignedTickets.count { it.status != TicketStatus.DONE }
+        get() = assignedTickets.count { it.status != TicketStatus.Done }
 
     /**
      * Formats the agent workload as a structured text suitable for LLM consumption.
