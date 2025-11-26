@@ -39,7 +39,7 @@ class EnvironmentOrchestrator(
     val messageApiFactory: AgentMessageApiFactory,
     val eventRepository: EventRepository,
     val eventApiFactory: AgentEventApiFactory,
-    private val eventSerialBus: EventSerialBus,
+    val eventSerialBus: EventSerialBus,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
     companion object {

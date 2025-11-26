@@ -15,12 +15,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
-import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.EnvironmentService
 import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.relay.EventRelayFilters
-import link.socket.ampere.agents.events.relay.EventRelayServiceImpl
-import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 import link.socket.ampere.renderer.EventRenderer
 import link.socket.ampere.util.EventTypeParser
@@ -75,10 +72,14 @@ class WatchCommand : CliktCommand(
             Database.Schema.create(driver)
             val database = Database(driver)
 
-            // Initialize event infrastructure
-            val eventRepository = EventRepository(DEFAULT_JSON, scope, database)
-            val eventBus = EventSerialBus(scope)
-            val eventRelayService = EventRelayServiceImpl(eventBus, eventRepository)
+            // Create environment service - this handles all infrastructure setup
+            val environment = EnvironmentService.create(
+                database = database,
+                scope = scope,
+            )
+
+            // Start the environment
+            environment.start()
 
             // Create event renderer
             val renderer = EventRenderer(terminal)
@@ -93,7 +94,7 @@ class WatchCommand : CliktCommand(
             terminal.println(bold("Watching events... (Ctrl+C to stop)"))
             terminal.println()
 
-            eventRelayService.subscribeToLiveEvents(filters)
+            environment.eventRelayService.subscribeToLiveEvents(filters)
                 .collect { event ->
                     renderer.render(event)
                 }
