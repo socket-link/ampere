@@ -1,0 +1,24 @@
+#!/bin/bash
+# Wrapper script for ampere CLI that ensures Java 21+ is used
+
+# Find Java 21 or higher
+JAVA_21=$(/usr/libexec/java_home -v 21 2>/dev/null)
+JAVA_24=$(/usr/libexec/java_home -v 24 2>/dev/null)
+
+if [ -n "$JAVA_24" ]; then
+    export JAVA_HOME="$JAVA_24"
+elif [ -n "$JAVA_21" ]; then
+    export JAVA_HOME="$JAVA_21"
+else
+    echo "Error: Java 21 or higher is required to run ampere CLI"
+    echo "Please install Java 21+ from:"
+    echo "  - https://www.oracle.com/java/technologies/downloads/"
+    echo "  - https://adoptium.net/"
+    exit 1
+fi
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Execute the ampere CLI
+exec "$SCRIPT_DIR/build/install/ampere-cli-jvm/bin/ampere-cli" "$@"
