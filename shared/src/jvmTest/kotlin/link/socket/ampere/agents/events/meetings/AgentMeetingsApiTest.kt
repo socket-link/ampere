@@ -29,7 +29,6 @@ class AgentMeetingsApiTest {
     private val scope = TestScope(UnconfinedTestDispatcher())
     private val eventSerialBusFactory = EventSerialBusFactory(scope)
 
-    private lateinit var meetingBuilder: MeetingBuilder
     private lateinit var driver: JdbcSqliteDriver
     private lateinit var eventSerialBus: EventSerialBus
 
@@ -49,7 +48,6 @@ class AgentMeetingsApiTest {
         eventSerialBus = eventSerialBusFactory.create()
         meetingRepository = MeetingRepository(json, scope, database)
         messageRepository = MessageRepository(json, scope, database)
-        meetingBuilder = MeetingBuilder(stubAgentId)
         messageApi = AgentMessageApi(stubAgentId, messageRepository, eventSerialBus)
 
         meetingOrchestrator = MeetingOrchestrator(
@@ -59,7 +57,6 @@ class AgentMeetingsApiTest {
         )
 
         agentMeetingsApiFactory = AgentMeetingsApiFactory(
-            meetingBuilder = meetingBuilder,
             meetingOrchestrator = meetingOrchestrator,
         )
     }
