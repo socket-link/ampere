@@ -43,3 +43,31 @@ SELECT event_id, event_type, source_id, timestamp, payload
 FROM EventStore
 WHERE timestamp >= ? AND timestamp <= ?
 ORDER BY timestamp ASC;
+
+-- Query events with event type filter
+getEventsBetweenWithEventTypes:
+SELECT event_id, event_type, source_id, timestamp, payload
+FROM EventStore
+WHERE timestamp >= :fromTime
+  AND timestamp <= :toTime
+  AND event_type IN :eventTypes
+ORDER BY timestamp ASC;
+
+-- Query events with source ID filter
+getEventsBetweenWithSourceIds:
+SELECT event_id, event_type, source_id, timestamp, payload
+FROM EventStore
+WHERE timestamp >= :fromTime
+  AND timestamp <= :toTime
+  AND source_id IN :sourceIds
+ORDER BY timestamp ASC;
+
+-- Query events with both event type and source ID filters
+getEventsBetweenWithBothFilters:
+SELECT event_id, event_type, source_id, timestamp, payload
+FROM EventStore
+WHERE timestamp >= :fromTime
+  AND timestamp <= :toTime
+  AND event_type IN :eventTypes
+  AND source_id IN :sourceIds
+ORDER BY timestamp ASC;

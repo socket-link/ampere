@@ -136,6 +136,73 @@ class EventRepository(
             }
         }
 
+    /**
+     * Retrieve events between [fromTime] and [toTime] with optional filtering by event types and source IDs.
+     *
+     * This method applies filters at the database level for better performance compared to
+     * filtering in memory after retrieving all events.
+     *
+     * @param fromTime Start of time range (inclusive)
+     * @param toTime End of time range (inclusive)
+     * @param eventTypes Optional set of event type strings to filter by (e.g., "TaskCreated", "QuestionRaised")
+     * @param sourceIds Optional set of source IDs to filter by (agent IDs or "human")
+     * @return Result containing list of events matching the criteria, in chronological order
+     */
+    suspend fun getEventsWithFilters(
+        fromTime: Instant,
+        toTime: Instant,
+        eventTypes: Set<String>? = null,
+        sourceIds: Set<String>? = null
+    ): Result<List<Event>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val fromMillis = fromTime.toEpochMilliseconds()
+                val toMillis = toTime.toEpochMilliseconds()
+
+                // Choose the appropriate query based on which filters are provided
+                val rows = when {
+                    // Both filters provided
+                    eventTypes != null && sourceIds != null -> {
+                        queries.getEventsBetweenWithBothFilters(
+                            fromTime = fromMillis,
+                            toTime = toMillis,
+                            eventTypes = eventTypes,
+                            sourceIds = sourceIds
+                        ).executeAsList()
+                    }
+                    // Only event types filter
+                    eventTypes != null -> {
+                        queries.getEventsBetweenWithEventTypes(
+                            fromTime = fromMillis,
+                            toTime = toMillis,
+                            eventTypes = eventTypes
+                        ).executeAsList()
+                    }
+                    // Only source IDs filter
+                    sourceIds != null -> {
+                        queries.getEventsBetweenWithSourceIds(
+                            fromTime = fromMillis,
+                            toTime = toMillis,
+                            sourceIds = sourceIds
+                        ).executeAsList()
+                    }
+                    // No filters, use the simple query
+                    else -> {
+                        queries.getEventsBetween(
+                            fromMillis,
+                            toMillis
+                        ).executeAsList()
+                    }
+                }
+
+                rows
+            }.map { rows ->
+                rows.map { row ->
+                    decode(row.payload)
+                }
+            }
+        }
+
     private fun encode(event: Event): String = try {
         json.encodeToString(
             serializer = Event.serializer(),
