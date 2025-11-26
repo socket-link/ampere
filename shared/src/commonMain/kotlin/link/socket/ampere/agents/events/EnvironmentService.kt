@@ -10,6 +10,8 @@ import link.socket.ampere.agents.events.meetings.AgentMeetingsApi
 import link.socket.ampere.agents.events.meetings.MeetingRepository
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
+import link.socket.ampere.agents.events.relay.EventRelayService
+import link.socket.ampere.agents.events.relay.EventRelayServiceImpl
 import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.agents.events.tickets.TicketRepository
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
@@ -37,6 +39,7 @@ import link.socket.ampere.db.Database
  */
 class EnvironmentService(
     private val orchestrator: EnvironmentOrchestrator,
+    val eventRelayService: EventRelayService,
 ) {
     /**
      * Access to the meeting repository for querying meeting data.
@@ -201,7 +204,11 @@ class EnvironmentService(
                 logger = logger,
             )
             val orchestrator = factory.create()
-            return EnvironmentService(orchestrator)
+            val eventRelayService = EventRelayServiceImpl(
+                eventSerialBus = eventSerialBus,
+                eventRepository = orchestrator.eventRepository,
+            )
+            return EnvironmentService(orchestrator, eventRelayService)
         }
     }
 }

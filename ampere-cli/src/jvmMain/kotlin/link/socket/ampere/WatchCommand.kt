@@ -2,22 +2,32 @@ package link.socket.ampere
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import com.github.ajalt.clikt.core.CliktCommand
-import com.github.ajalt.clikt.parameters.options.default
+import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
-import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.red
 import com.github.ajalt.mordant.rendering.TextColors.yellow
 import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.events.EnvironmentService
-import link.socket.ampere.agents.events.api.EventHandler
+import link.socket.ampere.agents.events.EventSource
+import link.socket.ampere.agents.events.relay.EventRelayFilters
 import link.socket.ampere.db.Database
 import link.socket.ampere.renderer.EventRenderer
+import link.socket.ampere.util.EventTypeParser
 
+/**
+ * Command to observe the substrate's electrical activity in real-time.
+ *
+ * This is the CLI's primary sensory interface - it lets you feel the pulse
+ * of the organizational organism by streaming events as they occur.
+ */
 class WatchCommand : CliktCommand(
     name = "watch",
     help = """
@@ -27,91 +37,120 @@ class WatchCommand : CliktCommand(
         and formatting for human readability.
 
         Examples:
-          ampere watch                    # Watch all events
-          ampere watch --type TaskCreated # Filter by event type
-          ampere watch --since 1h         # Events from last hour
+          ampere watch                         # Watch all events
+          ampere watch --filter TaskCreated    # Filter by event type
+          ampere watch --filter TaskCreated --filter QuestionRaised  # Multiple types
+          ampere watch --agent agent-pm        # Filter by agent ID
     """.trimIndent()
 ) {
-    private val eventType by option(
-        "--type", "-t",
-        help = "Filter events by type (TaskCreated, QuestionRaised, CodeSubmitted)"
-    )
+    // Repeatable option for filtering by event types
+    private val filterTypes by option(
+        "--filter", "-f",
+        help = "Filter by event type (e.g., TaskCreated, QuestionRaised). Repeatable."
+    ).multiple()
 
-    private val agent by option(
+    // Repeatable option for filtering by agent IDs
+    private val filterAgents by option(
         "--agent", "-a",
-        help = "Filter events by agent ID"
-    )
-
-    private val since by option(
-        "--since", "-s",
-        help = "Show events since timestamp (e.g., '1h', '30m', '2024-01-01')"
-    )
-
-    private val limit by option(
-        "--limit", "-n",
-        help = "Limit number of events to display"
-    ).int().default(100)
-
-    private val replay by option(
-        "--replay", "-r",
-        help = "Replay historical events from database before watching"
-    )
+        help = "Filter by agent ID (e.g., agent-pm, agent-dev). Repeatable."
+    ).multiple()
 
     private val terminal = Terminal()
 
     override fun run() = runBlocking {
-        terminal.println(
-            bold(cyan("AMPERE")) + " - AniMA Model Protocol Example Runtime Environment"
-        )
+        // Show startup banner
+        terminal.println(bold(cyan("⚡ AMPERE")) + " - Connecting to AniMA Model Protocol virtual environment")
         terminal.println(dim("Connecting to event stream..."))
         terminal.println()
 
-        // Create database (in-memory for now)
+        // Set up the event infrastructure
+        val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
-        Database.Schema.create(driver)
-        val database = Database(driver)
 
-        // Create coroutine scope for the environment
-        val scope = CoroutineScope(Dispatchers.Default)
+        try {
+            // Create database schema
+            Database.Schema.create(driver)
+            val database = Database(driver)
 
-        // Create environment service using the factory method
-        val environment = EnvironmentService.create(
-            database = database,
-            scope = scope,
-        )
+            // Create environment service - this handles all infrastructure setup
+            val environment = EnvironmentService.create(
+                database = database,
+                scope = scope,
+            )
 
-        // Create event renderer
-        val renderer = EventRenderer(terminal)
+            // Start the environment
+            environment.start()
 
-        // Subscribe to all events
-        val watcherId = "cli-watcher"
-        terminal.println(dim("Subscribing to events..."))
-        environment.subscribeToAll(
-            agentId = watcherId,
-            handler = EventHandler { event, _ ->
-                // Filter by event type if specified
-                if (eventType != null && !event.eventClassType.second.equals(eventType, ignoreCase = true)) {
-                    return@EventHandler
+            // Create event renderer
+            val renderer = EventRenderer(terminal)
+
+            // Build filters from command options
+            val filters = buildFilters()
+
+            // Show active filters
+            showActiveFilters(filters)
+
+            // Subscribe to live events and render them
+            terminal.println(bold("Watching events... (Ctrl+C to stop)"))
+            terminal.println()
+
+            environment.eventRelayService.subscribeToLiveEvents(filters)
+                .collect { event ->
+                    renderer.render(event)
                 }
+        } catch (e: Exception) {
+            terminal.println(red("Error: ${e.message}"))
+            throw e
+        } finally {
+            driver.close()
+            scope.cancel()
+        }
+    }
 
-                // Filter by agent if specified
-                if (agent != null && event.eventSource.getIdentifier() != agent) {
-                    return@EventHandler
-                }
-
-                // Render the event
-                renderer.render(event)
+    /**
+     * Build EventRelayFilters from command-line options.
+     */
+    private fun buildFilters(): EventRelayFilters {
+        // Parse event types
+        val eventTypes = if (filterTypes.isNotEmpty()) {
+            val parsed = EventTypeParser.parseMultiple(filterTypes)
+            if (parsed.isEmpty()) {
+                terminal.println(yellow("Warning: No valid event types found in filters"))
+                terminal.println(yellow("Available types: ${EventTypeParser.getAllEventTypeNames().sorted().joinToString(", ")}"))
             }
+            parsed
+        } else {
+            null
+        }
+
+        // Parse agent IDs to EventSource.Agent objects
+        val eventSources = if (filterAgents.isNotEmpty()) {
+            filterAgents.map { EventSource.Agent(it) }.toSet()
+        } else {
+            null
+        }
+
+        return EventRelayFilters(
+            eventTypes = eventTypes,
+            eventSources = eventSources
         )
+    }
 
-        // Start the environment
-        environment.start()
-
-        terminal.println(bold(cyan("✓")) + " Watching events (Press Ctrl+C to stop)")
+    /**
+     * Display active filters to the user.
+     */
+    private fun showActiveFilters(filters: EventRelayFilters) {
+        if (filters.isEmpty()) {
+            terminal.println(dim("Watching all events (no filters)"))
+        } else {
+            terminal.println(dim("Active filters:"))
+            filters.eventTypes?.let { types ->
+                terminal.println(dim("  Event types: ${types.map { it.second }.joinToString(", ")}"))
+            }
+            filters.eventSources?.let { sources ->
+                terminal.println(dim("  Agents: ${sources.map { (it as EventSource.Agent).agentId }.joinToString(", ")}"))
+            }
+        }
         terminal.println()
-
-        // Keep the command running
-        // TODO: Add graceful shutdown handling
-        Thread.currentThread().join()
     }
 }

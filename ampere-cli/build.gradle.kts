@@ -1,5 +1,6 @@
 @file:OptIn(ExperimentalKotlinGradlePluginApi::class)
 
+import org.gradle.jvm.application.tasks.CreateStartScripts
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -45,6 +46,9 @@ kotlin {
 
                 // DateTime
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
+
+                // SLF4J no-op implementation to suppress warnings
+                implementation("org.slf4j:slf4j-nop:2.0.16")
             }
         }
 
@@ -53,6 +57,7 @@ kotlin {
                 implementation(kotlin("test"))
                 implementation("org.junit.jupiter:junit-jupiter:5.10.2")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+                implementation("com.github.ajalt.clikt:clikt:4.4.0")
             }
         }
     }
@@ -60,4 +65,9 @@ kotlin {
 
 tasks.named<Test>("jvmTest") {
     useJUnitPlatform()
+}
+
+// Configure JVM arguments for the start scripts to suppress JNA warnings
+tasks.named<CreateStartScripts>("startScriptsForJvm") {
+    defaultJvmOpts = listOf("--enable-native-access=ALL-UNNAMED")
 }
