@@ -1,6 +1,5 @@
 package link.socket.ampere
 
-import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
@@ -10,15 +9,10 @@ import com.github.ajalt.mordant.rendering.TextColors.yellow
 import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
-import link.socket.ampere.agents.events.EnvironmentService
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.relay.EventRelayFilters
-import link.socket.ampere.db.Database
+import link.socket.ampere.agents.events.relay.EventRelayService
 import link.socket.ampere.renderer.EventRenderer
 import link.socket.ampere.util.EventTypeParser
 
@@ -27,8 +21,12 @@ import link.socket.ampere.util.EventTypeParser
  *
  * This is the CLI's primary sensory interface - it lets you feel the pulse
  * of the organizational organism by streaming events as they occur.
+ *
+ * @param eventRelayService The service for subscribing to events (injected)
  */
-class WatchCommand : CliktCommand(
+class WatchCommand(
+    private val eventRelayService: EventRelayService,
+) : CliktCommand(
     name = "watch",
     help = """
         Watch events streaming from the AniMA substrate in real-time.
@@ -63,24 +61,7 @@ class WatchCommand : CliktCommand(
         terminal.println(dim("Connecting to event stream..."))
         terminal.println()
 
-        // Set up the event infrastructure
-        val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
-
         try {
-            // Create database schema
-            Database.Schema.create(driver)
-            val database = Database(driver)
-
-            // Create environment service - this handles all infrastructure setup
-            val environment = EnvironmentService.create(
-                database = database,
-                scope = scope,
-            )
-
-            // Start the environment
-            environment.start()
-
             // Create event renderer
             val renderer = EventRenderer(terminal)
 
@@ -94,16 +75,13 @@ class WatchCommand : CliktCommand(
             terminal.println(bold("Watching events... (Ctrl+C to stop)"))
             terminal.println()
 
-            environment.eventRelayService.subscribeToLiveEvents(filters)
+            eventRelayService.subscribeToLiveEvents(filters)
                 .collect { event ->
                     renderer.render(event)
                 }
         } catch (e: Exception) {
             terminal.println(red("Error: ${e.message}"))
             throw e
-        } finally {
-            driver.close()
-            scope.cancel()
         }
     }
 
