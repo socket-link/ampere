@@ -5,7 +5,7 @@ import kotlinx.coroutines.launch
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.events.MessageEvent
 import link.socket.ampere.agents.events.api.EventHandler
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.subscription.Subscription
 
 /**
@@ -19,7 +19,7 @@ import link.socket.ampere.agents.events.subscription.Subscription
 class EscalationEventHandler(
     private val coroutineScope: CoroutineScope,
     private val humanNotifier: Notifier.Human,
-    private val eventBus: EventBus,
+    private val eventSerialBus: EventSerialBus,
     private val agentId: AgentId = "escalation-handler",
 ) : EventHandler<MessageEvent.EscalationRequested, Subscription>() {
 
@@ -31,7 +31,7 @@ class EscalationEventHandler(
      */
     fun start() {
         coroutineScope.launch {
-            eventBus.subscribe(
+            eventSerialBus.subscribe(
                 agentId = agentId,
                 eventClassType = MessageEvent.EscalationRequested.EVENT_CLASS_TYPE,
                 handler = EventHandler { event, subscription ->

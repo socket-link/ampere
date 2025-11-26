@@ -10,8 +10,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
-import link.socket.ampere.agents.events.bus.EventBus
-import link.socket.ampere.agents.events.bus.EventBusFactory
+import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.db.Database
 
@@ -20,10 +20,10 @@ class EventSubscriptionTest {
 
     private val agentId = "agent-1"
     private val scope = TestScope(UnconfinedTestDispatcher())
-    private val eventBusFactory = EventBusFactory(scope)
+    private val eventSerialBusFactory = EventSerialBusFactory(scope)
 
     private lateinit var driver: JdbcSqliteDriver
-    private lateinit var eventBus: EventBus
+    private lateinit var eventSerialBus: EventSerialBus
     private lateinit var eventRepository: EventRepository
 
     @BeforeTest
@@ -32,7 +32,7 @@ class EventSubscriptionTest {
         Database.Schema.create(driver)
         val database = Database(driver)
         eventRepository = EventRepository(link.socket.ampere.data.DEFAULT_JSON, scope, database)
-        eventBus = eventBusFactory.create()
+        eventSerialBus = eventSerialBusFactory.create()
     }
 
     @AfterTest
@@ -54,8 +54,8 @@ class EventSubscriptionTest {
 
     @Test
     fun `event router merge and unsubscribe semantics`() {
-        val api = AgentEventApiFactory(eventRepository, eventBus).create(agentId)
-        val router = EventRouter(api, eventBus)
+        val api = AgentEventApiFactory(eventRepository, eventSerialBus).create(agentId)
+        val router = EventRouter(api, eventSerialBus)
 
         // Subscribe to TaskCreated, then to QuestionRaised
         router.subscribeToEventClassType(agentId, Event.TaskCreated.EVENT_CLASS_TYPE)

@@ -1,7 +1,7 @@
 package link.socket.ampere.agents.events
 
 import link.socket.ampere.agents.events.api.AgentEventApi
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.meetings.Meeting
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
@@ -28,7 +28,7 @@ import link.socket.ampere.agents.events.meetings.MeetingSchedulingService
 class EnvironmentOrchestrator(
     private val meetingRepository: MeetingRepository,
     private val ticketRepository: TicketRepository,
-    private val eventBus: EventBus,
+    private val eventSerialBus: EventSerialBus,
     private val messageApi: AgentMessageApi,
     private val eventApi: AgentEventApi,
     private val logger: EventLogger = ConsoleEventLogger(),
@@ -38,7 +38,7 @@ class EnvironmentOrchestrator(
      */
     val meetingOrchestrator: MeetingOrchestrator = MeetingOrchestrator(
         repository = meetingRepository,
-        eventBus = eventBus,
+        eventSerialBus = eventSerialBus,
         messageApi = messageApi,
         logger = logger,
     )
@@ -51,7 +51,7 @@ class EnvironmentOrchestrator(
      */
     val ticketOrchestrator: TicketOrchestrator = TicketOrchestrator(
         ticketRepository = ticketRepository,
-        eventBus = eventBus,
+        eventSerialBus = eventSerialBus,
         messageApi = messageApi,
         meetingSchedulingService = createMeetingSchedulingService(),
         logger = logger,
@@ -62,7 +62,7 @@ class EnvironmentOrchestrator(
      */
     val eventRouter: EventRouter = EventRouter(
         eventApi = eventApi,
-        eventBus = eventBus,
+        eventSerialBus = eventSerialBus,
     )
 
     /**

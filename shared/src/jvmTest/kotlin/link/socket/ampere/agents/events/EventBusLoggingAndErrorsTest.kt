@@ -13,7 +13,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.events.subscription.Subscription
@@ -87,7 +87,7 @@ class EventBusLoggingAndErrorsTest {
         runBlocking {
             val logger = TestLogger()
             val repo = EventRepository(json, scope, db)
-            val bus = EventBus(scope, logger)
+            val bus = EventSerialBus(scope, logger)
 
             var goodCalled = false
             bus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
@@ -118,7 +118,7 @@ class EventBusLoggingAndErrorsTest {
         runBlocking {
             val logger = TestLogger()
             val repo = EventRepository(json, scope, db)
-            val bus = EventBus(scope, logger)
+            val bus = EventSerialBus(scope, logger)
 
             var delivered = false
             bus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
@@ -149,7 +149,7 @@ class EventBusLoggingAndErrorsTest {
         runBlocking {
             val logger = TestLogger()
             val repo = EventRepository(json, scope, db)
-            val bus = EventBus(scope, logger)
+            val bus = EventSerialBus(scope, logger)
 
             // Insert a malformed row directly
             db.eventStoreQueries.insertEvent(

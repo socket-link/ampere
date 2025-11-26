@@ -117,6 +117,25 @@ class EventRepository(
             }
         }
 
+    /**
+     * Retrieve events between [fromTime] and [toTime] (inclusive), ascending by time.
+     */
+    suspend fun getEventsBetween(fromTime: Instant, toTime: Instant): Result<List<Event>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                queries
+                    .getEventsBetween(
+                        fromTime.toEpochMilliseconds(),
+                        toTime.toEpochMilliseconds()
+                    )
+                    .executeAsList()
+            }.map { rows ->
+                rows.map { row ->
+                    decode(row.payload)
+                }
+            }
+        }
+
     private fun encode(event: Event): String = try {
         json.encodeToString(
             serializer = Event.serializer(),

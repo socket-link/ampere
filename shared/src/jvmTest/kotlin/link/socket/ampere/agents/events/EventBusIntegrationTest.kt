@@ -22,7 +22,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
-import link.socket.ampere.agents.events.bus.EventBusFactory
+import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.data.DEFAULT_JSON
@@ -33,7 +33,7 @@ class EventBusIntegrationTest {
 
     private val json = DEFAULT_JSON
     private val scope = TestScope(UnconfinedTestDispatcher())
-    private val eventBusFactory = EventBusFactory(scope)
+    private val eventSerialBusFactory = EventSerialBusFactory(scope)
 
     private lateinit var driver: JdbcSqliteDriver
     private lateinit var eventRepository: EventRepository
@@ -84,7 +84,7 @@ class EventBusIntegrationTest {
             // First bus publishes events
             val driver1 = JdbcSqliteDriver("jdbc:sqlite:$dbFile")
             Database.Schema.create(driver1)
-            val bus1 = eventBusFactory.create()
+            val bus1 = eventSerialBusFactory.create()
 
             val e1 = taskEvent("evt-bus-1", ts = Instant.fromEpochSeconds((10_000)))
             val e2 = questionEvent("evt-bus-2", ts = Instant.fromEpochSeconds(20_000))
@@ -96,7 +96,7 @@ class EventBusIntegrationTest {
             driver1.close()
 
             val driver2 = JdbcSqliteDriver("jdbc:sqlite:$dbFile")
-            val bus2 = eventBusFactory.create()
+            val bus2 = eventSerialBusFactory.create()
             val api2 = AgentEventApiFactory(eventRepository, bus2).create("agent-A")
 
             // History query
@@ -135,7 +135,7 @@ class EventBusIntegrationTest {
     @Test
     fun `publish failures do not crash bus`() {
         runBlocking {
-            val bus = eventBusFactory.create()
+            val bus = eventSerialBusFactory.create()
 
             var goodHandlerCalled = false
             bus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
@@ -161,7 +161,7 @@ class EventBusIntegrationTest {
     @Test
     fun `concurrent publishing is safe and persists all events`() {
         runBlocking {
-            val bus = eventBusFactory.create()
+            val bus = eventSerialBusFactory.create()
 
             val n = 25
             coroutineScope {

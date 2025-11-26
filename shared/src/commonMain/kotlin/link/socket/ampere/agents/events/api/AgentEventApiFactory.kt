@@ -2,14 +2,14 @@ package link.socket.ampere.agents.events.api
 
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.events.EventRepository
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
 
 /** Factory to create [AgentEventApi] instances wired to a persistent EventBus. */
 class AgentEventApiFactory(
     private val eventRepository: EventRepository,
-    private val eventBus: EventBus,
+    private val eventSerialBus: EventSerialBus,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
     /**
@@ -19,7 +19,7 @@ class AgentEventApiFactory(
         AgentEventApi(
             agentId = agentId,
             eventRepository = eventRepository,
-            eventBus = eventBus,
+            eventSerialBus = eventSerialBus,
             logger = logger,
         )
 }

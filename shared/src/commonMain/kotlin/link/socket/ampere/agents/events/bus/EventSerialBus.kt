@@ -18,20 +18,23 @@ typealias HandlerMap = MutableMap<EventClassType, List<EventHandler<Event, Subsc
 typealias SubscriptionMap = MutableMap<EventClassType, Subscription>
 
 /**
- * Type-safe event bus for publish-subscribe communication between agents with optional persistence.
+ * EventSerialBus (ESB) is a thread-safe, Kotlin Multiplatform-compatible event bus.
+ * Uses serialized event subscriptions to allow asynchronous two-way communication, which is then used
+ * to enable publish-subscribe communication between Agents and Humans.
  *
+ * Features:
  * - Thread-safe and Kotlin Multiplatform compatible
  * - Handlers are invoked asynchronously using the provided [CoroutineScope]
  * - Persistence is handled by higher-level APIs; EventBus only dispatches events to subscribers
  */
-class EventBus(
+class EventSerialBus(
     private val scope: CoroutineScope,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
-    // Map event from EventClassType -> (subscriptionId, eventHandler)
+    /** Map event from EventClassType -> (subscriptionId, eventHandler) */
     private val handlerMap: HandlerMap = mutableMapOf()
 
-    // Map from subscriptionId -> EventClassType (to efficiently locate the handler on unsubscribe)
+    /** Map from subscriptionId -> EventClassType (to efficiently locate the handler on unsubscribe) */
     private val subscriptionMap: SubscriptionMap = mutableMapOf()
 
     private val mutex = Mutex()
@@ -91,7 +94,13 @@ class EventBus(
         // Register handler under lock
         runBlockingLock {
             val existing = handlerMap[eventClassType]
-            val updated = if (existing == null) listOf(eventHandler) else existing + eventHandler
+
+            val updated = if (existing == null) {
+                listOf(eventHandler)
+            } else {
+                existing + eventHandler
+            }
+
             handlerMap[eventClassType] = updated
             subscriptionMap.getOrPut(eventClassType) { subscription }
         }
@@ -115,7 +124,7 @@ class EventBus(
         }
     }
 
-    // Helper to reuse the same locking pattern in non-suspending API without exposing Mutex.
+    /** Helper to reuse the same locking pattern in non-suspending API without exposing Mutex */
     private inline fun <R> runBlockingLock(
         crossinline block: () -> R,
     ): R = runBlocking {
@@ -127,7 +136,7 @@ class EventBus(
 /**
  * Inline reified helper for ergonomic subscriptions.
  */
-inline fun <reified E : Event, reified S : Subscription> EventBus.subscribe(
+inline fun <reified E : Event, reified S : Subscription> EventSerialBus.subscribe(
     agentId: AgentId,
     eventClassType: EventClassType,
     noinline handler: suspend (E, S?) -> Unit,

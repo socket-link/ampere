@@ -9,7 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.core.status.TicketStatus
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
 
@@ -294,7 +294,7 @@ class TicketEventTest {
     @Test
     fun `publishing TicketCreated event to EventBus does not throw`() = runTest {
         val scope = CoroutineScope(Dispatchers.Default)
-        val eventBus = EventBus(scope)
+        val eventSerialBus = EventSerialBus(scope)
 
         val now = Clock.System.now()
         val event = TicketEvent.TicketCreated(
@@ -309,7 +309,7 @@ class TicketEventTest {
         )
 
         // This should not throw - EventBus doesn't require registration
-        eventBus.publish(event)
+        eventSerialBus.publish(event)
 
         // If we get here without exception, the test passes
         assertTrue(true)

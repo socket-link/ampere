@@ -15,8 +15,8 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.EventStatus
 import link.socket.ampere.agents.events.MessageEvent
-import link.socket.ampere.agents.events.bus.EventBus
-import link.socket.ampere.agents.events.bus.EventBusFactory
+import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 
@@ -27,12 +27,12 @@ class AgentMessageApiTest {
     private val stubAgentId2 = "agent-B"
     private val json = DEFAULT_JSON
     private val scope = TestScope(UnconfinedTestDispatcher())
-    private val eventBusFactory = EventBusFactory(scope)
+    private val eventSerialBusFactory = EventSerialBusFactory(scope)
 
     private lateinit var driver: JdbcSqliteDriver
     private lateinit var eventRepository: EventRepository
     private lateinit var messageRepository: MessageRepository
-    private lateinit var eventBus: EventBus
+    private lateinit var eventSerialBus: EventSerialBus
     private lateinit var agentMessageApiFactory: AgentMessageApiFactory
 
     @BeforeTest
@@ -43,8 +43,8 @@ class AgentMessageApiTest {
 
         eventRepository = EventRepository(json, scope, database)
         messageRepository = MessageRepository(json, scope, database)
-        eventBus = eventBusFactory.create()
-        agentMessageApiFactory = AgentMessageApiFactory(messageRepository, eventBus)
+        eventSerialBus = eventSerialBusFactory.create()
+        agentMessageApiFactory = AgentMessageApiFactory(messageRepository, eventSerialBus)
     }
 
     @AfterTest

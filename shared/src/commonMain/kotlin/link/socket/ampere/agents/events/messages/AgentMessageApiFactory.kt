@@ -1,11 +1,11 @@
 package link.socket.ampere.agents.events.messages
 
 import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 
 class AgentMessageApiFactory(
     private val messageRepository: MessageRepository,
-    private val eventBus: EventBus,
+    private val eventSerialBus: EventSerialBus,
 ) {
     /**
      * Create an [AgentMessageApi] for the given [agentId].
@@ -14,6 +14,6 @@ class AgentMessageApiFactory(
         AgentMessageApi(
             agentId = agentId,
             messageRepository = messageRepository,
-            eventBus = eventBus,
+            eventSerialBus = eventSerialBus,
         )
 }

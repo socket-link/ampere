@@ -12,7 +12,7 @@ import link.socket.ampere.agents.core.tasks.MeetingTask
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.TicketEvent
 import link.socket.ampere.agents.events.Urgency
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.meetings.Meeting
 import link.socket.ampere.agents.events.meetings.MeetingId
 import link.socket.ampere.agents.events.meetings.MeetingInvitation
@@ -32,7 +32,7 @@ import link.socket.ampere.util.randomUUID
  */
 class TicketOrchestrator(
     private val ticketRepository: TicketRepository,
-    private val eventBus: EventBus,
+    private val eventSerialBus: EventSerialBus,
     private val messageApi: AgentMessageApi,
     private val meetingSchedulingService: MeetingSchedulingService,
     private val logger: EventLogger = ConsoleEventLogger(),
@@ -102,7 +102,7 @@ class TicketOrchestrator(
         )
 
         // Publish TicketCreated event
-        eventBus.publish(
+        eventSerialBus.publish(
             TicketEvent.TicketCreated(
                 eventId = randomUUID(),
                 ticketId = createdTicket.id,
@@ -185,7 +185,7 @@ class TicketOrchestrator(
             ?: return Result.failure(TicketError.TicketNotFound(ticketId))
 
         // Publish TicketStatusChanged event
-        eventBus.publish(
+        eventSerialBus.publish(
             TicketEvent.TicketStatusChanged(
                 eventId = randomUUID(),
                 ticketId = ticketId,
@@ -269,7 +269,7 @@ class TicketOrchestrator(
             ?: return Result.failure(TicketError.TicketNotFound(ticketId))
 
         // Publish TicketAssigned event
-        eventBus.publish(
+        eventSerialBus.publish(
             TicketEvent.TicketAssigned(
                 eventId = randomUUID(),
                 ticketId = ticketId,
@@ -368,7 +368,7 @@ class TicketOrchestrator(
             ?: return Result.failure(TicketError.TicketNotFound(ticketId))
 
         // Publish TicketBlocked event
-        eventBus.publish(
+        eventSerialBus.publish(
             TicketEvent.TicketBlocked(
                 eventId = randomUUID(),
                 ticketId = ticketId,
@@ -526,7 +526,7 @@ class TicketOrchestrator(
         }
 
         // Publish TicketMeetingScheduled event
-        eventBus.publish(
+        eventSerialBus.publish(
             TicketEvent.TicketMeetingScheduled(
                 eventId = randomUUID(),
                 ticketId = ticketId,

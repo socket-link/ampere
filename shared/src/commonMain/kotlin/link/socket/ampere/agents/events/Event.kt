@@ -25,11 +25,13 @@ sealed class EventSource {
     data class Agent(val agentId: AgentId) : EventSource()
 
     @Serializable
-    data object Human : EventSource()
+    data object Human : EventSource() {
+        const val ID = "human"
+    }
 
     fun getIdentifier(): String = when (this) {
         is Agent -> agentId
-        is Human -> "human"
+        is Human -> Human.ID
     }
 }
 

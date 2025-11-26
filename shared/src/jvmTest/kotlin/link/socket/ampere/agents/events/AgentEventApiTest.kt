@@ -16,8 +16,8 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
 import link.socket.ampere.agents.events.api.filterForEventsCreatedByMe
-import link.socket.ampere.agents.events.bus.EventBus
-import link.socket.ampere.agents.events.bus.EventBusFactory
+import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 
@@ -28,11 +28,11 @@ class AgentEventApiTest {
     private val stubAgentId2 = "agent-B"
     private val json = DEFAULT_JSON
     private val scope = TestScope(UnconfinedTestDispatcher())
-    private val eventBusFactory = EventBusFactory(scope)
+    private val eventSerialBusFactory = EventSerialBusFactory(scope)
 
     private lateinit var driver: JdbcSqliteDriver
     private lateinit var eventRepository: EventRepository
-    private lateinit var eventBus: EventBus
+    private lateinit var eventSerialBus: EventSerialBus
     private lateinit var agentEventApiFactory: AgentEventApiFactory
 
     @BeforeTest
@@ -42,8 +42,8 @@ class AgentEventApiTest {
         val database = Database(driver)
 
         eventRepository = EventRepository(json, scope, database)
-        eventBus = eventBusFactory.create()
-        agentEventApiFactory = AgentEventApiFactory(eventRepository, eventBus)
+        eventSerialBus = eventSerialBusFactory.create()
+        agentEventApiFactory = AgentEventApiFactory(eventRepository, eventSerialBus)
     }
 
     @AfterTest

@@ -17,7 +17,7 @@ import link.socket.ampere.agents.core.status.TicketStatus
 import link.socket.ampere.agents.events.Event
 import link.socket.ampere.agents.events.TicketEvent
 import link.socket.ampere.agents.events.api.EventHandler
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
 import link.socket.ampere.agents.events.meetings.MeetingSchedulingService
@@ -35,7 +35,7 @@ class TicketOrchestratorTest {
     private lateinit var meetingRepository: MeetingRepository
     private lateinit var ticketRepository: TicketRepository
 
-    private lateinit var eventBus: EventBus
+    private lateinit var eventSerialBus: EventSerialBus
     private lateinit var messageApi: AgentMessageApi
     private lateinit var meetingOrchestrator: MeetingOrchestrator
     private lateinit var ticketOrchestrator: TicketOrchestrator
@@ -58,12 +58,12 @@ class TicketOrchestratorTest {
         meetingRepository = MeetingRepository(DEFAULT_JSON, testScope, database)
         ticketRepository = TicketRepository(database)
 
-        eventBus = EventBus(testScope)
-        messageApi = AgentMessageApi(stubOrchestratorAgentId, messageRepository, eventBus)
+        eventSerialBus = EventSerialBus(testScope)
+        messageApi = AgentMessageApi(stubOrchestratorAgentId, messageRepository, eventSerialBus)
 
         meetingOrchestrator = MeetingOrchestrator(
             repository = meetingRepository,
-            eventBus = eventBus,
+            eventSerialBus = eventSerialBus,
             messageApi = messageApi,
         )
 
@@ -74,34 +74,34 @@ class TicketOrchestratorTest {
 
         ticketOrchestrator = TicketOrchestrator(
             ticketRepository = ticketRepository,
-            eventBus = eventBus,
+            eventSerialBus = eventSerialBus,
             messageApi = messageApi,
             meetingSchedulingService = meetingSchedulingService,
         )
 
         // Subscribe to capture published events
-        eventBus.subscribe(
+        eventSerialBus.subscribe(
             agentId = "test-subscriber",
             eventClassType = TicketEvent.TicketCreated.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },
         )
-        eventBus.subscribe(
+        eventSerialBus.subscribe(
             agentId = "test-subscriber",
             eventClassType = TicketEvent.TicketStatusChanged.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },
         )
-        eventBus.subscribe(
+        eventSerialBus.subscribe(
             agentId = "test-subscriber",
             eventClassType = TicketEvent.TicketAssigned.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },
         )
-        eventBus.subscribe(
+        eventSerialBus.subscribe(
             agentId = "test-subscriber",
             eventClassType = TicketEvent.TicketBlocked.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->

@@ -14,7 +14,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.core.status.TicketStatus
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
 import link.socket.ampere.agents.events.meetings.MeetingSchedulingService
@@ -32,7 +32,7 @@ class BacklogAnalyticsTest {
     private lateinit var meetingRepository: MeetingRepository
     private lateinit var ticketRepository: TicketRepository
 
-    private lateinit var eventBus: EventBus
+    private lateinit var eventSerialBus: EventSerialBus
     private lateinit var messageApi: AgentMessageApi
     private lateinit var meetingOrchestrator: MeetingOrchestrator
     private lateinit var ticketOrchestrator: TicketOrchestrator
@@ -53,12 +53,12 @@ class BacklogAnalyticsTest {
         meetingRepository = MeetingRepository(DEFAULT_JSON, testScope, database)
         ticketRepository = TicketRepository(database)
 
-        eventBus = EventBus(testScope)
-        messageApi = AgentMessageApi(stubOrchestratorAgentId, messageRepository, eventBus)
+        eventSerialBus = EventSerialBus(testScope)
+        messageApi = AgentMessageApi(stubOrchestratorAgentId, messageRepository, eventSerialBus)
 
         meetingOrchestrator = MeetingOrchestrator(
             repository = meetingRepository,
-            eventBus = eventBus,
+            eventSerialBus = eventSerialBus,
             messageApi = messageApi,
         )
 
@@ -69,7 +69,7 @@ class BacklogAnalyticsTest {
 
         ticketOrchestrator = TicketOrchestrator(
             ticketRepository = ticketRepository,
-            eventBus = eventBus,
+            eventSerialBus = eventSerialBus,
             messageApi = messageApi,
             meetingSchedulingService = meetingSchedulingService,
         )

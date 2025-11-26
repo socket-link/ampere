@@ -10,7 +10,7 @@ import link.socket.ampere.agents.core.status.MeetingStatus
 import link.socket.ampere.agents.core.status.TaskStatus
 import link.socket.ampere.agents.events.MeetingEvent
 import link.socket.ampere.agents.events.api.EventHandler
-import link.socket.ampere.agents.events.bus.EventBus
+import link.socket.ampere.agents.events.bus.EventSerialBus
 
 /**
  * Enables agents to subscribe to meeting events and automatically participate when required.
@@ -18,7 +18,7 @@ import link.socket.ampere.agents.events.bus.EventBus
  * agent participation in meetings.
  */
 class MeetingParticipationHandler(
-    private val eventBus: EventBus,
+    private val eventSerialBus: EventSerialBus,
     private val messageApi: link.socket.ampere.agents.events.messages.AgentMessageApi,
     private val meetingRepository: MeetingRepository,
 ) {
@@ -59,7 +59,7 @@ class MeetingParticipationHandler(
      */
     fun initialize() {
         // Subscribe to MeetingStarted events
-        eventBus.subscribe(
+        eventSerialBus.subscribe(
             agentId = "meeting-participation-handler",
             eventClassType = MeetingEvent.MeetingStarted.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
@@ -70,7 +70,7 @@ class MeetingParticipationHandler(
         )
 
         // Subscribe to AgendaItemStarted events
-        eventBus.subscribe(
+        eventSerialBus.subscribe(
             agentId = "meeting-participation-handler",
             eventClassType = MeetingEvent.AgendaItemStarted.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->
@@ -81,7 +81,7 @@ class MeetingParticipationHandler(
         )
 
         // Subscribe to MeetingCompleted events
-        eventBus.subscribe(
+        eventSerialBus.subscribe(
             agentId = "meeting-participation-handler",
             eventClassType = MeetingEvent.MeetingCompleted.EVENT_CLASS_TYPE,
             handler = EventHandler { event, _ ->

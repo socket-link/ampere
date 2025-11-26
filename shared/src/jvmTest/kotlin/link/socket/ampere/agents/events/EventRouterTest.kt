@@ -12,8 +12,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
-import link.socket.ampere.agents.events.bus.EventBus
-import link.socket.ampere.agents.events.bus.EventBusFactory
+import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.db.Database
@@ -22,10 +22,10 @@ import link.socket.ampere.db.Database
 class EventRouterTest {
 
     private val scope = TestScope(UnconfinedTestDispatcher())
-    private val eventBusFactory = EventBusFactory(scope)
+    private val eventSerialBusFactory = EventSerialBusFactory(scope)
 
     private lateinit var driver: JdbcSqliteDriver
-    private lateinit var eventBus: EventBus
+    private lateinit var eventSerialBus: EventSerialBus
     private lateinit var eventRepository: EventRepository
     private lateinit var agentEventApiFactory: AgentEventApiFactory
 
@@ -35,8 +35,8 @@ class EventRouterTest {
         Database.Schema.create(driver)
         val database = Database(driver)
         eventRepository = EventRepository(link.socket.ampere.data.DEFAULT_JSON, scope, database)
-        eventBus = eventBusFactory.create()
-        agentEventApiFactory = AgentEventApiFactory(eventRepository, eventBus)
+        eventSerialBus = eventSerialBusFactory.create()
+        agentEventApiFactory = AgentEventApiFactory(eventRepository, eventSerialBus)
     }
 
     @AfterTest
@@ -47,14 +47,14 @@ class EventRouterTest {
     @Test
     fun `routes TaskCreated to subscribed agents as NotificationEvent`() = runBlocking {
         val routerApi = agentEventApiFactory.create("router-agent")
-        val router = EventRouter(routerApi, eventBus)
+        val router = EventRouter(routerApi, eventSerialBus)
 
         val targetAgent = "agent-b"
         router.subscribeToEventClassType(targetAgent, Event.TaskCreated.EVENT_CLASS_TYPE)
 
         // Capture notifications to agents
         var notifications = mutableListOf<NotificationEvent.ToAgent<*>>()
-        eventBus.subscribe<NotificationEvent.ToAgent<*>, Subscription>(
+        eventSerialBus.subscribe<NotificationEvent.ToAgent<*>, Subscription>(
             agentId = "observer",
             eventClassType = NotificationEvent.ToAgent.EVENT_CLASS_TYPE,
         ) { event, _ ->
