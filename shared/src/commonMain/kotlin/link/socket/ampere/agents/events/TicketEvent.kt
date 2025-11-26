@@ -5,10 +5,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.core.AssignedTo
+import link.socket.ampere.agents.core.status.TicketStatus
 import link.socket.ampere.agents.events.meetings.MeetingId
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.events.tickets.TicketPriority
-import link.socket.ampere.agents.events.tickets.TicketStatus
 import link.socket.ampere.agents.events.tickets.TicketType
 
 /**

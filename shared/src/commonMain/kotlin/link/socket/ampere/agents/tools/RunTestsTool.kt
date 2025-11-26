@@ -1,22 +1,34 @@
 package link.socket.ampere.agents.tools
 
-import link.socket.ampere.agents.core.AutonomyLevel
-import link.socket.ampere.agents.core.Outcome
-import link.socket.ampere.agents.events.tasks.Task
+import link.socket.ampere.agents.core.actions.AgentActionAutonomy
+import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
+import link.socket.ampere.agents.core.outcomes.Outcome
+import link.socket.ampere.agents.core.tasks.Task
+import link.socket.ampere.agents.execution.request.ExecutionContext
+import link.socket.ampere.agents.execution.request.ExecutionRequest
 
-/**
- * Expect declaration for a tool that executes project tests via Gradle.
- * Implementations should execute tests at the given project root and
- * return the combined output with success based on process exit code.
- */
-expect class RunTestsTool(projectRoot: String) : Tool {
-    override val id: ToolId
-    override val name: String
-    override val description: String
-    override val requiredAutonomyLevel: AutonomyLevel
+expect suspend fun executeRunTests(
+    context: ExecutionContext.Code.ReadCode,
+): ExecutionOutcome.CodeReading
+
+data class RunTestsTool(
+    override val requiredAgentAutonomy: AgentActionAutonomy,
+) : Tool<ExecutionContext.Code.ReadCode> {
+
+    override val id: ToolId = ID
+    override val name: String = NAME
+    override val description: String = DESCRIPTION
+
     override suspend fun execute(
-        sourceTask: Task,
-        parameters: Map<String, Any?>,
-    ): Outcome
-    override fun validateParameters(parameters: Map<String, Any>): Boolean
+        executionRequest: ExecutionRequest<ExecutionContext.Code.ReadCode>,
+    ): Outcome {
+        // TODO: Handle execution request constraints
+        return executeRunTests(executionRequest.context)
+    }
+
+    companion object {
+        const val ID = "run_tests"
+        const val NAME = "Run Tests"
+        const val DESCRIPTION = "Runs tests in the current workspace."
+    }
 }

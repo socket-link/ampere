@@ -3,6 +3,7 @@ package link.socket.ampere.agents.events.tickets
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.core.status.TicketStatus
 
 /**
  * Perception state for Product Manager agent.
@@ -166,7 +167,7 @@ class ProductManagerAgent(
             // For now, collect from agent workloads and deduplicate
             agentWorkloads.values
                 .flatMap { it.assignedTickets }
-                .filter { it.status == TicketStatus.BLOCKED }
+                .filter { it.status == TicketStatus.Blocked }
                 .distinctBy { it.id }
         } else {
             emptyList()
@@ -180,7 +181,7 @@ class ProductManagerAgent(
             .filter { ticket ->
                 ticket.dueDate != null &&
                     ticket.dueDate < now &&
-                    ticket.status != TicketStatus.DONE
+                    ticket.status != TicketStatus.Done
             }
             .distinctBy { it.id }
 

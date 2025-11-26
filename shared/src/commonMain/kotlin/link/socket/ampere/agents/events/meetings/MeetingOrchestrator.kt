@@ -2,13 +2,15 @@ package link.socket.ampere.agents.events.meetings
 
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.core.AssignedTo
+import link.socket.ampere.agents.core.outcomes.MeetingOutcome
+import link.socket.ampere.agents.core.status.MeetingStatus
+import link.socket.ampere.agents.core.status.TaskStatus
+import link.socket.ampere.agents.core.tasks.MeetingTask
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.MeetingEvent
 import link.socket.ampere.agents.events.bus.EventBus
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageChannel
-import link.socket.ampere.agents.events.tasks.AgendaItem
-import link.socket.ampere.agents.events.tasks.Task
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
 import link.socket.ampere.agents.events.utils.generateUUID
@@ -44,7 +46,7 @@ class MeetingOrchestrator(
             )
         }
 
-        val scheduledTime = meeting.status.scheduledForOverride
+        val scheduledTime = meeting.status.scheduledFor
 
         val now = Clock.System.now()
         if (scheduledTime <= now) {
@@ -93,7 +95,7 @@ class MeetingOrchestrator(
                 messageThreadId = thread.id,
             ),
             status = MeetingStatus.Scheduled(
-                scheduledForOverride = scheduledTime,
+                scheduledFor = scheduledTime,
             ),
         )
 
@@ -204,7 +206,7 @@ class MeetingOrchestrator(
      * @param meetingId The ID of the meeting
      * @return Result containing the next agenda item, or null if all are complete
      */
-    suspend fun advanceAgenda(meetingId: String): Result<AgendaItem?> {
+    suspend fun advanceAgenda(meetingId: String): Result<MeetingTask.AgendaItem?> {
         // Retrieve meeting to validate it exists and is in progress
         val meetingResult = repository.getMeeting(meetingId)
         if (meetingResult.isFailure) {
@@ -231,20 +233,20 @@ class MeetingOrchestrator(
         val agendaItems = agendaItemsResult.getOrNull() ?: emptyList()
 
         // Find the next PENDING agenda item
-        val nextItem = agendaItems.find { it.status is Task.Status.Pending }
+        val nextItem = agendaItems.find { it.status is TaskStatus.Pending }
             ?: return Result.success(null) // All items are complete
 
         // Update its status to IN_PROGRESS
         val updateResult = repository.updateAgendaItemStatus(
             agendaItemId = nextItem.id,
-            status = Task.Status.InProgress,
+            status = TaskStatus.InProgress,
         )
         if (updateResult.isFailure) {
             return Result.failure(updateResult.exceptionOrNull() ?: Exception("Failed to update agenda item status"))
         }
 
         // Create the updated agenda item
-        val updatedItem = nextItem.copy(status = Task.Status.InProgress)
+        val updatedItem = nextItem.copy(status = TaskStatus.InProgress)
 
         // Publish AgendaItemStarted event
         eventBus.publish(
@@ -260,7 +262,7 @@ class MeetingOrchestrator(
         // Post a message to the meeting thread about the agenda item
         messageApi.postMessage(
             threadId = meeting.status.messagingDetails.messageThreadId,
-            content = "Now discussing: ${nextItem.topic}${nextItem.assignedTo?.let { " (assigned to ${it.getIdentifier()})" } ?: ""}",
+            content = "Now discussing: ${nextItem.title}${nextItem.assignedTo?.let { " (assigned to ${it.getIdentifier()})" } ?: ""}",
         )
 
         return Result.success(updatedItem)
@@ -349,7 +351,7 @@ class MeetingOrchestrator(
             scheduledTime?.let { append("Time: $it\n") }
             append("Agenda:\n")
             meeting.invitation.agenda.forEachIndexed { index, item ->
-                append("${index + 1}. ${item.topic}")
+                append("${index + 1}. ${item.title}")
                 item.assignedTo?.let { append(" (${it.getIdentifier()})") }
                 append("\n")
             }
@@ -371,7 +373,7 @@ class MeetingOrchestrator(
             )
             append("\n\nAgenda:\n")
             meeting.invitation.agenda.forEachIndexed { index, item ->
-                append("${index + 1}. ${item.topic}\n")
+                append("${index + 1}. ${item.title}\n")
             }
         }
     }
@@ -392,9 +394,9 @@ class MeetingOrchestrator(
                         }
                         is MeetingOutcome.ActionItem -> {
                             val assignee = when (val assigned = outcome.assignedTo) {
-                                is link.socket.ampere.agents.core.AssignedTo.Agent -> assigned.agentId
-                                is link.socket.ampere.agents.core.AssignedTo.Human -> "human"
-                                is link.socket.ampere.agents.core.AssignedTo.Team -> assigned.teamId
+                                is AssignedTo.Agent -> assigned.agentId
+                                is AssignedTo.Human -> "human"
+                                is AssignedTo.Team -> assigned.teamId
                             }
                             append("- Action Item: ${outcome.description} (assigned to $assignee)\n")
                         }

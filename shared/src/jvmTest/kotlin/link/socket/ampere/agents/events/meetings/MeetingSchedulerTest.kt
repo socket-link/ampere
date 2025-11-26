@@ -21,6 +21,9 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.core.AssignedTo
+import link.socket.ampere.agents.core.status.MeetingStatus
+import link.socket.ampere.agents.core.status.TaskStatus
+import link.socket.ampere.agents.core.tasks.MeetingTask.AgendaItem
 import link.socket.ampere.agents.events.Event
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.MeetingEvent
@@ -28,8 +31,6 @@ import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventBus
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
-import link.socket.ampere.agents.events.tasks.AgendaItem
-import link.socket.ampere.agents.events.tasks.Task
 import link.socket.ampere.db.Database
 import link.socket.ampere.util.randomUUID
 
@@ -116,8 +117,8 @@ class MeetingSchedulerTest {
         agendaItems: List<AgendaItem> = listOf(
             AgendaItem(
                 id = randomUUID(),
-                topic = "Topic 1",
-                status = Task.Status.Pending(),
+                title = "Topic 1",
+                status = TaskStatus.Pending,
                 assignedTo = AssignedTo.Agent("agent-alpha"),
             ),
         ),
@@ -127,7 +128,7 @@ class MeetingSchedulerTest {
     ): Meeting = Meeting(
         id = id,
         type = MeetingType.AdHoc("Test reason"),
-        status = MeetingStatus.Scheduled(scheduledForOverride = scheduledFor),
+        status = MeetingStatus.Scheduled(scheduledFor = scheduledFor),
         invitation = MeetingInvitation(
             title = title,
             agenda = agendaItems,

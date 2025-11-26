@@ -1,8 +1,8 @@
 package link.socket.ampere.agents.tools
 
 import java.io.File
-import link.socket.ampere.agents.core.AutonomyLevel
-import link.socket.ampere.agents.core.Outcome
+import link.socket.ampere.agents.core.actions.AgentActionAutonomy
+import link.socket.ampere.agents.core.outcomes.Outcome
 
 /**
  * Android actual for ReadCodebaseTool. Restricts reads to a sandboxed root.
@@ -12,7 +12,7 @@ actual class ReadCodebaseTool actual constructor(
 ) : Tool {
     actual override val name: String = "read_codebase"
     actual override val description: String = "Reads file content or directory structure"
-    actual override val requiredAutonomyLevel: AutonomyLevel = AutonomyLevel.FULLY_AUTONOMOUS
+    actual override val agentAutonomy: AgentActionAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS
 
     private fun resolveSafe(path: String): File {
         val base = File(rootDirectory).canonicalFile

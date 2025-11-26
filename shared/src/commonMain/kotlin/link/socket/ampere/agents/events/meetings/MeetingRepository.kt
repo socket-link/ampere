@@ -9,10 +9,12 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.core.AssignedTo
+import link.socket.ampere.agents.core.outcomes.MeetingOutcome
+import link.socket.ampere.agents.core.status.MeetingStatus
+import link.socket.ampere.agents.core.status.TaskStatus
+import link.socket.ampere.agents.core.tasks.AgendaItemId
+import link.socket.ampere.agents.core.tasks.MeetingTask
 import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.tasks.AgendaItem
-import link.socket.ampere.agents.events.tasks.AgendaItemId
-import link.socket.ampere.agents.events.tasks.Task
 import link.socket.ampere.data.Repository
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.meetings.MeetingStoreQueries
@@ -83,7 +85,7 @@ class MeetingRepository(
                     queries.insertAgendaItem(
                         id = agendaItem.id,
                         meetingId = meeting.id,
-                        topic = agendaItem.topic,
+                        topic = agendaItem.title,
                         assignedTo = agendaItem.assignedTo?.getIdentifier(),
                         assignedToType = if (agendaItem.assignedTo != null) "AGENT" else null,
                         status = getTaskStatusName(agendaItem.status),
@@ -138,9 +140,9 @@ class MeetingRepository(
                 // Reconstruct domain model
                 val type = decodeType(meetingRow.typeJson)
                 val agendaItems = agendaItemRows.map { row ->
-                    AgendaItem(
+                    MeetingTask.AgendaItem(
                         id = row.id,
-                        topic = row.topic,
+                        title = row.topic,
                         status = decodeTaskStatus(row.status, row.statusPayload),
                         assignedTo = row.assignedTo?.let { AssignedTo.Agent(it) },
                     )
@@ -304,15 +306,15 @@ class MeetingRepository(
     /**
      * Get all agenda items for a meeting.
      */
-    suspend fun getAgendaItemsForMeeting(meetingId: MeetingId): Result<List<AgendaItem>> =
+    suspend fun getAgendaItemsForMeeting(meetingId: MeetingId): Result<List<MeetingTask.AgendaItem>> =
         withContext(Dispatchers.IO) {
             runCatching {
                 queries.getAgendaItemsForMeeting(meetingId)
                     .executeAsList()
                     .map { row ->
-                        AgendaItem(
+                        MeetingTask.AgendaItem(
                             id = row.id,
-                            topic = row.topic,
+                            title = row.topic,
                             status = decodeTaskStatus(row.status, row.statusPayload),
                             assignedTo = row.assignedTo?.let { AssignedTo.Agent(it) },
                         )
@@ -325,7 +327,7 @@ class MeetingRepository(
      */
     suspend fun updateAgendaItemStatus(
         agendaItemId: AgendaItemId,
-        status: Task.Status,
+        status: TaskStatus,
     ): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -363,13 +365,13 @@ class MeetingRepository(
         throw MeetingSerializationException("Failed to serialize MeetingOutcome", e)
     }
 
-    private fun encodeTaskStatus(status: Task.Status): String? = try {
+    private fun encodeTaskStatus(status: TaskStatus): String? = try {
         when (status) {
-            is Task.Status.Pending -> status.reason?.let { json.encodeToString(it) }
-            is Task.Status.InProgress -> null
-            is Task.Status.Blocked -> status.reason?.let { json.encodeToString(it) }
-            is Task.Status.Completed -> json.encodeToString(Task.Status.Completed.serializer(), status)
-            is Task.Status.Deferred -> null
+            TaskStatus.Pending -> null
+            TaskStatus.InProgress -> null
+            is TaskStatus.Blocked -> json.encodeToString(status.reason)
+            is TaskStatus.Completed -> json.encodeToString(TaskStatus.Completed.serializer(), status)
+            TaskStatus.Deferred -> null
         }
     } catch (e: SerializationException) {
         throw MeetingSerializationException("Failed to serialize Task.Status", e)
@@ -420,28 +422,30 @@ class MeetingRepository(
         throw MeetingSerializationException("Failed to deserialize MeetingOutcome: $outcomeJson", e)
     }
 
-    private fun decodeTaskStatus(status: String, statusPayload: String?): Task.Status {
+    private fun decodeTaskStatus(status: String, statusPayload: String?): TaskStatus {
         return when (status) {
-            "PENDING" -> Task.Status.Pending(
+            "PENDING" -> TaskStatus.Pending
+            "IN_PROGRESS" -> TaskStatus.InProgress
+            "BLOCKED" -> TaskStatus.Blocked(
                 reason = statusPayload?.let {
                     try { json.decodeFromString<String>(it) } catch (e: Exception) { null }
-                },
+                } ?: "Unknown reason",
             )
-            "IN_PROGRESS" -> Task.Status.InProgress
-            "BLOCKED" -> Task.Status.Blocked(
-                reason = statusPayload?.let {
-                    try { json.decodeFromString<String>(it) } catch (e: Exception) { null }
-                },
-            )
-            "COMPLETED" -> statusPayload?.let {
+            "COMPLETED" -> statusPayload?.let { payload ->
                 try {
-                    json.decodeFromString(Task.Status.Completed.serializer(), it)
+                    json.decodeFromString(TaskStatus.Completed.serializer(), payload)
                 } catch (e: Exception) {
-                    Task.Status.Completed()
+                    TaskStatus.Completed(
+                        completedAt = Clock.System.now(),
+                        completedBy = EventSource.Human,
+                    )
                 }
-            } ?: Task.Status.Completed()
-            "DEFERRED" -> Task.Status.Deferred
-            else -> Task.Status.Pending()
+            } ?: TaskStatus.Completed(
+                completedAt = Clock.System.now(),
+                completedBy = EventSource.Human,
+            )
+            "DEFERRED" -> TaskStatus.Deferred
+            else -> TaskStatus.Pending
         }
     }
 
@@ -472,12 +476,12 @@ class MeetingRepository(
         is MeetingStatus.Canceled -> "CANCELED"
     }
 
-    private fun getTaskStatusName(status: Task.Status): String = when (status) {
-        is Task.Status.Pending -> "PENDING"
-        is Task.Status.InProgress -> "IN_PROGRESS"
-        is Task.Status.Blocked -> "BLOCKED"
-        is Task.Status.Completed -> "COMPLETED"
-        is Task.Status.Deferred -> "DEFERRED"
+    private fun getTaskStatusName(status: TaskStatus): String = when (status) {
+        is TaskStatus.Pending -> "PENDING"
+        is TaskStatus.InProgress -> "IN_PROGRESS"
+        is TaskStatus.Blocked -> "BLOCKED"
+        is TaskStatus.Completed -> "COMPLETED"
+        is TaskStatus.Deferred -> "DEFERRED"
     }
 
     private fun getOutcomeTypeName(outcome: MeetingOutcome): String = when (outcome) {

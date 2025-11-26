@@ -18,16 +18,16 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.core.AssignedTo
+import link.socket.ampere.agents.core.outcomes.MeetingOutcome
+import link.socket.ampere.agents.core.status.MeetingStatus
+import link.socket.ampere.agents.core.status.TaskStatus
+import link.socket.ampere.agents.core.tasks.MeetingTask.AgendaItem
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.meetings.Meeting
 import link.socket.ampere.agents.events.meetings.MeetingInvitation
 import link.socket.ampere.agents.events.meetings.MeetingMessagingDetails
-import link.socket.ampere.agents.events.meetings.MeetingOutcome
 import link.socket.ampere.agents.events.meetings.MeetingRepository
-import link.socket.ampere.agents.events.meetings.MeetingStatus
 import link.socket.ampere.agents.events.meetings.MeetingType
-import link.socket.ampere.agents.events.tasks.AgendaItem
-import link.socket.ampere.agents.events.tasks.Task
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 
@@ -67,12 +67,12 @@ class MeetingRepositoryTest {
         agenda: List<AgendaItem> = listOf(
             AgendaItem(
                 id = "ai-1",
-                topic = "Yesterday updates",
+                title = "Yesterday updates",
                 assignedTo = AssignedTo.Agent("agent-alpha"),
             ),
             AgendaItem(
                 id = "ai-2",
-                topic = "Today plans",
+                title = "Today plans",
                 assignedTo = AssignedTo.Agent("agent-beta"),
             ),
         ),
@@ -83,7 +83,7 @@ class MeetingRepositoryTest {
             sprintId = "sprint-1",
         ),
         status = MeetingStatus.Scheduled(
-            scheduledForOverride = scheduledFor,
+            scheduledFor = scheduledFor,
         ),
         invitation = MeetingInvitation(
             title = title,
@@ -103,7 +103,7 @@ class MeetingRepositoryTest {
         ),
         outcomes: List<MeetingOutcome> = listOf(
             MeetingOutcome.DecisionMade(
-                overrideId = "outcome-1",
+                id = "outcome-1",
                 description = "Proceed with refactor",
                 decidedBy = EventSource.Agent("agent-alpha"),
             ),
@@ -128,8 +128,11 @@ class MeetingRepositoryTest {
             agenda = listOf(
                 AgendaItem(
                     id = "ai-plan-1",
-                    topic = "Review sprint goals",
-                    status = Task.Status.Completed(),
+                    title = "Review sprint goals",
+                    status = TaskStatus.Completed(
+                        completedAt = completedAt,
+                        completedBy = EventSource.Agent("agent-alpha"),
+                    ),
                 ),
             ),
             requiredParticipants = listOf(AssignedTo.Agent("agent-alpha")),
@@ -164,8 +167,8 @@ class MeetingRepositoryTest {
         assertNotNull(loaded)
 
         assertEquals(2, loaded.invitation.agenda.size)
-        assertEquals("Yesterday updates", loaded.invitation.agenda[0].topic)
-        assertEquals("Today plans", loaded.invitation.agenda[1].topic)
+        assertEquals("Yesterday updates", loaded.invitation.agenda[0].title)
+        assertEquals("Today plans", loaded.invitation.agenda[1].title)
 
         assertEquals(2, loaded.invitation.requiredParticipants.size)
         assertNotNull(loaded.invitation.optionalParticipants)
@@ -248,7 +251,7 @@ class MeetingRepositoryTest {
             ),
             outcomes = listOf(
                 MeetingOutcome.ActionItem(
-                    overrideId = "action-1",
+                    id = "action-1",
                     assignedTo = AssignedTo.Agent("agent-alpha"),
                     description = "Implement feature X",
                     dueBy = Clock.System.now() + 24.hours,
@@ -274,7 +277,7 @@ class MeetingRepositoryTest {
         repo.saveMeeting(meeting)
 
         val outcome = MeetingOutcome.BlockerRaised(
-            overrideId = "blocker-1",
+            id = "blocker-1",
             description = "API not available",
             raisedBy = EventSource.Agent("agent-alpha"),
             assignedTo = AssignedTo.Agent("agent-beta"),
@@ -386,12 +389,12 @@ class MeetingRepositoryTest {
                 requestedReviewer = AssignedTo.Agent("agent-reviewer"),
             ),
             status = MeetingStatus.Scheduled(
-                scheduledForOverride = Clock.System.now() + 1.hours,
+                scheduledFor = Clock.System.now() + 1.hours,
             ),
             invitation = MeetingInvitation(
                 title = "Code Review: Feature X",
                 agenda = listOf(
-                    AgendaItem(id = "ai-1", topic = "Review changes"),
+                    AgendaItem(id = "ai-1", title = "Review changes"),
                 ),
                 requiredParticipants = listOf(
                     AssignedTo.Agent("agent-author"),
@@ -406,77 +409,78 @@ class MeetingRepositoryTest {
         assertNotNull(loaded)
         assertIs<MeetingType.CodeReview>(loaded.type)
 
-        val codeReviewType = loaded.type as MeetingType.CodeReview
-        assertEquals("PR-123", codeReviewType.prId)
-        assertEquals("https://github.com/org/repo/pull/123", codeReviewType.prUrl)
-        assertIs<EventSource.Agent>(codeReviewType.author)
-        assertEquals("agent-author", (codeReviewType.author as EventSource.Agent).agentId)
+        assertEquals("PR-123", loaded.type.prId)
+        assertEquals("https://github.com/org/repo/pull/123", loaded.type.prUrl)
+        assertIs<EventSource.Agent>(loaded.type.author)
+        assertEquals("agent-author", loaded.type.author.agentId)
     } }
 
     @Test
-    fun `mapping preserves agenda item status`() { runBlocking {
-        val meeting = Meeting(
-            id = "meeting-with-status",
-            type = MeetingType.AdHoc(reason = "Quick sync"),
-            status = MeetingStatus.Scheduled(scheduledForOverride = Clock.System.now() + 1.hours),
-            invitation = MeetingInvitation(
-                title = "Quick Sync",
-                agenda = listOf(
-                    AgendaItem(
-                        id = "ai-pending",
-                        topic = "Pending item",
-                        status = Task.Status.Pending(reason = "Waiting for input"),
-                    ),
-                    AgendaItem(
-                        id = "ai-completed",
-                        topic = "Completed item",
-                        status = Task.Status.Completed(
-                            completedAt = Clock.System.now(),
-                            completedBy = EventSource.Agent("agent-alpha"),
+    fun `mapping preserves agenda item status`() {
+        runBlocking {
+            val meeting = Meeting(
+                id = "meeting-with-status",
+                type = MeetingType.AdHoc(reason = "Quick sync"),
+                status = MeetingStatus.Scheduled(scheduledFor = Clock.System.now() + 1.hours),
+                invitation = MeetingInvitation(
+                    title = "Quick Sync",
+                    agenda = listOf(
+                        AgendaItem(
+                            id = "ai-pending",
+                            title = "Pending item",
+                            status = TaskStatus.Pending,
+                        ),
+                        AgendaItem(
+                            id = "ai-completed",
+                            title = "Completed item",
+                            status = TaskStatus.Completed(
+                                completedAt = Clock.System.now(),
+                                completedBy = EventSource.Agent("agent-alpha"),
+                            ),
+                        ),
+                        AgendaItem(
+                            id = "ai-blocked",
+                            title = "Blocked item",
+                            status = TaskStatus.Blocked(reason = "External dependency"),
                         ),
                     ),
-                    AgendaItem(
-                        id = "ai-blocked",
-                        topic = "Blocked item",
-                        status = Task.Status.Blocked(reason = "External dependency"),
-                    ),
+                    requiredParticipants = listOf(AssignedTo.Agent("agent-alpha")),
                 ),
-                requiredParticipants = listOf(AssignedTo.Agent("agent-alpha")),
-            ),
-        )
+            )
 
-        repo.saveMeeting(meeting)
+            repo.saveMeeting(meeting)
 
-        val loaded = repo.getMeeting(meeting.id).getOrNull()
-        assertNotNull(loaded)
-        assertEquals(3, loaded.invitation.agenda.size)
+            val loaded = repo.getMeeting(meeting.id).getOrNull()
+            assertNotNull(loaded)
+            assertEquals(3, loaded.invitation.agenda.size)
 
-        val pendingItem = loaded.invitation.agenda[0]
-        assertIs<Task.Status.Pending>(pendingItem.status)
+            val pendingItem = loaded.invitation.agenda[0]
+            assertIs<TaskStatus.Pending>(pendingItem.status)
 
-        val completedItem = loaded.invitation.agenda[1]
-        assertIs<Task.Status.Completed>(completedItem.status)
+            val completedItem = loaded.invitation.agenda[1]
+            assertIs<TaskStatus.Completed>(completedItem.status)
 
-        val blockedItem = loaded.invitation.agenda[2]
-        assertIs<Task.Status.Blocked>(blockedItem.status)
-    } }
+            val blockedItem = loaded.invitation.agenda[2]
+            assertIs<TaskStatus.Blocked>(blockedItem.status)
+        }
+    }
 
     @Test
     fun `multiple outcomes are preserved correctly`() { runBlocking {
         val outcomes = listOf(
             MeetingOutcome.DecisionMade(
-                overrideId = "decision-1",
+                id = "decision-1",
                 description = "Proceed with plan A",
                 decidedBy = EventSource.Agent("agent-alpha"),
             ),
             MeetingOutcome.ActionItem(
-                overrideId = "action-1",
+                id = "action-1",
                 assignedTo = AssignedTo.Agent("agent-beta"),
                 description = "Implement feature",
                 dueBy = Clock.System.now() + 24.hours,
             ),
             MeetingOutcome.BlockerRaised(
-                overrideId = "blocker-1",
+                id = "blocker-1",
                 description = "API unavailable",
                 raisedBy = EventSource.Agent("agent-alpha"),
             ),
@@ -493,11 +497,11 @@ class MeetingRepositoryTest {
 
         val status = loaded.status as MeetingStatus.Completed
         assertNotNull(status.outcomes)
-        assertEquals(3, status.outcomes!!.size)
+        assertEquals(3, status.outcomes.size)
 
         // Verify each outcome type is correct
-        assertTrue(status.outcomes!!.any { it is MeetingOutcome.DecisionMade })
-        assertTrue(status.outcomes!!.any { it is MeetingOutcome.ActionItem })
-        assertTrue(status.outcomes!!.any { it is MeetingOutcome.BlockerRaised })
+        assertTrue(status.outcomes.any { it is MeetingOutcome.DecisionMade })
+        assertTrue(status.outcomes.any { it is MeetingOutcome.ActionItem })
+        assertTrue(status.outcomes.any { it is MeetingOutcome.BlockerRaised })
     } }
 }

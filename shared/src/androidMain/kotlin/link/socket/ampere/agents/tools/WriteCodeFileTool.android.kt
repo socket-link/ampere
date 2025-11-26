@@ -1,8 +1,8 @@
 package link.socket.ampere.agents.tools
 
 import java.io.File
-import link.socket.ampere.agents.core.AutonomyLevel
-import link.socket.ampere.agents.core.Outcome
+import link.socket.ampere.agents.core.actions.AgentActionAutonomy
+import link.socket.ampere.agents.core.outcomes.Outcome
 
 /**
  * Android actual for WriteCodeFileTool using java.io.File APIs.
@@ -12,7 +12,7 @@ actual class WriteCodeFileTool actual constructor(
 ) : Tool {
     actual override val name: String = "write_code_file"
     actual override val description: String = "Generates a single code file with specified content"
-    actual override val requiredAutonomyLevel: AutonomyLevel = AutonomyLevel.ACT_WITH_NOTIFICATION
+    actual val agentAutonomy: AgentActionAutonomy = AgentActionAutonomy.ACT_WITH_NOTIFICATION
 
     actual override suspend fun execute(parameters: Map<String, Any?>): Outcome {
         val filePath = parameters["filePath"]

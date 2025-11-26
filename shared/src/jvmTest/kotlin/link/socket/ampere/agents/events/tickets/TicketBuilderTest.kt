@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.core.status.TicketStatus
 import link.socket.ampere.agents.events.bus.EventBus
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
@@ -302,7 +303,7 @@ class TicketBuilderTest {
             assertEquals(TicketType.FEATURE, ticket.type)
             assertEquals(TicketPriority.HIGH, ticket.priority)
             assertEquals(stubPmAgentId, ticket.createdByAgentId)
-            assertEquals(TicketStatus.BACKLOG, ticket.status)
+            assertEquals(TicketStatus.Backlog, ticket.status)
 
             // Verify thread was created
             assertNotNull(thread)

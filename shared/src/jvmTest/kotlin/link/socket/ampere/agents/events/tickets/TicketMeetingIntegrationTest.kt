@@ -15,6 +15,9 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.core.AssignedTo
+import link.socket.ampere.agents.core.status.TaskStatus
+import link.socket.ampere.agents.core.status.TicketStatus
+import link.socket.ampere.agents.core.tasks.MeetingTask.AgendaItem
 import link.socket.ampere.agents.events.Event
 import link.socket.ampere.agents.events.TicketEvent
 import link.socket.ampere.agents.events.api.EventHandler
@@ -24,8 +27,6 @@ import link.socket.ampere.agents.events.meetings.MeetingRepository
 import link.socket.ampere.agents.events.meetings.MeetingSchedulingService
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
-import link.socket.ampere.agents.events.tasks.AgendaItem
-import link.socket.ampere.agents.events.tasks.Task
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 import link.socket.ampere.util.randomUUID
@@ -138,9 +139,9 @@ class TicketMeetingIntegrationTest {
             val agendaItems = listOf(
                 AgendaItem(
                     id = randomUUID(),
-                    topic = "Discuss implementation approach",
+                    title = "Discuss implementation approach",
                     assignedTo = AssignedTo.Agent(stubAssignedAgentId),
-                    status = Task.Status.Pending(),
+                    status = TaskStatus.Pending,
                 ),
             )
 
@@ -204,8 +205,8 @@ class TicketMeetingIntegrationTest {
             )
 
             // Transition to IN_PROGRESS (BACKLOG -> READY -> IN_PROGRESS)
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, stubCreatorAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.Ready, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.InProgress, stubCreatorAgentId)
 
             publishedEvents.clear()
 
@@ -265,8 +266,8 @@ class TicketMeetingIntegrationTest {
             )
 
             // Transition to IN_PROGRESS
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, stubCreatorAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.Ready, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.InProgress, stubCreatorAgentId)
 
             publishedEvents.clear()
 
@@ -316,8 +317,8 @@ class TicketMeetingIntegrationTest {
             )
 
             // Transition ticket to IN_PROGRESS
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.READY, stubCreatorAgentId)
-            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.IN_PROGRESS, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.Ready, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.InProgress, stubCreatorAgentId)
 
             publishedEvents.clear()
 

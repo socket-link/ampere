@@ -1,38 +1,33 @@
 package link.socket.ampere.agents.tools
 
-import link.socket.ampere.agents.core.AutonomyLevel
-import link.socket.ampere.agents.core.Outcome
-import link.socket.ampere.agents.events.tasks.Task
+import link.socket.ampere.agents.core.actions.AgentActionAutonomy
+import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
+import link.socket.ampere.agents.core.outcomes.Outcome
+import link.socket.ampere.agents.execution.request.ExecutionContext
+import link.socket.ampere.agents.execution.request.ExecutionRequest
 
-/**
- * A safety-valve tool that escalates uncertainty to a human operator.
- * The tool forwards a question to a provided [humanInterface] and returns the
- * response in an [Outcome].
- */
-class AskHumanTool(
-    private val humanInterface: (String) -> String,
-) : Tool {
-    override val id: ToolId = "ask_human"
-    override val name: String = "Ask a Human"
-    override val description: String = "Escalates uncertainty to human for guidance"
-    override val requiredAutonomyLevel: AutonomyLevel = AutonomyLevel.ASK_BEFORE_ACTION
+expect suspend fun executeAskHuman(
+    context: ExecutionContext.NoChanges,
+): ExecutionOutcome.NoChanges
+
+data class AskHumanTool(
+    override val requiredAgentAutonomy: AgentActionAutonomy,
+) : Tool<ExecutionContext.NoChanges> {
+
+    override val id: ToolId = ID
+    override val name: String = NAME
+    override val description: String = DESCRIPTION
 
     override suspend fun execute(
-        sourceTask: Task,
-        parameters: Map<String, Any?>,
+        executionRequest: ExecutionRequest<ExecutionContext.NoChanges>,
     ): Outcome {
-        val question = parameters["question"] as? String
-            ?: return Outcome.Failure(sourceTask, "Missing 'question' parameter")
-
-        return try {
-            val response = humanInterface(question)
-            Outcome.Success.Full(sourceTask, response)
-        } catch (e: Exception) {
-            Outcome.Failure(sourceTask, "Failed to get human response: ${e.message}")
-        }
+        // TODO: Handle execution request constraints
+        return executeAskHuman(executionRequest.context)
     }
 
-    override fun validateParameters(parameters: Map<String, Any>): Boolean {
-        return parameters.containsKey("question") && parameters["question"] is String
+    companion object {
+        const val ID = "ask_human"
+        const val NAME = "Ask a Human"
+        const val DESCRIPTION = "Escalates uncertainty to human for guidance."
     }
 }

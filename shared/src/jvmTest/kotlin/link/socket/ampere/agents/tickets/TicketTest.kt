@@ -6,9 +6,9 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.core.status.TicketStatus
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
-import link.socket.ampere.agents.events.tickets.TicketStatus
 import link.socket.ampere.agents.events.tickets.TicketType
 
 class TicketTest {
@@ -18,7 +18,7 @@ class TicketTest {
     private val assigneeAgentId = "eng-agent-1"
 
     private fun createTicket(
-        status: TicketStatus = TicketStatus.BACKLOG,
+        status: TicketStatus = TicketStatus.Backlog,
         type: TicketType = TicketType.FEATURE,
         priority: TicketPriority = TicketPriority.MEDIUM,
     ): Ticket = Ticket(
@@ -41,38 +41,38 @@ class TicketTest {
 
     @Test
     fun `can create ticket with BACKLOG status`() {
-        val ticket = createTicket(status = TicketStatus.BACKLOG)
-        assertEquals(TicketStatus.BACKLOG, ticket.status)
+        val ticket = createTicket(status = TicketStatus.Backlog)
+        assertEquals(TicketStatus.Backlog, ticket.status)
     }
 
     @Test
-    fun `can create ticket with READY status`() {
-        val ticket = createTicket(status = TicketStatus.READY)
-        assertEquals(TicketStatus.READY, ticket.status)
+    fun `can create ticket with Ready status`() {
+        val ticket = createTicket(status = TicketStatus.Ready)
+        assertEquals(TicketStatus.Ready, ticket.status)
     }
 
     @Test
-    fun `can create ticket with IN_PROGRESS status`() {
-        val ticket = createTicket(status = TicketStatus.IN_PROGRESS)
-        assertEquals(TicketStatus.IN_PROGRESS, ticket.status)
+    fun `can create ticket with InProgress status`() {
+        val ticket = createTicket(status = TicketStatus.InProgress)
+        assertEquals(TicketStatus.InProgress, ticket.status)
     }
 
     @Test
-    fun `can create ticket with BLOCKED status`() {
-        val ticket = createTicket(status = TicketStatus.BLOCKED)
-        assertEquals(TicketStatus.BLOCKED, ticket.status)
+    fun `can create ticket with Blocked status`() {
+        val ticket = createTicket(status = TicketStatus.Blocked)
+        assertEquals(TicketStatus.Blocked, ticket.status)
     }
 
     @Test
-    fun `can create ticket with IN_REVIEW status`() {
-        val ticket = createTicket(status = TicketStatus.IN_REVIEW)
-        assertEquals(TicketStatus.IN_REVIEW, ticket.status)
+    fun `can create ticket with InReview status`() {
+        val ticket = createTicket(status = TicketStatus.InReview)
+        assertEquals(TicketStatus.InReview, ticket.status)
     }
 
     @Test
-    fun `can create ticket with DONE status`() {
-        val ticket = createTicket(status = TicketStatus.DONE)
-        assertEquals(TicketStatus.DONE, ticket.status)
+    fun `can create ticket with Done status`() {
+        val ticket = createTicket(status = TicketStatus.Done)
+        assertEquals(TicketStatus.Done, ticket.status)
     }
 
     // =============================================================================
@@ -100,18 +100,6 @@ class TicketTest {
     }
 
     @Test
-    fun `TicketStatus enum has all expected values`() {
-        val values = TicketStatus.entries
-        assertEquals(6, values.size)
-        assertTrue(values.contains(TicketStatus.BACKLOG))
-        assertTrue(values.contains(TicketStatus.READY))
-        assertTrue(values.contains(TicketStatus.IN_PROGRESS))
-        assertTrue(values.contains(TicketStatus.BLOCKED))
-        assertTrue(values.contains(TicketStatus.IN_REVIEW))
-        assertTrue(values.contains(TicketStatus.DONE))
-    }
-
-    @Test
     fun `can create ticket with each TicketType`() {
         TicketType.entries.forEach { type ->
             val ticket = createTicket(type = type)
@@ -132,75 +120,75 @@ class TicketTest {
     // =============================================================================
 
     @Test
-    fun `BACKLOG can transition to READY`() {
-        val ticket = createTicket(status = TicketStatus.BACKLOG)
-        assertTrue(ticket.canTransitionTo(TicketStatus.READY))
-        val updated = ticket.transitionTo(TicketStatus.READY, now)
-        assertEquals(TicketStatus.READY, updated.status)
+    fun `BACKLOG can transition to Ready`() {
+        val ticket = createTicket(status = TicketStatus.Backlog)
+        assertTrue(ticket.canTransitionTo(TicketStatus.Ready))
+        val updated = ticket.transitionTo(TicketStatus.Ready, now)
+        assertEquals(TicketStatus.Ready, updated.status)
     }
 
     @Test
-    fun `BACKLOG can transition to DONE`() {
-        val ticket = createTicket(status = TicketStatus.BACKLOG)
-        assertTrue(ticket.canTransitionTo(TicketStatus.DONE))
-        val updated = ticket.transitionTo(TicketStatus.DONE, now)
-        assertEquals(TicketStatus.DONE, updated.status)
+    fun `BACKLOG can transition to Done`() {
+        val ticket = createTicket(status = TicketStatus.Backlog)
+        assertTrue(ticket.canTransitionTo(TicketStatus.Done))
+        val updated = ticket.transitionTo(TicketStatus.Done, now)
+        assertEquals(TicketStatus.Done, updated.status)
     }
 
     @Test
-    fun `READY can transition to IN_PROGRESS`() {
-        val ticket = createTicket(status = TicketStatus.READY)
-        assertTrue(ticket.canTransitionTo(TicketStatus.IN_PROGRESS))
-        val updated = ticket.transitionTo(TicketStatus.IN_PROGRESS, now)
-        assertEquals(TicketStatus.IN_PROGRESS, updated.status)
+    fun `Ready can transition to InProgress`() {
+        val ticket = createTicket(status = TicketStatus.Ready)
+        assertTrue(ticket.canTransitionTo(TicketStatus.InProgress))
+        val updated = ticket.transitionTo(TicketStatus.InProgress, now)
+        assertEquals(TicketStatus.InProgress, updated.status)
     }
 
     @Test
-    fun `IN_PROGRESS can transition to BLOCKED`() {
-        val ticket = createTicket(status = TicketStatus.IN_PROGRESS)
-        assertTrue(ticket.canTransitionTo(TicketStatus.BLOCKED))
-        val updated = ticket.transitionTo(TicketStatus.BLOCKED, now)
-        assertEquals(TicketStatus.BLOCKED, updated.status)
+    fun `InProgress can transition to Blocked`() {
+        val ticket = createTicket(status = TicketStatus.InProgress)
+        assertTrue(ticket.canTransitionTo(TicketStatus.Blocked))
+        val updated = ticket.transitionTo(TicketStatus.Blocked, now)
+        assertEquals(TicketStatus.Blocked, updated.status)
     }
 
     @Test
-    fun `IN_PROGRESS can transition to IN_REVIEW`() {
-        val ticket = createTicket(status = TicketStatus.IN_PROGRESS)
-        assertTrue(ticket.canTransitionTo(TicketStatus.IN_REVIEW))
-        val updated = ticket.transitionTo(TicketStatus.IN_REVIEW, now)
-        assertEquals(TicketStatus.IN_REVIEW, updated.status)
+    fun `InProgress can transition to InReview`() {
+        val ticket = createTicket(status = TicketStatus.InProgress)
+        assertTrue(ticket.canTransitionTo(TicketStatus.InReview))
+        val updated = ticket.transitionTo(TicketStatus.InReview, now)
+        assertEquals(TicketStatus.InReview, updated.status)
     }
 
     @Test
-    fun `IN_PROGRESS can transition to DONE`() {
-        val ticket = createTicket(status = TicketStatus.IN_PROGRESS)
-        assertTrue(ticket.canTransitionTo(TicketStatus.DONE))
-        val updated = ticket.transitionTo(TicketStatus.DONE, now)
-        assertEquals(TicketStatus.DONE, updated.status)
+    fun `InProgress can transition to Done`() {
+        val ticket = createTicket(status = TicketStatus.InProgress)
+        assertTrue(ticket.canTransitionTo(TicketStatus.Done))
+        val updated = ticket.transitionTo(TicketStatus.Done, now)
+        assertEquals(TicketStatus.Done, updated.status)
     }
 
     @Test
-    fun `BLOCKED can transition back to IN_PROGRESS`() {
-        val ticket = createTicket(status = TicketStatus.BLOCKED)
-        assertTrue(ticket.canTransitionTo(TicketStatus.IN_PROGRESS))
-        val updated = ticket.transitionTo(TicketStatus.IN_PROGRESS, now)
-        assertEquals(TicketStatus.IN_PROGRESS, updated.status)
+    fun `Blocked can transition back to InProgress`() {
+        val ticket = createTicket(status = TicketStatus.Blocked)
+        assertTrue(ticket.canTransitionTo(TicketStatus.InProgress))
+        val updated = ticket.transitionTo(TicketStatus.InProgress, now)
+        assertEquals(TicketStatus.InProgress, updated.status)
     }
 
     @Test
-    fun `IN_REVIEW can transition to IN_PROGRESS`() {
-        val ticket = createTicket(status = TicketStatus.IN_REVIEW)
-        assertTrue(ticket.canTransitionTo(TicketStatus.IN_PROGRESS))
-        val updated = ticket.transitionTo(TicketStatus.IN_PROGRESS, now)
-        assertEquals(TicketStatus.IN_PROGRESS, updated.status)
+    fun `InReview can transition to InProgress`() {
+        val ticket = createTicket(status = TicketStatus.InReview)
+        assertTrue(ticket.canTransitionTo(TicketStatus.InProgress))
+        val updated = ticket.transitionTo(TicketStatus.InProgress, now)
+        assertEquals(TicketStatus.InProgress, updated.status)
     }
 
     @Test
-    fun `IN_REVIEW can transition to DONE`() {
-        val ticket = createTicket(status = TicketStatus.IN_REVIEW)
-        assertTrue(ticket.canTransitionTo(TicketStatus.DONE))
-        val updated = ticket.transitionTo(TicketStatus.DONE, now)
-        assertEquals(TicketStatus.DONE, updated.status)
+    fun `InReview can transition to Done`() {
+        val ticket = createTicket(status = TicketStatus.InReview)
+        assertTrue(ticket.canTransitionTo(TicketStatus.Done))
+        val updated = ticket.transitionTo(TicketStatus.Done, now)
+        assertEquals(TicketStatus.Done, updated.status)
     }
 
     // =============================================================================
@@ -208,117 +196,117 @@ class TicketTest {
     // =============================================================================
 
     @Test
-    fun `BACKLOG cannot transition to IN_PROGRESS`() {
-        val ticket = createTicket(status = TicketStatus.BACKLOG)
-        assertFalse(ticket.canTransitionTo(TicketStatus.IN_PROGRESS))
+    fun `BACKLOG cannot transition to InProgress`() {
+        val ticket = createTicket(status = TicketStatus.Backlog)
+        assertFalse(ticket.canTransitionTo(TicketStatus.InProgress))
     }
 
     @Test
-    fun `BACKLOG cannot transition to IN_REVIEW`() {
-        val ticket = createTicket(status = TicketStatus.BACKLOG)
-        assertFalse(ticket.canTransitionTo(TicketStatus.IN_REVIEW))
+    fun `BACKLOG cannot transition to InReview`() {
+        val ticket = createTicket(status = TicketStatus.Backlog)
+        assertFalse(ticket.canTransitionTo(TicketStatus.InReview))
         assertFailsWith<IllegalArgumentException> {
-            ticket.transitionTo(TicketStatus.IN_REVIEW, now)
+            ticket.transitionTo(TicketStatus.InReview, now)
         }
     }
 
     @Test
-    fun `BACKLOG cannot transition to BLOCKED`() {
-        val ticket = createTicket(status = TicketStatus.BACKLOG)
-        assertFalse(ticket.canTransitionTo(TicketStatus.BLOCKED))
+    fun `BACKLOG cannot transition to Blocked`() {
+        val ticket = createTicket(status = TicketStatus.Backlog)
+        assertFalse(ticket.canTransitionTo(TicketStatus.Blocked))
         assertFailsWith<IllegalArgumentException> {
-            ticket.transitionTo(TicketStatus.BLOCKED, now)
+            ticket.transitionTo(TicketStatus.Blocked, now)
         }
     }
 
     @Test
-    fun `READY cannot transition to DONE directly`() {
-        val ticket = createTicket(status = TicketStatus.READY)
-        assertFalse(ticket.canTransitionTo(TicketStatus.DONE))
+    fun `Ready cannot transition to Done directly`() {
+        val ticket = createTicket(status = TicketStatus.Ready)
+        assertFalse(ticket.canTransitionTo(TicketStatus.Done))
         assertFailsWith<IllegalArgumentException> {
-            ticket.transitionTo(TicketStatus.DONE, now)
+            ticket.transitionTo(TicketStatus.Done, now)
         }
     }
 
     @Test
-    fun `READY cannot transition to BLOCKED`() {
-        val ticket = createTicket(status = TicketStatus.READY)
-        assertFalse(ticket.canTransitionTo(TicketStatus.BLOCKED))
+    fun `Ready cannot transition to Blocked`() {
+        val ticket = createTicket(status = TicketStatus.Ready)
+        assertFalse(ticket.canTransitionTo(TicketStatus.Blocked))
     }
 
     @Test
-    fun `READY cannot transition to IN_REVIEW`() {
-        val ticket = createTicket(status = TicketStatus.READY)
-        assertFalse(ticket.canTransitionTo(TicketStatus.IN_REVIEW))
+    fun `Ready cannot transition to InReview`() {
+        val ticket = createTicket(status = TicketStatus.Ready)
+        assertFalse(ticket.canTransitionTo(TicketStatus.InReview))
     }
 
     @Test
-    fun `READY cannot transition back to BACKLOG`() {
-        val ticket = createTicket(status = TicketStatus.READY)
-        assertFalse(ticket.canTransitionTo(TicketStatus.BACKLOG))
+    fun `Ready cannot transition back to BACKLOG`() {
+        val ticket = createTicket(status = TicketStatus.Ready)
+        assertFalse(ticket.canTransitionTo(TicketStatus.Backlog))
     }
 
     @Test
-    fun `IN_PROGRESS cannot transition to BACKLOG`() {
-        val ticket = createTicket(status = TicketStatus.IN_PROGRESS)
-        assertFalse(ticket.canTransitionTo(TicketStatus.BACKLOG))
+    fun `InProgress cannot transition to BACKLOG`() {
+        val ticket = createTicket(status = TicketStatus.InProgress)
+        assertFalse(ticket.canTransitionTo(TicketStatus.Backlog))
     }
 
     @Test
-    fun `IN_PROGRESS cannot transition to READY`() {
-        val ticket = createTicket(status = TicketStatus.IN_PROGRESS)
-        assertFalse(ticket.canTransitionTo(TicketStatus.READY))
+    fun `InProgress cannot transition to Ready`() {
+        val ticket = createTicket(status = TicketStatus.InProgress)
+        assertFalse(ticket.canTransitionTo(TicketStatus.Ready))
     }
 
     @Test
-    fun `BLOCKED cannot transition to DONE`() {
-        val ticket = createTicket(status = TicketStatus.BLOCKED)
-        assertFalse(ticket.canTransitionTo(TicketStatus.DONE))
+    fun `Blocked cannot transition to Done`() {
+        val ticket = createTicket(status = TicketStatus.Blocked)
+        assertFalse(ticket.canTransitionTo(TicketStatus.Done))
         assertFailsWith<IllegalArgumentException> {
-            ticket.transitionTo(TicketStatus.DONE, now)
+            ticket.transitionTo(TicketStatus.Done, now)
         }
     }
 
     @Test
-    fun `BLOCKED cannot transition to IN_REVIEW`() {
-        val ticket = createTicket(status = TicketStatus.BLOCKED)
-        assertFalse(ticket.canTransitionTo(TicketStatus.IN_REVIEW))
+    fun `Blocked cannot transition to InReview`() {
+        val ticket = createTicket(status = TicketStatus.Blocked)
+        assertFalse(ticket.canTransitionTo(TicketStatus.InReview))
     }
 
     @Test
-    fun `IN_REVIEW cannot transition to BLOCKED`() {
-        val ticket = createTicket(status = TicketStatus.IN_REVIEW)
-        assertFalse(ticket.canTransitionTo(TicketStatus.BLOCKED))
+    fun `InReview cannot transition to Blocked`() {
+        val ticket = createTicket(status = TicketStatus.InReview)
+        assertFalse(ticket.canTransitionTo(TicketStatus.Blocked))
     }
 
     @Test
-    fun `IN_REVIEW cannot transition to READY`() {
-        val ticket = createTicket(status = TicketStatus.IN_REVIEW)
-        assertFalse(ticket.canTransitionTo(TicketStatus.READY))
+    fun `InReview cannot transition to Ready`() {
+        val ticket = createTicket(status = TicketStatus.InReview)
+        assertFalse(ticket.canTransitionTo(TicketStatus.Ready))
     }
 
     @Test
-    fun `IN_REVIEW cannot transition to BACKLOG`() {
-        val ticket = createTicket(status = TicketStatus.IN_REVIEW)
-        assertFalse(ticket.canTransitionTo(TicketStatus.BACKLOG))
+    fun `InReview cannot transition to BACKLOG`() {
+        val ticket = createTicket(status = TicketStatus.InReview)
+        assertFalse(ticket.canTransitionTo(TicketStatus.Backlog))
     }
 
     @Test
-    fun `DONE cannot transition to any status`() {
-        val ticket = createTicket(status = TicketStatus.DONE)
-        TicketStatus.entries.forEach { status ->
+    fun `Done cannot transition to any status`() {
+        val ticket = createTicket(status = TicketStatus.Done)
+        TicketStatus.values.forEach { status ->
             assertFalse(ticket.canTransitionTo(status))
         }
     }
 
     @Test
     fun `transitionTo throws with proper error message for invalid transition`() {
-        val ticket = createTicket(status = TicketStatus.BACKLOG)
+        val ticket = createTicket(status = TicketStatus.Backlog)
         val exception = assertFailsWith<IllegalArgumentException> {
-            ticket.transitionTo(TicketStatus.IN_REVIEW, now)
+            ticket.transitionTo(TicketStatus.InReview, now)
         }
-        assertEquals(exception.message?.contains("BACKLOG"), true)
-        assertEquals(exception.message?.contains("IN_REVIEW"), true)
+        assertEquals(exception.message?.contains("Backlog"), true)
+        assertEquals(exception.message?.contains("InReview"), true)
     }
 
     // =============================================================================
@@ -352,43 +340,43 @@ class TicketTest {
     // =============================================================================
 
     @Test
-    fun `isComplete returns true only for DONE status`() {
-        assertTrue(createTicket(status = TicketStatus.DONE).isComplete)
-        assertFalse(createTicket(status = TicketStatus.BACKLOG).isComplete)
-        assertFalse(createTicket(status = TicketStatus.READY).isComplete)
-        assertFalse(createTicket(status = TicketStatus.IN_PROGRESS).isComplete)
-        assertFalse(createTicket(status = TicketStatus.BLOCKED).isComplete)
-        assertFalse(createTicket(status = TicketStatus.IN_REVIEW).isComplete)
+    fun `isComplete returns true only for Done status`() {
+        assertTrue(createTicket(status = TicketStatus.Done).isComplete)
+        assertFalse(createTicket(status = TicketStatus.Backlog).isComplete)
+        assertFalse(createTicket(status = TicketStatus.Ready).isComplete)
+        assertFalse(createTicket(status = TicketStatus.InProgress).isComplete)
+        assertFalse(createTicket(status = TicketStatus.Blocked).isComplete)
+        assertFalse(createTicket(status = TicketStatus.InReview).isComplete)
     }
 
     @Test
-    fun `isBlocked returns true only for BLOCKED status`() {
-        assertTrue(createTicket(status = TicketStatus.BLOCKED).isBlocked)
-        assertFalse(createTicket(status = TicketStatus.BACKLOG).isBlocked)
-        assertFalse(createTicket(status = TicketStatus.READY).isBlocked)
-        assertFalse(createTicket(status = TicketStatus.IN_PROGRESS).isBlocked)
-        assertFalse(createTicket(status = TicketStatus.IN_REVIEW).isBlocked)
-        assertFalse(createTicket(status = TicketStatus.DONE).isBlocked)
+    fun `isBlocked returns true only for Blocked status`() {
+        assertTrue(createTicket(status = TicketStatus.Blocked).isBlocked)
+        assertFalse(createTicket(status = TicketStatus.Backlog).isBlocked)
+        assertFalse(createTicket(status = TicketStatus.Ready).isBlocked)
+        assertFalse(createTicket(status = TicketStatus.InProgress).isBlocked)
+        assertFalse(createTicket(status = TicketStatus.InReview).isBlocked)
+        assertFalse(createTicket(status = TicketStatus.Done).isBlocked)
     }
 
     @Test
-    fun `isInProgress returns true only for IN_PROGRESS status`() {
-        assertTrue(createTicket(status = TicketStatus.IN_PROGRESS).isInProgress)
-        assertFalse(createTicket(status = TicketStatus.BACKLOG).isInProgress)
-        assertFalse(createTicket(status = TicketStatus.READY).isInProgress)
-        assertFalse(createTicket(status = TicketStatus.BLOCKED).isInProgress)
-        assertFalse(createTicket(status = TicketStatus.IN_REVIEW).isInProgress)
-        assertFalse(createTicket(status = TicketStatus.DONE).isInProgress)
+    fun `isInProgress returns true only for InProgress status`() {
+        assertTrue(createTicket(status = TicketStatus.InProgress).isInProgress)
+        assertFalse(createTicket(status = TicketStatus.Backlog).isInProgress)
+        assertFalse(createTicket(status = TicketStatus.Ready).isInProgress)
+        assertFalse(createTicket(status = TicketStatus.Blocked).isInProgress)
+        assertFalse(createTicket(status = TicketStatus.InReview).isInProgress)
+        assertFalse(createTicket(status = TicketStatus.Done).isInProgress)
     }
 
     @Test
-    fun `isReady returns true only for READY status`() {
-        assertTrue(createTicket(status = TicketStatus.READY).isReady)
-        assertFalse(createTicket(status = TicketStatus.BACKLOG).isReady)
-        assertFalse(createTicket(status = TicketStatus.IN_PROGRESS).isReady)
-        assertFalse(createTicket(status = TicketStatus.BLOCKED).isReady)
-        assertFalse(createTicket(status = TicketStatus.IN_REVIEW).isReady)
-        assertFalse(createTicket(status = TicketStatus.DONE).isReady)
+    fun `isReady returns true only for Ready status`() {
+        assertTrue(createTicket(status = TicketStatus.Ready).isReadyAndNotStarted)
+        assertFalse(createTicket(status = TicketStatus.Backlog).isReadyAndNotStarted)
+        assertFalse(createTicket(status = TicketStatus.InProgress).isReadyAndNotStarted)
+        assertFalse(createTicket(status = TicketStatus.Blocked).isReadyAndNotStarted)
+        assertFalse(createTicket(status = TicketStatus.InReview).isReadyAndNotStarted)
+        assertFalse(createTicket(status = TicketStatus.Done).isReadyAndNotStarted)
     }
 
     // =============================================================================
@@ -397,37 +385,37 @@ class TicketTest {
 
     @Test
     fun `BACKLOG validTransitions returns correct set`() {
-        val transitions = TicketStatus.BACKLOG.validTransitions()
-        assertEquals(setOf(TicketStatus.READY, TicketStatus.DONE), transitions)
+        val transitions = TicketStatus.Backlog.validTransitions()
+        assertEquals(setOf(TicketStatus.Ready, TicketStatus.Done), transitions)
     }
 
     @Test
-    fun `READY validTransitions returns correct set`() {
-        val transitions = TicketStatus.READY.validTransitions()
-        assertEquals(setOf(TicketStatus.IN_PROGRESS), transitions)
+    fun `Ready validTransitions returns correct set`() {
+        val transitions = TicketStatus.Ready.validTransitions()
+        assertEquals(setOf(TicketStatus.InProgress), transitions)
     }
 
     @Test
-    fun `IN_PROGRESS validTransitions returns correct set`() {
-        val transitions = TicketStatus.IN_PROGRESS.validTransitions()
-        assertEquals(setOf(TicketStatus.BLOCKED, TicketStatus.IN_REVIEW, TicketStatus.DONE), transitions)
+    fun `InProgress validTransitions returns correct set`() {
+        val transitions = TicketStatus.InProgress.validTransitions()
+        assertEquals(setOf(TicketStatus.Blocked, TicketStatus.InReview, TicketStatus.Done), transitions)
     }
 
     @Test
-    fun `BLOCKED validTransitions returns correct set`() {
-        val transitions = TicketStatus.BLOCKED.validTransitions()
-        assertEquals(setOf(TicketStatus.IN_PROGRESS), transitions)
+    fun `Blocked validTransitions returns correct set`() {
+        val transitions = TicketStatus.Blocked.validTransitions()
+        assertEquals(setOf(TicketStatus.InProgress), transitions)
     }
 
     @Test
-    fun `IN_REVIEW validTransitions returns correct set`() {
-        val transitions = TicketStatus.IN_REVIEW.validTransitions()
-        assertEquals(setOf(TicketStatus.IN_PROGRESS, TicketStatus.DONE), transitions)
+    fun `InReview validTransitions returns correct set`() {
+        val transitions = TicketStatus.InReview.validTransitions()
+        assertEquals(setOf(TicketStatus.InProgress, TicketStatus.Done), transitions)
     }
 
     @Test
-    fun `DONE validTransitions returns empty set`() {
-        val transitions = TicketStatus.DONE.validTransitions()
+    fun `Done validTransitions returns empty set`() {
+        val transitions = TicketStatus.Done.validTransitions()
         assertTrue(transitions.isEmpty())
     }
 }

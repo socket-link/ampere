@@ -1,91 +1,13 @@
 package link.socket.ampere.agents.events.tickets
 
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.core.status.TicketStatus
 
 /** Type alias for ticket identifier. */
 typealias TicketId = String
-
-/**
- * Represents the type of work item.
- */
-@Serializable
-enum class TicketType {
-    /** New functionality to be implemented. */
-    FEATURE,
-
-    /** Defect to be fixed. */
-    BUG,
-
-    /** General task or chore. */
-    TASK,
-
-    /** Research or investigation task. */
-    SPIKE,
-}
-
-/**
- * Represents the priority level of a ticket.
- */
-@Serializable
-enum class TicketPriority {
-    LOW,
-    MEDIUM,
-    HIGH,
-    CRITICAL,
-}
-
-/**
- * Represents the current status of a ticket in its lifecycle.
- *
- * Valid state transitions:
- * - BACKLOG -> READY, DONE
- * - READY -> IN_PROGRESS
- * - IN_PROGRESS -> BLOCKED, IN_REVIEW, DONE
- * - BLOCKED -> IN_PROGRESS
- * - IN_REVIEW -> IN_PROGRESS, DONE
- */
-@Serializable
-enum class TicketStatus {
-    /** Ticket is in the backlog, not yet prioritized for work. */
-    BACKLOG,
-
-    /** Ticket is ready to be picked up for work. */
-    READY,
-
-    /** Ticket is actively being worked on. */
-    IN_PROGRESS,
-
-    /** Ticket is blocked by external dependencies or issues. */
-    BLOCKED,
-
-    /** Ticket work is complete and awaiting review. */
-    IN_REVIEW,
-
-    /** Ticket is complete. */
-    DONE,
-
-    ;
-
-    /**
-     * Returns the set of valid statuses this status can transition to.
-     */
-    fun validTransitions(): Set<TicketStatus> = when (this) {
-        BACKLOG -> setOf(READY, DONE)
-        READY -> setOf(IN_PROGRESS)
-        IN_PROGRESS -> setOf(BLOCKED, IN_REVIEW, DONE)
-        BLOCKED -> setOf(IN_PROGRESS)
-        IN_REVIEW -> setOf(IN_PROGRESS, DONE)
-        DONE -> emptySet()
-    }
-
-    /**
-     * Checks if transitioning to the given status is valid.
-     */
-    fun canTransitionTo(newStatus: TicketStatus): Boolean =
-        newStatus in validTransitions()
-}
 
 /**
  * Represents a work item managed by a Product Manager agent.
@@ -132,7 +54,10 @@ data class Ticket(
             "Invalid state transition: cannot transition from $status to $newStatus. " +
                 "Valid transitions from $status are: ${status.validTransitions()}"
         }
-        return copy(status = newStatus, updatedAt = updatedAt)
+        return copy(
+            status = newStatus,
+            updatedAt = updatedAt,
+        )
     }
 
     /**
@@ -142,8 +67,14 @@ data class Ticket(
      * @param updatedAt The timestamp of the assignment change.
      * @return A new Ticket with the updated assignment.
      */
-    fun assignTo(agentId: AgentId?, updatedAt: Instant): Ticket =
-        copy(assignedAgentId = agentId, updatedAt = updatedAt)
+    fun assignTo(
+        agentId: AgentId?,
+        updatedAt: Instant,
+    ): Ticket =
+        copy(
+            assignedAgentId = agentId,
+            updatedAt = updatedAt,
+        )
 
     /**
      * Checks if this ticket can transition to the given status.
@@ -152,26 +83,42 @@ data class Ticket(
         status.canTransitionTo(newStatus)
 
     /**
-     * Returns true if the ticket is in a terminal state (DONE).
+     * Returns true if the ticket can be picked up.
      */
-    val isComplete: Boolean
-        get() = status == TicketStatus.DONE
+    val isReadyAndNotStarted: Boolean
+        get() = status == TicketStatus.Ready
 
     /**
      * Returns true if the ticket is currently blocked.
      */
     val isBlocked: Boolean
-        get() = status == TicketStatus.BLOCKED
+        get() = status == TicketStatus.Blocked
 
     /**
      * Returns true if the ticket is actively being worked on.
      */
     val isInProgress: Boolean
-        get() = status == TicketStatus.IN_PROGRESS
+        get() = status == TicketStatus.InProgress
 
     /**
-     * Returns true if the ticket is available to be picked up.
+     * Returns true if the ticket is in a terminal state (DONE).
      */
-    val isReady: Boolean
-        get() = status == TicketStatus.READY
+    val isComplete: Boolean
+        get() = status == TicketStatus.Done
+
+    companion object {
+        val blank = Ticket(
+            id = "",
+            title = "",
+            description = "",
+            type = TicketType.TASK,
+            priority = TicketPriority.LOW,
+            status = TicketStatus.Backlog,
+            assignedAgentId = null,
+            createdByAgentId = "",
+            createdAt = Clock.System.now(),
+            updatedAt = Clock.System.now(),
+            dueDate = null,
+        )
+    }
 }

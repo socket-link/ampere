@@ -4,10 +4,12 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.core.AssignedTo
+import link.socket.ampere.agents.core.outcomes.MeetingOutcome
+import link.socket.ampere.agents.core.status.MeetingStatus
+import link.socket.ampere.agents.core.tasks.MeetingTask.AgendaItem
 import link.socket.ampere.agents.events.Event
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.MeetingEvent
-import link.socket.ampere.agents.events.tasks.AgendaItem
 
 class MeetingEventsTest {
 
@@ -18,8 +20,8 @@ class MeetingEventsTest {
         val invitation = MeetingInvitation(
             title = "Daily Standup",
             agenda = listOf(
-                AgendaItem(id = "ai-1", topic = "Yesterday"),
-                AgendaItem(id = "ai-2", topic = "Today"),
+                AgendaItem(id = "ai-1", title = "Yesterday"),
+                AgendaItem(id = "ai-2", title = "Today"),
             ),
             requiredParticipants = listOf(AssignedTo.Agent("agent-1")),
         )

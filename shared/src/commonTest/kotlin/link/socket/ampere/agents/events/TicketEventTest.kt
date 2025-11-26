@@ -8,9 +8,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.core.status.TicketStatus
 import link.socket.ampere.agents.events.bus.EventBus
 import link.socket.ampere.agents.events.tickets.TicketPriority
-import link.socket.ampere.agents.events.tickets.TicketStatus
 import link.socket.ampere.agents.events.tickets.TicketType
 
 class TicketEventTest {
@@ -36,8 +36,8 @@ class TicketEventTest {
         val statusChanged = TicketEvent.TicketStatusChanged(
             eventId = "22222222-2222-2222-2222-222222222222",
             ticketId = testTicketId,
-            previousStatus = TicketStatus.BACKLOG,
-            newStatus = TicketStatus.READY,
+            previousStatus = TicketStatus.Backlog,
+            newStatus = TicketStatus.Ready,
             changedBy = testAgentId,
             timestamp = now,
         )
@@ -73,8 +73,8 @@ class TicketEventTest {
         assertEquals(TicketPriority.HIGH, created.priority)
         assertEquals(testAgentId, created.createdBy)
 
-        assertEquals(TicketStatus.BACKLOG, statusChanged.previousStatus)
-        assertEquals(TicketStatus.READY, statusChanged.newStatus)
+        assertEquals(TicketStatus.Backlog, statusChanged.previousStatus)
+        assertEquals(TicketStatus.Ready, statusChanged.newStatus)
         assertEquals(testAgentId, statusChanged.changedBy)
 
         assertEquals("dev-agent-001", assigned.assignedTo)
@@ -149,8 +149,8 @@ class TicketEventTest {
         val statusChanged = TicketEvent.TicketStatusChanged(
             eventId = "e2",
             ticketId = testTicketId,
-            previousStatus = TicketStatus.READY,
-            newStatus = TicketStatus.IN_PROGRESS,
+            previousStatus = TicketStatus.Ready,
+            newStatus = TicketStatus.InProgress,
             changedBy = testAgentId,
             timestamp = now,
         )
@@ -203,8 +203,8 @@ class TicketEventTest {
         val statusChanged = TicketEvent.TicketStatusChanged(
             eventId = "e2",
             ticketId = testTicketId,
-            previousStatus = TicketStatus.BACKLOG,
-            newStatus = TicketStatus.READY,
+            previousStatus = TicketStatus.Backlog,
+            newStatus = TicketStatus.Ready,
             changedBy = testAgentId,
             timestamp = now,
         )

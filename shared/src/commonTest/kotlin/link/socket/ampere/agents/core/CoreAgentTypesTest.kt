@@ -2,13 +2,31 @@ package link.socket.ampere.agents.core
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.events.tasks.Task
+import link.socket.ampere.agents.core.outcomes.Outcome
+import link.socket.ampere.agents.core.reasoning.Idea
+import link.socket.ampere.agents.core.reasoning.Perception
+import link.socket.ampere.agents.core.reasoning.Plan
+import link.socket.ampere.agents.core.states.AgentState
+import link.socket.ampere.agents.core.tasks.Task
 
 class CoreAgentTypesTest {
+
+    private val stubIdeaId = "idea1"
+
+    private val stubIdea = Idea(
+        id = stubIdeaId,
+        name = "Test",
+        description = "Desc",
+    )
+
+    private val stubPlan = Plan.ForIdea(
+        idea = stubIdea,
+        estimatedComplexity = 5,
+        tasks = emptyList(),
+    )
 
     // ==================== IDEA TESTS ====================
 
@@ -38,9 +56,20 @@ class CoreAgentTypesTest {
 
     @Test
     fun `Idea equality works correctly`() {
-        val idea1 = Idea(name = "Test", description = "Desc")
-        val idea2 = Idea(name = "Test", description = "Desc")
-        val idea3 = Idea(name = "Different", description = "Desc")
+        val idea1 = Idea(
+            id = stubIdeaId,
+            name = "Test",
+            description = "Desc",
+        )
+        val idea2 = Idea(
+            id = stubIdeaId,
+            name = "Test",
+            description = "Desc",
+        )
+        val idea3 = Idea(
+            name = "Different",
+            description = "Desc",
+        )
 
         assertEquals(idea1, idea2)
         assertNotEquals(idea1, idea3)
@@ -57,7 +86,8 @@ class CoreAgentTypesTest {
 
     @Test
     fun `Plan can be created with tasks`() {
-        val plan = Plan(
+        val plan = Plan.ForIdea(
+            idea = stubIdea,
             estimatedComplexity = 5,
             tasks = listOf(Task.blank),
         )
@@ -67,7 +97,8 @@ class CoreAgentTypesTest {
 
     @Test
     fun `Plan can have multiple tasks`() {
-        val plan = Plan(
+        val plan = Plan.ForIdea(
+            idea = stubIdea,
             estimatedComplexity = 8,
             tasks = listOf(Task.blank, Task.blank, Task.blank),
         )
@@ -77,73 +108,24 @@ class CoreAgentTypesTest {
 
     @Test
     fun `Plan equality works correctly`() {
-        val plan1 = Plan(estimatedComplexity = 3, tasks = emptyList())
-        val plan2 = Plan(estimatedComplexity = 3, tasks = emptyList())
-        val plan3 = Plan(estimatedComplexity = 5, tasks = emptyList())
+        val plan1 = Plan.ForIdea(
+            idea = stubIdea,
+            estimatedComplexity = 3,
+            tasks = emptyList(),
+        )
+        val plan2 = Plan.ForIdea(
+            idea = stubIdea,
+            estimatedComplexity = 3,
+            tasks = emptyList(),
+        )
+        val plan3 = Plan.ForIdea(
+            idea = Idea(name = "Different"),
+            estimatedComplexity = 5,
+            tasks = emptyList(),
+        )
 
         assertEquals(plan1, plan2)
         assertNotEquals(plan1, plan3)
-    }
-
-    // ==================== OUTCOME TESTS ====================
-
-    @Test
-    fun `Outcome blank returns Blank instance`() {
-        val blank = Outcome.blank
-        assertIs<Outcome.Blank>(blank)
-    }
-
-    @Test
-    fun `Outcome Success Full can be created`() {
-        val task = Task.blank
-        val outcome = Outcome.Success.Full(task, "Result value")
-
-        assertIs<Outcome.Success.Full>(outcome)
-        assertEquals("Result value", outcome.value)
-        assertEquals(task, outcome.task)
-    }
-
-    @Test
-    fun `Outcome Success Partial can be created with unfinished tasks`() {
-        val task = Task.blank
-        val unfinished = listOf(Task.blank)
-        val outcome = Outcome.Success.Partial(task, unfinished)
-
-        assertIs<Outcome.Success.Partial>(outcome)
-        assertEquals(unfinished, outcome.unfinishedTasks)
-    }
-
-    @Test
-    fun `Outcome Success Partial can be created without unfinished tasks`() {
-        val task = Task.blank
-        val outcome = Outcome.Success.Partial(task)
-
-        assertIs<Outcome.Success.Partial>(outcome)
-        assertEquals(null, outcome.unfinishedTasks)
-    }
-
-    @Test
-    fun `Outcome Failure can be created with error message`() {
-        val task = Task.blank
-        val outcome = Outcome.Failure(task, "Something went wrong")
-
-        assertIs<Outcome.Failure>(outcome)
-        assertEquals("Something went wrong", outcome.errorMessage)
-        assertEquals(task, outcome.task)
-    }
-
-    @Test
-    fun `Outcome types are distinguishable`() {
-        val task = Task.blank
-        val success = Outcome.Success.Full(task, "value")
-        val partial = Outcome.Success.Partial(task)
-        val failure = Outcome.Failure(task, "error")
-        val blank = Outcome.Blank
-
-        assertIs<Outcome.Success>(success)
-        assertIs<Outcome.Success>(partial)
-        assertIs<Outcome.Failure>(failure)
-        assertIs<Outcome.Blank>(blank)
     }
 
     // ==================== PERCEPTION TESTS ====================
@@ -184,45 +166,19 @@ class CoreAgentTypesTest {
 
     @Test
     fun `Perception preserves state correctly`() {
-        val idea = Idea(name = "Current Idea")
-        val plan = Plan(estimatedComplexity = 5, tasks = emptyList())
-        val state = AgentState(
-            currentIdea = idea,
-            currentPlan = plan,
-        )
+        val state = AgentState()
+        state.setNewIdea(stubIdea)
+        state.setNewPlan(stubPlan)
+
         val perception = Perception(
-            ideas = listOf(idea),
+            ideas = listOf(stubIdea),
             currentState = state,
             timestamp = Clock.System.now(),
         )
 
-        val retrievedState = perception.currentState as AgentState
-        assertEquals(idea, retrievedState.currentIdea)
-        assertEquals(plan, retrievedState.currentPlan)
-    }
-
-    // ==================== SIGNAL TESTS ====================
-
-    @Test
-    fun `Signal can be created with value`() {
-        val signal = Signal(value = "Test signal message")
-        assertEquals("Test signal message", signal.value)
-    }
-
-    @Test
-    fun `Signal equality works correctly`() {
-        val signal1 = Signal(value = "Message")
-        val signal2 = Signal(value = "Message")
-        val signal3 = Signal(value = "Different")
-
-        assertEquals(signal1, signal2)
-        assertNotEquals(signal1, signal3)
-    }
-
-    @Test
-    fun `Signal can have empty value`() {
-        val signal = Signal(value = "")
-        assertEquals("", signal.value)
+        val retrievedState = perception.currentState
+        assertEquals(stubIdea, retrievedState.getCurrentMemory().idea)
+        assertEquals(stubPlan, retrievedState.getCurrentMemory().plan)
     }
 
     // ==================== AGENT STATE TESTS ====================
@@ -231,42 +187,58 @@ class CoreAgentTypesTest {
     fun `AgentState default values are correct`() {
         val state = AgentState()
 
-        assertEquals(Idea.blank, state.currentIdea)
-        assertEquals(Plan.blank, state.currentPlan)
-        assertTrue(state.ideaHistory.isEmpty())
-        assertTrue(state.planHistory.isEmpty())
-        assertTrue(state.taskHistory.isEmpty())
-        assertTrue(state.outcomeHistory.isEmpty())
-        assertTrue(state.perceptionHistory.isEmpty())
+        val currentMemory = state.getCurrentMemory()
+        assertEquals(Idea.blank, currentMemory.idea)
+        assertEquals(Outcome.blank, currentMemory.outcome)
+        assertEquals(Perception.blank, currentMemory.perception)
+        assertEquals(Plan.blank, currentMemory.plan)
+        assertEquals(Task.blank, currentMemory.task)
+
+        val pastMemory = state.getPastMemory()
+        assertTrue(pastMemory.ideas.isEmpty())
+        assertTrue(pastMemory.outcomes.isEmpty())
+        assertTrue(pastMemory.perceptions.isEmpty())
+        assertTrue(pastMemory.plans.isEmpty())
+        assertTrue(pastMemory.tasks.isEmpty())
+
+        assertTrue(pastMemory.knowledgeFromIdeas.isEmpty())
+        assertTrue(pastMemory.knowledgeFromOutcomes.isEmpty())
+        assertTrue(pastMemory.knowledgeFromPerceptions.isEmpty())
+        assertTrue(pastMemory.knowledgeFromPlans.isEmpty())
+        assertTrue(pastMemory.knowledgeFromTasks.isEmpty())
     }
 
     @Test
-    fun `AgentState can be created with custom values`() {
-        val idea = Idea(name = "Custom Idea")
-        val plan = Plan(estimatedComplexity = 3, tasks = emptyList())
-        val ideaHistory = listOf(Idea(name = "Past Idea"))
+    fun `AgentState can remember old values`() {
+        val state = AgentState()
 
-        val state = AgentState(
-            currentIdea = idea,
-            currentPlan = plan,
-            ideaHistory = ideaHistory,
+        state.setNewIdea(stubIdea)
+        state.setNewPlan(stubPlan)
+
+        val currentMemory1 = state.getCurrentMemory()
+        assertEquals(stubIdea, currentMemory1.idea)
+        assertEquals(stubPlan, currentMemory1.plan)
+
+        val pastMemory1 = state.getPastMemory()
+        assertTrue(pastMemory1.ideas.isEmpty())
+        assertTrue(pastMemory1.plans.isEmpty())
+
+        val stubIdea1 = stubIdea.copy(name = "New name")
+        val stubPlan1 = Plan.ForIdea(
+            idea = stubIdea1,
+            estimatedComplexity = 10,
+            tasks = emptyList(),
         )
 
-        assertEquals(idea, state.currentIdea)
-        assertEquals(plan, state.currentPlan)
-        assertEquals(1, state.ideaHistory.size)
-        assertEquals("Past Idea", state.ideaHistory[0].name)
-    }
+        state.setNewIdea(stubIdea1)
+        state.setNewPlan(stubPlan1)
 
-    @Test
-    fun `AgentState copy works correctly`() {
-        val state = AgentState()
-        val newIdea = Idea(name = "New Idea")
+        val currentMemory2 = state.getCurrentMemory()
+        assertEquals(stubIdea1, currentMemory2.idea)
+        assertEquals(stubPlan1, currentMemory2.plan)
 
-        val updatedState = state.copy(currentIdea = newIdea)
-
-        assertEquals(newIdea, updatedState.currentIdea)
-        assertEquals(Plan.blank, updatedState.currentPlan)
-        assertTrue(updatedState.ideaHistory.isEmpty())
+        val pastMemory2 = state.getPastMemory()
+        assertEquals(listOf(stubIdea.id), pastMemory2.ideas)
+        assertEquals(listOf(stubPlan.id), pastMemory2.plans)
     }
 }

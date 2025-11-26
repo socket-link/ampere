@@ -5,9 +5,12 @@ import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.core.AssignedTo
+import link.socket.ampere.agents.core.expectations.MeetingExpectations
+import link.socket.ampere.agents.core.outcomes.MeetingOutcome
+import link.socket.ampere.agents.core.status.MeetingStatus
+import link.socket.ampere.agents.core.status.TaskStatus
+import link.socket.ampere.agents.core.tasks.MeetingTask.AgendaItem
 import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.tasks.AgendaItem
-import link.socket.ampere.agents.events.tasks.Task
 
 class MeetingModelsTest {
 
@@ -18,10 +21,10 @@ class MeetingModelsTest {
         id: String,
         topic: String,
         assignedTo: AssignedTo.Agent? = null,
-        status: Task.Status = Task.Status.Pending(),
+        status: TaskStatus = TaskStatus.Pending,
     ) = AgendaItem(
         id = id,
-        topic = topic,
+        title = topic,
         status = status,
         assignedTo = assignedTo,
     )
@@ -40,22 +43,22 @@ class MeetingModelsTest {
             ),
         )
 
-        val outcomeRequirements = MeetingOutcomeRequirements(
+        val outcomeRequirements = MeetingExpectations(
             requirementsDescription = "Implement new API",
             expectedOutcomes = listOf(
-                MeetingOutcome.Type.ACTION_ITEM,
-                MeetingOutcome.Type.DECISION_MADE,
+                MeetingOutcome.ActionItem::class,
+                MeetingOutcome.DecisionMade::class,
             ),
         )
 
         val outcomes = listOf(
             MeetingOutcome.DecisionMade(
-                overrideId = "mo-1",
+                id = "mo-1",
                 description = "Proceed with refactor",
                 decidedBy = stubEventSource,
             ),
             MeetingOutcome.ActionItem(
-                overrideId = "mo-2",
+                id = "mo-2",
                 assignedTo = stubAssignedTo,
                 description = "Implement new API",
                 dueBy = now + 1.seconds,
@@ -82,6 +85,7 @@ class MeetingModelsTest {
                 agenda = agenda,
                 requiredParticipants = listOf(stubAssignedTo),
                 optionalParticipants = listOf(stubAssignedTo),
+                expectedOutcomes = listOf(outcomeRequirements),
             ),
         )
 

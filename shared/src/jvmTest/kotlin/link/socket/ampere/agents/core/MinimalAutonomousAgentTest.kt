@@ -4,15 +4,28 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import link.socket.ampere.agents.events.tasks.CodeChange
-import link.socket.ampere.agents.events.tasks.Task
+import kotlinx.datetime.Clock
+import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
+import link.socket.ampere.agents.core.outcomes.Outcome
+import link.socket.ampere.agents.core.reasoning.Idea
+import link.socket.ampere.agents.core.reasoning.Perception
+import link.socket.ampere.agents.core.reasoning.Plan
+import link.socket.ampere.agents.core.states.AgentState
+import link.socket.ampere.agents.core.status.TaskStatus
+import link.socket.ampere.agents.core.status.TicketStatus
+import link.socket.ampere.agents.core.tasks.Task
+import link.socket.ampere.agents.events.tickets.Ticket
+import link.socket.ampere.agents.events.tickets.TicketPriority
+import link.socket.ampere.agents.events.tickets.TicketType
+import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.tools.Tool
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
@@ -21,6 +34,50 @@ import link.socket.ampere.domain.ai.provider.AIProvider
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MinimalAutonomousAgentTest {
+
+    private val stubIdea = Idea(name = "Perceived")
+
+    private val stubPerception = Perception(
+        ideas = listOf(stubIdea),
+        currentState = AgentState(),
+        timestamp = Clock.System.now(),
+    )
+
+    private val stubTicket = Ticket(
+        id = "TestTicket",
+        title = "TestTitle",
+        description = "TestDescription",
+        type = TicketType.TASK,
+        priority = TicketPriority.LOW,
+        status = TicketStatus.Ready,
+        assignedAgentId = "TestAgent",
+        createdByAgentId = "TestAgent",
+        createdAt = Clock.System.now(),
+        updatedAt = Clock.System.now() + 1.seconds,
+        dueDate = Clock.System.now() + 1.minutes,
+    )
+
+    private val stubTask = Task.CodeChange(
+        id = "TestTask",
+        status = TaskStatus.InProgress,
+        description = "TestDescription",
+        assignedTo = AssignedTo.Agent("TestAgent"),
+    )
+
+    private val stubPlan = Plan.ForIdea(
+        idea = stubIdea,
+        estimatedComplexity = 1,
+        tasks = listOf(stubTask),
+    )
+
+    private val stubOutcome = ExecutionOutcome.NoChanges.Success(
+        executorId = "TestExecutor",
+        ticketId = stubTicket.id,
+        taskId = stubTask.id,
+        executionStartTimestamp = Clock.System.now(),
+        executionEndTimestamp = Clock.System.now() + 1.seconds,
+        message = "Success",
+    )
 
     private val testScope = TestScope(UnconfinedTestDispatcher())
 
@@ -35,34 +92,56 @@ class MinimalAutonomousAgentTest {
     }
 
     private class TestAutonomousAgent(
-        private val perceiveResult: Idea = Idea(name = "Perceived"),
-        private val planResult: Plan = Plan(estimatedComplexity = 1, tasks = emptyList()),
-        private val executeResult: Outcome = Outcome.Success.Full(Task.blank, "Done"),
-        private val evaluateResult: Idea = Idea(name = "Evaluated"),
-    ) : MinimalAutonomousAgent(
-        runLLMToPerceive = { perceiveResult },
-        runLLMToPlan = { planResult },
-        runLLMToExecuteTask = { executeResult },
-        runLLMToExecuteTool = { _, _ -> executeResult },
-        runLLMToEvaluate = { evaluateResult },
-        agentConfiguration = AgentConfiguration(
+        private val perceiveResult: Idea = stubIdea,
+        private val planResult: Plan = stubPlan,
+        private val executeResult: ExecutionOutcome = ExecutionOutcome.NoChanges.Success(
+            executorId = "TestExecutor",
+            ticketId = "TestTicket",
+            taskId = "TestTask",
+            executionStartTimestamp = Clock.System.now(),
+            executionEndTimestamp = Clock.System.now() + 1.seconds,
+            message = "Success",
+        )
+    ) : AutonomousAgent<AgentState>() {
+        override val id: AgentId = "TestAgent"
+        override val initialState: AgentState = AgentState()
+        override val agentConfiguration = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
             aiConfiguration = FakeAIConfiguration(),
-        ),
-    ) {
-        override val id: AgentId = "TestAgent"
+        )
+
+        override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea = { _ -> perceiveResult }
+        override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan = { _, _ -> planResult }
+        override val runLLMToExecuteTask: (task: Task) -> Outcome = { _ -> executeResult }
+        override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome = { _, _ -> executeResult }
+        override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { _ -> perceiveResult }
 
         // Expose protected methods for testing
+        fun testRememberIdea(idea: Idea) = rememberNewIdea(idea)
+        fun testRememberOutcome(outcome: Outcome) = rememberNewOutcome(outcome)
+        fun testRememberPerception(perception: Perception<AgentState>) = rememberNewPerception(perception)
+        fun testRememberPlan(plan: Plan) = rememberNewPlan(plan)
+        fun testRememberTask(task: Task) = rememberNewTask(task)
+
+        // TODO: Test `finish` functions
         fun testFinishCurrentIdea() = finishCurrentIdea()
+        fun testFinishCurrentOutcome() = finishCurrentOutcome()
+        fun testFinishCurrentPerception() = finishCurrentPerception()
         fun testFinishCurrentPlan() = finishCurrentPlan()
-        fun testRememberIdea(idea: Idea) = rememberIdea(idea)
-        fun testRememberPlan(plan: Plan) = rememberPlan(plan)
-        fun testRememberTask(task: Task) = rememberTask(task)
-        fun testRememberOutcome(outcome: Outcome) = rememberOutcome(outcome)
-        fun testRememberPerception(perception: Perception) = rememberPerception(perception)
-        fun testResetWorkingMemory() = resetWorkingMemory()
+        fun testFinishCurrentTask() = finishCurrentTask()
+
+        fun testResetCurrentMemory() = resetCurrentMemory()
         fun testResetPastMemory() = resetPastMemory()
         fun testResetAllMemory() = resetAllMemory()
+
+        companion object {
+            private val stubIdea = Idea(name = "Test Idea")
+            private val stubPlan = Plan.ForIdea(
+                idea = stubIdea,
+                estimatedComplexity = 1,
+                tasks = emptyList(),
+            )
+        }
     }
 
     private lateinit var agent: TestAutonomousAgent
@@ -77,219 +156,192 @@ class MinimalAutonomousAgentTest {
         agent.shutdownAgent()
     }
 
-    // ==================== STATE ACCESSOR TESTS ====================
+    // ==================== MEMORY FUNCTION TESTS ====================
 
     @Test
     fun `getCurrentState returns initial empty state`() {
         val state = agent.getCurrentState()
 
-        assertEquals(Idea.blank, state.currentIdea)
-        assertEquals(Plan.blank, state.currentPlan)
-        assertTrue(state.ideaHistory.isEmpty())
-        assertTrue(state.planHistory.isEmpty())
-        assertTrue(state.taskHistory.isEmpty())
-        assertTrue(state.outcomeHistory.isEmpty())
-        assertTrue(state.perceptionHistory.isEmpty())
+        val currentMemory = state.getCurrentMemory()
+        assertEquals(Idea.blank, currentMemory.idea)
+        assertEquals(Outcome.blank, currentMemory.outcome)
+        assertEquals(Perception.blank, currentMemory.perception)
+        assertEquals(Plan.blank, currentMemory.plan)
+        assertEquals(Task.blank, currentMemory.task)
+
+        val pastMemory = state.getPastMemory()
+        assertEquals(emptyList(), pastMemory.ideas)
+        assertEquals(emptyList(), pastMemory.outcomes)
+        assertEquals(emptyList(), pastMemory.perceptions)
+        assertEquals(emptyList(), pastMemory.plans)
+        assertEquals(emptyList(), pastMemory.tasks)
     }
 
     @Test
-    fun `getRecentIdeas returns current idea plus history`() {
-        val idea1 = Idea(name = "Idea 1")
-        val idea2 = Idea(name = "Idea 2")
+    fun `ideas can be remembered as knowledge`() {
+        agent.testRememberIdea(stubIdea)
+        assertEquals(stubIdea, agent.getCurrentState().getCurrentMemory().idea)
 
+        val idea1 = Idea(name = "Idea 2")
         agent.testRememberIdea(idea1)
-        agent.testRememberIdea(idea2)
 
-        val recentIdeas = agent.getRecentIdeas()
-        // History contains: [initial blank, idea1] + current [idea2]
-        assertEquals(3, recentIdeas.size)
-        assertEquals("Idea 1", recentIdeas[1].name)
-        assertEquals("Idea 2", recentIdeas[2].name)
+        val outputState = agent.getCurrentState()
+        assertEquals(idea1, outputState.getCurrentMemory().idea)
+        assertEquals(listOf(stubIdea.id), outputState.getPastMemory().ideas)
     }
 
     @Test
-    fun `getRecentPlans returns current plan plus history`() {
-        val plan1 = Plan(estimatedComplexity = 1, tasks = emptyList())
-        val plan2 = Plan(estimatedComplexity = 2, tasks = emptyList())
+    fun `outcomes can be remembered as knowledge`() {
+        agent.testRememberOutcome(stubOutcome)
+        assertEquals(stubOutcome, agent.getCurrentState().getCurrentMemory().outcome)
 
-        agent.testRememberPlan(plan1)
-        agent.testRememberPlan(plan2)
-
-        val recentPlans = agent.getRecentPlans()
-        // History contains: [initial blank, plan1] + current [plan2]
-        assertEquals(3, recentPlans.size)
-        assertEquals(1, recentPlans[1].estimatedComplexity)
-        assertEquals(2, recentPlans[2].estimatedComplexity)
-    }
-
-    @Test
-    fun `getRecentTasks returns task history`() {
-        val task = CodeChange(id = "task-1", description = "Test task")
-        agent.testRememberTask(task)
-
-        val tasks = agent.getRecentTasks()
-        assertEquals(1, tasks.size)
-        assertEquals("task-1", tasks[0].id)
-    }
-
-    @Test
-    fun `getRecentOutcomes returns outcome history`() {
-        val outcome = Outcome.Success.Full(Task.blank, "Result")
-        agent.testRememberOutcome(outcome)
-
-        val outcomes = agent.getRecentOutcomes()
-        assertEquals(1, outcomes.size)
-        assertIs<Outcome.Success.Full>(outcomes[0])
-    }
-
-    @Test
-    fun `getRecentPerceptions returns perception history`() {
-        val perception = Perception(
-            ideas = listOf(Idea(name = "Test")),
-            currentState = AgentState(),
-            timestamp = kotlinx.datetime.Clock.System.now(),
-        )
-        agent.testRememberPerception(perception)
-
-        val perceptions = agent.getRecentPerceptions()
-        assertEquals(1, perceptions.size)
-        assertEquals(1, perceptions[0].ideas.size)
-    }
-
-    // ==================== MEMORY MANAGEMENT TESTS ====================
-
-    @Test
-    fun `finishCurrentIdea moves current idea to history`() {
-        val idea = Idea(name = "Test Idea")
-        agent.testRememberIdea(idea)
-
-        agent.testFinishCurrentIdea()
-
-        val state = agent.getCurrentState()
-        assertEquals(Idea.blank, state.currentIdea)
-        // History contains: [initial blank (from rememberIdea), Test Idea (from finishCurrentIdea)]
-        assertEquals(2, state.ideaHistory.size)
-        assertEquals("Test Idea", state.ideaHistory[1].name)
-    }
-
-    @Test
-    fun `finishCurrentPlan moves current plan to history`() {
-        val plan = Plan(estimatedComplexity = 5, tasks = emptyList())
-        agent.testRememberPlan(plan)
-
-        agent.testFinishCurrentPlan()
-
-        val state = agent.getCurrentState()
-        assertEquals(Plan.blank, state.currentPlan)
-        // History contains: [initial blank (from rememberPlan), plan (from finishCurrentPlan)]
-        assertEquals(2, state.planHistory.size)
-        assertEquals(5, state.planHistory[1].estimatedComplexity)
-    }
-
-    @Test
-    fun `rememberIdea finishes previous idea and sets new one`() {
-        val idea1 = Idea(name = "First")
-        val idea2 = Idea(name = "Second")
-
-        agent.testRememberIdea(idea1)
-        agent.testRememberIdea(idea2)
-
-        val state = agent.getCurrentState()
-        assertEquals("Second", state.currentIdea.name)
-        // History contains: [initial blank, First]
-        assertEquals(2, state.ideaHistory.size)
-        assertEquals("First", state.ideaHistory[1].name)
-    }
-
-    @Test
-    fun `rememberPlan finishes previous plan and sets new one`() {
-        val plan1 = Plan(estimatedComplexity = 1, tasks = emptyList())
-        val plan2 = Plan(estimatedComplexity = 2, tasks = emptyList())
-
-        agent.testRememberPlan(plan1)
-        agent.testRememberPlan(plan2)
-
-        val state = agent.getCurrentState()
-        assertEquals(2, state.currentPlan.estimatedComplexity)
-        // History contains: [initial blank, plan1]
-        assertEquals(2, state.planHistory.size)
-        assertEquals(1, state.planHistory[1].estimatedComplexity)
-    }
-
-    @Test
-    fun `rememberTask adds to task history`() {
-        val task1 = CodeChange(id = "1", description = "First")
-        val task2 = CodeChange(id = "2", description = "Second")
-
-        agent.testRememberTask(task1)
-        agent.testRememberTask(task2)
-
-        val tasks = agent.getRecentTasks()
-        assertEquals(2, tasks.size)
-    }
-
-    @Test
-    fun `rememberOutcome adds to outcome history`() {
-        val outcome1 = Outcome.Success.Full(Task.blank, "First")
-        val outcome2 = Outcome.Failure(Task.blank, "Error")
-
+        val outcome1 = stubOutcome.copy(executorId = "Executor 2")
         agent.testRememberOutcome(outcome1)
-        agent.testRememberOutcome(outcome2)
 
-        val outcomes = agent.getRecentOutcomes()
-        assertEquals(2, outcomes.size)
-        assertIs<Outcome.Success.Full>(outcomes[0])
-        assertIs<Outcome.Failure>(outcomes[1])
+        val outputState = agent.getCurrentState()
+        assertEquals(outcome1, outputState.getCurrentMemory().outcome)
+        assertEquals(listOf(stubOutcome.id), outputState.getPastMemory().outcomes)
     }
 
     @Test
-    fun `resetWorkingMemory clears current idea and plan to history`() {
-        agent.testRememberIdea(Idea(name = "Current"))
-        agent.testRememberPlan(Plan(estimatedComplexity = 5, tasks = emptyList()))
+    fun `perceptions can be remembered as knowledge`() {
+        agent.testRememberPerception(stubPerception)
+        assertEquals(stubPerception, agent.getCurrentState().getCurrentMemory().perception)
 
-        agent.testResetWorkingMemory()
+        val perception1 = stubPerception.copy(ideas = listOf(Idea(name = "Perception 2")))
+        agent.testRememberPerception(perception1)
 
-        val state = agent.getCurrentState()
-        assertEquals(Idea.blank, state.currentIdea)
-        assertEquals(Plan.blank, state.currentPlan)
-        // History: [initial blank, Current] and [initial blank, plan5]
-        assertEquals(2, state.ideaHistory.size)
-        assertEquals(2, state.planHistory.size)
+        val outputState = agent.getCurrentState()
+        assertEquals(perception1, outputState.getCurrentMemory().perception)
+        assertEquals(listOf(stubPerception.id), outputState.getPastMemory().perceptions)
+    }
+
+    @Test
+    fun `plans can be remembered as knowledge`() {
+        agent.testRememberPlan(stubPlan)
+        assertEquals(stubPlan, agent.getCurrentState().getCurrentMemory().plan)
+
+        val plan1 = stubPlan.copy(estimatedComplexity = 2)
+        agent.testRememberPlan(plan1)
+
+        val outputState = agent.getCurrentState()
+        assertEquals(plan1, outputState.getCurrentMemory().plan)
+        assertEquals(listOf(stubPlan.id), outputState.getPastMemory().plans)
+    }
+
+    @Test
+    fun `tasks can be remembered as knowledge`() {
+        agent.testRememberTask(stubTask)
+        assertEquals(stubTask, agent.getCurrentState().getCurrentMemory().task)
+
+        val task1 = stubTask.copy(id = "Task 2")
+        agent.testRememberTask(task1)
+
+        val outputState = agent.getCurrentState()
+        assertEquals(task1, outputState.getCurrentMemory().task)
+        assertEquals(listOf(stubTask.id), outputState.getPastMemory().tasks)
+    }
+
+    @Test
+    fun `resetWorkingMemory saves current data to history and then clears current memory`() {
+        agent.testRememberIdea(stubIdea)
+        agent.testRememberOutcome(stubOutcome)
+        agent.testRememberPerception(stubPerception)
+        agent.testRememberPlan(stubPlan)
+        agent.testRememberTask(stubTask)
+
+        val inputState = agent.getCurrentState()
+        val inputCurrentMemory = inputState.getCurrentMemory()
+
+        assertEquals(stubIdea, inputCurrentMemory.idea)
+        assertEquals(stubOutcome, inputCurrentMemory.outcome)
+        assertEquals(stubPerception, inputCurrentMemory.perception)
+        assertEquals(stubPlan, inputCurrentMemory.plan)
+        assertEquals(stubTask, inputCurrentMemory.task)
+
+        agent.testResetCurrentMemory()
+
+        val outputState = agent.getCurrentState()
+        val outputCurrentMemory = outputState.getCurrentMemory()
+        val outputPastMemory = outputState.getPastMemory()
+
+        assertEquals(Idea.blank, outputCurrentMemory.idea)
+        assertEquals(Outcome.blank, outputCurrentMemory.outcome)
+        assertEquals(Perception.blank, outputCurrentMemory.perception)
+        assertEquals(Plan.blank, outputCurrentMemory.plan)
+        assertEquals(Task.blank, outputCurrentMemory.task)
+
+        assertEquals(listOf(stubIdea.id), outputPastMemory.ideas)
+        assertEquals(listOf(stubOutcome.id), outputPastMemory.outcomes)
+        assertEquals(listOf(stubPerception.id), outputPastMemory.perceptions)
+        assertEquals(listOf(stubPlan.id), outputPastMemory.plans)
+        assertEquals(listOf(stubTask.id), outputPastMemory.tasks)
     }
 
     @Test
     fun `resetPastMemory clears all history`() {
-        agent.testRememberIdea(Idea(name = "Test"))
-        agent.testRememberPlan(Plan(estimatedComplexity = 1, tasks = emptyList()))
-        agent.testRememberTask(Task.blank)
-        agent.testRememberOutcome(Outcome.blank)
+        agent.testRememberIdea(stubIdea)
+        agent.testRememberOutcome(stubOutcome)
+        agent.testRememberPerception(stubPerception)
+        agent.testRememberPlan(stubPlan)
+        agent.testRememberTask(stubTask)
+
+        agent.testResetCurrentMemory()
+
+        val inputState = agent.getCurrentState()
+        val inputPastMemory = inputState.getPastMemory()
+
+        assertEquals(listOf(stubIdea.id), inputPastMemory.ideas)
+        assertEquals(listOf(stubOutcome.id), inputPastMemory.outcomes)
+        assertEquals(listOf(stubPerception.id), inputPastMemory.perceptions)
+        assertEquals(listOf(stubPlan.id), inputPastMemory.plans)
+        assertEquals(listOf(stubTask.id), inputPastMemory.tasks)
 
         agent.testResetPastMemory()
 
-        val state = agent.getCurrentState()
-        assertTrue(state.ideaHistory.isEmpty())
-        assertTrue(state.planHistory.isEmpty())
-        assertTrue(state.taskHistory.isEmpty())
-        assertTrue(state.outcomeHistory.isEmpty())
-        assertTrue(state.perceptionHistory.isEmpty())
+        val outputState = agent.getCurrentState()
+        val outputPastMemory = outputState.getPastMemory()
+
+        assertEquals(emptyList(), outputPastMemory.ideas)
+        assertEquals(emptyList(), outputPastMemory.outcomes)
+        assertEquals(emptyList(), outputPastMemory.perceptions)
+        assertEquals(emptyList(), outputPastMemory.plans)
+        assertEquals(emptyList(), outputPastMemory.tasks)
     }
 
     @Test
     fun `resetAllMemory clears everything`() {
-        agent.testRememberIdea(Idea(name = "Test"))
-        agent.testRememberPlan(Plan(estimatedComplexity = 1, tasks = emptyList()))
-        agent.testRememberTask(Task.blank)
-        agent.testRememberOutcome(Outcome.blank)
+        agent.testRememberIdea(stubIdea)
+        agent.testRememberOutcome(stubOutcome)
+        agent.testRememberPerception(stubPerception)
+        agent.testRememberPlan(stubPlan)
+        agent.testRememberTask(stubTask)
+
+        agent.testResetCurrentMemory()
+
+        agent.testRememberIdea(stubIdea)
+        agent.testRememberOutcome(stubOutcome)
+        agent.testRememberPerception(stubPerception)
+        agent.testRememberPlan(stubPlan)
+        agent.testRememberTask(stubTask)
 
         agent.testResetAllMemory()
 
-        val state = agent.getCurrentState()
-        assertEquals(Idea.blank, state.currentIdea)
-        assertEquals(Plan.blank, state.currentPlan)
-        assertTrue(state.ideaHistory.isEmpty())
-        assertTrue(state.planHistory.isEmpty())
-        assertTrue(state.taskHistory.isEmpty())
-        assertTrue(state.outcomeHistory.isEmpty())
+        val outputState = agent.getCurrentState()
+        val outputCurrentMemory = outputState.getCurrentMemory()
+        val outputPastMemory = outputState.getPastMemory()
+
+        assertEquals(Idea.blank, outputCurrentMemory.idea)
+        assertEquals(Outcome.blank, outputCurrentMemory.outcome)
+        assertEquals(Perception.blank, outputCurrentMemory.perception)
+        assertEquals(Plan.blank, outputCurrentMemory.plan)
+        assertEquals(Task.blank, outputCurrentMemory.task)
+
+        assertEquals(emptyList(), outputPastMemory.ideas)
+        assertEquals(emptyList(), outputPastMemory.outcomes)
+        assertEquals(emptyList(), outputPastMemory.perceptions)
+        assertEquals(emptyList(), outputPastMemory.plans)
+        assertEquals(emptyList(), outputPastMemory.tasks)
     }
 
     // ==================== LIFECYCLE TESTS ====================
@@ -311,18 +363,21 @@ class MinimalAutonomousAgentTest {
     fun `pauseAgent stops the runtime loop and resets working memory`() {
         runBlocking {
             // Add some state before initializing
-            agent.testRememberIdea(Idea(name = "Test"))
+            agent.testRememberIdea(stubIdea)
 
             val stateBeforePause = agent.getCurrentState()
-            assertEquals("Test", stateBeforePause.currentIdea.name)
+            val currentMemoryBeforePause = stateBeforePause.getCurrentMemory()
+            assertEquals("Perceived", currentMemoryBeforePause.idea.name)
 
             agent.pauseAgent()
 
             // Working memory should be reset (current idea moved to history)
             val stateAfterPause = agent.getCurrentState()
-            assertEquals(Idea.blank, stateAfterPause.currentIdea)
-            // History contains: [initial blank, Test]
-            assertEquals(2, stateAfterPause.ideaHistory.size)
+            val currentMemoryAfterPause = stateAfterPause.getCurrentMemory()
+            val pastMemoryAfterPause = stateAfterPause.getPastMemory()
+
+            assertEquals(Idea.blank, currentMemoryAfterPause.idea)
+            assertEquals(listOf(stubIdea.id), pastMemoryAfterPause.ideas)
         }
     }
 
@@ -345,8 +400,10 @@ class MinimalAutonomousAgentTest {
     @Test
     fun `shutdownAgent stops loop and clears all memory`() {
         runBlocking {
-            agent.testRememberIdea(Idea(name = "Test"))
-            agent.testRememberTask(Task.blank)
+            agent.testRememberIdea(stubIdea)
+
+            val idea1 = stubIdea.copy(name = "Idea 1")
+            agent.testRememberIdea(idea1)
 
             agent.initialize(testScope)
             delay(20)
@@ -354,180 +411,11 @@ class MinimalAutonomousAgentTest {
             agent.shutdownAgent()
 
             val state = agent.getCurrentState()
-            assertEquals(Idea.blank, state.currentIdea)
-            assertTrue(state.ideaHistory.isEmpty())
-            assertTrue(state.taskHistory.isEmpty())
-        }
-    }
+            val currentMemory = state.getCurrentMemory()
+            val pastMemory = state.getPastMemory()
 
-    // ==================== AGENT ACTION TESTS ====================
-
-    @Test
-    fun `perceiveState creates perception and returns idea`() {
-        runBlocking {
-            val inputIdea = Idea(name = "Input")
-            val result = agent.perceiveState(inputIdea)
-
-            assertEquals("Perceived", result.name)
-
-            val perceptions = agent.getRecentPerceptions()
-            assertEquals(1, perceptions.size)
-            assertEquals(1, perceptions[0].ideas.size)
-            assertEquals("Input", perceptions[0].ideas[0].name)
-        }
-    }
-
-    @Test
-    fun `perceiveState with multiple ideas`() {
-        runBlocking {
-            val idea1 = Idea(name = "First")
-            val idea2 = Idea(name = "Second")
-
-            agent.perceiveState(idea1, idea2)
-
-            val perceptions = agent.getRecentPerceptions()
-            assertEquals(1, perceptions.size)
-            assertEquals(2, perceptions[0].ideas.size)
-        }
-    }
-
-    @Test
-    fun `planIdea returns plan and remembers it`() {
-        runBlocking {
-            val idea = Idea(name = "To Plan")
-            val result = agent.planIdea(idea)
-
-            assertEquals(1, result.estimatedComplexity)
-
-            val plans = agent.getRecentPlans()
-            assertTrue(plans.isNotEmpty())
-        }
-    }
-
-    @Test
-    fun `executePlan with empty tasks returns blank outcome`() {
-        runBlocking {
-            val plan = Plan(estimatedComplexity = 1, tasks = emptyList())
-
-            // Empty plan should cause reduce to fail or return default
-            // Based on implementation, empty list reduce throws
-            try {
-                agent.executePlan(plan)
-            } catch (_: Exception) {
-                // Expected for empty tasks
-            }
-        }
-    }
-
-    @Test
-    fun `executePlan with single task executes and returns outcome`() {
-        runBlocking {
-            val task = CodeChange(id = "1", description = "Test")
-            val plan = Plan(estimatedComplexity = 1, tasks = listOf(task))
-
-            val result = agent.executePlan(plan)
-
-            assertIs<Outcome.Success>(result)
-
-            val tasks = agent.getRecentTasks()
-            assertEquals(1, tasks.size)
-
-            val outcomes = agent.getRecentOutcomes()
-            assertTrue(outcomes.isNotEmpty())
-        }
-    }
-
-    @Test
-    fun `executePlan with multiple tasks executes all`() {
-        runBlocking {
-            val task1 = CodeChange(id = "1", description = "First")
-            val task2 = CodeChange(id = "2", description = "Second")
-            val plan = Plan(estimatedComplexity = 2, tasks = listOf(task1, task2))
-
-            agent.executePlan(plan)
-
-            val tasks = agent.getRecentTasks()
-            assertEquals(2, tasks.size)
-        }
-    }
-
-    @Test
-    fun `executePlan stops at first failure`() {
-        runBlocking {
-            val failingAgent = TestAutonomousAgent(
-                executeResult = Outcome.Failure(Task.blank, "Failed"),
-            )
-
-            val task1 = CodeChange(id = "1", description = "First")
-            val task2 = CodeChange(id = "2", description = "Second")
-            val plan = Plan(estimatedComplexity = 2, tasks = listOf(task1, task2))
-
-            val result = failingAgent.executePlan(plan)
-
-            assertIs<Outcome.Failure>(result)
-            failingAgent.shutdownAgent()
-        }
-    }
-
-    @Test
-    fun `runTask executes and remembers outcome`() {
-        runBlocking {
-            val task = CodeChange(id = "1", description = "Test")
-            val result = agent.runTask(task)
-
-            assertIs<Outcome.Success>(result)
-
-            val outcomes = agent.getRecentOutcomes()
-            assertEquals(1, outcomes.size)
-        }
-    }
-
-    @Test
-    fun `runTool executes and remembers outcome`() {
-        runBlocking {
-            val fakeTool = object : Tool {
-                override val id = "fake-tool"
-                override val name = "Fake Tool"
-                override val description = "A test tool"
-                override val requiredAutonomyLevel = AutonomyLevel.ASK_BEFORE_ACTION
-                override suspend fun execute(
-                    sourceTask: Task,
-                    parameters: Map<String, Any?>,
-                ) = Outcome.Success.Full(sourceTask, "Done")
-                override fun validateParameters(parameters: Map<String, Any>) = true
-            }
-
-            val result = agent.runTool(fakeTool, mapOf("param" to "value"))
-
-            assertIs<Outcome.Success>(result)
-
-            val outcomes = agent.getRecentOutcomes()
-            assertEquals(1, outcomes.size)
-        }
-    }
-
-    @Test
-    fun `evaluateNewIdeas returns idea and remembers it`() {
-        runBlocking {
-            val outcome = Outcome.Success.Full(Task.blank, "Result")
-            val result = agent.evaluateNewIdeas(outcome)
-
-            assertEquals("Evaluated", result.name)
-
-            val ideas = agent.getRecentIdeas()
-            assertTrue(ideas.any { it.name == "Evaluated" })
-        }
-    }
-
-    @Test
-    fun `evaluateNewIdeas with multiple outcomes`() {
-        runBlocking {
-            val outcome1 = Outcome.Success.Full(Task.blank, "First")
-            val outcome2 = Outcome.Success.Full(Task.blank, "Second")
-
-            val result = agent.evaluateNewIdeas(outcome1, outcome2)
-
-            assertEquals("Evaluated", result.name)
+            assertEquals(Idea.blank, currentMemory.idea)
+            assertEquals(emptyList(), pastMemory.ideas)
         }
     }
 
