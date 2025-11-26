@@ -1,11 +1,17 @@
 package link.socket.ampere.agents.events
 
+import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.api.AgentEventApiFactory
 import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.meetings.AgentMeetingsApi
+import link.socket.ampere.agents.events.meetings.AgentMeetingsApiFactory
 import link.socket.ampere.agents.events.meetings.Meeting
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
 import link.socket.ampere.agents.events.messages.AgentMessageApi
+import link.socket.ampere.agents.events.messages.AgentMessageApiFactory
+import link.socket.ampere.agents.events.messages.MessageRepository
 import link.socket.ampere.agents.events.tickets.TicketOrchestrator
 import link.socket.ampere.agents.events.tickets.TicketRepository
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
@@ -26,20 +32,41 @@ import link.socket.ampere.agents.events.meetings.MeetingSchedulingService
  * without depending directly on MeetingOrchestrator.
  */
 class EnvironmentOrchestrator(
-    private val meetingRepository: MeetingRepository,
-    private val ticketRepository: TicketRepository,
+    val meetingRepository: MeetingRepository,
+    val meetingApiFactory: AgentMeetingsApiFactory,
+    val ticketRepository: TicketRepository,
+    val messageRepository: MessageRepository,
+    val messageApiFactory: AgentMessageApiFactory,
+    val eventRepository: EventRepository,
+    val eventApiFactory: AgentEventApiFactory,
     private val eventSerialBus: EventSerialBus,
-    private val messageApi: AgentMessageApi,
-    private val eventApi: AgentEventApi,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
+    companion object {
+        /**
+         * System-level agent ID for orchestrator operations.
+         * Used when the orchestrator needs to perform operations that require an agent context.
+         */
+        private const val SYSTEM_AGENT_ID: AgentId = "SYSTEM_ORCHESTRATOR"
+    }
+
+    /**
+     * System-level message API for internal orchestrator operations.
+     */
+    private val systemMessageApi: AgentMessageApi = messageApiFactory.create(SYSTEM_AGENT_ID)
+
+    /**
+     * System-level event API for internal orchestrator operations.
+     */
+    private val systemEventApi: AgentEventApi = eventApiFactory.create(SYSTEM_AGENT_ID)
+
     /**
      * The meeting orchestrator that handles meeting lifecycle operations.
      */
     val meetingOrchestrator: MeetingOrchestrator = MeetingOrchestrator(
         repository = meetingRepository,
         eventSerialBus = eventSerialBus,
-        messageApi = messageApi,
+        messageApi = systemMessageApi,
         logger = logger,
     )
 
@@ -52,7 +79,7 @@ class EnvironmentOrchestrator(
     val ticketOrchestrator: TicketOrchestrator = TicketOrchestrator(
         ticketRepository = ticketRepository,
         eventSerialBus = eventSerialBus,
-        messageApi = messageApi,
+        messageApi = systemMessageApi,
         meetingSchedulingService = createMeetingSchedulingService(),
         logger = logger,
     )
@@ -61,7 +88,7 @@ class EnvironmentOrchestrator(
      * The event router that routes events to subscribed agents.
      */
     val eventRouter: EventRouter = EventRouter(
-        eventApi = eventApi,
+        eventApi = systemEventApi,
         eventSerialBus = eventSerialBus,
     )
 

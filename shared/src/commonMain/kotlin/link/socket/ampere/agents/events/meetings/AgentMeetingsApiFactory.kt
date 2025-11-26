@@ -5,7 +5,6 @@ import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
 
 class AgentMeetingsApiFactory(
-    private val meetingBuilder: MeetingBuilder,
     private val meetingOrchestrator: MeetingOrchestrator,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
@@ -13,7 +12,7 @@ class AgentMeetingsApiFactory(
     /** Create an [AgentMeetingsApi] for the given [agentId]. */
     fun create(agentId: AgentId): AgentMeetingsApi = AgentMeetingsApi(
         agentId = agentId,
-        meetingBuilder = meetingBuilder,
+        meetingBuilder = MeetingBuilder(agentId),
         meetingOrchestrator = meetingOrchestrator,
         logger = logger,
     )
