@@ -93,22 +93,3 @@ LIMIT ?;
 
 deleteOutcome:
 DELETE FROM OutcomeMemoryStore WHERE id = ?;
-
--- Analytics queries
-
-getSuccessRateByExecutor:
-SELECT
-    executor_id,
-    COUNT(*) as total_executions,
-    SUM(success) as successful_executions,
-    CAST(SUM(success) AS REAL) / COUNT(*) as success_rate,
-    AVG(execution_duration_ms) as avg_duration_ms
-FROM OutcomeMemoryStore
-WHERE executor_id = ?
-GROUP BY executor_id;
-
-getRecentFailures:
-SELECT * FROM OutcomeMemoryStore
-WHERE success = 0
-ORDER BY timestamp DESC
-LIMIT ?;
