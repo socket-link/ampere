@@ -1,6 +1,5 @@
 package link.socket.ampere.agents.implementations.pm
 
-import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.events.tickets.AgentWorkload
@@ -33,76 +32,51 @@ data class ProductManagerState(
      * Highlights blocked tickets, overdue items, and capacity constraints to
      * enable the PM agent to make informed decisions.
      */
-    fun toPerceptionText(): String = buildString {
-        appendLine("=== PM Agent Perception State ===")
-        appendLine("Generated at: ${Clock.System.now()}")
-        appendLine()
+    fun toPerceptionText(): String = perceptionText {
+        header("PM Agent Perception State")
+        timestamp()
 
         // Overall backlog summary
-        append(backlogSummary.toPerceptionText())
-        appendLine()
+        text(backlogSummary.toPerceptionText())
+        blankLine()
 
         // Highlight critical issues first
-        if (blockedTickets.isNotEmpty()) {
-            appendLine("=== BLOCKED TICKETS (Requires Attention) ===")
+        sectionIf(blockedTickets.isNotEmpty(), "BLOCKED TICKETS (Requires Attention)") {
             blockedTickets.forEach { ticket ->
-                appendLine("  - [${ticket.priority}] ${ticket.title}")
-                appendLine("    ID: ${ticket.id}")
-                appendLine("    Type: ${ticket.type}")
-                if (ticket.assignedAgentId != null) {
-                    appendLine("    Assigned to: ${ticket.assignedAgentId}")
-                } else {
-                    appendLine("    Assigned to: UNASSIGNED")
-                }
+                ticket(ticket)
             }
-            appendLine()
         }
 
-        if (overdueTickets.isNotEmpty()) {
-            appendLine("=== OVERDUE TICKETS (Immediate Action Required) ===")
+        sectionIf(overdueTickets.isNotEmpty(), "OVERDUE TICKETS (Immediate Action Required)") {
             overdueTickets.forEach { ticket ->
-                appendLine("  - [${ticket.priority}] ${ticket.title}")
-                appendLine("    ID: ${ticket.id}")
-                appendLine("    Due: ${ticket.dueDate}")
-                appendLine("    Status: ${ticket.status}")
-                if (ticket.assignedAgentId != null) {
-                    appendLine("    Assigned to: ${ticket.assignedAgentId}")
-                } else {
-                    appendLine("    Assigned to: UNASSIGNED")
-                }
+                ticket(ticket)
             }
-            appendLine()
         }
 
         // Upcoming deadlines
-        if (upcomingDeadlines.isNotEmpty()) {
-            appendLine("=== Upcoming Deadlines ===")
+        sectionIf(upcomingDeadlines.isNotEmpty(), "Upcoming Deadlines") {
             upcomingDeadlines.forEach { ticket ->
-                appendLine("  - [${ticket.priority}] ${ticket.title}")
-                appendLine("    Due: ${ticket.dueDate}")
-                appendLine("    Status: ${ticket.status}")
+                ticket(ticket)
             }
-            appendLine()
         }
 
         // Agent workloads
-        if (agentWorkloads.isNotEmpty()) {
-            appendLine("=== Agent Workloads ===")
+        sectionIf(agentWorkloads.isNotEmpty(), "Agent Workloads") {
             agentWorkloads.values.forEach { workload ->
-                appendLine("Agent: ${workload.agentId}")
-                appendLine("  Total assigned: ${workload.assignedTickets.size}")
-                appendLine("  In progress: ${workload.inProgressCount}")
-                appendLine("  Blocked: ${workload.blockedCount}")
-                appendLine("  Completed: ${workload.completedCount}")
+                line("Agent: ${workload.agentId}")
+                field("Total assigned", workload.assignedTickets.size)
+                field("In progress", workload.inProgressCount)
+                field("Blocked", workload.blockedCount)
+                field("Completed", workload.completedCount)
 
                 // Highlight capacity constraints
                 if (workload.blockedCount > 0) {
-                    appendLine("  ⚠ Has blocked tickets")
+                    warning("Has blocked tickets")
                 }
                 if (workload.activeCount > 5) {
-                    appendLine("  ⚠ High workload (${workload.activeCount} active)")
+                    warning("High workload (${workload.activeCount} active)")
                 }
-                appendLine()
+                line("")
             }
         }
     }
