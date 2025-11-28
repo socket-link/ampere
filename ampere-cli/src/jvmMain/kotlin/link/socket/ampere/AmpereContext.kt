@@ -113,6 +113,21 @@ class AmpereContext(
     )
 
     /**
+     * Subscribe to all events for an agent.
+     * Delegates to EnvironmentService for centralized event subscription.
+     *
+     * @param agentId The agent subscribing to the events
+     * @param handler Handler to process events
+     * @return List of subscriptions (one per event type)
+     */
+    fun subscribeToAll(
+        agentId: String,
+        handler: link.socket.ampere.agents.events.api.EventHandler<link.socket.ampere.agents.events.Event, link.socket.ampere.agents.events.subscription.Subscription>,
+    ): List<link.socket.ampere.agents.events.subscription.Subscription> {
+        return environmentService.subscribeToAll(agentId, handler)
+    }
+
+    /**
      * Start all orchestrator services.
      *
      * This must be called before using the context to ensure event routing
@@ -136,9 +151,10 @@ class AmpereContext(
     companion object {
         /**
          * Default database path in the user's home directory.
+         * Falls back to current directory if user.home is not available.
          */
         private fun defaultDatabasePath(): String {
-            val homeDir = System.getProperty("user.home")
+            val homeDir = System.getProperty("user.home") ?: System.getProperty("user.dir") ?: "."
             return File(homeDir, ".ampere/ampere.db").absolutePath
         }
 
