@@ -24,7 +24,8 @@ fun main(args: Array<String>) {
         AmpereCommand(context)
             .subcommands(
                 WatchCommand(context.eventRelayService),
-                ThreadCommand(context.threadViewService)
+                ThreadCommand(context.threadViewService),
+                StatusCommand(context.threadViewService, context.ticketViewService)
             )
             .main(args)
     } finally {
