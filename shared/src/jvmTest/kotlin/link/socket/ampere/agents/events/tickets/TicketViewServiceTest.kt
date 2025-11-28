@@ -37,7 +37,8 @@ class TicketViewServiceTest {
 
     // ==================== Helper Methods ====================
 
-    private val now = Clock.System.now()
+    // Truncate to milliseconds to match database precision
+    private val now = Instant.fromEpochMilliseconds(Clock.System.now().toEpochMilliseconds())
     private val creatorAgentId = "pm-agent-1"
     private val assigneeAgentId = "eng-agent-1"
 
