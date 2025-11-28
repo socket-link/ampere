@@ -18,6 +18,7 @@ import link.socket.ampere.agents.events.Event
 import link.socket.ampere.agents.events.TicketEvent
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.escalation.Escalation
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
 import link.socket.ampere.agents.events.meetings.MeetingSchedulingService

@@ -1,12 +1,13 @@
 package link.socket.ampere
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.events.EnvironmentService
+import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.events.messages.DefaultThreadViewService
 import link.socket.ampere.agents.events.messages.ThreadViewService
 import link.socket.ampere.agents.events.relay.EventRelayService
@@ -16,7 +17,6 @@ import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
-import java.io.File
 
 /**
  * Context that provides dependencies for CLI commands.

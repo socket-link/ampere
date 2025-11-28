@@ -7,10 +7,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import link.socket.ampere.agents.core.actions.AgentActionAutonomy
-import link.socket.ampere.agents.tools.AskHumanTool
-import link.socket.ampere.agents.tools.ReadCodebaseTool
-import link.socket.ampere.agents.tools.RunTestsTool
-import link.socket.ampere.agents.tools.WriteCodeFileTool
+import link.socket.ampere.agents.execution.tools.ToolAskHuman
+import link.socket.ampere.agents.execution.tools.ToolReadCodebase
+import link.socket.ampere.agents.execution.tools.ToolRunTests
+import link.socket.ampere.agents.execution.tools.ToolWriteCodeFile
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AgentSystemIntegrationTest {
@@ -22,10 +22,10 @@ class AgentSystemIntegrationTest {
         val tempDir = Files.createTempDirectory("agent_test").toFile()
         try {
             val tools = mapOf(
-                "ask_human" to AskHumanTool(AgentActionAutonomy.FULLY_AUTONOMOUS),
-                "write_code_file" to WriteCodeFileTool(AgentActionAutonomy.SELF_CORRECTING),
-                "read_codebase" to ReadCodebaseTool(AgentActionAutonomy.ASK_BEFORE_ACTION),
-                "run_tests" to RunTestsTool(AgentActionAutonomy.ACT_WITH_NOTIFICATION)
+                "ask_human" to ToolAskHuman(AgentActionAutonomy.FULLY_AUTONOMOUS),
+                "write_code_file" to ToolWriteCodeFile(AgentActionAutonomy.SELF_CORRECTING),
+                "read_codebase" to ToolReadCodebase(AgentActionAutonomy.ASK_BEFORE_ACTION),
+                "run_tests" to ToolRunTests(AgentActionAutonomy.ACT_WITH_NOTIFICATION)
             )
 
             // TODO: Write agent autonomy testing here

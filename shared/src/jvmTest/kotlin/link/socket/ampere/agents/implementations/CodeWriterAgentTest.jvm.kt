@@ -22,8 +22,8 @@ import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
-import link.socket.ampere.agents.tools.WriteCodeFileTool
-import link.socket.ampere.agents.workspace.ExecutionWorkspace
+import link.socket.ampere.agents.execution.tools.ToolWriteCodeFile
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModel
 import link.socket.ampere.domain.ai.provider.AIProvider
@@ -52,7 +52,7 @@ actual class CodeWriterAgentTest {
         assignedTo = AssignedTo.Agent("TestAgent"),
     )
 
-    private val stubTool = WriteCodeFileTool(
+    private val stubTool = ToolWriteCodeFile(
         requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
     )
 

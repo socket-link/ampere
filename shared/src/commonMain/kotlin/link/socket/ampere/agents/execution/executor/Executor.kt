@@ -4,9 +4,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.core.health.ExecutorSystemHealth
 import link.socket.ampere.agents.core.status.ExecutionStatus
-import link.socket.ampere.agents.execution.ExecutorCapabilities
+import link.socket.ampere.agents.execution.executor.ExecutorCapabilities
 import link.socket.ampere.agents.execution.request.ExecutionRequest
-import link.socket.ampere.agents.tools.Tool
+import link.socket.ampere.agents.execution.tools.Tool
 
 typealias ExecutorId = String
 

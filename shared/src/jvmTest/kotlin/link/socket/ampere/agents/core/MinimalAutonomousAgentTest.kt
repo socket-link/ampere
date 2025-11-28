@@ -26,7 +26,7 @@ import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.agents.execution.request.ExecutionRequest
-import link.socket.ampere.agents.tools.Tool
+import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModel
