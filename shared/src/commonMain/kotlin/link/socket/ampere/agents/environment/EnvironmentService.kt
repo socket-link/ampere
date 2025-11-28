@@ -5,10 +5,8 @@ import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.events.Event
 import link.socket.ampere.agents.events.EventClassType
+import link.socket.ampere.agents.events.EventRegistry
 import link.socket.ampere.agents.events.EventRepository
-import link.socket.ampere.agents.events.MeetingEvent
-import link.socket.ampere.agents.events.MessageEvent
-import link.socket.ampere.agents.events.TicketEvent
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -137,6 +135,8 @@ class EnvironmentService(
     /**
      * Subscribe to all events.
      *
+     * Uses EventRegistry as the single source of truth for all event types.
+     *
      * @param agentId The agent subscribing to the events
      * @param handler Handler to process events
      * @return List of subscriptions (one per event type)
@@ -145,29 +145,7 @@ class EnvironmentService(
         agentId: AgentId,
         handler: EventHandler<Event, Subscription>,
     ): List<Subscription> {
-        val eventTypes = listOf(
-            Event.TaskCreated.EVENT_CLASS_TYPE,
-            Event.QuestionRaised.EVENT_CLASS_TYPE,
-            Event.CodeSubmitted.EVENT_CLASS_TYPE,
-            MeetingEvent.MeetingScheduled.EVENT_CLASS_TYPE,
-            MeetingEvent.MeetingStarted.EVENT_CLASS_TYPE,
-            MeetingEvent.AgendaItemStarted.EVENT_CLASS_TYPE,
-            MeetingEvent.AgendaItemCompleted.EVENT_CLASS_TYPE,
-            MeetingEvent.MeetingCompleted.EVENT_CLASS_TYPE,
-            MeetingEvent.MeetingCanceled.EVENT_CLASS_TYPE,
-            TicketEvent.TicketCreated.EVENT_CLASS_TYPE,
-            TicketEvent.TicketStatusChanged.EVENT_CLASS_TYPE,
-            TicketEvent.TicketAssigned.EVENT_CLASS_TYPE,
-            TicketEvent.TicketBlocked.EVENT_CLASS_TYPE,
-            TicketEvent.TicketCompleted.EVENT_CLASS_TYPE,
-            TicketEvent.TicketMeetingScheduled.EVENT_CLASS_TYPE,
-            MessageEvent.ThreadCreated.EVENT_CLASS_TYPE,
-            MessageEvent.MessagePosted.EVENT_CLASS_TYPE,
-            MessageEvent.ThreadStatusChanged.EVENT_CLASS_TYPE,
-            MessageEvent.EscalationRequested.EVENT_CLASS_TYPE,
-        )
-
-        return eventTypes.map { eventType ->
+        return EventRegistry.allEventTypes.map { eventType ->
             subscribe(agentId, eventType, handler)
         }
     }
