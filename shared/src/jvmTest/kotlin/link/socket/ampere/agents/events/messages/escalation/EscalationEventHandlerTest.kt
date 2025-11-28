@@ -16,6 +16,8 @@ import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.MessageEvent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory
+import link.socket.ampere.agents.events.escalation.EscalationEventHandler
+import link.socket.ampere.agents.events.escalation.Notifier
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.AgentMessageApiFactory
 import link.socket.ampere.agents.events.messages.MessageChannel

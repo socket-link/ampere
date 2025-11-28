@@ -29,8 +29,8 @@ import link.socket.ampere.agents.events.MeetingEvent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
-import link.socket.ampere.agents.implementations.CodeWriterAgent
-import link.socket.ampere.agents.tools.WriteCodeFileTool
+import link.socket.ampere.agents.implementations.code.CodeWriterAgent
+import link.socket.ampere.agents.execution.tools.ToolWriteCodeFile
 import link.socket.ampere.db.Database
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
@@ -66,7 +66,7 @@ class MeetingParticipationHandlerTest {
                 model = AIModel_Gemini.Pro_2_5,
             ),
         ),
-        writeCodeFileTool = WriteCodeFileTool(
+        toolWriteCodeFile = ToolWriteCodeFile(
             requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
         ),
         coroutineScope = testScope,

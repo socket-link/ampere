@@ -1,8 +1,12 @@
 package link.socket.ampere.domain.agent
 
+import link.socket.ampere.agents.events.escalation.Escalation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import link.socket.ampere.agents.core.AgentDescribable
+import link.socket.ampere.agents.core.AgentTypeDescriber
+import link.socket.ampere.agents.events.escalation.EscalationProcess
 
 class AgentDescribableTest {
 
@@ -144,9 +148,9 @@ class AgentDescribableTest {
     fun `formatGroupedByHierarchy groups types by parent class`() {
         // Using Escalation types which implement AgentDescribable
         val types = listOf(
-            link.socket.ampere.agents.events.tickets.Escalation.Discussion.CodeReview,
-            link.socket.ampere.agents.events.tickets.Escalation.Discussion.Design,
-            link.socket.ampere.agents.events.tickets.Escalation.Decision.Technical,
+            Escalation.Discussion.CodeReview,
+            Escalation.Discussion.Design,
+            Escalation.Decision.Technical,
         )
 
         val result = AgentTypeDescriber.formatGroupedByHierarchy(types)
@@ -173,7 +177,7 @@ class AgentDescribableTest {
     @Test
     fun `formatGroupedByHierarchy includes descriptions`() {
         val types = listOf(
-            link.socket.ampere.agents.events.tickets.Escalation.Discussion.CodeReview,
+            Escalation.Discussion.CodeReview,
         )
 
         val result = AgentTypeDescriber.formatGroupedByHierarchy(types)
@@ -252,7 +256,7 @@ class AgentDescribableTest {
 
     @Test
     fun `Escalation types implement AgentDescribable correctly`() {
-        val escalation = link.socket.ampere.agents.events.tickets.Escalation.Discussion.CodeReview
+        val escalation = Escalation.Discussion.CodeReview
 
         assertEquals("CodeReview", escalation.typeName)
         assertTrue(escalation.description.isNotBlank())
@@ -263,7 +267,7 @@ class AgentDescribableTest {
 
     @Test
     fun `EscalationProcess types implement AgentDescribable correctly`() {
-        val process = link.socket.ampere.agents.events.tickets.EscalationProcess.AgentMeeting
+        val process = EscalationProcess.AgentMeeting
 
         assertEquals("AgentMeeting", process.typeName)
         assertTrue(process.description.isNotBlank())
@@ -275,7 +279,7 @@ class AgentDescribableTest {
 
     @Test
     fun `allTypesForPrompt generates valid output`() {
-        val result = link.socket.ampere.agents.events.tickets.Escalation.allTypesForPrompt()
+        val result = Escalation.allTypesForPrompt()
 
         // Should have title
         assertTrue(result.contains("Available escalation types:"))

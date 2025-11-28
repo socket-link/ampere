@@ -17,7 +17,7 @@ import link.socket.ampere.agents.core.states.AgentState
 import link.socket.ampere.agents.core.tasks.Task
 import link.socket.ampere.agents.core.tasks.TaskId
 import link.socket.ampere.agents.execution.request.ExecutionRequest
-import link.socket.ampere.agents.tools.Tool
+import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.domain.ai.model.AIModel
 
 typealias AgentId = String

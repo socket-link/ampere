@@ -6,6 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.events.escalation.ConsoleNotifier
 import link.socket.ampere.agents.events.messages.MessageThreadId
 
 class ConsoleNotifierTest {

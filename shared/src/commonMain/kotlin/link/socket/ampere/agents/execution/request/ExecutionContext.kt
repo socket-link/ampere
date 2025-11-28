@@ -5,7 +5,7 @@ import link.socket.ampere.agents.core.memory.Knowledge
 import link.socket.ampere.agents.core.tasks.Task
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.execution.executor.ExecutorId
-import link.socket.ampere.agents.workspace.ExecutionWorkspace
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 
 /** Additional context used to help the executor perform a task */
 @Serializable

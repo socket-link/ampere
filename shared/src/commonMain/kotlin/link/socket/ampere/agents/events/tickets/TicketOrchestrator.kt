@@ -13,6 +13,7 @@ import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.TicketEvent
 import link.socket.ampere.agents.events.Urgency
 import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.escalation.Escalation
 import link.socket.ampere.agents.events.meetings.Meeting
 import link.socket.ampere.agents.events.meetings.MeetingId
 import link.socket.ampere.agents.events.meetings.MeetingInvitation

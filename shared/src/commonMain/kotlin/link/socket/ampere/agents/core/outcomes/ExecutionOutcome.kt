@@ -7,7 +7,7 @@ import link.socket.ampere.agents.core.tasks.TaskId
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.ExecutorId
-import link.socket.ampere.agents.execution.outcomes.ExecutionValidationResults
+import link.socket.ampere.agents.execution.results.ExecutionResult
 
 /**
  * Standardized execution outcomes.
@@ -129,7 +129,7 @@ sealed interface ExecutionOutcome : Outcome {
             override val executionStartTimestamp: Instant,
             override val executionEndTimestamp: Instant,
             val changedFiles: List<String>,
-            val validation: ExecutionValidationResults,
+            val validation: ExecutionResult,
         ) : CodeChanged, ExecutionOutcome.Success {
 
             override val id: OutcomeId =
