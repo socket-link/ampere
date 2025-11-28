@@ -141,4 +141,187 @@ class EventRepositoryTest {
             driver2.close()
         }
     }
+
+    @Test
+    fun `getEventsWithFilters returns events within time range`() {
+        runBlocking {
+            val t1 = Instant.fromEpochSeconds(1_000)
+            val t2 = Instant.fromEpochSeconds(2_000)
+            val t3 = Instant.fromEpochSeconds(3_000)
+            val t4 = Instant.fromEpochSeconds(4_000)
+
+            // Save events at different times
+            repo.saveEvent(sampleTask(id = "evt-1", ts = t1))
+            repo.saveEvent(sampleQuestion(id = "evt-2", ts = t2))
+            repo.saveEvent(sampleTask(id = "evt-3", ts = t3))
+            repo.saveEvent(sampleQuestion(id = "evt-4", ts = t4))
+
+            // Query for events between t2 and t3 (inclusive)
+            val result = repo.getEventsWithFilters(
+                fromTime = t2,
+                toTime = t3
+            ).getOrNull()
+
+            assertNotNull(result)
+            assertEquals(2, result.size)
+            assertEquals("evt-2", result[0].eventId)
+            assertEquals("evt-3", result[1].eventId)
+        }
+    }
+
+    @Test
+    fun `getEventsWithFilters with event type filter returns only matching events`() {
+        runBlocking {
+            val now = Instant.fromEpochSeconds(5_000)
+
+            // Save events of different types at the same time
+            repo.saveEvent(sampleTask(id = "evt-task-1", ts = now))
+            repo.saveEvent(sampleQuestion(id = "evt-question-1", ts = now))
+            repo.saveEvent(sampleTask(id = "evt-task-2", ts = now))
+
+            // Query with event type filter for TaskCreated only
+            val result = repo.getEventsWithFilters(
+                fromTime = now.minus(kotlin.time.Duration.parse("1s")),
+                toTime = now.plus(kotlin.time.Duration.parse("1s")),
+                eventTypes = setOf("TaskCreated")
+            ).getOrNull()
+
+            assertNotNull(result)
+            assertEquals(2, result.size)
+            assertEquals("evt-task-1", result[0].eventId)
+            assertEquals("evt-task-2", result[1].eventId)
+            result.forEach { event ->
+                assertIs<Event.TaskCreated>(event)
+            }
+        }
+    }
+
+    @Test
+    fun `getEventsWithFilters with source ID filter returns only matching events`() {
+        runBlocking {
+            val now = Instant.fromEpochSeconds(6_000)
+            val sourceA = EventSource.Agent("agent-A")
+            val sourceB = EventSource.Agent("agent-B")
+
+            // Save events from different sources
+            repo.saveEvent(sampleTask(id = "evt-1", ts = now).copy(eventSource = sourceA))
+            repo.saveEvent(sampleTask(id = "evt-2", ts = now).copy(eventSource = sourceB))
+            repo.saveEvent(sampleQuestion(id = "evt-3", ts = now).copy(eventSource = sourceA))
+
+            // Query with source ID filter for agent-A only
+            val result = repo.getEventsWithFilters(
+                fromTime = now.minus(kotlin.time.Duration.parse("1s")),
+                toTime = now.plus(kotlin.time.Duration.parse("1s")),
+                sourceIds = setOf("agent-A")
+            ).getOrNull()
+
+            assertNotNull(result)
+            assertEquals(2, result.size)
+            assertEquals("evt-1", result[0].eventId)
+            assertEquals("evt-3", result[1].eventId)
+            result.forEach { event ->
+                assertEquals("agent-A", (event.eventSource as EventSource.Agent).agentId)
+            }
+        }
+    }
+
+    @Test
+    fun `getEventsWithFilters with both filters applies AND logic`() {
+        runBlocking {
+            val now = Instant.fromEpochSeconds(7_000)
+            val sourceA = EventSource.Agent("agent-A")
+            val sourceB = EventSource.Agent("agent-B")
+
+            // Save various combinations
+            repo.saveEvent(sampleTask(id = "evt-1", ts = now).copy(eventSource = sourceA)) // Match
+            repo.saveEvent(sampleTask(id = "evt-2", ts = now).copy(eventSource = sourceB)) // No match (wrong source)
+            repo.saveEvent(sampleQuestion(id = "evt-3", ts = now).copy(eventSource = sourceA)) // No match (wrong type)
+            repo.saveEvent(sampleQuestion(id = "evt-4", ts = now).copy(eventSource = sourceB)) // No match (both wrong)
+
+            // Query with both filters: TaskCreated AND agent-A
+            val result = repo.getEventsWithFilters(
+                fromTime = now.minus(kotlin.time.Duration.parse("1s")),
+                toTime = now.plus(kotlin.time.Duration.parse("1s")),
+                eventTypes = setOf("TaskCreated"),
+                sourceIds = setOf("agent-A")
+            ).getOrNull()
+
+            assertNotNull(result)
+            assertEquals(1, result.size)
+            assertEquals("evt-1", result[0].eventId)
+            assertIs<Event.TaskCreated>(result[0])
+            assertEquals("agent-A", (result[0].eventSource as EventSource.Agent).agentId)
+        }
+    }
+
+    @Test
+    fun `getEventsWithFilters returns empty list when no events in range`() {
+        runBlocking {
+            val now = Instant.fromEpochSeconds(10_000)
+            val past = Instant.fromEpochSeconds(5_000)
+            val wayPast = Instant.fromEpochSeconds(1_000)
+
+            // Save event at 'now'
+            repo.saveEvent(sampleTask(id = "evt-1", ts = now))
+
+            // Query for time range before the event
+            val result = repo.getEventsWithFilters(
+                fromTime = wayPast,
+                toTime = past
+            ).getOrNull()
+
+            assertNotNull(result)
+            assertEquals(0, result.size)
+        }
+    }
+
+    @Test
+    fun `getEventsWithFilters with equal fromTime and toTime returns events at that exact time`() {
+        runBlocking {
+            val t1 = Instant.fromEpochSeconds(8_000)
+            val t2 = Instant.fromEpochSeconds(8_001)
+            val t3 = Instant.fromEpochSeconds(8_002)
+
+            // Save events at different millisecond timestamps
+            repo.saveEvent(sampleTask(id = "evt-1", ts = t1))
+            repo.saveEvent(sampleTask(id = "evt-2", ts = t2))
+            repo.saveEvent(sampleTask(id = "evt-3", ts = t3))
+
+            // Query with fromTime == toTime
+            val result = repo.getEventsWithFilters(
+                fromTime = t2,
+                toTime = t2
+            ).getOrNull()
+
+            assertNotNull(result)
+            assertEquals(1, result.size)
+            assertEquals("evt-2", result[0].eventId)
+        }
+    }
+
+    @Test
+    fun `getEventsWithFilters returns events in chronological order`() {
+        runBlocking {
+            val t1 = Instant.fromEpochSeconds(100)
+            val t2 = Instant.fromEpochSeconds(200)
+            val t3 = Instant.fromEpochSeconds(300)
+
+            // Save events out of chronological order
+            repo.saveEvent(sampleTask(id = "evt-middle", ts = t2))
+            repo.saveEvent(sampleTask(id = "evt-last", ts = t3))
+            repo.saveEvent(sampleTask(id = "evt-first", ts = t1))
+
+            // Query should return in chronological order (ascending)
+            val result = repo.getEventsWithFilters(
+                fromTime = t1,
+                toTime = t3
+            ).getOrNull()
+
+            assertNotNull(result)
+            assertEquals(3, result.size)
+            assertEquals("evt-first", result[0].eventId)
+            assertEquals("evt-middle", result[1].eventId)
+            assertEquals("evt-last", result[2].eventId)
+        }
+    }
 }

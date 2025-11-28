@@ -58,11 +58,36 @@ class EventRelayServiceImpl(
         toTime: Instant,
         filters: EventRelayFilters
     ): Result<Flow<Event>> {
-        return eventRepository.getEventsBetween(fromTime, toTime).map { events ->
-            flow {
-                events.forEach { event ->
-                    if (filters.matches(event)) {
-                        emit(event)
+        // Extract filter values for database-level filtering
+        val eventTypes = filters.eventTypes?.map { it.second }?.toSet()
+        val sourceIds = filters.eventSources?.map { it.getIdentifier() }?.toSet()
+
+        // Use the filtered query for database-level filtering when event types or source IDs are specified
+        // Note: Urgency and eventId filters are still applied in-memory as they're not in the database schema
+        return if (eventTypes != null || sourceIds != null) {
+            eventRepository.getEventsWithFilters(
+                fromTime = fromTime,
+                toTime = toTime,
+                eventTypes = eventTypes,
+                sourceIds = sourceIds
+            ).map { events ->
+                flow {
+                    // Apply remaining filters (urgency, eventId) in-memory
+                    events.forEach { event ->
+                        if (filters.matches(event)) {
+                            emit(event)
+                        }
+                    }
+                }
+            }
+        } else {
+            // No database-level filters, but might have urgency/eventId filters
+            eventRepository.getEventsBetween(fromTime, toTime).map { events ->
+                flow {
+                    events.forEach { event ->
+                        if (filters.matches(event)) {
+                            emit(event)
+                        }
                     }
                 }
             }
