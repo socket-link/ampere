@@ -147,7 +147,7 @@ class OutcomeMemoryRepositoryTest {
         assertFalse(stored.success)
         assertEquals(1, stored.filesChanged) // partiallyChangedFiles
         assertNotNull(stored.errorMessage)
-        assertTrue(stored.errorMessage!!.contains("Test error"))
+        assertTrue(stored.errorMessage!!.contains(errorMessage))
     }
 
     @Test
