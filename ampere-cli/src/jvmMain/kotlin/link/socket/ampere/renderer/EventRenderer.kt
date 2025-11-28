@@ -114,72 +114,10 @@ class EventRenderer(
     /**
      * Extract human-readable information from the event.
      *
-     * Each event type is parsed to show the most relevant information:
-     * - TaskCreated: Task ID, description, and assignment
-     * - QuestionRaised: Question text and context
-     * - CodeSubmitted: File path and change description
-     * - MeetingEvent: Meeting-specific details
-     * - TicketEvent: Ticket-specific details
-     * - MessageEvent: Message-specific details
-     * - NotificationEvent: Notification-specific details
+     * Each event type is parsed to show the most relevant information using
+     * extension functions for better maintainability and scalability.
      */
-    private fun extractSummary(event: Event): String {
-        return when (event) {
-            is Event.TaskCreated -> {
-                buildString {
-                    append("Task #${event.taskId}: ${event.description}")
-                    event.assignedTo?.let {
-                        append(" (assigned to: $it)")
-                    }
-                    append(" ${formatUrgency(event.urgency)}")
-                    append(" from ${formatSource(event.eventSource)}")
-                }
-            }
-            is Event.QuestionRaised -> {
-                buildString {
-                    append("\"${event.questionText}\"")
-                    if (event.context.isNotBlank()) {
-                        append(" - Context: ${event.context.take(60)}")
-                        if (event.context.length > 60) append("...")
-                    }
-                    append(" ${formatUrgency(event.urgency)}")
-                    append(" from ${formatSource(event.eventSource)}")
-                }
-            }
-            is Event.CodeSubmitted -> {
-                buildString {
-                    append(event.filePath)
-                    append(" - ${event.changeDescription}")
-                    if (event.reviewRequired) {
-                        append(" (review required)")
-                        event.assignedTo?.let {
-                            append(" for $it")
-                        }
-                    }
-                    append(" ${formatUrgency(event.urgency)}")
-                    append(" from ${formatSource(event.eventSource)}")
-                }
-            }
-            is MeetingEvent.MeetingScheduled -> "Meeting scheduled: ${event.meeting.invitation.title} ${formatUrgency(event.urgency)} from ${formatSource(event.eventSource)}"
-            is MeetingEvent.MeetingStarted -> "Meeting ${event.meetingId} started (thread: ${event.threadId}) ${formatUrgency(event.urgency)}"
-            is MeetingEvent.AgendaItemStarted -> "Agenda item started in meeting ${event.meetingId} ${formatUrgency(event.urgency)}"
-            is MeetingEvent.AgendaItemCompleted -> "Agenda item ${event.agendaItemId} completed in meeting ${event.meetingId} ${formatUrgency(event.urgency)}"
-            is MeetingEvent.MeetingCompleted -> "Meeting ${event.meetingId} completed with ${event.outcomes.size} outcomes ${formatUrgency(event.urgency)}"
-            is MeetingEvent.MeetingCanceled -> "Meeting ${event.meetingId} canceled: ${event.reason} ${formatUrgency(event.urgency)}"
-            is TicketEvent.TicketCreated -> "Ticket ${event.ticketId}: ${event.title} (${event.type}, ${event.priority}) ${formatUrgency(event.urgency)}"
-            is TicketEvent.TicketStatusChanged -> "Ticket ${event.ticketId} status: ${event.previousStatus} → ${event.newStatus} ${formatUrgency(event.urgency)}"
-            is TicketEvent.TicketAssigned -> "Ticket ${event.ticketId} assigned to ${event.assignedTo ?: "unassigned"} ${formatUrgency(event.urgency)}"
-            is TicketEvent.TicketBlocked -> "Ticket ${event.ticketId} blocked: ${event.blockingReason} ${formatUrgency(event.urgency)}"
-            is TicketEvent.TicketCompleted -> "Ticket ${event.ticketId} completed by ${event.completedBy} ${formatUrgency(event.urgency)}"
-            is TicketEvent.TicketMeetingScheduled -> "Meeting ${event.meetingId} scheduled for ticket ${event.ticketId} ${formatUrgency(event.urgency)}"
-            is MessageEvent.ThreadCreated -> "Thread created in ${event.thread.channel} ${formatUrgency(event.urgency)} from ${formatSource(event.eventSource)}"
-            is MessageEvent.MessagePosted -> "Message posted in ${event.channel} ${formatUrgency(event.urgency)} from ${formatSource(event.eventSource)}"
-            is MessageEvent.ThreadStatusChanged -> "Thread ${event.threadId} status: ${event.oldStatus} → ${event.newStatus} ${formatUrgency(event.urgency)}"
-            is MessageEvent.EscalationRequested -> "Escalation requested in thread ${event.threadId}: ${event.reason} ${formatUrgency(event.urgency)}"
-            is NotificationEvent.ToAgent<*> -> "Notification to ${event.agentId} ${formatUrgency(event.urgency)}"
-            is NotificationEvent.ToHuman<*> -> "Notification to human ${formatUrgency(event.urgency)}"
-        }
-    }
+    private fun extractSummary(event: Event): String = event.toSummary(::formatUrgency, ::formatSource)
 
     /**
      * Formats the event source for display.
@@ -205,3 +143,171 @@ class EventRenderer(
         }
     }
 }
+
+/**
+ * Extension functions for converting Event types to summary strings.
+ * This pattern allows easy addition of new event types without modifying the renderer class.
+ */
+private fun Event.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = when (this) {
+    is Event.TaskCreated -> toSummary(formatUrgency, formatSource)
+    is Event.QuestionRaised -> toSummary(formatUrgency, formatSource)
+    is Event.CodeSubmitted -> toSummary(formatUrgency, formatSource)
+    is MeetingEvent.MeetingScheduled -> toSummary(formatUrgency, formatSource)
+    is MeetingEvent.MeetingStarted -> toSummary(formatUrgency)
+    is MeetingEvent.AgendaItemStarted -> toSummary(formatUrgency)
+    is MeetingEvent.AgendaItemCompleted -> toSummary(formatUrgency)
+    is MeetingEvent.MeetingCompleted -> toSummary(formatUrgency)
+    is MeetingEvent.MeetingCanceled -> toSummary(formatUrgency)
+    is TicketEvent.TicketCreated -> toSummary(formatUrgency)
+    is TicketEvent.TicketStatusChanged -> toSummary(formatUrgency)
+    is TicketEvent.TicketAssigned -> toSummary(formatUrgency)
+    is TicketEvent.TicketBlocked -> toSummary(formatUrgency)
+    is TicketEvent.TicketCompleted -> toSummary(formatUrgency)
+    is TicketEvent.TicketMeetingScheduled -> toSummary(formatUrgency)
+    is MessageEvent.ThreadCreated -> toSummary(formatUrgency, formatSource)
+    is MessageEvent.MessagePosted -> toSummary(formatUrgency, formatSource)
+    is MessageEvent.ThreadStatusChanged -> toSummary(formatUrgency)
+    is MessageEvent.EscalationRequested -> toSummary(formatUrgency)
+    is NotificationEvent.ToAgent<*> -> toSummary(formatUrgency)
+    is NotificationEvent.ToHuman<*> -> toSummary(formatUrgency)
+}
+
+// Event.TaskCreated
+private fun Event.TaskCreated.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = buildString {
+    append("Task #$taskId: $description")
+    assignedTo?.let {
+        append(" (assigned to: $it)")
+    }
+    append(" ${formatUrgency(urgency)}")
+    append(" from ${formatSource(eventSource)}")
+}
+
+// Event.QuestionRaised
+private fun Event.QuestionRaised.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = buildString {
+    append("\"$questionText\"")
+    if (context.isNotBlank()) {
+        append(" - Context: ${context.take(60)}")
+        if (context.length > 60) append("...")
+    }
+    append(" ${formatUrgency(urgency)}")
+    append(" from ${formatSource(eventSource)}")
+}
+
+// Event.CodeSubmitted
+private fun Event.CodeSubmitted.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = buildString {
+    append(filePath)
+    append(" - $changeDescription")
+    if (reviewRequired) {
+        append(" (review required)")
+        assignedTo?.let {
+            append(" for $it")
+        }
+    }
+    append(" ${formatUrgency(urgency)}")
+    append(" from ${formatSource(eventSource)}")
+}
+
+// MeetingEvent.MeetingScheduled
+private fun MeetingEvent.MeetingScheduled.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = "Meeting scheduled: ${meeting.invitation.title} ${formatUrgency(urgency)} from ${formatSource(eventSource)}"
+
+// MeetingEvent.MeetingStarted
+private fun MeetingEvent.MeetingStarted.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Meeting $meetingId started (thread: $threadId) ${formatUrgency(urgency)}"
+
+// MeetingEvent.AgendaItemStarted
+private fun MeetingEvent.AgendaItemStarted.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Agenda item started in meeting $meetingId ${formatUrgency(urgency)}"
+
+// MeetingEvent.AgendaItemCompleted
+private fun MeetingEvent.AgendaItemCompleted.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Agenda item $agendaItemId completed in meeting $meetingId ${formatUrgency(urgency)}"
+
+// MeetingEvent.MeetingCompleted
+private fun MeetingEvent.MeetingCompleted.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Meeting $meetingId completed with ${outcomes.size} outcomes ${formatUrgency(urgency)}"
+
+// MeetingEvent.MeetingCanceled
+private fun MeetingEvent.MeetingCanceled.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Meeting $meetingId canceled: $reason ${formatUrgency(urgency)}"
+
+// TicketEvent.TicketCreated
+private fun TicketEvent.TicketCreated.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Ticket $ticketId: $title ($type, $priority) ${formatUrgency(urgency)}"
+
+// TicketEvent.TicketStatusChanged
+private fun TicketEvent.TicketStatusChanged.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Ticket $ticketId status: $previousStatus → $newStatus ${formatUrgency(urgency)}"
+
+// TicketEvent.TicketAssigned
+private fun TicketEvent.TicketAssigned.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Ticket $ticketId assigned to ${assignedTo ?: "unassigned"} ${formatUrgency(urgency)}"
+
+// TicketEvent.TicketBlocked
+private fun TicketEvent.TicketBlocked.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Ticket $ticketId blocked: $blockingReason ${formatUrgency(urgency)}"
+
+// TicketEvent.TicketCompleted
+private fun TicketEvent.TicketCompleted.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Ticket $ticketId completed by $completedBy ${formatUrgency(urgency)}"
+
+// TicketEvent.TicketMeetingScheduled
+private fun TicketEvent.TicketMeetingScheduled.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Meeting $meetingId scheduled for ticket $ticketId ${formatUrgency(urgency)}"
+
+// MessageEvent.ThreadCreated
+private fun MessageEvent.ThreadCreated.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = "Thread created in ${thread.channel} ${formatUrgency(urgency)} from ${formatSource(eventSource)}"
+
+// MessageEvent.MessagePosted
+private fun MessageEvent.MessagePosted.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = "Message posted in $channel ${formatUrgency(urgency)} from ${formatSource(eventSource)}"
+
+// MessageEvent.ThreadStatusChanged
+private fun MessageEvent.ThreadStatusChanged.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Thread $threadId status: $oldStatus → $newStatus ${formatUrgency(urgency)}"
+
+// MessageEvent.EscalationRequested
+private fun MessageEvent.EscalationRequested.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Escalation requested in thread $threadId: $reason ${formatUrgency(urgency)}"
+
+// NotificationEvent.ToAgent
+private fun NotificationEvent.ToAgent<*>.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Notification to $agentId ${formatUrgency(urgency)}"
+
+// NotificationEvent.ToHuman
+private fun NotificationEvent.ToHuman<*>.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = "Notification to human ${formatUrgency(urgency)}"
