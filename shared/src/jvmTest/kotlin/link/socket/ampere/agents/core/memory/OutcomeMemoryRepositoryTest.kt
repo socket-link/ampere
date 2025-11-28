@@ -9,6 +9,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -63,7 +65,7 @@ class OutcomeMemoryRepositoryTest {
             ticketId = ticketId,
             taskId = taskId,
             executionStartTimestamp = now,
-            executionEndTimestamp = now.plus(5000), // 5 seconds later
+            executionEndTimestamp = now.plus(5.seconds),
             changedFiles = changedFiles,
             validation = ExecutionResult(
                 codeChanges = null,
@@ -84,8 +86,11 @@ class OutcomeMemoryRepositoryTest {
             ticketId = ticketId,
             taskId = taskId,
             executionStartTimestamp = now,
-            executionEndTimestamp = now.plus(3000), // 3 seconds later
-            error = ExecutionError.UnexpectedException(errorMessage),
+            executionEndTimestamp = now.plus(3.seconds),
+            error = ExecutionError(
+                type = ExecutionError.Type.UNEXPECTED,
+                message = errorMessage,
+            ),
             partiallyChangedFiles = listOf("file1.kt"),
         )
     }
@@ -148,7 +153,7 @@ class OutcomeMemoryRepositoryTest {
     @Test
     fun `recordOutcome stores execution duration correctly`() = runBlocking {
         val startTime = now
-        val endTime = now.plus(10_000) // 10 seconds later
+        val endTime = now.plus(10.seconds)
         val outcome = ExecutionOutcome.CodeChanged.Success(
             executorId = executorId1,
             ticketId = ticketId1,
@@ -185,8 +190,8 @@ class OutcomeMemoryRepositoryTest {
         val outcome3 = createSuccessfulOutcome()
 
         repo.recordOutcome(ticketId1, executorId1, "First attempt", outcome1, now)
-        repo.recordOutcome(ticketId1, executorId1, "Second attempt", outcome2, now.plus(1000))
-        repo.recordOutcome(ticketId1, executorId1, "Third attempt", outcome3, now.plus(2000))
+        repo.recordOutcome(ticketId1, executorId1, "Second attempt", outcome2, now.plus(1.seconds))
+        repo.recordOutcome(ticketId1, executorId1, "Third attempt", outcome3, now.plus(2.seconds))
 
         val result = repo.getOutcomesByTicket(ticketId1)
 
@@ -257,7 +262,7 @@ class OutcomeMemoryRepositoryTest {
         // Create 5 outcomes for the same executor
         repeat(5) { i ->
             val outcome = createSuccessfulOutcome(executorId = executorId1)
-            repo.recordOutcome(ticketId1, executorId1, "Attempt $i", outcome, now.plus(i * 1000L))
+            repo.recordOutcome(ticketId1, executorId1, "Attempt $i", outcome, now.plus((i * 1000).milliseconds))
         }
 
         val result = repo.getOutcomesByExecutor(executorId1, limit = 3)
@@ -330,7 +335,7 @@ class OutcomeMemoryRepositoryTest {
         // Create 10 outcomes with similar approaches
         repeat(10) { i ->
             val outcome = createSuccessfulOutcome()
-            repo.recordOutcome(ticketId1, executorId1, "Add validation logic $i", outcome, now.plus(i * 1000L))
+            repo.recordOutcome(ticketId1, executorId1, "Add validation logic $i", outcome, now.plus((i * 1000).milliseconds))
         }
 
         val result = repo.findSimilarOutcomes("validation", limit = 3)
@@ -390,8 +395,8 @@ class OutcomeMemoryRepositoryTest {
         // Simulate a ticket that was attempted multiple times
         val attempts = listOf(
             Triple("First try: add validation", createFailedOutcome(errorMessage = "Missing import"), now),
-            Triple("Second try: fix imports and add validation", createFailedOutcome(errorMessage = "Test failed"), now.plus(1000)),
-            Triple("Third try: fix tests and add validation", createSuccessfulOutcome(), now.plus(2000)),
+            Triple("Second try: fix imports and add validation", createFailedOutcome(errorMessage = "Test failed"), now.plus(1.seconds)),
+            Triple("Third try: fix tests and add validation", createSuccessfulOutcome(), now.plus(2.seconds)),
         )
 
         // Record all attempts
