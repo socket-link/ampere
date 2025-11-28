@@ -32,22 +32,22 @@ class DefaultTicketViewService(
 
     override suspend fun getTicketDetail(ticketId: TicketId): Result<TicketDetail> =
         ticketRepository.getTicket(ticketId).mapCatching { ticket ->
-            ticket ?: throw TicketError.TicketNotFound(ticketId)
+            val nonNullTicket = ticket ?: throw TicketError.TicketNotFound(ticketId)
 
             TicketDetail(
-                ticketId = ticket.id,
-                title = ticket.title,
-                description = ticket.description,
-                acceptanceCriteria = extractAcceptanceCriteria(ticket.description),
-                status = ticket.status.name,
-                assigneeId = ticket.assignedAgentId,
-                priority = ticket.priority.name,
-                type = ticket.type.name,
-                createdAt = ticket.createdAt,
-                updatedAt = ticket.updatedAt,
+                ticketId = nonNullTicket.id,
+                title = nonNullTicket.title,
+                description = nonNullTicket.description,
+                acceptanceCriteria = extractAcceptanceCriteria(nonNullTicket.description),
+                status = nonNullTicket.status.name,
+                assigneeId = nonNullTicket.assignedAgentId,
+                priority = nonNullTicket.priority.name,
+                type = nonNullTicket.type.name,
+                createdAt = nonNullTicket.createdAt,
+                updatedAt = nonNullTicket.updatedAt,
                 relatedThreadId = null, // TODO: Add thread relationship when available
-                dueDate = ticket.dueDate,
-                createdByAgentId = ticket.createdByAgentId,
+                dueDate = nonNullTicket.dueDate,
+                createdByAgentId = nonNullTicket.createdByAgentId,
             )
         }
 
@@ -75,9 +75,11 @@ class DefaultTicketViewService(
             // Find the next section header or end of document
             val nextSectionIndex = lines.subList(acIndex + 1, lines.size)
                 .indexOfFirst { line ->
-                    line.trim().endsWith(":") &&
-                    line.trim().first().isUpperCase() &&
-                    !line.trim().matches(Regex("^[-*].*"))
+                    val trimmed = line.trim()
+                    trimmed.endsWith(":") &&
+                    trimmed.isNotEmpty() &&
+                    trimmed.first().isUpperCase() &&
+                    !trimmed.matches(Regex("^[-*].*"))
                 }
 
             val endIndex = if (nextSectionIndex >= 0) {
