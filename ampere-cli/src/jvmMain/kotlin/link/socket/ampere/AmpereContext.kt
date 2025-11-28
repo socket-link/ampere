@@ -10,6 +10,8 @@ import link.socket.ampere.agents.events.EnvironmentService
 import link.socket.ampere.agents.events.messages.DefaultThreadViewService
 import link.socket.ampere.agents.events.messages.ThreadViewService
 import link.socket.ampere.agents.events.relay.EventRelayService
+import link.socket.ampere.agents.events.tickets.DefaultTicketViewService
+import link.socket.ampere.agents.events.tickets.TicketViewService
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
 import link.socket.ampere.data.DEFAULT_JSON
@@ -100,6 +102,14 @@ class AmpereContext(
      */
     val threadViewService: ThreadViewService = DefaultThreadViewService(
         messageRepository = environmentService.messageRepository
+    )
+
+    /**
+     * Ticket view service for querying ticket state.
+     * Provides high-level views of ticket data for CLI display.
+     */
+    val ticketViewService: TicketViewService = DefaultTicketViewService(
+        ticketRepository = environmentService.ticketRepository
     )
 
     /**
