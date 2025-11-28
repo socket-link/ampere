@@ -197,11 +197,11 @@ class CLIRenderer(
             body {
                 tickets.forEach { ticket ->
                     row(
-                        com.github.ajalt.mordant.rendering.TextColors.gray(ticket.id),
+                        com.github.ajalt.mordant.rendering.TextColors.gray(ticket.ticketId),
                         ticket.title,
-                        ticket.status.toString(),
-                        ticket.priority.toString(),
-                        ticket.assignedAgentId ?: dim("unassigned")
+                        ticket.status,
+                        ticket.priority,
+                        ticket.assigneeId ?: dim("unassigned")
                     )
                 }
             }
