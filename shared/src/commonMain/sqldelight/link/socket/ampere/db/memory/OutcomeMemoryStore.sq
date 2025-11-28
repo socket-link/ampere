@@ -1,0 +1,95 @@
+-- Outcome Memory table
+-- Stores execution outcomes for learning and debugging
+CREATE TABLE OutcomeMemoryStore (
+    id TEXT PRIMARY KEY NOT NULL,
+    ticket_id TEXT NOT NULL,
+    executor_id TEXT NOT NULL,
+    approach TEXT NOT NULL,
+    success INTEGER NOT NULL CHECK (success IN (0, 1)),
+    execution_duration_ms INTEGER NOT NULL,
+    files_changed INTEGER NOT NULL,
+    error_message TEXT,
+    timestamp INTEGER NOT NULL
+);
+
+-- Indexes for common queries
+CREATE INDEX idx_outcome_ticket_id ON OutcomeMemoryStore(ticket_id);
+CREATE INDEX idx_outcome_executor_id ON OutcomeMemoryStore(executor_id);
+CREATE INDEX idx_outcome_timestamp ON OutcomeMemoryStore(timestamp DESC);
+CREATE INDEX idx_outcome_success ON OutcomeMemoryStore(success);
+
+-- Full-text search index for similarity matching on approach
+-- This enables fuzzy matching for "find similar outcomes"
+CREATE VIRTUAL TABLE OutcomeMemoryFts USING fts5(
+    id UNINDEXED,
+    approach,
+    content=OutcomeMemoryStore,
+    content_rowid=rowid
+);
+
+-- Triggers to keep FTS index in sync with main table
+CREATE TRIGGER outcome_fts_insert AFTER INSERT ON OutcomeMemoryStore BEGIN
+    INSERT INTO OutcomeMemoryFts(rowid, id, approach)
+    VALUES (new.rowid, new.id, new.approach);
+END;
+
+CREATE TRIGGER outcome_fts_delete AFTER DELETE ON OutcomeMemoryStore BEGIN
+    DELETE FROM OutcomeMemoryFts WHERE rowid = old.rowid;
+END;
+
+CREATE TRIGGER outcome_fts_update AFTER UPDATE ON OutcomeMemoryStore BEGIN
+    DELETE FROM OutcomeMemoryFts WHERE rowid = old.rowid;
+    INSERT INTO OutcomeMemoryFts(rowid, id, approach)
+    VALUES (new.rowid, new.id, new.approach);
+END;
+
+-- =============================================================================
+-- OUTCOME MEMORY QUERIES
+-- =============================================================================
+
+insertOutcome:
+INSERT INTO OutcomeMemoryStore(
+    id, ticket_id, executor_id, approach, success,
+    execution_duration_ms, files_changed, error_message, timestamp
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+getOutcomeById:
+SELECT * FROM OutcomeMemoryStore WHERE id = ?;
+
+getOutcomesByTicket:
+SELECT * FROM OutcomeMemoryStore
+WHERE ticket_id = ?
+ORDER BY timestamp DESC;
+
+getOutcomesByExecutor:
+SELECT * FROM OutcomeMemoryStore
+WHERE executor_id = ?
+ORDER BY timestamp DESC
+LIMIT ?;
+
+getAllOutcomes:
+SELECT * FROM OutcomeMemoryStore
+ORDER BY timestamp DESC;
+
+-- Find similar outcomes using full-text search
+-- Returns outcomes where the approach text matches the search query
+-- Uses FTS5 MATCH for fuzzy matching
+findSimilarOutcomes:
+SELECT o.*
+FROM OutcomeMemoryStore o
+JOIN OutcomeMemoryFts fts ON o.rowid = fts.rowid
+WHERE OutcomeMemoryFts MATCH ?
+ORDER BY fts.rank, o.timestamp DESC
+LIMIT ?;
+
+-- Fallback similarity search using LIKE for simple keyword matching
+-- Used when FTS is not available or for simple queries
+findSimilarOutcomesLike:
+SELECT * FROM OutcomeMemoryStore
+WHERE approach LIKE '%' || ? || '%'
+ORDER BY timestamp DESC
+LIMIT ?;
+
+deleteOutcome:
+DELETE FROM OutcomeMemoryStore WHERE id = ?;
