@@ -21,7 +21,7 @@ fun main(args: Array<String>) {
         context.start()
 
         // Run the CLI with injected dependencies
-        AmpereCommand(context)
+        AmpereCommand()
             .subcommands(
                 WatchCommand(context.eventRelayService),
                 ThreadCommand(context.threadViewService),
@@ -32,24 +32,4 @@ fun main(args: Array<String>) {
         // Clean up resources
         context.close()
     }
-}
-
-/**
- * Root command for the Ampere CLI.
- *
- * @param context The application context providing access to services
- */
-class AmpereCommand(
-    private val context: AmpereContext,
-) : CliktCommand(
-    name = "ampere",
-    help = """
-        Animated Multi-Agent (Prompting Technique) -> AniMA
-        AniMA Model Protocol -> AMP
-        AMP Example Runtime Environment -> AMPERE
-
-        AMPERE is a tool for running AniMA simulations in a real-time, observable environment.
-    """.trimIndent()
-) {
-    override fun run() = Unit
 }
