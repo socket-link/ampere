@@ -23,7 +23,8 @@ fun main(args: Array<String>) {
         // Run the CLI with injected dependencies
         AmpereCommand(context)
             .subcommands(
-                WatchCommand(context.eventRelayService)
+                WatchCommand(context.eventRelayService),
+                ThreadCommand(context.threadViewService)
             )
             .main(args)
     } finally {

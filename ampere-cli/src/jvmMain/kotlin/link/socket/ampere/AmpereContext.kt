@@ -7,6 +7,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.events.EnvironmentService
+import link.socket.ampere.agents.events.messages.DefaultThreadViewService
+import link.socket.ampere.agents.events.messages.ThreadViewService
 import link.socket.ampere.agents.events.relay.EventRelayService
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
@@ -91,6 +93,14 @@ class AmpereContext(
      */
     val eventRelayService: EventRelayService
         get() = environmentService.eventRelayService
+
+    /**
+     * Thread view service for querying thread state.
+     * Provides high-level views of thread data for CLI display.
+     */
+    val threadViewService: ThreadViewService = DefaultThreadViewService(
+        messageRepository = environmentService.messageRepository
+    )
 
     /**
      * Start all orchestrator services.

@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.events.messages
 
 import kotlinx.datetime.Instant
+import kotlinx.serialization.Serializable
 
 /**
  * Service providing high-level views of thread state.
@@ -25,6 +26,7 @@ interface ThreadViewService {
 /**
  * Summary information about a thread for list displays.
  */
+@Serializable
 data class ThreadSummary(
     val threadId: MessageThreadId,
     val title: String,
@@ -37,6 +39,7 @@ data class ThreadSummary(
 /**
  * Complete thread contents for detail views.
  */
+@Serializable
 data class ThreadDetail(
     val threadId: MessageThreadId,
     val title: String,
