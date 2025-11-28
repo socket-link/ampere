@@ -3,17 +3,12 @@ package link.socket.ampere
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
-import com.github.ajalt.mordant.rendering.TextColors.cyan
-import com.github.ajalt.mordant.rendering.TextColors.red
-import com.github.ajalt.mordant.rendering.TextColors.yellow
-import com.github.ajalt.mordant.rendering.TextStyles.bold
-import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.relay.EventRelayFilters
 import link.socket.ampere.agents.events.relay.EventRelayService
-import link.socket.ampere.renderer.EventRenderer
+import link.socket.ampere.renderer.CLIRenderer
 import link.socket.ampere.util.EventTypeParser
 
 /**
@@ -23,9 +18,11 @@ import link.socket.ampere.util.EventTypeParser
  * of the organizational organism by streaming events as they occur.
  *
  * @param eventRelayService The service for subscribing to events (injected)
+ * @param renderer CLI renderer for all output
  */
 class WatchCommand(
     private val eventRelayService: EventRelayService,
+    private val renderer: CLIRenderer = CLIRenderer(Terminal()),
 ) : CliktCommand(
     name = "watch",
     help = """
@@ -53,34 +50,26 @@ class WatchCommand(
         help = "Filter by agent ID (e.g., agent-pm, agent-dev). Repeatable."
     ).multiple()
 
-    private val terminal = Terminal()
-
     override fun run() = runBlocking {
         // Show startup banner
-        terminal.println(bold(cyan("⚡ AMPERE")) + " - Connecting to AniMA Model Protocol virtual environment")
-        terminal.println(dim("Connecting to event stream..."))
-        terminal.println()
+        renderer.renderWatchBanner()
 
         try {
-            // Create event renderer
-            val renderer = EventRenderer(terminal)
-
             // Build filters from command options
             val filters = buildFilters()
 
             // Show active filters
-            showActiveFilters(filters)
+            renderer.renderActiveFilters(filters)
 
             // Subscribe to live events and render them
-            terminal.println(bold("Watching events... (Ctrl+C to stop)"))
-            terminal.println()
+            renderer.renderWatchStart()
 
             eventRelayService.subscribeToLiveEvents(filters)
                 .collect { event ->
-                    renderer.render(event)
+                    renderer.renderEvent(event)
                 }
         } catch (e: Exception) {
-            terminal.println(red("Error: ${e.message}"))
+            renderer.renderError(e.message ?: "Unknown error")
             throw e
         }
     }
@@ -93,8 +82,8 @@ class WatchCommand(
         val eventTypes = if (filterTypes.isNotEmpty()) {
             val parsed = EventTypeParser.parseMultiple(filterTypes)
             if (parsed.isEmpty()) {
-                terminal.println(yellow("Warning: No valid event types found in filters"))
-                terminal.println(yellow("Available types: ${EventTypeParser.getAllEventTypeNames().sorted().joinToString(", ")}"))
+                renderer.renderWarning("No valid event types found in filters")
+                renderer.renderAvailableEventTypes(EventTypeParser.getAllEventTypeNames())
             }
             parsed
         } else {
@@ -112,23 +101,5 @@ class WatchCommand(
             eventTypes = eventTypes,
             eventSources = eventSources
         )
-    }
-
-    /**
-     * Display active filters to the user.
-     */
-    private fun showActiveFilters(filters: EventRelayFilters) {
-        if (filters.isEmpty()) {
-            terminal.println(dim("Watching all events (no filters)"))
-        } else {
-            terminal.println(dim("Active filters:"))
-            filters.eventTypes?.let { types ->
-                terminal.println(dim("  Event types: ${types.map { it.second }.joinToString(", ")}"))
-            }
-            filters.eventSources?.let { sources ->
-                terminal.println(dim("  Agents: ${sources.map { (it as EventSource.Agent).agentId }.joinToString(", ")}"))
-            }
-        }
-        terminal.println()
     }
 }
