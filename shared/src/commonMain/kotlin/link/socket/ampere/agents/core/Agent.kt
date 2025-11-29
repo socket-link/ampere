@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import link.socket.ampere.agents.core.memory.AgentMemoryService
 import link.socket.ampere.agents.core.memory.Knowledge
 import link.socket.ampere.agents.core.memory.KnowledgeWithScore
@@ -39,8 +40,10 @@ sealed class Agent <S : AgentState> {
      * When null, the agent operates without long-term memory recall capabilities.
      * When provided, enables episodic memory queries across sessions.
      */
+    @Transient
     protected open val memoryService: AgentMemoryService? = null
 
+    @Transient
     private val logger by lazy { logWith("Agent/$id") }
 
     abstract suspend fun perceiveState(vararg newIdeas: Idea): Idea
