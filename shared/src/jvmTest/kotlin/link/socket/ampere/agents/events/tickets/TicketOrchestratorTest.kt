@@ -83,28 +83,28 @@ class TicketOrchestratorTest {
         // Subscribe to capture published events
         eventSerialBus.subscribe(
             agentId = "test-subscriber",
-            eventClassType = TicketEvent.TicketCreated.EVENT_CLASS_TYPE,
+            eventType = TicketEvent.TicketCreated.EVENT_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },
         )
         eventSerialBus.subscribe(
             agentId = "test-subscriber",
-            eventClassType = TicketEvent.TicketStatusChanged.EVENT_CLASS_TYPE,
+            eventType = TicketEvent.TicketStatusChanged.EVENT_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },
         )
         eventSerialBus.subscribe(
             agentId = "test-subscriber",
-            eventClassType = TicketEvent.TicketAssigned.EVENT_CLASS_TYPE,
+            eventType = TicketEvent.TicketAssigned.EVENT_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },
         )
         eventSerialBus.subscribe(
             agentId = "test-subscriber",
-            eventClassType = TicketEvent.TicketBlocked.EVENT_CLASS_TYPE,
+            eventType = TicketEvent.TicketBlocked.EVENT_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },
@@ -375,7 +375,7 @@ class TicketOrchestratorTest {
             assertTrue(assignEvents.isNotEmpty(), "TicketAssigned event should be published")
             assertEquals(ticket.id, assignEvents.first().ticketId)
             assertEquals(stubAssignedAgentId, assignEvents.first().assignedTo)
-            assertEquals(stubCreatorAgentId, assignEvents.first().assignedBy)
+            assertEquals(stubCreatorAgentId, assignEvents.first().eventSource.getIdentifier())
         }
     }
 

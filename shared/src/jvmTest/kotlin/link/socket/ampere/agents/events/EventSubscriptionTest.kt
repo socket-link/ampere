@@ -44,7 +44,7 @@ class EventSubscriptionTest {
     fun `subscription id contains agent id and event type`() {
         val sub = EventSubscription.ByEventClassType(
             agentIdOverride = agentId,
-            eventClassTypes = setOf(Event.TaskCreated.EVENT_CLASS_TYPE),
+            eventTypes = setOf(Event.TaskCreated.EVENT_TYPE),
         )
 
         // Format includes a joined representation of types, then "/$agentId"
@@ -58,22 +58,22 @@ class EventSubscriptionTest {
         val router = EventRouter(api, eventSerialBus)
 
         // Subscribe to TaskCreated, then to QuestionRaised
-        router.subscribeToEventClassType(agentId, Event.TaskCreated.EVENT_CLASS_TYPE)
-        val s2 = router.subscribeToEventClassType(agentId, Event.QuestionRaised.EVENT_CLASS_TYPE)
+        router.subscribeToEventClassType(agentId, Event.TaskCreated.EVENT_TYPE)
+        val s2 = router.subscribeToEventClassType(agentId, Event.QuestionRaised.EVENT_TYPE)
 
         // Same agent, subscription should accumulate both types
-        assertTrue(Event.TaskCreated.EVENT_CLASS_TYPE in s2.eventClassTypes)
-        assertTrue(Event.QuestionRaised.EVENT_CLASS_TYPE in s2.eventClassTypes)
+        assertTrue(Event.TaskCreated.EVENT_TYPE in s2.eventTypes)
+        assertTrue(Event.QuestionRaised.EVENT_TYPE in s2.eventTypes)
 
         // Unsubscribe from one (call extension within router scope)
-        val s3 = router.run { s2.unsubscribeFromEventClassType(Event.TaskCreated.EVENT_CLASS_TYPE) }
-        assertTrue(Event.QuestionRaised.EVENT_CLASS_TYPE in s3.eventClassTypes)
-        assertTrue(Event.TaskCreated.EVENT_CLASS_TYPE !in s3.eventClassTypes)
+        val s3 = router.run { s2.unsubscribeFromEventClassType(Event.TaskCreated.EVENT_TYPE) }
+        assertTrue(Event.QuestionRaised.EVENT_TYPE in s3.eventTypes)
+        assertTrue(Event.TaskCreated.EVENT_TYPE !in s3.eventTypes)
 
         // getSubscribedAgentsFor should reflect current mapping
-        val agentsForQuestion = router.getSubscribedAgentsFor(Event.QuestionRaised.EVENT_CLASS_TYPE)
+        val agentsForQuestion = router.getSubscribedAgentsFor(Event.QuestionRaised.EVENT_TYPE)
         assertEquals(listOf(agentId), agentsForQuestion)
-        val agentsForTask = router.getSubscribedAgentsFor(Event.TaskCreated.EVENT_CLASS_TYPE)
+        val agentsForTask = router.getSubscribedAgentsFor(Event.TaskCreated.EVENT_TYPE)
         assertEquals(emptyList(), agentsForTask)
     }
 }

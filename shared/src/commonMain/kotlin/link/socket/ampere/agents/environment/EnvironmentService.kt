@@ -4,9 +4,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.EventClassType
 import link.socket.ampere.agents.events.EventRegistry
 import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.EventType
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -133,10 +133,10 @@ class EnvironmentService(
      */
     fun subscribe(
         agentId: AgentId,
-        eventClassType: EventClassType,
+        eventType: EventType,
         handler: EventHandler<Event, Subscription>,
     ): Subscription =
-        eventBus.subscribe(agentId, eventClassType, handler)
+        eventBus.subscribe(agentId, eventType, handler)
 
     /**
      * Subscribe to all events.

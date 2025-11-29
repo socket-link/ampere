@@ -61,7 +61,7 @@ class MeetingParticipationHandler(
         // Subscribe to MeetingStarted events
         eventSerialBus.subscribe(
             agentId = "meeting-participation-handler",
-            eventClassType = MeetingEvent.MeetingStarted.EVENT_CLASS_TYPE,
+            eventType = MeetingEvent.MeetingStarted.EVENT_TYPE,
             handler = EventHandler { event, _ ->
                 if (event is MeetingEvent.MeetingStarted) {
                     handleMeetingStartedEvent(event)
@@ -72,7 +72,7 @@ class MeetingParticipationHandler(
         // Subscribe to AgendaItemStarted events
         eventSerialBus.subscribe(
             agentId = "meeting-participation-handler",
-            eventClassType = MeetingEvent.AgendaItemStarted.EVENT_CLASS_TYPE,
+            eventType = MeetingEvent.AgendaItemStarted.EVENT_TYPE,
             handler = EventHandler { event, _ ->
                 if (event is MeetingEvent.AgendaItemStarted) {
                     handleAgendaItemStartedEvent(event)
@@ -83,7 +83,7 @@ class MeetingParticipationHandler(
         // Subscribe to MeetingCompleted events
         eventSerialBus.subscribe(
             agentId = "meeting-participation-handler",
-            eventClassType = MeetingEvent.MeetingCompleted.EVENT_CLASS_TYPE,
+            eventType = MeetingEvent.MeetingCompleted.EVENT_TYPE,
             handler = EventHandler { event, _ ->
                 if (event is MeetingEvent.MeetingCompleted) {
                     handleMeetingCompletedEvent(event)

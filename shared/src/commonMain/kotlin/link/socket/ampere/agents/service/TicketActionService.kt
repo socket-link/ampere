@@ -61,7 +61,7 @@ class TicketActionService(
                         description = ticket.description,
                         type = ticket.type,
                         priority = ticket.priority,
-                        createdBy = "human-cli",
+                        eventSource = EventSource.Human,
                         timestamp = now,
                         urgency = when (priority) {
                             TicketPriority.CRITICAL -> Urgency.HIGH
@@ -94,7 +94,7 @@ class TicketActionService(
                         eventId = generateUUID(ticketId),
                         ticketId = ticketId,
                         assignedTo = agentId,
-                        assignedBy = "human-cli",
+                        eventSource = EventSource.Human,
                         timestamp = Clock.System.now(),
                         urgency = Urgency.MEDIUM,
                     )
@@ -128,7 +128,7 @@ class TicketActionService(
                         ticketId = ticketId,
                         previousStatus = oldStatus,
                         newStatus = newStatus,
-                        changedBy = "human-cli",
+                        eventSource = EventSource.Human,
                         timestamp = Clock.System.now(),
                         urgency = Urgency.MEDIUM,
                     )

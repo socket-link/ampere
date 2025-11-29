@@ -117,7 +117,7 @@ class EventStreamServiceTest {
         runBlocking {
             val events = mutableListOf<Event>()
             val filter = EventRelayFilters(
-                eventTypes = setOf(Event.TaskCreated.EVENT_CLASS_TYPE)
+                eventTypes = setOf(Event.TaskCreated.EVENT_TYPE)
             )
 
             val job = launch {
@@ -255,7 +255,7 @@ class EventStreamServiceTest {
 
             // Replay with filter for TaskCreated only
             val filter = EventRelayFilters(
-                eventTypes = setOf(Event.TaskCreated.EVENT_CLASS_TYPE)
+                eventTypes = setOf(Event.TaskCreated.EVENT_TYPE)
             )
             val result = service.replayEvents(
                 fromTime = now - 100.milliseconds,

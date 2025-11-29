@@ -93,7 +93,7 @@ class EventRepositoryTest {
             repo.saveEvent(t1)
             repo.saveEvent(q1)
 
-            val tasks = repo.getEventsByType(Event.TaskCreated.EVENT_CLASS_TYPE).getOrNull()
+            val tasks = repo.getEventsByType(Event.TaskCreated.EVENT_TYPE).getOrNull()
             assertNotNull(tasks)
             assertEquals(1, tasks.size)
             assertIs<Event.TaskCreated>(tasks.first())

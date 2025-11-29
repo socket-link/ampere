@@ -7,15 +7,15 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.EventClassType
+import link.socket.ampere.agents.events.EventType
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
 
-typealias HandlerMap = MutableMap<EventClassType, List<EventHandler<Event, Subscription>>>
-typealias SubscriptionMap = MutableMap<EventClassType, Subscription>
+typealias HandlerMap = MutableMap<EventType, List<EventHandler<Event, Subscription>>>
+typealias SubscriptionMap = MutableMap<EventType, Subscription>
 
 /**
  * EventSerialBus (ESB) is a thread-safe, Kotlin Multiplatform-compatible event bus.
@@ -47,7 +47,7 @@ class EventSerialBus(
     suspend fun publish(event: Event) {
         // Snapshot handlers under lock to maintain ordering and thread-safety
         val handlers: List<EventHandler<Event, Subscription>> = mutex.withLock {
-            handlerMap[event.eventClassType].orEmpty()
+            handlerMap[event.eventType].orEmpty()
         }
 
         if (handlers.isEmpty()) {
@@ -59,12 +59,12 @@ class EventSerialBus(
         for (handler in handlers) {
             scope.launch {
                 try {
-                    val subscription = subscriptionMap[event.eventClassType]
+                    val subscription = subscriptionMap[event.eventType]
                     handler(event, subscription)
                 } catch (throwable: Throwable) {
                     // Swallow exceptions from handlers to avoid impacting other subscribers, but still log them.
                     logger.logError(
-                        message = "Subscriber handler failure for ${event.eventClassType}(id=${event.eventId})",
+                        message = "Subscriber handler failure for ${event.eventType}(id=${event.eventId})",
                         throwable = throwable,
                     )
                 }
@@ -79,12 +79,12 @@ class EventSerialBus(
     @Suppress("UNCHECKED_CAST")
     fun subscribe(
         agentId: AgentId,
-        eventClassType: EventClassType,
+        eventType: EventType,
         handler: EventHandler<Event, Subscription>,
     ): Subscription {
         val subscription = EventSubscription.ByEventClassType(
             agentIdOverride = agentId,
-            eventClassTypes = setOf(eventClassType),
+            eventTypes = setOf(eventType),
         )
 
         val eventHandler: EventHandler<Event, Subscription> = EventHandler { event, subscription ->
@@ -93,7 +93,7 @@ class EventSerialBus(
 
         // Register handler under lock
         runBlockingLock {
-            val existing = handlerMap[eventClassType]
+            val existing = handlerMap[eventType]
 
             val updated = if (existing == null) {
                 listOf(eventHandler)
@@ -101,26 +101,26 @@ class EventSerialBus(
                 existing + eventHandler
             }
 
-            handlerMap[eventClassType] = updated
-            subscriptionMap.getOrPut(eventClassType) { subscription }
+            handlerMap[eventType] = updated
+            subscriptionMap.getOrPut(eventType) { subscription }
         }
 
         // Log subscription
-        logger.logSubscription(eventClassType, subscription)
+        logger.logSubscription(eventType, subscription)
 
         return subscription
     }
 
-    fun unsubscribe(eventClassType: EventClassType) {
+    fun unsubscribe(eventType: EventType) {
         runBlockingLock {
             // TODO: Potentially cancel subscription before removing
-            val subscription = subscriptionMap[eventClassType] ?: return@runBlockingLock
+            val subscription = subscriptionMap[eventType] ?: return@runBlockingLock
 
-            subscriptionMap.remove(eventClassType)
-            handlerMap.remove(eventClassType)
+            subscriptionMap.remove(eventType)
+            handlerMap.remove(eventType)
 
             // Log unsubscription
-            logger.logUnsubscription(eventClassType, subscription)
+            logger.logUnsubscription(eventType, subscription)
         }
     }
 
@@ -138,11 +138,11 @@ class EventSerialBus(
  */
 inline fun <reified E : Event, reified S : Subscription> EventSerialBus.subscribe(
     agentId: AgentId,
-    eventClassType: EventClassType,
+    eventType: EventType,
     noinline handler: suspend (E, S?) -> Unit,
 ): Subscription = subscribe(
     agentId = agentId,
-    eventClassType = eventClassType,
+    eventType = eventType,
     handler = EventHandler { event, subscription ->
         handler(event as E, subscription as S?)
     },

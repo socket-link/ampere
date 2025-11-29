@@ -1,7 +1,7 @@
 package link.socket.ampere.util
 
-import link.socket.ampere.agents.events.EventClassType
 import link.socket.ampere.agents.events.EventRegistry
+import link.socket.ampere.agents.events.EventType
 
 /**
  * Utility for parsing event type names from command-line strings to EventClassType.
@@ -18,7 +18,7 @@ object EventTypeParser {
      * @param typeName The event type name (case-insensitive)
      * @return The EventClassType, or null if not found
      */
-    fun parse(typeName: String): EventClassType? {
+    fun parse(typeName: String): EventType? {
         return EventRegistry.parseEventType(typeName)
     }
 
@@ -28,7 +28,7 @@ object EventTypeParser {
      * @param typeNames List of event type names
      * @return Set of EventClassTypes (skips invalid names)
      */
-    fun parseMultiple(typeNames: List<String>): Set<EventClassType> {
+    fun parseMultiple(typeNames: List<String>): Set<EventType> {
         return EventRegistry.parseEventTypes(typeNames)
     }
 
@@ -46,7 +46,7 @@ object EventTypeParser {
      *
      * @return Set of all EventClassTypes
      */
-    fun getAllEventTypes(): Set<EventClassType> {
+    fun getAllEventTypes(): Set<EventType> {
         return EventRegistry.allEventTypes.toSet()
     }
 }

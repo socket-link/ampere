@@ -10,7 +10,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -22,9 +23,6 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.db.Database
-import kotlin.time.Duration.Companion.days
-import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.minutes
 
 /**
  * Comprehensive test suite for AgentMemoryService.
@@ -65,14 +63,14 @@ class AgentMemoryServiceTest {
         // Subscribe to all MemoryEvents to track emissions
         eventBus.subscribe<MemoryEvent.KnowledgeStored, EventSubscription.ByEventClassType>(
             agentId = agentId,
-            eventClassType = MemoryEvent.KnowledgeStored.EVENT_CLASS_TYPE,
+            eventType = MemoryEvent.KnowledgeStored.EVENT_TYPE,
         ) { event, _ ->
             emittedEvents.add(event)
         }
 
         eventBus.subscribe<MemoryEvent.KnowledgeRecalled, EventSubscription.ByEventClassType>(
             agentId = agentId,
-            eventClassType = MemoryEvent.KnowledgeRecalled.EVENT_CLASS_TYPE,
+            eventType = MemoryEvent.KnowledgeRecalled.EVENT_TYPE,
         ) { event, _ ->
             emittedEvents.add(event)
         }

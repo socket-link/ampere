@@ -41,31 +41,31 @@ class MeetingEventsTest {
         val scheduled: Event = MeetingEvent.MeetingScheduled(
             eventId = "e-1",
             meeting = meeting,
-            scheduledBy = stubEventSource,
+            eventSource = stubEventSource,
         )
 
         val started: Event = MeetingEvent.MeetingStarted(
             eventId = "e-2",
             meetingId = meeting.id,
             threadId = "thread-1",
-            startedAt = now,
-            startedBy = stubEventSource2,
+            eventSource = stubEventSource2,
+            timestamp = now,
         )
 
         val itemStarted: Event = MeetingEvent.AgendaItemStarted(
             eventId = "e-3",
             meetingId = meeting.id,
             agendaItem = meeting.invitation.agenda.first(),
+            eventSource = stubEventSource2,
             timestamp = now,
-            startedBy = stubEventSource2,
         )
 
         val itemCompleted: Event = MeetingEvent.AgendaItemCompleted(
             eventId = "e-4",
             meetingId = meeting.id,
             agendaItemId = meeting.invitation.agenda.first().id,
-            completedAt = now,
-            completedBy = stubEventSource,
+            eventSource = stubEventSource,
+            timestamp = now,
         )
 
         val completed: Event = MeetingEvent.MeetingCompleted(
@@ -74,24 +74,24 @@ class MeetingEventsTest {
             outcomes = listOf(
                 MeetingOutcome.DecisionMade("mo-1", "Ship feature", EventSource.Agent("agent-1")),
             ),
-            completedAt = now,
-            completedBy = stubEventSource,
+            eventSource = stubEventSource,
+            timestamp = now,
         )
 
         val cancelled: Event = MeetingEvent.MeetingCanceled(
             eventId = "e-6",
             meetingId = meeting.id,
             reason = "No quorum",
-            canceledAt = now,
-            canceledBy = stubEventSource,
+            eventSource = stubEventSource,
+            timestamp = now,
         )
 
         // Basic assertions that eventClassType discriminators are set
-        assertEquals(MeetingEvent.MeetingScheduled.EVENT_CLASS_TYPE, scheduled.eventClassType)
-        assertEquals(MeetingEvent.MeetingStarted.EVENT_CLASS_TYPE, started.eventClassType)
-        assertEquals(MeetingEvent.AgendaItemStarted.EVENT_CLASS_TYPE, itemStarted.eventClassType)
-        assertEquals(MeetingEvent.AgendaItemCompleted.EVENT_CLASS_TYPE, itemCompleted.eventClassType)
-        assertEquals(MeetingEvent.MeetingCompleted.EVENT_CLASS_TYPE, completed.eventClassType)
-        assertEquals(MeetingEvent.MeetingCanceled.EVENT_CLASS_TYPE, cancelled.eventClassType)
+        assertEquals(MeetingEvent.MeetingScheduled.EVENT_TYPE, scheduled.eventType)
+        assertEquals(MeetingEvent.MeetingStarted.EVENT_TYPE, started.eventType)
+        assertEquals(MeetingEvent.AgendaItemStarted.EVENT_TYPE, itemStarted.eventType)
+        assertEquals(MeetingEvent.AgendaItemCompleted.EVENT_TYPE, itemCompleted.eventType)
+        assertEquals(MeetingEvent.MeetingCompleted.EVENT_TYPE, completed.eventType)
+        assertEquals(MeetingEvent.MeetingCanceled.EVENT_TYPE, cancelled.eventType)
     }
 }

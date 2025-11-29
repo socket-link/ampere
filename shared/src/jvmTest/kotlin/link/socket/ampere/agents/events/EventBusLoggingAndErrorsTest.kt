@@ -57,20 +57,20 @@ class EventBusLoggingAndErrorsTest {
 
     private class TestLogger : EventLogger {
         val publishes = mutableListOf<String>()
-        val subscriptionList = mutableListOf<Pair<EventClassType, Subscription>>()
-        val unsubscriptionList = mutableListOf<Pair<EventClassType, Subscription>>()
+        val subscriptionList = mutableListOf<Pair<EventType, Subscription>>()
+        val unsubscriptionList = mutableListOf<Pair<EventType, Subscription>>()
         val errors = mutableListOf<String>()
 
         override fun logPublish(event: Event) {
             publishes += event.eventId
         }
 
-        override fun logSubscription(eventClassType: EventClassType, subscription: Subscription) {
-            subscriptionList += eventClassType to subscription
+        override fun logSubscription(eventType: EventType, subscription: Subscription) {
+            subscriptionList += eventType to subscription
         }
 
-        override fun logUnsubscription(eventClassType: EventClassType, subscription: Subscription) {
-            unsubscriptionList += eventClassType to subscription
+        override fun logUnsubscription(eventType: EventType, subscription: Subscription) {
+            unsubscriptionList += eventType to subscription
         }
 
         override fun logError(message: String, throwable: Throwable?) {
@@ -92,12 +92,12 @@ class EventBusLoggingAndErrorsTest {
             var goodCalled = false
             bus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
                 agentId = "agent-X",
-                eventClassType = Event.TaskCreated.EVENT_CLASS_TYPE,
+                eventType = Event.TaskCreated.EVENT_TYPE,
             ) { _, _ -> throw IllegalStateException("boom") }
 
             bus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
                 agentId = "agent-X",
-                eventClassType = Event.TaskCreated.EVENT_CLASS_TYPE,
+                eventType = Event.TaskCreated.EVENT_TYPE,
             ) { _, _ -> goodCalled = true }
 
             // Use API to persist then publish
@@ -123,7 +123,7 @@ class EventBusLoggingAndErrorsTest {
             var delivered = false
             bus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
                 agentId = "agent-X",
-                eventClassType = Event.TaskCreated.EVENT_CLASS_TYPE,
+                eventType = Event.TaskCreated.EVENT_TYPE,
             ) { _, _ -> delivered = true }
 
             // Simulate failure by corrupting table (drop table name typo) is heavy; instead call publish and ensure regardless of save failure subscribers receive.

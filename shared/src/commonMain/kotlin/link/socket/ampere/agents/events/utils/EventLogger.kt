@@ -1,7 +1,7 @@
 package link.socket.ampere.agents.events.utils
 
 import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.EventClassType
+import link.socket.ampere.agents.events.EventType
 import link.socket.ampere.agents.events.subscription.Subscription
 
 /**
@@ -12,10 +12,10 @@ interface EventLogger {
     fun logPublish(event: Event)
 
     /** Called when a subscription occurs. */
-    fun logSubscription(eventClassType: EventClassType, subscription: Subscription)
+    fun logSubscription(eventType: EventType, subscription: Subscription)
 
     /** Called when an unsubscription occurs. */
-    fun logUnsubscription(eventClassType: EventClassType, subscription: Subscription)
+    fun logUnsubscription(eventType: EventType, subscription: Subscription)
 
     /** Log an error without crashing the app. */
     fun logError(message: String, throwable: Throwable? = null)
@@ -31,16 +31,16 @@ class ConsoleEventLogger : EventLogger {
 
     override fun logPublish(event: Event) {
         println(
-            "[EventBus][PUBLISH] type=${event.eventClassType} id=${event.eventId} ts=${event.timestamp} src=${event.eventSource.getIdentifier()}",
+            "[EventBus][PUBLISH] type=${event.eventType} id=${event.eventId} ts=${event.timestamp} src=${event.eventSource.getIdentifier()}",
         )
     }
 
-    override fun logSubscription(eventClassType: EventClassType, subscription: Subscription) {
-        println("[EventBus][SUBSCRIPTION] type=$eventClassType subscription=$subscription")
+    override fun logSubscription(eventType: EventType, subscription: Subscription) {
+        println("[EventBus][SUBSCRIPTION] type=$eventType subscription=$subscription")
     }
 
-    override fun logUnsubscription(eventClassType: EventClassType, subscription: Subscription) {
-        println("[EventBus][UNSUBSCRIPTION] type=$eventClassType subscription=$subscription")
+    override fun logUnsubscription(eventType: EventType, subscription: Subscription) {
+        println("[EventBus][UNSUBSCRIPTION] type=$eventType subscription=$subscription")
     }
 
     override fun logError(message: String, throwable: Throwable?) {

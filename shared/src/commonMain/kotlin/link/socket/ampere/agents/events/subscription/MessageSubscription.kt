@@ -2,7 +2,7 @@ package link.socket.ampere.agents.events.subscription
 
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.events.EventClassType
+import link.socket.ampere.agents.events.EventType
 import link.socket.ampere.agents.events.messages.MessageChannel
 import link.socket.ampere.agents.events.messages.MessageThreadId
 
@@ -17,11 +17,11 @@ sealed class MessageSubscription(
     @Serializable
     data class ByType(
         val agentIdOverride: AgentId,
-        val types: Set<EventClassType>,
+        val eventTypes: Set<EventType>,
     ) : MessageSubscription(agentIdOverride) {
 
         override val subscriptionId: String =
-            types.joinToString(",") + "/$agentId"
+            eventTypes.joinToString(",") + "/$agentId"
     }
 
     @Serializable

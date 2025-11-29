@@ -17,17 +17,16 @@ sealed interface MessageEvent : Event {
     data class ThreadCreated(
         override val eventId: EventId,
         val thread: MessageThread,
+        override val urgency: Urgency = Urgency.MEDIUM
     ) : MessageEvent {
 
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
-        override val urgency: Urgency = Urgency.MEDIUM
+        override val eventType: EventType = EVENT_TYPE
         override val eventSource: EventSource = thread.createdBy.toEventSource()
         override val threadId: MessageThreadId = thread.id
         override val timestamp: Instant = thread.createdAt
 
         companion object {
-            private const val EVENT_TYPE = "ThreadCreated"
-            val EVENT_CLASS_TYPE: EventClassType = ThreadCreated::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "ThreadCreated"
         }
     }
 
@@ -37,16 +36,15 @@ sealed interface MessageEvent : Event {
         override val threadId: MessageThreadId,
         val channel: MessageChannel,
         val message: Message,
+        override val urgency: Urgency = Urgency.LOW
     ) : MessageEvent {
 
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
-        override val urgency: Urgency = Urgency.LOW
+        override val eventType: EventType = EVENT_TYPE
         override val eventSource: EventSource = message.sender.toEventSource()
         override val timestamp: Instant = message.timestamp
 
         companion object {
-            private const val EVENT_TYPE = "MessagePosted"
-            val EVENT_CLASS_TYPE: EventClassType = MessagePosted::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "MessagePosted"
         }
     }
 
@@ -58,14 +56,13 @@ sealed interface MessageEvent : Event {
         override val threadId: MessageThreadId,
         val oldStatus: EventStatus,
         val newStatus: EventStatus,
+        override val urgency: Urgency = Urgency.MEDIUM
     ) : MessageEvent {
 
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
-        override val urgency: Urgency = Urgency.MEDIUM
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            private const val EVENT_TYPE = "ThreadStatusChanged"
-            val EVENT_CLASS_TYPE: EventClassType = ThreadStatusChanged::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "ThreadStatusChanged"
         }
     }
 
@@ -77,14 +74,13 @@ sealed interface MessageEvent : Event {
         override val threadId: MessageThreadId,
         val reason: String,
         val context: Map<String, String> = emptyMap(),
+        override val urgency: Urgency = Urgency.HIGH
     ) : MessageEvent {
 
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
-        override val urgency: Urgency = Urgency.HIGH
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            private const val EVENT_TYPE = "EscalationRequested"
-            val EVENT_CLASS_TYPE: EventClassType = EscalationRequested::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "EscalationRequested"
         }
     }
 }

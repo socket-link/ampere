@@ -29,8 +29,8 @@ import link.socket.ampere.agents.events.MeetingEvent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
-import link.socket.ampere.agents.implementations.code.CodeWriterAgent
 import link.socket.ampere.agents.execution.tools.ToolWriteCodeFile
+import link.socket.ampere.agents.implementations.code.CodeWriterAgent
 import link.socket.ampere.db.Database
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
@@ -425,8 +425,8 @@ class MeetingParticipationHandlerTest {
                 eventId = randomUUID(),
                 meetingId = meeting.id,
                 threadId = threadId,
-                startedAt = Clock.System.now(),
-                startedBy = EventSource.Agent(orchestratorAgentId),
+                eventSource = EventSource.Agent(orchestratorAgentId),
+                timestamp = Clock.System.now(),
             )
 
             // Handle the meeting start - verify it completes without error
@@ -463,7 +463,7 @@ class MeetingParticipationHandlerTest {
                 eventId = randomUUID(),
                 meetingId = meeting.id,
                 agendaItem = agendaItems.first(),
-                startedBy = EventSource.Agent(orchestratorAgentId),
+                eventSource = EventSource.Agent(orchestratorAgentId),
                 timestamp = Clock.System.now(),
             )
 
@@ -499,7 +499,7 @@ class MeetingParticipationHandlerTest {
                 eventId = randomUUID(),
                 meetingId = meeting.id,
                 agendaItem = agendaItems.first(),
-                startedBy = EventSource.Agent(orchestratorAgentId),
+                eventSource = EventSource.Agent(orchestratorAgentId),
                 timestamp = Clock.System.now(),
             )
 

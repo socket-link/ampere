@@ -88,21 +88,21 @@ class TicketMeetingIntegrationTest {
         // Subscribe to capture published events
         eventSerialBus.subscribe(
             agentId = "test-subscriber",
-            eventClassType = TicketEvent.TicketCreated.EVENT_CLASS_TYPE,
+            eventType = TicketEvent.TicketCreated.EVENT_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },
         )
         eventSerialBus.subscribe(
             agentId = "test-subscriber",
-            eventClassType = TicketEvent.TicketBlocked.EVENT_CLASS_TYPE,
+            eventType = TicketEvent.TicketBlocked.EVENT_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },
         )
         eventSerialBus.subscribe(
             agentId = "test-subscriber",
-            eventClassType = TicketEvent.TicketMeetingScheduled.EVENT_CLASS_TYPE,
+            eventType = TicketEvent.TicketMeetingScheduled.EVENT_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },

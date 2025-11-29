@@ -68,7 +68,7 @@ class EventBusTest {
 
             bus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
                 agentId = "agent-X",
-                eventClassType = Event.TaskCreated.EVENT_CLASS_TYPE,
+                eventType = Event.TaskCreated.EVENT_TYPE,
             ) { event, _ ->
                 receivedTask.complete(event)
             }
@@ -99,12 +99,12 @@ class EventBusTest {
 
             bus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
                 agentId = "agent-X",
-                eventClassType = Event.TaskCreated.EVENT_CLASS_TYPE,
+                eventType = Event.TaskCreated.EVENT_TYPE,
             ) { _, _ -> s1.complete(true) }
 
             bus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
                 agentId = "agent-Y",
-                eventClassType = Event.TaskCreated.EVENT_CLASS_TYPE,
+                eventType = Event.TaskCreated.EVENT_TYPE,
             ) { _, _ -> s2.complete(true) }
 
             bus.publish(taskEvent())
@@ -126,7 +126,7 @@ class EventBusTest {
             val bus = EventSerialBus(scope)
             val subscription = bus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
                 agentId = "agent-X",
-                eventClassType = Event.TaskCreated.EVENT_CLASS_TYPE,
+                eventType = Event.TaskCreated.EVENT_TYPE,
             ) { _, _ -> count += 1 }
 
             // First publish should deliver
@@ -135,7 +135,7 @@ class EventBusTest {
             assertEquals(1, count)
 
             // Now unsubscribe and publish again
-            bus.unsubscribe(Event.TaskCreated.EVENT_CLASS_TYPE)
+            bus.unsubscribe(Event.TaskCreated.EVENT_TYPE)
             bus.publish(taskEvent())
             delay(200)
             assertEquals(1, count)

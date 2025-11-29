@@ -6,8 +6,8 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.EventClassType
 import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.EventType
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.subscription.Subscription
@@ -34,7 +34,7 @@ class EventRelayServiceImpl(
         val subscriptions = eventTypes.map { eventType ->
             eventSerialBus.subscribe(
                 agentId = "event-stream-${generateUUID()}",
-                eventClassType = eventType,
+                eventType = eventType,
                 handler = EventHandler { event: Event, _: Subscription? ->
                     // Apply additional filtering beyond the event type
                     if (filters.matches(event)) {
@@ -59,7 +59,7 @@ class EventRelayServiceImpl(
         filters: EventRelayFilters
     ): Result<Flow<Event>> {
         // Extract filter values for database-level filtering
-        val eventTypes = filters.eventTypes?.map { it.second }?.toSet()
+        val eventTypes = filters.eventTypes?.toSet()
         val sourceIds = filters.eventSources?.map { it.getIdentifier() }?.toSet()
 
         // Use the filtered query for database-level filtering when event types or source IDs are specified
@@ -102,11 +102,12 @@ class EventRelayServiceImpl(
      * A more robust solution would use reflection or a registry pattern,
      * but for now we maintain this manually.
      */
-    private fun getAllKnownEventTypes(): Set<EventClassType> {
+   // TODO: Use registry pattern for events here
+    private fun getAllKnownEventTypes(): Set<EventType> {
         return setOf(
-            Event.TaskCreated.EVENT_CLASS_TYPE,
-            Event.QuestionRaised.EVENT_CLASS_TYPE,
-            Event.CodeSubmitted.EVENT_CLASS_TYPE,
+            Event.TaskCreated.EVENT_TYPE,
+            Event.QuestionRaised.EVENT_TYPE,
+            Event.CodeSubmitted.EVENT_TYPE,
             // Add more event types as they are defined
             // MessageEvent types, MeetingEvent types, TicketEvent types, etc.
         )

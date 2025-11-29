@@ -1,9 +1,15 @@
 package link.socket.ampere.agents.tools.registry
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -22,14 +28,6 @@ import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /**
  * Comprehensive tests for ToolRegistry.
@@ -153,7 +151,7 @@ class ToolRegistryTest {
 
             eventBus.subscribe<ToolEvent.ToolRegistered, EventSubscription.ByEventClassType>(
                 agentId = "test-subscriber",
-                eventClassType = ToolEvent.ToolRegistered.EVENT_CLASS_TYPE,
+                eventType = ToolEvent.ToolRegistered.EVENT_TYPE,
             ) { event, _ ->
                 received.complete(event)
             }
@@ -305,7 +303,7 @@ class ToolRegistryTest {
             val received = CompletableDeferred<ToolEvent.ToolUnregistered>()
             eventBus.subscribe<ToolEvent.ToolUnregistered, EventSubscription.ByEventClassType>(
                 agentId = "test-subscriber",
-                eventClassType = ToolEvent.ToolUnregistered.EVENT_CLASS_TYPE,
+                eventType = ToolEvent.ToolUnregistered.EVENT_TYPE,
             ) { event, _ ->
                 received.complete(event)
             }
@@ -420,7 +418,7 @@ class ToolRegistryTest {
 
             eventBus.subscribe<ToolEvent.ToolDiscoveryComplete, EventSubscription.ByEventClassType>(
                 agentId = "test-subscriber",
-                eventClassType = ToolEvent.ToolDiscoveryComplete.EVENT_CLASS_TYPE,
+                eventType = ToolEvent.ToolDiscoveryComplete.EVENT_TYPE,
             ) { event, _ ->
                 received.complete(event)
             }

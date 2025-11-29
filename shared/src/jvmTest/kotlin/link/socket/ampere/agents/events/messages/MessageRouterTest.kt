@@ -84,7 +84,7 @@ class MessageRouterTest {
             val notifications = mutableListOf<NotificationEvent.ToAgent<*>>()
             eventSerialBus.subscribe<NotificationEvent.ToAgent<*>, Subscription>(
                 agentId = "observer",
-                eventClassType = NotificationEvent.ToAgent.EVENT_CLASS_TYPE,
+                eventType = NotificationEvent.ToAgent.EVENT_TYPE,
             ) { event, _ ->
                 notifications += event
             }
@@ -110,9 +110,9 @@ class MessageRouterTest {
             // All notifications should target the subscribed agent
             assertTrue(notifications.all { (it.eventSource as EventSource.Agent).agentId == targetAgent })
             // Ensure we have at least one notification for a thread-related event
-            assertTrue(notifications.any { it.event.eventClassType == MessageEvent.ThreadCreated.EVENT_CLASS_TYPE })
+            assertTrue(notifications.any { it.event.eventType == MessageEvent.ThreadCreated.EVENT_TYPE })
             // And one for a message posted in the channel
-            assertTrue(notifications.any { it.event.eventClassType == MessageEvent.MessagePosted.EVENT_CLASS_TYPE })
+            assertTrue(notifications.any { it.event.eventType == MessageEvent.MessagePosted.EVENT_TYPE })
         }
     }
 }

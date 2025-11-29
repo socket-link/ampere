@@ -5,12 +5,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.datetime.Clock
-import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.events.subscription.Subscription
 
 class NotificationEventTest {
-
-    private val json: Json = link.socket.ampere.data.DEFAULT_JSON
 
     @Test
     fun `to agent mirrors source event properties`() {
@@ -27,14 +24,14 @@ class NotificationEventTest {
         val n: NotificationEvent.ToAgent<Subscription> = NotificationEvent.ToAgent(
             agentId = "agent-42",
             event = source,
-            eventSubscription = null,
+            subscription = null,
         )
 
         assertEquals("agent-42", (n.eventSource as EventSource.Agent).agentId)
         assertTrue(n.eventId.contains("e-1"))
         assertEquals(source.timestamp, n.timestamp)
         assertEquals(source.urgency, n.urgency)
-        assertEquals(NotificationEvent.ToAgent.EVENT_CLASS_TYPE, n.eventClassType)
+        assertEquals(NotificationEvent.ToAgent.EVENT_TYPE, n.eventType)
     }
 
     @Test
@@ -50,14 +47,14 @@ class NotificationEventTest {
 
         val n: NotificationEvent.ToHuman<Subscription> = NotificationEvent.ToHuman(
             event = source,
-            eventSubscription = null,
+            subscription = null,
         )
 
         assertIs<EventSource.Human>(n.eventSource)
         assertTrue(n.eventId.contains("e-2"))
         assertEquals(source.timestamp, n.timestamp)
         assertEquals(source.urgency, n.urgency)
-        assertEquals(NotificationEvent.ToHuman.EVENT_CLASS_TYPE, n.eventClassType)
+        assertEquals(NotificationEvent.ToHuman.EVENT_TYPE, n.eventType)
 
         // Note: serialization of generic sealed classes can vary by platform; core behavior validated above.
     }

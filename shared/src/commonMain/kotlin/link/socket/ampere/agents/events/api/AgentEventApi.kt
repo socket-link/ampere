@@ -3,10 +3,12 @@ package link.socket.ampere.agents.events.api
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.core.actions.AgentActionAutonomy
 import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.EventClassType
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.EventSource
+import link.socket.ampere.agents.events.EventType
+import link.socket.ampere.agents.events.ToolEvent
 import link.socket.ampere.agents.events.Urgency
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.subscribe
@@ -56,7 +58,7 @@ class AgentEventApi(
             }
             .onFailure { throwable ->
                 logger.logError(
-                    message = "Failed to create event ${event.eventClassType} id=${event.eventId}",
+                    message = "Failed to create event ${event.eventType} id=${event.eventId}",
                     throwable = throwable,
                 )
             }
@@ -129,7 +131,7 @@ class AgentEventApi(
     ): Subscription =
         eventSerialBus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
             agentId = agentId,
-            eventClassType = Event.TaskCreated.EVENT_CLASS_TYPE,
+            eventType = Event.TaskCreated.EVENT_TYPE,
         ) { event, subscription ->
             if (filter.execute(event)) {
                 handler(event, subscription)
@@ -143,7 +145,7 @@ class AgentEventApi(
     ): Subscription =
         eventSerialBus.subscribe<Event.QuestionRaised, EventSubscription.ByEventClassType>(
             agentId = agentId,
-            eventClassType = Event.QuestionRaised.EVENT_CLASS_TYPE,
+            eventType = Event.QuestionRaised.EVENT_TYPE,
         ) { event, subscription ->
             if (filter.execute(event)) {
                 handler(event, subscription)
@@ -157,7 +159,7 @@ class AgentEventApi(
     ): Subscription =
         eventSerialBus.subscribe<Event.CodeSubmitted, EventSubscription.ByEventClassType>(
             agentId = agentId,
-            eventClassType = Event.CodeSubmitted.EVENT_CLASS_TYPE,
+            eventType = Event.CodeSubmitted.EVENT_TYPE,
         ) { event, subscription ->
             if (filter.execute(event)) {
                 handler(event, subscription)
@@ -167,7 +169,7 @@ class AgentEventApi(
     /** Retrieve all events since the provided timestamp, or all if null. */
     suspend fun getRecentEvents(
         since: Instant?,
-        eventClassType: EventClassType? = null,
+        eventType: EventType? = null,
     ): List<Event> {
         val result = if (since != null) {
             eventRepository.getEventsSince(since)
@@ -183,9 +185,9 @@ class AgentEventApi(
         }
 
         return result.getOrNull()?.let { events ->
-            if (eventClassType != null) {
+            if (eventType != null) {
                 events.filter { event ->
-                    event.eventClassType == eventClassType
+                    event.eventType == eventType
                 }
             } else {
                 events
@@ -196,22 +198,22 @@ class AgentEventApi(
     /** Retrieve historical events with optional type filter and since timestamp. */
     suspend fun getEventHistory(
         since: Instant? = null,
-        eventClassType: EventClassType? = null,
+        eventType: EventType? = null,
     ): List<Event> {
         val result: Result<List<Event>> = when {
-            eventClassType != null && since != null -> {
+            eventType != null && since != null -> {
                 eventRepository
-                    .getEventsByType(eventClassType)
+                    .getEventsByType(eventType)
                     .map { list -> list.filter { it.timestamp >= since } }
             }
-            eventClassType != null -> eventRepository.getEventsByType(eventClassType)
+            eventType != null -> eventRepository.getEventsByType(eventType)
             since != null -> eventRepository.getEventsSince(since)
             else -> eventRepository.getAllEvents()
         }
 
         return result.onFailure { throwable ->
             logger.logError(
-                message = "Failed to load event history (eventClassType=$eventClassType since=$since)",
+                message = "Failed to load event history (eventClassType=$eventType since=$since)",
                 throwable = throwable,
             )
         }.getOrElse { emptyList() }
@@ -220,9 +222,9 @@ class AgentEventApi(
     /** Replay past events by publishing them to current subscribers. */
     suspend fun replayEvents(
         since: Instant?,
-        eventClassType: EventClassType? = null,
+        eventType: EventType? = null,
     ) {
-        val events = getRecentEvents(since, eventClassType)
+        val events = getRecentEvents(since, eventType)
         for (event in events) {
             eventSerialBus.publish(event)
         }
@@ -235,11 +237,11 @@ class AgentEventApi(
         toolId: String,
         toolName: String,
         toolType: String,
-        requiredAutonomy: link.socket.ampere.agents.core.actions.AgentActionAutonomy,
+        requiredAutonomy: AgentActionAutonomy,
         mcpServerId: String? = null,
         urgency: Urgency = Urgency.LOW,
     ) {
-        val event = link.socket.ampere.agents.events.ToolEvent.ToolRegistered(
+        val event = ToolEvent.ToolRegistered(
             eventId = generateUUID(toolId, agentId),
             urgency = urgency,
             timestamp = Clock.System.now(),
@@ -262,7 +264,7 @@ class AgentEventApi(
         mcpServerId: String? = null,
         urgency: Urgency = Urgency.MEDIUM,
     ) {
-        val event = link.socket.ampere.agents.events.ToolEvent.ToolUnregistered(
+        val event = ToolEvent.ToolUnregistered(
             eventId = generateUUID(toolId, agentId),
             urgency = urgency,
             timestamp = Clock.System.now(),
@@ -284,7 +286,7 @@ class AgentEventApi(
         mcpServerCount: Int,
         urgency: Urgency = Urgency.LOW,
     ) {
-        val event = link.socket.ampere.agents.events.ToolEvent.ToolDiscoveryComplete(
+        val event = ToolEvent.ToolDiscoveryComplete(
             eventId = generateUUID(agentId),
             urgency = urgency,
             timestamp = Clock.System.now(),
@@ -302,12 +304,12 @@ class AgentEventApi(
 
     /** Subscribe to ToolRegistered events. */
     fun onToolRegistered(
-        filter: EventFilter<link.socket.ampere.agents.events.ToolEvent.ToolRegistered> = EventFilter.noFilter(),
-        handler: suspend (link.socket.ampere.agents.events.ToolEvent.ToolRegistered, Subscription?) -> Unit,
+        filter: EventFilter<ToolEvent.ToolRegistered> = EventFilter.noFilter(),
+        handler: suspend (ToolEvent.ToolRegistered, Subscription?) -> Unit,
     ): Subscription =
-        eventSerialBus.subscribe<link.socket.ampere.agents.events.ToolEvent.ToolRegistered, EventSubscription.ByEventClassType>(
+        eventSerialBus.subscribe<ToolEvent.ToolRegistered, EventSubscription.ByEventClassType>(
             agentId = agentId,
-            eventClassType = link.socket.ampere.agents.events.ToolEvent.ToolRegistered.EVENT_CLASS_TYPE,
+            eventType = ToolEvent.ToolRegistered.EVENT_TYPE,
         ) { event, subscription ->
             if (filter.execute(event)) {
                 handler(event, subscription)
@@ -316,12 +318,12 @@ class AgentEventApi(
 
     /** Subscribe to ToolUnregistered events. */
     fun onToolUnregistered(
-        filter: EventFilter<link.socket.ampere.agents.events.ToolEvent.ToolUnregistered> = EventFilter.noFilter(),
-        handler: suspend (link.socket.ampere.agents.events.ToolEvent.ToolUnregistered, Subscription?) -> Unit,
+        filter: EventFilter<ToolEvent.ToolUnregistered> = EventFilter.noFilter(),
+        handler: suspend (ToolEvent.ToolUnregistered, Subscription?) -> Unit,
     ): Subscription =
-        eventSerialBus.subscribe<link.socket.ampere.agents.events.ToolEvent.ToolUnregistered, EventSubscription.ByEventClassType>(
+        eventSerialBus.subscribe<ToolEvent.ToolUnregistered, EventSubscription.ByEventClassType>(
             agentId = agentId,
-            eventClassType = link.socket.ampere.agents.events.ToolEvent.ToolUnregistered.EVENT_CLASS_TYPE,
+            eventType = ToolEvent.ToolUnregistered.EVENT_TYPE,
         ) { event, subscription ->
             if (filter.execute(event)) {
                 handler(event, subscription)
@@ -330,12 +332,12 @@ class AgentEventApi(
 
     /** Subscribe to ToolDiscoveryComplete events. */
     fun onToolDiscoveryComplete(
-        filter: EventFilter<link.socket.ampere.agents.events.ToolEvent.ToolDiscoveryComplete> = EventFilter.noFilter(),
-        handler: suspend (link.socket.ampere.agents.events.ToolEvent.ToolDiscoveryComplete, Subscription?) -> Unit,
+        filter: EventFilter<ToolEvent.ToolDiscoveryComplete> = EventFilter.noFilter(),
+        handler: suspend (ToolEvent.ToolDiscoveryComplete, Subscription?) -> Unit,
     ): Subscription =
-        eventSerialBus.subscribe<link.socket.ampere.agents.events.ToolEvent.ToolDiscoveryComplete, EventSubscription.ByEventClassType>(
+        eventSerialBus.subscribe<ToolEvent.ToolDiscoveryComplete, EventSubscription.ByEventClassType>(
             agentId = agentId,
-            eventClassType = link.socket.ampere.agents.events.ToolEvent.ToolDiscoveryComplete.EVENT_CLASS_TYPE,
+            eventType = ToolEvent.ToolDiscoveryComplete.EVENT_TYPE,
         ) { event, subscription ->
             if (filter.execute(event)) {
                 handler(event, subscription)
@@ -368,7 +370,7 @@ fun AgentEventApi.filterForCodeAssignedToMe(): EventFilter<Event.CodeSubmitted> 
         event.reviewRequired && event.assignedTo == agentId
     }
 
-fun AgentEventApi.filterForEventClassType(eventClassType: EventClassType): EventFilter<Event> =
+fun AgentEventApi.filterForEventClassType(eventType: EventType): EventFilter<Event> =
     EventFilter { event: Event ->
-        event.eventClassType == eventClassType
+        event.eventType == eventType
     }

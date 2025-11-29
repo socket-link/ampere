@@ -2,7 +2,6 @@ package link.socket.ampere.agents.events
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.Transient
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.core.AssignedTo
 import link.socket.ampere.agents.core.status.TicketStatus
@@ -15,11 +14,7 @@ import link.socket.ampere.agents.events.tickets.TicketType
  * Ticket lifecycle events flowing through the EventBus.
  */
 @Serializable
-sealed class TicketEvent(
-    private val source: EventSource,
-) : Event {
-
-    override val eventSource: EventSource = source
+sealed interface TicketEvent : Event {
 
     /** Emitted when a new ticket is created. */
     @Serializable
@@ -30,17 +25,15 @@ sealed class TicketEvent(
         val description: String,
         val type: TicketType,
         val priority: TicketPriority,
-        val createdBy: AgentId,
+        override val eventSource: EventSource,
         override val timestamp: Instant,
         override val urgency: Urgency = Urgency.MEDIUM,
-    ) : TicketEvent(source = EventSource.Agent(createdBy)) {
+    ) : TicketEvent {
 
-        @Transient
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            private const val EVENT_TYPE = "TicketCreated"
-            val EVENT_CLASS_TYPE: EventClassType = TicketCreated::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "TicketCreated"
         }
     }
 
@@ -51,17 +44,15 @@ sealed class TicketEvent(
         val ticketId: TicketId,
         val previousStatus: TicketStatus,
         val newStatus: TicketStatus,
-        val changedBy: AgentId,
+        override val eventSource: EventSource,
         override val timestamp: Instant,
         override val urgency: Urgency = Urgency.MEDIUM,
-    ) : TicketEvent(source = EventSource.Agent(changedBy)) {
+    ) : TicketEvent {
 
-        @Transient
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            private const val EVENT_TYPE = "TicketStatusChanged"
-            val EVENT_CLASS_TYPE: EventClassType = TicketStatusChanged::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "TicketStatusChanged"
         }
     }
 
@@ -71,17 +62,15 @@ sealed class TicketEvent(
         override val eventId: EventId,
         val ticketId: TicketId,
         val assignedTo: AgentId?,
-        val assignedBy: AgentId,
+        override val eventSource: EventSource,
         override val timestamp: Instant,
         override val urgency: Urgency = Urgency.MEDIUM,
-    ) : TicketEvent(source = EventSource.Agent(assignedBy)) {
+    ) : TicketEvent {
 
-        @Transient
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            private const val EVENT_TYPE = "TicketAssigned"
-            val EVENT_CLASS_TYPE: EventClassType = TicketAssigned::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "TicketAssigned"
         }
     }
 
@@ -91,17 +80,15 @@ sealed class TicketEvent(
         override val eventId: EventId,
         val ticketId: TicketId,
         val blockingReason: String,
-        val reportedBy: AgentId,
+        override val eventSource: EventSource,
         override val timestamp: Instant,
         override val urgency: Urgency = Urgency.HIGH,
-    ) : TicketEvent(source = EventSource.Agent(reportedBy)) {
+    ) : TicketEvent {
 
-        @Transient
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            private const val EVENT_TYPE = "TicketBlocked"
-            val EVENT_CLASS_TYPE: EventClassType = TicketBlocked::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "TicketBlocked"
         }
     }
 
@@ -110,17 +97,15 @@ sealed class TicketEvent(
     data class TicketCompleted(
         override val eventId: EventId,
         val ticketId: TicketId,
-        val completedBy: AgentId,
+        override val eventSource: EventSource,
         override val timestamp: Instant,
         override val urgency: Urgency = Urgency.LOW,
-    ) : TicketEvent(source = EventSource.Agent(completedBy)) {
+    ) : TicketEvent {
 
-        @Transient
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            private const val EVENT_TYPE = "TicketCompleted"
-            val EVENT_CLASS_TYPE: EventClassType = TicketCompleted::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "TicketCompleted"
         }
     }
 
@@ -132,17 +117,15 @@ sealed class TicketEvent(
         val meetingId: MeetingId,
         val scheduledTime: Instant,
         val requiredParticipants: List<AssignedTo>,
-        val scheduledBy: AgentId,
+        override val eventSource: EventSource,
         override val timestamp: Instant,
         override val urgency: Urgency = Urgency.MEDIUM,
-    ) : TicketEvent(source = EventSource.Agent(scheduledBy)) {
+    ) : TicketEvent {
 
-        @Transient
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            private const val EVENT_TYPE = "TicketMeetingScheduled"
-            val EVENT_CLASS_TYPE: EventClassType = TicketMeetingScheduled::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "TicketMeetingScheduled"
         }
     }
 }

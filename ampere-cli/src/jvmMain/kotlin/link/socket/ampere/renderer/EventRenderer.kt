@@ -56,7 +56,7 @@ class EventRenderer(
         val (icon, color) = getIconAndColor(event)
 
         // Get the event type name
-        val eventTypeName = event.eventClassType.second
+        val eventTypeName = event.eventType.second
 
         // Build the formatted line
         val line = buildString {
