@@ -27,8 +27,8 @@ actual class HttpClientHandler {
                 httpClient = HttpClient(OkHttp) {
                     engine {
                         config {
-                            connectTimeout(timeoutMs.toInt(), java.util.concurrent.TimeUnit.MILLISECONDS)
-                            readTimeout(timeoutMs.toInt(), java.util.concurrent.TimeUnit.MILLISECONDS)
+                            connectTimeout(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+                            readTimeout(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
                         }
                     }
                 }
