@@ -47,11 +47,48 @@ sealed class Agent <S : AgentState> {
     private val logger by lazy { logWith("Agent/$id") }
 
     abstract suspend fun perceiveState(vararg newIdeas: Idea): Idea
-    abstract suspend fun determinePlanForTask(task: Task, vararg ideas: Idea): Plan
+
+    /**
+     * Determine a plan for executing the given task.
+     *
+     * This method is now enhanced with episodic memory—agents can incorporate
+     * learnings from past similar tasks to inform their planning.
+     *
+     * @param task The task to plan for
+     * @param ideas Current ideas informing the plan
+     * @param relevantKnowledge Past knowledge entries relevant to this task context
+     * @return A plan incorporating both current ideas and past learnings
+     */
+    abstract suspend fun determinePlanForTask(
+        task: Task,
+        vararg ideas: Idea,
+        relevantKnowledge: List<KnowledgeWithScore> = emptyList()
+    ): Plan
+
     abstract suspend fun executePlan(plan: Plan): Outcome
     abstract suspend fun runTask(task: Task): Outcome
     abstract suspend fun runTool(tool: Tool<*>, request: ExecutionRequest<*>): ExecutionOutcome
     abstract suspend fun evaluateNextIdeaFromOutcomes(vararg outcomes: Outcome): Idea
+
+    /**
+     * Extract knowledge from a completed task outcome.
+     *
+     * This is where the agent reflects on what it learned: "What approach did I use?
+     * What worked well or failed? What would I do differently next time?"
+     *
+     * The extracted knowledge will be stored in long-term memory for future recall
+     * when facing similar tasks.
+     *
+     * @param outcome The completed task outcome to learn from
+     * @param task The task that was executed
+     * @param plan The plan that was followed
+     * @return Knowledge capturing the approach and learnings from this execution
+     */
+    abstract fun extractKnowledgeFromOutcome(
+        outcome: Outcome,
+        task: Task,
+        plan: Plan
+    ): Knowledge
 
     /**
      * Recall relevant past knowledge based on current context.

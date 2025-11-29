@@ -2,9 +2,11 @@ package link.socket.ampere.agents.implementations.code
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import link.socket.ampere.agents.core.AgentConfiguration
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.core.AutonomousAgent
+import link.socket.ampere.agents.core.memory.Knowledge
 import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
 import link.socket.ampere.agents.core.outcomes.Outcome
 import link.socket.ampere.agents.core.reasoning.Idea
@@ -73,5 +75,25 @@ class CodeWriterAgent(
             val outcome = toolWriteCodeFile.execute(executionRequest)
             onCodeSubmittedOutcome(outcome)
         }
+    }
+
+    /**
+     * Extract knowledge from completed task outcome.
+     *
+     * TODO: Implement meaningful knowledge extraction for code writing tasks.
+     * This stub implementation provides minimal knowledge capture until the agent
+     * is enhanced with memory capabilities.
+     */
+    override fun extractKnowledgeFromOutcome(
+        outcome: Outcome,
+        task: Task,
+        plan: Plan
+    ): Knowledge {
+        return Knowledge.FromOutcome(
+            outcomeId = outcome.id,
+            approach = "Code writing task executed",
+            learnings = "Task completed - knowledge extraction not yet implemented",
+            timestamp = Clock.System.now()
+        )
     }
 }

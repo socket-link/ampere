@@ -7,6 +7,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
+import link.socket.ampere.agents.core.memory.KnowledgeWithScore
+import link.socket.ampere.agents.core.memory.MemoryContext
 import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
 import link.socket.ampere.agents.core.outcomes.Outcome
 import link.socket.ampere.agents.core.reasoning.Idea
@@ -55,16 +57,81 @@ abstract class AutonomousAgent <S : AgentState> : Agent<S>() {
             val idea = perceiveState(previousIdea)
             rememberNewIdea(idea)
 
-            val plan = determinePlanForTask(currentTask, idea)
+            // Recall relevant knowledge from past similar tasks
+            val relevantKnowledge = recallRelevantKnowledgeForTask(currentTask)
+
+            val plan = determinePlanForTask(currentTask, idea, relevantKnowledge = relevantKnowledge)
             rememberNewPlan(plan)
 
             val outcome = executePlan(plan)
             rememberNewOutcome(outcome)
 
+            // Extract and store knowledge from this execution
+            extractAndStoreKnowledge(outcome, currentTask, plan)
+
             val nextIdea = evaluateNextIdeaFromOutcomes(outcome)
             rememberNewIdea(nextIdea)
 
             delay(1.seconds)
+        }
+    }
+
+    /**
+     * Recall relevant knowledge for the current task context.
+     *
+     * Queries the agent's long-term memory for past experiences with similar tasks.
+     * Returns an empty list if memory service is unavailable or recall fails.
+     */
+    private suspend fun recallRelevantKnowledgeForTask(task: Task): List<KnowledgeWithScore> {
+        // Build context from the task description
+        val context = when (task) {
+            is Task.CodeChange -> MemoryContext(
+                taskType = "code_change",
+                tags = emptySet(),
+                description = task.description
+            )
+            else -> MemoryContext(
+                taskType = "generic",
+                tags = emptySet(),
+                description = "Generic task: ${task.id}"
+            )
+        }
+
+        return recallRelevantKnowledge(context, limit = 10)
+            .getOrElse { emptyList<KnowledgeWithScore>() }
+    }
+
+    /**
+     * Extract knowledge from completed outcome and store for future recall.
+     *
+     * This closes the learning loop—capturing what the agent learned from this
+     * execution for use in future similar tasks.
+     */
+    private suspend fun extractAndStoreKnowledge(outcome: Outcome, task: Task, plan: Plan) {
+        try {
+            // Extract knowledge using the agent's domain-specific logic
+            val knowledge = extractKnowledgeFromOutcome(outcome, task, plan)
+
+            // Determine tags and task type for better retrieval
+            val tags = mutableListOf<String>()
+            val taskType = when (task) {
+                is Task.CodeChange -> {
+                    tags.add("code")
+                    "code_change"
+                }
+                else -> "generic"
+            }
+
+            when (outcome) {
+                is Outcome.Success -> tags.add("success")
+                is Outcome.Failure -> tags.add("failure")
+                else -> tags.add("partial")
+            }
+
+            // Store in long-term memory
+            storeKnowledge(knowledge, tags = tags, taskType = taskType)
+        } catch (e: Exception) {
+            // Logging is handled in storeKnowledge, just catch to prevent loop crash
         }
     }
 
@@ -113,11 +180,15 @@ abstract class AutonomousAgent <S : AgentState> : Agent<S>() {
         return idea
     }
 
-    /** Breaks down a complex task into smaller tasks */
+    /** Breaks down a complex task into smaller tasks, informed by past knowledge */
     override suspend fun determinePlanForTask(
         task: Task,
         vararg ideas: Idea,
+        relevantKnowledge: List<KnowledgeWithScore>
     ): Plan {
+        // Note: AutonomousAgent implementations should override this to incorporate
+        // relevantKnowledge into their planning. The base implementation here
+        // ignores knowledge for backwards compatibility.
         val plan = runLLMToPlan(task, ideas.toList())
         rememberNewPlan(plan)
         return plan
