@@ -87,13 +87,14 @@ class ToolInitializerTest {
      */
     private suspend fun createTestRegistry(): ToolRegistry {
         val database = createInMemoryDatabase()
+        val scope = CoroutineScope(Dispatchers.Default)
         val repository = ToolRegistryRepository(
             json = Json { prettyPrint = true },
-            scope = CoroutineScope(Dispatchers.Default),
+            scope = scope,
             database = database
         )
-        val eventBus = EventSerialBus()
-        val eventSource = EventSource("test-source", "test")
+        val eventBus = EventSerialBus(scope = scope)
+        val eventSource = EventSource.Agent(agentId = "test-source")
 
         return ToolRegistry(
             repository = repository,
@@ -324,7 +325,7 @@ class ToolInitializerTest {
     @Test
     fun `WriteCode tool execution returns success outcome`() = runTest {
         val tools = createLocalToolSet()
-        val writeCodeTool = tools.find { it.id == "write_code" }
+        val writeCodeTool = tools.find { it.id == "write_code" } as? FunctionTool<ExecutionContext.Code.WriteCode>
         assertNotNull(writeCodeTool, "WriteCode tool should exist")
 
         val context = ExecutionContext.Code.WriteCode(
@@ -333,13 +334,12 @@ class ToolInitializerTest {
             task = Task.blank,
             instructions = "Test write code",
             workspace = link.socket.ampere.agents.environment.workspace.ExecutionWorkspace(
-                rootPath = "/test/workspace",
-                repositoryUrl = null
+                baseDirectory = "/test/workspace"
             ),
             instructionsPerFilePath = listOf("test.kt" to "// Test code")
         )
 
-        val outcome = writeCodeTool.execute(
+        val outcome = writeCodeTool!!.execute(
             ExecutionRequest(
                 context = context,
                 constraints = ExecutionConstraints()
@@ -354,7 +354,7 @@ class ToolInitializerTest {
     @Test
     fun `ReadCode tool execution returns success outcome`() = runTest {
         val tools = createLocalToolSet()
-        val readCodeTool = tools.find { it.id == "read_code" }
+        val readCodeTool = tools.find { it.id == "read_code" } as? FunctionTool<ExecutionContext.Code.ReadCode>
         assertNotNull(readCodeTool, "ReadCode tool should exist")
 
         val context = ExecutionContext.Code.ReadCode(
@@ -363,13 +363,12 @@ class ToolInitializerTest {
             task = Task.blank,
             instructions = "Test read code",
             workspace = link.socket.ampere.agents.environment.workspace.ExecutionWorkspace(
-                rootPath = "/test/workspace",
-                repositoryUrl = null
+                baseDirectory = "/test/workspace"
             ),
             filePathsToRead = listOf("test.kt", "main.kt")
         )
 
-        val outcome = readCodeTool.execute(
+        val outcome = readCodeTool!!.execute(
             ExecutionRequest(
                 context = context,
                 constraints = ExecutionConstraints()
@@ -384,10 +383,10 @@ class ToolInitializerTest {
     @Test
     fun `AskHuman tool execution returns success outcome`() = runTest {
         val tools = createLocalToolSet()
-        val askHumanTool = tools.find { it.id == "ask_human" }
+        val askHumanTool = tools.find { it.id == "ask_human" } as? FunctionTool<ExecutionContext>
         assertNotNull(askHumanTool, "AskHuman tool should exist")
 
-        val outcome = askHumanTool.execute(createTestExecutionRequest())
+        val outcome = askHumanTool!!.execute(createTestExecutionRequest())
 
         assertTrue(outcome is ExecutionOutcome.NoChanges.Success, "Should return NoChanges.Success")
     }
@@ -395,10 +394,10 @@ class ToolInitializerTest {
     @Test
     fun `CreateTicket tool execution returns success outcome`() = runTest {
         val tools = createLocalToolSet()
-        val createTicketTool = tools.find { it.id == "create_ticket" }
+        val createTicketTool = tools.find { it.id == "create_ticket" } as? FunctionTool<ExecutionContext>
         assertNotNull(createTicketTool, "CreateTicket tool should exist")
 
-        val outcome = createTicketTool.execute(createTestExecutionRequest())
+        val outcome = createTicketTool!!.execute(createTestExecutionRequest())
 
         assertTrue(outcome is ExecutionOutcome.NoChanges.Success, "Should return NoChanges.Success")
     }
@@ -406,10 +405,10 @@ class ToolInitializerTest {
     @Test
     fun `RunTests tool execution returns success outcome`() = runTest {
         val tools = createLocalToolSet()
-        val runTestsTool = tools.find { it.id == "run_tests" }
+        val runTestsTool = tools.find { it.id == "run_tests" } as? FunctionTool<ExecutionContext>
         assertNotNull(runTestsTool, "RunTests tool should exist")
 
-        val outcome = runTestsTool.execute(createTestExecutionRequest())
+        val outcome = runTestsTool!!.execute(createTestExecutionRequest())
 
         assertTrue(outcome is ExecutionOutcome.NoChanges.Success, "Should return NoChanges.Success")
     }
@@ -420,8 +419,6 @@ class ToolInitializerTest {
      * Creates a test logger that captures output for verification.
      */
     private fun createTestLogger(): Logger {
-        return Logger.withTag("ToolInitializerTest").apply {
-            setMinSeverity(Severity.Verbose)
-        }
+        return Logger.withTag("ToolInitializerTest")
     }
 }
