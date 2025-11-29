@@ -6,7 +6,6 @@ import link.socket.ampere.AmpereContext
 import org.jline.reader.EndOfFileException
 import org.jline.reader.LineReader
 import org.jline.reader.LineReaderBuilder
-import org.jline.reader.impl.history.DefaultHistory
 import org.jline.terminal.Terminal
 import org.jline.terminal.TerminalBuilder
 import org.jline.utils.InfoCmp
@@ -27,9 +26,15 @@ class ReplSession(
         .system(true)
         .build()
 
+    private val historyFile = Paths.get(
+        System.getProperty("user.home"),
+        ".ampere",
+        "history"
+    )
+
     private val reader: LineReader = LineReaderBuilder.builder()
         .terminal(terminal)
-        .history(createHistory())
+        .variable(LineReader.HISTORY_FILE, historyFile)
         .completer(AmpereCompleter(context))
         .build()
 
@@ -59,6 +64,9 @@ class ReplSession(
     )
 
     init {
+        // Ensure history directory exists
+        historyFile.parent.toFile().mkdirs()
+
         // Install signal handler for Ctrl+C
         installSignalHandler()
     }
@@ -71,31 +79,6 @@ class ReplSession(
         Signal.handle(Signal("INT")) { signal ->
             // Interrupt any running command
             executor.interrupt()
-        }
-    }
-
-    /**
-     * Create and configure command history with persistent storage.
-     */
-    private fun createHistory(): DefaultHistory {
-        val historyFile = Paths.get(
-            System.getProperty("user.home"),
-            ".ampere",
-            "history"
-        )
-
-        // Ensure directory exists
-        historyFile.parent.toFile().mkdirs()
-
-        return DefaultHistory().apply {
-            // Load history from file if it exists
-            if (historyFile.toFile().exists()) {
-                try {
-                    load(historyFile)
-                } catch (e: Exception) {
-                    // Ignore load errors - start with empty history
-                }
-            }
         }
     }
 
@@ -278,18 +261,7 @@ class ReplSession(
     }
 
     fun close() {
-        // Save command history before closing
-        try {
-            val historyFile = Paths.get(
-                System.getProperty("user.home"),
-                ".ampere",
-                "history"
-            )
-            (reader.history as? DefaultHistory)?.save(historyFile)
-        } catch (e: Exception) {
-            // Ignore save errors - not critical
-        }
-
+        // JLine3 automatically saves history when the reader is closed
         executor.close()
         terminal.close()
     }
