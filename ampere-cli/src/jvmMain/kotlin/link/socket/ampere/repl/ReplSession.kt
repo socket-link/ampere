@@ -1,10 +1,13 @@
 package link.socket.ampere.repl
 
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import link.socket.ampere.AmpereContext
 import org.jline.reader.LineReader
 import org.jline.reader.LineReaderBuilder
 import org.jline.terminal.Terminal
 import org.jline.terminal.TerminalBuilder
+import sun.misc.Signal
 
 /**
  * Manages an interactive REPL session for the AMPERE CLI.
@@ -23,6 +26,24 @@ class ReplSession(
     private val reader: LineReader = LineReaderBuilder.builder()
         .terminal(terminal)
         .build()
+
+    private val executor = CommandExecutor(terminal)
+
+    init {
+        // Install signal handler for Ctrl+C
+        installSignalHandler()
+    }
+
+    /**
+     * Install SIGINT (Ctrl+C) handler that interrupts current command
+     * but doesn't exit the REPL session.
+     */
+    private fun installSignalHandler() {
+        Signal.handle(Signal("INT")) { signal ->
+            // Interrupt any running command
+            executor.interrupt()
+        }
+    }
 
     /**
      * Start the REPL loop.
@@ -66,7 +87,10 @@ class ReplSession(
                     continue
                 }
 
-                val result = executeCommand(line.trim())
+                // Execute command in cancellable context
+                val result = runBlocking {
+                    executeCommand(line.trim())
+                }
 
                 if (result == CommandResult.EXIT) {
                     terminal.writer().println("Goodbye! Shutting down environment...")
@@ -79,7 +103,7 @@ class ReplSession(
         }
     }
 
-    private fun executeCommand(input: String): CommandResult {
+    private suspend fun executeCommand(input: String): CommandResult {
         val parts = input.split(" ", limit = 2)
         val command = parts[0].lowercase()
         val args = parts.getOrNull(1) ?: ""
@@ -89,6 +113,15 @@ class ReplSession(
             "help" -> {
                 displayHelp()
                 CommandResult.SUCCESS
+            }
+            "test-interrupt" -> {
+                // Test command for verifying interruption works
+                executor.execute {
+                    terminal.writer().println("Running for 30 seconds... Press Ctrl+C to interrupt")
+                    delay(30000)
+                    terminal.writer().println("Completed!")
+                    CommandResult.SUCCESS
+                }
             }
             else -> {
                 terminal.writer().println("Unknown command: $command")
@@ -101,8 +134,9 @@ class ReplSession(
     private fun displayHelp() {
         val help = """
         Available commands:
-          help             Show this help message
-          exit, quit       Exit the interactive session
+          help                Show this help message
+          exit, quit          Exit the interactive session
+          test-interrupt      Test command for verifying Ctrl+C handling
 
         More commands coming soon...
         """.trimIndent()
@@ -111,6 +145,7 @@ class ReplSession(
     }
 
     fun close() {
+        executor.close()
         terminal.close()
     }
 }
@@ -118,5 +153,6 @@ class ReplSession(
 enum class CommandResult {
     SUCCESS,
     ERROR,
-    EXIT
+    EXIT,
+    INTERRUPTED  // Added for Ctrl+C handling
 }
