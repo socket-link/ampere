@@ -17,6 +17,8 @@ import kotlinx.datetime.Instant
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.MemoryEvent
 import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.bus.subscribe
+import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.db.Database
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -59,18 +61,18 @@ class AgentMemoryServiceTest {
         eventBus = EventSerialBus(testScope)
 
         // Subscribe to all MemoryEvents to track emissions
-        eventBus.subscribe(
+        eventBus.subscribe<MemoryEvent.KnowledgeStored, EventSubscription.ByEventClassType>(
             agentId = agentId,
             eventClassType = MemoryEvent.KnowledgeStored.EVENT_CLASS_TYPE,
         ) { event, _ ->
-            emittedEvents.add(event as MemoryEvent)
+            emittedEvents.add(event)
         }
 
-        eventBus.subscribe(
+        eventBus.subscribe<MemoryEvent.KnowledgeRecalled, EventSubscription.ByEventClassType>(
             agentId = agentId,
             eventClassType = MemoryEvent.KnowledgeRecalled.EVENT_CLASS_TYPE,
         ) { event, _ ->
-            emittedEvents.add(event as MemoryEvent)
+            emittedEvents.add(event)
         }
 
         service = AgentMemoryService(
