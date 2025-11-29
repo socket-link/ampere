@@ -108,12 +108,9 @@ private fun createToolRegistry(
         database = database
     )
 
-    val eventBus = EventSerialBus()
+    val eventBus = EventSerialBus(scope = scope)
 
-    val eventSource = EventSource(
-        sourceId = "ampere-system",
-        sourceType = "system"
-    )
+    val eventSource = EventSource.Agent(agentId = "ampere-system")
 
     return ToolRegistry(
         repository = repository,

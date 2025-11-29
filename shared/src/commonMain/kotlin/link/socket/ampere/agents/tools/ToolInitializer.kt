@@ -246,7 +246,12 @@ private suspend fun executeWriteCode(
         executionStartTimestamp = now,
         executionEndTimestamp = now,
         changedFiles = request.context.instructionsPerFilePath.map { it.first },
-        validation = link.socket.ampere.agents.execution.results.ExecutionResult.Blank
+        validation = link.socket.ampere.agents.execution.results.ExecutionResult(
+            codeChanges = null,
+            compilation = null,
+            linting = null,
+            tests = null
+        )
     )
 }
 
