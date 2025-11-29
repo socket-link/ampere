@@ -227,7 +227,7 @@ class McpClient(
      * Serializes an MCP request to JSON string.
      */
     fun serializeRequest(request: McpRequest): String {
-        return json.encodeToString(request)
+        return json.encodeToString(McpRequest.serializer(), request)
     }
 
     /**
@@ -235,7 +235,7 @@ class McpClient(
      */
     fun deserializeResponse(jsonString: String): Result<McpResponse> {
         return try {
-            val response = json.decodeFromString<McpResponse>(jsonString)
+            val response = json.decodeFromString(McpResponse.serializer(), jsonString)
             Result.success(response)
         } catch (e: Exception) {
             Result.failure(
