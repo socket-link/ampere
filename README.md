@@ -129,3 +129,35 @@ openai_api_key=$YOUR_KEY
 4. Run `iosApp` configuration
 
 For detailed device setup, see [Apple's documentation](https://developer.apple.com/documentation/xcode/running-your-app-on-a-device).
+
+## 🔧 Command Line Tools
+
+Ampere includes a comprehensive CLI for observing and managing the agent environment.
+
+### Building the CLI
+
+```bash
+./gradlew :ampere-cli:installJvmDist
+```
+
+### Available Commands
+
+```bash
+# Real-time event streaming
+./ampere-cli/ampere watch
+./ampere-cli/ampere watch --filter TaskCreated --agent agent-pm
+
+# View conversation threads
+./ampere-cli/ampere thread list
+./ampere-cli/ampere thread show <thread-id>
+
+# System status dashboard
+./ampere-cli/ampere status
+
+# Execution outcome memory
+./ampere-cli/ampere outcomes ticket <ticket-id>
+./ampere-cli/ampere outcomes search <query>
+./ampere-cli/ampere outcomes executor <executor-id>
+```
+
+**Complete CLI Documentation**: See [ampere-cli/README.md](ampere-cli/README.md) for detailed usage, options, and examples.

@@ -50,6 +50,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew generateJavadocs
 ```
 
+### CLI Commands
+
+```bash
+# Build the CLI
+./gradlew :ampere-cli:installJvmDist
+
+# Watch events in real-time
+./ampere-cli/ampere watch
+./ampere-cli/ampere watch --filter TaskCreated --agent agent-pm
+
+# View conversation threads
+./ampere-cli/ampere thread list
+./ampere-cli/ampere thread show <thread-id>
+
+# System status dashboard
+./ampere-cli/ampere status
+
+# View execution outcomes
+./ampere-cli/ampere outcomes ticket <ticket-id>
+./ampere-cli/ampere outcomes search <query>
+./ampere-cli/ampere outcomes executor <executor-id>
+./ampere-cli/ampere outcomes stats
+```
+
+See [ampere-cli/README.md](ampere-cli/README.md) for complete CLI documentation.
+
 ## High-Level Architecture
 
 Ampere is a Kotlin Multiplatform library for creating AI Agents and Assistants with multi-provider support. The architecture follows a layered approach:
@@ -152,10 +178,25 @@ Repository pattern with SQLDelight persistence:
 - **MessageRepository**: Message/thread persistence
 - **UserConversationRepository**: Enhanced conversation management
 
+### CLI Layer (`ampere-cli/`)
+**Command-line tools** for observing and managing the agent substrate:
+- **WatchCommand**: Real-time event streaming with filtering
+- **ThreadCommand**: View and manage conversation threads
+- **StatusCommand**: System-wide dashboard and metrics
+- **OutcomesCommand**: Execution outcome memory and analysis
+
+**Technologies:**
+- Clikt for command-line interface
+- Mordant for terminal rendering
+- SQLite/SQLDelight for persistence
+
+See [ampere-cli/README.md](ampere-cli/README.md) for complete documentation.
+
 ### Platform Targets
 - **Android**: Native Android app in `androidApp/`
 - **Desktop/JVM**: Desktop app in `desktopApp/`
 - **iOS**: iOS app in `iosApp/` (Xcode project)
+- **CLI**: Command-line tools in `ampere-cli/` (JVM-based)
 
 ## Directory Structure
 
@@ -184,6 +225,18 @@ shared/src/commonMain/kotlin/link/socket/ampere/
 │   └── tools/                 # Specific tool implementations
 ├── data/                      # Repositories and persistence
 └── ui/                        # Compose Multiplatform UI
+
+ampere-cli/
+├── src/jvmMain/kotlin/link/socket/ampere/
+│   ├── AmpereCommand.kt       # Root CLI command
+│   ├── WatchCommand.kt        # Real-time event streaming
+│   ├── ThreadCommand.kt       # Thread management (list/show)
+│   ├── StatusCommand.kt       # System dashboard
+│   ├── OutcomesCommand.kt     # Outcome memory (ticket/search/executor/stats)
+│   ├── AmpereContext.kt       # Dependency injection
+│   ├── renderer/              # CLI rendering (tables, events, colors)
+│   └── util/                  # Event type parsing
+└── README.md                  # Complete CLI documentation
 ```
 
 ## Key Patterns
@@ -223,17 +276,17 @@ Agents can be equipped with tools via `FunctionProvider`:
 
 ### Core
 - **OpenAI Kotlin**: `openai-kotlin` for OpenAI LLM integration
-- **KOOG Agents**: `ai.koog:koog-agents:0.4.1` for external agent framework
+- **KOOG Agents**: `ai.koog:koog-agents` for external agent framework
 - **Compose Multiplatform**: UI framework
-- **Ktor**: `ktor-client-*:3.2.2` HTTP client for different platforms
+- **Ktor**: `ktor-client-*` HTTP client for different platforms
 
 ### Persistence
-- **SQLDelight**: `app.cash.sqldelight:*:2.2.1` for database persistence
+- **SQLDelight**: `app.cash.sqldelight:*` for database persistence
 
 ### Utilities
 - **Turtle**: Shell script execution capabilities
-- **Kermit**: `co.touchlab:kermit:2.0.6` for logging
-- **Multiplatform Markdown**: `com.mikepenz:multiplatform-markdown-renderer:0.33.0`
+- **Kermit**: `co.touchlab:kermit` for logging
+- **Multiplatform Markdown**: `com.mikepenz:multiplatform-markdown-renderer`
 
 ## Configuration
 - AI API credentials configured via `local.properties`
