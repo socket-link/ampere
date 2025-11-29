@@ -39,8 +39,6 @@ import kotlin.time.Duration.Companion.minutes
 @OptIn(ExperimentalCoroutinesApi::class)
 class AgentMemoryServiceTest {
 
-    private val testScope = TestScope(UnconfinedTestDispatcher())
-
     private lateinit var driver: JdbcSqliteDriver
     private lateinit var knowledgeRepository: KnowledgeRepository
     private lateinit var eventBus: EventSerialBus
@@ -58,6 +56,8 @@ class AgentMemoryServiceTest {
         Database.Schema.create(driver)
         val database = Database(driver)
         knowledgeRepository = KnowledgeRepositoryImpl(database)
+
+        val testScope = TestScope(UnconfinedTestDispatcher())
         eventBus = EventSerialBus(testScope)
         now = Clock.System.now()
 
