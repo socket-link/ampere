@@ -1,0 +1,196 @@
+-- Knowledge Store table
+-- Stores Knowledge entries extracted from Ideas, Outcomes, Perceptions, Plans, and Tasks
+-- Enables semantic retrieval for agent learning and decision-making
+
+CREATE TABLE IF NOT EXISTS KnowledgeStore (
+    id TEXT PRIMARY KEY NOT NULL,
+
+    -- Discriminator for polymorphic Knowledge sealed class
+    -- Values: FROM_IDEA, FROM_OUTCOME, FROM_PERCEPTION, FROM_PLAN, FROM_TASK
+    knowledge_type TEXT NOT NULL,
+
+    -- Common fields across all Knowledge types
+    approach TEXT NOT NULL,
+    learnings TEXT NOT NULL,
+    timestamp INTEGER NOT NULL, -- Unix epoch milliseconds
+
+    -- Type-specific foreign key IDs (only one will be non-null based on knowledge_type)
+    idea_id TEXT,
+    outcome_id TEXT,
+    perception_id TEXT,
+    plan_id TEXT,
+    task_id TEXT,
+
+    -- Denormalized fields for efficient querying
+    task_type TEXT,           -- Extracted from associated task context
+    complexity_level TEXT     -- TRIVIAL, SIMPLE, MODERATE, COMPLEX, NOVEL
+);
+
+-- Indexes for common query patterns
+CREATE INDEX IF NOT EXISTS idx_knowledge_type ON KnowledgeStore(knowledge_type);
+CREATE INDEX IF NOT EXISTS idx_knowledge_timestamp ON KnowledgeStore(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_knowledge_task_type ON KnowledgeStore(task_type);
+CREATE INDEX IF NOT EXISTS idx_knowledge_complexity ON KnowledgeStore(complexity_level);
+
+-- Tags associated with knowledge entries (many-to-many for flexible categorization)
+CREATE TABLE IF NOT EXISTS KnowledgeTag (
+    knowledge_id TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    PRIMARY KEY (knowledge_id, tag),
+    FOREIGN KEY (knowledge_id) REFERENCES KnowledgeStore(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_tag_tag ON KnowledgeTag(tag);
+CREATE INDEX IF NOT EXISTS idx_knowledge_tag_knowledge_id ON KnowledgeTag(knowledge_id);
+
+-- Full-text search support for approach and learnings
+-- Enables semantic queries like "find all knowledge mentioning 'schema migration'"
+CREATE VIRTUAL TABLE IF NOT EXISTS KnowledgeFts USING fts5(
+    knowledge_id UNINDEXED,
+    approach,
+    learnings,
+    content=KnowledgeStore,
+    content_rowid=rowid
+);
+
+-- Triggers to keep FTS index in sync with main table
+CREATE TRIGGER IF NOT EXISTS knowledge_fts_insert AFTER INSERT ON KnowledgeStore BEGIN
+    INSERT INTO KnowledgeFts(rowid, knowledge_id, approach, learnings)
+    VALUES (new.rowid, new.id, new.approach, new.learnings);
+END;
+
+CREATE TRIGGER IF NOT EXISTS knowledge_fts_delete AFTER DELETE ON KnowledgeStore BEGIN
+    DELETE FROM KnowledgeFts WHERE rowid = old.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS knowledge_fts_update AFTER UPDATE ON KnowledgeStore BEGIN
+    DELETE FROM KnowledgeFts WHERE rowid = old.rowid;
+    INSERT INTO KnowledgeFts(rowid, knowledge_id, approach, learnings)
+    VALUES (new.rowid, new.id, new.approach, new.learnings);
+END;
+
+-- =============================================================================
+-- KNOWLEDGE STORE QUERIES
+-- =============================================================================
+
+-- Insert a knowledge entry
+insertKnowledge:
+INSERT INTO KnowledgeStore (
+    id, knowledge_type, approach, learnings, timestamp,
+    idea_id, outcome_id, perception_id, plan_id, task_id,
+    task_type, complexity_level
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Insert tag association
+insertKnowledgeTag:
+INSERT OR IGNORE INTO KnowledgeTag (knowledge_id, tag) VALUES (?, ?);
+
+-- Retrieve knowledge by ID
+getKnowledgeById:
+SELECT * FROM KnowledgeStore WHERE id = ?;
+
+-- Get tags for a knowledge entry
+getTagsForKnowledge:
+SELECT tag FROM KnowledgeTag WHERE knowledge_id = ? ORDER BY tag;
+
+-- Find knowledge by type (e.g., all FROM_OUTCOME learnings)
+findKnowledgeByType:
+SELECT * FROM KnowledgeStore
+WHERE knowledge_type = ?
+ORDER BY timestamp DESC
+LIMIT ?;
+
+-- Find knowledge within timestamp range
+findKnowledgeByTimeRange:
+SELECT * FROM KnowledgeStore
+WHERE timestamp BETWEEN ? AND ?
+ORDER BY timestamp DESC;
+
+-- Find knowledge by task type
+findKnowledgeByTaskType:
+SELECT * FROM KnowledgeStore
+WHERE task_type = ?
+ORDER BY timestamp DESC
+LIMIT ?;
+
+-- Find knowledge by single tag
+findKnowledgeByTag:
+SELECT k.* FROM KnowledgeStore k
+INNER JOIN KnowledgeTag kt ON k.id = kt.knowledge_id
+WHERE kt.tag = ?
+ORDER BY k.timestamp DESC
+LIMIT ?;
+
+-- Find knowledge by multiple tags (matches any of the provided tags)
+findKnowledgeByTags:
+SELECT DISTINCT k.* FROM KnowledgeStore k
+INNER JOIN KnowledgeTag kt ON k.id = kt.knowledge_id
+WHERE kt.tag IN ?
+ORDER BY k.timestamp DESC
+LIMIT ?;
+
+-- Full-text search in approach and learnings
+searchKnowledgeByText:
+SELECT k.* FROM KnowledgeStore k
+INNER JOIN KnowledgeFts fts ON k.rowid = fts.rowid
+WHERE KnowledgeFts MATCH ?
+ORDER BY fts.rank, k.timestamp DESC
+LIMIT ?;
+
+-- Fallback text search using LIKE for simple keyword matching
+searchKnowledgeByTextLike:
+SELECT * FROM KnowledgeStore
+WHERE approach LIKE '%' || ? || '%' OR learnings LIKE '%' || ? || '%'
+ORDER BY timestamp DESC
+LIMIT ?;
+
+-- Combined context-based search with multiple optional filters
+-- When tags list is empty, all entries match (LEFT JOIN returns all)
+-- When tags list has values, only entries with matching tags are returned
+searchKnowledgeByContextWithTags:
+SELECT DISTINCT k.*
+FROM KnowledgeStore k
+LEFT JOIN KnowledgeTag kt ON k.id = kt.knowledge_id
+WHERE (:knowledge_type IS NULL OR k.knowledge_type = :knowledge_type)
+AND (:task_type IS NULL OR k.task_type = :task_type)
+AND (:complexity_level IS NULL OR k.complexity_level = :complexity_level)
+AND (:from_timestamp IS NULL OR k.timestamp >= :from_timestamp)
+AND (:to_timestamp IS NULL OR k.timestamp <= :to_timestamp)
+AND kt.tag IN :tags
+ORDER BY k.timestamp DESC
+LIMIT :limit;
+
+-- Combined search without tag filtering
+searchKnowledgeByContextNoTags:
+SELECT k.*
+FROM KnowledgeStore k
+WHERE (:knowledge_type IS NULL OR k.knowledge_type = :knowledge_type)
+AND (:task_type IS NULL OR k.task_type = :task_type)
+AND (:complexity_level IS NULL OR k.complexity_level = :complexity_level)
+AND (:from_timestamp IS NULL OR k.timestamp >= :from_timestamp)
+AND (:to_timestamp IS NULL OR k.timestamp <= :to_timestamp)
+ORDER BY k.timestamp DESC
+LIMIT :limit;
+
+-- Get all knowledge entries ordered by timestamp
+getAllKnowledge:
+SELECT * FROM KnowledgeStore
+ORDER BY timestamp DESC;
+
+-- Get knowledge count by type
+getKnowledgeCountByType:
+SELECT knowledge_type, COUNT(*)
+FROM KnowledgeStore
+GROUP BY knowledge_type;
+
+-- Delete knowledge entry and all associations (cascade handled by FK)
+deleteKnowledge:
+DELETE FROM KnowledgeStore WHERE id = ?;
+
+-- Delete tag association
+deleteKnowledgeTag:
+DELETE FROM KnowledgeTag WHERE knowledge_id = ? AND tag = ?;
+
+-- Delete all tags for a knowledge entry
+deleteAllTagsForKnowledge:
+DELETE FROM KnowledgeTag WHERE knowledge_id = ?;
