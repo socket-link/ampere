@@ -71,7 +71,7 @@ class ValidationAgent(
         when (task) {
             is Task.CodeChange -> {
                 // Prioritize validation checks based on past effectiveness
-                insights.effectiveChecks.sortedByDescending { it.value }.forEach { (checkType, effectiveness) ->
+                insights.effectiveChecks.toList().sortedByDescending { it.second }.forEach { (checkType, effectiveness) ->
                     planTasks.add(
                         Task.CodeChange(
                             id = generateUUID("${task.id}-validate-${checkType}"),
