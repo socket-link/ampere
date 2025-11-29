@@ -113,6 +113,6 @@ DELETE FROM ToolRegistry;
 
 -- Count tools by type
 countToolsByType:
-SELECT tool_type, COUNT(*) as tool_count
+SELECT tool_type, COUNT(*)
 FROM ToolRegistry
 GROUP BY tool_type;

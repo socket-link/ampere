@@ -197,7 +197,7 @@ class ToolRegistryRepository(
                     .countToolsByType()
                     .executeAsList()
             }.map { rows ->
-                rows.associate { it.tool_type to it.tool_count }
+                rows.associate { it.tool_type to it.COUNT }
             }
         }
 
