@@ -90,7 +90,6 @@ class AgentMemoryServiceTest {
     @AfterTest
     fun tearDown() {
         driver.close()
-        }
     }
     // ==================== Test 1: Round-trip Persistence ====================
 
@@ -660,5 +659,6 @@ class AgentMemoryServiceTest {
 
         assertTrue(result.isSuccess)
         assertNull(result.getOrNull())
+        }
     }
 }
