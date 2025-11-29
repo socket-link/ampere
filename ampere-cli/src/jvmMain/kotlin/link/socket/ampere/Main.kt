@@ -25,7 +25,8 @@ fun main(args: Array<String>) {
             .subcommands(
                 WatchCommand(context.eventRelayService),
                 ThreadCommand(context.threadViewService),
-                StatusCommand(context.threadViewService, context.ticketViewService)
+                StatusCommand(context.threadViewService, context.ticketViewService),
+                OutcomesCommand(context.outcomeMemoryRepository)
             )
             .main(args)
     } finally {

@@ -70,6 +70,12 @@ class EnvironmentService(
         get() = orchestrator.eventRepository
 
     /**
+     * Access to the outcome memory repository for querying execution outcomes.
+     */
+    val outcomeMemoryRepository: link.socket.ampere.agents.core.memory.OutcomeMemoryRepository
+        get() = orchestrator.outcomeMemoryRepository
+
+    /**
      * Create an [AgentMessageApi] for the given agent.
      *
      * The message API allows agents to:

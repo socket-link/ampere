@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.environment
 
 import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.core.memory.OutcomeMemoryRepository
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.EventRouter
 import link.socket.ampere.agents.events.EventSource
@@ -41,6 +42,7 @@ class EnvironmentOrchestrator(
     val messageApiFactory: AgentMessageApiFactory,
     val eventRepository: EventRepository,
     val eventApiFactory: AgentEventApiFactory,
+    val outcomeMemoryRepository: OutcomeMemoryRepository,
     val eventSerialBus: EventSerialBus,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {

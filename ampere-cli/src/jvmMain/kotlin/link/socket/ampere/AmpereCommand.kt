@@ -15,6 +15,11 @@ import com.github.ajalt.clikt.core.CliktCommand
  *   - ampere thread list: List all threads
  *   - ampere thread show: Show thread details
  * - ampere status: View system-wide dashboard
+ * - ampere outcomes: View execution outcomes and accumulated experience
+ *   - ampere outcomes ticket: Show execution history for a specific ticket
+ *   - ampere outcomes search: Find outcomes similar to a description
+ *   - ampere outcomes executor: Show outcomes for a specific executor
+ *   - ampere outcomes stats: Show aggregate outcome statistics
  */
 class AmpereCommand : CliktCommand(
     name = "ampere",
