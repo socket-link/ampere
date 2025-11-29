@@ -4,6 +4,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
+import link.socket.ampere.agents.core.memory.AgentMemoryService
+import link.socket.ampere.agents.core.memory.Knowledge
+import link.socket.ampere.agents.core.memory.KnowledgeWithScore
+import link.socket.ampere.agents.core.memory.MemoryContext
 import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
 import link.socket.ampere.agents.core.outcomes.Outcome
 import link.socket.ampere.agents.core.outcomes.OutcomeId
@@ -19,6 +24,7 @@ import link.socket.ampere.agents.core.tasks.TaskId
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.domain.ai.model.AIModel
+import link.socket.ampere.util.logWith
 
 typealias AgentId = String
 
@@ -29,12 +35,172 @@ sealed class Agent <S : AgentState> {
     abstract val initialState: S
     abstract val agentConfiguration: AgentConfiguration
 
+    /**
+     * Optional memory service for persistent knowledge storage and retrieval.
+     * When null, the agent operates without long-term memory recall capabilities.
+     * When provided, enables episodic memory queries across sessions.
+     */
+    @Transient
+    protected open val memoryService: AgentMemoryService? = null
+
+    @Transient
+    private val logger by lazy { logWith("Agent/$id") }
+
     abstract suspend fun perceiveState(vararg newIdeas: Idea): Idea
     abstract suspend fun determinePlanForTask(task: Task, vararg ideas: Idea): Plan
     abstract suspend fun executePlan(plan: Plan): Outcome
     abstract suspend fun runTask(task: Task): Outcome
     abstract suspend fun runTool(tool: Tool<*>, request: ExecutionRequest<*>): ExecutionOutcome
     abstract suspend fun evaluateNextIdeaFromOutcomes(vararg outcomes: Outcome): Idea
+
+    /**
+     * Recall relevant past knowledge based on current context.
+     *
+     * This is episodic memory retrieval—querying accumulated learnings for
+     * entries relevant to the current situation. Returned knowledge informs
+     * planning by showing what approaches worked or failed in similar contexts.
+     *
+     * This complements the in-memory AgentState.getPastMemory() with long-term
+     * persistent recall across agent restarts and sessions.
+     *
+     * @param context Current situation to find relevant memories for
+     * @param limit Maximum knowledge entries to retrieve (default 10)
+     * @return Result containing knowledge entries ranked by relevance, or an error
+     */
+    protected suspend fun recallRelevantKnowledge(
+        context: MemoryContext,
+        limit: Int = 10
+    ): Result<List<KnowledgeWithScore>> {
+        // Check if memory service is available
+        val service = memoryService
+        if (service == null) {
+            logger.w { "Memory service not available - operating without long-term memory recall" }
+            return Result.failure(
+                AgentError.MemoryRecallFailure(
+                    message = "Memory service not configured for this agent",
+                    cause = null
+                )
+            )
+        }
+
+        return try {
+            // Query the persistent memory service
+            val recallResult = service.recallRelevantKnowledge(
+                context = context,
+                limit = limit
+            )
+
+            recallResult.fold(
+                onSuccess = { scoredKnowledge ->
+                    logger.i {
+                        "Recalled ${scoredKnowledge.size} relevant knowledge entries " +
+                        "with average relevance ${
+                            if (scoredKnowledge.isNotEmpty())
+                                scoredKnowledge.map { it.relevanceScore }.average()
+                            else 0.0
+                        }"
+                    }
+                    Result.success(scoredKnowledge)
+                },
+                onFailure = { error ->
+                    logger.w { "Knowledge recall failed: ${error.message}" }
+                    Result.failure(
+                        AgentError.MemoryRecallFailure(
+                            message = "Could not retrieve relevant knowledge: ${error.message}",
+                            cause = error
+                        )
+                    )
+                }
+            )
+        } catch (e: Exception) {
+            logger.e(e) { "Exception during knowledge recall" }
+            Result.failure(
+                AgentError.MemoryRecallFailure(
+                    message = "Exception during knowledge recall: ${e.message}",
+                    cause = e
+                )
+            )
+        }
+    }
+
+    /**
+     * Store knowledge from a completed experience.
+     *
+     * This persists learnings for future recall, building the agent's
+     * long-term episodic memory. Should be called after extracting
+     * knowledge from cognitive elements (outcomes, plans, etc.).
+     *
+     * @param knowledge The knowledge to persist
+     * @param tags Optional tags for categorization
+     * @param taskType Optional task type for context-based retrieval
+     * @return Result containing the stored knowledge entry or an error
+     */
+    protected suspend fun storeKnowledge(
+        knowledge: Knowledge,
+        tags: List<String> = emptyList(),
+        taskType: String? = null
+    ): Result<Unit> {
+        val service = memoryService
+        if (service == null) {
+            logger.w { "Memory service not available - cannot store knowledge" }
+            return Result.failure(
+                AgentError.MemoryRecallFailure(
+                    message = "Memory service not configured for this agent",
+                    cause = null
+                )
+            )
+        }
+
+        return try {
+            service.storeKnowledge(
+                knowledge = knowledge,
+                tags = tags,
+                taskType = taskType
+            ).fold(
+                onSuccess = { entry ->
+                    logger.i { "Stored knowledge entry ${entry.id} of type ${entry.knowledgeType}" }
+
+                    // Also add to in-memory state for immediate access
+                    when (knowledge) {
+                        is Knowledge.FromIdea -> getCurrentState().addToPastKnowledge(
+                            rememberedKnowledgeFromIdeas = listOf(knowledge)
+                        )
+                        is Knowledge.FromOutcome -> getCurrentState().addToPastKnowledge(
+                            rememberedKnowledgeFromOutcomes = listOf(knowledge)
+                        )
+                        is Knowledge.FromPerception -> getCurrentState().addToPastKnowledge(
+                            rememberedKnowledgeFromPerceptions = listOf(knowledge)
+                        )
+                        is Knowledge.FromPlan -> getCurrentState().addToPastKnowledge(
+                            rememberedKnowledgeFromPlans = listOf(knowledge)
+                        )
+                        is Knowledge.FromTask -> getCurrentState().addToPastKnowledge(
+                            rememberedKnowledgeFromTasks = listOf(knowledge)
+                        )
+                    }
+
+                    Result.success(Unit)
+                },
+                onFailure = { error ->
+                    logger.w { "Knowledge storage failed: ${error.message}" }
+                    Result.failure(
+                        AgentError.MemoryRecallFailure(
+                            message = "Could not store knowledge: ${error.message}",
+                            cause = error
+                        )
+                    )
+                }
+            )
+        } catch (e: Exception) {
+            logger.e(e) { "Exception during knowledge storage" }
+            Result.failure(
+                AgentError.MemoryRecallFailure(
+                    message = "Exception during knowledge storage: ${e.message}",
+                    cause = e
+                )
+            )
+        }
+    }
 
     private val _stateFlow: MutableStateFlow<S> by lazy { MutableStateFlow(initialState) }
     val stateFlow: StateFlow<S> by lazy { _stateFlow.asStateFlow() }
@@ -146,5 +312,36 @@ sealed class Agent <S : AgentState> {
     protected fun resetAllMemory() {
         resetCurrentMemory()
         resetPastMemory()
+    }
+}
+
+/**
+ * Agent-specific errors.
+ *
+ * These errors represent failures in agent cognitive processes, including
+ * memory operations, planning failures, and execution errors.
+ */
+sealed class AgentError : Exception() {
+
+    /**
+     * Error during memory recall or storage operations.
+     *
+     * This can occur when:
+     * - Memory service is not configured
+     * - Database queries fail
+     * - Knowledge retrieval/storage encounters errors
+     *
+     * @param message Human-readable error description
+     * @param cause The underlying cause (can be Exception or other error types)
+     */
+    data class MemoryRecallFailure(
+        override val message: String,
+        override val cause: Throwable? = null
+    ) : AgentError() {
+        // Secondary constructor for non-Throwable causes
+        constructor(message: String, cause: Any?) : this(
+            message = message,
+            cause = cause as? Throwable
+        )
     }
 }
