@@ -7,6 +7,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
+import link.socket.ampere.agents.core.memory.KnowledgeWithScore
+import link.socket.ampere.agents.core.memory.MemoryContext
 import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
 import link.socket.ampere.agents.core.outcomes.Outcome
 import link.socket.ampere.agents.core.reasoning.Idea
@@ -83,18 +85,20 @@ abstract class AutonomousAgent <S : AgentState> : Agent<S>() {
     private suspend fun recallRelevantKnowledgeForTask(task: Task): List<KnowledgeWithScore> {
         // Build context from the task description
         val context = when (task) {
-            is Task.CodeChange -> link.socket.ampere.agents.core.memory.MemoryContext(
-                taskDescription = task.description,
-                taskType = "code_change"
+            is Task.CodeChange -> MemoryContext(
+                taskType = "code_change",
+                tags = emptySet(),
+                description = task.description
             )
-            else -> link.socket.ampere.agents.core.memory.MemoryContext(
-                taskDescription = "Generic task: ${task.id}",
-                taskType = "generic"
+            else -> MemoryContext(
+                taskType = "generic",
+                tags = emptySet(),
+                description = "Generic task: ${task.id}"
             )
         }
 
         return recallRelevantKnowledge(context, limit = 10)
-            .getOrElse { emptyList() }
+            .getOrElse { emptyList<KnowledgeWithScore>() }
     }
 
     /**
