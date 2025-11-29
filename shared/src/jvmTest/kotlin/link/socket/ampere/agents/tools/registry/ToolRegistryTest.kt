@@ -80,7 +80,7 @@ class ToolRegistryTest {
         description: String,
         autonomy: AgentActionAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
     ): FunctionTool<ExecutionContext> {
-        return FunctionTool(
+        return FunctionTool<ExecutionContext>(
             id = id,
             name = name,
             description = description,

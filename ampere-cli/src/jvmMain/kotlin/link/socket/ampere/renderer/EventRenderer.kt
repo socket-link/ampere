@@ -18,6 +18,7 @@ import link.socket.ampere.agents.events.MemoryEvent
 import link.socket.ampere.agents.events.MessageEvent
 import link.socket.ampere.agents.events.NotificationEvent
 import link.socket.ampere.agents.events.TicketEvent
+import link.socket.ampere.agents.events.ToolEvent
 import link.socket.ampere.agents.events.Urgency
 
 /**
@@ -100,6 +101,7 @@ class EventRenderer(
      * - MessageEvent: 💬 blue (messages)
      * - NotificationEvent: 🔔 white (notifications)
      * - MemoryEvent: 🧠 cyan (knowledge/learning)
+     * - ToolEvent: 🔧 yellow (tool registration/discovery)
      */
     private fun getIconAndColor(event: Event): Pair<String, com.github.ajalt.mordant.rendering.TextStyle> {
         return when (event) {
@@ -111,6 +113,7 @@ class EventRenderer(
             is MessageEvent -> "💬" to blue
             is NotificationEvent<*> -> "🔔" to white
             is MemoryEvent -> "🧠" to cyan
+            is ToolEvent -> "🔧" to yellow
         }
     }
 
@@ -178,6 +181,9 @@ private fun Event.toSummary(
     is NotificationEvent.ToHuman<*> -> toSummary(formatUrgency)
     is MemoryEvent.KnowledgeStored -> toSummary(formatUrgency, formatSource)
     is MemoryEvent.KnowledgeRecalled -> toSummary(formatUrgency, formatSource)
+    is ToolEvent.ToolRegistered -> toSummary(formatUrgency)
+    is ToolEvent.ToolUnregistered -> toSummary(formatUrgency)
+    is ToolEvent.ToolDiscoveryComplete -> toSummary(formatUrgency)
 }
 
 // Event.TaskCreated
@@ -342,4 +348,36 @@ private fun MemoryEvent.KnowledgeRecalled.toSummary(
     }
     append(" ${formatUrgency(urgency)}")
     append(" from ${formatSource(eventSource)}")
+}
+
+// ToolEvent.ToolRegistered
+private fun ToolEvent.ToolRegistered.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = buildString {
+    append("Tool registered: $toolName")
+    append(" (type: $toolType, autonomy: $requiredAutonomy)")
+    mcpServerId?.let { append(" [server: $it]") }
+    append(" ${formatUrgency(urgency)}")
+}
+
+// ToolEvent.ToolUnregistered
+private fun ToolEvent.ToolUnregistered.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = buildString {
+    append("Tool unregistered: $toolName")
+    append(" - $reason")
+    mcpServerId?.let { append(" [server: $it]") }
+    append(" ${formatUrgency(urgency)}")
+}
+
+// ToolEvent.ToolDiscoveryComplete
+private fun ToolEvent.ToolDiscoveryComplete.toSummary(
+    formatUrgency: (Urgency) -> String,
+): String = buildString {
+    append("Tool discovery complete: $totalToolsDiscovered tool(s) found")
+    append(" ($functionToolCount function, $mcpToolCount MCP)")
+    if (mcpServerCount > 0) {
+        append(" from $mcpServerCount server(s)")
+    }
+    append(" ${formatUrgency(urgency)}")
 }
