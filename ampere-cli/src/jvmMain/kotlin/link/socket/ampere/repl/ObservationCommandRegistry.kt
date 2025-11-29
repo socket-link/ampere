@@ -1,5 +1,6 @@
 package link.socket.ampere.repl
 
+import kotlinx.coroutines.delay
 import link.socket.ampere.*
 import link.socket.ampere.renderer.CLIRenderer
 import org.jline.terminal.Terminal
@@ -37,13 +38,25 @@ class ObservationCommandRegistry(
     }
 
     private suspend fun executeWatch(args: Array<String>): CommandResult {
-        return executor.execute {
-            val command = WatchCommand(
-                eventRelayService = context.eventRelayService,
-                renderer = renderer
-            )
-            val adapter = CommandAdapter(terminal)
-            adapter.execute(command, args)
+        val indicator = ProgressIndicator(terminal)
+
+        return try {
+            indicator.start("Connecting to event stream...")
+            delay(300) // Brief pause to show spinner
+            indicator.stop()
+
+            terminal.writer().println(TerminalColors.info("Streaming events... Press Ctrl+C to stop"))
+
+            executor.execute {
+                val command = WatchCommand(
+                    eventRelayService = context.eventRelayService,
+                    renderer = renderer
+                )
+                val adapter = CommandAdapter(terminal)
+                adapter.execute(command, args)
+            }
+        } finally {
+            indicator.stop()
         }
     }
 
