@@ -134,6 +134,15 @@ class MinimalAutonomousAgentTest {
         fun testResetPastMemory() = resetPastMemory()
         fun testResetAllMemory() = resetAllMemory()
 
+        override fun extractKnowledgeFromOutcome(outcome: Outcome, task: Task, plan: Plan): Knowledge {
+            return Knowledge.FromOutcome(
+                outcomeId = outcome.id,
+                approach = "Test approach",
+                learnings = "Test learnings",
+                timestamp = Clock.System.now()
+            )
+        }
+
         companion object {
             private val stubIdea = Idea(name = "Test Idea")
             private val stubPlan = Plan.ForIdea(

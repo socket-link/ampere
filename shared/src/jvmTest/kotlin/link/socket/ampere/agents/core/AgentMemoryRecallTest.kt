@@ -468,6 +468,15 @@ private class TestAgentWithMemory(
     override val runLLMToExecuteTask: (task: Task) -> Outcome = { Outcome.blank }
     override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome = { _, _ -> ExecutionOutcome.blank }
     override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { Idea.blank }
+
+    override fun extractKnowledgeFromOutcome(outcome: Outcome, task: Task, plan: Plan): Knowledge {
+        return Knowledge.FromOutcome(
+            outcomeId = outcome.id,
+            approach = "Test approach",
+            learnings = "Test learnings",
+            timestamp = Clock.System.now()
+        )
+    }
 }
 
 /**
@@ -498,4 +507,13 @@ private class TestAgentWithoutMemory(
     override val runLLMToExecuteTask: (task: Task) -> Outcome = { Outcome.blank }
     override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome = { _, _ -> ExecutionOutcome.blank }
     override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { Idea.blank }
+
+    override fun extractKnowledgeFromOutcome(outcome: Outcome, task: Task, plan: Plan): Knowledge {
+        return Knowledge.FromOutcome(
+            outcomeId = outcome.id,
+            approach = "Test approach",
+            learnings = "Test learnings",
+            timestamp = Clock.System.now()
+        )
+    }
 }
