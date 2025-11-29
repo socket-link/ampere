@@ -56,7 +56,7 @@ class EventRenderer(
         val (icon, color) = getIconAndColor(event)
 
         // Get the event type name
-        val eventTypeName = event.eventType.second
+        val eventTypeName = event.eventType
 
         // Build the formatted line
         val line = buildString {
@@ -284,7 +284,7 @@ private fun TicketEvent.TicketBlocked.toSummary(
 // TicketEvent.TicketCompleted
 private fun TicketEvent.TicketCompleted.toSummary(
     formatUrgency: (Urgency) -> String,
-): String = "Ticket $ticketId completed by $completedBy ${formatUrgency(urgency)}"
+): String = "Ticket $ticketId completed by $eventSource ${formatUrgency(urgency)}"
 
 // TicketEvent.TicketMeetingScheduled
 private fun TicketEvent.TicketMeetingScheduled.toSummary(

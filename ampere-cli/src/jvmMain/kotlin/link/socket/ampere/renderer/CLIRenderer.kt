@@ -11,6 +11,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.agents.events.Event
+import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.messages.MessageSender
 import link.socket.ampere.agents.events.relay.EventRelayFilters
 import link.socket.ampere.agents.events.tickets.TicketSummary
@@ -61,10 +62,10 @@ class CLIRenderer(
         } else {
             terminal.println(dim("Active filters:"))
             filters.eventTypes?.let { types ->
-                terminal.println(dim("  Event types: ${types.map { it.second }.joinToString(", ")}"))
+                terminal.println(dim("  Event types: ${types.joinToString(", ")}"))
             }
             filters.eventSources?.let { sources ->
-                terminal.println(dim("  Agents: ${sources.map { (it as link.socket.ampere.agents.events.EventSource.Agent).agentId }.joinToString(", ")}"))
+                terminal.println(dim("  Agents: ${sources.joinToString(", ") { (it as EventSource.Agent).agentId }}"))
             }
         }
         terminal.println()

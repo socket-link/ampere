@@ -1,15 +1,15 @@
 package link.socket.ampere.util
 
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import link.socket.ampere.agents.events.Event
 import link.socket.ampere.agents.events.MeetingEvent
 import link.socket.ampere.agents.events.MessageEvent
 import link.socket.ampere.agents.events.NotificationEvent
 import link.socket.ampere.agents.events.TicketEvent
 import org.junit.jupiter.api.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class EventTypeParserTest {
 
@@ -17,7 +17,7 @@ class EventTypeParserTest {
     fun `parse TaskCreated returns correct EventClassType`() {
         val result = EventTypeParser.parse("TaskCreated")
         assertNotNull(result)
-        assertEquals(Event.TaskCreated.EVENT_CLASS_TYPE, result)
+        assertEquals(Event.TaskCreated.EVENT_TYPE, result)
     }
 
     @Test
@@ -87,9 +87,9 @@ class EventTypeParserTest {
         )
 
         assertEquals(3, result.size)
-        assertTrue(result.contains(Event.TaskCreated.EVENT_CLASS_TYPE))
-        assertTrue(result.contains(Event.QuestionRaised.EVENT_CLASS_TYPE))
-        assertTrue(result.contains(MeetingEvent.MeetingScheduled.EVENT_CLASS_TYPE))
+        assertTrue(result.contains(Event.TaskCreated.EVENT_TYPE))
+        assertTrue(result.contains(Event.QuestionRaised.EVENT_TYPE))
+        assertTrue(result.contains(MeetingEvent.MeetingScheduled.EVENT_TYPE))
     }
 
     @Test
@@ -99,8 +99,8 @@ class EventTypeParserTest {
         )
 
         assertEquals(2, result.size)
-        assertTrue(result.contains(Event.TaskCreated.EVENT_CLASS_TYPE))
-        assertTrue(result.contains(Event.QuestionRaised.EVENT_CLASS_TYPE))
+        assertTrue(result.contains(Event.TaskCreated.EVENT_TYPE))
+        assertTrue(result.contains(Event.QuestionRaised.EVENT_TYPE))
     }
 
     @Test
@@ -146,32 +146,32 @@ class EventTypeParserTest {
         val allTypes = EventTypeParser.getAllEventTypes()
 
         // Should have at least the basic event types
-        assertTrue(allTypes.contains(Event.TaskCreated.EVENT_CLASS_TYPE))
-        assertTrue(allTypes.contains(Event.QuestionRaised.EVENT_CLASS_TYPE))
-        assertTrue(allTypes.contains(Event.CodeSubmitted.EVENT_CLASS_TYPE))
+        assertTrue(allTypes.contains(Event.TaskCreated.EVENT_TYPE))
+        assertTrue(allTypes.contains(Event.QuestionRaised.EVENT_TYPE))
+        assertTrue(allTypes.contains(Event.CodeSubmitted.EVENT_TYPE))
 
         // Should have meeting events
-        assertTrue(allTypes.contains(MeetingEvent.MeetingScheduled.EVENT_CLASS_TYPE))
+        assertTrue(allTypes.contains(MeetingEvent.MeetingScheduled.EVENT_TYPE))
 
         // Should have ticket events
-        assertTrue(allTypes.contains(TicketEvent.TicketCreated.EVENT_CLASS_TYPE))
+        assertTrue(allTypes.contains(TicketEvent.TicketCreated.EVENT_TYPE))
 
         // Should have message events
-        assertTrue(allTypes.contains(MessageEvent.ThreadCreated.EVENT_CLASS_TYPE))
+        assertTrue(allTypes.contains(MessageEvent.ThreadCreated.EVENT_TYPE))
 
         // Should have notification events
-        assertTrue(allTypes.contains(NotificationEvent.ToAgent.EVENT_CLASS_TYPE))
-        assertTrue(allTypes.contains(NotificationEvent.ToHuman.EVENT_CLASS_TYPE))
+        assertTrue(allTypes.contains(NotificationEvent.ToAgent.EVENT_TYPE))
+        assertTrue(allTypes.contains(NotificationEvent.ToHuman.EVENT_TYPE))
     }
 
     @Test
     fun `parsed event type has correct string name`() {
         val taskCreated = EventTypeParser.parse("TaskCreated")
         assertNotNull(taskCreated)
-        assertEquals("TaskCreated", taskCreated.second)
+        assertEquals("TaskCreated", taskCreated)
 
         val meetingScheduled = EventTypeParser.parse("MeetingScheduled")
         assertNotNull(meetingScheduled)
-        assertEquals("MeetingScheduled", meetingScheduled.second)
+        assertEquals("MeetingScheduled", meetingScheduled)
     }
 }
