@@ -120,12 +120,12 @@ class ActionCommandRegistry(
         return when {
             result.isSuccess -> {
                 val ticket = result.getOrThrow()
-                terminal.writer().println("✓ Created ticket ${ticket.id}: $title [$priority]")
-                terminal.writer().println("  Event: TicketCreated emitted")
+                terminal.writer().println(TerminalColors.success("Created ticket ${ticket.id}: $title [$priority]"))
+                terminal.writer().println(TerminalColors.dim("  Event: TicketCreated emitted"))
                 CommandResult.SUCCESS
             }
             else -> {
-                terminal.writer().println("✗ Failed to create ticket: ${result.exceptionOrNull()?.message}")
+                terminal.writer().println(TerminalColors.error("Failed to create ticket: ${result.exceptionOrNull()?.message}"))
                 CommandResult.ERROR
             }
         }
@@ -145,12 +145,12 @@ class ActionCommandRegistry(
 
         return when {
             result.isSuccess -> {
-                terminal.writer().println("✓ Assigned ticket $ticketId to $agentId")
-                terminal.writer().println("  Event: TicketAssigned emitted")
+                terminal.writer().println(TerminalColors.success("Assigned ticket $ticketId to $agentId"))
+                terminal.writer().println(TerminalColors.dim("  Event: TicketAssigned emitted"))
                 CommandResult.SUCCESS
             }
             else -> {
-                terminal.writer().println("✗ Failed to assign ticket: ${result.exceptionOrNull()?.message}")
+                terminal.writer().println(TerminalColors.error("Failed to assign ticket: ${result.exceptionOrNull()?.message}"))
                 CommandResult.ERROR
             }
         }
@@ -176,12 +176,12 @@ class ActionCommandRegistry(
 
         return when {
             result.isSuccess -> {
-                terminal.writer().println("✓ Updated ticket $ticketId status to $status")
-                terminal.writer().println("  Event: TicketStatusChanged emitted")
+                terminal.writer().println(TerminalColors.success("Updated ticket $ticketId status to $status"))
+                terminal.writer().println(TerminalColors.dim("  Event: TicketStatusChanged emitted"))
                 CommandResult.SUCCESS
             }
             else -> {
-                terminal.writer().println("✗ Failed to update status: ${result.exceptionOrNull()?.message}")
+                terminal.writer().println(TerminalColors.error("Failed to update status: ${result.exceptionOrNull()?.message}"))
                 CommandResult.ERROR
             }
         }
@@ -232,12 +232,12 @@ class ActionCommandRegistry(
 
         return when {
             result.isSuccess -> {
-                terminal.writer().println("✓ Posted message to thread $threadId")
-                terminal.writer().println("  Event: MessagePosted emitted")
+                terminal.writer().println(TerminalColors.success("Posted message to thread $threadId"))
+                terminal.writer().println(TerminalColors.dim("  Event: MessagePosted emitted"))
                 CommandResult.SUCCESS
             }
             else -> {
-                terminal.writer().println("✗ Failed to post message: ${result.exceptionOrNull()?.message}")
+                terminal.writer().println(TerminalColors.error("Failed to post message: ${result.exceptionOrNull()?.message}"))
                 CommandResult.ERROR
             }
         }
@@ -286,13 +286,13 @@ class ActionCommandRegistry(
         return when {
             result.isSuccess -> {
                 val thread = result.getOrThrow()
-                terminal.writer().println("✓ Created thread ${thread.id}: $title")
-                terminal.writer().println("  Participants: ${participants.joinToString(", ")}")
-                terminal.writer().println("  Event: ThreadCreated emitted")
+                terminal.writer().println(TerminalColors.success("Created thread ${thread.id}: $title"))
+                terminal.writer().println(TerminalColors.dim("  Participants: ${participants.joinToString(", ")}"))
+                terminal.writer().println(TerminalColors.dim("  Event: ThreadCreated emitted"))
                 CommandResult.SUCCESS
             }
             else -> {
-                terminal.writer().println("✗ Failed to create thread: ${result.exceptionOrNull()?.message}")
+                terminal.writer().println(TerminalColors.error("Failed to create thread: ${result.exceptionOrNull()?.message}"))
                 CommandResult.ERROR
             }
         }
@@ -325,12 +325,12 @@ class ActionCommandRegistry(
 
         return when {
             result.isSuccess -> {
-                terminal.writer().println("✓ Sent wake signal to $agentId")
-                terminal.writer().println("  Event: TaskCreated emitted (assigned to $agentId)")
+                terminal.writer().println(TerminalColors.success("Sent wake signal to $agentId"))
+                terminal.writer().println(TerminalColors.dim("  Event: TaskCreated emitted (assigned to $agentId)"))
                 CommandResult.SUCCESS
             }
             else -> {
-                terminal.writer().println("✗ Failed to wake agent: ${result.exceptionOrNull()?.message}")
+                terminal.writer().println(TerminalColors.error("Failed to wake agent: ${result.exceptionOrNull()?.message}"))
                 CommandResult.ERROR
             }
         }

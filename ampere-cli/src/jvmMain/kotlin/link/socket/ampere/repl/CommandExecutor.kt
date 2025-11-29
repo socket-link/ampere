@@ -29,10 +29,11 @@ class CommandExecutor(
                 CommandResult.SUCCESS
             }
         } catch (e: CancellationException) {
-            terminal.writer().println("\n[Command interrupted]")
+            terminal.writer().println()
+            terminal.writer().println(TerminalColors.warning("Command interrupted"))
             CommandResult.INTERRUPTED
         } catch (e: Exception) {
-            terminal.writer().println("Error: ${e.message}")
+            terminal.writer().println(TerminalColors.error("Error: ${e.message}"))
             CommandResult.ERROR
         } finally {
             currentJob = null
