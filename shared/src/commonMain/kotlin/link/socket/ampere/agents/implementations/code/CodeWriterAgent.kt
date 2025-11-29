@@ -15,7 +15,6 @@ import link.socket.ampere.agents.core.tasks.Task
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
-import link.socket.ampere.agents.execution.tools.ToolWriteCodeFile
 
 /**
  * First concrete agent that can read tickets, generate code, and validate results (scaffold).
@@ -27,7 +26,7 @@ import link.socket.ampere.agents.execution.tools.ToolWriteCodeFile
 class CodeWriterAgent(
     override val initialState: AgentState,
     override val agentConfiguration: AgentConfiguration,
-    private val toolWriteCodeFile: ToolWriteCodeFile,
+    private val toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode>,
     private val coroutineScope: CoroutineScope,
 ) : AutonomousAgent<AgentState>() {
 
