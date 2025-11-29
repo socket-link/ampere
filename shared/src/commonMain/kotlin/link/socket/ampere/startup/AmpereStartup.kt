@@ -7,6 +7,9 @@ import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.tools.ToolInitializationResult
 import link.socket.ampere.agents.tools.initializeLocalTools
+import link.socket.ampere.agents.tools.mcp.McpDiscoveryResult
+import link.socket.ampere.agents.tools.mcp.McpServerConfiguration
+import link.socket.ampere.agents.tools.mcp.McpServerManager
 import link.socket.ampere.agents.tools.registry.ToolRegistry
 import link.socket.ampere.agents.tools.registry.ToolRegistryRepository
 import link.socket.ampere.db.Database
@@ -33,19 +36,22 @@ import link.socket.ampere.db.Database
  * The function:
  * 1. Creates the ToolRegistry with persistence
  * 2. Initializes local function tools
- * 3. Emits discovery complete events
- * 4. Returns the registry for use by agents
+ * 3. Discovers and registers tools from MCP servers (if configured)
+ * 4. Emits discovery complete events
+ * 5. Returns the registry and MCP manager for use by agents
  *
  * @param database The SQLDelight database for persistence
  * @param json The JSON serializer for data operations
  * @param scope The coroutine scope for async operations
+ * @param mcpServerConfigs Optional list of MCP server configurations to discover
  * @param logger Optional logger for observability
- * @return Result containing the initialized ToolRegistry and initialization stats
+ * @return Result containing the initialized ToolRegistry, McpServerManager, and initialization stats
  */
 suspend fun initializeAmpere(
     database: Database,
     json: Json,
     scope: CoroutineScope,
+    mcpServerConfigs: List<McpServerConfiguration> = emptyList(),
     logger: Logger = Logger.withTag("AmpereStartup")
 ): Result<AmpereStartupResult> {
     logger.i { "=== Ampere System Initialization Starting ===" }
@@ -53,7 +59,7 @@ suspend fun initializeAmpere(
     return try {
         // Create the tool registry
         logger.i { "Creating tool registry..." }
-        val registry = createToolRegistry(database, json, scope)
+        val (registry, eventBus, eventSource) = createToolRegistry(database, json, scope)
 
         // Initialize local function tools
         logger.i { "Initializing local function tools..." }
@@ -66,21 +72,67 @@ suspend fun initializeAmpere(
             }
         }
 
-        // Emit discovery complete event
-        logger.i { "Emitting tool discovery complete event..." }
-        registry.emitDiscoveryComplete(mcpServerCount = 0)
+        // Create MCP server manager
+        logger.i { "Creating MCP server manager..." }
+        val mcpManager = McpServerManager(
+            toolRegistry = registry,
+            eventBus = eventBus,
+            eventSource = eventSource,
+            logger = logger,
+        )
+
+        // Discover and register MCP tools if servers are configured
+        var mcpDiscoveryResult: McpDiscoveryResult? = null
+        if (mcpServerConfigs.isNotEmpty()) {
+            logger.i { "Discovering tools from ${mcpServerConfigs.size} MCP servers..." }
+
+            // Add all server configurations
+            mcpServerConfigs.forEach { config ->
+                mcpManager.addServerConfiguration(config)
+            }
+
+            // Perform discovery
+            mcpDiscoveryResult = mcpManager.discoverAndRegisterTools().getOrElse { error ->
+                logger.w(error) { "MCP discovery failed, continuing without MCP tools" }
+                null
+            }
+
+            if (mcpDiscoveryResult != null) {
+                if (!mcpDiscoveryResult.isFullSuccess) {
+                    logger.w {
+                        "MCP discovery completed with ${mcpDiscoveryResult.failedServers} failures. " +
+                        "See logs above for details."
+                    }
+                }
+            }
+        } else {
+            logger.i { "No MCP servers configured, skipping MCP discovery" }
+        }
+
+        // Emit final discovery complete event
+        logger.i { "Emitting final tool discovery complete event..." }
+        registry.emitDiscoveryComplete(
+            mcpServerCount = mcpDiscoveryResult?.successfulServers ?: 0
+        )
+
+        val totalTools = toolInitResult.successfulRegistrations +
+            (mcpDiscoveryResult?.totalToolsDiscovered ?: 0)
 
         logger.i {
             "=== Ampere System Initialization Complete ===" +
-            "\n  Total tools: ${toolInitResult.successfulRegistrations}" +
-            "\n  Failed registrations: ${toolInitResult.failedRegistrations}" +
-            "\n  Status: ${if (toolInitResult.isFullSuccess) "SUCCESS" else "PARTIAL SUCCESS"}"
+            "\n  Local tools: ${toolInitResult.successfulRegistrations}" +
+            "\n  MCP tools: ${mcpDiscoveryResult?.totalToolsDiscovered ?: 0}" +
+            "\n  Total tools: $totalTools" +
+            "\n  MCP servers: ${mcpDiscoveryResult?.successfulServers ?: 0}/${mcpServerConfigs.size}" +
+            "\n  Status: ${if (toolInitResult.isFullSuccess && (mcpDiscoveryResult?.isFullSuccess != false)) "SUCCESS" else "PARTIAL SUCCESS"}"
         }
 
         Result.success(
             AmpereStartupResult(
                 registry = registry,
-                toolInitialization = toolInitResult
+                mcpServerManager = mcpManager,
+                toolInitialization = toolInitResult,
+                mcpDiscovery = mcpDiscoveryResult,
             )
         )
     } catch (e: Exception) {
@@ -95,13 +147,13 @@ suspend fun initializeAmpere(
  * @param database The SQLDelight database for persistence
  * @param json The JSON serializer
  * @param scope The coroutine scope
- * @return Configured ToolRegistry instance
+ * @return Triple of (ToolRegistry, EventSerialBus, EventSource)
  */
 private fun createToolRegistry(
     database: Database,
     json: Json,
     scope: CoroutineScope
-): ToolRegistry {
+): Triple<ToolRegistry, EventSerialBus, EventSource> {
     val repository = ToolRegistryRepository(
         json = json,
         scope = scope,
@@ -112,28 +164,45 @@ private fun createToolRegistry(
 
     val eventSource = EventSource.Agent(agentId = "ampere-system")
 
-    return ToolRegistry(
+    val registry = ToolRegistry(
         repository = repository,
         eventBus = eventBus,
         eventSource = eventSource
     )
+
+    return Triple(registry, eventBus, eventSource)
 }
 
 /**
  * Result of Ampere system initialization.
  *
  * @property registry The initialized ToolRegistry
- * @property toolInitialization Statistics from tool initialization
+ * @property mcpServerManager The MCP server manager for external tool integration
+ * @property toolInitialization Statistics from local tool initialization
+ * @property mcpDiscovery Statistics from MCP tool discovery (null if no MCP servers configured)
  */
 data class AmpereStartupResult(
     val registry: ToolRegistry,
-    val toolInitialization: ToolInitializationResult
+    val mcpServerManager: McpServerManager,
+    val toolInitialization: ToolInitializationResult,
+    val mcpDiscovery: McpDiscoveryResult? = null,
 ) {
     /** Whether initialization was fully successful */
     val isFullSuccess: Boolean
-        get() = toolInitialization.isFullSuccess
+        get() = toolInitialization.isFullSuccess &&
+            (mcpDiscovery?.isFullSuccess != false)
 
     /** Whether at least partial initialization succeeded */
     val isPartialSuccess: Boolean
-        get() = toolInitialization.isPartialSuccess
+        get() = toolInitialization.isPartialSuccess ||
+            (mcpDiscovery?.isPartialSuccess == true)
+
+    /** Total number of tools discovered (local + MCP) */
+    val totalToolsDiscovered: Int
+        get() = toolInitialization.successfulRegistrations +
+            (mcpDiscovery?.totalToolsDiscovered ?: 0)
+
+    /** Number of successfully connected MCP servers */
+    val mcpServersConnected: Int
+        get() = mcpDiscovery?.successfulServers ?: 0
 }
