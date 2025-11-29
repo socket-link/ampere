@@ -50,7 +50,7 @@ class AgentMemoryServiceTest {
     private val emittedEvents = mutableListOf<MemoryEvent>()
 
     private val agentId = "test-agent-1"
-    private val now = Clock.System.now()
+    private lateinit var now: Instant
 
     @BeforeTest
     fun setUp() {
@@ -59,6 +59,7 @@ class AgentMemoryServiceTest {
         val database = Database(driver)
         knowledgeRepository = KnowledgeRepositoryImpl(database)
         eventBus = EventSerialBus(testScope)
+        now = Clock.System.now()
 
         // Subscribe to all MemoryEvents to track emissions
         eventBus.subscribe<MemoryEvent.KnowledgeStored, EventSubscription.ByEventClassType>(
