@@ -10,24 +10,27 @@ expect suspend fun executeWriteCodeFile(
     context: ExecutionContext.Code.WriteCode,
 ): ExecutionOutcome.CodeChanged
 
-data class ToolWriteCodeFile(
-    override val requiredAgentAutonomy: AgentActionAutonomy,
-) : Tool<ExecutionContext.Code.WriteCode> {
-
-    override val id: ToolId = ID
-    override val name: String = NAME
-    override val description: String = DESCRIPTION
-
-    override suspend fun execute(
-        executionRequest: ExecutionRequest<ExecutionContext.Code.WriteCode>,
-    ): Outcome {
-        // TODO: Handle execution request constraints
-        return executeWriteCodeFile(executionRequest.context)
-    }
-
-    companion object Companion {
-        const val ID = "write_code_file"
-        const val NAME = "Write Code File"
-        const val DESCRIPTION = "Writes a code file in the current workspace."
-    }
+/**
+ * Creates a FunctionTool that writes code files to the workspace.
+ *
+ * @param requiredAgentAutonomy The minimum autonomy level required to use this tool.
+ * @return A FunctionTool configured to write code files.
+ */
+fun ToolWriteCodeFile(
+    requiredAgentAutonomy: AgentActionAutonomy,
+): FunctionTool<ExecutionContext.Code.WriteCode> {
+    return FunctionTool(
+        id = ID,
+        name = NAME,
+        description = DESCRIPTION,
+        requiredAgentAutonomy = requiredAgentAutonomy,
+        executionFunction = { executionRequest ->
+            // TODO: Handle execution request constraints
+            executeWriteCodeFile(executionRequest.context)
+        }
+    )
 }
+
+private const val ID = "write_code_file"
+private const val NAME = "Write Code File"
+private const val DESCRIPTION = "Writes a code file in the current workspace."

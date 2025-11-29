@@ -10,24 +10,27 @@ expect suspend fun executeAskHuman(
     context: ExecutionContext.NoChanges,
 ): ExecutionOutcome.NoChanges
 
-data class ToolAskHuman(
-    override val requiredAgentAutonomy: AgentActionAutonomy,
-) : Tool<ExecutionContext.NoChanges> {
-
-    override val id: ToolId = ID
-    override val name: String = NAME
-    override val description: String = DESCRIPTION
-
-    override suspend fun execute(
-        executionRequest: ExecutionRequest<ExecutionContext.NoChanges>,
-    ): Outcome {
-        // TODO: Handle execution request constraints
-        return executeAskHuman(executionRequest.context)
-    }
-
-    companion object Companion {
-        const val ID = "ask_human"
-        const val NAME = "Ask a Human"
-        const val DESCRIPTION = "Escalates uncertainty to human for guidance."
-    }
+/**
+ * Creates a FunctionTool that asks a human for guidance.
+ *
+ * @param requiredAgentAutonomy The minimum autonomy level required to use this tool.
+ * @return A FunctionTool configured to escalate to humans.
+ */
+fun ToolAskHuman(
+    requiredAgentAutonomy: AgentActionAutonomy,
+): FunctionTool<ExecutionContext.NoChanges> {
+    return FunctionTool(
+        id = ID,
+        name = NAME,
+        description = DESCRIPTION,
+        requiredAgentAutonomy = requiredAgentAutonomy,
+        executionFunction = { executionRequest ->
+            // TODO: Handle execution request constraints
+            executeAskHuman(executionRequest.context)
+        }
+    )
 }
+
+private const val ID = "ask_human"
+private const val NAME = "Ask a Human"
+private const val DESCRIPTION = "Escalates uncertainty to human for guidance."
