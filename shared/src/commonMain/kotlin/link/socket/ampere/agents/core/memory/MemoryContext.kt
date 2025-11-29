@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.core.memory
 
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.days
@@ -41,7 +42,7 @@ data class MemoryContext(
      * @param currentTime The current timestamp (defaults to now, but can be overridden for testing)
      * @return A similarity score between 0.0 (completely unrelated) and 1.0 (highly relevant)
      */
-    fun similarityScore(knowledge: Knowledge, currentTime: Instant = Instant.now()): Double {
+    fun similarityScore(knowledge: Knowledge, currentTime: Instant = Clock.System.now()): Double {
         var score = 0.0
 
         // Temporal proximity: more recent knowledge is often more relevant
