@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package link.socket.ampere.agents.core.memory
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
@@ -36,7 +38,6 @@ import kotlin.time.Duration.Companion.minutes
  *
  * Validates the requirements from AMPERE-004 Task 3.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 class AgentMemoryServiceTest {
 
     private val testScope = TestScope(UnconfinedTestDispatcher())
