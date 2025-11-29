@@ -21,8 +21,7 @@ import kotlin.test.assertTrue
  * 5. Serialization/deserialization
  */
 class McpClientTest {
-    private val json = Json { ignoreUnknownKeys = true }
-    private val mcpClient = McpClient(json)
+    private val mcpClient = McpClient()
 
     /**
      * Test 1: Create initialize request.

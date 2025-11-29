@@ -1,8 +1,8 @@
 package link.socket.ampere.agents.tools.mcp.protocol
 
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.data.DEFAULT_JSON
 
 /**
  * McpClient - Protocol-level client for communicating with MCP servers.
@@ -25,7 +25,7 @@ import link.socket.ampere.agents.events.utils.generateUUID
  * Thread-safety: This class is NOT thread-safe. Callers must synchronize access.
  */
 class McpClient(
-    private val json: Json = Json { ignoreUnknownKeys = true },
+    private val json: Json = DEFAULT_JSON,
 ) {
     /**
      * Whether the MCP handshake has completed successfully.
