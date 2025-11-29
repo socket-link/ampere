@@ -68,7 +68,7 @@ class ValidationAgentTest {
         )
 
         val plan = Plan.ForTask(task = task)
-        val outcome = TestSuccessOutcome(id = "outcome-success-1")
+        val outcome = testSuccessOutcome(id = "outcome-success-1")
 
         val knowledge = agent.extractKnowledgeFromOutcome(outcome, task, plan)
 

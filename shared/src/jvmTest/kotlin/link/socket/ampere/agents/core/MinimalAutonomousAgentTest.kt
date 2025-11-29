@@ -13,6 +13,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.core.memory.Knowledge
 import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
 import link.socket.ampere.agents.core.outcomes.Outcome
 import link.socket.ampere.agents.core.reasoning.Idea

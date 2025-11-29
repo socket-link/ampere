@@ -33,7 +33,7 @@ class AgentLearningLoopIntegrationTest {
         )
 
         val firstPlan = agent.determinePlanForTask(firstTask, relevantKnowledge = emptyList())
-        val firstOutcome = TestSuccessOutcome(id = "outcome-1")
+        val firstOutcome = testSuccessOutcome(id = "outcome-1")
 
         // Extract knowledge from first execution
         val extractedKnowledge = agent.extractKnowledgeFromOutcome(
@@ -128,11 +128,11 @@ class AgentLearningLoopIntegrationTest {
         val plan = Plan.ForTask(task = task)
 
         // Extract from success
-        val successOutcome = TestSuccessOutcome(id = "success-outcome")
+        val successOutcome = testSuccessOutcome(id = "success-outcome")
         val successKnowledge = agent.extractKnowledgeFromOutcome(successOutcome, task, plan)
 
         // Extract from failure
-        val failureOutcome = TestFailureOutcome(id = "failure-outcome")
+        val failureOutcome = testFailureOutcome(id = "failure-outcome")
         val failureKnowledge = agent.extractKnowledgeFromOutcome(failureOutcome, task, plan)
 
         assertTrue(successKnowledge is Knowledge.FromOutcome)
