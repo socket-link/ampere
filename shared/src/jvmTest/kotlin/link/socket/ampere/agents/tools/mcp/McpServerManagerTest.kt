@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.tools.mcp
 
+import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +44,7 @@ import kotlin.test.assertTrue
  * 7. Unknown server handling
  */
 class McpServerManagerTest {
+    private lateinit var driver: JdbcSqliteDriver
     private lateinit var database: Database
     private lateinit var registry: ToolRegistry
     private lateinit var eventBus: EventSerialBus
@@ -53,9 +55,9 @@ class McpServerManagerTest {
     @Before
     fun setup() {
         // Create in-memory database
-        database = Database(
-            driver = link.socket.ampere.db.createInMemoryDriver(),
-        )
+        driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        Database.Schema.create(driver)
+        database = Database(driver)
 
         // Create registry
         val repository = ToolRegistryRepository(
@@ -90,8 +92,8 @@ class McpServerManagerTest {
         // Disconnect all MCP servers
         mcpManager.disconnectAll()
 
-        // Close database
-        database.close()
+        // Close database driver
+        driver.close()
     }
 
     /**
