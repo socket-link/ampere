@@ -86,7 +86,7 @@ class ToolRegistryTest {
             description = description,
             requiredAgentAutonomy = autonomy,
             executionFunction = { _: ExecutionRequest<ExecutionContext> ->
-                Outcome.Blank(id = "test-outcome")
+                Outcome.Blank
             }
         )
     }
