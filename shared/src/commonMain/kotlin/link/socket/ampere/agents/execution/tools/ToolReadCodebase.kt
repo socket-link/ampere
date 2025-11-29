@@ -10,24 +10,27 @@ expect suspend fun executeReadCodebase(
     context: ExecutionContext.Code.ReadCode,
 ): ExecutionOutcome.CodeReading
 
-data class ToolReadCodebase(
-    override val requiredAgentAutonomy: AgentActionAutonomy,
-) : Tool<ExecutionContext.Code.ReadCode> {
-
-    override val id: ToolId = ID
-    override val name: String = NAME
-    override val description: String = DESCRIPTION
-
-    override suspend fun execute(
-        executionRequest: ExecutionRequest<ExecutionContext.Code.ReadCode>,
-    ): Outcome {
-        // TODO: Handle execution request constraints
-        return executeReadCodebase(executionRequest.context)
-    }
-
-    companion object Companion {
-        const val ID = "read_codebase"
-        const val NAME = "Read Codebase"
-        const val DESCRIPTION = "Reads the codebase of the current workspace."
-    }
+/**
+ * Creates a FunctionTool that reads code files from the workspace.
+ *
+ * @param requiredAgentAutonomy The minimum autonomy level required to use this tool.
+ * @return A FunctionTool configured to read code files.
+ */
+fun ToolReadCodebase(
+    requiredAgentAutonomy: AgentActionAutonomy,
+): FunctionTool<ExecutionContext.Code.ReadCode> {
+    return FunctionTool(
+        id = ID,
+        name = NAME,
+        description = DESCRIPTION,
+        requiredAgentAutonomy = requiredAgentAutonomy,
+        executionFunction = { executionRequest ->
+            // TODO: Handle execution request constraints
+            executeReadCodebase(executionRequest.context)
+        }
+    )
 }
+
+private const val ID = "read_codebase"
+private const val NAME = "Read Codebase"
+private const val DESCRIPTION = "Reads the codebase of the current workspace."

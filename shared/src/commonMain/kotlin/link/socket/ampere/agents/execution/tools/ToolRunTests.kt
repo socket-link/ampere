@@ -10,24 +10,27 @@ expect suspend fun executeRunTests(
     context: ExecutionContext.Code.ReadCode,
 ): ExecutionOutcome.CodeReading
 
-data class ToolRunTests(
-    override val requiredAgentAutonomy: AgentActionAutonomy,
-) : Tool<ExecutionContext.Code.ReadCode> {
-
-    override val id: ToolId = ID
-    override val name: String = NAME
-    override val description: String = DESCRIPTION
-
-    override suspend fun execute(
-        executionRequest: ExecutionRequest<ExecutionContext.Code.ReadCode>,
-    ): Outcome {
-        // TODO: Handle execution request constraints
-        return executeRunTests(executionRequest.context)
-    }
-
-    companion object Companion {
-        const val ID = "run_tests"
-        const val NAME = "Run Tests"
-        const val DESCRIPTION = "Runs tests in the current workspace."
-    }
+/**
+ * Creates a FunctionTool that runs tests in the workspace.
+ *
+ * @param requiredAgentAutonomy The minimum autonomy level required to use this tool.
+ * @return A FunctionTool configured to run tests.
+ */
+fun ToolRunTests(
+    requiredAgentAutonomy: AgentActionAutonomy,
+): FunctionTool<ExecutionContext.Code.ReadCode> {
+    return FunctionTool(
+        id = ID,
+        name = NAME,
+        description = DESCRIPTION,
+        requiredAgentAutonomy = requiredAgentAutonomy,
+        executionFunction = { executionRequest ->
+            // TODO: Handle execution request constraints
+            executeRunTests(executionRequest.context)
+        }
+    )
 }
+
+private const val ID = "run_tests"
+private const val NAME = "Run Tests"
+private const val DESCRIPTION = "Runs tests in the current workspace."
