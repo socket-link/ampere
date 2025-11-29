@@ -4,6 +4,8 @@ import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.mordant.terminal.Terminal
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.relay.EventRelayFilters
@@ -67,10 +69,10 @@ class WatchCommand(
             eventRelayService.subscribeToLiveEvents(filters)
                 .collect { event ->
                     // Check if coroutine is cancelled before processing
-                    kotlinx.coroutines.ensureActive()
+                    ensureActive()
                     renderer.renderEvent(event)
                 }
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             // Gracefully handle cancellation - just stop collecting
             // The CommandExecutor will display the interrupt message
             throw e
