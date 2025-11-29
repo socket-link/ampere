@@ -227,6 +227,120 @@ class AgentEventApi(
             eventSerialBus.publish(event)
         }
     }
+
+    // ==================== Tool Event Publishing Methods ====================
+
+    /** Publish a ToolRegistered event with auto-generated ID and current timestamp. */
+    suspend fun publishToolRegistered(
+        toolId: String,
+        toolName: String,
+        toolType: String,
+        requiredAutonomy: link.socket.ampere.agents.core.actions.AgentActionAutonomy,
+        mcpServerId: String? = null,
+        urgency: Urgency = Urgency.LOW,
+    ) {
+        val event = link.socket.ampere.agents.events.ToolEvent.ToolRegistered(
+            eventId = generateUUID(toolId, agentId),
+            urgency = urgency,
+            timestamp = Clock.System.now(),
+            eventSource = EventSource.Agent(agentId),
+            toolId = toolId,
+            toolName = toolName,
+            toolType = toolType,
+            requiredAutonomy = requiredAutonomy,
+            mcpServerId = mcpServerId,
+        )
+
+        publish(event)
+    }
+
+    /** Publish a ToolUnregistered event with auto-generated ID and current timestamp. */
+    suspend fun publishToolUnregistered(
+        toolId: String,
+        toolName: String,
+        reason: String,
+        mcpServerId: String? = null,
+        urgency: Urgency = Urgency.MEDIUM,
+    ) {
+        val event = link.socket.ampere.agents.events.ToolEvent.ToolUnregistered(
+            eventId = generateUUID(toolId, agentId),
+            urgency = urgency,
+            timestamp = Clock.System.now(),
+            eventSource = EventSource.Agent(agentId),
+            toolId = toolId,
+            toolName = toolName,
+            reason = reason,
+            mcpServerId = mcpServerId,
+        )
+
+        publish(event)
+    }
+
+    /** Publish a ToolDiscoveryComplete event with auto-generated ID and current timestamp. */
+    suspend fun publishToolDiscoveryComplete(
+        totalToolsDiscovered: Int,
+        functionToolCount: Int,
+        mcpToolCount: Int,
+        mcpServerCount: Int,
+        urgency: Urgency = Urgency.LOW,
+    ) {
+        val event = link.socket.ampere.agents.events.ToolEvent.ToolDiscoveryComplete(
+            eventId = generateUUID(agentId),
+            urgency = urgency,
+            timestamp = Clock.System.now(),
+            eventSource = EventSource.Agent(agentId),
+            totalToolsDiscovered = totalToolsDiscovered,
+            functionToolCount = functionToolCount,
+            mcpToolCount = mcpToolCount,
+            mcpServerCount = mcpServerCount,
+        )
+
+        publish(event)
+    }
+
+    // ==================== Tool Event Subscription Methods ====================
+
+    /** Subscribe to ToolRegistered events. */
+    fun onToolRegistered(
+        filter: EventFilter<link.socket.ampere.agents.events.ToolEvent.ToolRegistered> = EventFilter.noFilter(),
+        handler: suspend (link.socket.ampere.agents.events.ToolEvent.ToolRegistered, Subscription?) -> Unit,
+    ): Subscription =
+        eventSerialBus.subscribe<link.socket.ampere.agents.events.ToolEvent.ToolRegistered, EventSubscription.ByEventClassType>(
+            agentId = agentId,
+            eventClassType = link.socket.ampere.agents.events.ToolEvent.ToolRegistered.EVENT_CLASS_TYPE,
+        ) { event, subscription ->
+            if (filter.execute(event)) {
+                handler(event, subscription)
+            }
+        }
+
+    /** Subscribe to ToolUnregistered events. */
+    fun onToolUnregistered(
+        filter: EventFilter<link.socket.ampere.agents.events.ToolEvent.ToolUnregistered> = EventFilter.noFilter(),
+        handler: suspend (link.socket.ampere.agents.events.ToolEvent.ToolUnregistered, Subscription?) -> Unit,
+    ): Subscription =
+        eventSerialBus.subscribe<link.socket.ampere.agents.events.ToolEvent.ToolUnregistered, EventSubscription.ByEventClassType>(
+            agentId = agentId,
+            eventClassType = link.socket.ampere.agents.events.ToolEvent.ToolUnregistered.EVENT_CLASS_TYPE,
+        ) { event, subscription ->
+            if (filter.execute(event)) {
+                handler(event, subscription)
+            }
+        }
+
+    /** Subscribe to ToolDiscoveryComplete events. */
+    fun onToolDiscoveryComplete(
+        filter: EventFilter<link.socket.ampere.agents.events.ToolEvent.ToolDiscoveryComplete> = EventFilter.noFilter(),
+        handler: suspend (link.socket.ampere.agents.events.ToolEvent.ToolDiscoveryComplete, Subscription?) -> Unit,
+    ): Subscription =
+        eventSerialBus.subscribe<link.socket.ampere.agents.events.ToolEvent.ToolDiscoveryComplete, EventSubscription.ByEventClassType>(
+            agentId = agentId,
+            eventClassType = link.socket.ampere.agents.events.ToolEvent.ToolDiscoveryComplete.EVENT_CLASS_TYPE,
+        ) { event, subscription ->
+            if (filter.execute(event)) {
+                handler(event, subscription)
+            }
+        }
 }
 
 fun <E : Event> AgentEventApi.filterForEventsCreatedByMe(): EventFilter<E> =

@@ -1,0 +1,118 @@
+-- ToolRegistry.sq
+-- SQLDelight schema for persisting tool metadata in the Tool Registry
+-- This table stores metadata about all discovered tools (both FunctionTool and McpTool)
+-- for observability, recovery after restarts, and agent self-improvement tracking.
+
+CREATE TABLE ToolRegistry (
+    -- Unique identifier for the tool (ToolId value)
+    id TEXT PRIMARY KEY NOT NULL,
+
+    -- Display name of the tool
+    name TEXT NOT NULL,
+
+    -- Human-readable description of what the tool does
+    description TEXT NOT NULL,
+
+    -- Tool type discriminator: "function" or "mcp"
+    tool_type TEXT NOT NULL,
+
+    -- Required autonomy level (ASK_BEFORE_ACTION, ACT_WITH_NOTIFICATION, FULLY_AUTONOMOUS, SELF_CORRECTING)
+    required_agent_autonomy TEXT NOT NULL,
+
+    -- MCP-specific fields (null for FunctionTool)
+    mcp_server_id TEXT,
+    remote_tool_name TEXT,
+
+    -- JSON schema for tool inputs (nullable, primarily for MCP tools)
+    input_schema TEXT,
+
+    -- Timestamps for lifecycle tracking
+    registered_at INTEGER NOT NULL,
+    last_seen_at INTEGER NOT NULL
+);
+
+-- Indexes for common query patterns
+CREATE INDEX idx_tool_type ON ToolRegistry(tool_type);
+CREATE INDEX idx_required_autonomy ON ToolRegistry(required_agent_autonomy);
+CREATE INDEX idx_mcp_server ON ToolRegistry(mcp_server_id);
+CREATE INDEX idx_registered_at ON ToolRegistry(registered_at);
+
+-- Named queries for repository implementation
+
+-- Insert or replace a tool in the registry
+insertTool:
+INSERT OR REPLACE INTO ToolRegistry(
+    id,
+    name,
+    description,
+    tool_type,
+    required_agent_autonomy,
+    mcp_server_id,
+    remote_tool_name,
+    input_schema,
+    registered_at,
+    last_seen_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Get a specific tool by ID
+getToolById:
+SELECT * FROM ToolRegistry
+WHERE id = ?;
+
+-- Get all registered tools
+getAllTools:
+SELECT * FROM ToolRegistry
+ORDER BY name ASC;
+
+-- Get tools by type (function or mcp)
+getToolsByType:
+SELECT * FROM ToolRegistry
+WHERE tool_type = ?
+ORDER BY name ASC;
+
+-- Get tools by autonomy level (inclusive - returns tools at or below specified level)
+-- Note: Filtering logic is handled in repository layer based on autonomy enum ordering
+getToolsByAutonomy:
+SELECT * FROM ToolRegistry
+WHERE required_agent_autonomy = ?
+ORDER BY name ASC;
+
+-- Get all tools for a specific MCP server
+getToolsByMcpServer:
+SELECT * FROM ToolRegistry
+WHERE mcp_server_id = ?
+ORDER BY name ASC;
+
+-- Search tools by name or description (case-insensitive partial match)
+searchTools:
+SELECT * FROM ToolRegistry
+WHERE name LIKE '%' || ? || '%'
+   OR description LIKE '%' || ? || '%'
+ORDER BY name ASC;
+
+-- Delete a tool from the registry
+deleteTool:
+DELETE FROM ToolRegistry
+WHERE id = ?;
+
+-- Delete all tools for a specific MCP server (when server disconnects)
+deleteToolsByMcpServer:
+DELETE FROM ToolRegistry
+WHERE mcp_server_id = ?;
+
+-- Update last_seen_at timestamp for a tool
+updateLastSeen:
+UPDATE ToolRegistry
+SET last_seen_at = ?
+WHERE id = ?;
+
+-- Clear all tools (useful for testing)
+clearAllTools:
+DELETE FROM ToolRegistry;
+
+-- Count tools by type
+countToolsByType:
+SELECT tool_type, COUNT(*)
+FROM ToolRegistry
+GROUP BY tool_type;
