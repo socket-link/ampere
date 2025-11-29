@@ -171,7 +171,7 @@ ORDER BY timestamp DESC;
 
 -- Get knowledge count by type
 getKnowledgeCountByType:
-SELECT knowledge_type, COUNT(*) as count
+SELECT knowledge_type, COUNT(*) as total
 FROM KnowledgeStore
 GROUP BY knowledge_type;
 
