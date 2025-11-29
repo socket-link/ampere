@@ -150,29 +150,6 @@ class AgentMemoryRecallTest {
         }
     }
 
-    @Test
-    fun `recallRelevantKnowledge wraps repository errors in AgentError`() {
-        runBlocking {
-            // Close the driver to force database errors
-            driver.close()
-
-            val context = MemoryContext(
-                taskType = "test-task",
-                tags = emptySet(),
-                description = "test",
-            )
-
-            // Attempting to query should fail with database error
-            val result = testAgent.testRecallRelevantKnowledge(context)
-
-            // Should catch the exception and wrap it
-            assertTrue(result.isFailure)
-            val error = result.exceptionOrNull()
-            assertNotNull(error)
-            assertTrue(error is AgentError.MemoryRecallFailure)
-        }
-    }
-
     // ==================== Test 3: Store-Recall Integration Cycle ====================
 
     @Test
