@@ -9,8 +9,9 @@ import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
 import link.socket.ampere.agents.core.outcomes.Outcome
 import link.socket.ampere.agents.core.outcomes.OutcomeId
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
-import link.socket.ampere.domain.ai.configuration.aiConfiguration
+import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
+import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -42,7 +43,8 @@ fun testFailureOutcome(id: OutcomeId): Outcome.Failure =
 /** Create a test agent configuration */
 fun testAgentConfiguration() = AgentConfiguration(
     agentDefinition = WriteCodeAgent,
-    aiConfiguration = aiConfiguration(
+    aiConfiguration = AIConfiguration_Default(
+        provider = AIProvider_Anthropic,
         model = AIModel_Claude.Sonnet_4
     )
 )
