@@ -3,6 +3,7 @@ package link.socket.ampere.agents.tools.registry
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.core.actions.AgentActionAutonomy
+import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.McpServerId
 import link.socket.ampere.agents.execution.tools.McpTool
@@ -62,7 +63,7 @@ data class ToolMetadata(
          * Create ToolMetadata from a FunctionTool.
          * Note: The execution function itself is not stored, only metadata.
          */
-        fun <T> fromFunctionTool(tool: FunctionTool<T>, timestamp: Instant): ToolMetadata {
+        fun <T : ExecutionContext> fromFunctionTool(tool: FunctionTool<T>, timestamp: Instant): ToolMetadata {
             return ToolMetadata(
                 id = tool.id,
                 name = tool.name,
