@@ -5,6 +5,7 @@ import kotlinx.coroutines.launch
 import link.socket.ampere.agents.core.AgentConfiguration
 import link.socket.ampere.agents.core.AgentId
 import link.socket.ampere.agents.core.AutonomousAgent
+import link.socket.ampere.agents.core.memory.Knowledge
 import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
 import link.socket.ampere.agents.core.outcomes.Outcome
 import link.socket.ampere.agents.core.reasoning.Idea
@@ -41,9 +42,9 @@ class CodeWriterAgent(
             Idea.blank
         }
 
-    override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan =
-        { task, ideas ->
-            // TODO: plan out actions to take given ideas
+    override val runLLMToPlan: (task: Task, ideas: List<Idea>, relevantKnowledge: List<Knowledge>) -> Plan =
+        { task, ideas, relevantKnowledge ->
+            // TODO: plan out actions to take given ideas and past knowledge
             Plan.blank
         }
 

@@ -7,6 +7,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
+import link.socket.ampere.agents.core.memory.Knowledge
+import link.socket.ampere.agents.core.memory.KnowledgeWithScore
+import link.socket.ampere.agents.core.memory.MemoryContext
 import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
 import link.socket.ampere.agents.core.outcomes.Outcome
 import link.socket.ampere.agents.core.reasoning.Idea
@@ -33,7 +36,7 @@ abstract class AutonomousAgent <S : AgentState> : Agent<S>() {
     open val requiredTools: Set<Tool<*>> = emptySet()
 
     abstract val runLLMToEvaluatePerception: (perception: Perception<S>) -> Idea
-    abstract val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan
+    abstract val runLLMToPlan: (task: Task, ideas: List<Idea>, relevantKnowledge: List<Knowledge>) -> Plan
     abstract val runLLMToExecuteTask: (task: Task) -> Outcome
     abstract val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome
     abstract val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea
@@ -55,7 +58,10 @@ abstract class AutonomousAgent <S : AgentState> : Agent<S>() {
             val idea = perceiveState(previousIdea)
             rememberNewIdea(idea)
 
-            val plan = determinePlanForTask(currentTask, idea)
+            // Recall relevant knowledge before planning
+            val relevantKnowledge = recallKnowledgeForTask(currentTask).getOrElse { emptyList() }
+
+            val plan = determinePlanForTask(currentTask, idea, relevantKnowledge)
             rememberNewPlan(plan)
 
             val outcome = executePlan(plan)
@@ -66,6 +72,21 @@ abstract class AutonomousAgent <S : AgentState> : Agent<S>() {
 
             delay(1.seconds)
         }
+    }
+
+    /**
+     * Recall relevant knowledge for a given task.
+     * Builds a MemoryContext from the task and queries stored learnings.
+     */
+    private suspend fun recallKnowledgeForTask(task: Task): Result<List<KnowledgeWithScore>> {
+        // Build context from task
+        val context = MemoryContext(
+            taskType = task.id, // Use task ID as type for now
+            tags = emptySet(), // Could extract tags from task description in the future
+            description = task.description
+        )
+
+        return recallRelevantKnowledge(context, limit = 10)
     }
 
     fun initialize(scope: CoroutineScope) {
@@ -117,8 +138,12 @@ abstract class AutonomousAgent <S : AgentState> : Agent<S>() {
     override suspend fun determinePlanForTask(
         task: Task,
         vararg ideas: Idea,
+        relevantKnowledge: List<KnowledgeWithScore>
     ): Plan {
-        val plan = runLLMToPlan(task, ideas.toList())
+        // Extract Knowledge objects from KnowledgeWithScore wrappers
+        val knowledgeList = relevantKnowledge.map { it.knowledge }
+
+        val plan = runLLMToPlan(task, ideas.toList(), knowledgeList)
         rememberNewPlan(plan)
         return plan
     }

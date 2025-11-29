@@ -464,7 +464,7 @@ private class TestAgentWithMemory(
 
     // Implement abstract methods (not needed for these tests, provide stubs)
     override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea = { Idea.blank }
-    override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan = { _, _ -> Plan.blank }
+    override val runLLMToPlan: (task: Task, ideas: List<Idea>, relevantKnowledge: List<Knowledge>) -> Plan = { _, _, _ -> Plan.blank }
     override val runLLMToExecuteTask: (task: Task) -> Outcome = { Outcome.blank }
     override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome = { _, _ -> ExecutionOutcome.blank }
     override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { Idea.blank }
@@ -494,7 +494,7 @@ private class TestAgentWithoutMemory(
 
     // Implement abstract methods
     override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea = { Idea.blank }
-    override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan = { _, _ -> Plan.blank }
+    override val runLLMToPlan: (task: Task, ideas: List<Idea>, relevantKnowledge: List<Knowledge>) -> Plan = { _, _, _ -> Plan.blank }
     override val runLLMToExecuteTask: (task: Task) -> Outcome = { Outcome.blank }
     override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome = { _, _ -> ExecutionOutcome.blank }
     override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { Idea.blank }

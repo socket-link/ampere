@@ -47,7 +47,11 @@ sealed class Agent <S : AgentState> {
     private val logger by lazy { logWith("Agent/$id") }
 
     abstract suspend fun perceiveState(vararg newIdeas: Idea): Idea
-    abstract suspend fun determinePlanForTask(task: Task, vararg ideas: Idea): Plan
+    abstract suspend fun determinePlanForTask(
+        task: Task,
+        vararg ideas: Idea,
+        relevantKnowledge: List<KnowledgeWithScore> = emptyList()
+    ): Plan
     abstract suspend fun executePlan(plan: Plan): Outcome
     abstract suspend fun runTask(task: Task): Outcome
     abstract suspend fun runTool(tool: Tool<*>, request: ExecutionRequest<*>): ExecutionOutcome

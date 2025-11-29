@@ -13,6 +13,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.core.memory.Knowledge
 import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
 import link.socket.ampere.agents.core.outcomes.Outcome
 import link.socket.ampere.agents.core.reasoning.Idea
@@ -111,7 +112,7 @@ class MinimalAutonomousAgentTest {
         )
 
         override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea = { _ -> perceiveResult }
-        override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan = { _, _ -> planResult }
+        override val runLLMToPlan: (task: Task, ideas: List<Idea>, relevantKnowledge: List<Knowledge>) -> Plan = { _, _, _ -> planResult }
         override val runLLMToExecuteTask: (task: Task) -> Outcome = { _ -> executeResult }
         override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome = { _, _ -> executeResult }
         override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { _ -> perceiveResult }
