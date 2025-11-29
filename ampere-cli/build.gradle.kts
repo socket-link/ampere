@@ -35,6 +35,9 @@ kotlin {
                 // Terminal rendering with colors and styles
                 implementation("com.github.ajalt.mordant:mordant:2.7.2")
 
+                // REPL terminal handling
+                implementation("org.jline:jline:3.25.0")
+
                 // Coroutines
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 
