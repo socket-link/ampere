@@ -29,6 +29,13 @@ class ReplSession(
 
     private val executor = CommandExecutor(terminal)
 
+    // Add registry for observation commands
+    private val observationCommands = ObservationCommandRegistry(
+        context,
+        terminal,
+        executor
+    )
+
     init {
         // Install signal handler for Ctrl+C
         installSignalHandler()
@@ -104,6 +111,13 @@ class ReplSession(
     }
 
     private suspend fun executeCommand(input: String): CommandResult {
+        // First check if it's an observation command
+        val observationResult = observationCommands.executeIfMatches(input)
+        if (observationResult != null) {
+            return observationResult
+        }
+
+        // Otherwise check built-in REPL commands
         val parts = input.split(" ", limit = 2)
         val command = parts[0].lowercase()
         val args = parts.getOrNull(1) ?: ""
@@ -134,11 +148,22 @@ class ReplSession(
     private fun displayHelp() {
         val help = """
         Available commands:
+
+        Observation Commands (interruptible with Ctrl+C):
+          watch [--filter TYPE] [--agent ID]    Stream events from EventBus
+          status [--json]                        Show system dashboard
+          thread list [--json]                   List all conversation threads
+          thread show <id> [--json]              Show thread details
+          outcomes ticket <id>                   Show ticket execution history
+          outcomes search <query> [--limit N]    Search similar outcomes
+          outcomes executor <id> [--limit N]     Show executor performance
+          outcomes stats                         Show aggregate statistics
+
+        Session Commands:
           help                Show this help message
           exit, quit          Exit the interactive session
-          test-interrupt      Test command for verifying Ctrl+C handling
 
-        More commands coming soon...
+        Action commands coming soon...
         """.trimIndent()
 
         terminal.writer().println(help)
