@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.messages.MessageRepository
+import link.socket.ampere.agents.tools.registry.ToolRegistryRepository
 import link.socket.ampere.db.Database
 
 val DEFAULT_JSON = Json {
@@ -29,6 +30,9 @@ class RepositoryFactory(
         }
         MessageRepository::class -> {
             MessageRepository(json, scope, database) as T
+        }
+        ToolRegistryRepository::class -> {
+            ToolRegistryRepository(json, scope, database) as T
         }
         UserConversationRepository::class -> {
             UserConversationRepository(json, scope) as T

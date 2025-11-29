@@ -56,6 +56,11 @@ object EventRegistry {
         // MemoryEvent types
         MemoryEvent.KnowledgeStored.EVENT_CLASS_TYPE,
         MemoryEvent.KnowledgeRecalled.EVENT_CLASS_TYPE,
+
+        // ToolEvent types
+        ToolEvent.ToolRegistered.EVENT_CLASS_TYPE,
+        ToolEvent.ToolUnregistered.EVENT_CLASS_TYPE,
+        ToolEvent.ToolDiscoveryComplete.EVENT_CLASS_TYPE,
     )
 
     /**
