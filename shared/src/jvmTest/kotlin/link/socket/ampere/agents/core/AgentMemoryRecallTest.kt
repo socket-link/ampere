@@ -7,7 +7,6 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -16,9 +15,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.core.memory.AgentMemoryService
-import link.socket.ampere.agents.core.memory.ComplexityLevel
 import link.socket.ampere.agents.core.memory.Knowledge
 import link.socket.ampere.agents.core.memory.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.core.memory.MemoryContext
@@ -33,9 +30,10 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.db.Database
-import link.socket.ampere.domain.agent.bundled.general.TechAgent
+import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModel
+import link.socket.ampere.domain.ai.provider.AIProvider
 import kotlin.time.Duration.Companion.days
 
 /**
@@ -448,18 +446,29 @@ class AgentMemoryRecallTest {
 // ==================== Test Agent Implementations ====================
 
 /**
- * Test agent with memory service configured.
+ * Fake AI configuration for testing (doesn't require actual AI providers).
  */
-@Serializable
-class TestAgentWithMemory(
+private class FakeAIConfiguration : AIConfiguration {
+    override val provider: AIProvider<*, *>
+        get() = throw NotImplementedError("Not needed for tests")
+    override val model: AIModel
+        get() = throw NotImplementedError("Not needed for tests")
+    override fun getAvailableModels(): List<Pair<AIProvider<*, *>, AIModel>> = emptyList()
+}
+
+/**
+ * Test agent with memory service configured.
+ * Extends AutonomousAgent (not sealed) so can be defined in test module.
+ */
+private class TestAgentWithMemory(
     override val id: AgentId,
     private val memoryServiceInstance: AgentMemoryService,
-) : Agent<TestAgentState>() {
+) : AutonomousAgent<AgentState>() {
 
-    override val initialState = TestAgentState()
+    override val initialState = AgentState()
     override val agentConfiguration = AgentConfiguration(
-        agentDefinition = TechAgent(),
-        aiConfiguration = AIConfiguration.default(AIModel.GPT_4O_MINI),
+        agentDefinition = WriteCodeAgent,
+        aiConfiguration = FakeAIConfiguration(),
     )
 
     override val memoryService: AgentMemoryService = memoryServiceInstance
@@ -476,27 +485,25 @@ class TestAgentWithMemory(
         taskType: String? = null
     ) = storeKnowledge(knowledge, tags, taskType)
 
-    // Implement abstract methods (not needed for these tests)
-    override suspend fun perceiveState(vararg newIdeas: Idea): Idea = Idea.blank
-    override suspend fun determinePlanForTask(task: Task, vararg ideas: Idea): Plan = Plan.blank
-    override suspend fun executePlan(plan: Plan): Outcome = Outcome.blank
-    override suspend fun runTask(task: Task): Outcome = Outcome.blank
-    override suspend fun runTool(tool: Tool<*>, request: ExecutionRequest<*>): ExecutionOutcome = ExecutionOutcome.blank
-    override suspend fun evaluateNextIdeaFromOutcomes(vararg outcomes: Outcome): Idea = Idea.blank
+    // Implement abstract methods (not needed for these tests, provide stubs)
+    override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea = { Idea.blank }
+    override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan = { _, _ -> Plan.blank }
+    override val runLLMToExecuteTask: (task: Task) -> Outcome = { Outcome.blank }
+    override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome = { _, _ -> ExecutionOutcome.blank }
+    override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { Idea.blank }
 }
 
 /**
  * Test agent without memory service.
  */
-@Serializable
-class TestAgentWithoutMemory(
+private class TestAgentWithoutMemory(
     override val id: AgentId,
-) : Agent<TestAgentState>() {
+) : AutonomousAgent<AgentState>() {
 
-    override val initialState = TestAgentState()
+    override val initialState = AgentState()
     override val agentConfiguration = AgentConfiguration(
-        agentDefinition = TechAgent(),
-        aiConfiguration = AIConfiguration.default(AIModel.GPT_4O_MINI),
+        agentDefinition = WriteCodeAgent,
+        aiConfiguration = FakeAIConfiguration(),
     )
 
     // No memory service configured
@@ -509,16 +516,9 @@ class TestAgentWithoutMemory(
     ) = recallRelevantKnowledge(context, limit)
 
     // Implement abstract methods
-    override suspend fun perceiveState(vararg newIdeas: Idea): Idea = Idea.blank
-    override suspend fun determinePlanForTask(task: Task, vararg ideas: Idea): Plan = Plan.blank
-    override suspend fun executePlan(plan: Plan): Outcome = Outcome.blank
-    override suspend fun runTask(task: Task): Outcome = Outcome.blank
-    override suspend fun runTool(tool: Tool<*>, request: ExecutionRequest<*>): ExecutionOutcome = ExecutionOutcome.blank
-    override suspend fun evaluateNextIdeaFromOutcomes(vararg outcomes: Outcome): Idea = Idea.blank
+    override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea = { Idea.blank }
+    override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan = { _, _ -> Plan.blank }
+    override val runLLMToExecuteTask: (task: Task) -> Outcome = { Outcome.blank }
+    override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome = { _, _ -> ExecutionOutcome.blank }
+    override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { Idea.blank }
 }
-
-/**
- * Simple test agent state.
- */
-@Serializable
-class TestAgentState : AgentState()
