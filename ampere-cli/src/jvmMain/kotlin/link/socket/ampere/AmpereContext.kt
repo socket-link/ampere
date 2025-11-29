@@ -15,6 +15,9 @@ import link.socket.ampere.agents.events.tickets.DefaultTicketViewService
 import link.socket.ampere.agents.events.tickets.TicketViewService
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
+import link.socket.ampere.agents.service.AgentActionService
+import link.socket.ampere.agents.service.MessageActionService
+import link.socket.ampere.agents.service.TicketActionService
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 
@@ -118,6 +121,38 @@ class AmpereContext(
      */
     val outcomeMemoryRepository: link.socket.ampere.agents.core.memory.OutcomeMemoryRepository
         get() = environmentService.outcomeMemoryRepository
+
+    /**
+     * Ticket action service for creating and managing tickets from CLI.
+     */
+    val ticketActionService: TicketActionService by lazy {
+        val eventApi = environmentService.createEventApi("human-cli")
+        TicketActionService(
+            ticketRepository = environmentService.ticketRepository,
+            eventApi = eventApi,
+        )
+    }
+
+    /**
+     * Message action service for posting messages and creating threads from CLI.
+     */
+    val messageActionService: MessageActionService by lazy {
+        val eventApi = environmentService.createEventApi("human-cli")
+        MessageActionService(
+            messageRepository = environmentService.messageRepository,
+            eventApi = eventApi,
+        )
+    }
+
+    /**
+     * Agent action service for triggering agent actions from CLI.
+     */
+    val agentActionService: AgentActionService by lazy {
+        val eventApi = environmentService.createEventApi("human-cli")
+        AgentActionService(
+            eventApi = eventApi,
+        )
+    }
 
     /**
      * Subscribe to all events for an agent.

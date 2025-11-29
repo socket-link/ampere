@@ -36,6 +36,12 @@ class ReplSession(
         executor
     )
 
+    // Add registry for action commands
+    private val actionCommands = ActionCommandRegistry(
+        context,
+        terminal
+    )
+
     init {
         // Install signal handler for Ctrl+C
         installSignalHandler()
@@ -117,6 +123,12 @@ class ReplSession(
             return observationResult
         }
 
+        // Then check if it's an action command
+        val actionResult = actionCommands.executeIfMatches(input)
+        if (actionResult != null) {
+            return actionResult
+        }
+
         // Otherwise check built-in REPL commands
         val parts = input.split(" ", limit = 2)
         val command = parts[0].lowercase()
@@ -159,11 +171,22 @@ class ReplSession(
           outcomes executor <id> [--limit N]     Show executor performance
           outcomes stats                         Show aggregate statistics
 
+        Action Commands (affect the substrate):
+          ticket create "TITLE" [--priority P] [--description "DESC"] [--type TYPE]
+                                                 Create new ticket (P: LOW|MEDIUM|HIGH|CRITICAL)
+          ticket assign TICKET_ID AGENT_ID       Assign ticket to agent
+          ticket status TICKET_ID STATUS         Update ticket status
+
+          message post THREAD_ID "CONTENT" [--sender ID]
+                                                 Post message to thread
+          message create-thread --title "TITLE" --participants ID1,ID2
+                                                 Create new thread
+
+          agent wake AGENT_ID                    Send wake signal to agent
+
         Session Commands:
           help                Show this help message
           exit, quit          Exit the interactive session
-
-        Action commands coming soon...
         """.trimIndent()
 
         terminal.writer().println(help)
