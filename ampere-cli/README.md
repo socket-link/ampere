@@ -46,6 +46,76 @@ JAVA_HOME=$(/usr/libexec/java_home -v 21) ampere-cli/build/install/ampere-cli-jv
 
 ---
 
+## Interactive Mode
+
+**The recommended way to use the AMPERE CLI** is through interactive mode, which provides a persistent session where you can observe and interact with the substrate.
+
+### Starting Interactive Mode
+
+```bash
+# Launch interactive session (default when no arguments provided)
+./ampere-cli/ampere
+
+# Or explicitly specify interactive mode
+./ampere-cli/ampere interactive
+```
+
+### Interactive Session Features
+
+- **Persistent Environment**: AmpereContext stays alive across commands
+- **Interruptible Commands**: Press Ctrl+C to stop observations without exiting
+- **Command History**: Use ↑/↓ arrows to recall previous commands
+- **Tab Completion**: Press Tab for command suggestions (coming soon)
+- **Multiple Commands**: Run any observation command in sequence
+
+### Example Session
+
+```bash
+$ ./ampere-cli/ampere
+
+╔═══════════════════════════════════════════════════════╗
+║  AMPERE Interactive Shell v0.1.0                      ║
+║  Autonomous Multi-Process Execution & Relay Env       ║
+║                                                       ║
+║  Type 'help' for commands, 'exit' to quit            ║
+║  Press Ctrl+C to interrupt running observations       ║
+╚═══════════════════════════════════════════════════════╝
+
+System Status: ● Running
+
+ampere> watch --filter TaskCreated
+[Streaming events... Press Ctrl+C to stop]
+14:32:18  📋  TaskCreated  Task #123: Implement auth
+^C
+[Command interrupted]
+
+ampere> status
+[Shows system dashboard]
+
+ampere> thread list
+[Shows all threads]
+
+ampere> exit
+Goodbye! Shutting down environment...
+```
+
+### Available Commands in Interactive Mode
+
+All observation commands work in interactive mode:
+
+- **watch** - Stream events in real-time
+- **status** - Show system dashboard
+- **thread list/show** - View conversations
+- **outcomes** - Query execution memory
+
+Action commands (coming soon):
+
+- **ticket create** - Create new tickets
+- **message post** - Post to threads
+- **agent wake** - Trigger agent activity
+
+---
+
 ## Command Reference
 
 ### Overview

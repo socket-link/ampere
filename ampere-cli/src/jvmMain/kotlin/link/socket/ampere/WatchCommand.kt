@@ -66,8 +66,14 @@ class WatchCommand(
 
             eventRelayService.subscribeToLiveEvents(filters)
                 .collect { event ->
+                    // Check if coroutine is cancelled before processing
+                    kotlinx.coroutines.ensureActive()
                     renderer.renderEvent(event)
                 }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Gracefully handle cancellation - just stop collecting
+            // The CommandExecutor will display the interrupt message
+            throw e
         } catch (e: Exception) {
             renderer.renderError(e.message ?: "Unknown error")
             throw e
