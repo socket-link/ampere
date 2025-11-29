@@ -198,17 +198,31 @@ class KnowledgeRepositoryImpl(
         limit: Int,
     ): Result<List<KnowledgeEntry>> = withContext(Dispatchers.IO) {
         runCatching {
-            queries.searchKnowledgeByContext(
-                knowledge_type = knowledgeType?.name,
-                task_type = taskType,
-                complexity_level = complexityLevel,
-                from_timestamp = fromTimestamp?.toEpochMilliseconds(),
-                to_timestamp = toTimestamp?.toEpochMilliseconds(),
-                tags = tags ?: emptyList(),
-                limit = limit.toLong(),
-            )
-                .executeAsList()
-                .map { row -> mapRowToKnowledgeEntry(row) }
+            // Use different query based on whether tags are provided
+            if (!tags.isNullOrEmpty()) {
+                queries.searchKnowledgeByContextWithTags(
+                    knowledge_type = knowledgeType?.name,
+                    task_type = taskType,
+                    complexity_level = complexityLevel,
+                    from_timestamp = fromTimestamp?.toEpochMilliseconds(),
+                    to_timestamp = toTimestamp?.toEpochMilliseconds(),
+                    tags = tags,
+                    limit = limit.toLong(),
+                )
+                    .executeAsList()
+                    .map { row -> mapRowToKnowledgeEntry(row) }
+            } else {
+                queries.searchKnowledgeByContextNoTags(
+                    knowledge_type = knowledgeType?.name,
+                    task_type = taskType,
+                    complexity_level = complexityLevel,
+                    from_timestamp = fromTimestamp?.toEpochMilliseconds(),
+                    to_timestamp = toTimestamp?.toEpochMilliseconds(),
+                    limit = limit.toLong(),
+                )
+                    .executeAsList()
+                    .map { row -> mapRowToKnowledgeEntry(row) }
+            }
         }
     }
 

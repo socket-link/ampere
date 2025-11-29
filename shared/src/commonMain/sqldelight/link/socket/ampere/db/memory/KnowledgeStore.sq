@@ -145,24 +145,32 @@ ORDER BY timestamp DESC
 LIMIT ?;
 
 -- Combined context-based search with multiple optional filters
--- Parameters: knowledge_type, task_type, tags (list), from_timestamp, to_timestamp, limit
-searchKnowledgeByContext {
-    SELECT DISTINCT k.*
-    FROM KnowledgeStore k
-    LEFT JOIN KnowledgeTag kt ON k.id = kt.knowledge_id
-    WHERE 1=1
-    AND (:knowledge_type IS NULL OR k.knowledge_type = :knowledge_type)
-    AND (:task_type IS NULL OR k.task_type = :task_type)
-    AND (:complexity_level IS NULL OR k.complexity_level = :complexity_level)
-    AND (:from_timestamp IS NULL OR k.timestamp >= :from_timestamp)
-    AND (:to_timestamp IS NULL OR k.timestamp <= :to_timestamp)
-    AND (
-        :tags IS NULL OR :tags = '' OR
-        kt.tag IN :tags
-    )
-    ORDER BY k.timestamp DESC
-    LIMIT :limit;
-}
+-- When tags list is empty, all entries match (LEFT JOIN returns all)
+-- When tags list has values, only entries with matching tags are returned
+searchKnowledgeByContextWithTags:
+SELECT DISTINCT k.*
+FROM KnowledgeStore k
+LEFT JOIN KnowledgeTag kt ON k.id = kt.knowledge_id
+WHERE (:knowledge_type IS NULL OR k.knowledge_type = :knowledge_type)
+AND (:task_type IS NULL OR k.task_type = :task_type)
+AND (:complexity_level IS NULL OR k.complexity_level = :complexity_level)
+AND (:from_timestamp IS NULL OR k.timestamp >= :from_timestamp)
+AND (:to_timestamp IS NULL OR k.timestamp <= :to_timestamp)
+AND kt.tag IN :tags
+ORDER BY k.timestamp DESC
+LIMIT :limit;
+
+-- Combined search without tag filtering
+searchKnowledgeByContextNoTags:
+SELECT k.*
+FROM KnowledgeStore k
+WHERE (:knowledge_type IS NULL OR k.knowledge_type = :knowledge_type)
+AND (:task_type IS NULL OR k.task_type = :task_type)
+AND (:complexity_level IS NULL OR k.complexity_level = :complexity_level)
+AND (:from_timestamp IS NULL OR k.timestamp >= :from_timestamp)
+AND (:to_timestamp IS NULL OR k.timestamp <= :to_timestamp)
+ORDER BY k.timestamp DESC
+LIMIT :limit;
 
 -- Get all knowledge entries ordered by timestamp
 getAllKnowledge:
@@ -171,7 +179,7 @@ ORDER BY timestamp DESC;
 
 -- Get knowledge count by type
 getKnowledgeCountByType:
-SELECT knowledge_type, COUNT(*) as total
+SELECT knowledge_type, COUNT(*)
 FROM KnowledgeStore
 GROUP BY knowledge_type;
 
