@@ -14,6 +14,7 @@ import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.agents.events.Event
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.MeetingEvent
+import link.socket.ampere.agents.events.MemoryEvent
 import link.socket.ampere.agents.events.MessageEvent
 import link.socket.ampere.agents.events.NotificationEvent
 import link.socket.ampere.agents.events.TicketEvent
@@ -98,6 +99,7 @@ class EventRenderer(
      * - TicketEvent: 🎫 green (tickets)
      * - MessageEvent: 💬 blue (messages)
      * - NotificationEvent: 🔔 white (notifications)
+     * - MemoryEvent: 🧠 cyan (knowledge/learning)
      */
     private fun getIconAndColor(event: Event): Pair<String, com.github.ajalt.mordant.rendering.TextStyle> {
         return when (event) {
@@ -108,6 +110,7 @@ class EventRenderer(
             is TicketEvent -> "🎫" to green
             is MessageEvent -> "💬" to blue
             is NotificationEvent<*> -> "🔔" to white
+            is MemoryEvent -> "🧠" to cyan
         }
     }
 
@@ -173,6 +176,8 @@ private fun Event.toSummary(
     is MessageEvent.EscalationRequested -> toSummary(formatUrgency)
     is NotificationEvent.ToAgent<*> -> toSummary(formatUrgency)
     is NotificationEvent.ToHuman<*> -> toSummary(formatUrgency)
+    is MemoryEvent.KnowledgeStored -> toSummary(formatUrgency, formatSource)
+    is MemoryEvent.KnowledgeRecalled -> toSummary(formatUrgency, formatSource)
 }
 
 // Event.TaskCreated
@@ -311,3 +316,30 @@ private fun NotificationEvent.ToAgent<*>.toSummary(
 private fun NotificationEvent.ToHuman<*>.toSummary(
     formatUrgency: (Urgency) -> String,
 ): String = "Notification to human ${formatUrgency(urgency)}"
+
+// MemoryEvent.KnowledgeStored
+private fun MemoryEvent.KnowledgeStored.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = buildString {
+    append("Knowledge stored: $knowledgeType")
+    taskType?.let { append(" ($it)") }
+    if (tags.isNotEmpty()) {
+        append(" [${tags.take(3).joinToString(", ")}]")
+    }
+    append(" ${formatUrgency(urgency)}")
+    append(" from ${formatSource(eventSource)}")
+}
+
+// MemoryEvent.KnowledgeRecalled
+private fun MemoryEvent.KnowledgeRecalled.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = buildString {
+    append("Knowledge recalled: $resultsFound result(s)")
+    if (resultsFound > 0) {
+        append(" (avg relevance: ${"%.2f".format(averageRelevance)})")
+    }
+    append(" ${formatUrgency(urgency)}")
+    append(" from ${formatSource(eventSource)}")
+}

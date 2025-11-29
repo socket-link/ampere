@@ -52,6 +52,10 @@ object EventRegistry {
         // NotificationEvent types
         NotificationEvent.ToAgent.EVENT_CLASS_TYPE,
         NotificationEvent.ToHuman.EVENT_CLASS_TYPE,
+
+        // MemoryEvent types
+        MemoryEvent.KnowledgeStored.EVENT_CLASS_TYPE,
+        MemoryEvent.KnowledgeRecalled.EVENT_CLASS_TYPE,
     )
 
     /**

@@ -1,0 +1,69 @@
+package link.socket.ampere.agents.events
+
+import kotlinx.datetime.Instant
+import kotlinx.serialization.Serializable
+import link.socket.ampere.agents.core.memory.KnowledgeType
+import link.socket.ampere.agents.core.memory.MemoryContext
+
+/**
+ * Base sealed interface for memory-related events.
+ *
+ * Memory events track the lifecycle of Knowledge storage and retrieval,
+ * providing observability into the agent learning process.
+ */
+sealed interface MemoryEvent : Event {
+
+    /**
+     * Event emitted when a Knowledge entry is successfully stored.
+     *
+     * This event signals that an agent has extracted learnings from
+     * a cognitive element (Idea, Outcome, Perception, Plan, or Task)
+     * and persisted it for future recall.
+     */
+    @Serializable
+    data class KnowledgeStored(
+        override val eventId: EventId,
+        override val timestamp: Instant,
+        override val eventSource: EventSource,
+        val knowledgeId: String,
+        val knowledgeType: KnowledgeType,
+        val taskType: String?,
+        val tags: List<String>,
+    ) : MemoryEvent {
+
+        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+        override val urgency: Urgency = Urgency.LOW
+
+        companion object {
+            private const val EVENT_TYPE = "KnowledgeStored"
+            val EVENT_CLASS_TYPE: EventClassType = KnowledgeStored::class to EVENT_TYPE
+        }
+    }
+
+    /**
+     * Event emitted when Knowledge entries are recalled based on context.
+     *
+     * This event provides observability into the agent's learning process—
+     * showing when past learnings are being consulted and how relevant
+     * they were to the current situation.
+     */
+    @Serializable
+    data class KnowledgeRecalled(
+        override val eventId: EventId,
+        override val timestamp: Instant,
+        override val eventSource: EventSource,
+        val context: MemoryContext,
+        val resultsFound: Int,
+        val averageRelevance: Double,
+        val topKnowledgeIds: List<String>,
+    ) : MemoryEvent {
+
+        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+        override val urgency: Urgency = Urgency.LOW
+
+        companion object {
+            private const val EVENT_TYPE = "KnowledgeRecalled"
+            val EVENT_CLASS_TYPE: EventClassType = KnowledgeRecalled::class to EVENT_TYPE
+        }
+    }
+}
