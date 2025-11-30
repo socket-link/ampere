@@ -94,7 +94,7 @@ class McpExecutorTest {
             id = "test-server:concat",
             name = "concat",
             description = "Concatenates two strings",
-            requiredAgentAutonomy = AgentActionAutonomy.FULL,
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "test-server",
             remoteToolName = "concat",
         )
@@ -155,7 +155,7 @@ class McpExecutorTest {
             id = "unavailable-server:tool",
             name = "tool",
             description = "Some tool",
-            requiredAgentAutonomy = AgentActionAutonomy.FULL,
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "unavailable-server",
             remoteToolName = "tool",
         )
@@ -208,7 +208,7 @@ class McpExecutorTest {
             id = "function-tool",
             name = "some-function",
             description = "A function tool",
-            requiredAgentAutonomy = AgentActionAutonomy.FULL,
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             executionFunction = { ExecutionOutcome.blank },
         )
 
@@ -274,7 +274,7 @@ class McpExecutorTest {
             id = "test-server:tool",
             name = "tool",
             description = "Test tool",
-            requiredAgentAutonomy = AgentActionAutonomy.FULL,
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "test-server",
             remoteToolName = "tool",
         )
@@ -337,7 +337,7 @@ class McpExecutorTest {
             id = "test-server:tool",
             name = "tool",
             description = "Test tool",
-            requiredAgentAutonomy = AgentActionAutonomy.FULL,
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "test-server",
             remoteToolName = "tool",
         )
@@ -395,7 +395,7 @@ class McpExecutorTest {
             id = "test-server:tool",
             name = "tool",
             description = "Test tool",
-            requiredAgentAutonomy = AgentActionAutonomy.FULL,
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "test-server",
             remoteToolName = "tool",
         )
@@ -465,7 +465,7 @@ class McpExecutorTest {
             id = "test-server:tool",
             name = "tool",
             description = "Test tool",
-            requiredAgentAutonomy = AgentActionAutonomy.FULL,
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "test-server",
             remoteToolName = "tool",
         )
@@ -523,7 +523,7 @@ class McpExecutorTest {
             id = "test-server:tool",
             name = "tool",
             description = "Test tool",
-            requiredAgentAutonomy = AgentActionAutonomy.FULL,
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "test-server",
             remoteToolName = "tool",
         )
@@ -589,7 +589,7 @@ class McpExecutorTest {
             id = "test-server:tool",
             name = "tool",
             description = "Test tool",
-            requiredAgentAutonomy = AgentActionAutonomy.FULL,
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "test-server",
             remoteToolName = "tool",
         )
@@ -640,7 +640,7 @@ class McpExecutorTest {
             id = "test-server:tool",
             name = "tool",
             description = "Test tool",
-            requiredAgentAutonomy = AgentActionAutonomy.FULL,
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "test-server",
             remoteToolName = "tool",
         )
@@ -701,7 +701,7 @@ class McpExecutorTest {
             id = "test-server:tool",
             name = "tool",
             description = "Test tool",
-            requiredAgentAutonomy = AgentActionAutonomy.FULL,
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "test-server",
             remoteToolName = "tool",
         )
