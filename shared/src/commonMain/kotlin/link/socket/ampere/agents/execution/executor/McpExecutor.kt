@@ -351,10 +351,12 @@ class McpExecutor(
             put("instructions", request.context.instructions)
 
             // Add task information
-            put("taskId", request.context.task.id)
+            val task = request.context.task
+            put("taskId", task.id)
             // Task is a sealed interface - only some subtypes have description
-            if (request.context.task is link.socket.ampere.agents.core.tasks.Task.CodeChange) {
-                put("taskDescription", request.context.task.description)
+            // Use local variable to enable smart casting
+            if (task is link.socket.ampere.agents.core.tasks.Task.CodeChange) {
+                put("taskDescription", task.description)
             }
 
             // Add ticket information
