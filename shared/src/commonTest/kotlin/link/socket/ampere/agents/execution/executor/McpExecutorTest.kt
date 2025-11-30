@@ -16,6 +16,7 @@ import link.socket.ampere.agents.core.tasks.Task
 import link.socket.ampere.agents.events.EventId
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.tickets.Ticket
+import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
@@ -734,21 +735,26 @@ class McpExecutorTest {
         instructions: String = "Test instructions",
         taskDescription: String = "Test task",
     ): ExecutionRequest<ExecutionContext> {
+        val now = Clock.System.now()
+
         val ticket = Ticket(
             id = "ticket-123",
+            title = "Test Ticket",
             description = "Test ticket",
-            status = link.socket.ampere.agents.events.tickets.TicketStatus.IN_PROGRESS,
+            type = link.socket.ampere.agents.events.tickets.TicketType.TASK,
             priority = link.socket.ampere.agents.events.tickets.TicketPriority.MEDIUM,
-            category = link.socket.ampere.agents.events.tickets.TicketCategory.FEATURE,
-            assignedTo = null,
+            status = link.socket.ampere.agents.events.tickets.TicketStatus.InProgress,
+            assignedAgentId = "test-agent",
+            createdByAgentId = "test-pm-agent",
+            createdAt = now,
+            updatedAt = now,
         )
 
-        val task = Task(
+        val task = Task.CodeChange(
             id = "task-456",
             description = taskDescription,
-            status = link.socket.ampere.agents.core.tasks.TaskStatus.IN_PROGRESS,
-            createdAt = Clock.System.now(),
-            ticketId = ticket.id,
+            status = link.socket.ampere.agents.core.tasks.TaskStatus.Pending,
+            assignedTo = null,
         )
 
         val context = ExecutionContext.NoChanges(

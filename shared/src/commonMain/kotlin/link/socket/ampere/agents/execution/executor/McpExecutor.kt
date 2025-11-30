@@ -352,7 +352,10 @@ class McpExecutor(
 
             // Add task information
             put("taskId", request.context.task.id)
-            put("taskDescription", request.context.task.description)
+            // Task is a sealed interface - only some subtypes have description
+            if (request.context.task is link.socket.ampere.agents.core.tasks.Task.CodeChange) {
+                put("taskDescription", request.context.task.description)
+            }
 
             // Add ticket information
             put("ticketId", request.context.ticket.id)
