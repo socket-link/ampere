@@ -50,13 +50,13 @@ class EventRouterTest {
         val router = EventRouter(routerApi, eventSerialBus)
 
         val targetAgent = "agent-b"
-        router.subscribeToEventClassType(targetAgent, Event.TaskCreated.EVENT_CLASS_TYPE)
+        router.subscribeToEventClassType(targetAgent, Event.TaskCreated.EVENT_TYPE)
 
         // Capture notifications to agents
         var notifications = mutableListOf<NotificationEvent.ToAgent<*>>()
         eventSerialBus.subscribe<NotificationEvent.ToAgent<*>, Subscription>(
             agentId = "observer",
-            eventClassType = NotificationEvent.ToAgent.EVENT_CLASS_TYPE,
+            eventType = NotificationEvent.ToAgent.EVENT_TYPE,
         ) { event, _ ->
             notifications += event
         }
@@ -79,6 +79,6 @@ class EventRouterTest {
         val n = notifications.first()
         assertIs<NotificationEvent.ToAgent<*>>(n)
         assertEquals(targetAgent, (n.eventSource as EventSource.Agent).agentId)
-        assertEquals(Event.TaskCreated.EVENT_CLASS_TYPE, (n.event as Event).eventClassType)
+        assertEquals(Event.TaskCreated.EVENT_TYPE, n.event.eventType)
     }
 }

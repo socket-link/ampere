@@ -118,7 +118,7 @@ class MeetingOrchestrator(
             MeetingEvent.MeetingScheduled(
                 eventId = generateUUID(createdMeeting.id),
                 meeting = createdMeeting,
-                scheduledBy = scheduledBy,
+                eventSource = scheduledBy,
             ),
         )
 
@@ -191,8 +191,8 @@ class MeetingOrchestrator(
                 eventId = randomUUID(),
                 meetingId = meetingId,
                 threadId = thread.id,
-                startedAt = now,
-                startedBy = EventSource.Agent(messageApi.agentId),
+                eventSource = EventSource.Agent(messageApi.agentId),
+                timestamp = now,
             ),
         )
 
@@ -254,7 +254,7 @@ class MeetingOrchestrator(
                 eventId = randomUUID(),
                 meetingId = meetingId,
                 agendaItem = updatedItem,
-                startedBy = EventSource.Agent(messageApi.agentId),
+                eventSource = EventSource.Agent(messageApi.agentId),
                 timestamp = Clock.System.now(),
             ),
         )
@@ -327,8 +327,8 @@ class MeetingOrchestrator(
                 eventId = randomUUID(),
                 meetingId = meetingId,
                 outcomes = outcomes,
-                completedAt = now,
-                completedBy = EventSource.Agent(messageApi.agentId),
+                eventSource = EventSource.Agent(messageApi.agentId),
+                timestamp = now,
             ),
         )
 

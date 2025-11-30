@@ -69,28 +69,28 @@ class MeetingOrchestratorTest {
         // Subscribe to capture published events
         eventSerialBus.subscribe(
             agentId = "test-subscriber",
-            eventClassType = MeetingEvent.MeetingScheduled.EVENT_CLASS_TYPE,
+            eventType = MeetingEvent.MeetingScheduled.EVENT_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },
         )
         eventSerialBus.subscribe(
             agentId = "test-subscriber",
-            eventClassType = MeetingEvent.MeetingStarted.EVENT_CLASS_TYPE,
+            eventType = MeetingEvent.MeetingStarted.EVENT_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },
         )
         eventSerialBus.subscribe(
             agentId = "test-subscriber",
-            eventClassType = MeetingEvent.AgendaItemStarted.EVENT_CLASS_TYPE,
+            eventType = MeetingEvent.AgendaItemStarted.EVENT_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },
         )
         eventSerialBus.subscribe(
             agentId = "test-subscriber",
-            eventClassType = MeetingEvent.MeetingCompleted.EVENT_CLASS_TYPE,
+            eventType = MeetingEvent.MeetingCompleted.EVENT_TYPE,
             handler = EventHandler { event, _ ->
                 publishedEvents.add(event)
             },

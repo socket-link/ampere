@@ -15,7 +15,7 @@ import link.socket.ampere.agents.events.tickets.TicketType
 
 class TicketEventTest {
 
-    private val testAgentId = "test-agent-001"
+    private val testAgentSource = EventSource.Agent("test-agent-001")
     private val testTicketId = "ticket-001"
 
     @Test
@@ -29,7 +29,7 @@ class TicketEventTest {
             description = "A test ticket description",
             type = TicketType.FEATURE,
             priority = TicketPriority.HIGH,
-            createdBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
@@ -38,7 +38,7 @@ class TicketEventTest {
             ticketId = testTicketId,
             previousStatus = TicketStatus.Backlog,
             newStatus = TicketStatus.Ready,
-            changedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
@@ -46,7 +46,7 @@ class TicketEventTest {
             eventId = "33333333-3333-3333-3333-333333333333",
             ticketId = testTicketId,
             assignedTo = "dev-agent-001",
-            assignedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
@@ -54,14 +54,14 @@ class TicketEventTest {
             eventId = "44444444-4444-4444-4444-444444444444",
             ticketId = testTicketId,
             blockingReason = "Waiting for external dependency",
-            reportedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
         val completed = TicketEvent.TicketCompleted(
             eventId = "55555555-5555-5555-5555-555555555555",
             ticketId = testTicketId,
-            completedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
@@ -71,26 +71,26 @@ class TicketEventTest {
         assertEquals("A test ticket description", created.description)
         assertEquals(TicketType.FEATURE, created.type)
         assertEquals(TicketPriority.HIGH, created.priority)
-        assertEquals(testAgentId, created.createdBy)
+        assertEquals(testAgentSource, created.eventSource)
 
         assertEquals(TicketStatus.Backlog, statusChanged.previousStatus)
         assertEquals(TicketStatus.Ready, statusChanged.newStatus)
-        assertEquals(testAgentId, statusChanged.changedBy)
+        assertEquals(testAgentSource, created.eventSource)
 
         assertEquals("dev-agent-001", assigned.assignedTo)
-        assertEquals(testAgentId, assigned.assignedBy)
+        assertEquals(testAgentSource, created.eventSource)
 
         assertEquals("Waiting for external dependency", blocked.blockingReason)
-        assertEquals(testAgentId, blocked.reportedBy)
+        assertEquals(testAgentSource, created.eventSource)
 
-        assertEquals(testAgentId, completed.completedBy)
+        assertEquals(testAgentSource, created.eventSource)
 
         // Verify eventSource is correctly set
-        assertEquals(testAgentId, created.eventSource.getIdentifier())
-        assertEquals(testAgentId, statusChanged.eventSource.getIdentifier())
-        assertEquals(testAgentId, assigned.eventSource.getIdentifier())
-        assertEquals(testAgentId, blocked.eventSource.getIdentifier())
-        assertEquals(testAgentId, completed.eventSource.getIdentifier())
+        assertEquals(testAgentSource.getIdentifier(), created.eventSource.getIdentifier())
+        assertEquals(testAgentSource.getIdentifier(), statusChanged.eventSource.getIdentifier())
+        assertEquals(testAgentSource.getIdentifier(), assigned.eventSource.getIdentifier())
+        assertEquals(testAgentSource.getIdentifier(), blocked.eventSource.getIdentifier())
+        assertEquals(testAgentSource.getIdentifier(), completed.eventSource.getIdentifier())
     }
 
     @Test
@@ -104,7 +104,7 @@ class TicketEventTest {
             description = "Description 1",
             type = TicketType.FEATURE,
             priority = TicketPriority.HIGH,
-            createdBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
@@ -115,7 +115,7 @@ class TicketEventTest {
             description = "Description 2",
             type = TicketType.BUG,
             priority = TicketPriority.CRITICAL,
-            createdBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
@@ -142,7 +142,7 @@ class TicketEventTest {
             description = "Desc",
             type = TicketType.TASK,
             priority = TicketPriority.LOW,
-            createdBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
@@ -151,7 +151,7 @@ class TicketEventTest {
             ticketId = testTicketId,
             previousStatus = TicketStatus.Ready,
             newStatus = TicketStatus.InProgress,
-            changedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
@@ -159,7 +159,7 @@ class TicketEventTest {
             eventId = "e3",
             ticketId = testTicketId,
             assignedTo = "agent-x",
-            assignedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
@@ -167,14 +167,14 @@ class TicketEventTest {
             eventId = "e4",
             ticketId = testTicketId,
             blockingReason = "Blocked",
-            reportedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
         val completed = TicketEvent.TicketCompleted(
             eventId = "e5",
             ticketId = testTicketId,
-            completedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
@@ -196,7 +196,7 @@ class TicketEventTest {
             description = "Desc",
             type = TicketType.FEATURE,
             priority = TicketPriority.MEDIUM,
-            createdBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
@@ -205,7 +205,7 @@ class TicketEventTest {
             ticketId = testTicketId,
             previousStatus = TicketStatus.Backlog,
             newStatus = TicketStatus.Ready,
-            changedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
@@ -213,7 +213,7 @@ class TicketEventTest {
             eventId = "e3",
             ticketId = testTicketId,
             assignedTo = "agent-y",
-            assignedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
@@ -221,29 +221,29 @@ class TicketEventTest {
             eventId = "e4",
             ticketId = testTicketId,
             blockingReason = "Waiting",
-            reportedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
         val completed = TicketEvent.TicketCompleted(
             eventId = "e5",
             ticketId = testTicketId,
-            completedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
-        assertEquals(TicketEvent.TicketCreated.EVENT_CLASS_TYPE, created.eventClassType)
-        assertEquals(TicketEvent.TicketStatusChanged.EVENT_CLASS_TYPE, statusChanged.eventClassType)
-        assertEquals(TicketEvent.TicketAssigned.EVENT_CLASS_TYPE, assigned.eventClassType)
-        assertEquals(TicketEvent.TicketBlocked.EVENT_CLASS_TYPE, blocked.eventClassType)
-        assertEquals(TicketEvent.TicketCompleted.EVENT_CLASS_TYPE, completed.eventClassType)
+        assertEquals(TicketEvent.TicketCreated.EVENT_TYPE, created.eventType)
+        assertEquals(TicketEvent.TicketStatusChanged.EVENT_TYPE, statusChanged.eventType)
+        assertEquals(TicketEvent.TicketAssigned.EVENT_TYPE, assigned.eventType)
+        assertEquals(TicketEvent.TicketBlocked.EVENT_TYPE, blocked.eventType)
+        assertEquals(TicketEvent.TicketCompleted.EVENT_TYPE, completed.eventType)
 
         // Verify type names
-        assertEquals("TicketCreated", created.eventClassType.second)
-        assertEquals("TicketStatusChanged", statusChanged.eventClassType.second)
-        assertEquals("TicketAssigned", assigned.eventClassType.second)
-        assertEquals("TicketBlocked", blocked.eventClassType.second)
-        assertEquals("TicketCompleted", completed.eventClassType.second)
+        assertEquals("TicketCreated", created.eventType)
+        assertEquals("TicketStatusChanged", statusChanged.eventType)
+        assertEquals("TicketAssigned", assigned.eventType)
+        assertEquals("TicketBlocked", blocked.eventType)
+        assertEquals("TicketCompleted", completed.eventType)
     }
 
     @Test
@@ -254,12 +254,12 @@ class TicketEventTest {
             eventId = "e1",
             ticketId = testTicketId,
             assignedTo = null,
-            assignedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
         assertEquals(null, unassigned.assignedTo)
-        assertEquals(testAgentId, unassigned.assignedBy)
+        assertEquals(testAgentSource, unassigned.eventSource)
     }
 
     @Test
@@ -270,11 +270,12 @@ class TicketEventTest {
             eventId = "e1",
             ticketId = testTicketId,
             blockingReason = "Blocker",
-            reportedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
         assertEquals(Urgency.HIGH, blocked.urgency)
+        assertEquals(testAgentSource, blocked.eventSource)
     }
 
     @Test
@@ -284,11 +285,12 @@ class TicketEventTest {
         val completed = TicketEvent.TicketCompleted(
             eventId = "e1",
             ticketId = testTicketId,
-            completedBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 
         assertEquals(Urgency.LOW, completed.urgency)
+        assertEquals(testAgentSource, completed.eventSource)
     }
 
     @Test
@@ -304,7 +306,7 @@ class TicketEventTest {
             description = "Desc",
             type = TicketType.FEATURE,
             priority = TicketPriority.HIGH,
-            createdBy = testAgentId,
+            eventSource = testAgentSource,
             timestamp = now,
         )
 

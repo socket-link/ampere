@@ -12,32 +12,32 @@ class EventRouter(
     private val eventsByEventClassTypeSubscriptions = mutableMapOf<AgentId, EventSubscription.ByEventClassType>()
 
     fun startRouting() {
-        getSubscribedAgentsFor(Event.TaskCreated.EVENT_CLASS_TYPE).forEach { agentId ->
+        getSubscribedAgentsFor(Event.TaskCreated.EVENT_TYPE).forEach { agentId ->
             eventApi.onTaskCreated { event, subscription ->
                 NotificationEvent.ToAgent(
                     agentId = agentId,
                     event = event,
-                    eventSubscription = subscription,
+                    subscription = subscription,
                 ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
             }
         }
 
-        getSubscribedAgentsFor(Event.QuestionRaised.EVENT_CLASS_TYPE).forEach { agentId ->
+        getSubscribedAgentsFor(Event.QuestionRaised.EVENT_TYPE).forEach { agentId ->
             eventApi.onQuestionRaised { event, subscription ->
                 NotificationEvent.ToAgent(
                     agentId = agentId,
                     event = event,
-                    eventSubscription = subscription,
+                    subscription = subscription,
                 ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
             }
         }
 
-        getSubscribedAgentsFor(Event.CodeSubmitted.EVENT_CLASS_TYPE).forEach { agentId ->
+        getSubscribedAgentsFor(Event.CodeSubmitted.EVENT_TYPE).forEach { agentId ->
             eventApi.onCodeSubmitted { event, subscription ->
                 NotificationEvent.ToAgent(
                     agentId = agentId,
                     event = event,
-                    eventSubscription = subscription,
+                    subscription = subscription,
                 ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
             }
         }
@@ -45,19 +45,19 @@ class EventRouter(
 
     fun subscribeToEventClassType(
         agentId: AgentId,
-        eventClassType: EventClassType,
+        eventType: EventType,
     ): EventSubscription.ByEventClassType {
         val updatedSubscription =
             eventsByEventClassTypeSubscriptions[agentId]
                 ?.let { existingSubscription ->
-                    val newEventClassTypes = existingSubscription.eventClassTypes.plus(eventClassType)
+                    val newEventClassTypes = existingSubscription.eventTypes.plus(eventType)
                     EventSubscription.ByEventClassType(
                         agentIdOverride = agentId,
-                        eventClassTypes = newEventClassTypes,
+                        eventTypes = newEventClassTypes,
                     )
                 } ?: EventSubscription.ByEventClassType(
                 agentIdOverride = agentId,
-                eventClassTypes = setOf(eventClassType),
+                eventTypes = setOf(eventType),
             )
 
         eventsByEventClassTypeSubscriptions[agentId] = updatedSubscription
@@ -66,10 +66,10 @@ class EventRouter(
     }
 
     fun EventSubscription.ByEventClassType.unsubscribeFromEventClassType(
-        eventClassType: EventClassType,
+        eventType: EventType,
     ): EventSubscription.ByEventClassType {
         val updatedSubscription = copy(
-            eventClassTypes = eventClassTypes - eventClassType,
+            eventTypes = eventTypes - eventType,
         )
 
         eventsByEventClassTypeSubscriptions[agentId] = updatedSubscription
@@ -78,11 +78,11 @@ class EventRouter(
 
     // ** Function to get all agents that are subscribed to an event type. */
     fun getSubscribedAgentsFor(
-        eventClassType: EventClassType,
+        eventType: EventType,
     ): List<AgentId> =
         eventsByEventClassTypeSubscriptions
             .filterValues { subscriptions ->
-                eventClassType in subscriptions.eventClassTypes
+                eventType in subscriptions.eventTypes
             }
             .map { (agentId, _) -> agentId }
             .toList()

@@ -33,7 +33,7 @@ class EscalationEventHandler(
         coroutineScope.launch {
             eventSerialBus.subscribe(
                 agentId = agentId,
-                eventClassType = MessageEvent.EscalationRequested.EVENT_CLASS_TYPE,
+                eventType = MessageEvent.EscalationRequested.EVENT_TYPE,
                 handler = EventHandler { event, subscription ->
                     val escalationEvent = event as MessageEvent.EscalationRequested
                     invoke(escalationEvent, subscription)

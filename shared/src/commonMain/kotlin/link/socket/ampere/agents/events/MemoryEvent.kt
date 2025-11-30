@@ -29,14 +29,13 @@ sealed interface MemoryEvent : Event {
         val knowledgeType: KnowledgeType,
         val taskType: String?,
         val tags: List<String>,
+        override val urgency: Urgency = Urgency.LOW,
     ) : MemoryEvent {
 
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
-        override val urgency: Urgency = Urgency.LOW
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            private const val EVENT_TYPE = "KnowledgeStored"
-            val EVENT_CLASS_TYPE: EventClassType = KnowledgeStored::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "KnowledgeStored"
         }
     }
 
@@ -56,14 +55,13 @@ sealed interface MemoryEvent : Event {
         val resultsFound: Int,
         val averageRelevance: Double,
         val topKnowledgeIds: List<String>,
+        override val urgency: Urgency = Urgency.LOW,
     ) : MemoryEvent {
 
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
-        override val urgency: Urgency = Urgency.LOW
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            private const val EVENT_TYPE = "KnowledgeRecalled"
-            val EVENT_CLASS_TYPE: EventClassType = KnowledgeRecalled::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "KnowledgeRecalled"
         }
     }
 }

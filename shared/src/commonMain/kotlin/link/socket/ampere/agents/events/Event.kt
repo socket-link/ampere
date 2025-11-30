@@ -1,13 +1,11 @@
 package link.socket.ampere.agents.events
 
-import kotlin.reflect.KClass
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.Transient
 import link.socket.ampere.agents.core.AgentId
 
 typealias EventId = String
-typealias EventClassType = Pair<KClass<out Event>, String>
+typealias EventType = String
 
 /** Urgency levels for questions raised by agents. */
 @Serializable
@@ -75,7 +73,7 @@ sealed interface Event {
     /**
      * A type discriminator for the event.
      */
-    val eventClassType: EventClassType
+    val eventType: EventType
 
     /** Urgency level of the event. */
     val urgency: Urgency
@@ -92,12 +90,10 @@ sealed interface Event {
         val assignedTo: AgentId?,
     ) : Event {
 
-        @Transient
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            private const val EVENT_TYPE = "TaskCreated"
-            val EVENT_CLASS_TYPE: EventClassType = TaskCreated::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "TaskCreated"
         }
     }
 
@@ -112,12 +108,10 @@ sealed interface Event {
         val context: String,
     ) : Event {
 
-        @Transient
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            private const val EVENT_TYPE = "QuestionRaised"
-            val EVENT_CLASS_TYPE: EventClassType = QuestionRaised::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "QuestionRaised"
         }
     }
 
@@ -134,12 +128,10 @@ sealed interface Event {
         val assignedTo: AgentId?,
     ) : Event {
 
-        @Transient
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            private const val EVENT_TYPE = "CodeSubmitted"
-            val EVENT_CLASS_TYPE: EventClassType = CodeSubmitted::class to EVENT_TYPE
+            const val EVENT_TYPE: EventType = "CodeSubmitted"
         }
     }
 }

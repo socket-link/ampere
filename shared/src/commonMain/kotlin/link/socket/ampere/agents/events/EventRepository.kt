@@ -41,7 +41,7 @@ class EventRepository(
 
                 queries.insertEvent(
                     event_id = event.eventId,
-                    event_type = event.eventClassType.second,
+                    event_type = event.eventType,
                     source_id = event.eventSource.getIdentifier(),
                     timestamp = event.timestamp.toEpochMilliseconds(),
                     payload = eventPayload,
@@ -84,12 +84,12 @@ class EventRepository(
     /**
      * Retrieve all events filtered by [eventType] (e.g., "TaskCreatedEvent"), newest first.
      */
-    suspend fun getEventsByType(eventClassType: EventClassType): Result<List<Event>> =
+    suspend fun getEventsByType(eventType: EventType): Result<List<Event>> =
         withContext(Dispatchers.IO) {
             runCatching {
                 queries
                     .getEventsByType(
-                        event_type = eventClassType.second,
+                        event_type = eventType,
                     )
                     .executeAsList()
             }.map { rows ->

@@ -1,9 +1,9 @@
 package link.socket.ampere.agents.events.relay
 
 import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.EventClassType
 import link.socket.ampere.agents.events.EventId
 import link.socket.ampere.agents.events.EventSource
+import link.socket.ampere.agents.events.EventType
 import link.socket.ampere.agents.events.Urgency
 
 /**
@@ -29,7 +29,7 @@ import link.socket.ampere.agents.events.Urgency
  * @property eventIds Set of specific event IDs to include. Null means all events.
  */
 data class EventRelayFilters(
-    val eventTypes: Set<EventClassType>? = null,
+    val eventTypes: Set<EventType>? = null,
     val eventSources: Set<EventSource>? = null,
     val urgencies: Set<Urgency>? = null,
     val eventIds: Set<EventId>? = null
@@ -50,7 +50,7 @@ data class EventRelayFilters(
      * @return true if the event passes all non-null filters
      */
     fun matches(event: Event): Boolean {
-        if (eventTypes != null && event.eventClassType !in eventTypes) return false
+        if (eventTypes != null && event.eventType !in eventTypes) return false
 
         if (eventSources != null && event.eventSource !in eventSources) return false
 
@@ -66,11 +66,11 @@ data class EventRelayFilters(
         val NONE = EventRelayFilters()
 
         /** Creates a filter for a single event type */
-        fun forEventType(eventType: EventClassType): EventRelayFilters =
+        fun forEventType(eventType: EventType): EventRelayFilters =
             EventRelayFilters(eventTypes = setOf(eventType))
 
         /** Creates a filter for multiple event types */
-        fun forEventTypes(eventTypes: List<EventClassType>): EventRelayFilters =
+        fun forEventTypes(eventTypes: List<EventType>): EventRelayFilters =
             EventRelayFilters(eventTypes = eventTypes.toSet())
 
         fun forSources(sources: List<EventSource>): EventRelayFilters =

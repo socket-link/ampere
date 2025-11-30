@@ -305,7 +305,7 @@ class AgentMessageApi(
     ): Subscription =
         eventSerialBus.subscribe(
             agentId = agentId,
-            eventClassType = MessageEvent.ThreadCreated.EVENT_CLASS_TYPE,
+            eventType = MessageEvent.ThreadCreated.EVENT_TYPE,
             handler = EventHandler { event, subscription ->
                 val messageEvent = event as MessageEvent.ThreadCreated
                 if (filter.execute(messageEvent)) {
@@ -322,7 +322,7 @@ class AgentMessageApi(
     ): Subscription =
         eventSerialBus.subscribe(
             agentId = agentId,
-            eventClassType = MessageEvent.MessagePosted.EVENT_CLASS_TYPE,
+            eventType = MessageEvent.MessagePosted.EVENT_TYPE,
             handler = EventHandler { event, subscription ->
                 val messageEvent = event as MessageEvent.MessagePosted
                 if (messageEvent.channel == channel && filter.execute(messageEvent)) {
@@ -339,7 +339,7 @@ class AgentMessageApi(
     ): Subscription =
         eventSerialBus.subscribe(
             agentId = agentId,
-            eventClassType = MessageEvent.MessagePosted.EVENT_CLASS_TYPE,
+            eventType = MessageEvent.MessagePosted.EVENT_TYPE,
             handler = EventHandler { event, subscription ->
                 val messageEvent = event as MessageEvent.MessagePosted
                 if (messageEvent.threadId == threadId && filter(messageEvent)) {
@@ -355,7 +355,7 @@ class AgentMessageApi(
     ): Subscription =
         eventSerialBus.subscribe(
             agentId = agentId,
-            eventClassType = MessageEvent.ThreadStatusChanged.EVENT_CLASS_TYPE,
+            eventType = MessageEvent.ThreadStatusChanged.EVENT_TYPE,
             handler = EventHandler { event, subscription ->
                 if (filter(event as MessageEvent.ThreadStatusChanged)) {
                     handler(event, subscription)
@@ -370,7 +370,7 @@ class AgentMessageApi(
     ): Subscription =
         eventSerialBus.subscribe(
             agentId = agentId,
-            eventClassType = MessageEvent.EscalationRequested.EVENT_CLASS_TYPE,
+            eventType = MessageEvent.EscalationRequested.EVENT_TYPE,
             handler = EventHandler { event, subscription ->
                 if (filter(event as MessageEvent.EscalationRequested)) {
                     handler(event, subscription)

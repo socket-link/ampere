@@ -1,7 +1,7 @@
 package link.socket.ampere.agents.events.messages
 
 import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.events.EventClassType
+import link.socket.ampere.agents.events.EventType
 import link.socket.ampere.agents.events.NotificationEvent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.escalation.EscalationEventHandler
@@ -25,7 +25,7 @@ class MessageRouter(
                         NotificationEvent.ToAgent(
                             agentId = agentId,
                             event = event,
-                            eventSubscription = subscription,
+                            subscription = subscription,
                         ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
                     }
 
@@ -33,7 +33,7 @@ class MessageRouter(
                         NotificationEvent.ToAgent(
                             agentId = agentId,
                             event = event,
-                            eventSubscription = subscription,
+                            subscription = subscription,
                         ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
                     }
 
@@ -41,7 +41,7 @@ class MessageRouter(
                         NotificationEvent.ToAgent(
                             agentId = agentId,
                             event = event,
-                            eventSubscription = subscription,
+                            subscription = subscription,
                         ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
                     }
                 }
@@ -54,12 +54,12 @@ class MessageRouter(
 
     fun subscribeToMessageType(
         agentId: AgentId,
-        messageType: EventClassType,
+        eventType: EventType,
     ): MessageSubscription.ByType {
         val updatedSubscription = messagesByTypeSubscriptions[agentId]?.let { existingSubscription ->
-            val newTypes = existingSubscription.types.plus(messageType)
+            val newTypes = existingSubscription.eventTypes.plus(eventType)
             MessageSubscription.ByType(agentId, newTypes)
-        } ?: MessageSubscription.ByType(agentId, setOf(messageType))
+        } ?: MessageSubscription.ByType(agentId, setOf(eventType))
 
         messagesByTypeSubscriptions[agentId] = updatedSubscription
 

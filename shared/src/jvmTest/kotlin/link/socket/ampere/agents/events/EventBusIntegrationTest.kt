@@ -110,12 +110,12 @@ class EventBusIntegrationTest {
 
             bus2.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
                 agentId = "agent-A",
-                eventClassType = Event.TaskCreated.EVENT_CLASS_TYPE,
+                eventType = Event.TaskCreated.EVENT_TYPE,
             ) { event, _ -> acc += event.eventId }
 
             bus2.subscribe<Event.QuestionRaised, EventSubscription.ByEventClassType>(
                 agentId = "agent-B",
-                eventClassType = Event.QuestionRaised.EVENT_CLASS_TYPE,
+                eventType = Event.QuestionRaised.EVENT_TYPE,
             ) { event, _ -> acc += event.eventId }
 
             api2.replayEvents(since = Instant.fromEpochSeconds(0L))
@@ -140,12 +140,12 @@ class EventBusIntegrationTest {
             var goodHandlerCalled = false
             bus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
                 agentId = "agent-A",
-                eventClassType = Event.TaskCreated.EVENT_CLASS_TYPE,
+                eventType = Event.TaskCreated.EVENT_TYPE,
             ) { _, _ -> throw IllegalStateException("boom") }
 
             bus.subscribe<Event.TaskCreated, EventSubscription.ByEventClassType>(
                 agentId = "agent-A",
-                eventClassType = Event.TaskCreated.EVENT_CLASS_TYPE,
+                eventType = Event.TaskCreated.EVENT_TYPE,
             ) { _, _ -> goodHandlerCalled = true }
 
             // Use API to persist then publish
@@ -179,7 +179,7 @@ class EventBusIntegrationTest {
 
             val history = AgentEventApiFactory(eventRepository, bus)
                 .create("agent-A")
-                .getEventHistory(eventClassType = Event.TaskCreated.EVENT_CLASS_TYPE)
+                .getEventHistory(eventType = Event.TaskCreated.EVENT_TYPE)
 
             assertEquals(n, history.size)
         }

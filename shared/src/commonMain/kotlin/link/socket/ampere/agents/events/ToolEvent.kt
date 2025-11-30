@@ -4,7 +4,6 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.core.actions.AgentActionAutonomy
 import link.socket.ampere.agents.execution.tools.ToolId
-import kotlin.reflect.KClass
 
 /**
  * ToolEvent - Events related to tool lifecycle, discovery, and execution.
@@ -25,9 +24,8 @@ import kotlin.reflect.KClass
  * - Track tool usage patterns for learning
  */
 @Serializable
-sealed class ToolEvent(
-    private val source: EventSource,
-) : Event {
+sealed interface ToolEvent : Event {
+
     /**
      * A tool has been registered in the ToolRegistry and is now available for agent use.
      *
@@ -53,12 +51,12 @@ sealed class ToolEvent(
         val toolType: String,
         val requiredAutonomy: AgentActionAutonomy,
         val mcpServerId: String? = null,
-    ) : ToolEvent(eventSource) {
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+    ) : ToolEvent {
+
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            val EVENT_CLASS_TYPE: EventClassType =
-                Pair(ToolRegistered::class as KClass<out Event>, "ToolRegistered")
+            const val EVENT_TYPE: EventType = "ToolRegistered"
         }
     }
 
@@ -85,12 +83,12 @@ sealed class ToolEvent(
         val toolName: String,
         val reason: String,
         val mcpServerId: String? = null,
-    ) : ToolEvent(eventSource) {
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+    ) : ToolEvent {
+
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            val EVENT_CLASS_TYPE: EventClassType =
-                Pair(ToolUnregistered::class as KClass<out Event>, "ToolUnregistered")
+            const val EVENT_TYPE: EventType = "ToolUnregistered"
         }
     }
 
@@ -120,12 +118,12 @@ sealed class ToolEvent(
         val functionToolCount: Int,
         val mcpToolCount: Int,
         val mcpServerCount: Int,
-    ) : ToolEvent(eventSource) {
-        override val eventClassType: EventClassType = EVENT_CLASS_TYPE
+    ) : ToolEvent {
+
+        override val eventType: EventType = EVENT_TYPE
 
         companion object {
-            val EVENT_CLASS_TYPE: EventClassType =
-                Pair(ToolDiscoveryComplete::class as KClass<out Event>, "ToolDiscoveryComplete")
+            const val EVENT_TYPE: EventType = "ToolDiscoveryComplete"
         }
     }
 }

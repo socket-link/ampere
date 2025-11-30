@@ -71,7 +71,7 @@ class EventFiltersTest {
     @Test
     fun `filter by event type matches correctly`() {
         val filter = EventRelayFilters(
-            eventTypes = setOf(Event.TaskCreated.EVENT_CLASS_TYPE)
+            eventTypes = setOf(Event.TaskCreated.EVENT_TYPE)
         )
 
         assertFalse(filter.isEmpty())
@@ -84,8 +84,8 @@ class EventFiltersTest {
     fun `filter by multiple event types uses OR logic`() {
         val filter = EventRelayFilters(
             eventTypes = setOf(
-                Event.TaskCreated.EVENT_CLASS_TYPE,
-                Event.QuestionRaised.EVENT_CLASS_TYPE
+                Event.TaskCreated.EVENT_TYPE,
+                Event.QuestionRaised.EVENT_TYPE
             )
         )
 
@@ -151,7 +151,7 @@ class EventFiltersTest {
     @Test
     fun `combining multiple filters uses AND logic`() {
         val filter = EventRelayFilters(
-            eventTypes = setOf(Event.TaskCreated.EVENT_CLASS_TYPE),
+            eventTypes = setOf(Event.TaskCreated.EVENT_TYPE),
             eventSources = setOf(stubSourceA),
             urgencies = setOf(Urgency.HIGH)
         )
@@ -179,7 +179,7 @@ class EventFiltersTest {
 
     @Test
     fun `factory method forEventType creates correct filter`() {
-        val filter = EventRelayFilters.forEventType(Event.TaskCreated.EVENT_CLASS_TYPE)
+        val filter = EventRelayFilters.forEventType(Event.TaskCreated.EVENT_TYPE)
 
         assertTrue(filter.matches(taskEvent()))
         assertFalse(filter.matches(questionEvent()))

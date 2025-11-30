@@ -112,7 +112,7 @@ class EscalationEventHandlerTest {
 
             messageRouter.subscribeToMessageType(
                 agentId = agentId,
-                messageType = MessageEvent.EscalationRequested.EVENT_CLASS_TYPE,
+                eventType = MessageEvent.EscalationRequested.EVENT_TYPE,
             )
 
             api.escalateToHuman(
@@ -146,7 +146,7 @@ class EscalationEventHandlerTest {
 
             messageRouter.subscribeToMessageType(
                 agentId = agentId,
-                messageType = MessageEvent.EscalationRequested.EVENT_CLASS_TYPE,
+                eventType = MessageEvent.EscalationRequested.EVENT_TYPE,
             )
 
             api.escalateToHuman(
