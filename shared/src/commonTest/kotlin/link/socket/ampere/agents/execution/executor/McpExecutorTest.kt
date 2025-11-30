@@ -12,10 +12,13 @@ import link.socket.ampere.agents.core.actions.AgentActionAutonomy
 import link.socket.ampere.agents.core.errors.ExecutionError
 import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
 import link.socket.ampere.agents.core.status.ExecutionStatus
+import link.socket.ampere.agents.core.status.TaskStatus
+import link.socket.ampere.agents.core.status.TicketStatus
 import link.socket.ampere.agents.core.tasks.Task
 import link.socket.ampere.agents.events.EventId
 import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.tickets.Ticket
+import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.execution.request.ExecutionConstraints
@@ -741,9 +744,9 @@ class McpExecutorTest {
             id = "ticket-123",
             title = "Test Ticket",
             description = "Test ticket",
-            type = link.socket.ampere.agents.events.tickets.TicketType.TASK,
-            priority = link.socket.ampere.agents.events.tickets.TicketPriority.MEDIUM,
-            status = link.socket.ampere.agents.events.tickets.TicketStatus.InProgress,
+            type = TicketType.TASK,
+            priority = TicketPriority.MEDIUM,
+            status = TicketStatus.InProgress,
             assignedAgentId = "test-agent",
             createdByAgentId = "test-pm-agent",
             createdAt = now,
@@ -753,7 +756,7 @@ class McpExecutorTest {
         val task = Task.CodeChange(
             id = "task-456",
             description = taskDescription,
-            status = link.socket.ampere.agents.core.tasks.TaskStatus.Pending,
+            status = TaskStatus.Pending,
             assignedTo = null,
         )
 
