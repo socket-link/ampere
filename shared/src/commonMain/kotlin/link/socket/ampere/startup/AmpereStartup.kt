@@ -10,6 +10,7 @@ import link.socket.ampere.agents.tools.initializeLocalTools
 import link.socket.ampere.agents.tools.mcp.McpDiscoveryResult
 import link.socket.ampere.agents.tools.mcp.McpServerConfiguration
 import link.socket.ampere.agents.tools.mcp.McpServerManager
+import link.socket.ampere.agents.tools.mcp.ServerManager
 import link.socket.ampere.agents.tools.registry.ToolRegistry
 import link.socket.ampere.agents.tools.registry.ToolRegistryRepository
 import link.socket.ampere.db.Database
@@ -45,7 +46,7 @@ import link.socket.ampere.db.Database
  * @param scope The coroutine scope for async operations
  * @param mcpServerConfigs Optional list of MCP server configurations to discover
  * @param logger Optional logger for observability
- * @return Result containing the initialized ToolRegistry, McpServerManager, and initialization stats
+ * @return Result containing the initialized ToolRegistry, ServerManager, and initialization stats
  */
 suspend fun initializeAmpere(
     database: Database,
@@ -130,7 +131,7 @@ suspend fun initializeAmpere(
         Result.success(
             AmpereStartupResult(
                 registry = registry,
-                mcpServerManager = mcpManager,
+                serverManager = mcpManager,
                 toolInitialization = toolInitResult,
                 mcpDiscovery = mcpDiscoveryResult,
             )
@@ -177,13 +178,13 @@ private fun createToolRegistry(
  * Result of Ampere system initialization.
  *
  * @property registry The initialized ToolRegistry
- * @property mcpServerManager The MCP server manager for external tool integration
+ * @property serverManager The server manager for external tool integration
  * @property toolInitialization Statistics from local tool initialization
  * @property mcpDiscovery Statistics from MCP tool discovery (null if no MCP servers configured)
  */
 data class AmpereStartupResult(
     val registry: ToolRegistry,
-    val mcpServerManager: McpServerManager,
+    val serverManager: ServerManager,
     val toolInitialization: ToolInitializationResult,
     val mcpDiscovery: McpDiscoveryResult? = null,
 ) {
