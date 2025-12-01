@@ -122,7 +122,7 @@ Ampere includes **24+ pre-built agents** organized by domain:
 
 Each agent has a specialized system prompt, configurable inputs, and personality settings (tone, seriousness level).
 
-**Location:** [`shared/src/commonMain/kotlin/link/socket/ampere/domain/agent/bundled/`](shared/src/commonMain/kotlin/link/socket/ampere/domain/agent/bundled/)
+**Location:** [`ampere-core/src/commonMain/kotlin/link/socket/ampere/domain/agent/bundled/`](ampere-core/src/commonMain/kotlin/link/socket/ampere/domain/agent/bundled/)
 
 ---
 
@@ -174,8 +174,8 @@ openai_api_key=YOUR_OPENAI_KEY
 
 # iOS
 # 1. Get Team ID: kdoctor --team-ids
-# 2. Set TEAM_ID in iosApp/Configuration/Config.xcconfig
-# 3. Open iosApp/iosApp.xcodeproj in Xcode and run
+# 2. Set TEAM_ID in ampere-ios/Configuration/Config.xcconfig
+# 3. Open ampere-ios/ampere-ios.xcodeproj in Xcode and run
 ```
 
 ### Build & Test
@@ -198,7 +198,7 @@ openai_api_key=YOUR_OPENAI_KEY
 ### Directory Structure
 
 ```
-shared/src/commonMain/kotlin/link/socket/ampere/
+ampere-core/src/commonMain/kotlin/link/socket/ampere/
 ├── agents/
 │   ├── core/           # AutonomousAgent, MinimalAutonomousAgent
 │   ├── events/         # EventBus, TicketOrchestrator, MeetingOrchestrator
@@ -212,6 +212,9 @@ shared/src/commonMain/kotlin/link/socket/ampere/
 └── ui/                 # Compose Multiplatform UI
 
 ampere-cli/             # Command-line observability tools
+ampere-android/         # Android application
+ampere-desktop/         # Desktop application
+ampere-ios/             # iOS application
 ```
 
 ### Key Technologies
