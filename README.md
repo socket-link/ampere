@@ -12,7 +12,16 @@
 
 ## 📔 Overview
 
-Ampere is a **Kotlin Multiplatform library** for building autonomous AI agent systems with **built-in coordination, memory, and learning capabilities**. Unlike traditional chatbot frameworks, Ampere provides a complete substrate for agents to collaborate on complex work through structured workflows.
+Ampere is a **Kotlin Multiplatform library** for building autonomous AI agent systems with **built-in coordination, memory, and learning capabilities**. Unlike traditional chatbot frameworks, Ampere provides a complete platform for agents to collaborate on complex work through structured workflows.
+
+### Part of Project AniMA
+
+Ampere is the reference implementation of a larger multi-agent ecosystem:
+
+- **Animated Multi-Agent (AniMA) Prompting Technique** - A prompting methodology that enables AI agents to work together like animated characters in a coordinated system, each with distinct roles and personalities
+- **AniMA Model Protocol (AMP)** - The protocol specification defining how agents communicate, coordinate, and learn from each other
+- **AMP Example Runtime Environment (AMPERE)** - This library - a complete Kotlin Multiplatform implementation of the AMP protocol
+- **Socket** - A real-world application built on Ampere/AMP that demonstrates the full capabilities of the multi-agent system
 
 ### What Makes Ampere Different
 
@@ -25,7 +34,7 @@ Most AI frameworks focus on single-agent chat interactions. Ampere goes further 
 - **👁️ Full Observability** - Real-time CLI tools to watch agents work
 - **🔄 Event-Driven Architecture** - All agent actions flow through a persistent event bus
 
-This creates an **agent substrate** where AI agents perceive their environment, reason about work, execute plans, learn from outcomes, and coordinate with other agents - all autonomously.
+This creates a **multi-agent system** where AI agents perceive their environment, reason about work, execute plans, learn from outcomes, and coordinate with other agents - all autonomously.
 
 ---
 
@@ -478,7 +487,7 @@ View message-based agent coordination:
 
 ### System Status Dashboard
 
-Get an overview of the entire agent substrate:
+Get an overview of the entire multi-agent system:
 
 ```bash
 ./ampere-cli/ampere status
@@ -487,7 +496,7 @@ Get an overview of the entire agent substrate:
 **Output:**
 ```
 ╔══════════════════════════════════════════════════════════╗
-║              AMPERE AGENT SUBSTRATE STATUS               ║
+║           AMPERE MULTI-AGENT SYSTEM STATUS               ║
 ╚══════════════════════════════════════════════════════════╝
 
 Active Agents: 3
