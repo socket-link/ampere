@@ -5,24 +5,24 @@
 Ampere is a Kotlin Multiplatform (KMP) project that provides a shared core for building conversational AI agents and
 multiple platform apps that consume this core.
 
-- shared: Multiplatform library containing the domain and model layers for agents, chat, conversations, capabilities,
+- ampere-core: Multiplatform library containing the domain and model layers for agents, chat, conversations, capabilities,
   and tools.
-    - Common code: `shared/src/commonMain/kotlin/link/socket/ampere/...`
-    - Platform code: `shared/src/{androidMain,iosMain,jvmMain}`
-    - Tests: `shared/src/jvmTest`
-- androidApp: Android application that uses the shared module.
-- iosApp: iOS application (SwiftUI) that uses the shared module.
-- desktopApp: Desktop application (Compose for Desktop) that uses the shared module.
-- docs/api: Generated API docs for the shared module.
+    - Common code: `ampere-core/src/commonMain/kotlin/link/socket/ampere/...`
+    - Platform code: `ampere-core/src/{androidMain,iosMain,jvmMain}`
+    - Tests: `ampere-core/src/jvmTest`
+- ampere-android: Android application that uses the ampere-core module.
+- ampere-ios: iOS application (SwiftUI) that uses the ampere-core module.
+- ampere-desktop: Desktop application (Compose for Desktop) that uses the ampere-core module.
+- docs/api: Generated API docs for the ampere-core module.
 - Build system: Gradle with Kotlin DSL (`build.gradle.kts`, `settings.gradle.kts`).
 
 ## How Junie should validate changes
 
 - Docs-only changes (e.g., files in `.junie/`, `README.md`, `docs/`) do not require building or running tests.
-- For changes in `shared` common/jvm code, run the JVM tests:
-    - `./gradlew :shared:jvmTest`
-- If compilation of the shared JVM target needs to be verified without running all tests:
-    - `./gradlew :shared:compileKotlinJvm`
+- For changes in `ampere-core` common/jvm code, run the JVM tests:
+    - `./gradlew :ampere-core:jvmTest`
+- If compilation of the ampere-core JVM target needs to be verified without running all tests:
+    - `./gradlew :ampere-core:compileKotlinJvm`
 - Avoid building Android/iOS/Desktop apps unless the issue explicitly requires it (they are heavier and not needed for
   most library-level changes).
 
@@ -30,7 +30,7 @@ multiple platform apps that consume this core.
 
 - Follow standard Kotlin coding conventions and keep style consistent with surrounding code.
 - Use small, minimal diffs focused on the described issue.
-- Prefer adding or adjusting unit tests under `shared/src/jvmTest` when modifying core logic.
+- Prefer adding or adjusting unit tests under `ampere-core/src/jvmTest` when modifying core logic.
 
 ## Contribution references
 
@@ -40,8 +40,8 @@ multiple platform apps that consume this core.
 ## Notes for this repository
 
 - The main package namespace is `link.socket.ampere.*`.
-- Key domains in `shared/src/commonMain/kotlin` include:
+- Key domains in `ampere-core/src/commonMain/kotlin` include:
     - `domain/chat` and `domain/conversation`: Conversation, Chat, and system instructions (tone, seriousness).
     - `domain/capability`: Capability abstractions.
     - `domain/model/llm`: LLM client/provider abstractions.
-- API documentation mirrors these packages under `docs/api/shared/`.
+- API documentation mirrors these packages under `docs/api/ampere-core/`.

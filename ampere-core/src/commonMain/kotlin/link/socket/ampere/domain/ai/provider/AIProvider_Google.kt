@@ -3,7 +3,7 @@ package link.socket.ampere.domain.ai.provider
 import com.aallam.openai.client.OpenAI as Client
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.tool.AITool_Gemini
-import link.socket.ampere.shared.config.KotlinConfig
+import link.socket.ampere.core.config.KotlinConfig
 
 private const val ID = "google"
 private const val NAME = "Google"

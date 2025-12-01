@@ -233,7 +233,7 @@ tasks.register("kotlinConfiguration") {
 
     val kotlinConfig = File(generatedSources, "KotlinConfig.kt")
     kotlinConfig.writeText(
-        "package link.socket.ampere.shared.config\n\nobject KotlinConfig {\n$properties\n}\n",
+        "package link.socket.ampere.core.config\n\nobject KotlinConfig {\n$properties\n}\n",
     )
 }
 

@@ -18,7 +18,7 @@ kotlin {
     sourceSets {
         val jvmMain by getting {
             dependencies {
-                implementation(project(":shared"))
+                implementation(project(":ampere-core"))
                 implementation(compose.desktop.currentOs)
             }
         }
