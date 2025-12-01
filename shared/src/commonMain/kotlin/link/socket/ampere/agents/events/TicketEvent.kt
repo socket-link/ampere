@@ -23,7 +23,7 @@ sealed interface TicketEvent : Event {
         val ticketId: TicketId,
         val title: String,
         val description: String,
-        val type: TicketType,
+        val ticketType: TicketType,
         val priority: TicketPriority,
         override val eventSource: EventSource,
         override val timestamp: Instant,

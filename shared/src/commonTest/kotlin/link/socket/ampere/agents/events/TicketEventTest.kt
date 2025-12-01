@@ -27,7 +27,7 @@ class TicketEventTest {
             ticketId = testTicketId,
             title = "Test Ticket",
             description = "A test ticket description",
-            type = TicketType.FEATURE,
+            ticketType = TicketType.FEATURE,
             priority = TicketPriority.HIGH,
             eventSource = testAgentSource,
             timestamp = now,
@@ -69,7 +69,7 @@ class TicketEventTest {
         assertEquals(testTicketId, created.ticketId)
         assertEquals("Test Ticket", created.title)
         assertEquals("A test ticket description", created.description)
-        assertEquals(TicketType.FEATURE, created.type)
+        assertEquals(TicketType.FEATURE, created.ticketType)
         assertEquals(TicketPriority.HIGH, created.priority)
         assertEquals(testAgentSource, created.eventSource)
 
@@ -102,7 +102,7 @@ class TicketEventTest {
             ticketId = "ticket-1",
             title = "Ticket 1",
             description = "Description 1",
-            type = TicketType.FEATURE,
+            ticketType = TicketType.FEATURE,
             priority = TicketPriority.HIGH,
             eventSource = testAgentSource,
             timestamp = now,
@@ -113,7 +113,7 @@ class TicketEventTest {
             ticketId = "ticket-2",
             title = "Ticket 2",
             description = "Description 2",
-            type = TicketType.BUG,
+            ticketType = TicketType.BUG,
             priority = TicketPriority.CRITICAL,
             eventSource = testAgentSource,
             timestamp = now,
@@ -140,7 +140,7 @@ class TicketEventTest {
             ticketId = testTicketId,
             title = "Test",
             description = "Desc",
-            type = TicketType.TASK,
+            ticketType = TicketType.TASK,
             priority = TicketPriority.LOW,
             eventSource = testAgentSource,
             timestamp = now,
@@ -194,7 +194,7 @@ class TicketEventTest {
             ticketId = testTicketId,
             title = "Test",
             description = "Desc",
-            type = TicketType.FEATURE,
+            ticketType = TicketType.FEATURE,
             priority = TicketPriority.MEDIUM,
             eventSource = testAgentSource,
             timestamp = now,
@@ -304,7 +304,7 @@ class TicketEventTest {
             ticketId = testTicketId,
             title = "Test",
             description = "Desc",
-            type = TicketType.FEATURE,
+            ticketType = TicketType.FEATURE,
             priority = TicketPriority.HIGH,
             eventSource = testAgentSource,
             timestamp = now,

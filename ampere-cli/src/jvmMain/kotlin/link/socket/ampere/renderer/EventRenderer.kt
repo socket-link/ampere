@@ -264,7 +264,7 @@ private fun MeetingEvent.MeetingCanceled.toSummary(
 // TicketEvent.TicketCreated
 private fun TicketEvent.TicketCreated.toSummary(
     formatUrgency: (Urgency) -> String,
-): String = "Ticket $ticketId: $title ($type, $priority) ${formatUrgency(urgency)}"
+): String = "Ticket $ticketId: $title ($ticketType, $priority) ${formatUrgency(urgency)}"
 
 // TicketEvent.TicketStatusChanged
 private fun TicketEvent.TicketStatusChanged.toSummary(
