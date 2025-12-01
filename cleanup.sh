@@ -4,7 +4,7 @@ rm -rf .idea
 rm -rf .gradle
 rm -rf build
 rm -rf */build
-rm -rf iosApp/iosApp.xcworkspace
-rm -rf iosApp/Pods
-rm -rf iosApp/iosApp.xcodeproj/project.xcworkspace
-rm -rf iosApp/iosApp.xcodeproj/xcuserdata 
+rm -rf ampere-ios/ampere-ios.xcworkspace
+rm -rf ampere-ios/Pods
+rm -rf ampere-ios/ampere-ios.xcodeproj/project.xcworkspace
+rm -rf ampere-ios/ampere-ios.xcodeproj/xcuserdata 
