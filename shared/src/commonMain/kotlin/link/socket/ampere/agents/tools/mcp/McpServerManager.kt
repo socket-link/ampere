@@ -55,7 +55,7 @@ class McpServerManager(
     private val eventBus: EventSerialBus,
     private val eventSource: EventSource,
     private val logger: Logger = Logger.withTag("McpServerManager"),
-) {
+) : ServerManager {
     // Server configurations indexed by server ID
     private val serverConfigs = mutableMapOf<McpServerId, McpServerConfiguration>()
 
@@ -304,7 +304,7 @@ class McpServerManager(
      * @param serverId The server ID
      * @return True if connected, false otherwise
      */
-    suspend fun isConnected(serverId: McpServerId): Boolean = mutex.withLock {
+    override suspend fun isConnected(serverId: McpServerId): Boolean = mutex.withLock {
         activeConnections[serverId]?.isConnected == true
     }
 
@@ -316,7 +316,7 @@ class McpServerManager(
      * @param serverId The server ID
      * @return The connection, or null if not connected
      */
-    suspend fun getConnection(serverId: McpServerId): McpServerConnection? = mutex.withLock {
+    override suspend fun getConnection(serverId: McpServerId): McpServerConnection? = mutex.withLock {
         activeConnections[serverId]
     }
 

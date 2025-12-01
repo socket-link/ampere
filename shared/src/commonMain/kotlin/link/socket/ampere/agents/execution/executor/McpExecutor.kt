@@ -18,6 +18,7 @@ import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.tools.mcp.McpServerManager
+import link.socket.ampere.agents.tools.mcp.ServerManager
 import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
 
 /**
@@ -47,7 +48,7 @@ import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
  * - Clear error messages guide users toward resolution
  * - Network timeouts, server unavailability, and protocol errors are all handled
  *
- * @property mcpServerManager Manager for MCP server connections
+ * @property serverManager Manager for MCP server connections
  * @property eventBus Event bus for emitting execution status events
  * @property logger Logger for diagnostic output
  */
@@ -57,7 +58,7 @@ class McpExecutor(
     override val displayName: String,
     override val capabilities: ExecutorCapabilities,
     @kotlinx.serialization.Transient
-    private val mcpServerManager: McpServerManager? = null,
+    private val serverManager: ServerManager? = null,
     @kotlinx.serialization.Transient
     private val eventBus: EventSerialBus? = null,
     @kotlinx.serialization.Transient
@@ -66,18 +67,18 @@ class McpExecutor(
 
     /**
      * Health check verifies that:
-     * 1. McpServerManager is available
+     * 1. ServerManager is available
      * 2. At least one MCP server is connected and reachable
      *
      * This should be called before attempting to use the executor.
      */
     override suspend fun performHealthCheck(): Result<ExecutorSystemHealth> {
-        if (mcpServerManager == null) {
+        if (serverManager == null) {
             return Result.success(
                 ExecutorSystemHealth(
                     version = null,
                     isAvailable = false,
-                    issues = listOf("McpServerManager not configured"),
+                    issues = listOf("ServerManager not configured"),
                 )
             )
         }
@@ -149,9 +150,9 @@ class McpExecutor(
             )
         )
 
-        // Verify McpServerManager is available
-        if (mcpServerManager == null) {
-            logger.e { "McpServerManager not configured" }
+        // Verify ServerManager is available
+        if (serverManager == null) {
+            logger.e { "ServerManager not configured" }
             emit(
                 ExecutionStatus.Failed(
                     executorId = id,
@@ -162,7 +163,7 @@ class McpExecutor(
                         error = ExecutionError(
                             type = ExecutionError.Type.TOOL_UNAVAILABLE,
                             message = "MCP server manager not configured",
-                            details = "McpExecutor requires McpServerManager to be injected",
+                            details = "McpExecutor requires ServerManager to be injected",
                             isRetryable = false,
                         ),
                     ),
@@ -172,7 +173,7 @@ class McpExecutor(
         }
 
         // Get connection from manager
-        val connection = mcpServerManager.getConnection(tool.serverId)
+        val connection = serverManager.getConnection(tool.serverId)
         if (connection == null) {
             logger.w { "MCP server '${tool.serverId}' is not connected" }
             emit(
@@ -468,7 +469,7 @@ class McpExecutor(
          * Creates a default MCP executor with standard configuration.
          */
         fun create(
-            mcpServerManager: McpServerManager,
+            serverManager: ServerManager,
             eventBus: EventSerialBus,
         ): McpExecutor {
             return McpExecutor(
@@ -478,7 +479,7 @@ class McpExecutor(
                     supportsLanguages = emptySet(), // MCP tools are language-agnostic
                     supportsFrameworks = emptySet(), // MCP tools are framework-agnostic
                 ),
-                mcpServerManager = mcpServerManager,
+                serverManager = serverManager,
                 eventBus = eventBus,
             )
         }

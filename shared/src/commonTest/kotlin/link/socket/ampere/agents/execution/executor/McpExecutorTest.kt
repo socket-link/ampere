@@ -1,32 +1,29 @@
 package link.socket.ampere.agents.execution.executor
 
-import co.touchlab.kermit.Logger
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import link.socket.ampere.agents.core.actions.AgentActionAutonomy
-import link.socket.ampere.agents.core.errors.ExecutionError
 import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
 import link.socket.ampere.agents.core.status.ExecutionStatus
 import link.socket.ampere.agents.core.status.TaskStatus
 import link.socket.ampere.agents.core.status.TicketStatus
 import link.socket.ampere.agents.core.tasks.Task
-import link.socket.ampere.agents.events.EventId
-import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
-import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.McpTool
-import link.socket.ampere.agents.tools.mcp.McpServerManager
+import link.socket.ampere.agents.tools.mcp.ServerManager
 import link.socket.ampere.agents.tools.mcp.connection.McpServerConnection
 import link.socket.ampere.agents.tools.mcp.protocol.ContentItem
 import link.socket.ampere.agents.tools.mcp.protocol.InitializeResult
@@ -34,12 +31,6 @@ import link.socket.ampere.agents.tools.mcp.protocol.McpToolDescriptor
 import link.socket.ampere.agents.tools.mcp.protocol.ServerCapabilities
 import link.socket.ampere.agents.tools.mcp.protocol.ServerInfo
 import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
  * Tests for McpExecutor - MCP tool execution layer.
@@ -82,14 +73,14 @@ class McpExecutorTest {
             ),
         )
 
-        val mockManager = MockMcpServerManager()
+        val mockManager = MockServerManager()
         mockManager.connections["test-server"] = mockConnection
 
         val executor = McpExecutor(
             id = "mcp-test",
             displayName = "Test MCP Executor",
             capabilities = ExecutorCapabilities(emptySet(), emptySet()),
-            mcpServerManager = mockManager,
+            serverManager = mockManager,
             eventBus = null, // Not needed for this test
         )
 
@@ -143,14 +134,14 @@ class McpExecutorTest {
     @Test
     fun `test execution fails when MCP server unavailable`() = runTest {
         // Arrange
-        val mockManager = MockMcpServerManager()
+        val mockManager = MockServerManager()
         // Don't add any connections - server is unavailable
 
         val executor = McpExecutor(
             id = "mcp-test",
             displayName = "Test MCP Executor",
             capabilities = ExecutorCapabilities(emptySet(), emptySet()),
-            mcpServerManager = mockManager,
+            serverManager = mockManager,
             eventBus = null,
         )
 
@@ -196,13 +187,13 @@ class McpExecutorTest {
     @Test
     fun `test execution rejects non-MCP tools`() = runTest {
         // Arrange
-        val mockManager = MockMcpServerManager()
+        val mockManager = MockServerManager()
 
         val executor = McpExecutor(
             id = "mcp-test",
             displayName = "Test MCP Executor",
             capabilities = ExecutorCapabilities(emptySet(), emptySet()),
-            mcpServerManager = mockManager,
+            serverManager = mockManager,
             eventBus = null,
         )
 
@@ -262,14 +253,14 @@ class McpExecutorTest {
             )
         }
 
-        val mockManager = MockMcpServerManager()
+        val mockManager = MockServerManager()
         mockManager.connections["test-server"] = mockConnection
 
         val executor = McpExecutor(
             id = "mcp-test",
             displayName = "Test MCP Executor",
             capabilities = ExecutorCapabilities(emptySet(), emptySet()),
-            mcpServerManager = mockManager,
+            serverManager = mockManager,
             eventBus = null,
         )
 
@@ -325,14 +316,14 @@ class McpExecutorTest {
             ),
         )
 
-        val mockManager = MockMcpServerManager()
+        val mockManager = MockServerManager()
         mockManager.connections["test-server"] = mockConnection
 
         val executor = McpExecutor(
             id = "mcp-test",
             displayName = "Test MCP Executor",
             capabilities = ExecutorCapabilities(emptySet(), emptySet()),
-            mcpServerManager = mockManager,
+            serverManager = mockManager,
             eventBus = null,
         )
 
@@ -383,14 +374,14 @@ class McpExecutorTest {
             ),
         )
 
-        val mockManager = MockMcpServerManager()
+        val mockManager = MockServerManager()
         mockManager.connections["test-server"] = mockConnection
 
         val executor = McpExecutor(
             id = "mcp-test",
             displayName = "Test MCP Executor",
             capabilities = ExecutorCapabilities(emptySet(), emptySet()),
-            mcpServerManager = mockManager,
+            serverManager = mockManager,
             eventBus = null,
         )
 
@@ -453,14 +444,14 @@ class McpExecutorTest {
             ),
         )
 
-        val mockManager = MockMcpServerManager()
+        val mockManager = MockServerManager()
         mockManager.connections["test-server"] = mockConnection
 
         val executor = McpExecutor(
             id = "mcp-test",
             displayName = "Test MCP Executor",
             capabilities = ExecutorCapabilities(emptySet(), emptySet()),
-            mcpServerManager = mockManager,
+            serverManager = mockManager,
             eventBus = null,
         )
 
@@ -511,14 +502,14 @@ class McpExecutorTest {
             Exception("Network timeout - connection lost"),
         )
 
-        val mockManager = MockMcpServerManager()
+        val mockManager = MockServerManager()
         mockManager.connections["test-server"] = mockConnection
 
         val executor = McpExecutor(
             id = "mcp-test",
             displayName = "Test MCP Executor",
             capabilities = ExecutorCapabilities(emptySet(), emptySet()),
-            mcpServerManager = mockManager,
+            serverManager = mockManager,
             eventBus = null,
         )
 
@@ -577,14 +568,14 @@ class McpExecutorTest {
             )
         }
 
-        val mockManager = MockMcpServerManager()
+        val mockManager = MockServerManager()
         mockManager.connections["test-server"] = mockConnection
 
         val executor = McpExecutor(
             id = "mcp-test",
             displayName = "Test MCP Executor",
             capabilities = ExecutorCapabilities(emptySet(), emptySet()),
-            mcpServerManager = mockManager,
+            serverManager = mockManager,
             eventBus = null,
         )
 
@@ -628,14 +619,14 @@ class McpExecutorTest {
             isConnectedValue = false, // Connection exists but not active
         )
 
-        val mockManager = MockMcpServerManager()
+        val mockManager = MockServerManager()
         mockManager.connections["test-server"] = mockConnection
 
         val executor = McpExecutor(
             id = "mcp-test",
             displayName = "Test MCP Executor",
             capabilities = ExecutorCapabilities(emptySet(), emptySet()),
-            mcpServerManager = mockManager,
+            serverManager = mockManager,
             eventBus = null,
         )
 
@@ -689,14 +680,14 @@ class McpExecutorTest {
             ),
         )
 
-        val mockManager = MockMcpServerManager()
+        val mockManager = MockServerManager()
         mockManager.connections["test-server"] = mockConnection
 
         val executor = McpExecutor(
             id = "mcp-test",
             displayName = "Test MCP Executor",
             capabilities = ExecutorCapabilities(emptySet(), emptySet()),
-            mcpServerManager = mockManager,
+            serverManager = mockManager,
             eventBus = null,
         )
 
@@ -820,13 +811,9 @@ class McpExecutorTest {
     }
 
     /**
-     * Mock MCP server manager for testing.
+     * Mock server manager for testing.
      */
-    private class MockMcpServerManager : McpServerManager(
-        toolRegistry = MockToolRegistry(),
-        eventBus = MockEventBus(),
-        eventSource = EventSource.AGENT,
-    ) {
+    private class MockServerManager : ServerManager {
         val connections = mutableMapOf<String, McpServerConnection>()
 
         override suspend fun getConnection(serverId: String): McpServerConnection? {
@@ -835,22 +822,6 @@ class McpExecutorTest {
 
         override suspend fun isConnected(serverId: String): Boolean {
             return connections[serverId]?.isConnected == true
-        }
-    }
-
-    /**
-     * Mock tool registry (not used in these tests).
-     */
-    private class MockToolRegistry : link.socket.ampere.agents.tools.registry.ToolRegistry(
-        logger = Logger.withTag("MockToolRegistry"),
-    )
-
-    /**
-     * Mock event bus (not used in these tests).
-     */
-    private class MockEventBus : EventSerialBus {
-        override suspend fun publish(event: link.socket.ampere.agents.events.Event) {
-            // No-op for tests
         }
     }
 }
