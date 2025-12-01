@@ -3,7 +3,7 @@ package link.socket.ampere.domain.ai.provider
 import com.aallam.openai.client.OpenAI as Client
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.tool.AITool_Claude
-import link.socket.ampere.shared.config.KotlinConfig
+import link.socket.ampere.core.config.KotlinConfig
 
 private const val ID = "anthropic"
 private const val NAME = "Anthropic"

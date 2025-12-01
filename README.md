@@ -32,7 +32,7 @@ An **Agent** is a specialized AI Chatbot with domain-specific knowledge for well
 - **System Prompt**: Defines the Agent's mindset and approach
 - **User Prompt**: Initial prompt with optional `HumanAssisted` API for dynamic input
 
-### [Bundled Agents](https://github.com/socket-link/ampere/tree/main/shared/src/commonMain/kotlin/link/socket/ampere/model/agent/bundled)
+### [Bundled Agents](https://github.com/socket-link/ampere/tree/main/ampere-core/src/commonMain/kotlin/link/socket/ampere/model/agent/bundled)
 
 - Save File Agent
 - Modify File Agent  
@@ -71,10 +71,10 @@ kdoctor
 1. Open the project in Android Studio
 2. Switch from **Android** to **Project** view
 3. Explore the main modules:
-    - `shared`: Common logic and Compose Multiplatform code
-    - `desktopApp`: Desktop application target
-    - `androidApp`: Android application target
-    - `iosApp`: Xcode project for iOS
+    - `ampere-core`: Common logic and Compose Multiplatform code
+    - `ampere-desktop`: Desktop application target
+    - `ampere-android`: Android application target
+    - `ampere-ios`: Xcode project for iOS
 
 ### Environment Variables
 - Add your AI providers' API keys to `local.properties`: 
@@ -92,7 +92,7 @@ openai_api_key=$YOUR_KEY
 
 ### Desktop
 
-**IDE**: Use `desktopApp` run configuration in Android Studio
+**IDE**: Use `ampere-desktop` run configuration in Android Studio
 
 **Command Line**:
 ```bash
@@ -105,8 +105,8 @@ openai_api_key=$YOUR_KEY
 
 ### Android
 
-**IDE**: 
-1. Select `androidApp` run configuration
+**IDE**:
+1. Select `ampere-android` run configuration
 2. Choose device/emulator
 3. Click **Run**
 
@@ -118,15 +118,15 @@ openai_api_key=$YOUR_KEY
 ### iOS
 
 **IDE**:
-1. Configure `iosApp` run configuration
+1. Configure `ampere-ios` run configuration
 2. Select target device
 3. Click **Run**
 
 **Physical Device Setup**:
 1. Find your `TEAM_ID`: `kdoctor --team-ids`
-2. Set `TEAM_ID` in `iosApp/Configuration/Config.xcconfig`
+2. Set `TEAM_ID` in `ampere-ios/Configuration/Config.xcconfig`
 3. Register device in Xcode
-4. Run `iosApp` configuration
+4. Run `ampere-ios` configuration
 
 For detailed device setup, see [Apple's documentation](https://developer.apple.com/documentation/xcode/running-your-app-on-a-device).
 

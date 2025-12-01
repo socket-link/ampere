@@ -193,15 +193,15 @@ Repository pattern with SQLDelight persistence:
 See [ampere-cli/README.md](ampere-cli/README.md) for complete documentation.
 
 ### Platform Targets
-- **Android**: Native Android app in `androidApp/`
-- **Desktop/JVM**: Desktop app in `desktopApp/`
-- **iOS**: iOS app in `iosApp/` (Xcode project)
+- **Android**: Native Android app in `ampere-android/`
+- **Desktop/JVM**: Desktop app in `ampere-desktop/`
+- **iOS**: iOS app in `ampere-ios/` (Xcode project)
 - **CLI**: Command-line tools in `ampere-cli/` (JVM-based)
 
 ## Directory Structure
 
 ```
-shared/src/commonMain/kotlin/link/socket/ampere/
+ampere-core/src/commonMain/kotlin/link/socket/ampere/
 ├── domain/
 │   ├── ai/
 │   │   ├── provider/          # AI providers (OpenAI, Anthropic, Google)
