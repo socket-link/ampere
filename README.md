@@ -120,7 +120,7 @@ Ampere supports configuring many models from different AI providers automatic fa
 - **OpenAI** 
     - GPT 5, 4.1, 4o, o3, o4-mini 
 
-Each provider configuration includes model capabilities, token limits, rate limits, and fallback options.
+Each provider configuration includes the model capabilities, token limits, rate limits, and fallback options.
 
 ## Observability
 
@@ -142,6 +142,18 @@ All agent activity is observable in real-time through the **Ampere CLI**.
 
 # View conversation threads
 ./ampere-cli/ampere thread list
+```
+
+**Example output:**
+```
+📋 TicketCreated    [pm-agent]           2025-12-01 14:23:01
+   FEAT-123: Add user authentication
+✅ TicketAssigned   [pm-agent]           2025-12-01 14:23:15
+   FEAT-123 → engineer-agent
+🔨 TicketStatusChanged [engineer-agent]  2025-12-01 14:23:45
+   FEAT-123: Ready → InProgress
+✅ TaskCompleted    [engineer-agent]     2025-12-01 14:27:33
+   Create User model - SUCCESS
 ```
 
 **[→ Complete CLI documentation](ampere-cli/README.md)**
@@ -179,7 +191,7 @@ ampere-ios/             # iOS application
 - **OpenAI Kotlin** - LLM integration
 - **Clikt + Mordant** - CLI tools with rich terminal rendering
 
-## More Resources
+### More Resources
 
 - **[Core Concepts](docs/CORE_CONCEPTS.md)** - Detailed explanation of Tickets, Tasks, Plans, Meetings, Outcomes, Knowledge
 - **[Agent Lifecycle](docs/AGENT_LIFECYCLE.md)** - How agents autonomously work through tasks with examples
@@ -188,7 +200,30 @@ ampere-ios/             # iOS application
 
 ## Development Guide
 
-### Build & Test
+### Prerequisites
+
+- macOS or Linux
+- [Android Studio](https://developer.android.com/studio) with [Kotlin Multiplatform plugin](https://plugins.jetbrains.com/plugin/14936-kotlin-multiplatform-mobile)
+- [Xcode](https://apps.apple.com/us/app/xcode/id497799835) (for iOS)
+
+**Verify Setup:**
+```bash
+brew install kdoctor
+kdoctor
+```
+
+### Configuration
+
+- **Generate API Key:** [Anthropic](https://console.anthropic.com/settings/keys) | [Google](https://aistudio.google.com/app/apikey) | [OpenAI](https://platform.openai.com/account/api-keys)
+- Provide the values for those keys in the `ampere/local.properties` file:
+  - This file is ignored by Git, so you can safely store your keys there
+```properties
+anthropic_api_key=YOUR_ANTHROPIC_KEY
+google_api_key=YOUR_GOOGLE_KEY
+openai_api_key=YOUR_OPENAI_KEY
+```
+
+### Build & Test Project
 
 ```bash
 # Build project
@@ -204,7 +239,7 @@ ampere-ios/             # iOS application
 ./gradlew ktlintCheck
 ```
 
-### Platform-Specific
+### Run Platform-Specific Targets
 
 ```bash
 # Desktop application
@@ -219,11 +254,14 @@ ampere-ios/             # iOS application
 ./gradlew jvmTest
 
 # Run iOS tests
+# 1. Get Team ID: kdoctor --team-ids
+# 2. Set TEAM_ID in ampere-ios/Configuration/Config.xcconfig
+# 3. Open ampere-ios/ampere-ios.xcodeproj in Xcode and run
 ./gradlew iosSimulatorArm64Test
 ./gradlew iosX64Test
 ```
 
-### API Documentation
+### Generate API Documentation
 
 ```bash
 # Generate API documentation
