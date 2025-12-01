@@ -109,7 +109,7 @@ class TicketOrchestrator(
                 ticketId = createdTicket.id,
                 title = createdTicket.title,
                 description = createdTicket.description,
-                type = createdTicket.type,
+                ticketType = createdTicket.type,
                 priority = createdTicket.priority,
                 eventSource = EventSource.Agent(createdByAgentId),
                 timestamp = now,

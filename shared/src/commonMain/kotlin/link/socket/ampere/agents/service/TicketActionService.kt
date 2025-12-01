@@ -59,7 +59,7 @@ class TicketActionService(
                         ticketId = ticket.id,
                         title = ticket.title,
                         description = ticket.description,
-                        type = ticket.type,
+                        ticketType = ticket.type,
                         priority = ticket.priority,
                         eventSource = EventSource.Human,
                         timestamp = now,
