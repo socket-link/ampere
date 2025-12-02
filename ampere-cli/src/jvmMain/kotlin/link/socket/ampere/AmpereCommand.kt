@@ -24,11 +24,15 @@ import com.github.ajalt.clikt.core.CliktCommand
 class AmpereCommand : CliktCommand(
     name = "ampere",
     help = """
-        Animated Multi-Agent (Prompting Technique) -> AniMA
-        AniMA Model Protocol -> AMP
-        AMP Example Runtime Environment -> AMPERE
+        AMPERE Interactive CLI
 
-        AMPERE is a tool for running AniMA simulations in a real-time, observable environment.
+        Framework hierarchy:
+        • AniMA - Animated Multi-Agent prompting framework
+        • AMP - AniMA Model Protocol specification
+        • AMPERE - AMP Example Runtime Environment (this implementation)
+
+        AMPERE provides CLI tools for observing and affecting an autonomous
+        multi-agent environment with built-in coordination, memory, and learning.
     """.trimIndent()
 ) {
     override fun run() = Unit

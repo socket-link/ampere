@@ -22,7 +22,7 @@ import link.socket.ampere.agents.core.memory.OutcomeMemoryRepository
 /**
  * Root command for viewing outcome memory.
  *
- * Provides access to the substrate's accumulated execution experience.
+ * Provides access to the environment's accumulated execution experience.
  */
 class OutcomesCommand(
     outcomeRepository: OutcomeMemoryRepository,

@@ -9,7 +9,7 @@ import com.github.ajalt.mordant.terminal.Terminal as MordantTerminal
 /**
  * Registry of observation commands available in the REPL.
  *
- * These commands provide sensory data about the substrate's state
+ * These commands provide sensory data about the environment's state
  * (events, threads, tickets, outcomes) and can be interrupted
  * gracefully without terminating the session.
  */
