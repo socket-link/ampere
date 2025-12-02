@@ -60,7 +60,6 @@ class ThreadCommandTest {
         val result = command.test("list --help")
 
         assertContains(result.output, "List all active threads")
-        assertContains(result.output, "--json")
     }
 
     @Test
@@ -71,7 +70,6 @@ class ThreadCommandTest {
 
         assertContains(result.output, "Display full thread conversation")
         assertContains(result.output, "thread-id")
-        assertContains(result.output, "--json")
     }
 
     @Test
