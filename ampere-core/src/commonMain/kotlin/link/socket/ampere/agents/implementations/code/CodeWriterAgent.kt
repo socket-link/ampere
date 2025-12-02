@@ -811,7 +811,7 @@ open class CodeWriterAgent(
         val ticket = createTicketForTask(task)
 
         // Create workspace (use current directory for now)
-        val workspace = ExecutionWorkspace(workingDirectory = ".")
+        val workspace = ExecutionWorkspace(baseDirectory = ".")
 
         return ExecutionRequest(
             context = ExecutionContext.Code.WriteCode(
@@ -848,7 +848,10 @@ open class CodeWriterAgent(
             type = TicketType.TASK,
             priority = TicketPriority.MEDIUM,
             status = TicketStatus.InProgress,
-            assignedAgentId = task.assignedTo?.agentId ?: id,
+            assignedAgentId = when (val assignedTo = task.assignedTo) {
+                is AssignedTo.Agent -> assignedTo.agentId
+                else -> id
+            },
             createdByAgentId = id,
             createdAt = now,
             updatedAt = now,
@@ -959,7 +962,7 @@ open class CodeWriterAgent(
                 description = "Task execution",
                 type = TicketType.TASK,
                 priority = TicketPriority.MEDIUM,
-                status = TicketStatus.Failed,
+                status = TicketStatus.Blocked,
                 assignedAgentId = id,
                 createdByAgentId = id,
                 createdAt = now,
