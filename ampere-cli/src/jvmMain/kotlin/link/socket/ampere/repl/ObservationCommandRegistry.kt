@@ -16,7 +16,9 @@ import com.github.ajalt.mordant.terminal.Terminal as MordantTerminal
 class ObservationCommandRegistry(
     private val context: AmpereContext,
     private val terminal: Terminal,
-    private val executor: CommandExecutor
+    private val executor: CommandExecutor,
+    private val statusBar: StatusBar,
+    private val filterCycler: EventFilterCycler
 ) {
     private val renderer = CLIRenderer(MordantTerminal())
 

@@ -49,6 +49,13 @@ class CommandExecutor(
         currentJob = null
     }
 
+    /**
+     * Check if a command is currently executing.
+     */
+    fun isExecuting(): Boolean {
+        return currentJob != null && currentJob?.isActive == true
+    }
+
     fun close() {
         scope.cancel()
     }
