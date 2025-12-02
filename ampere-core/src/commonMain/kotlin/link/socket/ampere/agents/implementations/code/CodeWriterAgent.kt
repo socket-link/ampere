@@ -37,7 +37,7 @@ import link.socket.ampere.domain.util.toClientModelId
  * satisfy the initial milestone requirements. It is multiplatform-friendly as
  * it only relies on commonMain types and contracts.
  */
-class CodeWriterAgent(
+open class CodeWriterAgent(
     override val initialState: AgentState,
     override val agentConfiguration: AgentConfiguration,
     private val toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode>,
