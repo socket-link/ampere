@@ -37,6 +37,7 @@ class ReplSession(
         .variable(LineReader.HISTORY_FILE, historyFile)
         .completer(AmpereCompleter(context))
         .build()
+        .also { installCustomKeyBindings(it) }
 
     private val executor = CommandExecutor(terminal)
     private val statusBar = StatusBar(terminal)
@@ -74,6 +75,31 @@ class ReplSession(
 
         // Install signal handler for Ctrl+C
         installSignalHandler()
+    }
+
+    /**
+     * Install custom key bindings for Ctrl+L and Ctrl+Space to clear screen.
+     */
+    private fun installCustomKeyBindings(reader: LineReader) {
+        // Create a custom widget for clearing the screen
+        val clearScreenWidget = org.jline.reader.Widget {
+            clearScreen()
+            true  // Return true to indicate the widget handled the key
+        }
+
+        reader.getWidgets()["clear-screen-custom"] = clearScreenWidget
+
+        // Bind Ctrl+L (already bound by default in JLine, but we override it)
+        reader.getKeyMaps()["main"]?.bind(
+            org.jline.reader.Reference("clear-screen-custom"),
+            "\u000C"
+        )
+
+        // Bind Ctrl+Space
+        reader.getKeyMaps()["main"]?.bind(
+            org.jline.reader.Reference("clear-screen-custom"),
+            "\u0000"
+        )
     }
 
     /**
@@ -184,11 +210,45 @@ class ReplSession(
             'h', '?' -> "help"
             'c' -> "clear"
             'q' -> "exit"
+            // Number keys for quick dashboard access
+            '1' -> "status"
+            '2' -> "thread list"
+            '3' -> "outcomes stats"
+            '4' -> "watch"
+            '5' -> "outcomes ticket"  // Most recent would need implementation
+            '\u000C' -> {  // Ctrl+L
+                clearScreen()
+                null
+            }
+            '\u0000' -> {  // Ctrl+Space
+                clearScreen()
+                null
+            }
             'i', 'a' -> {
                 modeManager.enterInsertMode()
                 null  // Don't execute, just switch mode
             }
-            '\u001B' -> {  // Escape key
+            '\u001B' -> {  // Escape key - might be escape sequence
+                // Peek ahead to see if this is an escape sequence
+                if (terminal.reader().peek(100) > 0) {
+                    // Read the next character
+                    val next = terminal.reader().read()
+                    if (next == '['.code) {
+                        // This is a CSI sequence, ignore it
+                        return null
+                    } else if (next >= '1'.code && next <= '5'.code) {
+                        // Ctrl+number sequence (Alt+number on some terminals)
+                        return when (next.toChar()) {
+                            '1' -> "status"
+                            '2' -> "thread list"
+                            '3' -> "outcomes stats"
+                            '4' -> "watch"
+                            '5' -> "outcomes ticket"
+                            else -> null
+                        }
+                    }
+                }
+                // Regular escape handling
                 if (modeManager.handleEscape()) {
                     throw EmergencyExitException()
                 }
@@ -204,6 +264,14 @@ class ReplSession(
                 null
             }
         }
+    }
+
+    /**
+     * Clear the terminal screen.
+     */
+    private fun clearScreen() {
+        terminal.puts(InfoCmp.Capability.clear_screen)
+        terminal.flush()
     }
 
     private fun readInsertModeInput(): String? {

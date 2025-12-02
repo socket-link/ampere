@@ -14,22 +14,34 @@ class StatusBar(
     private var currentMode: Mode = Mode.INSERT
     private var currentFilter: String? = null
     private var customMessage: String? = null
+    private var eventCount: Int = 0
 
-    fun render(mode: Mode, filter: String? = null, message: String? = null) {
+    fun render(mode: Mode, filter: String? = null, message: String? = null, eventCount: Int = 0) {
         currentMode = mode
         currentFilter = filter
         customMessage = message
+        this.eventCount = eventCount
 
         val width = terminal.width
-        val separator = "─".repeat(width.coerceAtLeast(1))
+        val separator = buildSeparator(width)
 
+        // Top separator
         terminal.writer().println(separator)
 
-        // Render mode and status line
+        // Status line with mode and context
         val statusLine = buildStatusLine()
         terminal.writer().println(statusLine)
 
         // Render prompt based on mode
+        renderPrompt(mode)
+    }
+
+    private fun buildSeparator(width: Int): String {
+        // Thin line separator
+        return TerminalColors.dim("─".repeat(width.coerceAtLeast(1)))
+    }
+
+    private fun renderPrompt(mode: Mode) {
         val prompt = when (mode) {
             Mode.NORMAL -> TerminalColors.highlight("⚡") + " "
             Mode.INSERT -> TerminalColors.highlight("⚡") + " "
@@ -41,21 +53,67 @@ class StatusBar(
     }
 
     private fun buildStatusLine(): String {
+        val modeIndicator = buildModeIndicator()
+        val contextInfo = buildContextInfo()
+        val hints = buildHints()
+
+        val fullLine = "  $modeIndicator$contextInfo$hints"
+
+        // Truncate if too wide for terminal
+        val maxWidth = terminal.width - 2
+        return if (fullLine.length > maxWidth) {
+            fullLine.substring(0, maxWidth) + "…"
+        } else {
+            fullLine
+        }
+    }
+
+    private fun buildModeIndicator(): String {
         return when (currentMode) {
-            Mode.NORMAL -> {
-                "  ${TerminalColors.emphasis("-- NORMAL --")} Single-key commands active (i=insert, ?=help)"
-            }
-            Mode.INSERT -> {
-                "  ${TerminalColors.dim("-- INSERT --")} Type commands (Esc=normal mode)"
-            }
+            Mode.NORMAL -> TerminalColors.emphasis("-- NORMAL --")
+            Mode.INSERT -> TerminalColors.dim("-- INSERT --")
+            Mode.OBSERVING -> TerminalColors.emphasis("-- OBSERVING --")
+        }
+    }
+
+    private fun buildContextInfo(): String {
+        return when (currentMode) {
             Mode.OBSERVING -> {
-                val filterInfo = if (currentFilter != null) {
+                val filterDisplay = if (currentFilter != null) {
                     " | Filter: ${TerminalColors.emphasis(currentFilter!!)}"
                 } else {
                     ""
                 }
-                "  ${TerminalColors.emphasis("-- OBSERVING --")} Press Enter to stop | Ctrl+E to cycle filter$filterInfo"
+                val countDisplay = if (eventCount > 0) {
+                    " | Events: ${TerminalColors.dim(eventCount.toString())}"
+                } else {
+                    ""
+                }
+                "$filterDisplay$countDisplay"
+            }
+            else -> ""
+        }
+    }
+
+    private fun buildHints(): String {
+        return when (currentMode) {
+            Mode.NORMAL -> {
+                " ${TerminalColors.dim("(w/s/t/o=commands, i=insert, ?=help)")}"
+            }
+            Mode.INSERT -> {
+                " ${TerminalColors.dim("(Esc=normal, Tab=complete)")}"
+            }
+            Mode.OBSERVING -> {
+                " ${TerminalColors.dim("(Enter=stop, Ctrl+E=filter, Ctrl+D=disconnect)")}"
             }
         }
+    }
+
+    /**
+     * Update event count during observation.
+     */
+    fun updateEventCount(count: Int) {
+        eventCount = count
+        // Optionally re-render just the count part
     }
 }
