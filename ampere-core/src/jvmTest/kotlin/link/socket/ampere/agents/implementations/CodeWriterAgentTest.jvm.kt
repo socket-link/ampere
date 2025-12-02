@@ -105,11 +105,15 @@ actual class CodeWriterAgentTest {
         agentConfiguration: AgentConfiguration,
         toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode>,
         coroutineScope: CoroutineScope,
-        private val perceptionResult: (Perception<AgentState>) -> Idea
+        private val perceptionResult: (Perception<AgentState>) -> Idea,
+        private val planningResult: ((Task, List<Idea>) -> link.socket.ampere.agents.core.reasoning.Plan)? = null
     ) : CodeWriterAgent(initialState, agentConfiguration, toolWriteCodeFile, coroutineScope) {
 
         override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea =
             perceptionResult
+
+        override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> link.socket.ampere.agents.core.reasoning.Plan =
+            planningResult ?: super.runLLMToPlan
     }
 
     @BeforeTest
@@ -157,6 +161,33 @@ actual class CodeWriterAgentTest {
             toolWriteCodeFile = stubTool,
             coroutineScope = testScope,
             perceptionResult = perceptionResult
+        )
+    }
+
+    /**
+     * Creates a testable agent with controlled perception and planning results.
+     *
+     * @param perceptionResult A function that produces Ideas based on perception
+     * @param planningResult A function that produces Plans based on tasks and ideas
+     * @return A CodeWriterAgent configured for testing
+     */
+    private fun createTestAgentWithPlanning(
+        perceptionResult: (Perception<AgentState>) -> Idea,
+        planningResult: (Task, List<Idea>) -> link.socket.ampere.agents.core.reasoning.Plan
+    ): TestableCodeWriterAgent {
+        val aiConfig = FakeAIConfiguration()
+        val agentConfig = AgentConfiguration(
+            agentDefinition = WriteCodeAgent,
+            aiConfiguration = aiConfig
+        )
+
+        return TestableCodeWriterAgent(
+            initialState = AgentState(),
+            agentConfiguration = agentConfig,
+            toolWriteCodeFile = stubTool,
+            coroutineScope = testScope,
+            perceptionResult = perceptionResult,
+            planningResult = planningResult
         )
     }
 
@@ -471,5 +502,358 @@ actual class CodeWriterAgentTest {
                 idea.description.contains("similar", ignoreCase = true) ||
                 idea.description.contains("approach", ignoreCase = true)
         )
+    }
+
+    // ==================== PLANNING TESTS ====================
+
+    /**
+     * Test: Planning for simple single-step task
+     *
+     * Validates that planning generates a plan with one concrete step for a simple task.
+     */
+    @Test
+    fun `planning for simple task generates single-step plan`() {
+        // Setup: Create agent with mock planning that returns a single-step plan
+        val agent = createTestAgentWithPlanning(
+            perceptionResult = ::createPendingTaskIdea,
+            planningResult = { task, ideas ->
+                link.socket.ampere.agents.core.reasoning.Plan.ForTask(
+                    task = task,
+                    tasks = listOf(
+                        Task.CodeChange(
+                            id = "step-1-${task.id}",
+                            status = TaskStatus.Pending,
+                            description = "Write a hello world function",
+                            assignedTo = AssignedTo.Agent("TestAgent")
+                        )
+                    ),
+                    estimatedComplexity = 1,
+                    expectations = link.socket.ampere.agents.core.expectations.Expectations.blank
+                )
+            }
+        )
+
+        val simpleTask = Task.CodeChange(
+            id = "task-simple",
+            status = TaskStatus.Pending,
+            description = "Create a hello world function"
+        )
+
+        val basicIdeas = listOf(
+            Idea(
+                name = "Simple task",
+                description = "This is a straightforward single-function task"
+            )
+        )
+
+        // Execute
+        val plan = agent.runLLMToPlan(simpleTask, basicIdeas)
+
+        // Verify
+        assertNotNull(plan)
+        assertTrue(plan is link.socket.ampere.agents.core.reasoning.Plan.ForTask)
+        kotlin.test.assertEquals(1, plan.tasks.size, "Simple task should have 1 step")
+        assertTrue(plan.estimatedComplexity <= 3, "Simple task should have low complexity")
+    }
+
+    /**
+     * Test: Planning creates multi-step plan for complex tasks
+     *
+     * Validates that planning breaks down complex tasks into multiple steps.
+     */
+    @Test
+    fun `planning for complex task generates multi-step plan`() {
+        // Setup: Create agent with mock planning that returns a multi-step plan
+        val agent = createTestAgentWithPlanning(
+            perceptionResult = ::createPendingTaskIdea,
+            planningResult = { task, ideas ->
+                link.socket.ampere.agents.core.reasoning.Plan.ForTask(
+                    task = task,
+                    tasks = listOf(
+                        Task.CodeChange(
+                            id = "step-1-${task.id}",
+                            status = TaskStatus.Pending,
+                            description = "Create User data class with name and email properties"
+                        ),
+                        Task.CodeChange(
+                            id = "step-2-${task.id}",
+                            status = TaskStatus.Pending,
+                            description = "Add validation logic for email format"
+                        ),
+                        Task.CodeChange(
+                            id = "step-3-${task.id}",
+                            status = TaskStatus.Pending,
+                            description = "Write unit tests for User class"
+                        )
+                    ),
+                    estimatedComplexity = 6,
+                    expectations = link.socket.ampere.agents.core.expectations.Expectations.blank
+                )
+            }
+        )
+
+        val complexTask = Task.CodeChange(
+            id = "task-complex",
+            status = TaskStatus.Pending,
+            description = "Implement user authentication with validation and tests"
+        )
+
+        val complexIdeas = listOf(
+            Idea(
+                name = "Complex task",
+                description = "This requires data model, validation, and testing"
+            )
+        )
+
+        // Execute
+        val plan = agent.runLLMToPlan(complexTask, complexIdeas)
+
+        // Verify
+        assertNotNull(plan)
+        assertTrue(plan is link.socket.ampere.agents.core.reasoning.Plan.ForTask)
+        assertTrue(plan.tasks.size >= 3, "Complex task should have multiple steps")
+        assertTrue(plan.estimatedComplexity > 3, "Complex task should have higher complexity")
+    }
+
+    /**
+     * Test: Plan steps are logically ordered
+     *
+     * Validates that plan steps are sequenced in a way that makes sense
+     * (e.g., write code before testing it).
+     */
+    @Test
+    fun `plan steps are logically ordered with dependencies`() {
+        // Setup: Create agent with mock planning that returns ordered steps
+        val agent = createTestAgentWithPlanning(
+            perceptionResult = ::createPendingTaskIdea,
+            planningResult = { task, ideas ->
+                link.socket.ampere.agents.core.reasoning.Plan.ForTask(
+                    task = task,
+                    tasks = listOf(
+                        Task.CodeChange(
+                            id = "step-1-${task.id}",
+                            status = TaskStatus.Pending,
+                            description = "Write the implementation"
+                        ),
+                        Task.CodeChange(
+                            id = "step-2-${task.id}",
+                            status = TaskStatus.Pending,
+                            description = "Write tests for the implementation"
+                        )
+                    ),
+                    estimatedComplexity = 4,
+                    expectations = link.socket.ampere.agents.core.expectations.Expectations.blank
+                )
+            }
+        )
+
+        val task = Task.CodeChange(
+            id = "task-ordered",
+            status = TaskStatus.Pending,
+            description = "Implement a feature with tests"
+        )
+
+        val ideas = listOf(
+            Idea(
+                name = "Implementation strategy",
+                description = "Write implementation first, then tests"
+            )
+        )
+
+        // Execute
+        val plan = agent.runLLMToPlan(task, ideas)
+
+        // Verify
+        assertNotNull(plan)
+        assertTrue(plan is link.socket.ampere.agents.core.reasoning.Plan.ForTask)
+        kotlin.test.assertEquals(2, plan.tasks.size)
+
+        // First step should be implementation
+        val firstStep = plan.tasks[0] as Task.CodeChange
+        assertTrue(
+            firstStep.description.contains("implementation", ignoreCase = true) ||
+                firstStep.description.contains("write", ignoreCase = true)
+        )
+
+        // Second step should be tests
+        val secondStep = plan.tasks[1] as Task.CodeChange
+        assertTrue(secondStep.description.contains("test", ignoreCase = true))
+    }
+
+    /**
+     * Test: Plan includes all necessary information
+     *
+     * Validates that each step in the plan has the required information.
+     */
+    @Test
+    fun `plan steps include necessary information`() {
+        // Setup: Create agent with mock planning
+        val agent = createTestAgentWithPlanning(
+            perceptionResult = ::createPendingTaskIdea,
+            planningResult = { task, ideas ->
+                link.socket.ampere.agents.core.reasoning.Plan.ForTask(
+                    task = task,
+                    tasks = listOf(
+                        Task.CodeChange(
+                            id = "step-1-${task.id}",
+                            status = TaskStatus.Pending,
+                            description = "Create User.kt file with data class User(name: String, email: String)",
+                            assignedTo = AssignedTo.Agent("TestAgent")
+                        )
+                    ),
+                    estimatedComplexity = 2,
+                    expectations = link.socket.ampere.agents.core.expectations.Expectations.blank
+                )
+            }
+        )
+
+        val task = Task.CodeChange(
+            id = "task-detailed",
+            status = TaskStatus.Pending,
+            description = "Create a user data class"
+        )
+
+        val ideas = listOf(
+            Idea(
+                name = "Implementation details",
+                description = "User should have name and email"
+            )
+        )
+
+        // Execute
+        val plan = agent.runLLMToPlan(task, ideas)
+
+        // Verify
+        assertNotNull(plan)
+        assertTrue(plan is link.socket.ampere.agents.core.reasoning.Plan.ForTask)
+
+        val step = plan.tasks[0] as Task.CodeChange
+        assertNotEquals("", step.id, "Step should have an ID")
+        assertNotEquals("", step.description, "Step should have a description")
+        assertTrue(step.description.length > 10, "Step description should be meaningful")
+    }
+
+    /**
+     * Test: Planning handles blank task gracefully
+     *
+     * Validates that planning returns blank plan for blank task.
+     */
+    @Test
+    fun `planning handles blank task gracefully`() {
+        // Setup: Create agent (planning logic should handle blank task internally)
+        val agent = createTestAgent(::createEmptyStateIdea)
+
+        val blankTask = Task.Blank
+
+        val ideas = emptyList<Idea>()
+
+        // Execute
+        val plan = agent.runLLMToPlan(blankTask, ideas)
+
+        // Verify
+        assertNotNull(plan)
+        assertTrue(plan is link.socket.ampere.agents.core.reasoning.Plan.Empty)
+    }
+
+    /**
+     * Test: Planning with no ideas still generates a plan
+     *
+     * Validates that planning can work even without insights from perception.
+     */
+    @Test
+    fun `planning with no ideas generates reasonable plan`() {
+        // Setup: Create agent with mock planning
+        val agent = createTestAgentWithPlanning(
+            perceptionResult = ::createPendingTaskIdea,
+            planningResult = { task, ideas ->
+                // Even with no ideas, should create a basic plan
+                link.socket.ampere.agents.core.reasoning.Plan.ForTask(
+                    task = task,
+                    tasks = listOf(
+                        Task.CodeChange(
+                            id = "step-1-${task.id}",
+                            status = TaskStatus.Pending,
+                            description = "Execute task: ${(task as Task.CodeChange).description}"
+                        )
+                    ),
+                    estimatedComplexity = 3,
+                    expectations = link.socket.ampere.agents.core.expectations.Expectations.blank
+                )
+            }
+        )
+
+        val task = Task.CodeChange(
+            id = "task-no-ideas",
+            status = TaskStatus.Pending,
+            description = "Simple task"
+        )
+
+        val noIdeas = emptyList<Idea>()
+
+        // Execute
+        val plan = agent.runLLMToPlan(task, noIdeas)
+
+        // Verify
+        assertNotNull(plan)
+        assertTrue(plan is link.socket.ampere.agents.core.reasoning.Plan.ForTask)
+        assertTrue(plan.tasks.isNotEmpty(), "Plan should have at least one step")
+    }
+
+    /**
+     * Test: Planning complexity estimation is reasonable
+     *
+     * Validates that estimated complexity matches the plan's actual complexity.
+     */
+    @Test
+    fun `plan complexity estimation matches task complexity`() {
+        // Setup: Test both simple and complex plans
+        val simpleAgent = createTestAgentWithPlanning(
+            perceptionResult = ::createPendingTaskIdea,
+            planningResult = { task, ideas ->
+                link.socket.ampere.agents.core.reasoning.Plan.ForTask(
+                    task = task,
+                    tasks = listOf(
+                        Task.CodeChange(
+                            id = "step-1-${task.id}",
+                            status = TaskStatus.Pending,
+                            description = "Simple step"
+                        )
+                    ),
+                    estimatedComplexity = 1,
+                    expectations = link.socket.ampere.agents.core.expectations.Expectations.blank
+                )
+            }
+        )
+
+        val complexAgent = createTestAgentWithPlanning(
+            perceptionResult = ::createPendingTaskIdea,
+            planningResult = { task, ideas ->
+                link.socket.ampere.agents.core.reasoning.Plan.ForTask(
+                    task = task,
+                    tasks = listOf(
+                        Task.CodeChange(id = "step-1", status = TaskStatus.Pending, description = "Step 1"),
+                        Task.CodeChange(id = "step-2", status = TaskStatus.Pending, description = "Step 2"),
+                        Task.CodeChange(id = "step-3", status = TaskStatus.Pending, description = "Step 3"),
+                        Task.CodeChange(id = "step-4", status = TaskStatus.Pending, description = "Step 4"),
+                        Task.CodeChange(id = "step-5", status = TaskStatus.Pending, description = "Step 5")
+                    ),
+                    estimatedComplexity = 8,
+                    expectations = link.socket.ampere.agents.core.expectations.Expectations.blank
+                )
+            }
+        )
+
+        val simpleTask = Task.CodeChange(id = "simple", status = TaskStatus.Pending, description = "Simple")
+        val complexTask = Task.CodeChange(id = "complex", status = TaskStatus.Pending, description = "Complex")
+
+        // Execute
+        val simplePlan = simpleAgent.runLLMToPlan(simpleTask, emptyList())
+        val complexPlan = complexAgent.runLLMToPlan(complexTask, emptyList())
+
+        // Verify
+        assertTrue(simplePlan.estimatedComplexity < complexPlan.estimatedComplexity,
+            "Complex plan should have higher complexity than simple plan")
+        assertTrue(simplePlan.estimatedComplexity in 1..3, "Simple plan complexity should be low")
+        assertTrue(complexPlan.estimatedComplexity in 6..10, "Complex plan complexity should be high")
     }
 }

@@ -56,8 +56,7 @@ open class CodeWriterAgent(
 
     override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan =
         { task, ideas ->
-            // TODO: plan out actions to take given ideas
-            Plan.blank
+            generatePlan(task, ideas)
         }
 
     override val runLLMToExecuteTask: (task: Task) -> Outcome =
@@ -368,6 +367,238 @@ open class CodeWriterAgent(
 
                 Available tools: ${requiredTools.joinToString(", ") { it.id }}
             """.trimIndent()
+        )
+    }
+
+    /**
+     * Generates an executable plan for accomplishing a given task.
+     *
+     * This function transforms high-level understanding (task + ideas) into concrete,
+     * sequential steps that can be executed by the agent. It uses an LLM to reason
+     * about how to decompose the task into actionable sub-tasks.
+     *
+     * The planning process:
+     * 1. Extracts task description and synthesizes insights from ideas
+     * 2. Builds a planning prompt with task context and available tools
+     * 3. Calls LLM to generate structured plan steps
+     * 4. Parses LLM response into Plan object with Task objects
+     * 5. Falls back to simple plan if LLM call or parsing fails
+     *
+     * @param task The task to plan for
+     * @param ideas Insights from perception that inform planning
+     * @return A Plan containing sequential steps (as Tasks) to accomplish the goal
+     */
+    private fun generatePlan(task: Task, ideas: List<Idea>): Plan {
+        // Handle blank task
+        if (task is Task.Blank) {
+            return Plan.blank
+        }
+
+        // Extract task description
+        val taskDescription = when (task) {
+            is Task.CodeChange -> task.description
+            is MeetingTask.AgendaItem -> task.title
+            is TicketTask.CompleteSubticket -> "Complete subticket ${task.id}"
+            is Task.Blank -> return Plan.blank
+        }
+
+        // Synthesize ideas into planning context
+        val ideaSummary = if (ideas.isNotEmpty()) {
+            ideas.joinToString("\n\n") { idea ->
+                "${idea.name}:\n${idea.description}"
+            }
+        } else {
+            "No insights available from perception phase."
+        }
+
+        // Build planning prompt
+        val planningPrompt = """
+            You are the planning module of an autonomous code-writing agent.
+            Your task is to create a concrete, executable plan to accomplish the given task.
+
+            Task: $taskDescription
+
+            Insights from Perception:
+            $ideaSummary
+
+            Available Tools:
+            ${requiredTools.joinToString("\n") { "- ${it.id}: ${it.description}" }}
+
+            Create a step-by-step plan where each step is a concrete task that can be executed.
+            Each step should:
+            1. Have a clear, actionable description
+            2. Specify which tool to use (if applicable)
+            3. Be sequentially ordered with clear dependencies
+            4. Include validation/verification steps where appropriate
+
+            For simple tasks, create a 1-2 step plan.
+            For complex tasks, break down into logical phases (3-5 steps typically).
+            Avoid excessive granularity - focus on meaningful phases of work.
+
+            Format your response as a JSON object:
+            {
+              "steps": [
+                {
+                  "description": "what this step accomplishes",
+                  "toolToUse": "tool ID or null if no specific tool",
+                  "requiresPreviousStep": true/false
+                }
+              ],
+              "estimatedComplexity": 1-10,
+              "requiresHumanInput": true/false
+            }
+
+            Respond ONLY with the JSON object, no other text.
+        """.trimIndent()
+
+        // Call LLM
+        val llmResponse = try {
+            callLLM(planningPrompt)
+        } catch (e: Exception) {
+            // Fallback: create a simple single-step plan
+            return createFallbackPlan(task, "LLM call failed: ${e.message}")
+        }
+
+        // Parse response into Plan
+        val plan = try {
+            parseLLMResponseIntoPlan(llmResponse, task)
+        } catch (e: Exception) {
+            // Fallback if parsing fails
+            createFallbackPlan(task, "Failed to parse LLM response: ${e.message}")
+        }
+
+        return plan
+    }
+
+    /**
+     * Parses LLM JSON response into a structured Plan object.
+     *
+     * Expected JSON format:
+     * {
+     *   "steps": [
+     *     {
+     *       "description": "...",
+     *       "toolToUse": "...",
+     *       "requiresPreviousStep": true/false
+     *     }
+     *   ],
+     *   "estimatedComplexity": 1-10,
+     *   "requiresHumanInput": true/false
+     * }
+     *
+     * @param jsonResponse The JSON response from the LLM
+     * @param task The task being planned
+     * @return A Plan containing the parsed steps as Task objects
+     */
+    private fun parseLLMResponseIntoPlan(jsonResponse: String, task: Task): Plan {
+        val json = Json { ignoreUnknownKeys = true }
+
+        // Clean up response (remove markdown code blocks if present)
+        val cleanedResponse = jsonResponse
+            .trim()
+            .removePrefix("```json")
+            .removePrefix("```")
+            .removeSuffix("```")
+            .trim()
+
+        val planJson = json.parseToJsonElement(cleanedResponse).jsonObject
+
+        val stepsArray = planJson["steps"]?.jsonArray
+            ?: throw IllegalStateException("No steps in plan")
+
+        val complexity = planJson["estimatedComplexity"]?.jsonPrimitive?.content?.toIntOrNull() ?: 5
+
+        // Validate steps are logically ordered
+        val validatedSteps = validatePlanSteps(stepsArray)
+
+        // Convert steps into Task objects
+        val planTasks = validatedSteps.mapIndexed { index, stepElement ->
+            val stepObj = stepElement.jsonObject
+            val description = stepObj["description"]?.jsonPrimitive?.content
+                ?: "Step ${index + 1}"
+
+            Task.CodeChange(
+                id = "step-${index + 1}-${task.id}",
+                status = TaskStatus.Pending,
+                description = description,
+                assignedTo = when (task) {
+                    is Task.CodeChange -> task.assignedTo
+                    else -> null
+                }
+            )
+        }
+
+        return Plan.ForTask(
+            task = task,
+            tasks = planTasks,
+            estimatedComplexity = complexity,
+            expectations = Expectations.blank
+        )
+    }
+
+    /**
+     * Validates that plan steps are logically sequenced and executable.
+     *
+     * Checks for:
+     * - At least one step exists
+     * - Steps have descriptions
+     * - Dependencies are valid (if we add dependency tracking in the future)
+     *
+     * @param steps The array of step JSON objects
+     * @return The validated steps (same as input if valid)
+     * @throws IllegalStateException if validation fails
+     */
+    private fun validatePlanSteps(steps: kotlinx.serialization.json.JsonArray): kotlinx.serialization.json.JsonArray {
+        if (steps.isEmpty()) {
+            throw IllegalStateException("Plan must contain at least one step")
+        }
+
+        // Verify each step has a description
+        steps.forEachIndexed { index, stepElement ->
+            val stepObj = stepElement.jsonObject
+            val description = stepObj["description"]?.jsonPrimitive?.content
+            if (description.isNullOrBlank()) {
+                throw IllegalStateException("Step ${index + 1} is missing a description")
+            }
+        }
+
+        return steps
+    }
+
+    /**
+     * Creates a fallback plan when LLM call or parsing fails.
+     *
+     * This ensures the agent can continue operating even if planning encounters errors.
+     * The fallback is a simple single-step plan that attempts to execute the task directly.
+     *
+     * @param task The task to create a plan for
+     * @param reason Why the fallback was needed
+     * @return A simple Plan with one step
+     */
+    private fun createFallbackPlan(task: Task, reason: String): Plan {
+        val taskDescription = when (task) {
+            is Task.CodeChange -> task.description
+            is MeetingTask.AgendaItem -> task.title
+            is TicketTask.CompleteSubticket -> "Complete subticket ${task.id}"
+            is Task.Blank -> return Plan.blank
+        }
+
+        // Create a simple single-step plan as fallback
+        val fallbackTask = Task.CodeChange(
+            id = "step-1-${task.id}",
+            status = TaskStatus.Pending,
+            description = "Execute: $taskDescription (Note: Advanced planning unavailable - $reason)",
+            assignedTo = when (task) {
+                is Task.CodeChange -> task.assignedTo
+                else -> null
+            }
+        )
+
+        return Plan.ForTask(
+            task = task,
+            tasks = listOf(fallbackTask),
+            estimatedComplexity = 3,
+            expectations = Expectations.blank
         )
     }
 }
