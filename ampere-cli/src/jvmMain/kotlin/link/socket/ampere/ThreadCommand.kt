@@ -3,13 +3,9 @@ package link.socket.ampere
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.arguments.argument
-import com.github.ajalt.clikt.parameters.options.flag
-import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.encodeToString
 import link.socket.ampere.agents.events.messages.ThreadViewService
-import link.socket.ampere.data.DEFAULT_JSON
 
 /**
  * Root command for thread operations. Doesn't do anything itself,
@@ -43,28 +39,22 @@ class ThreadListCommand(
     name = "list",
     help = "List all active threads"
 ) {
-    private val jsonOutput by option("--json", "-j", help = "Output as JSON").flag()
-
     override fun run() = runBlocking {
         val result = threadViewService.listActiveThreads()
 
         result.fold(
             onSuccess = { threads ->
-                if (jsonOutput) {
-                    renderer.renderJson(DEFAULT_JSON.encodeToString(threads))
-                } else {
-                    val threadItems = threads.map { thread ->
-                        link.socket.ampere.renderer.CLIRenderer.ThreadListItem(
-                            threadId = thread.threadId,
-                            title = thread.title,
-                            messageCount = thread.messageCount,
-                            participantCount = thread.participantIds.size,
-                            lastActivity = thread.lastActivity,
-                            hasUnreadEscalations = thread.hasUnreadEscalations
-                        )
-                    }
-                    renderer.renderThreadList(threadItems)
+                val threadItems = threads.map { thread ->
+                    link.socket.ampere.renderer.CLIRenderer.ThreadListItem(
+                        threadId = thread.threadId,
+                        title = thread.title,
+                        messageCount = thread.messageCount,
+                        participantCount = thread.participantIds.size,
+                        lastActivity = thread.lastActivity,
+                        hasUnreadEscalations = thread.hasUnreadEscalations
+                    )
                 }
+                renderer.renderThreadList(threadItems)
             },
             onFailure = { error ->
                 renderer.renderError(error.message ?: "Unknown error")
@@ -86,30 +76,24 @@ class ThreadShowCommand(
 ) {
     private val threadId by argument(name = "thread-id", help = "ID of the thread to display")
 
-    private val jsonOutput by option("--json", "-j", help = "Output as JSON").flag()
-
     override fun run() = runBlocking {
         val result = threadViewService.getThreadDetail(threadId)
 
         result.fold(
             onSuccess = { thread ->
-                if (jsonOutput) {
-                    renderer.renderJson(DEFAULT_JSON.encodeToString(thread))
-                } else {
-                    val threadDetail = link.socket.ampere.renderer.CLIRenderer.ThreadDetail(
-                        threadId = threadId,
-                        title = thread.title,
-                        participants = thread.participants,
-                        messages = thread.messages.map { message ->
-                            link.socket.ampere.renderer.CLIRenderer.ThreadMessage(
-                                sender = message.sender,
-                                timestamp = message.timestamp,
-                                content = message.content
-                            )
-                        }
-                    )
-                    renderer.renderThreadDetail(threadDetail)
-                }
+                val threadDetail = link.socket.ampere.renderer.CLIRenderer.ThreadDetail(
+                    threadId = threadId,
+                    title = thread.title,
+                    participants = thread.participants,
+                    messages = thread.messages.map { message ->
+                        link.socket.ampere.renderer.CLIRenderer.ThreadMessage(
+                            sender = message.sender,
+                            timestamp = message.timestamp,
+                            content = message.content
+                        )
+                    }
+                )
+                renderer.renderThreadDetail(threadDetail)
             },
             onFailure = { error ->
                 renderer.renderThreadNotFound(threadId)
