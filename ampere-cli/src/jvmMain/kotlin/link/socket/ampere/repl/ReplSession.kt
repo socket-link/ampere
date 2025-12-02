@@ -82,16 +82,24 @@ class ReplSession(
      */
     private fun installCustomKeyBindings(reader: LineReader) {
         // Create a custom widget for clearing the screen
-        reader.getWidgets()["clear-screen-custom"] = {
+        val clearScreenWidget = org.jline.reader.Widget {
             clearScreen()
             true  // Return true to indicate the widget handled the key
         }
 
-        // Bind Ctrl+L (already bound by default, but ensure it's there)
-        reader.keyMap.bind(org.jline.reader.Reference("clear-screen-custom"), "\u000C")
+        reader.getWidgets()["clear-screen-custom"] = clearScreenWidget
+
+        // Bind Ctrl+L (already bound by default in JLine, but we override it)
+        reader.getKeyMaps()["main"]?.bind(
+            org.jline.reader.Reference("clear-screen-custom"),
+            "\u000C"
+        )
 
         // Bind Ctrl+Space
-        reader.keyMap.bind(org.jline.reader.Reference("clear-screen-custom"), "\u0000")
+        reader.getKeyMaps()["main"]?.bind(
+            org.jline.reader.Reference("clear-screen-custom"),
+            "\u0000"
+        )
     }
 
     /**
