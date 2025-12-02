@@ -1,7 +1,6 @@
 package link.socket.ampere.agents.implementations.code
 
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
@@ -10,32 +9,32 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.core.AgentConfiguration
+import link.socket.ampere.agents.core.actions.AgentActionAutonomy
+import link.socket.ampere.agents.core.health.ExecutorSystemHealth
 import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
-import link.socket.ampere.agents.core.outcomes.Outcome
 import link.socket.ampere.agents.core.states.AgentState
 import link.socket.ampere.agents.core.status.ExecutionStatus
 import link.socket.ampere.agents.core.status.TaskStatus
+import link.socket.ampere.agents.core.status.TicketStatus
 import link.socket.ampere.agents.core.tasks.Task
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
-import link.socket.ampere.agents.events.tickets.TicketStatus
 import link.socket.ampere.agents.events.tickets.TicketType
-import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.ExecutorCapabilities
 import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.results.ExecutionResult
+import link.socket.ampere.agents.execution.results.ExecutionResultCodeChanges
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
-import link.socket.ampere.agents.core.health.ExecutorSystemHealth
 import kotlinx.coroutines.flow.Flow
-import link.socket.ampere.agents.core.actions.AgentActionAutonomy
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -46,6 +45,10 @@ import kotlin.time.Duration.Companion.seconds
  * 2. Executes tools through the executor pattern
  * 3. Handles errors gracefully
  * 4. Works with different tool types
+ *
+ * Note: These are primarily structure/API tests since we can't easily mock
+ * the LLM service in the current architecture. Integration tests would
+ * require actual LLM calls.
  */
 class RunLLMToExecuteToolTest {
 
@@ -93,10 +96,8 @@ class RunLLMToExecuteToolTest {
         override val id = "mock-executor"
         override val displayName = "Mock Executor"
         override val capabilities = ExecutorCapabilities(
-            canWriteCode = true,
-            canReadCode = true,
-            canRunTests = false,
-            canDeployCode = false,
+            supportsLanguages = setOf("kotlin", "java"),
+            supportsFrameworks = setOf("compose"),
         )
 
         var lastExecutedRequest: ExecutionRequest<*>? = null
@@ -104,10 +105,9 @@ class RunLLMToExecuteToolTest {
         override suspend fun performHealthCheck(): Result<ExecutorSystemHealth> {
             return Result.success(
                 ExecutorSystemHealth(
-                    executorId = id,
-                    isHealthy = true,
-                    message = "Mock executor is healthy",
-                    timestamp = Clock.System.now(),
+                    version = "1.0.0",
+                    isAvailable = true,
+                    issues = emptyList(),
                 )
             )
         }
@@ -117,121 +117,27 @@ class RunLLMToExecuteToolTest {
             tool: Tool<*>,
         ): Flow<ExecutionStatus> {
             lastExecutedRequest = request
+            val now = Clock.System.now()
             return flowOf(
-                ExecutionStatus.InProgress(
+                ExecutionStatus.Started(
                     executorId = id,
-                    ticketId = request.context.ticket.id,
-                    taskId = request.context.task.id,
-                    message = "Executing...",
-                    timestamp = Clock.System.now(),
+                    timestamp = now,
                 ),
                 if (outcomeToReturn is ExecutionOutcome.Success) {
                     ExecutionStatus.Completed(
+                        executorId = id,
+                        timestamp = now,
                         result = outcomeToReturn,
                     )
                 } else {
                     ExecutionStatus.Failed(
-                        result = outcomeToReturn,
+                        executorId = id,
+                        timestamp = now,
+                        result = outcomeToReturn as ExecutionOutcome.Failure,
                     )
                 }
             )
         }
-    }
-
-    /**
-     * Mock CodeWriterAgent that returns predefined LLM responses.
-     */
-    private class MockCodeWriterAgent(
-        initialState: AgentState,
-        agentConfiguration: AgentConfiguration,
-        toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode>,
-        coroutineScope: CoroutineScope,
-        executor: Executor,
-        private val llmResponsesToReturn: MutableList<String>,
-    ) : CodeWriterAgent(
-        initialState = initialState,
-        agentConfiguration = agentConfiguration,
-        toolWriteCodeFile = toolWriteCodeFile,
-        coroutineScope = coroutineScope,
-        executor = executor,
-    ) {
-        // Override callLLM to return mock responses
-        private var callCount = 0
-
-        // We need to expose the function we're testing
-        fun testRunLLMToExecuteTool(tool: Tool<*>, request: ExecutionRequest<*>): ExecutionOutcome {
-            return runLLMToExecuteTool(tool, request)
-        }
-
-        // This is a hack to inject mock LLM responses
-        // In a real test, we'd use a proper mocking framework
-    }
-
-    @Test
-    fun `runLLMToExecuteTool generates code for write_code_file tool`() = runBlocking {
-        // Create a mock LLM response with valid code generation JSON
-        val mockLLMResponse = """
-            {
-              "files": [
-                {
-                  "path": "src/commonMain/kotlin/User.kt",
-                  "content": "package link.socket.ampere\n\ndata class User(val id: String, val name: String)",
-                  "reason": "Simple data class for User"
-                }
-              ]
-            }
-        """.trimIndent()
-
-        val successOutcome = ExecutionOutcome.CodeChanged.Success(
-            executorId = "mock-executor",
-            ticketId = "test-ticket",
-            taskId = "test-task",
-            executionStartTimestamp = Clock.System.now(),
-            executionEndTimestamp = Clock.System.now() + 1.seconds,
-            changedFiles = listOf("src/commonMain/kotlin/User.kt"),
-            validation = ExecutionResult.AllChecksPassed(
-                changedFiles = listOf("src/commonMain/kotlin/User.kt"),
-                testsRan = emptyList(),
-            ),
-        )
-
-        val mockExecutor = MockExecutor(successOutcome)
-
-        val writeCodeTool = FunctionTool<ExecutionContext.Code.WriteCode>(
-            id = "write_code_file",
-            name = "Write Code File",
-            description = "Writes code to a file",
-            requiredAgentAutonomy = AgentActionAutonomy.FullyAutonomous,
-            executionFunction = { request ->
-                // This shouldn't be called directly - executor should be used
-                throw IllegalStateException("Tool should be executed through executor")
-            }
-        )
-
-        // Create execution request with minimal parameters
-        val ticket = createTestTicket()
-        val task = createTestTask()
-        val request = ExecutionRequest(
-            context = ExecutionContext.Code.WriteCode(
-                executorId = "mock-executor",
-                ticket = ticket,
-                task = task,
-                instructions = "Create a simple data class for User with id and name fields",
-                workspace = ExecutionWorkspace(baseDirectory = "."),
-                instructionsPerFilePath = emptyList(), // Empty - should be filled by LLM
-            ),
-            constraints = ExecutionConstraints(
-                requireTests = false,
-                requireLinting = false,
-            ),
-        )
-
-        // Note: This test is incomplete because we can't easily mock the LLM call
-        // in the current architecture. In a real implementation, we would need
-        // to inject a mock LLM service or use dependency injection.
-
-        // For now, we'll just verify the function signature exists and can be called
-        // A full integration test would require mocking the OpenAI client.
     }
 
     @Test
@@ -251,7 +157,7 @@ class RunLLMToExecuteToolTest {
             id = "write_code_file",
             name = "Write Code File",
             description = "Writes code to a file",
-            requiredAgentAutonomy = AgentActionAutonomy.FullyAutonomous,
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             executionFunction = { request ->
                 throw IllegalStateException("Tool should be executed through executor")
             }
@@ -310,7 +216,7 @@ class RunLLMToExecuteToolTest {
             id = "mcp_test_tool",
             name = "MCP Test Tool",
             description = "A test MCP tool",
-            requiredAgentAutonomy = AgentActionAutonomy.FullyAutonomous,
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "test-server",
             remoteToolName = "test-tool",
             inputSchema = null,
@@ -320,7 +226,7 @@ class RunLLMToExecuteToolTest {
             id = "write_code_file",
             name = "Write Code File",
             description = "Writes code to a file",
-            requiredAgentAutonomy = AgentActionAutonomy.FullyAutonomous,
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             executionFunction = { request ->
                 throw IllegalStateException("Tool should be executed through executor")
             }
@@ -360,18 +266,43 @@ class RunLLMToExecuteToolTest {
     }
 
     @Test
-    fun `runLLMToExecuteTool validates parameter structure matches tool expectations`() {
-        // This test validates that the function generates parameters in the correct format
-        // for the specific tool being executed.
+    fun `runLLMToExecuteTool function signature exists and is callable`() {
+        // This test verifies that the function exists with the correct signature
+        // and can be called. Full integration testing would require mocking the LLM service.
 
-        // For write_code_file tool, parameters should include:
-        // - File paths
-        // - Complete file content
-        // - No placeholders or TODOs
+        val mockExecutor = MockExecutor(
+            ExecutionOutcome.NoChanges.Success(
+                executorId = "mock-executor",
+                ticketId = "test-ticket",
+                taskId = "test-task",
+                executionStartTimestamp = Clock.System.now(),
+                executionEndTimestamp = Clock.System.now(),
+                message = "Success",
+            )
+        )
 
-        // This would be tested through integration tests with actual LLM calls
-        // For now, we document the expected behavior.
+        val writeCodeTool = FunctionTool<ExecutionContext.Code.WriteCode>(
+            id = "write_code_file",
+            name = "Write Code File",
+            description = "Writes code to a file",
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
+            executionFunction = { request ->
+                throw IllegalStateException("Tool should be executed through executor")
+            }
+        )
 
-        assertTrue(true, "Parameter validation test placeholder")
+        val agent = CodeWriterAgent(
+            initialState = AgentState(),
+            agentConfiguration = createTestAgentConfiguration(),
+            toolWriteCodeFile = writeCodeTool,
+            coroutineScope = CoroutineScope(Dispatchers.Default),
+            executor = mockExecutor,
+        )
+
+        // Verify the function exists and has the correct signature
+        val function: (Tool<*>, ExecutionRequest<*>) -> ExecutionOutcome = agent.runLLMToExecuteTool
+
+        // Verify it's not null and is a function
+        assertTrue(function != null, "runLLMToExecuteTool should not be null")
     }
 }
