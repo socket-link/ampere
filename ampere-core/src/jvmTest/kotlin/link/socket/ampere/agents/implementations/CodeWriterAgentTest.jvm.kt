@@ -46,9 +46,10 @@ import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.ToolWriteCodeFile
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.implementations.code.CodeWriterAgent
-import link.socket.ampere.domain.agent.bundled.code.WriteCodeAgent
+import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModel
+import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 import link.socket.ampere.domain.ai.provider.AIProvider
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -86,21 +87,21 @@ actual class CodeWriterAgentTest {
 
     // ==================== FAKE IMPLEMENTATIONS ====================
 
+    private class MockAIProvider(
+        private val mockClient: OpenAI
+    ) : AIProvider<Nothing, AIModel_OpenAI> {
+        override val id: String = "test-provider"
+        override val name: String = "Test Provider"
+        override val availableModels: List<AIModel_OpenAI> = emptyList()
+        override val apiToken: String = "test-token"
+        override val client: OpenAI = mockClient
+    }
+
     private class MockAIConfiguration(
         private val mockClient: OpenAI
     ) : AIConfiguration {
-        override val provider: AIProvider<*, *> = object : AIProvider<Nothing, AIModel> {
-            override val id: String = "test-provider"
-            override val name: String = "Test Provider"
-            override val availableModels: List<AIModel> = emptyList()
-            override val apiToken: String = "test-token"
-            override val client: OpenAI = mockClient
-        }
-        override val model: AIModel = object : AIModel {
-            override val id: String = "test-model"
-            override val modelName: String = "Test Model"
-            override val provider: String = "test-provider"
-        }
+        override val provider: AIProvider<*, *> = MockAIProvider(mockClient)
+        override val model: AIModel = AIModel_OpenAI.GPT_4_1
 
         override fun getAvailableModels(): List<Pair<AIProvider<*, *>, AIModel>> = emptyList()
     }
