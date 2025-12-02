@@ -39,12 +39,17 @@ class ReplSession(
         .build()
 
     private val executor = CommandExecutor(terminal)
+    private val statusBar = StatusBar(terminal)
+    private val modeManager = ModeManager()
+    private val filterCycler = EventFilterCycler()
 
     // Add registry for observation commands
     private val observationCommands = ObservationCommandRegistry(
         context,
         terminal,
-        executor
+        executor,
+        statusBar,
+        filterCycler
     )
 
     // Add registry for action commands
@@ -72,13 +77,13 @@ class ReplSession(
     }
 
     /**
-     * Install SIGINT (Ctrl+C) handler that interrupts current command
-     * but doesn't exit the REPL session.
+     * Install SIGINT (Ctrl+C) handler for hard exit.
+     * In vim-inspired modal system, Ctrl+C is emergency exit.
      */
     private fun installSignalHandler() {
         Signal.handle(Signal("INT")) { signal ->
-            // Interrupt any running command
-            executor.interrupt()
+            terminal.writer().println("\n${TerminalColors.dim("Emergency exit!")}")
+            kotlin.system.exitProcess(0)
         }
     }
 
@@ -124,31 +129,28 @@ class ReplSession(
     private fun runCommandLoop() {
         while (true) {
             try {
+                statusBar.render(
+                    modeManager.getCurrentMode(),
+                    if (modeManager.getCurrentMode() == Mode.OBSERVING) filterCycler.current() else null
+                )
+
                 val line = try {
-                    reader.readLine("ampere> ")
+                    readLineWithModeHandling()
                 } catch (e: EndOfFileException) {
-                    // Ctrl+D pressed
-                    terminal.writer().println()
-                    terminal.writer().println("Goodbye! Shutting down environment...")
+                    // Ctrl+D handling
+                    handleCtrlD()
+                    continue
+                } catch (e: EmergencyExitException) {
+                    // Double-Esc
+                    terminal.writer().println("\n${TerminalColors.warning("Emergency exit!")}")
                     break
                 }
 
-                if (line.isNullOrBlank()) {
-                    continue
-                }
-
-                // Handle special commands first
-                when (line.trim().lowercase()) {
-                    "clear" -> {
-                        terminal.puts(InfoCmp.Capability.clear_screen)
-                        terminal.flush()
-                        continue
-                    }
-                }
+                if (line == null) continue
 
                 // Execute command in cancellable context
                 val result = runBlocking {
-                    executeCommand(line.trim())
+                    executeCommand(line)
                 }
 
                 if (result == CommandResult.EXIT) {
@@ -162,23 +164,133 @@ class ReplSession(
         }
     }
 
+    private fun readLineWithModeHandling(): String? {
+        return when (modeManager.getCurrentMode()) {
+            Mode.NORMAL -> readNormalModeInput()
+            Mode.INSERT -> readInsertModeInput()
+            Mode.OBSERVING -> readObservingModeInput()
+        }
+    }
+
+    private fun readNormalModeInput(): String? {
+        // In normal mode, read single character using terminal reader
+        val key = terminal.reader().read()
+
+        return when (key.toChar()) {
+            'w' -> "watch"
+            's' -> "status"
+            't' -> "thread list"
+            'o' -> "outcomes stats"
+            'h', '?' -> "help"
+            'c' -> "clear"
+            'q' -> "exit"
+            'i', 'a' -> {
+                modeManager.enterInsertMode()
+                null  // Don't execute, just switch mode
+            }
+            '\u001B' -> {  // Escape key
+                if (modeManager.handleEscape()) {
+                    throw EmergencyExitException()
+                }
+                null
+            }
+            '\n', '\r' -> {
+                // Enter in normal mode = switch to insert
+                modeManager.enterInsertMode()
+                null
+            }
+            else -> {
+                terminal.writer().println(TerminalColors.dim("Unknown key. Press ? for help."))
+                null
+            }
+        }
+    }
+
+    private fun readInsertModeInput(): String? {
+        val line = reader.readLine("")
+
+        // Check for empty enter during observation
+        if (line.isBlank() && executor.isExecuting()) {
+            executor.interrupt()
+            modeManager.enterInsertMode()
+            terminal.writer().println(TerminalColors.dim("Stopped observation"))
+            return null
+        }
+
+        return line.trim().takeIf { it.isNotBlank() }
+    }
+
+    private fun readObservingModeInput(): String? {
+        // During observation, check for Enter (stop) or Ctrl+E (cycle filter)
+        val key = terminal.reader().read()
+
+        return when (key.toChar()) {
+            '\n', '\r' -> {
+                // Empty enter stops observation
+                executor.interrupt()
+                modeManager.enterInsertMode()
+                terminal.writer().println(TerminalColors.dim("Stopped observation"))
+                null
+            }
+            '\u0005' -> {  // Ctrl+E
+                // Cycle filter
+                val newFilter = filterCycler.cycle()
+                terminal.writer().println(
+                    TerminalColors.info("Filter: ${filterCycler.currentDisplayName()}")
+                )
+                null
+            }
+            else -> null
+        }
+    }
+
+    private fun handleCtrlD() {
+        when (modeManager.getCurrentMode()) {
+            Mode.OBSERVING -> {
+                // Stop observation, return to insert mode
+                executor.interrupt()
+                modeManager.enterInsertMode()
+                terminal.writer().println()
+                terminal.writer().println(TerminalColors.dim("Disconnected from observation"))
+            }
+            else -> {
+                // Exit session
+                terminal.writer().println()
+                terminal.writer().println("Goodbye! Shutting down environment...")
+                kotlin.system.exitProcess(0)
+            }
+        }
+    }
+
     private suspend fun executeCommand(input: String): CommandResult {
-        // Expand aliases first
+        // Handle special commands
+        when (input.lowercase()) {
+            "clear", ".clear" -> {
+                terminal.puts(InfoCmp.Capability.clear_screen)
+                terminal.flush()
+                return CommandResult.SUCCESS
+            }
+        }
+
+        // Expand aliases
         val expandedInput = expandAliases(input)
 
-        // First check if it's an observation command
+        // Try observation commands first
         val observationResult = observationCommands.executeIfMatches(expandedInput)
         if (observationResult != null) {
+            if (observationResult == CommandResult.SUCCESS) {
+                modeManager.setMode(Mode.OBSERVING)
+            }
             return observationResult
         }
 
-        // Then check if it's an action command
+        // Try action commands
         val actionResult = actionCommands.executeIfMatches(expandedInput)
         if (actionResult != null) {
             return actionResult
         }
 
-        // Otherwise check built-in REPL commands
+        // Check built-in commands
         val parts = expandedInput.split(" ", limit = 2)
         val command = parts[0].lowercase()
         val args = parts.getOrNull(1) ?: ""
@@ -196,7 +308,7 @@ class ReplSession(
             "test-interrupt" -> {
                 // Test command for verifying interruption works
                 executor.execute {
-                    terminal.writer().println("Running for 30 seconds... Press Ctrl+C to interrupt")
+                    terminal.writer().println("Running for 30 seconds... Press Enter to interrupt")
                     delay(30000)
                     terminal.writer().println("Completed!")
                     CommandResult.SUCCESS
@@ -282,7 +394,22 @@ class ReplSession(
 
     private fun displayFullHelp() {
         val help = """
-            AMPERE Interactive Shell - Command Reference
+            AMPERE Interactive Shell - Vim-Inspired Modal Interface
+
+            ═══ MODES ═══
+            NORMAL    Single-key commands (press Esc)
+                      w=watch s=status t=threads o=outcomes
+                      h=help c=clear q=quit
+                      i/a/Enter = switch to INSERT mode
+
+            INSERT    Full command entry (default mode)
+                      Tab completion, history, aliases
+                      Esc = switch to NORMAL mode
+
+            OBSERVING Active observation (watch, etc.)
+                      Enter = stop observation
+                      Ctrl+E = cycle event filter
+                      Ctrl+D = disconnect
 
             ═══ OBSERVATION COMMANDS ═══
             watch [-f TYPE] [-a AGENT]        Stream events
@@ -307,34 +434,20 @@ class ReplSession(
 
             agent wake <id>                   Wake agent
 
-            ═══ FLAG ALIASES ═══
-            -f, --filter       Event type
-            -a, --agent        Agent ID
-            -p, --priority     Ticket priority (HIGH|MEDIUM|LOW|CRITICAL)
-            -d, --description  Ticket description
-            -s, --sender       Message sender
-            -t, --title        Thread title
-            -n, --limit        Result limit
-            -h, --help         Show help
+            ═══ KEYBINDINGS ═══
+            Ctrl+C      Emergency exit (hard quit)
+            Ctrl+D      Stop observation / Exit if idle
+            Ctrl+E      Cycle event filter (during watch)
+            Esc Esc     Emergency exit (double-tap)
+            Enter       Context-sensitive (stop observation if running)
+            ↑/↓         Command history
+            Tab         Command completion
 
-            ═══ COMMAND ALIASES ═══
+            ═══ ALIASES ═══
             w → watch     s → status    t → thread
             o → outcomes  q → quit      ? → help
 
-            ═══ SESSION COMMANDS ═══
-            help, ?             Show this help message
-            help <command>      Show command-specific help
-            exit, quit, q       Exit the session (or Ctrl+D)
-            clear               Clear screen
-
-            ═══ KEYBINDINGS ═══
-            Ctrl+C          Exit REPL
-            Ctrl+D          Stop observation / Exit if idle
-            Ctrl+L          Clear screen
-            ↑/↓             Command history
-            Tab             Command completion
-
-            Type 'help <command>' for detailed command help
+            Tip: Start in INSERT mode, press Esc for NORMAL mode shortcuts
         """.trimIndent()
 
         terminal.writer().println(help)
@@ -505,3 +618,8 @@ enum class CommandResult {
     EXIT,
     INTERRUPTED  // Added for Ctrl+C handling
 }
+
+/**
+ * Exception thrown when user triggers emergency exit (double-tap Esc).
+ */
+class EmergencyExitException : Exception()

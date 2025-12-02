@@ -20,4 +20,5 @@ object TerminalColors {
     fun warning(message: String) = yellow("⚠ $message")
     fun dim(message: String) = gray(message)
     fun emphasis(message: String) = bold(message)
+    fun highlight(message: String) = blue(bold(message))
 }
