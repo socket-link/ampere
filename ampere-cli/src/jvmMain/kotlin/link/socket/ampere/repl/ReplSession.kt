@@ -1,5 +1,6 @@
 package link.socket.ampere.repl
 
+import java.nio.file.Paths
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.AmpereContext
@@ -10,13 +11,12 @@ import org.jline.terminal.Terminal
 import org.jline.terminal.TerminalBuilder
 import org.jline.utils.InfoCmp
 import sun.misc.Signal
-import java.nio.file.Paths
 
 /**
  * Manages an interactive REPL session for the AMPERE CLI.
  *
  * The REPL session maintains a persistent environment where multiple
- * commands can be executed sequentially without restarting the substrate.
+ * commands can be executed sequentially without restarting the environment.
  * This is the "brainstem interface" connecting human input to agent activity.
  */
 class ReplSession(
@@ -93,13 +93,12 @@ class ReplSession(
 
     private fun displayWelcomeBanner() {
         val banner = """
-        ╔═══════════════════════════════════════════════════════╗
-        ║  AMPERE Interactive Shell v0.1.0                      ║
-        ║  Autonomous Multi-Process Execution & Relay Env       ║
-        ║                                                       ║
-        ║  Type 'help' for commands, 'exit' to quit            ║
-        ║  Press Ctrl+C to interrupt running observations       ║
-        ╚═══════════════════════════════════════════════════════╝
+            
+                  ⚡──○──⚡
+               ⚡──○──⚡──○──⚡          AMPERE Interactive Shell v0.1.0
+            ⚡──○──⚡──○──⚡──○──⚡     Autonomous multi-agent coordination
+               ⚡──○──⚡──○──⚡
+                  ⚡──○──⚡
         """.trimIndent()
 
         terminal.writer().println(banner)
@@ -107,6 +106,13 @@ class ReplSession(
 
         // Display initial system status
         displaySystemStatus()
+        terminal.writer().println()
+        displayQuickStart()
+    }
+
+    private fun displayQuickStart() {
+        terminal.writer().println(TerminalColors.info("  Type 'help' for commands, 'exit' to quit"))
+        terminal.writer().println(TerminalColors.info("  Press Ctrl+C to interrupt running observations"))
         terminal.writer().println()
     }
 

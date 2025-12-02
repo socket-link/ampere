@@ -16,7 +16,7 @@ class ThreadCommand(
     renderer: link.socket.ampere.renderer.CLIRenderer = link.socket.ampere.renderer.CLIRenderer(Terminal())
 ) : CliktCommand(
     name = "thread",
-    help = "View conversation threads in the substrate"
+    help = "View conversation threads in the environment"
 ) {
     init {
         subcommands(

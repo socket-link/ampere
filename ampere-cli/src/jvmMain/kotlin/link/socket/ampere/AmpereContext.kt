@@ -117,7 +117,7 @@ class AmpereContext(
 
     /**
      * Outcome memory repository for querying execution outcomes.
-     * Provides access to the substrate's accumulated experience.
+     * Provides access to the environment's accumulated experience.
      */
     val outcomeMemoryRepository: link.socket.ampere.agents.core.memory.OutcomeMemoryRepository
         get() = environmentService.outcomeMemoryRepository

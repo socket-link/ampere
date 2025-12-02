@@ -8,7 +8,7 @@ import link.socket.ampere.agents.events.tickets.TicketType
 import org.jline.terminal.Terminal
 
 /**
- * Registry of action commands that affect the substrate.
+ * Registry of action commands that affect the environment.
  *
  * These commands send impulses through the motor cortex - emitting
  * events that trigger agent reactions and state changes.

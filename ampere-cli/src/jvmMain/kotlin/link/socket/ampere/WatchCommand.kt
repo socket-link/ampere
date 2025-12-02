@@ -14,7 +14,7 @@ import link.socket.ampere.renderer.CLIRenderer
 import link.socket.ampere.util.EventTypeParser
 
 /**
- * Command to observe the substrate's electrical activity in real-time.
+ * Command to observe the environment's electrical activity in real-time.
  *
  * This is the CLI's primary sensory interface - it lets you feel the pulse
  * of the organizational organism by streaming events as they occur.
@@ -28,7 +28,7 @@ class WatchCommand(
 ) : CliktCommand(
     name = "watch",
     help = """
-        Watch events streaming from the AniMA substrate in real-time.
+        Watch events streaming from the AniMA environment in real-time.
 
         Connects to the EventBus and renders events to terminal with color-coding
         and formatting for human readability.
