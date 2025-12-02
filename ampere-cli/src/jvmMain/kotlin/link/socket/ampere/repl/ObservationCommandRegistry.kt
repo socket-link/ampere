@@ -41,24 +41,72 @@ class ObservationCommandRegistry(
 
     private suspend fun executeWatch(args: Array<String>): CommandResult {
         val indicator = ProgressIndicator(terminal)
+        var eventCount = 0
 
         return try {
             indicator.start("Connecting to event stream...")
             delay(300) // Brief pause to show spinner
             indicator.stop()
 
-            terminal.writer().println(TerminalColors.info("Streaming events... Press Ctrl+C to stop"))
+            // Parse arguments using ArgParser
+            val parser = ArgParser(args.toList())
+            val filters = parser.getAll("filter")
+            val agents = parser.getAll("agent")
+
+            // Show initial status
+            statusBar.render(Mode.OBSERVING, filterCycler.current(), eventCount = 0)
+            terminal.writer().println(TerminalColors.info("Streaming events... Press Enter to stop"))
 
             executor.execute {
-                val command = WatchCommand(
-                    eventRelayService = context.eventRelayService,
-                    renderer = renderer
+                // Build filters
+                val eventTypes = if (filters.isNotEmpty()) {
+                    link.socket.ampere.util.EventTypeParser.parseMultiple(filters)
+                } else {
+                    null
+                }
+
+                val eventSources = if (agents.isNotEmpty()) {
+                    agents.map { link.socket.ampere.agents.events.EventSource.Agent(it) }.toSet()
+                } else {
+                    null
+                }
+
+                val relayFilters = link.socket.ampere.agents.events.relay.EventRelayFilters(
+                    eventTypes = eventTypes,
+                    eventSources = eventSources
                 )
-                val adapter = CommandAdapter(terminal)
-                adapter.execute(command, args)
+
+                // Subscribe to events and count them
+                context.eventRelayService.subscribeToLiveEvents(relayFilters)
+                    .collect { event ->
+                        eventCount++
+
+                        // Update status bar every 10 events
+                        if (eventCount % 10 == 0) {
+                            statusBar.render(
+                                Mode.OBSERVING,
+                                filterCycler.current(),
+                                eventCount = eventCount
+                            )
+                        }
+
+                        // Render the event
+                        renderer.renderEvent(event)
+                    }
+
+                CommandResult.SUCCESS
             }
         } finally {
             indicator.stop()
+
+            // Show final count
+            if (eventCount > 0) {
+                terminal.writer().println()
+                terminal.writer().println(
+                    TerminalColors.dim("Observed $eventCount events")
+                )
+            }
+            eventCount = 0
         }
     }
 
