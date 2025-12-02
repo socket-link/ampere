@@ -14,6 +14,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import link.socket.ampere.agents.core.AgentConfiguration
 import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.core.AssignedTo
 import link.socket.ampere.agents.core.AutonomousAgent
 import link.socket.ampere.agents.core.expectations.Expectations
 import link.socket.ampere.agents.core.memory.Knowledge
