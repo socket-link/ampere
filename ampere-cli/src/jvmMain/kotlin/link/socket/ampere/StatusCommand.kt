@@ -17,10 +17,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import link.socket.ampere.agents.events.messages.ThreadViewService
 import link.socket.ampere.agents.events.tickets.TicketViewService
-import link.socket.ampere.data.DEFAULT_JSON
 import kotlin.time.Duration.Companion.hours
 
 /**
@@ -34,8 +32,6 @@ class StatusCommand(
     name = "status",
     help = "Show system-wide status dashboard"
 ) {
-    private val jsonOutput by option("--json", "-j", help = "Output as JSON").flag()
-
     private val terminal = Terminal()
 
     override fun run() = runBlocking {
@@ -46,47 +42,8 @@ class StatusCommand(
         val threadsResult = threadsDeferred.await()
         val ticketsResult = ticketsDeferred.await()
 
-        if (jsonOutput) {
-            // JSON output mode
-            outputJson(threadsResult, ticketsResult)
-        } else {
-            // Human-readable dashboard
-            outputDashboard(threadsResult, ticketsResult)
-        }
-    }
-
-    /**
-     * Output status as JSON for scripting/automation.
-     */
-    private fun outputJson(
-        threadsResult: Result<List<link.socket.ampere.agents.events.messages.ThreadSummary>>,
-        ticketsResult: Result<List<link.socket.ampere.agents.events.tickets.TicketSummary>>
-    ) {
-        val status = StatusDashboard(
-            threads = threadsResult.getOrNull()?.let { threads ->
-                ThreadStatus(
-                    total = threads.size,
-                    withEscalations = threads.count { it.hasUnreadEscalations },
-                    needingAttention = threads.count {
-                        it.hasUnreadEscalations || isStale(it.lastActivity)
-                    }
-                )
-            },
-            tickets = ticketsResult.getOrNull()?.let { tickets ->
-                TicketStatus(
-                    total = tickets.size,
-                    byStatus = tickets.groupBy { it.status }.mapValues { it.value.size },
-                    unassigned = tickets.count { it.assigneeId == null },
-                    highPriority = tickets.count { it.priority == "High" || it.priority == "Critical" }
-                )
-            },
-            errors = buildList {
-                threadsResult.exceptionOrNull()?.let { add("threads: ${it.message}") }
-                ticketsResult.exceptionOrNull()?.let { add("tickets: ${it.message}") }
-            }.takeIf { it.isNotEmpty() }
-        )
-
-        terminal.println(DEFAULT_JSON.encodeToString(status))
+        // Human-readable dashboard
+        outputDashboard(threadsResult, ticketsResult)
     }
 
     /**
@@ -201,28 +158,3 @@ class StatusCommand(
         return (now - lastActivity) > threshold
     }
 }
-
-/**
- * JSON representation of system status.
- */
-@Serializable
-data class StatusDashboard(
-    val threads: ThreadStatus?,
-    val tickets: TicketStatus?,
-    val errors: List<String>?
-)
-
-@Serializable
-data class ThreadStatus(
-    val total: Int,
-    val withEscalations: Int,
-    val needingAttention: Int
-)
-
-@Serializable
-data class TicketStatus(
-    val total: Int,
-    val byStatus: Map<String, Int>,
-    val unassigned: Int,
-    val highPriority: Int
-)

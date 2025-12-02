@@ -52,63 +52,35 @@ class ActionCommandRegistry(
     }
 
     private suspend fun createTicket(args: List<String>): CommandResult {
-        // Parse: ticket create "TITLE" --priority HIGH --description "DESC" --type FEATURE
-        if (args.isEmpty()) {
-            terminal.writer().println("Usage: ticket create \"TITLE\" [--priority PRIORITY] [--description \"DESC\"] [--type TYPE]")
+        val parser = ArgParser(args)
+        val positional = parser.getPositional()
+
+        if (positional.isEmpty() || parser.has("help")) {
+            displayTicketCreateHelp()
             return CommandResult.ERROR
         }
 
-        val title = args[0].trim('"')
-        var priority = TicketPriority.MEDIUM
-        var description = ""
-        var type = TicketType.TASK
-
-        // Parse flags
-        var i = 1
-        while (i < args.size) {
-            when (args[i].lowercase()) {
-                "--priority" -> {
-                    if (i + 1 < args.size) {
-                        priority = try {
-                            TicketPriority.valueOf(args[i + 1].uppercase())
-                        } catch (e: IllegalArgumentException) {
-                            terminal.writer().println("Invalid priority: ${args[i + 1]}")
-                            terminal.writer().println("Valid values: LOW, MEDIUM, HIGH, CRITICAL")
-                            return CommandResult.ERROR
-                        }
-                        i += 2
-                    } else {
-                        terminal.writer().println("Missing value for --priority")
-                        return CommandResult.ERROR
-                    }
-                }
-                "--description" -> {
-                    if (i + 1 < args.size) {
-                        description = args[i + 1].trim('"')
-                        i += 2
-                    } else {
-                        terminal.writer().println("Missing value for --description")
-                        return CommandResult.ERROR
-                    }
-                }
-                "--type" -> {
-                    if (i + 1 < args.size) {
-                        type = try {
-                            TicketType.valueOf(args[i + 1].uppercase())
-                        } catch (e: IllegalArgumentException) {
-                            terminal.writer().println("Invalid type: ${args[i + 1]}")
-                            terminal.writer().println("Valid values: FEATURE, BUG, TASK, SPIKE")
-                            return CommandResult.ERROR
-                        }
-                        i += 2
-                    } else {
-                        terminal.writer().println("Missing value for --type")
-                        return CommandResult.ERROR
-                    }
-                }
-                else -> i++
+        val title = positional[0].trim('"')
+        val priority = parser.get("priority")?.let {
+            try {
+                TicketPriority.valueOf(it.uppercase())
+            } catch (e: IllegalArgumentException) {
+                terminal.writer().println(TerminalColors.error("Invalid priority: $it"))
+                terminal.writer().println(TerminalColors.dim("Valid values: LOW, MEDIUM, HIGH, CRITICAL"))
+                return CommandResult.ERROR
             }
-        }
+        } ?: TicketPriority.MEDIUM
+
+        val description = parser.get("description")?.trim('"') ?: ""
+        val type = parser.get("type")?.let {
+            try {
+                TicketType.valueOf(it.uppercase())
+            } catch (e: IllegalArgumentException) {
+                terminal.writer().println(TerminalColors.error("Invalid type: $it"))
+                terminal.writer().println(TerminalColors.dim("Valid values: FEATURE, BUG, TASK, SPIKE"))
+                return CommandResult.ERROR
+            }
+        } ?: TicketType.TASK
 
         val result = context.ticketActionService.createTicket(
             title = title,
@@ -210,19 +182,17 @@ class ActionCommandRegistry(
     }
 
     private suspend fun postMessage(args: List<String>): CommandResult {
-        // Parse: message post THREAD_ID "CONTENT" --sender SENDER_ID
-        if (args.size < 2) {
-            terminal.writer().println("Usage: message post THREAD_ID \"CONTENT\" [--sender SENDER_ID]")
+        val parser = ArgParser(args)
+        val positional = parser.getPositional()
+
+        if (positional.size < 2 || parser.has("help")) {
+            displayMessagePostHelp()
             return CommandResult.ERROR
         }
 
-        val threadId = args[0]
-        val content = args[1].trim('"')
-        val senderId = if (args.size > 3 && args[2] == "--sender") {
-            args[3]
-        } else {
-            "human"
-        }
+        val threadId = positional[0]
+        val content = positional[1].trim('"')
+        val senderId = parser.get("sender") ?: "human"
 
         val result = context.messageActionService.postMessage(
             threadId = threadId,
@@ -244,37 +214,20 @@ class ActionCommandRegistry(
     }
 
     private suspend fun createThread(args: List<String>): CommandResult {
-        // Parse: message create-thread --title "TITLE" --participants ID1,ID2
-        var title: String? = null
-        var participants: List<String>? = null
+        val parser = ArgParser(args)
 
-        var i = 0
-        while (i < args.size) {
-            when (args[i].lowercase()) {
-                "--title" -> {
-                    if (i + 1 < args.size) {
-                        title = args[i + 1].trim('"')
-                        i += 2
-                    } else {
-                        terminal.writer().println("Missing value for --title")
-                        return CommandResult.ERROR
-                    }
-                }
-                "--participants" -> {
-                    if (i + 1 < args.size) {
-                        participants = args[i + 1].split(",").map { it.trim() }
-                        i += 2
-                    } else {
-                        terminal.writer().println("Missing value for --participants")
-                        return CommandResult.ERROR
-                    }
-                }
-                else -> i++
-            }
+        if (parser.has("help") || !parser.has("title") || !parser.has("participants")) {
+            displayThreadCreateHelp()
+            return CommandResult.ERROR
         }
 
-        if (title == null || participants == null) {
-            terminal.writer().println("Usage: message create-thread --title \"TITLE\" --participants ID1,ID2")
+        val title = parser.get("title")?.trim('"') ?: run {
+            terminal.writer().println(TerminalColors.error("Missing --title"))
+            return CommandResult.ERROR
+        }
+
+        val participants = parser.get("participants")?.split(",")?.map { it.trim() } ?: run {
+            terminal.writer().println(TerminalColors.error("Missing --participants"))
             return CommandResult.ERROR
         }
 
@@ -340,5 +293,62 @@ class ActionCommandRegistry(
         // Observation command - could delegate to service
         terminal.writer().println("Agent listing: use 'status' command to see active agents")
         return CommandResult.SUCCESS
+    }
+
+    // ═══ Help Functions ═══
+
+    private fun displayTicketCreateHelp() {
+        val help = """
+            ticket create - Create a new ticket
+
+            Usage: ticket create "TITLE" [-p PRIORITY] [-d "DESC"]
+
+            Flags:
+              -p, --priority PRIORITY    HIGH, MEDIUM, LOW, CRITICAL (default: MEDIUM)
+              -d, --description DESC     Ticket description
+              -h, --help                 Show this help
+
+            Examples:
+              ticket create "Add authentication" -p HIGH
+              ticket create "Fix bug" -d "User login fails on retry"
+        """.trimIndent()
+
+        terminal.writer().println(help)
+    }
+
+    private fun displayMessagePostHelp() {
+        val help = """
+            message post - Post a message to a thread
+
+            Usage: message post THREAD_ID "CONTENT" [-s SENDER_ID]
+
+            Flags:
+              -s, --sender SENDER_ID     Message sender (default: human)
+              -h, --help                 Show this help
+
+            Examples:
+              message post thread-123 "Hello team"
+              message post thread-123 "Status update" -s agent-pm
+        """.trimIndent()
+
+        terminal.writer().println(help)
+    }
+
+    private fun displayThreadCreateHelp() {
+        val help = """
+            message create-thread - Create a new conversation thread
+
+            Usage: message create-thread -t "TITLE" --participants ID1,ID2
+
+            Flags:
+              -t, --title TITLE          Thread title
+              --participants IDS         Comma-separated participant IDs
+              -h, --help                 Show this help
+
+            Examples:
+              message create-thread -t "Sprint Planning" --participants agent-pm,agent-dev
+        """.trimIndent()
+
+        terminal.writer().println(help)
     }
 }
