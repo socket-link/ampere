@@ -179,8 +179,12 @@ class ReplSession(
 
         return when (command) {
             "exit", "quit" -> CommandResult.EXIT
-            "help" -> {
-                displayHelp()
+            "help", "?" -> {
+                if (args.isNotBlank()) {
+                    displayCommandHelp(args.trim())
+                } else {
+                    displayHelp()
+                }
                 CommandResult.SUCCESS
             }
             "test-interrupt" -> {
@@ -218,43 +222,265 @@ class ReplSession(
     }
 
     private fun displayHelp() {
+        val width = terminal.width
+        val compact = width < 90
+
+        if (compact) {
+            displayCompactHelp()
+        } else {
+            displayFullHelp()
+        }
+    }
+
+    private fun displayCompactHelp() {
         val help = """
-        Available commands:
+            AMPERE - Command Reference
 
-        Observation Commands (interruptible with Ctrl+C):
-          watch, w [--filter TYPE] [--agent ID]  Stream events from EventBus
-          status, s [--json]                     Show system dashboard
-          thread, t list [--json]                List all conversation threads
-          thread, t show <id> [--json]           Show thread details
-          outcomes, o ticket <id>                Show ticket execution history
-          outcomes, o search <query> [--limit N] Search similar outcomes
-          outcomes, o executor <id> [--limit N]  Show executor performance
-          outcomes, o stats                      Show aggregate statistics
+            ─── OBSERVE (Ctrl+C to stop) ───
+            w [-f TYPE] [-a ID]    Events
+            s                      Status
+            t list | show <id>     Threads
+            o ticket|search|stats  Outcomes
 
-        Action Commands (affect the substrate):
-          ticket create "TITLE" [--priority P] [--description "DESC"] [--type TYPE]
-                                                 Create new ticket (P: LOW|MEDIUM|HIGH|CRITICAL)
-          ticket assign TICKET_ID AGENT_ID       Assign ticket to agent
-          ticket status TICKET_ID STATUS         Update ticket status
+            ─── ACT ───
+            ticket create "TITLE" [-p PRI] [-d "DESC"]
+                   assign <id> <agent>
+                   status <id> <STATUS>
 
-          message post THREAD_ID "CONTENT" [--sender ID]
-                                                 Post message to thread
-          message create-thread --title "TITLE" --participants ID1,ID2
-                                                 Create new thread
+            message post <thread> "TEXT" [-s ID]
+                    create-thread -t "TITLE" --participants A,B
 
-          agent wake AGENT_ID                    Send wake signal to agent
+            agent wake <id>
 
-        Session Commands:
-          help, ?             Show this help message
-          exit, quit, q       Exit the interactive session (or press Ctrl+D)
-          clear               Clear the screen
+            ─── FLAGS ───
+            -f, --filter       Event type
+            -a, --agent        Agent ID
+            -p, --priority     Ticket priority
+            -d, --description  Description
+            -s, --sender       Message sender
+            -t, --title        Thread title
+            -n, --limit        Result limit
+            -h, --help         Show help
 
-        Tips:
-          - Press ↑/↓ to navigate command history
-          - Press Tab for command completion
-          - Press Ctrl+C to interrupt running observations
-          - Press Ctrl+L to clear screen
-          - Press Ctrl+D to exit
+            ─── KEYS ───
+            Ctrl+C      Exit
+            Ctrl+D      Stop/Exit
+            Ctrl+L      Clear
+            ↑/↓         History
+
+            Type 'help <command>' for details
+        """.trimIndent()
+
+        terminal.writer().println(help)
+    }
+
+    private fun displayFullHelp() {
+        val help = """
+            AMPERE Interactive Shell - Command Reference
+
+            ═══ OBSERVATION COMMANDS ═══
+            watch [-f TYPE] [-a AGENT]        Stream events
+            status                            System dashboard
+            thread list                       List threads
+            thread show <id>                  Thread details
+            outcomes ticket <id>              Ticket history
+            outcomes search <query> [-n N]    Search outcomes
+            outcomes executor <id> [-n N]     Executor stats
+            outcomes stats                    Aggregate stats
+
+            ═══ ACTION COMMANDS ═══
+            ticket create "TITLE" [-p PRIORITY] [-d "DESC"]
+                                              Create ticket
+            ticket assign <id> <agent>        Assign ticket
+            ticket status <id> <STATUS>       Update status
+
+            message post <thread> "TEXT" [-s ID]
+                                              Post message
+            message create-thread -t "TITLE" --participants A,B
+                                              New thread
+
+            agent wake <id>                   Wake agent
+
+            ═══ FLAG ALIASES ═══
+            -f, --filter       Event type
+            -a, --agent        Agent ID
+            -p, --priority     Ticket priority (HIGH|MEDIUM|LOW|CRITICAL)
+            -d, --description  Ticket description
+            -s, --sender       Message sender
+            -t, --title        Thread title
+            -n, --limit        Result limit
+            -h, --help         Show help
+
+            ═══ COMMAND ALIASES ═══
+            w → watch     s → status    t → thread
+            o → outcomes  q → quit      ? → help
+
+            ═══ SESSION COMMANDS ═══
+            help, ?             Show this help message
+            help <command>      Show command-specific help
+            exit, quit, q       Exit the session (or Ctrl+D)
+            clear               Clear screen
+
+            ═══ KEYBINDINGS ═══
+            Ctrl+C          Exit REPL
+            Ctrl+D          Stop observation / Exit if idle
+            Ctrl+L          Clear screen
+            ↑/↓             Command history
+            Tab             Command completion
+
+            Type 'help <command>' for detailed command help
+        """.trimIndent()
+
+        terminal.writer().println(help)
+    }
+
+    private fun displayCommandHelp(commandName: String) {
+        when (commandName.lowercase()) {
+            "watch", "w" -> displayWatchHelp()
+            "ticket" -> displayTicketHelp()
+            "message" -> displayMessageHelp()
+            "agent" -> displayAgentHelp()
+            "status", "s" -> displayStatusHelp()
+            "thread", "t" -> displayThreadHelp()
+            "outcomes", "o" -> displayOutcomesHelp()
+            else -> {
+                terminal.writer().println(TerminalColors.error("Unknown command: $commandName"))
+                terminal.writer().println(TerminalColors.info("Type 'help' for all commands"))
+            }
+        }
+    }
+
+    private fun displayWatchHelp() {
+        val help = """
+            watch - Stream events in real-time
+
+            Usage: watch [-f TYPE] [-a AGENT]
+
+            Flags:
+              -f, --filter TYPE    Event type filter (repeatable)
+              -a, --agent ID       Agent ID filter (repeatable)
+              -h, --help           Show this help
+
+            Examples:
+              watch -f TaskCreated -f MessagePosted
+              watch -a agent-pm
+              watch -f TicketStatusChanged -a agent-dev
+
+            Controls:
+              Ctrl+C     Stop watching
+        """.trimIndent()
+
+        terminal.writer().println(help)
+    }
+
+    private fun displayTicketHelp() {
+        val help = """
+            ticket - Manage tickets
+
+            Subcommands:
+              create "TITLE" [-p PRI] [-d "DESC"]    Create ticket
+              assign <id> <agent>                    Assign ticket
+              status <id> <STATUS>                   Update status
+
+            Flags:
+              -p, --priority     HIGH|MEDIUM|LOW|CRITICAL
+              -d, --description  Ticket description
+
+            Examples:
+              ticket create "Add auth" -p HIGH
+              ticket assign TKT-123 agent-dev
+              ticket status TKT-123 InProgress
+        """.trimIndent()
+
+        terminal.writer().println(help)
+    }
+
+    private fun displayMessageHelp() {
+        val help = """
+            message - Manage messages and threads
+
+            Subcommands:
+              post <thread> "TEXT" [-s ID]           Post message
+              create-thread -t "TITLE" --participants A,B
+                                                     Create thread
+
+            Flags:
+              -s, --sender       Message sender (default: human)
+              -t, --title        Thread title
+              --participants     Comma-separated IDs
+
+            Examples:
+              message post thread-123 "Hello"
+              message create-thread -t "Planning" --participants agent-pm,agent-dev
+        """.trimIndent()
+
+        terminal.writer().println(help)
+    }
+
+    private fun displayAgentHelp() {
+        val help = """
+            agent - Interact with agents
+
+            Subcommands:
+              wake <id>    Send wake signal to agent
+
+            Examples:
+              agent wake agent-pm
+        """.trimIndent()
+
+        terminal.writer().println(help)
+    }
+
+    private fun displayStatusHelp() {
+        val help = """
+            status - Show system dashboard
+
+            Usage: status
+
+            Displays:
+              - Active threads with escalations
+              - Ticket breakdown by status
+              - High-priority items
+              - System alerts
+        """.trimIndent()
+
+        terminal.writer().println(help)
+    }
+
+    private fun displayThreadHelp() {
+        val help = """
+            thread - View conversation threads
+
+            Subcommands:
+              list         List all active threads
+              show <id>    Show thread details
+
+            Examples:
+              thread list
+              thread show thread-123
+        """.trimIndent()
+
+        terminal.writer().println(help)
+    }
+
+    private fun displayOutcomesHelp() {
+        val help = """
+            outcomes - View execution outcomes
+
+            Subcommands:
+              ticket <id>            Ticket execution history
+              search <query> [-n N]  Search similar outcomes
+              executor <id> [-n N]   Executor performance
+              stats                  Aggregate statistics
+
+            Flags:
+              -n, --limit    Result limit
+
+            Examples:
+              outcomes ticket TKT-123
+              outcomes search "authentication" -n 10
+              outcomes executor agent-dev
+              outcomes stats
         """.trimIndent()
 
         terminal.writer().println(help)
