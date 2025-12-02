@@ -23,6 +23,8 @@ import link.socket.ampere.agents.core.reasoning.Plan
 import link.socket.ampere.agents.core.states.AgentState
 import link.socket.ampere.agents.core.status.TaskStatus
 import link.socket.ampere.agents.core.tasks.Task
+import link.socket.ampere.agents.core.tasks.MeetingTask
+import link.socket.ampere.agents.core.tasks.TicketTask
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
@@ -142,6 +144,20 @@ class CodeWriterAgent(
                     currentTask.assignedTo?.let { assignedTo ->
                         appendLine("  Assigned To: $assignedTo")
                     }
+                }
+                is MeetingTask.AgendaItem -> {
+                    appendLine("  Type: Meeting Agenda Item")
+                    appendLine("  ID: ${currentTask.id}")
+                    appendLine("  Status: ${currentTask.status}")
+                    appendLine("  Title: ${currentTask.title}")
+                    currentTask.description?.let { desc ->
+                        appendLine("  Description: $desc")
+                    }
+                }
+                is TicketTask.CompleteSubticket -> {
+                    appendLine("  Type: Complete Subticket")
+                    appendLine("  ID: ${currentTask.id}")
+                    appendLine("  Status: ${currentTask.status}")
                 }
                 is Task.Blank -> {
                     appendLine("  No active task")
@@ -314,7 +330,9 @@ class CodeWriterAgent(
         // Create an Idea from the insights
         val taskDescription = when (task) {
             is Task.CodeChange -> task.description
-            else -> "current task"
+            is MeetingTask.AgendaItem -> task.title
+            is TicketTask.CompleteSubticket -> "subticket ${task.id}"
+            is Task.Blank -> "current task"
         }
 
         return Idea(
@@ -336,8 +354,9 @@ class CodeWriterAgent(
     private fun createFallbackIdea(task: Task, reason: String): Idea {
         val taskStatus = when (task) {
             is Task.CodeChange -> "Code change task: ${task.description} (Status: ${task.status})"
+            is MeetingTask.AgendaItem -> "Meeting agenda item: ${task.title} (Status: ${task.status})"
+            is TicketTask.CompleteSubticket -> "Complete subticket: ${task.id} (Status: ${task.status})"
             is Task.Blank -> "No active task"
-            else -> "Task ${task.id} (Status: ${task.status})"
         }
 
         return Idea(
