@@ -89,8 +89,7 @@ open class CodeWriterAgent(
 
     override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea =
         { outcomes ->
-            // TODO: evaluate outcomes and generate the idea to start the next runtime loop
-            Idea.blank
+            evaluateOutcomesAndGenerateLearnings(outcomes)
         }
 
     private fun writeCodeFile(
@@ -106,19 +105,108 @@ open class CodeWriterAgent(
     /**
      * Extract knowledge from completed task outcome.
      *
-     * TODO: Implement meaningful knowledge extraction for code writing tasks.
-     * This stub implementation provides minimal knowledge capture until the agent
-     * is enhanced with memory capabilities.
+     * This creates immediate knowledge from a single task execution. For deeper
+     * pattern analysis across multiple outcomes, use runLLMToEvaluateOutcomes.
+     *
+     * Knowledge extracted here captures:
+     * - What approach was used (task description and plan)
+     * - Whether it succeeded or failed
+     * - Context that might be useful for similar future tasks
      */
     override fun extractKnowledgeFromOutcome(
         outcome: Outcome,
         task: Task,
         plan: Plan
     ): Knowledge {
+        // Build approach description from task and plan
+        val approach = buildString {
+            when (task) {
+                is Task.CodeChange -> append("Code change: ${task.description}")
+                is MeetingTask.AgendaItem -> append("Meeting item: ${task.title}")
+                is TicketTask.CompleteSubticket -> append("Subticket: ${task.id}")
+                is Task.Blank -> append("No specific task")
+            }
+
+            if (plan is Plan.ForTask && plan.tasks.isNotEmpty()) {
+                append(" (${plan.tasks.size} steps)")
+            }
+        }
+
+        // Extract learnings based on outcome type
+        val learnings = when (outcome) {
+            is ExecutionOutcome.CodeChanged.Success -> {
+                buildString {
+                    appendLine("✓ Code changes succeeded")
+                    appendLine("Files modified: ${outcome.changedFiles.size}")
+                    outcome.changedFiles.take(3).forEach { file ->
+                        appendLine("  - $file")
+                    }
+                    if (outcome.changedFiles.size > 3) {
+                        appendLine("  ... and ${outcome.changedFiles.size - 3} more")
+                    }
+                    appendLine("Validation: ${outcome.validation}")
+
+                    val duration = outcome.executionEndTimestamp - outcome.executionStartTimestamp
+                    appendLine("Duration: $duration")
+
+                    appendLine()
+                    appendLine("This approach was successful for this type of code change task.")
+                }
+            }
+            is ExecutionOutcome.CodeChanged.Failure -> {
+                buildString {
+                    appendLine("✗ Code changes failed")
+                    appendLine("Error: ${outcome.error}")
+                    outcome.partiallyChangedFiles?.let { files ->
+                        if (files.isNotEmpty()) {
+                            appendLine("Partially changed ${files.size} files")
+                        }
+                    }
+
+                    val duration = outcome.executionEndTimestamp - outcome.executionStartTimestamp
+                    appendLine("Duration before failure: $duration")
+
+                    appendLine()
+                    appendLine("Future tasks should avoid this approach or address the error cause.")
+                }
+            }
+            is ExecutionOutcome.CodeReading.Success -> {
+                buildString {
+                    appendLine("✓ Code reading succeeded")
+                    appendLine("Files read: ${outcome.readFiles.size}")
+
+                    val duration = outcome.executionEndTimestamp - outcome.executionStartTimestamp
+                    appendLine("Duration: $duration")
+
+                    appendLine()
+                    appendLine("Code reading was successful for gathering context.")
+                }
+            }
+            is ExecutionOutcome.CodeReading.Failure -> {
+                buildString {
+                    appendLine("✗ Code reading failed")
+                    appendLine("Error: ${outcome.error}")
+
+                    appendLine()
+                    appendLine("Consider checking file paths or permissions for future reads.")
+                }
+            }
+            is ExecutionOutcome.NoChanges.Success -> {
+                "Task completed without changes: ${(outcome as ExecutionOutcome.NoChanges.Success).message}"
+            }
+            is ExecutionOutcome.NoChanges.Failure -> {
+                "Task failed without changes: ${(outcome as ExecutionOutcome.NoChanges.Failure).message}"
+            }
+            is Outcome.Success -> "Task succeeded (details not available)"
+            is Outcome.Failure -> "Task failed (details not available)"
+            is Outcome.Blank -> "No outcome recorded"
+            else -> "Outcome type: ${outcome::class.simpleName}"
+        }
+
         return Knowledge.FromOutcome(
             outcomeId = outcome.id,
-            approach = "Code writing task executed",
-            learnings = "Task completed - knowledge extraction not yet implemented",
+            approach = approach,
+            learnings = learnings,
             timestamp = Clock.System.now()
         )
     }
@@ -982,6 +1070,463 @@ open class CodeWriterAgent(
             executionStartTimestamp = now,
             executionEndTimestamp = now,
             message = reason,
+        )
+    }
+
+    /**
+     * Evaluates execution outcomes and generates learnings that feed back into the cognitive loop.
+     *
+     * This function closes the learning loop by:
+     * 1. Analyzing execution outcomes to identify patterns of success and failure
+     * 2. Using an LLM to extract actionable insights from these patterns
+     * 3. Creating Knowledge.FromOutcome entries for each learning
+     * 4. Storing learnings in agent memory for future reference
+     * 5. Returning an Idea that summarizes the learnings
+     *
+     * The insights generated here inform future perception, planning, and execution,
+     * enabling the agent to improve over time by learning from experience.
+     *
+     * @param outcomes List of outcomes from recent executions
+     * @return An Idea containing synthesized learnings from the outcomes
+     */
+    private fun evaluateOutcomesAndGenerateLearnings(outcomes: List<Outcome>): Idea {
+        // Handle empty outcomes
+        if (outcomes.isEmpty()) {
+            return Idea(
+                name = "No outcomes to evaluate",
+                description = "No execution outcomes were provided for evaluation."
+            )
+        }
+
+        // Handle blank outcomes
+        if (outcomes.all { it is Outcome.Blank }) {
+            return Idea(
+                name = "Only blank outcomes",
+                description = "All provided outcomes were blank - no learnings can be extracted."
+            )
+        }
+
+        // Build outcome analysis context
+        val analysisContext = buildOutcomeAnalysisContext(outcomes)
+
+        // Craft evaluation prompt
+        val evaluationPrompt = buildOutcomeEvaluationPrompt(analysisContext)
+
+        // Call LLM to generate insights
+        val llmResponse = try {
+            callLLM(evaluationPrompt)
+        } catch (e: Exception) {
+            return createFallbackLearningIdea(outcomes, "LLM call failed: ${e.message}")
+        }
+
+        // Parse insights into Knowledge objects
+        val knowledgeEntries = try {
+            parseLearningsFromResponse(llmResponse, outcomes)
+        } catch (e: Exception) {
+            return createFallbackLearningIdea(outcomes, "Failed to parse learnings: ${e.message}")
+        }
+
+        // Store learnings in agent memory for future reference
+        if (knowledgeEntries.isNotEmpty()) {
+            initialState.addToPastKnowledge(
+                rememberedKnowledgeFromOutcomes = knowledgeEntries
+            )
+        }
+
+        // Create an Idea summarizing the learnings
+        return createLearningIdea(knowledgeEntries, outcomes)
+    }
+
+    /**
+     * Builds a context description from execution outcomes for LLM analysis.
+     *
+     * This extracts key information from outcomes including:
+     * - Success vs failure counts
+     * - Details about successful executions
+     * - Details about failed executions
+     * - Execution timing and performance data
+     *
+     * @param outcomes The outcomes to analyze
+     * @return A structured context description for the LLM
+     */
+    private fun buildOutcomeAnalysisContext(outcomes: List<Outcome>): String {
+        val successfulOutcomes = outcomes.filterIsInstance<Outcome.Success>()
+        val failedOutcomes = outcomes.filterIsInstance<Outcome.Failure>()
+
+        return buildString {
+            appendLine("=== Execution Outcome Analysis ===")
+            appendLine()
+            appendLine("Total Outcomes: ${outcomes.size}")
+            appendLine("Successful: ${successfulOutcomes.size}")
+            appendLine("Failed: ${failedOutcomes.size}")
+            appendLine()
+
+            // Analyze successful outcomes
+            if (successfulOutcomes.isNotEmpty()) {
+                appendLine("Successful Executions:")
+                appendLine()
+
+                successfulOutcomes.forEach { outcome ->
+                    when (outcome) {
+                        is ExecutionOutcome.CodeChanged.Success -> {
+                            val duration = outcome.executionEndTimestamp - outcome.executionStartTimestamp
+                            appendLine("✓ Code Changed Successfully")
+                            appendLine("  Task: ${outcome.taskId}")
+                            appendLine("  Files Changed: ${outcome.changedFiles.size}")
+                            outcome.changedFiles.take(5).forEach { file ->
+                                appendLine("    - $file")
+                            }
+                            if (outcome.changedFiles.size > 5) {
+                                appendLine("    ... and ${outcome.changedFiles.size - 5} more")
+                            }
+                            appendLine("  Duration: $duration")
+                            appendLine("  Validation: ${outcome.validation}")
+                            appendLine()
+                        }
+                        is ExecutionOutcome.CodeReading.Success -> {
+                            val duration = outcome.executionEndTimestamp - outcome.executionStartTimestamp
+                            appendLine("✓ Code Read Successfully")
+                            appendLine("  Task: ${outcome.taskId}")
+                            appendLine("  Files Read: ${outcome.readFiles.size}")
+                            outcome.readFiles.take(3).forEach { (path, _) ->
+                                appendLine("    - $path")
+                            }
+                            if (outcome.readFiles.size > 3) {
+                                appendLine("    ... and ${outcome.readFiles.size - 3} more")
+                            }
+                            appendLine("  Duration: $duration")
+                            appendLine()
+                        }
+                        is ExecutionOutcome.NoChanges.Success -> {
+                            val duration = outcome.executionEndTimestamp - outcome.executionStartTimestamp
+                            appendLine("✓ No Changes (Success)")
+                            appendLine("  Task: ${outcome.taskId}")
+                            appendLine("  Message: ${outcome.message}")
+                            appendLine("  Duration: $duration")
+                            appendLine()
+                        }
+                        else -> {
+                            appendLine("✓ Success: ${outcome::class.simpleName}")
+                            if (outcome is ExecutionOutcome) {
+                                appendLine("  Task: ${outcome.taskId}")
+                            }
+                            appendLine()
+                        }
+                    }
+                }
+            }
+
+            // Analyze failed outcomes
+            if (failedOutcomes.isNotEmpty()) {
+                appendLine("Failed Executions:")
+                appendLine()
+
+                failedOutcomes.forEach { outcome ->
+                    when (outcome) {
+                        is ExecutionOutcome.CodeChanged.Failure -> {
+                            val duration = outcome.executionEndTimestamp - outcome.executionStartTimestamp
+                            appendLine("✗ Code Change Failed")
+                            appendLine("  Task: ${outcome.taskId}")
+                            appendLine("  Error: ${outcome.error}")
+                            outcome.partiallyChangedFiles?.let { files ->
+                                if (files.isNotEmpty()) {
+                                    appendLine("  Partially Changed Files: ${files.size}")
+                                    files.take(3).forEach { file ->
+                                        appendLine("    - $file")
+                                    }
+                                }
+                            }
+                            appendLine("  Duration: $duration")
+                            appendLine()
+                        }
+                        is ExecutionOutcome.CodeReading.Failure -> {
+                            val duration = outcome.executionEndTimestamp - outcome.executionStartTimestamp
+                            appendLine("✗ Code Reading Failed")
+                            appendLine("  Task: ${outcome.taskId}")
+                            appendLine("  Error: ${outcome.error}")
+                            outcome.partiallyReadFiles?.let { files ->
+                                if (files.isNotEmpty()) {
+                                    appendLine("  Partially Read Files: ${files.size}")
+                                }
+                            }
+                            appendLine("  Duration: $duration")
+                            appendLine()
+                        }
+                        is ExecutionOutcome.NoChanges.Failure -> {
+                            val duration = outcome.executionEndTimestamp - outcome.executionStartTimestamp
+                            appendLine("✗ Execution Failed (No Changes)")
+                            appendLine("  Task: ${outcome.taskId}")
+                            appendLine("  Message: ${outcome.message}")
+                            appendLine("  Duration: $duration")
+                            appendLine()
+                        }
+                        else -> {
+                            appendLine("✗ Failure: ${outcome::class.simpleName}")
+                            if (outcome is ExecutionOutcome) {
+                                appendLine("  Task: ${outcome.taskId}")
+                            }
+                            appendLine()
+                        }
+                    }
+                }
+            }
+
+            // Add summary statistics
+            appendLine("Summary:")
+            val successRate = if (outcomes.isNotEmpty()) {
+                (successfulOutcomes.size.toDouble() / outcomes.size.toDouble() * 100).toInt()
+            } else {
+                0
+            }
+            appendLine("  Success Rate: $successRate%")
+
+            // Calculate average duration for execution outcomes
+            val executionOutcomes = outcomes.filterIsInstance<ExecutionOutcome>()
+            if (executionOutcomes.isNotEmpty()) {
+                val totalDuration = executionOutcomes.sumOf { outcome ->
+                    (outcome.executionEndTimestamp - outcome.executionStartTimestamp).inWholeMilliseconds
+                }
+                val avgDuration = totalDuration / executionOutcomes.size
+                appendLine("  Average Execution Duration: ${avgDuration}ms")
+            }
+        }
+    }
+
+    /**
+     * Builds the LLM prompt for outcome evaluation.
+     *
+     * This prompt instructs the LLM to:
+     * - Identify patterns in successful and failed executions
+     * - Extract actionable insights from these patterns
+     * - Generate learnings with confidence levels based on evidence
+     * - Focus on insights that will improve future performance
+     *
+     * @param analysisContext The outcome analysis context
+     * @return The prompt string for the LLM
+     */
+    private fun buildOutcomeEvaluationPrompt(analysisContext: String): String {
+        return """
+            You are the learning module of an autonomous code-writing agent.
+            Analyze execution outcomes to generate insights that will improve future performance.
+
+            Your goal is to identify:
+            1. What patterns distinguish successful executions from failures
+            2. Which approaches, tools, or strategies correlate with success
+            3. What common failure modes exist and how to avoid them
+            4. What meta-patterns exist (e.g., "simple tasks succeed more than complex ones")
+
+            Execution Data:
+            $analysisContext
+
+            Generate 2-4 specific, actionable insights. Each insight should:
+            - Identify a clear pattern observed in the data
+            - Explain why this pattern matters for future executions
+            - Suggest a concrete change to behavior based on this pattern
+            - Include confidence level (high/medium/low) based on evidence strength
+
+            Focus on insights that will actually improve performance, not just observations.
+            "File operations sometimes fail" is an observation.
+            "File operations fail when paths are relative; use absolute paths" is actionable.
+
+            Format your response as a JSON array:
+            [
+              {
+                "pattern": "what pattern you identified",
+                "reasoning": "why this pattern emerged and why it matters",
+                "actionableAdvice": "what to do differently based on this",
+                "confidence": "high|medium|low",
+                "evidenceCount": number_of_supporting_examples
+              }
+            ]
+
+            Important:
+            - Base insights on actual patterns in the data, not generic advice
+            - Higher evidenceCount should correlate with higher confidence
+            - Focus on learnings specific to code generation and file operations
+            - Avoid generic advice that would apply to any task
+
+            Respond ONLY with the JSON array, no other text.
+        """.trimIndent()
+    }
+
+    /**
+     * Parses the LLM response into Knowledge.FromOutcome objects.
+     *
+     * Expected JSON format:
+     * [
+     *   {
+     *     "pattern": "...",
+     *     "reasoning": "...",
+     *     "actionableAdvice": "...",
+     *     "confidence": "high|medium|low",
+     *     "evidenceCount": N
+     *   }
+     * ]
+     *
+     * @param llmResponse The LLM's JSON response
+     * @param outcomes The original outcomes being analyzed
+     * @return List of Knowledge.FromOutcome entries
+     */
+    private fun parseLearningsFromResponse(
+        llmResponse: String,
+        outcomes: List<Outcome>,
+    ): List<Knowledge.FromOutcome> {
+        val json = Json { ignoreUnknownKeys = true }
+
+        // Clean up response (remove markdown code blocks if present)
+        val cleanedResponse = llmResponse
+            .trim()
+            .removePrefix("```json")
+            .removePrefix("```")
+            .removeSuffix("```")
+            .trim()
+
+        val learningsArray = json.parseToJsonElement(cleanedResponse).jsonArray
+
+        if (learningsArray.isEmpty()) {
+            return emptyList()
+        }
+
+        val now = Clock.System.now()
+
+        // Convert each learning into a Knowledge.FromOutcome entry
+        return learningsArray.mapNotNull { element ->
+            try {
+                val obj = element.jsonObject
+                val pattern = obj["pattern"]?.jsonPrimitive?.content ?: return@mapNotNull null
+                val reasoning = obj["reasoning"]?.jsonPrimitive?.content ?: ""
+                val actionableAdvice = obj["actionableAdvice"]?.jsonPrimitive?.content ?: ""
+                val confidence = obj["confidence"]?.jsonPrimitive?.content ?: "medium"
+                val evidenceCount = obj["evidenceCount"]?.jsonPrimitive?.content?.toIntOrNull() ?: 1
+
+                // Use the first non-blank outcome ID, or generate a composite ID
+                val outcomeId = outcomes.firstOrNull { it.id.isNotBlank() }?.id
+                    ?: "composite-${outcomes.hashCode()}"
+
+                Knowledge.FromOutcome(
+                    outcomeId = outcomeId,
+                    approach = pattern,
+                    learnings = buildString {
+                        appendLine("Reasoning: $reasoning")
+                        appendLine()
+                        appendLine("Actionable Advice: $actionableAdvice")
+                        appendLine()
+                        appendLine("Confidence: $confidence")
+                        appendLine("Evidence Count: $evidenceCount")
+                    },
+                    timestamp = now
+                )
+            } catch (e: Exception) {
+                // Skip malformed learning entries
+                null
+            }
+        }
+    }
+
+    /**
+     * Creates an Idea from Knowledge.FromOutcome entries.
+     *
+     * This synthesizes the learnings into a cohesive description that can be
+     * used by future perception to inform planning and execution.
+     *
+     * @param knowledgeEntries The knowledge entries extracted from outcomes
+     * @param outcomes The original outcomes
+     * @return An Idea summarizing the learnings
+     */
+    private fun createLearningIdea(
+        knowledgeEntries: List<Knowledge.FromOutcome>,
+        outcomes: List<Outcome>,
+    ): Idea {
+        val successCount = outcomes.count { it is Outcome.Success }
+        val failureCount = outcomes.count { it is Outcome.Failure }
+
+        val description = buildString {
+            appendLine("Learnings from ${outcomes.size} execution outcomes " +
+                    "($successCount successful, $failureCount failed):")
+            appendLine()
+
+            if (knowledgeEntries.isEmpty()) {
+                appendLine("No specific learnings extracted - outcomes may be too similar or data insufficient.")
+            } else {
+                knowledgeEntries.forEachIndexed { index, knowledge ->
+                    appendLine("${index + 1}. ${knowledge.approach}")
+                    appendLine()
+                    knowledge.learnings.lines().forEach { line ->
+                        if (line.isNotBlank()) {
+                            appendLine("   $line")
+                        }
+                    }
+                    appendLine()
+                }
+            }
+        }
+
+        return Idea(
+            name = "Outcome evaluation: ${outcomes.size} executions analyzed",
+            description = description
+        )
+    }
+
+    /**
+     * Creates a fallback learning Idea when LLM analysis fails.
+     *
+     * This ensures the agent can continue operating even when outcome evaluation
+     * encounters errors. The fallback provides basic statistics without deep insights.
+     *
+     * @param outcomes The outcomes that were being analyzed
+     * @param reason Why the fallback was needed
+     * @return A basic Idea with outcome statistics
+     */
+    private fun createFallbackLearningIdea(outcomes: List<Outcome>, reason: String): Idea {
+        val successCount = outcomes.count { it is Outcome.Success }
+        val failureCount = outcomes.count { it is Outcome.Failure }
+        val successRate = if (outcomes.isNotEmpty()) {
+            (successCount.toDouble() / outcomes.size.toDouble() * 100).toInt()
+        } else {
+            0
+        }
+
+        val description = buildString {
+            appendLine("Basic outcome statistics (advanced analysis unavailable - $reason):")
+            appendLine()
+            appendLine("Total Outcomes: ${outcomes.size}")
+            appendLine("Successful: $successCount")
+            appendLine("Failed: $failureCount")
+            appendLine("Success Rate: $successRate%")
+            appendLine()
+
+            if (failureCount > successCount) {
+                appendLine("⚠ High failure rate suggests tasks may be too complex or tools inadequate.")
+                appendLine("Consider: Breaking tasks into smaller steps, validating inputs, or using different approaches.")
+            } else {
+                appendLine("✓ Reasonable success rate - continue with current approach.")
+            }
+        }
+
+        // Create a basic Knowledge.FromOutcome for the fallback
+        val now = Clock.System.now()
+        val outcomeId = outcomes.firstOrNull { it.id.isNotBlank() }?.id
+            ?: "fallback-${outcomes.hashCode()}"
+
+        val fallbackKnowledge = Knowledge.FromOutcome(
+            outcomeId = outcomeId,
+            approach = "Completed ${outcomes.size} executions with $successRate% success rate",
+            learnings = if (failureCount > successCount) {
+                "High failure rate indicates need for simpler tasks or better tools"
+            } else {
+                "Continue with current approach"
+            },
+            timestamp = now
+        )
+
+        // Store the fallback learning
+        initialState.addToPastKnowledge(
+            rememberedKnowledgeFromOutcomes = listOf(fallbackKnowledge)
+        )
+
+        return Idea(
+            name = "Outcome evaluation (basic statistics)",
+            description = description
         )
     }
 
