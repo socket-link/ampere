@@ -28,7 +28,7 @@ sealed interface Plan {
     val expectations: Expectations
 
     @Serializable
-    data object Empty : Plan {
+    data object Blank : Plan {
         override val id: PlanId = ""
         override val tasks: List<Task> = emptyList()
         override val estimatedComplexity: Int = 0
@@ -84,6 +84,6 @@ sealed interface Plan {
     }
 
     companion object {
-        val blank: Plan = Empty
+        val blank: Plan = Blank
     }
 }

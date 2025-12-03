@@ -753,7 +753,7 @@ actual class CodeWriterAgentTest {
 
         // Verify
         assertNotNull(plan)
-        assertTrue(plan is link.socket.ampere.agents.core.reasoning.Plan.Empty)
+        assertTrue(plan is link.socket.ampere.agents.core.reasoning.Plan.Blank)
     }
 
     /**
