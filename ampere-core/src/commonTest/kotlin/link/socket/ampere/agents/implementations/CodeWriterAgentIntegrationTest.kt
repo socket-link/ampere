@@ -56,6 +56,7 @@ import link.socket.ampere.agents.implementations.code.CodeWriterAgent
  * This suite verifies the "metabolic loop" of autonomous agency—the continuous cycle
  * of perception → planning → execution → evaluation that enables genuine autonomy.
  */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class CodeWriterAgentIntegrationTest {
 
     /**
