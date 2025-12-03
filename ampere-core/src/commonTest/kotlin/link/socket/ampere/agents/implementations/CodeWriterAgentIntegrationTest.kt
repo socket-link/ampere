@@ -389,14 +389,6 @@ class CodeWriterAgentIntegrationTest {
     /**
      * Test 6: Executor abstraction is used correctly
      *
-     * Validates that:
-     * - Agent invokes tools through executors, not directly
-     * - Executors are properly passed to cognitive functions
-     * - The architectural pattern (agents → executors → tools) is respected
-     */
-    /**
-     * Test 6: Executor abstraction is used correctly
-     *
      * Validates that the agent properly uses an executor for tool execution.
      * Since Executor is a sealed interface, we cannot create a test double,
      * but we verify that the agent has an executor and uses it for execution.
