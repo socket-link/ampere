@@ -24,16 +24,16 @@ import link.socket.ampere.agents.core.reasoning.Idea
 import link.socket.ampere.agents.core.reasoning.Perception
 import link.socket.ampere.agents.core.reasoning.Plan
 import link.socket.ampere.agents.core.states.AgentState
-import link.socket.ampere.agents.core.status.TaskStatus
-import link.socket.ampere.agents.core.tasks.Task
-import link.socket.ampere.agents.core.tasks.MeetingTask
-import link.socket.ampere.agents.core.tasks.TicketTask
 import link.socket.ampere.agents.core.status.ExecutionStatus
+import link.socket.ampere.agents.core.status.TaskStatus
 import link.socket.ampere.agents.core.status.TicketStatus
+import link.socket.ampere.agents.core.tasks.MeetingTask
+import link.socket.ampere.agents.core.tasks.Task
+import link.socket.ampere.agents.core.tasks.TicketTask
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
-import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
@@ -117,7 +117,7 @@ open class CodeWriterAgent(
         outcome: Outcome,
         task: Task,
         plan: Plan
-    ): Knowledge {
+    ): Knowledge.FromOutcome {
         // Build approach description from task and plan
         val approach = buildString {
             when (task) {
