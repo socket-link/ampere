@@ -152,7 +152,7 @@ class CodeWriterAgentIntegrationTest {
         val initialState = agent.getCurrentState()
         val initialMemory = initialState.getCurrentMemory()
         assertTrue(initialMemory.task is Task.Blank, "Initial task should be blank")
-        assertTrue(initialMemory.plan is Plan.blank, "Initial plan should be blank")
+        assertTrue(initialMemory.plan is Plan.Empty, "Initial plan should be blank")
         assertTrue(initialMemory.outcome is Outcome.Blank, "Initial outcome should be blank")
 
         // Perceive state
