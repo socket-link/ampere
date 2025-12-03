@@ -37,6 +37,8 @@ import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
+import link.socket.ampere.agents.execution.tools.FunctionTool
+import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.domain.util.toClientModelId
 
@@ -80,8 +82,9 @@ open class CodeWriterAgent(
 
     override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome =
         { tool, request ->
-            // TODO: execute tool with parameters
-            ExecutionOutcome.Blank
+            runBlocking {
+                executeToolWithLLMGeneratedParameters(tool, request)
+            }
         }
 
     override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea =
@@ -994,4 +997,437 @@ open class CodeWriterAgent(
         val content: String,
         val reason: String,
     )
+
+    /**
+     * Executes a tool with LLM-generated parameters.
+     *
+     * This function acts as the parameter synthesizer - it takes a high-level intent
+     * and a specific tool, then uses an LLM to generate the exact parameters that tool needs.
+     *
+     * For code generation tools, this means generating actual code content, file paths,
+     * and implementation details from a description like "implement user validation".
+     *
+     * The function:
+     * 1. Extracts the intent from the execution request
+     * 2. Builds a parameter generation prompt specific to the tool type
+     * 3. Calls the LLM to generate parameters
+     * 4. Parses and validates the generated parameters
+     * 5. Executes the tool through the executor
+     * 6. Returns the execution outcome
+     *
+     * @param tool The tool to execute
+     * @param request The execution request containing context and high-level intent
+     * @return ExecutionOutcome indicating success or failure
+     */
+    private suspend fun executeToolWithLLMGeneratedParameters(
+        tool: Tool<*>,
+        request: ExecutionRequest<*>,
+    ): ExecutionOutcome {
+        val startTime = Clock.System.now()
+
+        // Extract the intent from the request
+        val intent = extractIntentFromRequest(request)
+        if (intent.isBlank()) {
+            return ExecutionOutcome.NoChanges.Failure(
+                executorId = executor.id,
+                ticketId = request.context.ticket.id,
+                taskId = request.context.task.id,
+                executionStartTimestamp = startTime,
+                executionEndTimestamp = Clock.System.now(),
+                message = "Cannot execute tool: no intent found in request",
+            )
+        }
+
+        // Check if this is an MCP tool - not yet supported
+        if (tool is McpTool) {
+            return ExecutionOutcome.NoChanges.Failure(
+                executorId = executor.id,
+                ticketId = request.context.ticket.id,
+                taskId = request.context.task.id,
+                executionStartTimestamp = startTime,
+                executionEndTimestamp = Clock.System.now(),
+                message = "MCP tool execution not yet supported",
+            )
+        }
+
+        // Generate parameters using LLM based on the tool type
+        val parametersPrompt = buildParameterGenerationPrompt(tool, request, intent)
+        val llmResponse = try {
+            callLLM(parametersPrompt)
+        } catch (e: Exception) {
+            return ExecutionOutcome.NoChanges.Failure(
+                executorId = executor.id,
+                ticketId = request.context.ticket.id,
+                taskId = request.context.task.id,
+                executionStartTimestamp = startTime,
+                executionEndTimestamp = Clock.System.now(),
+                message = "LLM call failed during parameter generation: ${e.message}",
+            )
+        }
+
+        // Parse the LLM response into tool-specific parameters
+        val enrichedRequest = try {
+            parseAndEnrichRequest(llmResponse, tool, request)
+        } catch (e: Exception) {
+            return ExecutionOutcome.NoChanges.Failure(
+                executorId = executor.id,
+                ticketId = request.context.ticket.id,
+                taskId = request.context.task.id,
+                executionStartTimestamp = startTime,
+                executionEndTimestamp = Clock.System.now(),
+                message = "Failed to parse LLM response into parameters: ${e.message}",
+            )
+        }
+
+        // Execute the tool through the executor with the enriched request
+        return try {
+            when (tool) {
+                is FunctionTool<*> -> {
+                    // For FunctionTools, we need to cast appropriately
+                    @Suppress("UNCHECKED_CAST")
+                    val typedTool = tool as Tool<ExecutionContext>
+                    @Suppress("UNCHECKED_CAST")
+                    val typedRequest = enrichedRequest as ExecutionRequest<ExecutionContext>
+
+                    val statusFlow = executor.execute(typedRequest, typedTool)
+                    val finalStatus = statusFlow.last()
+
+                    when (finalStatus) {
+                        is link.socket.ampere.agents.core.status.ExecutionStatus.Completed -> finalStatus.result
+                        is link.socket.ampere.agents.core.status.ExecutionStatus.Failed -> finalStatus.result
+                        else -> ExecutionOutcome.NoChanges.Failure(
+                            executorId = executor.id,
+                            ticketId = request.context.ticket.id,
+                            taskId = request.context.task.id,
+                            executionStartTimestamp = startTime,
+                            executionEndTimestamp = Clock.System.now(),
+                            message = "Unexpected execution status: ${finalStatus::class.simpleName}",
+                        )
+                    }
+                }
+                is McpTool -> {
+                    // MCP tools not yet fully implemented
+                    ExecutionOutcome.NoChanges.Failure(
+                        executorId = executor.id,
+                        ticketId = request.context.ticket.id,
+                        taskId = request.context.task.id,
+                        executionStartTimestamp = startTime,
+                        executionEndTimestamp = Clock.System.now(),
+                        message = "MCP tool execution not yet supported",
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            ExecutionOutcome.NoChanges.Failure(
+                executorId = executor.id,
+                ticketId = request.context.ticket.id,
+                taskId = request.context.task.id,
+                executionStartTimestamp = startTime,
+                executionEndTimestamp = Clock.System.now(),
+                message = "Tool execution failed: ${e.message}",
+            )
+        }
+    }
+
+    /**
+     * Extracts the high-level intent from an execution request.
+     *
+     * The intent describes what the agent wants to accomplish (e.g., "implement user validation").
+     * This is extracted from the request's instructions field.
+     *
+     * @param request The execution request
+     * @return The extracted intent string
+     */
+    private fun extractIntentFromRequest(request: ExecutionRequest<*>): String {
+        return request.context.instructions
+    }
+
+    /**
+     * Builds a prompt for the LLM to generate tool-specific parameters.
+     *
+     * The prompt is tailored to the tool type:
+     * - For write_code_file: generates complete, working code
+     * - For read_code_file: determines which files to read
+     * - For other tools: generates appropriate parameters in JSON format
+     *
+     * @param tool The tool that will be executed
+     * @param request The original execution request
+     * @param intent The high-level intent to accomplish
+     * @return The prompt string for the LLM
+     */
+    private fun buildParameterGenerationPrompt(
+        tool: Tool<*>,
+        request: ExecutionRequest<*>,
+        intent: String,
+    ): String {
+        return when (tool.id) {
+            "write_code_file" -> buildCodeWritingPrompt(request, intent)
+            "read_code_file" -> buildCodeReadingPrompt(request, intent)
+            else -> buildGenericToolPrompt(tool, request, intent)
+        }
+    }
+
+    /**
+     * Builds a prompt for generating code to write to a file.
+     *
+     * This prompt instructs the LLM to generate production-quality code that:
+     * - Is syntactically correct
+     * - Follows Kotlin idioms and best practices
+     * - Includes proper package declarations and imports
+     * - Has complete implementations (no TODOs or placeholders)
+     *
+     * @param request The execution request with context
+     * @param intent The high-level intent (what to implement)
+     * @return The prompt string
+     */
+    private fun buildCodeWritingPrompt(
+        request: ExecutionRequest<*>,
+        intent: String,
+    ): String {
+        val context = request.context
+        val workspace = if (context is ExecutionContext.Code) {
+            context.workspace.baseDirectory
+        } else {
+            "."
+        }
+
+        return """
+            You are a precise code generation system for the CodeWriterAgent.
+            Your task is to generate production-quality Kotlin code based on the given intent.
+
+            Intent: $intent
+
+            Workspace: $workspace
+
+            Generate COMPLETE, WORKING code that:
+            1. Is syntactically correct and follows Kotlin conventions
+            2. Uses idiomatic Kotlin patterns (data classes, sealed classes, extension functions where appropriate)
+            3. Includes proper package declarations inferred from file paths
+            4. Includes all necessary imports
+            5. Has no TODOs, placeholders, or incomplete implementations
+            6. Includes appropriate documentation comments for public APIs
+
+            Package naming convention:
+            - For file path "src/commonMain/kotlin/link/socket/ampere/User.kt" → package link.socket.ampere
+            - For file path "src/main/kotlin/com/example/Foo.kt" → package com.example
+
+            Format your response as a JSON object:
+            {
+              "files": [
+                {
+                  "path": "relative/path/to/file.kt",
+                  "content": "the complete file content",
+                  "reason": "brief explanation of what this file does"
+                }
+              ]
+            }
+
+            Important:
+            - Generate at least one file
+            - Use relative paths from the workspace root
+            - Include COMPLETE file content, not snippets
+            - Start file content with package declaration (if applicable)
+
+            Respond ONLY with the JSON object, no other text.
+        """.trimIndent()
+    }
+
+    /**
+     * Builds a prompt for determining which code files to read.
+     *
+     * This prompt instructs the LLM to analyze the intent and determine which
+     * files need to be read to understand the context.
+     *
+     * @param request The execution request with context
+     * @param intent The high-level intent
+     * @return The prompt string
+     */
+    private fun buildCodeReadingPrompt(
+        request: ExecutionRequest<*>,
+        intent: String,
+    ): String {
+        val context = request.context
+        val workspace = if (context is ExecutionContext.Code) {
+            context.workspace.baseDirectory
+        } else {
+            "."
+        }
+
+        return """
+            You are a code analysis system for the CodeWriterAgent.
+            Your task is to determine which files need to be read to accomplish the given intent.
+
+            Intent: $intent
+
+            Workspace: $workspace
+
+            Analyze the intent and determine which files should be read to:
+            1. Understand existing code structure
+            2. Find relevant classes, functions, or modules
+            3. Gather context for code modifications
+
+            Format your response as a JSON object:
+            {
+              "filePaths": [
+                "relative/path/to/file1.kt",
+                "relative/path/to/file2.kt"
+              ],
+              "reason": "brief explanation of why these files are needed"
+            }
+
+            Respond ONLY with the JSON object, no other text.
+        """.trimIndent()
+    }
+
+    /**
+     * Builds a generic prompt for tools that don't have specific handling.
+     *
+     * This prompt asks the LLM to generate parameters in JSON format based on
+     * the tool's description and the given intent.
+     *
+     * @param tool The tool to generate parameters for
+     * @param request The execution request
+     * @param intent The high-level intent
+     * @return The prompt string
+     */
+    private fun buildGenericToolPrompt(
+        tool: Tool<*>,
+        request: ExecutionRequest<*>,
+        intent: String,
+    ): String {
+        return """
+            You are a parameter generation system for the CodeWriterAgent.
+            Your task is to generate appropriate parameters for executing a tool.
+
+            Tool: ${tool.name}
+            Tool Description: ${tool.description}
+
+            Intent: $intent
+
+            Generate the parameters needed to execute this tool to accomplish the intent.
+
+            Format your response as a JSON object with parameter names as keys:
+            {
+              "parameterName1": "value1",
+              "parameterName2": "value2"
+            }
+
+            Respond ONLY with the JSON object, no other text.
+        """.trimIndent()
+    }
+
+    /**
+     * Parses the LLM response and enriches the execution request with generated parameters.
+     *
+     * This function:
+     * 1. Cleans up the LLM response (removes markdown formatting)
+     * 2. Parses the JSON response
+     * 3. Extracts tool-specific parameters
+     * 4. Creates a new execution request with the enriched context
+     *
+     * @param llmResponse The raw response from the LLM
+     * @param tool The tool being executed
+     * @param originalRequest The original execution request
+     * @return An enriched execution request with generated parameters
+     */
+    private fun parseAndEnrichRequest(
+        llmResponse: String,
+        tool: Tool<*>,
+        originalRequest: ExecutionRequest<*>,
+    ): ExecutionRequest<*> {
+        val json = Json { ignoreUnknownKeys = true }
+
+        // Clean up response (remove markdown code blocks if present)
+        val cleanedResponse = llmResponse
+            .trim()
+            .removePrefix("```json")
+            .removePrefix("```")
+            .removeSuffix("```")
+            .trim()
+
+        val responseJson = json.parseToJsonElement(cleanedResponse).jsonObject
+
+        return when (tool.id) {
+            "write_code_file" -> {
+                // Parse file specifications
+                val filesArray = responseJson["files"]?.jsonArray
+                    ?: throw IllegalStateException("No 'files' array in LLM response")
+
+                if (filesArray.isEmpty()) {
+                    throw IllegalStateException("Empty 'files' array in LLM response")
+                }
+
+                // Extract file paths and content
+                val instructionsPerFilePath = filesArray.map { element ->
+                    val fileObj = element.jsonObject
+                    val path = fileObj["path"]?.jsonPrimitive?.content
+                        ?: throw IllegalStateException("File missing 'path'")
+                    val content = fileObj["content"]?.jsonPrimitive?.content
+                        ?: throw IllegalStateException("File missing 'content'")
+
+                    path to content
+                }
+
+                // Create enriched context for write_code_file
+                val originalContext = originalRequest.context
+                val workspace = if (originalContext is ExecutionContext.Code) {
+                    originalContext.workspace
+                } else {
+                    ExecutionWorkspace(baseDirectory = ".")
+                }
+
+                val enrichedContext = ExecutionContext.Code.WriteCode(
+                    executorId = originalContext.executorId,
+                    ticket = originalContext.ticket,
+                    task = originalContext.task,
+                    instructions = originalContext.instructions,
+                    workspace = workspace,
+                    instructionsPerFilePath = instructionsPerFilePath,
+                    knowledgeFromPastMemory = originalContext.knowledgeFromPastMemory,
+                )
+
+                ExecutionRequest(
+                    context = enrichedContext,
+                    constraints = originalRequest.constraints,
+                )
+            }
+
+            "read_code_file" -> {
+                // Parse file paths
+                val filePathsArray = responseJson["filePaths"]?.jsonArray
+                    ?: throw IllegalStateException("No 'filePaths' array in LLM response")
+
+                val filePaths = filePathsArray.map { it.jsonPrimitive.content }
+
+                // Create enriched context for read_code_file
+                val originalContext = originalRequest.context
+                val workspace = if (originalContext is ExecutionContext.Code) {
+                    originalContext.workspace
+                } else {
+                    ExecutionWorkspace(baseDirectory = ".")
+                }
+
+                val enrichedContext = ExecutionContext.Code.ReadCode(
+                    executorId = originalContext.executorId,
+                    ticket = originalContext.ticket,
+                    task = originalContext.task,
+                    instructions = originalContext.instructions,
+                    workspace = workspace,
+                    filePathsToRead = filePaths,
+                    knowledgeFromPastMemory = originalContext.knowledgeFromPastMemory,
+                )
+
+                ExecutionRequest(
+                    context = enrichedContext,
+                    constraints = originalRequest.constraints,
+                )
+            }
+
+            else -> {
+                // For generic tools, return the original request
+                // (parameters are in the JSON but we don't know how to apply them)
+                originalRequest
+            }
+        }
+    }
 }
