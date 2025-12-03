@@ -3,9 +3,9 @@ package link.socket.ampere
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.arguments.argument
-import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.events.messages.ThreadViewService
+import link.socket.ampere.repl.TerminalFactory
 
 /**
  * Root command for thread operations. Doesn't do anything itself,
@@ -13,7 +13,7 @@ import link.socket.ampere.agents.events.messages.ThreadViewService
  */
 class ThreadCommand(
     threadViewService: ThreadViewService,
-    renderer: link.socket.ampere.renderer.CLIRenderer = link.socket.ampere.renderer.CLIRenderer(Terminal())
+    renderer: link.socket.ampere.renderer.CLIRenderer = link.socket.ampere.renderer.CLIRenderer(TerminalFactory.createTerminal())
 ) : CliktCommand(
     name = "thread",
     help = "View conversation threads in the environment"

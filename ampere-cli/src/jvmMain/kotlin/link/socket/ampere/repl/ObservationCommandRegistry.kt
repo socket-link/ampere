@@ -4,7 +4,6 @@ import kotlinx.coroutines.delay
 import link.socket.ampere.*
 import link.socket.ampere.renderer.CLIRenderer
 import org.jline.terminal.Terminal
-import com.github.ajalt.mordant.terminal.Terminal as MordantTerminal
 
 /**
  * Registry of observation commands available in the REPL.
@@ -20,7 +19,7 @@ class ObservationCommandRegistry(
     private val statusBar: StatusBar,
     private val filterCycler: EventFilterCycler
 ) {
-    private val renderer = CLIRenderer(MordantTerminal())
+    private val renderer = CLIRenderer(TerminalFactory.createTerminal())
 
     /**
      * Execute an observation command from user input.

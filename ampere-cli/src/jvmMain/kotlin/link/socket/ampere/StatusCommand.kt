@@ -11,7 +11,6 @@ import com.github.ajalt.mordant.rendering.TextColors.yellow
 import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.table.table
-import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
@@ -19,6 +18,7 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.events.messages.ThreadViewService
 import link.socket.ampere.agents.events.tickets.TicketViewService
+import link.socket.ampere.repl.TerminalFactory
 import kotlin.time.Duration.Companion.hours
 
 /**
@@ -32,7 +32,7 @@ class StatusCommand(
     name = "status",
     help = "Show system-wide status dashboard"
 ) {
-    private val terminal = Terminal()
+    private val terminal = TerminalFactory.createTerminal()
 
     override fun run() = runBlocking {
         // Fetch data from multiple services concurrently

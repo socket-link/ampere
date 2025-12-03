@@ -14,10 +14,10 @@ import com.github.ajalt.mordant.rendering.TextColors.red
 import com.github.ajalt.mordant.rendering.TextColors.yellow
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.table.table
-import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.core.memory.OutcomeMemoryRepository
+import link.socket.ampere.repl.TerminalFactory
 
 /**
  * Root command for viewing outcome memory.
@@ -59,7 +59,7 @@ class OutcomesTicketCommand(
     )
 
     override fun run() = runBlocking {
-        val terminal = Terminal()
+        val terminal = TerminalFactory.createTerminal()
 
         outcomeRepository.getOutcomesByTicket(ticketId).fold(
             onSuccess = { outcomes ->
@@ -151,7 +151,7 @@ class OutcomesSearchCommand(
         .default(10)
 
     override fun run() = runBlocking {
-        val terminal = Terminal()
+        val terminal = TerminalFactory.createTerminal()
 
         outcomeRepository.findSimilarOutcomes(query, limit).fold(
             onSuccess = { outcomes ->
@@ -207,7 +207,7 @@ class OutcomesExecutorCommand(
         .default(20)
 
     override fun run() = runBlocking {
-        val terminal = Terminal()
+        val terminal = TerminalFactory.createTerminal()
 
         outcomeRepository.getOutcomesByExecutor(executorId, limit).fold(
             onSuccess = { outcomes ->
@@ -283,7 +283,7 @@ class OutcomesStatsCommand(
     // This would query aggregate data from the repository
     // For now, just a placeholder showing what it could display
     override fun run() {
-        val terminal = Terminal()
+        val terminal = TerminalFactory.createTerminal()
         terminal.println(cyan("📊 OUTCOME STATISTICS"))
         terminal.println()
         terminal.println(yellow("This command shows aggregate learning metrics:"))

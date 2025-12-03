@@ -1,10 +1,10 @@
 package link.socket.ampere.repl
 
-import com.github.ajalt.mordant.rendering.TextColors.*
-import com.github.ajalt.mordant.rendering.TextStyles.*
-
 /**
  * Terminal color utilities for consistent visual feedback.
+ *
+ * Uses raw ANSI codes for maximum compatibility across terminal emulators,
+ * including IntelliJ IDEA, VS Code, iTerm2, and standard terminals.
  *
  * Provides semantic coloring for different types of output:
  * - Success: Green with ✓
@@ -14,11 +14,39 @@ import com.github.ajalt.mordant.rendering.TextStyles.*
  * - Dim: Gray for secondary information
  */
 object TerminalColors {
-    fun success(message: String) = green("✓ $message")
-    fun error(message: String) = red("✗ $message")
-    fun info(message: String) = cyan("ℹ $message")
-    fun warning(message: String) = yellow("⚠ $message")
-    fun dim(message: String) = gray(message)
-    fun emphasis(message: String) = bold(message)
-    fun highlight(message: String) = blue(bold(message))
+    // ANSI color codes - compatible with all modern terminals
+    private const val RESET = "\u001B[0m"
+    private const val GREEN = "\u001B[32m"
+    private const val RED = "\u001B[31m"
+    private const val CYAN = "\u001B[36m"
+    private const val YELLOW = "\u001B[33m"
+    private const val BLUE = "\u001B[34m"
+    private const val GRAY = "\u001B[90m"
+    private const val BOLD = "\u001B[1m"
+
+    /**
+     * Enable/disable colors (can be toggled for testing or non-color terminals).
+     */
+    var enabled: Boolean = true
+
+    fun success(message: String) = if (enabled) "$GREEN✓ $message$RESET" else "✓ $message"
+    fun error(message: String) = if (enabled) "$RED✗ $message$RESET" else "✗ $message"
+    fun info(message: String) = if (enabled) "$CYAN$message$RESET" else message
+    fun warning(message: String) = if (enabled) "$YELLOW⚠ $message$RESET" else "⚠ $message"
+    fun dim(message: String) = if (enabled) "$GRAY$message$RESET" else message
+    fun emphasis(message: String) = if (enabled) "$BOLD$message$RESET" else message
+    fun highlight(message: String) = if (enabled) "$BLUE$BOLD$message$RESET" else message
+
+    /**
+     * Returns all color test strings for verifying terminal support.
+     */
+    fun getColorTests(): List<Pair<String, String>> = listOf(
+        "Success" to success("Success message (should be green)"),
+        "Error" to error("Error message (should be red)"),
+        "Info" to info("Info message (should be cyan)"),
+        "Warning" to warning("Warning message (should be yellow)"),
+        "Highlight" to highlight("Highlighted text (should be bold blue)"),
+        "Dim" to dim("Dimmed text (should be gray)"),
+        "Emphasis" to emphasis("Emphasized text (should be bold)")
+    )
 }
