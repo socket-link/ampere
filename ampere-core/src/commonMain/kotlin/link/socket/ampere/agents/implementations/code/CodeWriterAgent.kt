@@ -1038,6 +1038,18 @@ open class CodeWriterAgent(
             )
         }
 
+        // Check if this is an MCP tool - not yet supported
+        if (tool is McpTool) {
+            return ExecutionOutcome.NoChanges.Failure(
+                executorId = executor.id,
+                ticketId = request.context.ticket.id,
+                taskId = request.context.task.id,
+                executionStartTimestamp = startTime,
+                executionEndTimestamp = Clock.System.now(),
+                message = "MCP tool execution not yet supported",
+            )
+        }
+
         // Generate parameters using LLM based on the tool type
         val parametersPrompt = buildParameterGenerationPrompt(tool, request, intent)
         val llmResponse = try {
