@@ -1132,7 +1132,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("/absolute/path/User.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult.Validated
+                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             ),
             ExecutionOutcome.CodeChanged.Success(
                 executorId = "executor-1",
@@ -1141,7 +1141,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("/absolute/path/Order.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult.Validated
+                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             ),
             ExecutionOutcome.CodeChanged.Success(
                 executorId = "executor-1",
@@ -1150,7 +1150,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("/absolute/path/Product.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult.Validated
+                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             )
         )
 
@@ -1218,7 +1218,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(500.seconds),
                 changedFiles = listOf("Simple.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult.Validated
+                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             ),
             ExecutionOutcome.CodeChanged.Failure(
                 executorId = "executor-1",
@@ -1226,9 +1226,9 @@ actual class CodeWriterAgentTest {
                 taskId = "task-complex",
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(3.seconds),
-                error = link.socket.ampere.agents.core.errors.ExecutionError.ToolError(
-                    message = "Complex task failed",
-                    toolId = "write_code_file"
+                error = link.socket.ampere.agents.core.errors.ExecutionError(
+                    type = link.socket.ampere.agents.core.errors.ExecutionError.Type.TOOL_UNAVAILABLE,
+                    message = "Complex task failed"
                 )
             )
         )
@@ -1298,7 +1298,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("File1.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult.Validated
+                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             )
         )
 
@@ -1317,7 +1317,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("File$i.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult.Validated
+                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             )
         }
 
@@ -1390,7 +1390,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("Test.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult.Validated
+                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             )
         )
 
@@ -1456,7 +1456,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("Success1.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult.Validated
+                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             ),
             ExecutionOutcome.CodeChanged.Failure(
                 executorId = "executor-1",
@@ -1464,9 +1464,9 @@ actual class CodeWriterAgentTest {
                 taskId = "task-2",
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(2.seconds),
-                error = link.socket.ampere.agents.core.errors.ExecutionError.ToolError(
-                    message = "Failed",
-                    toolId = "write_code_file"
+                error = link.socket.ampere.agents.core.errors.ExecutionError(
+                    type = link.socket.ampere.agents.core.errors.ExecutionError.Type.TOOL_UNAVAILABLE,
+                    message = "Failed"
                 )
             ),
             ExecutionOutcome.CodeChanged.Success(
@@ -1476,7 +1476,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("Success2.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult.Validated
+                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             )
         )
 
@@ -1548,7 +1548,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(i.seconds),
                 changedFiles = listOf("File$i.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult.Validated
+                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             )
         }
 
@@ -1609,7 +1609,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("File1.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult.Validated
+                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             ),
             ExecutionOutcome.CodeChanged.Success(
                 executorId = "executor-1",
@@ -1618,7 +1618,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("File2.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult.Validated
+                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             )
         )
 
@@ -1697,7 +1697,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("Success.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult.Validated
+                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             ),
             ExecutionOutcome.CodeChanged.Failure(
                 executorId = "executor-1",
@@ -1705,9 +1705,9 @@ actual class CodeWriterAgentTest {
                 taskId = "task-2",
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
-                error = link.socket.ampere.agents.core.errors.ExecutionError.ToolError(
-                    message = "Failed 1",
-                    toolId = "write_code_file"
+                error = link.socket.ampere.agents.core.errors.ExecutionError(
+                    type = link.socket.ampere.agents.core.errors.ExecutionError.Type.TOOL_UNAVAILABLE,
+                    message = "Failed 1"
                 )
             ),
             ExecutionOutcome.CodeChanged.Failure(
@@ -1716,9 +1716,9 @@ actual class CodeWriterAgentTest {
                 taskId = "task-3",
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
-                error = link.socket.ampere.agents.core.errors.ExecutionError.ToolError(
-                    message = "Failed 2",
-                    toolId = "write_code_file"
+                error = link.socket.ampere.agents.core.errors.ExecutionError(
+                    type = link.socket.ampere.agents.core.errors.ExecutionError.Type.TOOL_UNAVAILABLE,
+                    message = "Failed 2"
                 )
             )
         )

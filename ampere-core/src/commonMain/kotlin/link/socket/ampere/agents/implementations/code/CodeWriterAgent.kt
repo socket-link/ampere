@@ -1089,7 +1089,7 @@ open class CodeWriterAgent(
      * @param outcomes List of outcomes from recent executions
      * @return An Idea containing synthesized learnings from the outcomes
      */
-    private fun evaluateOutcomesAndGenerateLearnings(outcomes: List<Outcome>): Idea {
+    protected open fun evaluateOutcomesAndGenerateLearnings(outcomes: List<Outcome>): Idea {
         // Handle empty outcomes
         if (outcomes.isEmpty()) {
             return Idea(
@@ -1477,7 +1477,7 @@ open class CodeWriterAgent(
      * @param reason Why the fallback was needed
      * @return A basic Idea with outcome statistics
      */
-    private fun createFallbackLearningIdea(outcomes: List<Outcome>, reason: String): Idea {
+    protected open fun createFallbackLearningIdea(outcomes: List<Outcome>, reason: String): Idea {
         val successCount = outcomes.count { it is Outcome.Success }
         val failureCount = outcomes.count { it is Outcome.Failure }
         val successRate = if (outcomes.isNotEmpty()) {
