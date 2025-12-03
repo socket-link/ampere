@@ -3,7 +3,6 @@ package link.socket.ampere
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
-import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
@@ -11,6 +10,7 @@ import link.socket.ampere.agents.events.EventSource
 import link.socket.ampere.agents.events.relay.EventRelayFilters
 import link.socket.ampere.agents.events.relay.EventRelayService
 import link.socket.ampere.renderer.CLIRenderer
+import link.socket.ampere.repl.TerminalFactory
 import link.socket.ampere.util.EventTypeParser
 
 /**
@@ -24,7 +24,7 @@ import link.socket.ampere.util.EventTypeParser
  */
 class WatchCommand(
     private val eventRelayService: EventRelayService,
-    private val renderer: CLIRenderer = CLIRenderer(Terminal()),
+    private val renderer: CLIRenderer = CLIRenderer(TerminalFactory.createTerminal()),
 ) : CliktCommand(
     name = "watch",
     help = """

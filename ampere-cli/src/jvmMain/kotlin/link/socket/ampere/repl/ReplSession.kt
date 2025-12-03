@@ -338,6 +338,10 @@ class ReplSession(
                 terminal.flush()
                 return CommandResult.SUCCESS
             }
+            ".test-colors", ".colors" -> {
+                testColorOutput()
+                return CommandResult.SUCCESS
+            }
         }
 
         // Expand aliases
@@ -388,6 +392,26 @@ class ReplSession(
                 CommandResult.ERROR
             }
         }
+    }
+
+    /**
+     * Test color output to verify terminal color support.
+     */
+    private fun testColorOutput() {
+        terminal.writer().println()
+        terminal.writer().println("Color Support Test:")
+        terminal.writer().println("━".repeat(50))
+        terminal.writer().println()
+
+        // Display all color tests
+        TerminalColors.getColorTests().forEach { (label, coloredText) ->
+            terminal.writer().println("  $label: $coloredText")
+        }
+
+        terminal.writer().println()
+        terminal.writer().println("If you see colors above, your terminal supports ANSI codes.")
+        terminal.writer().println("Colors enabled: ${TerminalColors.enabled}")
+        terminal.writer().println()
     }
 
     /**
@@ -454,6 +478,9 @@ class ReplSession(
             Ctrl+L      Clear
             ↑/↓         History
 
+            ─── DEBUG ───
+            .test-colors    Test color support
+
             Type 'help <command>' for details
         """.trimIndent()
 
@@ -514,6 +541,9 @@ class ReplSession(
             ═══ ALIASES ═══
             w → watch     s → status    t → thread
             o → outcomes  q → quit      ? → help
+
+            ═══ DEBUG COMMANDS ═══
+            .test-colors    Verify terminal color support
 
             Tip: Start in INSERT mode, press Esc for NORMAL mode shortcuts
         """.trimIndent()
