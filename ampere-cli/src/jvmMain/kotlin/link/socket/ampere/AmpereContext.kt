@@ -17,6 +17,8 @@ import link.socket.ampere.agents.events.tickets.DefaultTicketViewService
 import link.socket.ampere.agents.events.tickets.TicketViewService
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
+import link.socket.ampere.agents.receptors.FileSystemReceptor
+import link.socket.ampere.agents.receptors.WorkspaceEventMapper
 import link.socket.ampere.agents.service.AgentActionService
 import link.socket.ampere.agents.service.MessageActionService
 import link.socket.ampere.agents.service.TicketActionService
@@ -66,6 +68,13 @@ class AmpereContext(
      * Defaults to console logging.
      */
     logger: EventLogger = ConsoleEventLogger(),
+
+    /**
+     * Path to the workspace directory to monitor for file changes.
+     * Defaults to "~/.ampere/Workspaces/Ampere".
+     * Set to null to disable workspace monitoring.
+     */
+    workspacePath: String? = defaultWorkspacePath(),
 ) {
     /**
      * Database driver for SQLite operations.
@@ -82,6 +91,16 @@ class AmpereContext(
      * Uses Dispatchers.Default with a SupervisorJob for fault tolerance.
      */
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+    /**
+     * Event logger for system operations.
+     */
+    private val eventLogger: EventLogger = logger
+
+    /**
+     * Workspace path to monitor, or null if monitoring is disabled.
+     */
+    private val workspace: String? = workspacePath
 
     /**
      * The environment service that provides access to all repositories,
@@ -157,6 +176,37 @@ class AmpereContext(
     }
 
     /**
+     * Workspace event mapper that transforms FileSystemEvents into ProductEvents.
+     * Null if workspace monitoring is disabled.
+     */
+    private val workspaceEventMapper: WorkspaceEventMapper? = workspacePath?.let {
+        val eventApi = environmentService.createEventApi("workspace-receptor-system")
+        WorkspaceEventMapper(
+            agentEventApi = eventApi,
+            mapperId = "mapper-workspace",
+            scope = scope
+        )
+    }
+
+    /**
+     * File system receptor that monitors the workspace directory for file changes.
+     * Null if workspace monitoring is disabled.
+     */
+    private val fileSystemReceptor: FileSystemReceptor? = workspacePath?.let { path ->
+        val eventApi = environmentService.createEventApi("workspace-receptor-system")
+        FileSystemReceptor(
+            workspacePath = path,
+            agentEventApi = eventApi,
+            receptorId = "receptor-filesystem",
+            scope = scope,
+            fileFilter = { file ->
+                // Only monitor markdown files
+                file.extension.lowercase() == "md"
+            }
+        )
+    }
+
+    /**
      * Subscribe to all events for an agent.
      * Delegates to EnvironmentService for centralized event subscription.
      *
@@ -179,6 +229,14 @@ class AmpereContext(
      */
     fun start() {
         environmentService.start()
+
+        // Start the workspace monitoring system if enabled
+        workspaceEventMapper?.startWithEventBus(environmentService.eventBus)
+        fileSystemReceptor?.start()
+
+        if (fileSystemReceptor != null) {
+            eventLogger.logInfo("Workspace receptor system started, monitoring: ${workspace ?: "disabled"}")
+        }
     }
 
     /**
@@ -188,6 +246,9 @@ class AmpereContext(
      * clean resource cleanup.
      */
     fun close() {
+        // Stop the workspace monitoring system if enabled
+        fileSystemReceptor?.stop()
+
         scope.cancel()
         driver.close()
     }
@@ -200,6 +261,15 @@ class AmpereContext(
         private fun defaultDatabasePath(): String {
             val homeDir = System.getProperty("user.home") ?: System.getProperty("user.dir") ?: "."
             return File(homeDir, ".ampere/ampere.db").absolutePath
+        }
+
+        /**
+         * Default workspace path in the user's home directory.
+         * Returns "~/.ampere/Workspaces/Ampere" expanded to absolute path.
+         */
+        private fun defaultWorkspacePath(): String {
+            val homeDir = System.getProperty("user.home") ?: System.getProperty("user.dir") ?: "."
+            return File(homeDir, ".ampere/Workspaces/Ampere").absolutePath
         }
 
         /**
