@@ -4,11 +4,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.MeetingEvent
-import link.socket.ampere.agents.events.MessageEvent
-import link.socket.ampere.agents.events.NotificationEvent
-import link.socket.ampere.agents.events.TicketEvent
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.MeetingEvent
+import link.socket.ampere.agents.domain.event.MessageEvent
+import link.socket.ampere.agents.domain.event.NotificationEvent
+import link.socket.ampere.agents.domain.event.TicketEvent
 import org.junit.jupiter.api.Test
 
 class EventTypeParserTest {

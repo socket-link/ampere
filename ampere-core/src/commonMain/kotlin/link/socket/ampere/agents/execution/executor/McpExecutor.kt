@@ -8,16 +8,16 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import link.socket.ampere.agents.core.errors.ExecutionError
-import link.socket.ampere.agents.core.health.ExecutorSystemHealth
-import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
-import link.socket.ampere.agents.core.status.ExecutionStatus
+import link.socket.ampere.agents.domain.error.ExecutionError
+import link.socket.ampere.agents.domain.health.ExecutorSystemHealth
+import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.concept.status.ExecutionStatus
+import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.agents.execution.tools.Tool
-import link.socket.ampere.agents.tools.mcp.McpServerManager
 import link.socket.ampere.agents.tools.mcp.ServerManager
 import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
 
@@ -356,7 +356,7 @@ class McpExecutor(
             put("taskId", task.id)
             // Task is a sealed interface - only some subtypes have description
             // Use local variable to enable smart casting
-            if (task is link.socket.ampere.agents.core.tasks.Task.CodeChange) {
+            if (task is Task.CodeChange) {
                 put("taskDescription", task.description)
             }
 

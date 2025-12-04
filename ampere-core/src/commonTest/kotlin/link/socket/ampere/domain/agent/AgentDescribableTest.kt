@@ -4,8 +4,8 @@ import link.socket.ampere.agents.events.escalation.Escalation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import link.socket.ampere.agents.core.AgentDescribable
-import link.socket.ampere.agents.core.AgentTypeDescriber
+import link.socket.ampere.agents.domain.AgentDescribable
+import link.socket.ampere.agents.domain.AgentTypeDescriber
 import link.socket.ampere.agents.events.escalation.EscalationProcess
 
 class AgentDescribableTest {

@@ -14,10 +14,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.core.actions.AgentActionAutonomy
-import link.socket.ampere.agents.core.outcomes.Outcome
-import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.ToolEvent
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.concept.outcome.Outcome
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.agents.events.bus.subscribe

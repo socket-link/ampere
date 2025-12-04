@@ -2,9 +2,9 @@ package link.socket.ampere.agents.events.meetings
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.core.outcomes.MeetingOutcome
-import link.socket.ampere.agents.core.status.MeetingStatus
-import link.socket.ampere.agents.events.Event
+import link.socket.ampere.agents.domain.concept.outcome.MeetingOutcome
+import link.socket.ampere.agents.domain.concept.status.MeetingStatus
+import link.socket.ampere.agents.domain.event.Event
 
 typealias MeetingId = String
 

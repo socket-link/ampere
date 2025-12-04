@@ -1,7 +1,7 @@
 package link.socket.ampere.agents.events.utils
 
-import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.EventType
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.events.subscription.Subscription
 
 /**

@@ -2,7 +2,7 @@ package link.socket.ampere.agents.events.relay
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.events.Event
+import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.bus.EventSerialBus
 

@@ -1,8 +1,8 @@
 package link.socket.ampere.agents.execution.tools.invoke
 
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
-import link.socket.ampere.agents.core.outcomes.Outcome
+import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool

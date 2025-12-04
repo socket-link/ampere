@@ -16,7 +16,7 @@ import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.table.table
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.core.memory.OutcomeMemoryRepository
+import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepository
 import link.socket.ampere.repl.TerminalFactory
 
 /**

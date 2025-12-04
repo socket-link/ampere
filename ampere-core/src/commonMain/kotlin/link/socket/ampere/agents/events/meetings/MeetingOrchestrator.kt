@@ -1,13 +1,13 @@
 package link.socket.ampere.agents.events.meetings
 
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.core.AssignedTo
-import link.socket.ampere.agents.core.outcomes.MeetingOutcome
-import link.socket.ampere.agents.core.status.MeetingStatus
-import link.socket.ampere.agents.core.status.TaskStatus
-import link.socket.ampere.agents.core.tasks.MeetingTask
-import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.MeetingEvent
+import link.socket.ampere.agents.domain.concept.task.AssignedTo
+import link.socket.ampere.agents.domain.concept.outcome.MeetingOutcome
+import link.socket.ampere.agents.domain.concept.status.MeetingStatus
+import link.socket.ampere.agents.domain.concept.status.TaskStatus
+import link.socket.ampere.agents.domain.concept.task.MeetingTask
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageChannel
@@ -302,9 +302,9 @@ class MeetingOrchestrator(
         // Build list of attendees (for now, use the required participants as attendees)
         val attendees = meeting.invitation.requiredParticipants.mapNotNull { participant ->
             when (participant) {
-                is link.socket.ampere.agents.core.AssignedTo.Agent -> EventSource.Agent(participant.agentId)
-                is link.socket.ampere.agents.core.AssignedTo.Human -> EventSource.Human
-                is link.socket.ampere.agents.core.AssignedTo.Team -> null // Teams are not individual attendees
+                is AssignedTo.Agent -> EventSource.Agent(participant.agentId)
+                is AssignedTo.Human -> EventSource.Human
+                is AssignedTo.Team -> null // Teams are not individual attendees
             }
         }
 

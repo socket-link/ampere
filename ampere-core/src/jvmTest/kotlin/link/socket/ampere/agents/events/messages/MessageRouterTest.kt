@@ -10,11 +10,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.domain.type.AgentId
 import link.socket.ampere.agents.events.EventRepository
-import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.MessageEvent
-import link.socket.ampere.agents.events.NotificationEvent
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.MessageEvent
+import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory

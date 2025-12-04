@@ -1,7 +1,7 @@
 package link.socket.ampere.util
 
-import link.socket.ampere.agents.events.EventRegistry
-import link.socket.ampere.agents.events.EventType
+import link.socket.ampere.agents.domain.event.EventRegistry
+import link.socket.ampere.agents.domain.event.EventType
 
 /**
  * Utility for parsing event type names from command-line strings to EventClassType.

@@ -1,8 +1,8 @@
 package link.socket.ampere.agents.events.subscription
 
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.events.EventType
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.event.EventType
 
 /**
  * Subscription returned by [link.socket.ampere.agents.events.bus.EventSerialBus.subscribe] used to cancel a subscription via [link.socket.ampere.agents.events.bus.EventSerialBus.unsubscribe].

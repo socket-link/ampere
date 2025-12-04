@@ -6,8 +6,8 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.core.status.TicketStatus
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.events.meetings.MeetingId
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.tickets.TicketStore

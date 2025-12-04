@@ -2,8 +2,8 @@ package link.socket.ampere.agents.execution.tools
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
-import link.socket.ampere.agents.core.actions.AgentActionAutonomy
-import link.socket.ampere.agents.core.outcomes.Outcome
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 

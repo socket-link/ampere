@@ -2,11 +2,12 @@ package link.socket.ampere.agents.tools
 
 import co.touchlab.kermit.Logger
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.core.actions.AgentActionAutonomy
-import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
-import link.socket.ampere.agents.core.outcomes.Outcome
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
+import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.tools.registry.ToolRegistry
 
@@ -246,7 +247,7 @@ private suspend fun executeWriteCode(
         executionStartTimestamp = now,
         executionEndTimestamp = now,
         changedFiles = request.context.instructionsPerFilePath.map { it.first },
-        validation = link.socket.ampere.agents.execution.results.ExecutionResult(
+        validation = ExecutionResult(
             codeChanges = null,
             compilation = null,
             linting = null,

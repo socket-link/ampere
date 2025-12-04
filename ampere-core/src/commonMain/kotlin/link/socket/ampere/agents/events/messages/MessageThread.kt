@@ -3,7 +3,7 @@ package link.socket.ampere.agents.events.messages
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.events.EventStatus
+import link.socket.ampere.agents.domain.concept.status.EventStatus
 
 typealias MessageThreadId = String
 
@@ -34,7 +34,7 @@ data class MessageThread(
                 createdBy = initialMessage.sender,
                 participants = initialParticipants,
                 messages = listOf(initialMessage),
-                status = EventStatus.OPEN,
+                status = EventStatus.Open,
                 createdAt = now,
                 updatedAt = now,
             )

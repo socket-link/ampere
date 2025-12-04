@@ -1,7 +1,7 @@
 package link.socket.ampere.agents.events.tickets
 
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.domain.type.AgentId
 import link.socket.ampere.agents.events.messages.MessageThread
 
 /**

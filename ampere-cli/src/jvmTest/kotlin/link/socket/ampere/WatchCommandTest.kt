@@ -3,7 +3,7 @@ package link.socket.ampere
 import com.github.ajalt.clikt.testing.test
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import link.socket.ampere.agents.events.Event
+import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.events.relay.EventRelayFilters
 import link.socket.ampere.agents.events.relay.EventRelayService
 import org.junit.jupiter.api.Test

@@ -2,10 +2,10 @@ package link.socket.ampere.agents.execution.tools.invoke
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.events.EventId
-import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.EventType
-import link.socket.ampere.agents.events.Urgency
+import link.socket.ampere.agents.domain.event.EventId
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.EventType
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.execution.tools.ToolId
 
 typealias ToolInvocationId = String

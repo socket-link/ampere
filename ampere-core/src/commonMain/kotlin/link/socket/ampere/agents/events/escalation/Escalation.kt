@@ -1,7 +1,7 @@
 package link.socket.ampere.agents.events.escalation
 
-import link.socket.ampere.agents.core.AgentDescribable
-import link.socket.ampere.agents.core.AgentTypeDescriber
+import link.socket.ampere.agents.domain.AgentDescribable
+import link.socket.ampere.agents.domain.AgentTypeDescriber
 
 /**
  * Represents the type of escalation needed for a blocker.

@@ -1,7 +1,6 @@
 package link.socket.ampere.agents.tools
 
 import co.touchlab.kermit.Logger
-import co.touchlab.kermit.Severity
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -12,12 +11,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.core.actions.AgentActionAutonomy
-import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
-import link.socket.ampere.agents.core.outcomes.Outcome
-import link.socket.ampere.agents.core.status.TicketStatus
-import link.socket.ampere.agents.core.tasks.Task
-import link.socket.ampere.agents.events.EventSource
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
@@ -26,7 +24,6 @@ import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.FunctionTool
-import link.socket.ampere.agents.tools.registry.ToolMetadata
 import link.socket.ampere.agents.tools.registry.ToolRegistry
 import link.socket.ampere.agents.tools.registry.ToolRegistryRepository
 import link.socket.ampere.db.Database

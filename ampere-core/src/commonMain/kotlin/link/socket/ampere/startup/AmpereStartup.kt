@@ -3,7 +3,7 @@ package link.socket.ampere.startup
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.events.EventSource
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.tools.ToolInitializationResult
 import link.socket.ampere.agents.tools.initializeLocalTools

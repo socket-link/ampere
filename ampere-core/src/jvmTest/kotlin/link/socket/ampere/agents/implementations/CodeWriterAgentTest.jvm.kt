@@ -18,18 +18,22 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.core.AgentConfiguration
-import link.socket.ampere.agents.core.AssignedTo
-import link.socket.ampere.agents.core.actions.AgentActionAutonomy
-import link.socket.ampere.agents.core.memory.Knowledge
-import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
-import link.socket.ampere.agents.core.outcomes.Outcome
-import link.socket.ampere.agents.core.reasoning.Idea
-import link.socket.ampere.agents.core.reasoning.Perception
-import link.socket.ampere.agents.core.states.AgentState
-import link.socket.ampere.agents.core.status.TaskStatus
-import link.socket.ampere.agents.core.status.TicketStatus
-import link.socket.ampere.agents.core.tasks.Task
+import link.socket.ampere.agents.domain.config.AgentConfiguration
+import link.socket.ampere.agents.domain.concept.task.AssignedTo
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
+import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.concept.outcome.Outcome
+import link.socket.ampere.agents.domain.concept.Idea
+import link.socket.ampere.agents.domain.concept.Perception
+import link.socket.ampere.agents.domain.concept.Plan
+import link.socket.ampere.agents.domain.concept.expectation.Expectations
+import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.concept.status.TaskStatus
+import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.concept.task.MeetingTask
+import link.socket.ampere.agents.domain.error.ExecutionError
+import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
@@ -39,7 +43,8 @@ import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.execution.tools.ToolWriteCodeFile
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
-import link.socket.ampere.agents.implementations.code.CodeWriterAgent
+import link.socket.ampere.agents.domain.type.CodeWriterAgent
+import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModel
@@ -107,13 +112,13 @@ actual class CodeWriterAgentTest {
         toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode>,
         coroutineScope: CoroutineScope,
         private val perceptionResult: (Perception<AgentState>) -> Idea,
-        private val planningResult: ((Task, List<Idea>) -> link.socket.ampere.agents.core.reasoning.Plan)? = null
+        private val planningResult: ((Task, List<Idea>) -> Plan)? = null
     ) : CodeWriterAgent(initialState, agentConfiguration, toolWriteCodeFile, coroutineScope) {
 
         override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea =
             perceptionResult
 
-        override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> link.socket.ampere.agents.core.reasoning.Plan =
+        override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan =
             planningResult ?: super.runLLMToPlan
     }
 
@@ -174,7 +179,7 @@ actual class CodeWriterAgentTest {
      */
     private fun createTestAgentWithPlanning(
         perceptionResult: (Perception<AgentState>) -> Idea,
-        planningResult: (Task, List<Idea>) -> link.socket.ampere.agents.core.reasoning.Plan
+        planningResult: (Task, List<Idea>) -> Plan
     ): TestableCodeWriterAgent {
         val aiConfig = FakeAIConfiguration()
         val agentConfig = AgentConfiguration(
@@ -518,7 +523,7 @@ actual class CodeWriterAgentTest {
         val agent = createTestAgentWithPlanning(
             perceptionResult = ::createPendingTaskIdea,
             planningResult = { task, ideas ->
-                link.socket.ampere.agents.core.reasoning.Plan.ForTask(
+                Plan.ForTask(
                     task = task,
                     tasks = listOf(
                         Task.CodeChange(
@@ -529,7 +534,7 @@ actual class CodeWriterAgentTest {
                         )
                     ),
                     estimatedComplexity = 1,
-                    expectations = link.socket.ampere.agents.core.expectations.Expectations.blank
+                    expectations = Expectations.blank
                 )
             }
         )
@@ -552,7 +557,7 @@ actual class CodeWriterAgentTest {
 
         // Verify
         assertNotNull(plan)
-        assertTrue(plan is link.socket.ampere.agents.core.reasoning.Plan.ForTask)
+        assertTrue(plan is Plan.ForTask)
         kotlin.test.assertEquals(1, plan.tasks.size, "Simple task should have 1 step")
         assertTrue(plan.estimatedComplexity <= 3, "Simple task should have low complexity")
     }
@@ -568,7 +573,7 @@ actual class CodeWriterAgentTest {
         val agent = createTestAgentWithPlanning(
             perceptionResult = ::createPendingTaskIdea,
             planningResult = { task, ideas ->
-                link.socket.ampere.agents.core.reasoning.Plan.ForTask(
+                Plan.ForTask(
                     task = task,
                     tasks = listOf(
                         Task.CodeChange(
@@ -588,7 +593,7 @@ actual class CodeWriterAgentTest {
                         )
                     ),
                     estimatedComplexity = 6,
-                    expectations = link.socket.ampere.agents.core.expectations.Expectations.blank
+                    expectations = Expectations.blank
                 )
             }
         )
@@ -611,7 +616,7 @@ actual class CodeWriterAgentTest {
 
         // Verify
         assertNotNull(plan)
-        assertTrue(plan is link.socket.ampere.agents.core.reasoning.Plan.ForTask)
+        assertTrue(plan is Plan.ForTask)
         assertTrue(plan.tasks.size >= 3, "Complex task should have multiple steps")
         assertTrue(plan.estimatedComplexity > 3, "Complex task should have higher complexity")
     }
@@ -628,7 +633,7 @@ actual class CodeWriterAgentTest {
         val agent = createTestAgentWithPlanning(
             perceptionResult = ::createPendingTaskIdea,
             planningResult = { task, ideas ->
-                link.socket.ampere.agents.core.reasoning.Plan.ForTask(
+                Plan.ForTask(
                     task = task,
                     tasks = listOf(
                         Task.CodeChange(
@@ -643,7 +648,7 @@ actual class CodeWriterAgentTest {
                         )
                     ),
                     estimatedComplexity = 4,
-                    expectations = link.socket.ampere.agents.core.expectations.Expectations.blank
+                    expectations = Expectations.blank
                 )
             }
         )
@@ -666,7 +671,7 @@ actual class CodeWriterAgentTest {
 
         // Verify
         assertNotNull(plan)
-        assertTrue(plan is link.socket.ampere.agents.core.reasoning.Plan.ForTask)
+        assertTrue(plan is Plan.ForTask)
         kotlin.test.assertEquals(2, plan.tasks.size)
 
         // First step should be implementation
@@ -692,7 +697,7 @@ actual class CodeWriterAgentTest {
         val agent = createTestAgentWithPlanning(
             perceptionResult = ::createPendingTaskIdea,
             planningResult = { task, ideas ->
-                link.socket.ampere.agents.core.reasoning.Plan.ForTask(
+                Plan.ForTask(
                     task = task,
                     tasks = listOf(
                         Task.CodeChange(
@@ -703,7 +708,7 @@ actual class CodeWriterAgentTest {
                         )
                     ),
                     estimatedComplexity = 2,
-                    expectations = link.socket.ampere.agents.core.expectations.Expectations.blank
+                    expectations = Expectations.blank
                 )
             }
         )
@@ -726,7 +731,7 @@ actual class CodeWriterAgentTest {
 
         // Verify
         assertNotNull(plan)
-        assertTrue(plan is link.socket.ampere.agents.core.reasoning.Plan.ForTask)
+        assertTrue(plan is Plan.ForTask)
 
         val step = plan.tasks[0] as Task.CodeChange
         assertNotEquals("", step.id, "Step should have an ID")
@@ -753,7 +758,7 @@ actual class CodeWriterAgentTest {
 
         // Verify
         assertNotNull(plan)
-        assertTrue(plan is link.socket.ampere.agents.core.reasoning.Plan.Blank)
+        assertTrue(plan is Plan.Blank)
     }
 
     /**
@@ -768,7 +773,7 @@ actual class CodeWriterAgentTest {
             perceptionResult = ::createPendingTaskIdea,
             planningResult = { task, ideas ->
                 // Even with no ideas, should create a basic plan
-                link.socket.ampere.agents.core.reasoning.Plan.ForTask(
+                Plan.ForTask(
                     task = task,
                     tasks = listOf(
                         Task.CodeChange(
@@ -778,7 +783,7 @@ actual class CodeWriterAgentTest {
                         )
                     ),
                     estimatedComplexity = 3,
-                    expectations = link.socket.ampere.agents.core.expectations.Expectations.blank
+                    expectations = Expectations.blank
                 )
             }
         )
@@ -796,7 +801,7 @@ actual class CodeWriterAgentTest {
 
         // Verify
         assertNotNull(plan)
-        assertTrue(plan is link.socket.ampere.agents.core.reasoning.Plan.ForTask)
+        assertTrue(plan is Plan.ForTask)
         assertTrue(plan.tasks.isNotEmpty(), "Plan should have at least one step")
     }
 
@@ -811,7 +816,7 @@ actual class CodeWriterAgentTest {
         val simpleAgent = createTestAgentWithPlanning(
             perceptionResult = ::createPendingTaskIdea,
             planningResult = { task, ideas ->
-                link.socket.ampere.agents.core.reasoning.Plan.ForTask(
+                Plan.ForTask(
                     task = task,
                     tasks = listOf(
                         Task.CodeChange(
@@ -821,7 +826,7 @@ actual class CodeWriterAgentTest {
                         )
                     ),
                     estimatedComplexity = 1,
-                    expectations = link.socket.ampere.agents.core.expectations.Expectations.blank
+                    expectations = Expectations.blank
                 )
             }
         )
@@ -829,7 +834,7 @@ actual class CodeWriterAgentTest {
         val complexAgent = createTestAgentWithPlanning(
             perceptionResult = ::createPendingTaskIdea,
             planningResult = { task, ideas ->
-                link.socket.ampere.agents.core.reasoning.Plan.ForTask(
+                Plan.ForTask(
                     task = task,
                     tasks = listOf(
                         Task.CodeChange(id = "step-1", status = TaskStatus.Pending, description = "Step 1"),
@@ -839,7 +844,7 @@ actual class CodeWriterAgentTest {
                         Task.CodeChange(id = "step-5", status = TaskStatus.Pending, description = "Step 5")
                     ),
                     estimatedComplexity = 8,
-                    expectations = link.socket.ampere.agents.core.expectations.Expectations.blank
+                    expectations = Expectations.blank
                 )
             }
         )
@@ -888,7 +893,7 @@ actual class CodeWriterAgentTest {
     fun `executing unsupported task type returns failure outcome`() {
         // Setup
         val agent = createTestAgent(::createEmptyStateIdea)
-        val meetingTask = link.socket.ampere.agents.core.tasks.MeetingTask.AgendaItem(
+        val meetingTask = MeetingTask.AgendaItem(
             id = "meeting-1",
             status = TaskStatus.Pending,
             title = "Discuss architecture"
@@ -1132,7 +1137,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("/absolute/path/User.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             ),
             ExecutionOutcome.CodeChanged.Success(
                 executorId = "executor-1",
@@ -1141,7 +1146,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("/absolute/path/Order.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             ),
             ExecutionOutcome.CodeChanged.Success(
                 executorId = "executor-1",
@@ -1150,7 +1155,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("/absolute/path/Product.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             )
         )
 
@@ -1218,7 +1223,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(500.seconds),
                 changedFiles = listOf("Simple.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             ),
             ExecutionOutcome.CodeChanged.Failure(
                 executorId = "executor-1",
@@ -1226,8 +1231,8 @@ actual class CodeWriterAgentTest {
                 taskId = "task-complex",
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(3.seconds),
-                error = link.socket.ampere.agents.core.errors.ExecutionError(
-                    type = link.socket.ampere.agents.core.errors.ExecutionError.Type.TOOL_UNAVAILABLE,
+                error = ExecutionError(
+                    type = ExecutionError.Type.TOOL_UNAVAILABLE,
                     message = "Complex task failed"
                 )
             )
@@ -1298,7 +1303,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("File1.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             )
         )
 
@@ -1317,7 +1322,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("File$i.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             )
         }
 
@@ -1390,7 +1395,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("Test.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             )
         )
 
@@ -1456,7 +1461,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("Success1.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             ),
             ExecutionOutcome.CodeChanged.Failure(
                 executorId = "executor-1",
@@ -1464,8 +1469,8 @@ actual class CodeWriterAgentTest {
                 taskId = "task-2",
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(2.seconds),
-                error = link.socket.ampere.agents.core.errors.ExecutionError(
-                    type = link.socket.ampere.agents.core.errors.ExecutionError.Type.TOOL_UNAVAILABLE,
+                error = ExecutionError(
+                    type = ExecutionError.Type.TOOL_UNAVAILABLE,
                     message = "Failed"
                 )
             ),
@@ -1476,7 +1481,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("Success2.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             )
         )
 
@@ -1548,7 +1553,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(i.seconds),
                 changedFiles = listOf("File$i.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             )
         }
 
@@ -1609,7 +1614,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("File1.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             ),
             ExecutionOutcome.CodeChanged.Success(
                 executorId = "executor-1",
@@ -1618,7 +1623,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("File2.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             )
         )
 
@@ -1697,7 +1702,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("Success.kt"),
-                validation = link.socket.ampere.agents.execution.results.ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
             ),
             ExecutionOutcome.CodeChanged.Failure(
                 executorId = "executor-1",
@@ -1705,8 +1710,8 @@ actual class CodeWriterAgentTest {
                 taskId = "task-2",
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
-                error = link.socket.ampere.agents.core.errors.ExecutionError(
-                    type = link.socket.ampere.agents.core.errors.ExecutionError.Type.TOOL_UNAVAILABLE,
+                error = ExecutionError(
+                    type = ExecutionError.Type.TOOL_UNAVAILABLE,
                     message = "Failed 1"
                 )
             ),
@@ -1716,8 +1721,8 @@ actual class CodeWriterAgentTest {
                 taskId = "task-3",
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
-                error = link.socket.ampere.agents.core.errors.ExecutionError(
-                    type = link.socket.ampere.agents.core.errors.ExecutionError.Type.TOOL_UNAVAILABLE,
+                error = ExecutionError(
+                    type = ExecutionError.Type.TOOL_UNAVAILABLE,
                     message = "Failed 2"
                 )
             )

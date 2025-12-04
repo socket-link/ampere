@@ -2,13 +2,13 @@ package link.socket.ampere.agents.events.meetings
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.core.AssignedTo
-import link.socket.ampere.agents.core.AutonomousAgent
-import link.socket.ampere.agents.core.states.AgentState
-import link.socket.ampere.agents.core.status.MeetingStatus
-import link.socket.ampere.agents.core.status.TaskStatus
-import link.socket.ampere.agents.events.MeetingEvent
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.concept.task.AssignedTo
+import link.socket.ampere.agents.domain.type.AutonomousAgent
+import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.concept.status.MeetingStatus
+import link.socket.ampere.agents.domain.concept.status.TaskStatus
+import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 

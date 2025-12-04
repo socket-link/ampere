@@ -1,6 +1,6 @@
 package link.socket.ampere.agents.events.escalation
 
-import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.domain.type.AgentId
 import link.socket.ampere.agents.events.messages.MessageThreadId
 
 interface Notifier {

@@ -2,16 +2,16 @@ package link.socket.ampere.agents.events.api
 
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.core.actions.AgentActionAutonomy
-import link.socket.ampere.agents.events.Event
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.events.EventRepository
-import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.EventType
-import link.socket.ampere.agents.events.ToolEvent
-import link.socket.ampere.agents.events.Urgency
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.subscribe
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.EventType
+import link.socket.ampere.agents.domain.event.ToolEvent
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger

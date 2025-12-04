@@ -1,8 +1,8 @@
 package link.socket.ampere.agents.tools
 
 import java.io.File
-import link.socket.ampere.agents.core.actions.AgentActionAutonomy
-import link.socket.ampere.agents.core.outcomes.Outcome
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.execution.tools.Tool
 
 /**

@@ -1,10 +1,10 @@
 package link.socket.ampere.agents.events.messages
 
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.EventStatus
-import link.socket.ampere.agents.events.MessageEvent
+import link.socket.ampere.agents.domain.concept.status.EventStatus
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.MessageEvent
+import link.socket.ampere.agents.domain.type.AgentId
 import link.socket.ampere.agents.events.api.EventFilter
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -111,7 +111,7 @@ class AgentMessageApi(
             .getOrNull()
 
         requireNotNull(thread)
-        require(thread.status != EventStatus.WAITING_FOR_HUMAN) {
+        require(thread.status != EventStatus.WaitingForHuman) {
             "Cannot post message while thread is waiting for human intervention"
         }
 
@@ -170,12 +170,12 @@ class AgentMessageApi(
             return
         }
 
-        require(thread.status != EventStatus.RESOLVED) {
+        require(thread.status != EventStatus.Resolved) {
             "Cannot escalate a resolved thread"
         }
 
         val oldStatus = thread.status
-        val newStatus = EventStatus.WAITING_FOR_HUMAN
+        val newStatus = EventStatus.WaitingForHuman
 
         messageRepository
             .updateStatus(threadId, newStatus)
@@ -229,7 +229,7 @@ class AgentMessageApi(
 
         requireNotNull(thread)
         val oldStatus: EventStatus = thread.status
-        val newStatus = EventStatus.RESOLVED
+        val newStatus = EventStatus.Resolved
 
         messageRepository
             .updateStatus(threadId, newStatus)
@@ -269,12 +269,12 @@ class AgentMessageApi(
             .getOrNull()
 
         requireNotNull(thread)
-        require(thread.status == EventStatus.WAITING_FOR_HUMAN) {
+        require(thread.status == EventStatus.WaitingForHuman) {
             "Can only reopen threads that are waiting for human intervention. Current status: ${thread.status}"
         }
 
         val oldStatus: EventStatus = thread.status
-        val newStatus = EventStatus.OPEN
+        val newStatus = EventStatus.Open
 
         messageRepository
             .updateStatus(threadId, newStatus)

@@ -1,7 +1,7 @@
 package link.socket.ampere.agents.events.meetings
 
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.events.EventSource
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
 

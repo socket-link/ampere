@@ -2,8 +2,8 @@ package link.socket.ampere.agents.events.escalation
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.events.MessageEvent
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.subscription.Subscription
