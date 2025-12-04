@@ -15,10 +15,12 @@ import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
+import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 
@@ -109,10 +111,12 @@ class EventRenderer(
             is Event.CodeSubmitted -> "💻" to cyan
             is Event.QuestionRaised -> "❓" to magenta
             is Event.TaskCreated -> "📋" to green
+            is FileSystemEvent -> "📄" to cyan
             is MeetingEvent -> "📅" to magenta
             is MemoryEvent -> "🧠" to cyan
             is MessageEvent -> "💬" to blue
             is NotificationEvent<*> -> "🔔" to white
+            is ProductEvent -> "💡" to green
             is TicketEvent -> "🎫" to green
             is ToolEvent -> "🔧" to yellow
         }
@@ -162,17 +166,17 @@ private fun Event.toSummary(
     is Event.TaskCreated -> toSummary(formatUrgency, formatSource)
     is Event.QuestionRaised -> toSummary(formatUrgency, formatSource)
     is Event.CodeSubmitted -> toSummary(formatUrgency, formatSource)
+    is FileSystemEvent.FileCreated -> toSummary(formatUrgency, formatSource)
+    is FileSystemEvent.FileDeleted -> toSummary(formatUrgency, formatSource)
+    is FileSystemEvent.FileModified -> toSummary(formatUrgency, formatSource)
     is MeetingEvent.MeetingScheduled -> toSummary(formatUrgency, formatSource)
     is MeetingEvent.MeetingStarted -> toSummary(formatUrgency)
     is MeetingEvent.AgendaItemStarted -> toSummary(formatUrgency)
     is MeetingEvent.AgendaItemCompleted -> toSummary(formatUrgency)
     is MeetingEvent.MeetingCompleted -> toSummary(formatUrgency)
     is MeetingEvent.MeetingCanceled -> toSummary(formatUrgency)
-    is TicketEvent.TicketCreated -> toSummary(formatUrgency)
-    is TicketEvent.TicketStatusChanged -> toSummary(formatUrgency)
-    is TicketEvent.TicketAssigned -> toSummary(formatUrgency)
-    is TicketEvent.TicketBlocked -> toSummary(formatUrgency)
-    is TicketEvent.TicketCompleted -> toSummary(formatUrgency)
+    is MemoryEvent.KnowledgeStored -> toSummary(formatUrgency, formatSource)
+    is MemoryEvent.KnowledgeRecalled -> toSummary(formatUrgency, formatSource)
     is TicketEvent.TicketMeetingScheduled -> toSummary(formatUrgency)
     is MessageEvent.ThreadCreated -> toSummary(formatUrgency, formatSource)
     is MessageEvent.MessagePosted -> toSummary(formatUrgency, formatSource)
@@ -180,8 +184,14 @@ private fun Event.toSummary(
     is MessageEvent.EscalationRequested -> toSummary(formatUrgency)
     is NotificationEvent.ToAgent<*> -> toSummary(formatUrgency)
     is NotificationEvent.ToHuman<*> -> toSummary(formatUrgency)
-    is MemoryEvent.KnowledgeStored -> toSummary(formatUrgency, formatSource)
-    is MemoryEvent.KnowledgeRecalled -> toSummary(formatUrgency, formatSource)
+    is ProductEvent.EpicDefined -> toSummary(formatUrgency, formatSource)
+    is ProductEvent.FeatureRequested -> toSummary(formatUrgency, formatSource)
+    is ProductEvent.PhaseDefined -> toSummary(formatUrgency, formatSource)
+    is TicketEvent.TicketCreated -> toSummary(formatUrgency)
+    is TicketEvent.TicketStatusChanged -> toSummary(formatUrgency)
+    is TicketEvent.TicketAssigned -> toSummary(formatUrgency)
+    is TicketEvent.TicketBlocked -> toSummary(formatUrgency)
+    is TicketEvent.TicketCompleted -> toSummary(formatUrgency)
     is ToolEvent.ToolRegistered -> toSummary(formatUrgency)
     is ToolEvent.ToolUnregistered -> toSummary(formatUrgency)
     is ToolEvent.ToolDiscoveryComplete -> toSummary(formatUrgency)
@@ -381,4 +391,71 @@ private fun ToolEvent.ToolDiscoveryComplete.toSummary(
         append(" from $mcpServerCount server(s)")
     }
     append(" ${formatUrgency(urgency)}")
+}
+
+// FileSystemEvent.FileCreated
+private fun FileSystemEvent.FileCreated.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = buildString {
+    append("File created: $relativePath")
+    fileExtension?.let { append(" (.$it)") }
+    append(" ${formatUrgency(urgency)}")
+    append(" from ${formatSource(eventSource)}")
+}
+
+// FileSystemEvent.FileModified
+private fun FileSystemEvent.FileModified.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = buildString {
+    append("File modified: $relativePath")
+    fileExtension?.let { append(" (.$it)") }
+    append(" ${formatUrgency(urgency)}")
+    append(" from ${formatSource(eventSource)}")
+}
+
+// FileSystemEvent.FileDeleted
+private fun FileSystemEvent.FileDeleted.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = buildString {
+    append("File deleted: $relativePath")
+    append(" ${formatUrgency(urgency)}")
+    append(" from ${formatSource(eventSource)}")
+}
+
+// ProductEvent.FeatureRequested
+private fun ProductEvent.FeatureRequested.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = buildString {
+    append("Feature requested: $featureTitle")
+    epic?.let { append(" [Epic: $it]") }
+    phase?.let { append(" [Phase: $it]") }
+    append(" ${formatUrgency(urgency)}")
+    append(" from ${formatSource(eventSource)}")
+}
+
+// ProductEvent.EpicDefined
+private fun ProductEvent.EpicDefined.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = buildString {
+    append("Epic defined: $epicTitle")
+    phase?.let { append(" [Phase: $it]") }
+    act?.let { append(" [Act: $it]") }
+    append(" ${formatUrgency(urgency)}")
+    append(" from ${formatSource(eventSource)}")
+}
+
+// ProductEvent.PhaseDefined
+private fun ProductEvent.PhaseDefined.toSummary(
+    formatUrgency: (Urgency) -> String,
+    formatSource: (EventSource) -> String,
+): String = buildString {
+    append("Phase defined: $phaseTitle")
+    act?.let { append(" [Act: $it]") }
+    append(" ${formatUrgency(urgency)}")
+    append(" from ${formatSource(eventSource)}")
 }

@@ -65,6 +65,16 @@ object EventRegistry {
         ToolEvent.ToolRegistered.EVENT_TYPE,
         ToolEvent.ToolUnregistered.EVENT_TYPE,
         ToolEvent.ToolDiscoveryComplete.EVENT_TYPE,
+
+        // FileSystemEvent types
+        FileSystemEvent.FileCreated.EVENT_TYPE,
+        FileSystemEvent.FileModified.EVENT_TYPE,
+        FileSystemEvent.FileDeleted.EVENT_TYPE,
+
+        // ProductEvent types
+        ProductEvent.FeatureRequested.EVENT_TYPE,
+        ProductEvent.EpicDefined.EVENT_TYPE,
+        ProductEvent.PhaseDefined.EVENT_TYPE,
     )
 
     /**
