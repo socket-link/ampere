@@ -2,11 +2,12 @@ package link.socket.ampere.agents.environment
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.EventRegistry
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventRegistry
 import link.socket.ampere.agents.events.EventRepository
-import link.socket.ampere.agents.events.EventType
+import link.socket.ampere.agents.domain.event.EventType
+import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -72,7 +73,7 @@ class EnvironmentService(
     /**
      * Access to the outcome memory repository for querying execution outcomes.
      */
-    val outcomeMemoryRepository: link.socket.ampere.agents.core.memory.OutcomeMemoryRepository
+    val outcomeMemoryRepository: OutcomeMemoryRepository
         get() = orchestrator.outcomeMemoryRepository
 
     /**

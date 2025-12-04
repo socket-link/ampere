@@ -2,6 +2,7 @@ package link.socket.ampere.repl
 
 import kotlinx.coroutines.delay
 import link.socket.ampere.*
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.renderer.CLIRenderer
 import org.jline.terminal.Terminal
 
@@ -65,7 +66,7 @@ class ObservationCommandRegistry(
                 }
 
                 val eventSources = if (agents.isNotEmpty()) {
-                    agents.map { link.socket.ampere.agents.events.EventSource.Agent(it) }.toSet()
+                    agents.map { EventSource.Agent(it) }.toSet()
                 } else {
                     null
                 }

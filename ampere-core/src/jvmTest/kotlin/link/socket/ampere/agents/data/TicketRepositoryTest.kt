@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.core.status.TicketStatus
+import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketError
 import link.socket.ampere.agents.events.tickets.TicketPriority

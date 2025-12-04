@@ -7,6 +7,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventId
+import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.events.utils.EventSerializationException
 import link.socket.ampere.data.Repository
 import link.socket.ampere.db.Database

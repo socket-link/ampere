@@ -5,9 +5,9 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.Urgency
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.Urgency
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream

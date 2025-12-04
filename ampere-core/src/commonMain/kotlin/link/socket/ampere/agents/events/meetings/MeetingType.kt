@@ -1,11 +1,11 @@
 package link.socket.ampere.agents.events.meetings
 
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.core.AssignedTo
-import link.socket.ampere.agents.core.PRId
-import link.socket.ampere.agents.core.SprintId
-import link.socket.ampere.agents.core.TeamId
-import link.socket.ampere.agents.events.EventSource
+import link.socket.ampere.agents.domain.concept.task.AssignedTo
+import link.socket.ampere.agents.domain.PRId
+import link.socket.ampere.agents.domain.SprintId
+import link.socket.ampere.agents.domain.TeamId
+import link.socket.ampere.agents.domain.event.EventSource
 
 /** Types of meetings supported by the system. */
 @Serializable

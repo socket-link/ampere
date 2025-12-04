@@ -8,18 +8,19 @@ import com.github.ajalt.mordant.rendering.TextColors.magenta
 import com.github.ajalt.mordant.rendering.TextColors.red
 import com.github.ajalt.mordant.rendering.TextColors.white
 import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyle
 import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.MeetingEvent
-import link.socket.ampere.agents.events.MemoryEvent
-import link.socket.ampere.agents.events.MessageEvent
-import link.socket.ampere.agents.events.NotificationEvent
-import link.socket.ampere.agents.events.TicketEvent
-import link.socket.ampere.agents.events.ToolEvent
-import link.socket.ampere.agents.events.Urgency
+import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.MeetingEvent
+import link.socket.ampere.agents.domain.event.MemoryEvent
+import link.socket.ampere.agents.domain.event.MessageEvent
+import link.socket.ampere.agents.domain.event.NotificationEvent
+import link.socket.ampere.agents.domain.event.TicketEvent
+import link.socket.ampere.agents.domain.event.ToolEvent
 
 /**
  * Renders events to terminal with color coding and formatting.
@@ -103,16 +104,16 @@ class EventRenderer(
      * - MemoryEvent: 🧠 cyan (knowledge/learning)
      * - ToolEvent: 🔧 yellow (tool registration/discovery)
      */
-    private fun getIconAndColor(event: Event): Pair<String, com.github.ajalt.mordant.rendering.TextStyle> {
+    private fun getIconAndColor(event: Event): Pair<String, TextStyle> {
         return when (event) {
-            is Event.TaskCreated -> "📋" to green
-            is Event.QuestionRaised -> "❓" to magenta
             is Event.CodeSubmitted -> "💻" to cyan
+            is Event.QuestionRaised -> "❓" to magenta
+            is Event.TaskCreated -> "📋" to green
             is MeetingEvent -> "📅" to magenta
-            is TicketEvent -> "🎫" to green
+            is MemoryEvent -> "🧠" to cyan
             is MessageEvent -> "💬" to blue
             is NotificationEvent<*> -> "🔔" to white
-            is MemoryEvent -> "🧠" to cyan
+            is TicketEvent -> "🎫" to green
             is ToolEvent -> "🔧" to yellow
         }
     }

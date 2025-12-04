@@ -12,8 +12,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.core.status.TicketStatus
+import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.type.ProductManagerAgent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.escalation.Escalation
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
@@ -21,9 +22,9 @@ import link.socket.ampere.agents.events.meetings.MeetingRepository
 import link.socket.ampere.agents.events.meetings.MeetingSchedulingService
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
-import link.socket.ampere.agents.implementations.pm.ProductManagerAgent
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
+import link.socket.ampere.stubProductManagerAgent
 
 class BacklogAnalyticsTest {
 
@@ -38,6 +39,8 @@ class BacklogAnalyticsTest {
     private lateinit var messageApi: AgentMessageApi
     private lateinit var meetingOrchestrator: MeetingOrchestrator
     private lateinit var ticketOrchestrator: TicketOrchestrator
+
+    private lateinit var productManagerAgent: ProductManagerAgent
 
     private val testScope = CoroutineScope(Dispatchers.Default)
     private val stubOrchestratorAgentId: AgentId = "orchestrator-agent"
@@ -74,6 +77,10 @@ class BacklogAnalyticsTest {
             eventSerialBus = eventSerialBus,
             messageApi = messageApi,
             meetingSchedulingService = meetingSchedulingService,
+        )
+
+        productManagerAgent = stubProductManagerAgent(
+            ticketOrchestrator = ticketOrchestrator,
         )
     }
 
@@ -514,40 +521,34 @@ class BacklogAnalyticsTest {
     @Test
     fun `PM agent perceive returns empty state with no tickets`() {
         runBlocking {
-            val pmAgent = ProductManagerAgent(stubPmAgentId, ticketOrchestrator)
+            val state = productManagerAgent.getCurrentState()
 
-            val perception = pmAgent.perceive()
-
-            assertEquals(0, perception.backlogSummary.totalTickets)
-            assertTrue(perception.agentWorkloads.isEmpty())
-            assertTrue(perception.upcomingDeadlines.isEmpty())
-            assertTrue(perception.blockedTickets.isEmpty())
-            assertTrue(perception.overdueTickets.isEmpty())
+            assertEquals(0, state.backlogSummary.totalTickets)
+            assertTrue(state.agentWorkloads.isEmpty())
+            assertTrue(state.upcomingDeadlines.isEmpty())
+            assertTrue(state.blockedTickets.isEmpty())
+            assertTrue(state.overdueTickets.isEmpty())
         }
     }
 
     @Test
     fun `PM agent perceive returns backlog summary`() {
         runBlocking {
-            val pmAgent = ProductManagerAgent(stubPmAgentId, ticketOrchestrator)
-
             // Create various tickets
             createTestTicket("Feature", TicketType.FEATURE, TicketPriority.HIGH)
             createTestTicket("Bug", TicketType.BUG, TicketPriority.CRITICAL)
             createTestTicket("Task", TicketType.TASK, TicketPriority.LOW)
 
-            val perception = pmAgent.perceive()
+            val state = productManagerAgent.getCurrentState()
 
-            assertEquals(3, perception.backlogSummary.totalTickets)
-            assertEquals(3, perception.backlogSummary.ticketsByStatus[TicketStatus.Backlog])
+            assertEquals(3, state.backlogSummary.totalTickets)
+            assertEquals(3, state.backlogSummary.ticketsByStatus[TicketStatus.Backlog])
         }
     }
 
     @Test
     fun `PM agent perceive returns agent workloads when agents specified`() {
         runBlocking {
-            val pmAgent = ProductManagerAgent(stubPmAgentId, ticketOrchestrator)
-
             // Assign tickets
             val ticket1 = createTestTicket("Agent1 Work", TicketType.FEATURE, TicketPriority.HIGH)
             ticketOrchestrator.assignTicket(ticket1.id, stubDevAgent1Id, stubPmAgentId)
@@ -555,23 +556,19 @@ class BacklogAnalyticsTest {
             val ticket2 = createTestTicket("Agent2 Work", TicketType.BUG, TicketPriority.MEDIUM)
             ticketOrchestrator.assignTicket(ticket2.id, stubDevAgent2Id, stubPmAgentId)
 
-            val perception = pmAgent.perceive(
-                agentIds = listOf(stubDevAgent1Id, stubDevAgent2Id),
-            )
+            val state = productManagerAgent.getCurrentState()
 
-            assertEquals(2, perception.agentWorkloads.size)
-            assertNotNull(perception.agentWorkloads[stubDevAgent1Id])
-            assertNotNull(perception.agentWorkloads[stubDevAgent2Id])
-            assertEquals(1, perception.agentWorkloads[stubDevAgent1Id]!!.assignedTickets.size)
-            assertEquals(1, perception.agentWorkloads[stubDevAgent2Id]!!.assignedTickets.size)
+            assertEquals(2, state.agentWorkloads.size)
+            assertNotNull(state.agentWorkloads[stubDevAgent1Id])
+            assertNotNull(state.agentWorkloads[stubDevAgent2Id])
+            assertEquals(1, state.agentWorkloads[stubDevAgent1Id]!!.assignedTickets.size)
+            assertEquals(1, state.agentWorkloads[stubDevAgent2Id]!!.assignedTickets.size)
         }
     }
 
     @Test
     fun `PM agent perceive includes blocked tickets`() {
         runBlocking {
-            val pmAgent = ProductManagerAgent(stubPmAgentId, ticketOrchestrator)
-
             // Create and block a ticket
             val blockedTicket = createTestTicket("Blocked", TicketType.BUG, TicketPriority.HIGH)
             ticketOrchestrator.assignTicket(blockedTicket.id, stubDevAgent1Id, stubPmAgentId)
@@ -585,17 +582,16 @@ class BacklogAnalyticsTest {
                 assignedToAgentId = stubDevAgent1Id,
             )
 
-            val perception = pmAgent.perceive(agentIds = listOf(stubDevAgent1Id))
+            val state = productManagerAgent.getCurrentState()
 
-            assertEquals(1, perception.blockedTickets.size)
-            assertEquals(blockedTicket.id, perception.blockedTickets[0].id)
+            assertEquals(1, state.blockedTickets.size)
+            assertEquals(blockedTicket.id, state.blockedTickets[0].id)
         }
     }
 
     @Test
     fun `PM agent perceive includes overdue tickets`() {
         runBlocking {
-            val pmAgent = ProductManagerAgent(stubPmAgentId, ticketOrchestrator)
             val now = Clock.System.now()
 
             // Create overdue ticket
@@ -607,17 +603,16 @@ class BacklogAnalyticsTest {
             )
             ticketOrchestrator.assignTicket(overdueTicket.id, stubDevAgent1Id, stubPmAgentId)
 
-            val perception = pmAgent.perceive(agentIds = listOf(stubDevAgent1Id))
+            val state = productManagerAgent.getCurrentState()
 
-            assertEquals(1, perception.overdueTickets.size)
-            assertEquals(overdueTicket.id, perception.overdueTickets[0].id)
+            assertEquals(1, state.overdueTickets.size)
+            assertEquals(overdueTicket.id, state.overdueTickets[0].id)
         }
     }
 
     @Test
     fun `PM agent perceive includes upcoming deadlines`() {
         runBlocking {
-            val pmAgent = ProductManagerAgent(stubPmAgentId, ticketOrchestrator)
             val now = Clock.System.now()
 
             createTestTicketWithDueDate(
@@ -627,34 +622,32 @@ class BacklogAnalyticsTest {
                 now + 3.days,
             )
 
-            val perception = pmAgent.perceive(deadlineDaysAhead = 7)
+            val state = productManagerAgent.getCurrentState()
 
-            assertEquals(1, perception.upcomingDeadlines.size)
-            assertEquals("Due Soon", perception.upcomingDeadlines[0].title)
+            assertEquals(1, state.upcomingDeadlines.size)
+            assertEquals("Due Soon", state.upcomingDeadlines[0].title)
         }
     }
 
     @Test
     fun `PM agent perceiveAsText returns formatted text`() {
         runBlocking {
-            val pmAgent = ProductManagerAgent(stubPmAgentId, ticketOrchestrator)
-
             // Create test data
             createTestTicket("Test Feature", TicketType.FEATURE, TicketPriority.HIGH)
 
-            val text = pmAgent.perceiveAsText()
+            val state = productManagerAgent.getCurrentState()
+            val perception = productManagerAgent.perceiveState(state)
+            val titles = perception.ideas.map { it.name }
 
-            assertTrue(text.contains("PM Agent Perception State"))
-            assertTrue(text.contains("Backlog Summary"))
-            assertTrue(text.contains("Total Tickets: 1"))
+            assertTrue(titles.contains("PM Agent Perception State"))
+            assertTrue(titles.contains("Backlog Summary"))
+            assertTrue(titles.contains("Total Tickets: 1"))
         }
     }
 
     @Test
     fun `PM perception text highlights blocked tickets`() {
         runBlocking {
-            val pmAgent = ProductManagerAgent(stubPmAgentId, ticketOrchestrator)
-
             // Create and block a ticket
             val blockedTicket = createTestTicket("Blocked Feature", TicketType.FEATURE, TicketPriority.HIGH)
             ticketOrchestrator.assignTicket(blockedTicket.id, stubDevAgent1Id, stubPmAgentId)
@@ -668,10 +661,12 @@ class BacklogAnalyticsTest {
                 assignedToAgentId = stubDevAgent1Id,
             )
 
-            val text = pmAgent.perceiveAsText(agentIds = listOf(stubDevAgent1Id))
+            val state = productManagerAgent.getCurrentState()
+            val perception = productManagerAgent.perceiveState(state)
+            val titles = perception.ideas.map { it.name }
 
-            assertTrue(text.contains("BLOCKED TICKETS"))
-            assertTrue(text.contains("Blocked Feature"))
+            assertTrue(titles.contains("BLOCKED TICKETS"))
+            assertTrue(titles.contains("Blocked Feature"))
         }
     }
 

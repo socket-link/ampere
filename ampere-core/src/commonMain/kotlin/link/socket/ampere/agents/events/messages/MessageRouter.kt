@@ -1,8 +1,8 @@
 package link.socket.ampere.agents.events.messages
 
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.events.EventType
-import link.socket.ampere.agents.events.NotificationEvent
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.event.EventType
+import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.escalation.EscalationEventHandler
 import link.socket.ampere.agents.events.subscription.MessageSubscription

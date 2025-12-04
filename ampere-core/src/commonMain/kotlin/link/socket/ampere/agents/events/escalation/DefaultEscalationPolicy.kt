@@ -1,6 +1,6 @@
 package link.socket.ampere.agents.events.escalation
 
-import link.socket.ampere.agents.implementations.pm.ProductManagerState
+import link.socket.ampere.agents.domain.type.pm.ProductManagerState
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 

@@ -1,11 +1,9 @@
 package link.socket.ampere.agents.service
 
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.Urgency
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.api.AgentEventApi
-import link.socket.ampere.agents.events.utils.generateUUID
 
 /**
  * Service for agent-related actions.

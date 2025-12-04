@@ -2,12 +2,12 @@ package link.socket.ampere.agents.execution.tools.invoke
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.core.actions.AgentActionAutonomy
-import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
-import link.socket.ampere.agents.core.outcomes.Outcome
-import link.socket.ampere.agents.core.status.TaskStatus
-import link.socket.ampere.agents.core.status.TicketStatus
-import link.socket.ampere.agents.core.tasks.Task
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.concept.outcome.Outcome
+import link.socket.ampere.agents.domain.concept.status.TaskStatus
+import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
@@ -21,6 +21,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import link.socket.ampere.agents.execution.results.ExecutionResult
 
 /**
  * Tests for ToolInvoker - the motor neuron abstraction for tool execution.
@@ -381,7 +382,7 @@ class ToolInvokerTest {
                     executionStartTimestamp = Clock.System.now(),
                     executionEndTimestamp = Clock.System.now(),
                     changedFiles = filePaths,
-                    validation = link.socket.ampere.agents.execution.results.ExecutionResult(
+                    validation = ExecutionResult(
                         codeChanges = null,
                         compilation = null,
                         linting = null,

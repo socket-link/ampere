@@ -1,10 +1,10 @@
 package link.socket.ampere.agents.environment
 
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.core.memory.OutcomeMemoryRepository
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.EventRouter
-import link.socket.ampere.agents.events.EventSource
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
 import link.socket.ampere.agents.events.bus.EventSerialBus

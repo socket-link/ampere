@@ -14,7 +14,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.events.EventStatus
+import link.socket.ampere.agents.domain.concept.status.EventStatus
 import link.socket.ampere.agents.events.messages.Message
 import link.socket.ampere.agents.events.messages.MessageChannel
 import link.socket.ampere.agents.events.messages.MessageId
@@ -140,10 +140,10 @@ class MessageRepositoryTest {
             )
             repo.saveThread(thread)
 
-            repo.updateStatus(stubThreadId3, EventStatus.WAITING_FOR_HUMAN)
+            repo.updateStatus(stubThreadId3, EventStatus.WaitingForHuman)
             val updated = repo.findThreadById(stubThreadId3).getOrNull()
             assertNotNull(updated)
-            assertEquals(EventStatus.WAITING_FOR_HUMAN, updated.status)
+            assertEquals(EventStatus.WaitingForHuman, updated.status)
 
             // now delete conversation, ensure cascade removes messages/participants
             repo.delete(stubThreadId3)

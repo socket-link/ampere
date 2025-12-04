@@ -10,8 +10,8 @@ import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.EventSource
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.messages.MessageSender
 import link.socket.ampere.agents.events.relay.EventRelayFilters
 import link.socket.ampere.agents.events.tickets.TicketSummary

@@ -1,6 +1,6 @@
 package link.socket.ampere.agents.events.meetings
 
-import link.socket.ampere.agents.events.EventSource
+import link.socket.ampere.agents.domain.event.EventSource
 
 /**
  * Functional interface for scheduling meetings.

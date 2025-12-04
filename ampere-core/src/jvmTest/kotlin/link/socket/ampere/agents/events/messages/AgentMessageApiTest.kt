@@ -12,9 +12,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import link.socket.ampere.agents.domain.concept.status.EventStatus
+import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.events.EventRepository
-import link.socket.ampere.agents.events.EventStatus
-import link.socket.ampere.agents.events.MessageEvent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.data.DEFAULT_JSON
@@ -86,7 +86,7 @@ class AgentMessageApiTest {
 
             val fetchedThread1 = api.getThread(thread.id).getOrNull()
             assertNotNull(fetchedThread1)
-            assertEquals(EventStatus.OPEN, fetchedThread1.status)
+            assertEquals(EventStatus.Open, fetchedThread1.status)
             assertEquals(2, fetchedThread1.participants.size) // sender + agent-B
             assertEquals(1, fetchedThread1.messages.size)
 
@@ -108,7 +108,7 @@ class AgentMessageApiTest {
             )
             val fetchedThread3 = api.getThread(thread.id).getOrNull()
             assertNotNull(fetchedThread3)
-            assertEquals(EventStatus.WAITING_FOR_HUMAN, fetchedThread3.status)
+            assertEquals(EventStatus.WaitingForHuman, fetchedThread3.status)
 
             // Posting now should fail, since the thread is waiting for human
             var threw = false
@@ -128,7 +128,7 @@ class AgentMessageApiTest {
             api.resolveThread(thread.id)
             val fetched4 = api.getThread(thread.id).getOrNull()
             assertNotNull(fetched4)
-            assertEquals(EventStatus.RESOLVED, fetched4.status)
+            assertEquals(EventStatus.Resolved, fetched4.status)
 
             // allow async event handlers to run
             delay(200)
@@ -163,7 +163,7 @@ class AgentMessageApiTest {
             // Verify initial status is OPEN
             val fetchedThread1 = api.getThread(thread.id).getOrNull()
             assertNotNull(fetchedThread1)
-            assertEquals(EventStatus.OPEN, fetchedThread1.status)
+            assertEquals(EventStatus.Open, fetchedThread1.status)
 
             // Escalate to WAITING_FOR_HUMAN
             api.escalateToHuman(
@@ -173,7 +173,7 @@ class AgentMessageApiTest {
 
             val fetchedThread2 = api.getThread(thread.id).getOrNull()
             assertNotNull(fetchedThread2)
-            assertEquals(EventStatus.WAITING_FOR_HUMAN, fetchedThread2.status)
+            assertEquals(EventStatus.WaitingForHuman, fetchedThread2.status)
 
             // Verify posting is blocked
             var blocked = false
@@ -189,7 +189,7 @@ class AgentMessageApiTest {
 
             val fetchedThread3 = api.getThread(thread.id).getOrNull()
             assertNotNull(fetchedThread3)
-            assertEquals(EventStatus.OPEN, fetchedThread3.status)
+            assertEquals(EventStatus.Open, fetchedThread3.status)
 
             // Now posting should succeed
             val newMessage = api.postMessage(thread.id, "Human intervention complete")
@@ -206,8 +206,8 @@ class AgentMessageApiTest {
             // Verify status change events
             val statusChanges = received.filterIsInstance<MessageEvent.ThreadStatusChanged>()
             assertTrue(statusChanges.size >= 2)
-            assertTrue(statusChanges.any { it.newStatus == EventStatus.WAITING_FOR_HUMAN })
-            assertTrue(statusChanges.any { it.newStatus == EventStatus.OPEN })
+            assertTrue(statusChanges.any { it.newStatus == EventStatus.WaitingForHuman})
+            assertTrue(statusChanges.any { it.newStatus == EventStatus.Open})
         }
     }
 

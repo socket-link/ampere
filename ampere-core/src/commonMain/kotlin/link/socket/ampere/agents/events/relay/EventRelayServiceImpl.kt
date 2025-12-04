@@ -5,9 +5,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.events.Event
+import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.events.EventRepository
-import link.socket.ampere.agents.events.EventType
+import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.subscription.Subscription

@@ -4,6 +4,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.concept.status.EventStatus
+import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.events.messages.Message
 import link.socket.ampere.agents.events.messages.MessageChannel
 import link.socket.ampere.agents.events.messages.MessageSender
@@ -55,8 +57,8 @@ class ConversationEventTest {
             timestamp = now + 2.seconds,
             eventSource = stubSenderA.toEventSource(),
             threadId = stubThreadId,
-            oldStatus = EventStatus.OPEN,
-            newStatus = EventStatus.WAITING_FOR_HUMAN,
+            oldStatus = EventStatus.Open,
+            newStatus = EventStatus.WaitingForHuman,
         )
 
         val escalation = MessageEvent.EscalationRequested(
@@ -72,7 +74,7 @@ class ConversationEventTest {
         assertEquals("t1", created.threadId)
         assertEquals(initialMessage, created.thread.messages.first())
         assertEquals(MessageChannel.Public.Engineering, posted.channel)
-        assertEquals(EventStatus.OPEN, statusChanged.oldStatus)
+        assertEquals(EventStatus.Open, statusChanged.oldStatus)
         assertEquals("agentA", escalation.eventSource.getIdentifier())
 
         // Exhaustive when expression over sealed interface

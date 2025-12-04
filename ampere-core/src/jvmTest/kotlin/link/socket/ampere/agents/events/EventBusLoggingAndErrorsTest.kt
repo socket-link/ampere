@@ -15,6 +15,10 @@ import kotlinx.datetime.Clock
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.subscribe
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.EventType
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.agents.events.utils.EventLogger

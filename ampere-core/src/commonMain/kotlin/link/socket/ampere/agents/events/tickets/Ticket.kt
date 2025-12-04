@@ -3,8 +3,8 @@ package link.socket.ampere.agents.events.tickets
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.core.status.TicketStatus
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.concept.status.TicketStatus
 
 /** Type alias for ticket identifier. */
 typealias TicketId = String

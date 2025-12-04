@@ -6,7 +6,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import link.socket.ampere.agents.core.actions.AgentActionAutonomy
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.execution.tools.ToolAskHuman
 import link.socket.ampere.agents.execution.tools.ToolReadCodebase
 import link.socket.ampere.agents.execution.tools.ToolRunTests

@@ -7,7 +7,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.events.EventStatus
+import link.socket.ampere.agents.domain.concept.status.EventStatus
 import link.socket.ampere.data.Repository
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.messages.MessageStoreQueries
@@ -102,7 +102,7 @@ class MessageRepository(
                         MessageSender.fromSenderId(participantId)
                     }.toSet(),
                     messages = messages,
-                    status = EventStatus.valueOf(messageThread.status),
+                    status = EventStatus.fromName(messageThread.status),
                     createdAt = Instant.Companion.fromEpochMilliseconds(messageThread.createdAt),
                     updatedAt = Instant.Companion.fromEpochMilliseconds(messageThread.updatedAt),
                 )
@@ -144,7 +144,7 @@ class MessageRepository(
                                 MessageSender.fromSenderId(participantId)
                             }.toSet(),
                             messages = messages,
-                            status = EventStatus.valueOf(messageThread.status),
+                            status = EventStatus.fromName(messageThread.status),
                             createdAt = Instant.Companion.fromEpochMilliseconds(messageThread.createdAt),
                             updatedAt = Instant.Companion.fromEpochMilliseconds(messageThread.updatedAt),
                         )
@@ -176,7 +176,7 @@ class MessageRepository(
 
                 queries.updateMessageThreadStatus(
                     id = threadId,
-                    status = EventStatus.OPEN.name, // keep status unless external change; OPEN ensures active
+                    status = EventStatus.Open.name, // keep status unless external change; OPEN ensures active
                     updatedAt = message.timestamp.toEpochMilliseconds(),
                 )
             }.map { }

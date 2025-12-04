@@ -1,7 +1,7 @@
 package link.socket.ampere.agents.events.escalation
 
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.implementations.pm.ProductManagerState
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.type.pm.ProductManagerState
 import link.socket.ampere.agents.events.tickets.Ticket
 
 /**

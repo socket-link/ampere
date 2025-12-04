@@ -13,25 +13,26 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.core.AgentConfiguration
-import link.socket.ampere.agents.core.actions.AgentActionAutonomy
-import link.socket.ampere.agents.core.errors.ExecutionError
-import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
-import link.socket.ampere.agents.core.outcomes.Outcome
-import link.socket.ampere.agents.core.reasoning.Idea
-import link.socket.ampere.agents.core.reasoning.Perception
-import link.socket.ampere.agents.core.reasoning.Plan
-import link.socket.ampere.agents.core.states.AgentState
-import link.socket.ampere.agents.core.status.TaskStatus
-import link.socket.ampere.agents.core.tasks.Task
-import link.socket.ampere.agents.core.types.testAgentConfiguration
+import link.socket.ampere.agents.domain.concept.Idea
+import link.socket.ampere.agents.domain.concept.Perception
+import link.socket.ampere.agents.domain.concept.Plan
+import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.concept.outcome.Outcome
+import link.socket.ampere.agents.domain.concept.outcome.TaskOutcome
+import link.socket.ampere.agents.domain.concept.status.TaskStatus
+import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.config.AgentConfiguration
+import link.socket.ampere.agents.domain.error.ExecutionError
+import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.type.CodeWriterAgent
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.executor.InstrumentedExecutor
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
-import link.socket.ampere.agents.implementations.code.CodeWriterAgent
+import link.socket.ampere.stubAgentConfiguration
 
 /**
  * Comprehensive integration tests for the CodeWriterAgent's complete cognitive loop.
@@ -67,7 +68,7 @@ class CodeWriterAgentIntegrationTest {
 
         val agent = TestableCodeWriterAgent(
             initialState = AgentState(),
-            agentConfiguration = testAgentConfiguration(),
+            agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
             executor = executor,
@@ -86,12 +87,12 @@ class CodeWriterAgentIntegrationTest {
 
         // Run through the complete cognitive cycle
         // 1. Perceive current state
-        val perception = agent.perceiveState()
+        val perception = agent.perceiveState(agent.getCurrentState())
         assertNotNull(perception)
-        assertTrue(perception.name.isNotEmpty(), "Perception should generate insights")
+        assertTrue(perception.ideas.first().name.isNotEmpty(), "Perception should generate insights")
 
         // 2. Generate a plan
-        val plan = agent.determinePlanForTask(task, perception, relevantKnowledge = emptyList())
+        val plan = agent.determinePlanForTask(task, perception.ideas.first(), relevantKnowledge = emptyList())
         assertNotNull(plan)
         assertIs<Plan.ForTask>(plan)
         assertTrue(plan.tasks.isNotEmpty(), "Plan should contain steps")
@@ -129,7 +130,7 @@ class CodeWriterAgentIntegrationTest {
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = true)
         val agent = TestableCodeWriterAgent(
             initialState = AgentState(),
-            agentConfiguration = testAgentConfiguration(),
+            agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
             executor = FunctionExecutor.create(),
@@ -153,12 +154,12 @@ class CodeWriterAgentIntegrationTest {
         assertTrue(initialMemory.outcome is Outcome.Blank, "Initial outcome should be blank")
 
         // Perceive state
-        val idea = agent.perceiveState()
+        val idea = agent.perceiveState(agent.getCurrentState())
         val afterPerception = agent.getCurrentState()
         assertEquals(idea.id, afterPerception.getCurrentMemory().idea.id, "Idea should be stored in current memory")
 
         // Generate plan
-        val plan = agent.determinePlanForTask(task, idea, relevantKnowledge = emptyList())
+        val plan = agent.determinePlanForTask(task, idea.ideas.first(), relevantKnowledge = emptyList())
         val afterPlanning = agent.getCurrentState()
         assertEquals(plan.id, afterPlanning.getCurrentMemory().plan.id, "Plan should be stored in current memory")
 
@@ -188,7 +189,7 @@ class CodeWriterAgentIntegrationTest {
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = true)
         val agent = CodeWriterAgent(
             initialState = AgentState(),
-            agentConfiguration = testAgentConfiguration(),
+            agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
             executor = FunctionExecutor.create()
@@ -255,7 +256,7 @@ class CodeWriterAgentIntegrationTest {
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = false)
         val agent = CodeWriterAgent(
             initialState = AgentState(),
-            agentConfiguration = testAgentConfiguration(),
+            agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
             executor = FunctionExecutor.create()
@@ -321,7 +322,7 @@ class CodeWriterAgentIntegrationTest {
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = true)
         val agent = TestableCodeWriterAgent(
             initialState = AgentState(),
-            agentConfiguration = testAgentConfiguration(),
+            agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
             executor = FunctionExecutor.create(),
@@ -354,8 +355,8 @@ class CodeWriterAgentIntegrationTest {
         // Process each task sequentially
         for (task in tasks) {
             // Full cognitive cycle for each task
-            val idea = agent.perceiveState()
-            val plan = agent.determinePlanForTask(task, idea, relevantKnowledge = emptyList())
+            val idea = agent.perceiveState(agent.getCurrentState())
+            val plan = agent.determinePlanForTask(task, idea.ideas.first(), relevantKnowledge = emptyList())
             val outcome = agent.executePlan(plan)
             val learningIdea = agent.evaluateNextIdeaFromOutcomes(outcome)
 
@@ -411,7 +412,7 @@ class CodeWriterAgentIntegrationTest {
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = true)
         val agent = CodeWriterAgent(
             initialState = AgentState(),
-            agentConfiguration = testAgentConfiguration(),
+            agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
             executor = instrumentedExecutor
@@ -450,7 +451,7 @@ class CodeWriterAgentIntegrationTest {
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = true)
         val agent = CodeWriterAgent(
             initialState = AgentState(),
-            agentConfiguration = testAgentConfiguration(),
+            agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
             executor = FunctionExecutor.create()
@@ -468,12 +469,12 @@ class CodeWriterAgentIntegrationTest {
         // Agent should autonomously transform this vague requirement into concrete code
 
         // 1. Perceive and understand the requirement
-        val idea = agent.perceiveState()
+        val idea = agent.perceiveState(agent.getCurrentState())
         assertNotNull(idea)
-        assertTrue(idea.description.isNotEmpty(), "Agent should generate insights from vague requirement")
+        assertTrue(idea.ideas.first().name.isNotEmpty(), "Agent should generate insights from vague requirement")
 
         // 2. Plan concrete steps
-        val plan = agent.determinePlanForTask(task, idea, relevantKnowledge = emptyList())
+        val plan = agent.determinePlanForTask(task, idea.ideas.first(), relevantKnowledge = emptyList())
         assertNotNull(plan)
         assertIs<Plan.ForTask>(plan)
         assertTrue(plan.tasks.isNotEmpty(), "Agent should break down vague requirement into steps")
@@ -515,7 +516,7 @@ class CodeWriterAgentIntegrationTest {
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = true)
         val agent = CodeWriterAgent(
             initialState = AgentState(),
-            agentConfiguration = testAgentConfiguration(),
+            agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
             executor = FunctionExecutor.create()
@@ -612,7 +613,7 @@ class CodeWriterAgentIntegrationTest {
      * Creates a mock success outcome for task execution.
      */
     private fun createMockSuccessOutcome(task: Task): Outcome {
-        return link.socket.ampere.agents.core.outcomes.TaskOutcome.Success.Full(
+        return TaskOutcome.Success.Full(
             id = "mock-outcome-${task.id}",
             task = task,
             value = "Mock execution completed successfully"

@@ -1,11 +1,11 @@
 package link.socket.ampere.agents.events.meetings
 
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.core.AssignedTo
-import link.socket.ampere.agents.core.status.MeetingStatus
-import link.socket.ampere.agents.core.tasks.MeetingTask
-import link.socket.ampere.agents.events.Event
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.concept.task.AssignedTo
+import link.socket.ampere.agents.domain.concept.status.MeetingStatus
+import link.socket.ampere.agents.domain.concept.task.MeetingTask
+import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.events.utils.generateUUID
 
 class MeetingBuilder(

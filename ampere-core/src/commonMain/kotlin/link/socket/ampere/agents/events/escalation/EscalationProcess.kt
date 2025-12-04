@@ -1,6 +1,6 @@
 package link.socket.ampere.agents.events.escalation
 
-import link.socket.ampere.agents.core.AgentDescribable
+import link.socket.ampere.agents.domain.AgentDescribable
 
 /**
  * Defines the mechanism by which an escalation is resolved.

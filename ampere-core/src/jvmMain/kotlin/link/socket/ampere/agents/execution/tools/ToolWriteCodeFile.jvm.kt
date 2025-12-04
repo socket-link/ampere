@@ -2,8 +2,8 @@ package link.socket.ampere.agents.execution.tools
 
 import java.io.File
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.core.errors.ExecutionError
-import link.socket.ampere.agents.core.outcomes.ExecutionOutcome
+import link.socket.ampere.agents.domain.error.ExecutionError
+import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.results.ExecutionResult
 

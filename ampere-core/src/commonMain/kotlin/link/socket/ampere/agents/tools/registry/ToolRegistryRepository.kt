@@ -6,7 +6,7 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.core.actions.AgentActionAutonomy
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.execution.tools.McpServerId
 import link.socket.ampere.agents.execution.tools.ToolId
 import link.socket.ampere.data.Repository

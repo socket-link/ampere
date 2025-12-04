@@ -2,7 +2,7 @@ package link.socket.ampere.agents.events.tickets
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.core.AgentId
+import link.socket.ampere.agents.domain.type.AgentId
 
 /**
  * Service providing high-level views of ticket state.

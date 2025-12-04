@@ -6,7 +6,7 @@ import com.github.ajalt.clikt.parameters.options.option
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
-import link.socket.ampere.agents.events.EventSource
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.relay.EventRelayFilters
 import link.socket.ampere.agents.events.relay.EventRelayService
 import link.socket.ampere.renderer.CLIRenderer

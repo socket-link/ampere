@@ -1,10 +1,10 @@
 package link.socket.ampere.agents.events.relay
 
-import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.EventId
-import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.EventType
-import link.socket.ampere.agents.events.Urgency
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventId
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.EventType
+import link.socket.ampere.agents.domain.Urgency
 
 /**
  * Filter criteria for event streams.

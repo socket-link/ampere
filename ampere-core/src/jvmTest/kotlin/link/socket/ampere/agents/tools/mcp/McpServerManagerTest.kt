@@ -5,13 +5,9 @@ import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import link.socket.ampere.agents.core.actions.AgentActionAutonomy
-import link.socket.ampere.agents.events.EventSource
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.tools.mcp.connection.McpServerConnection
 import link.socket.ampere.agents.tools.mcp.protocol.InitializeResult
@@ -19,7 +15,6 @@ import link.socket.ampere.agents.tools.mcp.protocol.McpToolDescriptor
 import link.socket.ampere.agents.tools.mcp.protocol.ServerCapabilities
 import link.socket.ampere.agents.tools.mcp.protocol.ServerInfo
 import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
-import link.socket.ampere.agents.tools.registry.ToolMetadata
 import link.socket.ampere.agents.tools.registry.ToolRegistry
 import link.socket.ampere.agents.tools.registry.ToolRegistryRepository
 import link.socket.ampere.db.Database

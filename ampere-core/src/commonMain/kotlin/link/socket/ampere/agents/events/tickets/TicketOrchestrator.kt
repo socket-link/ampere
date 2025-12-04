@@ -3,15 +3,16 @@ package link.socket.ampere.agents.events.tickets
 import kotlin.time.Duration.Companion.hours
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.core.AssignedTo
-import link.socket.ampere.agents.core.status.MeetingStatus
-import link.socket.ampere.agents.core.status.TaskStatus
-import link.socket.ampere.agents.core.status.TicketStatus
-import link.socket.ampere.agents.core.tasks.MeetingTask
-import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.TicketEvent
-import link.socket.ampere.agents.events.Urgency
+import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.concept.status.EventStatus
+import link.socket.ampere.agents.domain.concept.status.MeetingStatus
+import link.socket.ampere.agents.domain.concept.status.TaskStatus
+import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.concept.task.AssignedTo
+import link.socket.ampere.agents.domain.concept.task.MeetingTask
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.TicketEvent
+import link.socket.ampere.agents.domain.type.AgentId
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.escalation.Escalation
 import link.socket.ampere.agents.events.meetings.Meeting
@@ -517,7 +518,7 @@ class TicketOrchestrator(
         // Post notification to ticket thread
         getOrCreateTicketThread(ticket)?.let { thread ->
             // Reopen thread if it's waiting for human (e.g., after escalation in blockTicket)
-            if (thread.status == link.socket.ampere.agents.events.EventStatus.WAITING_FOR_HUMAN) {
+            if (thread.status == EventStatus.WaitingForHuman) {
                 messageApi.reopenThread(thread.id)
             }
             messageApi.postMessage(
@@ -554,6 +555,16 @@ class TicketOrchestrator(
      *
      * @return Result containing the BacklogSummary or an error.
      */
+    suspend fun getAllTickets(): Result<List<Ticket>> {
+        return ticketRepository.getAllTickets()
+            .onFailure { throwable ->
+                logger.logError(
+                    message = "Failed to get all tickets",
+                    throwable = throwable,
+                )
+            }
+    }
+
     suspend fun getBacklogSummary(): Result<BacklogSummary> {
         return ticketRepository.getBacklogSummary()
             .onFailure { throwable ->

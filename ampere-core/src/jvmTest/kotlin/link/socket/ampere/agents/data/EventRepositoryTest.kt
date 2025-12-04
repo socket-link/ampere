@@ -15,10 +15,10 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.events.Event
+import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.events.EventRepository
-import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.Urgency
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 

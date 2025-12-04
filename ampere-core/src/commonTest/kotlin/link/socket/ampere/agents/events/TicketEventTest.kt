@@ -8,8 +8,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.core.status.TicketStatus
+import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.TicketEvent
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
 

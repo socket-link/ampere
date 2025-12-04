@@ -8,6 +8,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.environment.EnvironmentService
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.events.messages.DefaultThreadViewService
 import link.socket.ampere.agents.events.messages.ThreadViewService
 import link.socket.ampere.agents.events.relay.EventRelayService
@@ -119,7 +121,7 @@ class AmpereContext(
      * Outcome memory repository for querying execution outcomes.
      * Provides access to the environment's accumulated experience.
      */
-    val outcomeMemoryRepository: link.socket.ampere.agents.core.memory.OutcomeMemoryRepository
+    val outcomeMemoryRepository: OutcomeMemoryRepository
         get() = environmentService.outcomeMemoryRepository
 
     /**
@@ -164,7 +166,7 @@ class AmpereContext(
      */
     fun subscribeToAll(
         agentId: String,
-        handler: link.socket.ampere.agents.events.api.EventHandler<link.socket.ampere.agents.events.Event, link.socket.ampere.agents.events.subscription.Subscription>,
+        handler: link.socket.ampere.agents.events.api.EventHandler<Event, link.socket.ampere.agents.events.subscription.Subscription>,
     ): List<link.socket.ampere.agents.events.subscription.Subscription> {
         return environmentService.subscribeToAll(agentId, handler)
     }

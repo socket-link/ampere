@@ -8,13 +8,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.events.EventStatus
-import kotlin.time.Duration.Companion.hours
+import link.socket.ampere.agents.domain.concept.status.EventStatus
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 
@@ -113,7 +113,7 @@ class ThreadViewServiceTest {
                 createdBy = MessageSender.Agent("agent-2"),
                 participants = setOf(MessageSender.Agent("agent-2")),
                 messages = emptyList(),
-                status = EventStatus.OPEN,
+                status = EventStatus.Open,
                 createdAt = Clock.System.now(),
                 updatedAt = Clock.System.now(),
             )
@@ -201,7 +201,7 @@ class ThreadViewServiceTest {
             messageRepository.saveThread(thread)
 
             // Update status to WAITING_FOR_HUMAN
-            messageRepository.updateStatus("thread-1", EventStatus.WAITING_FOR_HUMAN)
+            messageRepository.updateStatus("thread-1", EventStatus.WaitingForHuman)
 
             // Get active threads
             val result = threadViewService.listActiveThreads()
@@ -245,7 +245,7 @@ class ThreadViewServiceTest {
                 initialMessage = message2,
             )
             messageRepository.saveThread(resolvedThread)
-            messageRepository.updateStatus("thread-2", EventStatus.RESOLVED)
+            messageRepository.updateStatus("thread-2", EventStatus.Resolved)
 
             // Get active threads
             val result = threadViewService.listActiveThreads()

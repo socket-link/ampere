@@ -12,12 +12,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import link.socket.ampere.agents.core.AgentId
-import link.socket.ampere.agents.core.status.TicketStatus
-import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.TicketEvent
+import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.escalation.Escalation
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
@@ -197,7 +198,7 @@ class TicketOrchestratorTest {
 
             val createdEvents = publishedEvents.filterIsInstance<TicketEvent.TicketCreated>()
             assertTrue(createdEvents.isNotEmpty())
-            assertEquals(link.socket.ampere.agents.events.Urgency.HIGH, createdEvents.first().urgency)
+            assertEquals(Urgency.HIGH, createdEvents.first().urgency)
         }
     }
 
@@ -486,7 +487,7 @@ class TicketOrchestratorTest {
             assertTrue(blockedEvents.isNotEmpty(), "TicketBlocked event should be published")
             assertEquals(ticket.id, blockedEvents.first().ticketId)
             assertEquals(blockReason, blockedEvents.first().blockingReason)
-            assertEquals(link.socket.ampere.agents.events.Urgency.HIGH, blockedEvents.first().urgency)
+            assertEquals(Urgency.HIGH, blockedEvents.first().urgency)
         }
     }
 

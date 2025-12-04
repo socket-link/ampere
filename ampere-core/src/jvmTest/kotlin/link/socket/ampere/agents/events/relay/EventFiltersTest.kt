@@ -4,9 +4,9 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.events.Event
-import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.Urgency
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.Urgency
 
 class EventFiltersTest {
 

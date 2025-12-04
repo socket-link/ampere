@@ -5,6 +5,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.NotificationEvent
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.subscription.Subscription
 
 class NotificationEventTest {

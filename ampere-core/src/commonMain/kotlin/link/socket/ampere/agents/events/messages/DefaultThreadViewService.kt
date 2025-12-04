@@ -1,6 +1,6 @@
 package link.socket.ampere.agents.events.messages
 
-import link.socket.ampere.agents.events.EventStatus
+import link.socket.ampere.agents.domain.concept.status.EventStatus
 
 /**
  * Default implementation of ThreadViewService that queries thread state
@@ -13,7 +13,7 @@ class DefaultThreadViewService(
     override suspend fun listActiveThreads(): Result<List<ThreadSummary>> =
         messageRepository.findAllThreads().mapCatching { threads ->
             threads
-                .filter { it.messages.isNotEmpty() && it.status != EventStatus.RESOLVED }
+                .filter { it.messages.isNotEmpty() && it.status != EventStatus.Resolved }
                 .map { thread ->
                     ThreadSummary(
                         threadId = thread.id,
@@ -21,7 +21,7 @@ class DefaultThreadViewService(
                         messageCount = thread.messages.size,
                         participantIds = thread.participants.map { it.getIdentifier() },
                         lastActivity = thread.updatedAt,
-                        hasUnreadEscalations = thread.status == EventStatus.WAITING_FOR_HUMAN,
+                        hasUnreadEscalations = thread.status == EventStatus.WaitingForHuman,
                     )
                 }
                 .sortedByDescending { it.lastActivity }

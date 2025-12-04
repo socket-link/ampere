@@ -1,9 +1,8 @@
 package link.socket.ampere.agents.service
 
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.events.EventSource
-import link.socket.ampere.agents.events.EventStatus
-import link.socket.ampere.agents.events.MessageEvent
+import link.socket.ampere.agents.domain.concept.status.EventStatus
+import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.messages.Message
 import link.socket.ampere.agents.events.messages.MessageChannel
@@ -94,7 +93,7 @@ class MessageActionService(
                 createdBy = MessageSender.Human,
                 participants = participants,
                 messages = listOf(initialMessage),
-                status = EventStatus.OPEN,
+                status = EventStatus.Open,
                 createdAt = now,
                 updatedAt = now,
             )
