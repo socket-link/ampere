@@ -10,7 +10,7 @@ import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
 import link.socket.ampere.agents.domain.concept.status.TaskStatus
 import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
-import link.socket.ampere.agents.domain.type.QualityAssuranceAgent
+import link.socket.ampere.agents.definition.QualityAssuranceAgent
 import link.socket.ampere.stubKnowledgeEntry
 import link.socket.ampere.stubQualityAssuranceAgent
 import link.socket.ampere.stubSuccessOutcome

@@ -1,10 +1,11 @@
-package link.socket.ampere.agents.domain.type
+package link.socket.ampere.agents.definition
 
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.definition.pm.ProductManagerState
 import link.socket.ampere.agents.domain.concept.Idea
 import link.socket.ampere.agents.domain.concept.Perception
 import link.socket.ampere.agents.domain.concept.Plan
@@ -17,7 +18,6 @@ import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.domain.config.AgentConfiguration
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
-import link.socket.ampere.agents.domain.type.pm.ProductManagerState
 import link.socket.ampere.agents.events.tickets.AgentWorkload
 import link.socket.ampere.agents.events.tickets.BacklogSummary
 import link.socket.ampere.agents.events.tickets.TicketOrchestrator
@@ -34,14 +34,14 @@ import link.socket.ampere.domain.util.toClientModelId
  * lead to successful implementations versus which create confusion or rework.
  */
 class ProductManagerAgent(
-    override val id: AgentId,
-    override val initialState: ProductManagerState,
     override val agentConfiguration: AgentConfiguration,
     private val ticketOrchestrator: TicketOrchestrator,
+    override val initialState: ProductManagerState = ProductManagerState.blank,
     override val memoryService: AgentMemoryService? = null,
 ) : AutonomousAgent<ProductManagerState>() {
 
-    // LLM execution functions using proper LLM access pattern
+    override val id: AgentId = generateUUID("ProductManagerAgent")
+
     override val runLLMToEvaluatePerception: (perception: Perception<ProductManagerState>) -> Idea =
         { perception -> evaluatePerception(perception) }
 

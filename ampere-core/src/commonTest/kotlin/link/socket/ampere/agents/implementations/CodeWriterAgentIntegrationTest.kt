@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.definition.CodeWriterAgent
 import link.socket.ampere.agents.domain.concept.Idea
 import link.socket.ampere.agents.domain.concept.Perception
 import link.socket.ampere.agents.domain.concept.Plan
@@ -25,7 +26,6 @@ import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.config.AgentConfiguration
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.state.AgentState
-import link.socket.ampere.agents.domain.type.CodeWriterAgent
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.executor.InstrumentedExecutor
 import link.socket.ampere.agents.execution.request.ExecutionContext
@@ -573,7 +573,7 @@ class CodeWriterAgentIntegrationTest {
         private val mockPlanning: ((Task, List<Idea>) -> Plan)? = null,
         private val mockExecution: ((Task) -> Outcome)? = null,
         private val mockEvaluation: ((List<Outcome>) -> Idea)? = null
-    ) : CodeWriterAgent(initialState, agentConfiguration, toolWriteCodeFile, coroutineScope, executor) {
+    ) : CodeWriterAgent(agentConfiguration, toolWriteCodeFile, coroutineScope, initialState, executor) {
 
         override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea =
             mockPerception ?: super.runLLMToEvaluatePerception

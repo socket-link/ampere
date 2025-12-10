@@ -13,8 +13,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
-import link.socket.ampere.agents.domain.type.AgentId
-import link.socket.ampere.agents.domain.type.ProductManagerAgent
+import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.definition.ProductManagerAgent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.escalation.Escalation
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator

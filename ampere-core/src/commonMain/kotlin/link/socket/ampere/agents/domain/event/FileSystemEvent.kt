@@ -13,6 +13,12 @@ import link.socket.ampere.agents.domain.Urgency
 @Serializable
 sealed interface FileSystemEvent : Event {
 
+    val filePath: String
+    val fileName: String
+    val fileExtension: String?
+    val workspacePath: String
+    val relativePath: String
+
     /**
      * Emitted when a new file is created in a monitored workspace directory.
      *
@@ -26,14 +32,26 @@ sealed interface FileSystemEvent : Event {
         override val eventId: EventId,
         override val timestamp: Instant,
         override val eventSource: EventSource,
+        override val filePath: String,
+        override val fileName: String,
+        override val fileExtension: String?,
+        override val workspacePath: String,
+        override val relativePath: String,
         override val urgency: Urgency = Urgency.MEDIUM,
-        val filePath: String,
-        val fileName: String,
-        val fileExtension: String?,
-        val workspacePath: String,
-        val relativePath: String,
     ) : FileSystemEvent {
+
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("File created: $relativePath")
+            fileExtension?.let { append(" (.$it)") }
+            append(" ${formatUrgency(urgency)}")
+            append(" from ${formatSource(eventSource)}")
+        }
+
 
         companion object {
             const val EVENT_TYPE: EventType = "FileCreated"
@@ -48,14 +66,26 @@ sealed interface FileSystemEvent : Event {
         override val eventId: EventId,
         override val timestamp: Instant,
         override val eventSource: EventSource,
+        override val filePath: String,
+        override val fileName: String,
+        override val fileExtension: String?,
+        override val workspacePath: String,
+        override val relativePath: String,
         override val urgency: Urgency = Urgency.LOW,
-        val filePath: String,
-        val fileName: String,
-        val fileExtension: String?,
-        val workspacePath: String,
-        val relativePath: String,
     ) : FileSystemEvent {
+
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("File modified: $relativePath")
+            fileExtension?.let { append(" (.$it)") }
+            append(" ${formatUrgency(urgency)}")
+            append(" from ${formatSource(eventSource)}")
+        }
+
 
         companion object {
             const val EVENT_TYPE: EventType = "FileModified"
@@ -70,13 +100,25 @@ sealed interface FileSystemEvent : Event {
         override val eventId: EventId,
         override val timestamp: Instant,
         override val eventSource: EventSource,
+        override val filePath: String,
+        override val fileName: String,
+        override val fileExtension: String?,
+        override val workspacePath: String,
+        override val relativePath: String,
         override val urgency: Urgency = Urgency.LOW,
-        val filePath: String,
-        val fileName: String,
-        val workspacePath: String,
-        val relativePath: String,
     ) : FileSystemEvent {
+
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("File deleted: $relativePath")
+            append(" ${formatUrgency(urgency)}")
+            append(" from ${formatSource(eventSource)}")
+        }
+
 
         companion object {
             const val EVENT_TYPE: EventType = "FileDeleted"

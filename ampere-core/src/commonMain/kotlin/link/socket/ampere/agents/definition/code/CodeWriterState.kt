@@ -1,12 +1,12 @@
-package link.socket.ampere.agents.domain.type.code
+package link.socket.ampere.agents.definition.code
 
 import kotlinx.serialization.Serializable
+import link.socket.ampere.agents.definition.perception
 import link.socket.ampere.agents.domain.concept.Perception
 import link.socket.ampere.agents.domain.concept.Plan
 import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.domain.state.AgentState
-import link.socket.ampere.agents.domain.type.perception
 
 @Serializable
 data class CodeWriterState(
@@ -22,5 +22,14 @@ data class CodeWriterState(
         setNewOutcome(outcome)
         setNewTask(task)
         setNewPlan(plan)
+    }
+
+    companion object {
+        val blank: CodeWriterState =
+            CodeWriterState(
+                outcome = Outcome.blank,
+                task = Task.blank,
+                plan = Plan.blank,
+            )
     }
 }

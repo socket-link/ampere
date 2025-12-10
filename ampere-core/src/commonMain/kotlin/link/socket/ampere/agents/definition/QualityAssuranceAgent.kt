@@ -1,10 +1,11 @@
-package link.socket.ampere.agents.domain.type
+package link.socket.ampere.agents.definition
 
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.definition.qa.QualityAssuranceState
 import link.socket.ampere.agents.domain.concept.Idea
 import link.socket.ampere.agents.domain.concept.Perception
 import link.socket.ampere.agents.domain.concept.Plan
@@ -16,7 +17,6 @@ import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.domain.config.AgentConfiguration
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
-import link.socket.ampere.agents.domain.type.qa.QualityAssuranceState
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
@@ -30,11 +30,12 @@ import link.socket.ampere.domain.util.toClientModelId
  * the most issues and which types of problems are commonly missed.
  */
 class QualityAssuranceAgent(
-    override val id: AgentId,
-    override val initialState: QualityAssuranceState,
     override val agentConfiguration: AgentConfiguration,
-    override val memoryService: AgentMemoryService?,
+    override val initialState: QualityAssuranceState = QualityAssuranceState.blank,
+    override val memoryService: AgentMemoryService? = null,
 ) : AutonomousAgent<QualityAssuranceState>() {
+
+    override val id: AgentId = generateUUID("QualityAssuranceAgent")
 
     override val runLLMToEvaluatePerception: (perception: Perception<QualityAssuranceState>) -> Idea =
         { perception -> evaluatePerception(perception) }

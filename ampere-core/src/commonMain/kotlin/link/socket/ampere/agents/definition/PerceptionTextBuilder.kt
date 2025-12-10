@@ -1,4 +1,4 @@
-package link.socket.ampere.agents.domain.type
+package link.socket.ampere.agents.definition
 
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.concept.Idea

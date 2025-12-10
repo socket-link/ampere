@@ -25,8 +25,8 @@ import link.socket.ampere.agents.domain.concept.status.TaskStatus
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.concept.task.Task
-import link.socket.ampere.agents.domain.type.AgentId
-import link.socket.ampere.agents.domain.type.AutonomousAgent
+import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.definition.AutonomousAgent
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType

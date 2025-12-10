@@ -2,7 +2,7 @@ package link.socket.ampere.agents.events.messages
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.EventSource
 
 typealias MessageSenderId = String

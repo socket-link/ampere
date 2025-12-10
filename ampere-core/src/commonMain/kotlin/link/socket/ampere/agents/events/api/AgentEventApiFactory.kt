@@ -1,6 +1,6 @@
 package link.socket.ampere.agents.events.api
 
-import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger

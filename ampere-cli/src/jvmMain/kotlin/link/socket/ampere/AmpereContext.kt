@@ -7,12 +7,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.environment.EnvironmentService
-import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepository
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.environment.EnvironmentService
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
+import link.socket.ampere.agents.environment.workspace.defaultWorkspace
+import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.messages.DefaultThreadViewService
 import link.socket.ampere.agents.events.messages.ThreadViewService
 import link.socket.ampere.agents.events.relay.EventRelayService
+import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.agents.events.tickets.DefaultTicketViewService
 import link.socket.ampere.agents.events.tickets.TicketViewService
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
@@ -51,30 +55,14 @@ import link.socket.ampere.db.Database
  * ```
  */
 class AmpereContext(
-    /**
-     * Path to the SQLite database file.
-     * Defaults to "ampere.db" in the user's home directory.
-     */
+    /** Path to the SQLite database file, defaults to "ampere.db" in the user's home directory*/
     databasePath: String = defaultDatabasePath(),
-
-    /**
-     * JSON configuration for serialization.
-     * Defaults to the standard Ampere JSON configuration.
-     */
+    /** JSON configuration for serialization, defaults to the standard Ampere JSON configuration */
     json: Json = DEFAULT_JSON,
-
-    /**
-     * Event logger for system operations.
-     * Defaults to console logging.
-     */
-    logger: EventLogger = ConsoleEventLogger(),
-
-    /**
-     * Path to the workspace directory to monitor for file changes.
-     * Defaults to "~/.ampere/Workspaces/Ampere".
-     * Set to null to disable workspace monitoring.
-     */
-    workspacePath: String? = defaultWorkspacePath(),
+    /** Event logger for system operations, defaults to console logging */
+    private val logger: EventLogger = ConsoleEventLogger(),
+    /** The workspace to monitor for file changes, can be set to null to disable workspace monitoring */
+    private val workspace: ExecutionWorkspace? = defaultWorkspace(),
 ) {
     /**
      * Database driver for SQLite operations.
@@ -84,23 +72,13 @@ class AmpereContext(
     /**
      * Database instance with all queries.
      */
-    private val database: Database = createDatabase(driver)
+    private val database: Database = createDatabase(logger, driver)
 
     /**
      * Coroutine scope for async operations.
      * Uses Dispatchers.Default with a SupervisorJob for fault tolerance.
      */
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-
-    /**
-     * Event logger for system operations.
-     */
-    private val eventLogger: EventLogger = logger
-
-    /**
-     * Workspace path to monitor, or null if monitoring is disabled.
-     */
-    private val workspace: String? = workspacePath
 
     /**
      * The environment service that provides access to all repositories,
@@ -179,32 +157,34 @@ class AmpereContext(
      * Workspace event mapper that transforms FileSystemEvents into ProductEvents.
      * Null if workspace monitoring is disabled.
      */
-    private val workspaceEventMapper: WorkspaceEventMapper? = workspacePath?.let {
-        val eventApi = environmentService.createEventApi("workspace-receptor-system")
-        WorkspaceEventMapper(
-            agentEventApi = eventApi,
-            mapperId = "mapper-workspace",
-            scope = scope
-        )
-    }
+    private val workspaceEventMapper: WorkspaceEventMapper? =
+        workspace?.baseDirectory?.let {
+            val eventApi = environmentService.createEventApi("workspace-receptor-system")
+            WorkspaceEventMapper(
+                agentEventApi = eventApi,
+                mapperId = "mapper-workspace",
+                scope = scope
+            )
+        }
 
     /**
      * File system receptor that monitors the workspace directory for file changes.
      * Null if workspace monitoring is disabled.
      */
-    private val fileSystemReceptor: FileSystemReceptor? = workspacePath?.let { path ->
-        val eventApi = environmentService.createEventApi("workspace-receptor-system")
-        FileSystemReceptor(
-            workspacePath = path,
-            agentEventApi = eventApi,
-            receptorId = "receptor-filesystem",
-            scope = scope,
-            fileFilter = { file ->
-                // Only monitor markdown files
-                file.extension.lowercase() == "md"
-            }
-        )
-    }
+    private val fileSystemReceptor: FileSystemReceptor? =
+        workspace?.baseDirectory?.let { path ->
+            val eventApi = environmentService.createEventApi("workspace-receptor-system")
+            FileSystemReceptor(
+                workspacePath = path,
+                agentEventApi = eventApi,
+                receptorId = "receptor-filesystem",
+                scope = scope,
+                fileFilter = { file ->
+                    // Only monitor markdown files
+                    file.extension.lowercase() == "md"
+                }
+            )
+        }
 
     /**
      * Subscribe to all events for an agent.
@@ -216,10 +196,9 @@ class AmpereContext(
      */
     fun subscribeToAll(
         agentId: String,
-        handler: link.socket.ampere.agents.events.api.EventHandler<Event, link.socket.ampere.agents.events.subscription.Subscription>,
-    ): List<link.socket.ampere.agents.events.subscription.Subscription> {
-        return environmentService.subscribeToAll(agentId, handler)
-    }
+        handler: EventHandler<Event, Subscription>,
+    ): List<Subscription> =
+        environmentService.subscribeToAll(agentId, handler)
 
     /**
      * Start all orchestrator services.
@@ -235,7 +214,7 @@ class AmpereContext(
         fileSystemReceptor?.start()
 
         if (fileSystemReceptor != null) {
-            eventLogger.logInfo("Workspace receptor system started, monitoring: ${workspace ?: "disabled"}")
+            logger.logInfo("Workspace receptor system started, monitoring: ${workspace?.baseDirectory ?: "disabled"}")
         }
     }
 
@@ -264,15 +243,6 @@ class AmpereContext(
         }
 
         /**
-         * Default workspace path in the user's home directory.
-         * Returns "~/.ampere/Workspaces/Ampere" expanded to absolute path.
-         */
-        private fun defaultWorkspacePath(): String {
-            val homeDir = System.getProperty("user.home") ?: System.getProperty("user.dir") ?: "."
-            return File(homeDir, ".ampere/Workspaces/Ampere").absolutePath
-        }
-
-        /**
          * Create a JDBC SQLite driver with proper configuration.
          */
         private fun createDriver(databasePath: String): JdbcSqliteDriver {
@@ -286,10 +256,13 @@ class AmpereContext(
         /**
          * Create the database instance and initialize the schema if needed.
          */
-        private fun createDatabase(driver: JdbcSqliteDriver): Database {
+        private fun createDatabase(
+            logger: EventLogger,
+            driver: JdbcSqliteDriver,
+        ): Database {
             // Check if the main table exists to determine if we need to create the schema
             val schemaExists = try {
-                driver.executeQuery<Boolean>(
+                driver.executeQuery(
                     identifier = null,
                     sql = "SELECT name FROM sqlite_master WHERE type='table' AND name='EventStore'",
                     mapper = { cursor ->
@@ -299,6 +272,7 @@ class AmpereContext(
                     binders = null
                 ).value
             } catch (e: Exception) {
+                logger.logError("Error checking database schema: ${e.message}")
                 false
             }
 

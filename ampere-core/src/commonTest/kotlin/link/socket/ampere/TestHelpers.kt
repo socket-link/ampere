@@ -2,6 +2,11 @@ package link.socket.ampere
 
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.definition.ProductManagerAgent
+import link.socket.ampere.agents.definition.QualityAssuranceAgent
+import link.socket.ampere.agents.definition.pm.ProductManagerState
+import link.socket.ampere.agents.definition.qa.QualityAssuranceState
 import link.socket.ampere.agents.domain.concept.Plan
 import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeType
@@ -12,11 +17,6 @@ import link.socket.ampere.agents.domain.concept.task.MeetingTask
 import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.domain.concept.task.TaskId
 import link.socket.ampere.agents.domain.config.AgentConfiguration
-import link.socket.ampere.agents.domain.type.AgentId
-import link.socket.ampere.agents.domain.type.ProductManagerAgent
-import link.socket.ampere.agents.domain.type.QualityAssuranceAgent
-import link.socket.ampere.agents.domain.type.pm.ProductManagerState
-import link.socket.ampere.agents.domain.type.qa.QualityAssuranceState
 import link.socket.ampere.agents.events.tickets.AgentWorkload
 import link.socket.ampere.agents.events.tickets.BacklogSummary
 import link.socket.ampere.agents.events.tickets.Ticket
@@ -151,7 +151,6 @@ fun stubProductManagerAgent(
     agentConfiguration: AgentConfiguration = stubAgentConfiguration(),
 ): ProductManagerAgent =
     ProductManagerAgent(
-        id = "test-pm",
         initialState = initialState,
         agentConfiguration = agentConfiguration,
         ticketOrchestrator = ticketOrchestrator,
@@ -174,7 +173,6 @@ fun stubQualityAssuranceAgent(
     agentConfiguration: AgentConfiguration = stubAgentConfiguration(),
 ): QualityAssuranceAgent =
     QualityAssuranceAgent(
-        id = "test-qa",
         initialState = initialState,
         agentConfiguration = agentConfiguration,
         memoryService = null,

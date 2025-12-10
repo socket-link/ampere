@@ -1,4 +1,4 @@
-package link.socket.ampere.agents.domain.type
+package link.socket.ampere.agents.definition
 
 import link.socket.ampere.agents.domain.concept.Idea
 import link.socket.ampere.agents.domain.concept.Perception

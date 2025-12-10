@@ -2,10 +2,10 @@ package link.socket.ampere.agents.domain.event
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
-import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.events.meetings.MeetingId
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.events.tickets.TicketPriority
@@ -33,6 +33,11 @@ sealed interface TicketEvent : Event {
 
         override val eventType: EventType = EVENT_TYPE
 
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Ticket $ticketId: $title ($ticketType, $priority) ${formatUrgency(urgency)}"
+
         companion object {
             const val EVENT_TYPE: EventType = "TicketCreated"
         }
@@ -52,6 +57,11 @@ sealed interface TicketEvent : Event {
 
         override val eventType: EventType = EVENT_TYPE
 
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Ticket $ticketId status: $previousStatus → $newStatus ${formatUrgency(urgency)}"
+
         companion object {
             const val EVENT_TYPE: EventType = "TicketStatusChanged"
         }
@@ -69,6 +79,11 @@ sealed interface TicketEvent : Event {
     ) : TicketEvent {
 
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Ticket $ticketId assigned to ${assignedTo ?: "unassigned"} ${formatUrgency(urgency)}"
 
         companion object {
             const val EVENT_TYPE: EventType = "TicketAssigned"
@@ -88,6 +103,11 @@ sealed interface TicketEvent : Event {
 
         override val eventType: EventType = EVENT_TYPE
 
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Ticket $ticketId blocked: $blockingReason ${formatUrgency(urgency)}"
+
         companion object {
             const val EVENT_TYPE: EventType = "TicketBlocked"
         }
@@ -104,6 +124,11 @@ sealed interface TicketEvent : Event {
     ) : TicketEvent {
 
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Ticket $ticketId completed by $eventSource ${formatUrgency(urgency)}"
 
         companion object {
             const val EVENT_TYPE: EventType = "TicketCompleted"
@@ -124,6 +149,11 @@ sealed interface TicketEvent : Event {
     ) : TicketEvent {
 
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Meeting $meetingId scheduled for ticket $ticketId ${formatUrgency(urgency)}"
 
         companion object {
             const val EVENT_TYPE: EventType = "TicketMeetingScheduled"

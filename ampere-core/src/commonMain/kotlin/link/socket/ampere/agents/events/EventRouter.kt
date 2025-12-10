@@ -1,11 +1,11 @@
 package link.socket.ampere.agents.events
 
-import link.socket.ampere.agents.domain.type.AgentId
-import link.socket.ampere.agents.events.api.AgentEventApi
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.domain.event.NotificationEvent
+import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.subscription.EventSubscription
 
 class EventRouter(
