@@ -1,275 +1,274 @@
-[![Maven Central](https://img.shields.io/maven-central/v/link.socket.ampere/ampere-client?color=blue&label=Download)](https://central.sonatype.com/namespace/link.socket.ampere)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-> **Alpha Notice**
-> - Any of these APIs may change in the future
-> - Report issues on [GitHub](https://github.com/socket-link/ampere/issues)
 
-# ⚡︎ Ampere
+# ⚡ AMPERE
 
-**A Kotlin Multiplatform library for building autonomous teams of AI agents**
+**Multi-agent team orchestration, compatible with the existing Agentic AI Foundation ecosystem**
 
-Ampere lets you create AI agent systems where multiple agents collaborate like a real team - holding meetings, creating tickets, learning from experience, and coordinating on complex projects.
+The [Agentic AI Foundation](https://aaif.io) has published standards for how AI agents should connect to tools (MCP), specify permissions (Agents.md), and implement basic behaviors (Goose).
 
-**Traditional AI frameworks** give you single-agent chat interactions with one long conversation thread.
+**But something's missing: how will the AI agents coordinate with *each other*?**
 
-**Ampere gives you** a multi-agent environment where specialized agents autonomously:
-- Break down complex goals into executable tasks
-- Coordinate through meetings and message channels
-- Learn from past execution outcomes
-- Escalate blockers and notify humans when stuck
-- Maintain their own knowledge base from experience
+AMPERE answers this question by providing a simple framework for managing collaboration within a group of AI agents.
 
-All from a single high-level goal you provide.
+The runtime pattern that AMPERE uses for coordinating agents is inspired by biological systems:
+- Event-driven runtime that manages the LLM context by simulating interactions and decision-making within a PROPEL loop
+- Asynchronous event emissions are broadcast across the agents' environment, allowing for mass coordination across different sections of the system
+- Persistent memory with chunking and consolidation allows for reflection on previous task outcomes, allowing agents to improve their behavior
+- Agents' ability to change their future behavior based on changes in stored knowledge can allow for emergent agent behavior 
+- A Kotlin Multiplatform library built for the JVM ecosystem, compatible with Android, iOS, and desktop applications
 
---- 
+---
 
-## Overview
+## The Missing Layer
 
-### The Problem
-Building multi-agent AI systems is hard:
-- Agents need to coordinate without stepping on each other
-- They need access to relevant context, not everything
-- They should learn from experience, not repeat mistakes
-- You need visibility into what they're doing
+| AAIF Provides | AMPERE Provides |
+|---------------|-----------------|
+| Agent ↔ Tool connections (MCP) | Agent ↔ Agent coordination |
+| Permission specifications (Agents.md) | Uncertainty escalation to humans |
+| Reference agent implementation (Goose) | Emergent multi-agent orchestration |
+| Python/TypeScript SDKs | Kotlin Multiplatform (JVM, Android, iOS, Desktop) |
 
-### The Solution
-Ampere gives you a **collaborative environment** with built-in:
+AMPERE provides an AI behavior orchestration layer that makes AAIF-compliant agents *intelligent*.
 
-- **🎫 Work Management** - Tickets and tasks agents create and track
-- **🤝 Coordination** - Meetings, escalations, and messaging between agents
-- **🧠 Memory** - Agents learn from execution outcomes over time
-- **📚 Knowledge** - Semantic search of past learnings
-- **👁️ Observability** - Real-time CLI to watch agents work
-- **🔄 Event System** - Persistent event bus for all agent actions
+---
 
-Ampere is the reference implementation of the **AniMA Model Protocol (AMP)**, which is a framework for LLM prompting that enables efficient collaboration across groups of AI agents.
+## Why Biology?
 
-### The AniMA Model
+Traditional agent frameworks use request-response patterns: Agent A calls Agent B, waits for response, proceeds. 
 
-- **AniMA (Animated Multi-Agent)** Prompting
-    - A prompting technique that allows AI agents to simulate human team interactions in a virtual environment
-    - Allows agents to choose their actions based on what they perceive, which enables efficient coordination across agents
-- **AniMA Model Protocol (AMP)** Specification
-    - Guidelines for how agents communicate, coordinate, and learn from each other's experiences in a group environment
-    - By mimicking realistic team dynamics, groups of agents can coordinate efficiently on complex, abstract goals
-- **Perceive, Recall, Optimize, Plan, Execute, Loop (PROPEL)** Runtime Loop
-  - The core execution lifecycle for each agent, which is consistently being evaluated in the environment simulation 
-  - Results are communicated to other agents through an event-based system of subscribing to events 
-- **AMP Example Runtime Environment (AMPERE)** Developer SDK
-  - This library; a Kotlin Multiplatform implementation of **AMP** using a **PROPEL** runtime loop
-  - The SDK provides a simple API for configuring and interacting with **AniMA** environment runtime simulations
+This synchronous nature of communication creates bottlenecks, tightly couples agents, and only provides fragile 2-way coordination patterns.
 
-Instead of storing all the context for the prompt in just a single thread, Ampere lets you:
-- Distribute shared knowledge across different specialized agents, based on execution outcomes
-- Provide agents with only the relevant context to avoid hallucinations and misunderstandings
-- Enable coordination across agents using structured workflows that are ran in the simulated environment
+**But biological systems solved multi-agent coordination billions of years ago.** 
 
-### Agent Lifecycle: PROPEL
+Cells don't make synchronous RPC calls—they emit signals and respond to environmental state. Neurons don't poll each other—they react to electrochemical gradients. Immune systems don't have a central orchestrator—complex behavior emerges from simple local rules.
 
-Each agent runs autonomously in a loop called **PROPEL** (similar to the [ReAct pattern](https://arxiv.org/abs/2210.03629)):
+AMPERE provides tools to LLMs that allow them to run a simulated runtime environment, where agents can act and communicate asynchronously:
 
-1. **Perceive** - Observe tickets, events, messages, and current state
-2. **Recall** - Query knowledge from similar past work
-3. **Optimize** - Select the best tasks based on context
-4. **Plan** - Create execution plan informed by past learnings
-5. **Execute** - Execute tasks and record outcomes
-6. **Loop** - Return to step 1
+- **Event-driven coordination** — Agents emit signals; other agents subscribe and react. No request-response chains
+- **Persistent memory** — Execution outcomes consolidate into searchable knowledge. Irrelevant information fades
+- **Uncertainty escalation** — Agents recognize when they're uncertain and escalate to humans instead of hallucinating
+- **Emergent behavior** — Complex team coordination arises from simple individual agent rules
 
-**[→ See detailed Agent Lifecycle with examples](docs/AGENT_LIFECYCLE.md)**
+---
 
-### The Environment Model
+## Quick Start
 
-Ampere simulates a real work environment with six core concepts:
+> **Current Development Status:**
+>
+> After being in active development for over 2 years, AMPERE is now available as an Alpha release.
+>
+> **Note:** Some of the code examples below show the planned high-level API that is currently in development. For accurate details of the current API implementation, see the [CLI Guide](ampere-cli/README.md) and [CLAUDE.md](CLAUDE.md).
+>
+> **We're looking for collaborators to help build AMPERE into a production-ready framework.**
+>
+>[Report issues →](https://github.com/socket-link/ampere/issues)
 
-- **[Tickets](docs/CORE_CONCEPTS.md#-tickets---units-of-work)** - Work items with lifecycle tracking (like JIRA)
-- **[Tasks](docs/CORE_CONCEPTS.md#-tasks---execution-steps)** - Individual steps that make up a plan
-- **[Plans](docs/CORE_CONCEPTS.md#-plans---from-goals-to-actions)** - Bridge between goals (tickets) and actions (tasks)
-- **[Meetings](docs/CORE_CONCEPTS.md#-meetings---coordination-points)** - Coordination events with agendas and outcomes
-- **[Outcomes](docs/CORE_CONCEPTS.md#-outcomes---execution-memory)** - Execution results forming episodic memory
-- **[Knowledge](docs/CORE_CONCEPTS.md#-knowledge---semantic-learning)** - Semantic learnings searchable by future agents
+To get started, create an agent team and give them a goal:
 
-**[→ Read the complete Core Concepts guide](docs/CORE_CONCEPTS.md)**
+```kotlin
+// 1. Configure your AI provider
+val aiConfig = AnthropicConfig(
+    apiKey = "your-api-key",
+    model = Claude.Sonnet4
+)
 
-## Configuration Options
+// 2. Create an agent team
+val team = AgentTeam.create {
+    agent(ProductManager) { personality { directness = 0.8 } }
+    agent(Engineer) { personality { creativity = 0.7 } }
+    agent(QATester)
+}
 
-Ampere includes **24+ pre-built agents** organized by domain:
+// 3. Give them a goal
+team.pursue("Build a user authentication system with OAuth2 support")
 
-Each agent has its own specialized system prompt, with configurable inputs from the user, and customizable personality settings (tone, seriousness, directness, and more).
+// 4. Watch them work
+team.events.collect { event ->
+    when (event) {
+        is TicketCreated -> println("📋 ${event.ticket.title}")
+        is TaskCompleted -> println("✅ ${event.task.name}")
+        is EscalationRequested -> println("🚨 Human input needed: ${event.reason}")
+    }
+}
+```
 
-**Location:** [`ampere-core/src/commonMain/kotlin/link/socket/ampere/domain/agent/bundled/`](ampere-core/src/commonMain/kotlin/link/socket/ampere/domain/agent/bundled/)
+**What will happen next:**
+1. ProductManager breaks the goal into tickets
+2. Engineer picks up tickets, creates execution plans
+3. Agents coordinate through meetings when blocked
+4. QATester validates outputs
+5. Learnings persist to knowledge base for future work
+6. Uncertain decisions escalate to you if necessary
 
-- **Code:** APIDesign, Documentation, PerformanceOptimization, SecurityReview, QATesting, WriteCode
+---
 
-- **Business:** ProductManager, ProjectManager, BusinessAnalyst
+## The PROPEL Runtime Loop
 
-- **Reasoning:** ReAct (Reason+Act pattern), DelegateTasks
+After being initialized, each agent runs autonomously in their own loop using a biologically-inspired cognitive cycle:
+```
+┌────────────────────────────────────────────────────────┐
+│                                                        │
+│   ┌──────────┐    ┌──────────┐    ┌──────────┐         │
+│   │ PERCEIVE │───▶│  RECALL  │───▶│ OPTIMIZE │         │
+│   │  signals │    │  memory  │    │  select  │         │
+│   └──────────┘    └──────────┘    └──────────┘         │
+│        ▲                               │               │
+│        │                               ▼               │
+│   ┌──────────┐                   ┌──────────┐          │
+│   │   LOOP   │◀──────────────────│   PLAN   │          │
+│   │  repeat  │                   │  decide  │          │
+│   └──────────┘                   └──────────┘          │
+│        ▲                               │               │
+│        │         ┌──────────┐          │               │
+│        └─────────│ EXECUTE  │◀─────────┘               │
+│                  │   act    │                          │
+│                  └──────────┘                          │
+│                                                        │
+└────────────────────────────────────────────────────────┘
+```
 
-- **Specialized:** Financial, Legal, Travel, Health, Cooking, Study, and more
+This cognition cycle gives agents the flexibility to adapt their behavior over time to adapt based on changes in the environment.
 
-## Multi-Provider AI Support
+**[→ Detailed Agent Lifecycle](docs/AGENT_LIFECYCLE.md)**
 
-Ampere supports configuring many models from different AI providers automatic failover:
+---
 
-- **Anthropic**
-    - Claude Opus 4.1, 4
-    - Claude Sonnet 4, 3.7
-    - Claude Haiku 3.5, 3
-- **Google**
-    - Gemini 2.5 Pro, 2 Pro
-    - Gemini 2.5, 2
-- **OpenAI** 
-    - GPT 5, 4.1, 4o, o3, o4-mini 
+## Core Concepts
 
-Each provider configuration includes the model capabilities, token limits, rate limits, and fallback options.
+AMPERE controls the agents' behavior by simulating a work environment with six primitive types:
+
+| Concept | Biological Analog | Purpose |
+|---------|-------------------|---------|
+| **Tickets** | Goals/Stimuli | Units of work with lifecycle tracking |
+| **Tasks** | Motor actions | Individual execution steps |
+| **Plans** | Neural pathways | Bridge between goals and actions |
+| **Meetings** | Synaptic convergence | Coordination points between agents |
+| **Outcomes** | Episodic memory | Execution results that inform future behavior |
+| **Knowledge** | Semantic memory | Consolidated learnings searchable by similarity |
+
+These concepts allow AMPERE to run a simulation of a work environment that mirrors how human teams operate in a company, which provides a flexible and adaptable framework for coordinated agent behavior.
+
+**[→ Complete Core Concepts Guide](docs/CORE_CONCEPTS.md)**
+
+---
+
+## Platform Support
+
+Being a Kotlin Multiplatform library allows AMPERE to run on every platform that the JVM runs on:
+
+| Platform | Status | Use Case |
+|----------|--------|----------|
+| **JVM** | ✅ Stable | Server-side agent orchestration |
+| **Android** | ✅ Stable | On-device agent coordination |
+| **Desktop** | ✅ Stable | Local-first agent development |
+| **iOS** | 🔄 Beta | Cross-platform mobile apps |
+| **CLI** | ✅ Stable | Observability and debugging |
+
+---
+
+## AI Model Provider Support
+
+AMPERE's runtime is model-agnostic, and the SDK allows for model provider configuration with automatic failover:
+```kotlin
+val config = MultiProviderConfig(
+    primary = AnthropicConfig(model = Claude.Opus_4_5),
+    fallback = listOf(
+        GoogleConfig(model = Gemini.Pro_3),
+        OpenAIConfig(model = OpenAI.GPT_5_1)
+    )
+)
+```
+
+**Currently supported LLM providers:** 
+- Anthropic (Claude 4.x, 3.x)
+- Google (Gemini 3, 2.x)
+- OpenAI (GPT-5.x, 4.x, o3/o4)
+
+---
 
 ## Observability
 
-All agent activity is observable in real-time through the **Ampere CLI**.
-
+Use the CLI to watch agents work together in real-time:
 ```bash
-# Build CLI
+# Install CLI
 ./gradlew :ampere-cli:installJvmDist
 
-# Watch agents work in real-time
-./ampere-cli/ampere watch
+# Watch event stream
+./ampere watch
 
-# View system status
-./ampere-cli/ampere status
+# Query execution history  
+./ampere outcomes search "authentication"
 
-# Query execution outcomes
-./ampere-cli/ampere outcomes ticket FEAT-123
-./ampere-cli/ampere outcomes search "authentication"
-
-# View conversation threads
-./ampere-cli/ampere thread list
+# View agent status
+./ampere status
+```
+```
+📋 TicketCreated    [pm-agent]        14:23:01  FEAT-123: Add user authentication
+✅ TicketAssigned   [pm-agent]        14:23:15  FEAT-123 → engineer-agent  
+🔨 StatusChanged    [engineer-agent]  14:23:45  FEAT-123: Ready → InProgress
+💭 MeetingStarted   [engineer-agent]  14:25:00  Clarifying OAuth2 requirements
+✅ TaskCompleted    [engineer-agent]  14:27:33  Create User model - SUCCESS
+🧠 KnowledgeStored  [engineer-agent]  14:27:35  "OAuth2 requires PKCE for mobile"
 ```
 
-**Example output:**
-```
-📋 TicketCreated    [pm-agent]           2025-12-01 14:23:01
-   FEAT-123: Add user authentication
-✅ TicketAssigned   [pm-agent]           2025-12-01 14:23:15
-   FEAT-123 → engineer-agent
-🔨 TicketStatusChanged [engineer-agent]  2025-12-01 14:23:45
-   FEAT-123: Ready → InProgress
-✅ TaskCompleted    [engineer-agent]     2025-12-01 14:27:33
-   Create User model - SUCCESS
-```
+**[→ Complete CLI Guide](ampere-cli/README.md)**
 
-**[→ Complete CLI documentation](ampere-cli/README.md)**
+---
 
-## Architecture
+## Installation
 
-### Directory Structure
+> **Note:** The library is just nearing its initial release, so it is not yet available on Maven Central.
+> 
+> For now the library can be built locally using `./gradlew publishToMavenLocal` to test the functionality, and an initial release will be published to Maven Central shortly.
 
-```
-ampere-core/src/commonMain/kotlin/link/socket/ampere/
-├── agents/
-│   ├── core/           # AutonomousAgent, MinimalAutonomousAgent
-│   ├── events/         # EventBus, TicketOrchestrator, MeetingOrchestrator
-│   ├── tools/          # WriteCodeFileTool, AskHumanTool
-│   └── memory/         # OutcomeMemoryRepository, KnowledgeRepository
-├── domain/
-│   ├── agent/bundled/  # 24+ pre-built agents
-│   ├── ai/             # Multi-provider AI support
-│   └── capability/     # Agent capabilities (IO, spawning)
-├── data/               # Repository pattern with SQLDelight
-└── ui/                 # Compose Multiplatform UI
-
-ampere-cli/             # Command-line observability tools
-ampere-android/         # Android application
-ampere-desktop/         # Desktop application
-ampere-ios/             # iOS application
+**Gradle (Kotlin DSL):**
+```kotlin
+implementation("link.socket.ampere:ampere-core:0.1.0")
 ```
 
-### Key Technologies
-
-- **Kotlin Multiplatform** - Shared code across Android, iOS, Desktop, CLI
-- **Compose Multiplatform** - UI framework
-- **SQLDelight** - Cross-platform database persistence
-- **Ktor Client** - HTTP communication
-- **OpenAI Kotlin** - LLM integration
-- **Clikt + Mordant** - CLI tools with rich terminal rendering
-
-### More Resources
-
-- **[Core Concepts](docs/CORE_CONCEPTS.md)** - Detailed explanation of Tickets, Tasks, Plans, Meetings, Outcomes, Knowledge
-- **[Agent Lifecycle](docs/AGENT_LIFECYCLE.md)** - How agents autonomously work through tasks with examples
-- **[CLI Guide](ampere-cli/README.md)** - Complete CLI commands and usage
-- **[CLAUDE.md](CLAUDE.md)** - Development guide for AI contributors
-
-## Development Guide
-
-### Prerequisites
-
-- macOS or Linux
-- [Android Studio](https://developer.android.com/studio) with [Kotlin Multiplatform plugin](https://plugins.jetbrains.com/plugin/14936-kotlin-multiplatform-mobile)
-- [Xcode](https://apps.apple.com/us/app/xcode/id497799835) (for iOS)
-
-**Verify Setup:**
-```bash
-brew install kdoctor
-kdoctor
+**Gradle (Groovy):**
+```groovy
+implementation 'link.socket.ampere:ampere-core:0.1.0'
 ```
 
-### Configuration
+---
 
-- **Generate API Key:** [Anthropic](https://console.anthropic.com/settings/keys) | [Google](https://aistudio.google.com/app/apikey) | [OpenAI](https://platform.openai.com/account/api-keys)
-- Provide the values for those keys in the `ampere/local.properties` file:
-  - This file is ignored by Git, so you can safely store your keys there
-```properties
-anthropic_api_key=YOUR_ANTHROPIC_KEY
-google_api_key=YOUR_GOOGLE_KEY
-openai_api_key=YOUR_OPENAI_KEY
-```
+## Roadmap for AAIF Compatibility
 
-### Build & Test Project
+AMPERE is positioning itself as an enhancement to the initial AAIF standards:
 
-```bash
-# Build project
-./gradlew build
+- [x] Event-driven agent coordination 
+- [x] Persistent memory and knowledge systems
+- [x] Uncertainty escalation patterns
+- [x] Native tool discovery via Model Context Protocol
+- [ ] **Agents.md compliance** — Permission specification support
+- [ ] **Goose interop** — Orchestrate Goose agents alongside native AMPERE agents
+- [ ] **Protocol proposals** — Contributing agent coordination standards to AAIF
 
-# Run all tests
-./gradlew allTests
+---
 
-# Format code
-./gradlew ktlintFormat
+## Contributing
 
-# Check code formatting
-./gradlew ktlintCheck
-```
+AMPERE is built on the thesis that biological patterns provide superior agent coordination. We're looking for collaborators interested in:
 
-### Run Platform-Specific Targets
+- **Event-driven architectures** — Kafka, Akka, or reactive systems background
+- **Kotlin Multiplatform** — Cross-platform development expertise
+- **Agent systems** — Experience with LangChain, AutoGen, CrewAI, or similar
+- **Biological modeling** — Background in systems biology, neuroscience, or emergence
 
-```bash
-# Desktop application
-./gradlew run
-./gradlew package
+**[→ Contributing Guide](CONTRIBUTING.md)** · **[→ Development Setup](docs/DEVELOPMENT.md)**
 
-# Android
-./gradlew installDebug
-./gradlew lint
+---
 
-# Run JVM-specific tests
-./gradlew jvmTest
+## Documentation
 
-# Run iOS tests
-# 1. Get Team ID: kdoctor --team-ids
-# 2. Set TEAM_ID in ampere-ios/Configuration/Config.xcconfig
-# 3. Open ampere-ios/ampere-ios.xcodeproj in Xcode and run
-./gradlew iosSimulatorArm64Test
-./gradlew iosX64Test
-```
-
-### Generate API Documentation
-
-```bash
-# Generate API documentation
-./gradlew dokkaHtml
-
-# Generate Javadocs
-./gradlew generateJavadocs
-```
+| Guide | Description |
+|-------|-------------|
+| [Core Concepts](docs/CORE_CONCEPTS.md) | Tickets, Tasks, Plans, Meetings, Outcomes, Knowledge |
+| [Agent Lifecycle](docs/AGENT_LIFECYCLE.md) | The PROPEL loop with detailed examples |
+| [CLI Reference](ampere-cli/README.md) | Complete command documentation |
+| [API Docs](https://socket-link.github.io/ampere/) | Generated KDoc reference |
+| [CLAUDE.md](CLAUDE.md) | Guide for AI-assisted development |
 
 ---
 
