@@ -1,14 +1,14 @@
-package link.socket.ampere.agents.domain.type.pm
+package link.socket.ampere.agents.definition.pm
 
 import kotlinx.serialization.Serializable
+import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.definition.perception
+import link.socket.ampere.agents.definition.perceptionText
 import link.socket.ampere.agents.domain.concept.Perception
 import link.socket.ampere.agents.domain.concept.Plan
 import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.domain.state.AgentState
-import link.socket.ampere.agents.domain.type.AgentId
-import link.socket.ampere.agents.domain.type.perception
-import link.socket.ampere.agents.domain.type.perceptionText
 import link.socket.ampere.agents.events.tickets.AgentWorkload
 import link.socket.ampere.agents.events.tickets.BacklogSummary
 import link.socket.ampere.agents.events.tickets.Ticket
@@ -113,7 +113,7 @@ data class ProductManagerState(
         /**
          * Returns an empty perception state.
          */
-        fun empty(): ProductManagerState = ProductManagerState(
+        val blank = ProductManagerState(
             outcome = Outcome.blank,
             task = Task.Blank,
             plan = Plan.blank,

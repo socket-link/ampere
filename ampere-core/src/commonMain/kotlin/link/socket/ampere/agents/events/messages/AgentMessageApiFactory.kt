@@ -1,6 +1,6 @@
 package link.socket.ampere.agents.events.messages
 
-import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.events.bus.EventSerialBus
 
 class AgentMessageApiFactory(

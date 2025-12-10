@@ -27,6 +27,11 @@ sealed interface MessageEvent : Event {
         override val threadId: MessageThreadId = thread.id
         override val timestamp: Instant = thread.createdAt
 
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Thread created in ${thread.channel} ${formatUrgency(urgency)} from ${formatSource(eventSource)}"
+
         companion object {
             const val EVENT_TYPE: EventType = "ThreadCreated"
         }
@@ -44,6 +49,11 @@ sealed interface MessageEvent : Event {
         override val eventType: EventType = EVENT_TYPE
         override val eventSource: EventSource = message.sender.toEventSource()
         override val timestamp: Instant = message.timestamp
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Message posted in $channel ${formatUrgency(urgency)} from ${formatSource(eventSource)}"
 
         companion object {
             const val EVENT_TYPE: EventType = "MessagePosted"
@@ -63,6 +73,11 @@ sealed interface MessageEvent : Event {
 
         override val eventType: EventType = EVENT_TYPE
 
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Thread $threadId status: $oldStatus → $newStatus ${formatUrgency(urgency)}"
+
         companion object {
             const val EVENT_TYPE: EventType = "ThreadStatusChanged"
         }
@@ -80,6 +95,11 @@ sealed interface MessageEvent : Event {
     ) : MessageEvent {
 
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Escalation requested in thread $threadId: $reason ${formatUrgency(urgency)}"
 
         companion object {
             const val EVENT_TYPE: EventType = "EscalationRequested"

@@ -13,9 +13,9 @@ import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
 import link.socket.ampere.agents.domain.concept.status.TaskStatus
 import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
-import link.socket.ampere.agents.domain.type.AgentId
-import link.socket.ampere.agents.domain.type.ProductManagerAgent
-import link.socket.ampere.agents.domain.type.QualityAssuranceAgent
+import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.definition.ProductManagerAgent
+import link.socket.ampere.agents.definition.QualityAssuranceAgent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository

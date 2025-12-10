@@ -2,7 +2,7 @@ package link.socket.ampere.agents.domain.event
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.subscription.Subscription
 
@@ -24,6 +24,12 @@ sealed interface NotificationEvent<S : Subscription> : Event {
         override val eventType: EventType = EVENT_TYPE
         override val urgency: Urgency = event.urgency
 
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Notification to $agentId ${formatUrgency(urgency)}"
+
+
         companion object {
             const val EVENT_TYPE: EventType = "NotificationToAgent"
         }
@@ -40,6 +46,12 @@ sealed interface NotificationEvent<S : Subscription> : Event {
         override val timestamp: Instant = event.timestamp
         override val eventType: EventType = EVENT_TYPE
         override val urgency: Urgency = event.urgency
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Notification to human ${formatUrgency(urgency)}"
+
 
         companion object {
             const val EVENT_TYPE: EventType = "NotificationToHuman"

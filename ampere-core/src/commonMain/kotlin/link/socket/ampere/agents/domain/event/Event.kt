@@ -2,7 +2,7 @@ package link.socket.ampere.agents.domain.event
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
 
 typealias EventId = String
@@ -34,6 +34,12 @@ sealed interface Event {
     /** Urgency level of the event. */
     val urgency: Urgency
 
+
+    fun getSummary(
+        formatUrgency: (Urgency) -> String,
+        formatSource: (EventSource) -> String,
+    ): String
+
     /** Event emitted when a new task is created in the system. */
     @Serializable
     data class TaskCreated(
@@ -47,6 +53,18 @@ sealed interface Event {
     ) : Event {
 
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Task #$taskId: $description")
+            assignedTo?.let {
+                append(" (assigned to: $it)")
+            }
+            append(" ${formatUrgency(urgency)}")
+            append(" from ${formatSource(eventSource)}")
+        }
 
         companion object {
             const val EVENT_TYPE: EventType = "TaskCreated"
@@ -65,6 +83,19 @@ sealed interface Event {
     ) : Event {
 
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("\"$questionText\"")
+            if (context.isNotBlank()) {
+                append(" - Context: ${context.take(60)}")
+                if (context.length > 60) append("...")
+            }
+            append(" ${formatUrgency(urgency)}")
+            append(" from ${formatSource(eventSource)}")
+        }
 
         companion object {
             const val EVENT_TYPE: EventType = "QuestionRaised"
@@ -85,6 +116,22 @@ sealed interface Event {
     ) : Event {
 
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append(filePath)
+            append(" - $changeDescription")
+            if (reviewRequired) {
+                append(" (review required)")
+                assignedTo?.let {
+                    append(" for $it")
+                }
+            }
+            append(" ${formatUrgency(urgency)}")
+            append(" from ${formatSource(eventSource)}")
+        }
 
         companion object {
             const val EVENT_TYPE: EventType = "CodeSubmitted"

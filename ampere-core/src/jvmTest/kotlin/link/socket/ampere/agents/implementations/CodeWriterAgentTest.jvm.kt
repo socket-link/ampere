@@ -18,33 +18,33 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.config.AgentConfiguration
-import link.socket.ampere.agents.domain.concept.task.AssignedTo
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
-import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
+import link.socket.ampere.agents.definition.CodeWriterAgent
 import link.socket.ampere.agents.domain.concept.Idea
 import link.socket.ampere.agents.domain.concept.Perception
 import link.socket.ampere.agents.domain.concept.Plan
 import link.socket.ampere.agents.domain.concept.expectation.Expectations
-import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
+import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.domain.concept.status.TaskStatus
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.concept.task.MeetingTask
-import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.config.AgentConfiguration
+import link.socket.ampere.agents.domain.error.ExecutionError
+import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
+import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.execution.tools.ToolWriteCodeFile
-import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
-import link.socket.ampere.agents.domain.type.CodeWriterAgent
-import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModel
@@ -113,7 +113,7 @@ actual class CodeWriterAgentTest {
         coroutineScope: CoroutineScope,
         private val perceptionResult: (Perception<AgentState>) -> Idea,
         private val planningResult: ((Task, List<Idea>) -> Plan)? = null
-    ) : CodeWriterAgent(initialState, agentConfiguration, toolWriteCodeFile, coroutineScope) {
+    ) : CodeWriterAgent(agentConfiguration, toolWriteCodeFile, coroutineScope, initialState) {
 
         override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea =
             perceptionResult
@@ -947,7 +947,7 @@ actual class CodeWriterAgentTest {
 
         // For now, we verify the agent exists and has the required infrastructure
         assertNotNull(agent.id)
-        assertEquals("CodeWriterAgent", agent.id)
+        assertTrue(agent.id.endsWith("CodeWriterAgent"), "Agent ID should end with 'CodeWriterAgent'")
     }
 
     /**
@@ -1102,10 +1102,9 @@ actual class CodeWriterAgentTest {
         )
 
         val testAgent = object : CodeWriterAgent(
-            AgentState(),
             agentConfig,
             stubTool,
-            testScope
+            testScope,
         ) {
             override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { outcomes ->
                 // Simulate LLM identifying a success pattern
@@ -1189,10 +1188,9 @@ actual class CodeWriterAgentTest {
         )
 
         val testAgent = object : CodeWriterAgent(
-            AgentState(),
             agentConfig,
             stubTool,
-            testScope
+            testScope,
         ) {
             override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { outcomes ->
                 Idea(
@@ -1266,10 +1264,9 @@ actual class CodeWriterAgentTest {
         )
 
         val testAgent = object : CodeWriterAgent(
-            AgentState(),
             agentConfig,
             stubTool,
-            testScope
+            testScope,
         ) {
             override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { outcomes ->
                 val evidenceCount = outcomes.count { it is Outcome.Success }
@@ -1350,10 +1347,10 @@ actual class CodeWriterAgentTest {
         val agentState = AgentState()
 
         val testAgent = object : CodeWriterAgent(
-            agentState,
             agentConfig,
             stubTool,
-            testScope
+            testScope,
+            agentState,
         ) {
             override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { outcomes ->
                 // Call the real implementation which should store knowledge
@@ -1424,10 +1421,9 @@ actual class CodeWriterAgentTest {
         )
 
         val testAgent = object : CodeWriterAgent(
-            AgentState(),
             agentConfig,
             stubTool,
-            testScope
+            testScope,
         ) {
             override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { outcomes ->
                 val successCount = outcomes.count { it is Outcome.Success }
@@ -1510,10 +1506,9 @@ actual class CodeWriterAgentTest {
         )
 
         val testAgent = object : CodeWriterAgent(
-            AgentState(),
             agentConfig,
             stubTool,
-            testScope
+            testScope,
         ) {
             override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { outcomes ->
                 Idea(
@@ -1588,10 +1583,10 @@ actual class CodeWriterAgentTest {
         val agentState = AgentState()
 
         val testAgent = object : CodeWriterAgent(
-            agentState,
             agentConfig,
             stubTool,
-            testScope
+            testScope,
+            agentState,
         ) {
             override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { outcomes ->
                 // Simulate fallback by calling the fallback method directly
@@ -1663,10 +1658,9 @@ actual class CodeWriterAgentTest {
         )
 
         val testAgent = object : CodeWriterAgent(
-            AgentState(),
             agentConfig,
             stubTool,
-            testScope
+            testScope,
         ) {
             override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { outcomes ->
                 val successCount = outcomes.count { it is Outcome.Success }

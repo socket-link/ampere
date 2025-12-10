@@ -1,4 +1,4 @@
-package link.socket.ampere.agents.domain.type
+package link.socket.ampere.agents.definition
 
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.flow.MutableStateFlow

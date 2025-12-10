@@ -23,8 +23,12 @@ sealed interface MeetingEvent : Event {
     ) : MeetingEvent {
 
         override val eventType: EventType = EVENT_TYPE
-
         override val timestamp: Instant = meeting.lastUpdatedAt() ?: Instant.DISTANT_PAST
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Meeting scheduled: ${meeting.invitation.title} ${formatUrgency(urgency)} from ${formatSource(eventSource)}"
 
         companion object Companion {
             const val EVENT_TYPE: EventType = "MeetingScheduled"
@@ -44,6 +48,11 @@ sealed interface MeetingEvent : Event {
 
         override val eventType: EventType = EVENT_TYPE
 
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Meeting $meetingId started (thread: $threadId) ${formatUrgency(urgency)}"
+
         companion object Companion {
             const val EVENT_TYPE: EventType = "MeetingStarted"
         }
@@ -61,6 +70,11 @@ sealed interface MeetingEvent : Event {
     ) : MeetingEvent {
 
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Agenda item started in meeting $meetingId ${formatUrgency(urgency)}"
 
         companion object Companion {
             const val EVENT_TYPE: EventType = "AgendaItemStarted"
@@ -80,6 +94,11 @@ sealed interface MeetingEvent : Event {
 
         override val eventType: EventType = EVENT_TYPE
 
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Agenda item $agendaItemId completed in meeting $meetingId ${formatUrgency(urgency)}"
+
         companion object Companion {
             const val EVENT_TYPE: EventType = "AgendaItemCompleted"
         }
@@ -98,6 +117,11 @@ sealed interface MeetingEvent : Event {
 
         override val eventType: EventType = EVENT_TYPE
 
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Meeting $meetingId completed with ${outcomes.size} outcomes ${formatUrgency(urgency)}"
+
         companion object Companion {
             const val EVENT_TYPE: EventType = "MeetingCompleted"
         }
@@ -115,6 +139,11 @@ sealed interface MeetingEvent : Event {
     ) : MeetingEvent {
 
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Meeting $meetingId canceled: $reason ${formatUrgency(urgency)}"
 
         companion object Companion {
             const val EVENT_TYPE: EventType = "MeetingCanceled"

@@ -56,6 +56,16 @@ sealed interface ToolEvent : Event {
 
         override val eventType: EventType = EVENT_TYPE
 
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Tool registered: $toolName")
+            append(" (type: $toolType, autonomy: $requiredAutonomy)")
+            mcpServerId?.let { append(" [server: $it]") }
+            append(" ${formatUrgency(urgency)}")
+        }
+
         companion object {
             const val EVENT_TYPE: EventType = "ToolRegistered"
         }
@@ -87,6 +97,16 @@ sealed interface ToolEvent : Event {
     ) : ToolEvent {
 
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Tool unregistered: $toolName")
+            append(" - $reason")
+            mcpServerId?.let { append(" [server: $it]") }
+            append(" ${formatUrgency(urgency)}")
+        }
 
         companion object {
             const val EVENT_TYPE: EventType = "ToolUnregistered"
@@ -122,6 +142,18 @@ sealed interface ToolEvent : Event {
     ) : ToolEvent {
 
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Tool discovery complete: $totalToolsDiscovered tool(s) found")
+            append(" ($functionToolCount function, $mcpToolCount MCP)")
+            if (mcpServerCount > 0) {
+                append(" from $mcpServerCount server(s)")
+            }
+            append(" ${formatUrgency(urgency)}")
+        }
 
         companion object {
             const val EVENT_TYPE: EventType = "ToolDiscoveryComplete"

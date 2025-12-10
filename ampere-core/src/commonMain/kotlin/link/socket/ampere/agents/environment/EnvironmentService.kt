@@ -2,12 +2,12 @@ package link.socket.ampere.agents.environment
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventRegistry
-import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.domain.event.EventType
-import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepository
+import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -18,6 +18,7 @@ import link.socket.ampere.agents.events.messages.MessageRepository
 import link.socket.ampere.agents.events.relay.EventRelayService
 import link.socket.ampere.agents.events.relay.EventRelayServiceImpl
 import link.socket.ampere.agents.events.subscription.Subscription
+import link.socket.ampere.agents.events.tickets.TicketOrchestrator
 import link.socket.ampere.agents.events.tickets.TicketRepository
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
@@ -76,19 +77,8 @@ class EnvironmentService(
     val outcomeMemoryRepository: OutcomeMemoryRepository
         get() = orchestrator.outcomeMemoryRepository
 
-    /**
-     * Create an [AgentMessageApi] for the given agent.
-     *
-     * The message API allows agents to:
-     * - Send messages to channels and threads
-     * - Query message history
-     * - Escalate issues to humans
-     *
-     * @param agentId The ID of the agent
-     * @return A new AgentMessageApi instance bound to this agent
-     */
-    fun createMessageApi(agentId: AgentId): AgentMessageApi =
-        orchestrator.messageApiFactory.create(agentId)
+    val ticketOrchestrator: TicketOrchestrator
+        get() = orchestrator.ticketOrchestrator
 
     /**
      * Create an [AgentEventApi] for the given agent.
@@ -117,6 +107,20 @@ class EnvironmentService(
      */
     fun createMeetingsApi(agentId: AgentId): AgentMeetingsApi =
         orchestrator.meetingApiFactory.create(agentId)
+
+    /**
+     * Create an [AgentMessageApi] for the given agent.
+     *
+     * The message API allows agents to:
+     * - Send messages to channels and threads
+     * - Query message history
+     * - Escalate issues to humans
+     *
+     * @param agentId The ID of the agent
+     * @return A new AgentMessageApi instance bound to this agent
+     */
+    fun createMessageApi(agentId: AgentId): AgentMessageApi =
+        orchestrator.messageApiFactory.create(agentId)
 
     /**
      * Access to the event bus for subscribing to events.
@@ -151,11 +155,10 @@ class EnvironmentService(
     fun subscribeToAll(
         agentId: AgentId,
         handler: EventHandler<Event, Subscription>,
-    ): List<Subscription> {
-        return EventRegistry.allEventTypes.map { eventType ->
+    ): List<Subscription> =
+        EventRegistry.allEventTypes.map { eventType ->
             subscribe(agentId, eventType, handler)
         }
-    }
 
     /**
      * Start all orchestrator services.

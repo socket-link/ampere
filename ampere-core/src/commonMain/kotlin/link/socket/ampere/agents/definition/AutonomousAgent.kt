@@ -1,4 +1,4 @@
-package link.socket.ampere.agents.domain.type
+package link.socket.ampere.agents.definition
 
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
@@ -210,8 +210,12 @@ abstract class AutonomousAgent <S : AgentState> : Agent<S>, NeuralAgent<S> {
     /** Executes a plan of actions */
     override suspend fun executePlan(
         plan: Plan,
-    ): Outcome =
-        plan.tasks.map { task ->
+    ): Outcome {
+        if (plan.tasks.isEmpty()) {
+            return Outcome.blank
+        }
+
+        return plan.tasks.map { task ->
             rememberNewTask(task)
             val outcome = runLLMToExecuteTask(task)
             rememberNewOutcome(outcome)
@@ -223,6 +227,7 @@ abstract class AutonomousAgent <S : AgentState> : Agent<S>, NeuralAgent<S> {
                 outcome
             }
         }
+    }
 
     /** Executes a task from a plan */
     override suspend fun runTask(task: Task): Outcome {

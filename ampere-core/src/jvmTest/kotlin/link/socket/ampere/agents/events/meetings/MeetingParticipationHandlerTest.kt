@@ -16,7 +16,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.domain.config.AgentConfiguration
-import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.state.AgentState
@@ -30,7 +30,7 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
 import link.socket.ampere.agents.execution.tools.ToolWriteCodeFile
-import link.socket.ampere.agents.domain.type.CodeWriterAgent
+import link.socket.ampere.agents.definition.CodeWriterAgent
 import link.socket.ampere.db.Database
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default

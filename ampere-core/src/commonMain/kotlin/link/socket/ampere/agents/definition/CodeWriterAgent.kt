@@ -1,4 +1,4 @@
-package link.socket.ampere.agents.domain.type
+package link.socket.ampere.agents.definition
 
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
@@ -14,6 +14,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import link.socket.ampere.agents.definition.code.CodeWriterState
 import link.socket.ampere.agents.domain.concept.Idea
 import link.socket.ampere.agents.domain.concept.Perception
 import link.socket.ampere.agents.domain.concept.Plan
@@ -34,6 +35,7 @@ import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
+import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.request.ExecutionConstraints
@@ -52,15 +54,14 @@ import link.socket.ampere.domain.util.toClientModelId
  * it only relies on commonMain types and contracts.
  */
 open class CodeWriterAgent(
-    override val initialState: AgentState,
     override val agentConfiguration: AgentConfiguration,
     private val toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode>,
     private val coroutineScope: CoroutineScope,
-    private val executor: Executor =
-        FunctionExecutor.create(),
+    override val initialState: AgentState = CodeWriterState.blank,
+    private val executor: Executor = FunctionExecutor.create(),
 ) : AutonomousAgent<AgentState>() {
 
-    override val id: AgentId = "CodeWriterAgent"
+    override val id: AgentId = generateUUID("CodeWriterAgent")
 
     override val requiredTools: Set<Tool<*>> =
         setOf(toolWriteCodeFile)

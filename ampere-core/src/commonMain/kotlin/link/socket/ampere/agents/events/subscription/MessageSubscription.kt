@@ -1,7 +1,7 @@
 package link.socket.ampere.agents.events.subscription
 
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.events.messages.MessageChannel
 import link.socket.ampere.agents.events.messages.MessageThreadId

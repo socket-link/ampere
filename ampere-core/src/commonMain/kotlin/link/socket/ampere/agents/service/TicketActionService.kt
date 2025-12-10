@@ -1,7 +1,7 @@
 package link.socket.ampere.agents.service
 
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.TicketEvent

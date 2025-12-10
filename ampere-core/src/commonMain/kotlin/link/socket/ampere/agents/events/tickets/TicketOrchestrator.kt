@@ -12,7 +12,7 @@ import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.concept.task.MeetingTask
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.TicketEvent
-import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.escalation.Escalation
 import link.socket.ampere.agents.events.meetings.Meeting

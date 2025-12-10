@@ -5,7 +5,7 @@ import java.io.PrintStream
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
-import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.events.escalation.ConsoleNotifier
 import link.socket.ampere.agents.events.messages.MessageThreadId
 

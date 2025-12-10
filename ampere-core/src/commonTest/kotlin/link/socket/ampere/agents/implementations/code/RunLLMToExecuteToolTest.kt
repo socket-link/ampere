@@ -14,7 +14,7 @@ import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.concept.status.TaskStatus
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.domain.concept.task.Task
-import link.socket.ampere.agents.domain.type.CodeWriterAgent
+import link.socket.ampere.agents.definition.CodeWriterAgent
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority

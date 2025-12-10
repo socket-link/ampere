@@ -1,18 +1,5 @@
 package link.socket.ampere.agents.receptors
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.type.AgentId
-import link.socket.ampere.agents.domain.event.EventSource
-import link.socket.ampere.agents.domain.event.FileSystemEvent
-import link.socket.ampere.agents.domain.Urgency
-import link.socket.ampere.agents.events.api.AgentEventApi
-import link.socket.ampere.agents.events.utils.generateUUID
-import link.socket.ampere.util.logWith
 import java.io.File
 import java.nio.file.FileSystems
 import java.nio.file.Path
@@ -25,6 +12,19 @@ import kotlin.io.path.extension
 import kotlin.io.path.name
 import kotlin.io.path.pathString
 import kotlin.io.path.relativeTo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.FileSystemEvent
+import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.util.logWith
 
 /**
  * FileSystemReceptor monitors a workspace directory for file changes and emits
@@ -252,6 +252,7 @@ class FileSystemReceptor(
             urgency = Urgency.LOW,
             filePath = filePath.absolutePathString(),
             fileName = filePath.name,
+            fileExtension = filePath.extension.takeIf { it.isNotEmpty() },
             workspacePath = workspacePathObj.absolutePathString(),
             relativePath = filePath.relativeTo(workspacePathObj).pathString
         )

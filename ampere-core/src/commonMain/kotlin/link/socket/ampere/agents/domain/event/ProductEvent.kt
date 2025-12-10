@@ -2,7 +2,7 @@ package link.socket.ampere.agents.domain.event
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
 
 /**
@@ -27,17 +27,30 @@ sealed interface ProductEvent : Event {
         override val eventId: EventId,
         override val timestamp: Instant,
         override val eventSource: EventSource,
-        override val urgency: Urgency = Urgency.MEDIUM,
         val featureTitle: String,
         val description: String,
+        val requestedBy: AgentId,
         val phase: String? = null,
         val epic: String? = null,
         val act: String? = null,
-        val requestedBy: AgentId,
+        override val urgency: Urgency = Urgency.MEDIUM,
         val metadata: Map<String, String> = emptyMap(),
         val sourceFilePath: String? = null,
     ) : ProductEvent {
+
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Feature requested: $featureTitle")
+            epic?.let { append(" [Epic: $it]") }
+            phase?.let { append(" [Phase: $it]") }
+            append(" ${formatUrgency(urgency)}")
+            append(" from ${formatSource(eventSource)}")
+        }
+
 
         companion object {
             const val EVENT_TYPE: EventType = "ProductFeatureRequested"
@@ -54,15 +67,28 @@ sealed interface ProductEvent : Event {
         override val eventId: EventId,
         override val timestamp: Instant,
         override val eventSource: EventSource,
-        override val urgency: Urgency = Urgency.MEDIUM,
         val epicTitle: String,
         val description: String,
         val phase: String? = null,
         val act: String? = null,
         val metadata: Map<String, String> = emptyMap(),
         val sourceFilePath: String? = null,
+        override val urgency: Urgency = Urgency.MEDIUM,
     ) : ProductEvent {
+
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Epic defined: $epicTitle")
+            phase?.let { append(" [Phase: $it]") }
+            act?.let { append(" [Act: $it]") }
+            append(" ${formatUrgency(urgency)}")
+            append(" from ${formatSource(eventSource)}")
+        }
+
 
         companion object {
             const val EVENT_TYPE: EventType = "ProductEpicDefined"
@@ -86,7 +112,19 @@ sealed interface ProductEvent : Event {
         val metadata: Map<String, String> = emptyMap(),
         val sourceFilePath: String? = null,
     ) : ProductEvent {
+
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Phase defined: $phaseTitle")
+            act?.let { append(" [Act: $it]") }
+            append(" ${formatUrgency(urgency)}")
+            append(" from ${formatSource(eventSource)}")
+        }
+
 
         companion object {
             const val EVENT_TYPE: EventType = "ProductPhaseDefined"

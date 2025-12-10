@@ -35,8 +35,8 @@ import link.socket.ampere.domain.ai.model.AIModel
 import link.socket.ampere.domain.ai.provider.AIProvider
 import kotlin.time.Duration.Companion.days
 import link.socket.ampere.agents.domain.config.AgentConfiguration
-import link.socket.ampere.agents.domain.type.AgentId
-import link.socket.ampere.agents.domain.type.AutonomousAgent
+import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.definition.AutonomousAgent
 
 /**
  * Comprehensive test suite for Agent memory recall functionality.

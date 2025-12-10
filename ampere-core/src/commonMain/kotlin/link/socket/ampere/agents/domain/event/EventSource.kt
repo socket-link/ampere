@@ -1,7 +1,7 @@
 package link.socket.ampere.agents.domain.event
 
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.type.AgentId
+import link.socket.ampere.agents.definition.AgentId
 
 /** Source of an event, either an agent or a human. */
 @Serializable

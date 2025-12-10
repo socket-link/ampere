@@ -35,6 +35,20 @@ sealed interface MemoryEvent : Event {
 
         override val eventType: EventType = EVENT_TYPE
 
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Knowledge stored: $knowledgeType")
+            taskType?.let { append(" ($it)") }
+            if (tags.isNotEmpty()) {
+                append(" [${tags.take(3).joinToString(", ")}]")
+            }
+            append(" ${formatUrgency(urgency)}")
+            append(" from ${formatSource(eventSource)}")
+        }
+
+
         companion object {
             const val EVENT_TYPE: EventType = "KnowledgeStored"
         }
@@ -60,6 +74,19 @@ sealed interface MemoryEvent : Event {
     ) : MemoryEvent {
 
         override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Knowledge recalled: $resultsFound result(s)")
+            if (resultsFound > 0) {
+                val roundedRelevance = ((averageRelevance * 100).toInt()) / 100.0
+                append(" (avg relevance: $roundedRelevance)")
+            }
+            append(" ${formatUrgency(urgency)}")
+            append(" from ${formatSource(eventSource)}")
+        }
 
         companion object {
             const val EVENT_TYPE: EventType = "KnowledgeRecalled"

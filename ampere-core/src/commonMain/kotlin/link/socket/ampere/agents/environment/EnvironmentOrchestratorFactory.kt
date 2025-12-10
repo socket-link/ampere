@@ -124,6 +124,8 @@ class EnvironmentOrchestratorFactory(
      * Note: This is a workaround for the circular dependency between MeetingOrchestrator
      * and AgentMeetingsApiFactory. The final MeetingOrchestrator will be created by
      * the EnvironmentOrchestrator itself.
+     *
+     * TODO: Remove this workaround once MeetingOrchestrator is refactored to avoid circular dependencies.
      */
     private fun createTemporaryMeetingOrchestrator(
         meetingRepository: MeetingRepository,
