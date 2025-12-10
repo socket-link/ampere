@@ -1,6 +1,6 @@
 # The Autonomous Agent Lifecycle
 
-This document explains how agents in Ampere autonomously work through tasks using the **perceive → recall → reason → act → learn** cycle.
+This document explains how agents in Ampere autonomously work through tasks using the **PROPEL** cycle: **Perceive → Recall → Optimize → Plan → Execute → Loop**.
 
 ## The Core Loop
 
@@ -8,29 +8,37 @@ Agents in Ampere follow a continuous cycle:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    PERCEIVE STATE                        │
+│                    PERCEIVE STATE                       │
 │  Agent observes: new tickets, events, messages          │
 │  Creates: Perceptions with Ideas                        │
 └─────────────────┬───────────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────┐
-│                  RECALL KNOWLEDGE                        │
+│                  RECALL KNOWLEDGE                       │
 │  Query: KnowledgeRepository for similar past work       │
 │  Returns: Relevant learnings with relevance scores      │
 └─────────────────┬───────────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────┐
-│              REASON - CREATE PLAN                        │
-│  Input: Ticket, Ideas, Past Knowledge                   │
+│                     OPTIMIZE APPROACH                   │
+│  Analyze: Ideas, Past Knowledge, Best Approaches        │
+│  Synthesize: Combine insights to optimize strategy      │
+│  Refine: Select optimal approach based on learnings     │
+└─────────────────┬───────────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────────┐
+│                       PLAN SOLUTION                     │
+│  Input: Ticket, Optimized Approach                      │
 │  Output: Plan with Task list                            │
 │  Status: Ticket moves InProgress                        │
 └─────────────────┬───────────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────┐
-│                ACT - EXECUTE PLAN                        │
+│                    EXECUTE TASKS                        │
 │  For each Task in Plan:                                 │
 │    - Execute with appropriate tool                      │
 │    - Generate ExecutionOutcome                          │
@@ -39,7 +47,7 @@ Agents in Ampere follow a continuous cycle:
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────┐
-│            LEARN - EXTRACT KNOWLEDGE                     │
+│            LOOP WITH UPDATED KNOWLEDGE                  │
 │  Analyze: Outcomes, what worked, what didn't            │
 │  Create: Knowledge entries                              │
 │  Store: In KnowledgeRepository with tags                │
@@ -65,6 +73,8 @@ Agents in Ampere follow a continuous cycle:
 ---
 
 ## Complete Example: Authentication Feature
+
+> **Note:** Some of the code examples below show the planned high-level API that is currently in development. For accurate details of the current API implementation, see the [CLI Guide](ampere-cli/README.md) and [CLAUDE.md](CLAUDE.md).
 
 Let's walk through how an authentication feature flows through the system, from ticket creation to completion.
 
@@ -152,11 +162,33 @@ val relevantKnowledge = memoryService.recallRelevantKnowledge(
 
 ---
 
-### 5. Agent Creates Plan
+### 5. Agent Optimizes Approach
+
+```kotlin
+val optimizedApproach = agent.optimize(
+    ideas = perception.ideas,
+    knowledge = relevantKnowledge,
+    ticket = ticket
+)
+// Analyzes: JWT vs OAuth2, bcrypt vs other hashing
+// Selects: JWT + bcrypt based on past success
+// Refines: Incorporates learnings about token expiry and rate limiting
+```
+
+**What happens:**
+- Agent analyzes multiple potential approaches from Ideas
+- Evaluates each against Past Knowledge and relevance scores
+- Synthesizes insights to select optimal strategy
+- Refines approach based on what worked in similar situations
+
+---
+
+### 6. Agent Creates Plan
 
 ```kotlin
 val plan = Plan.ForTicket(
     ticket = ticket,
+    optimizedApproach = optimizedApproach,
     tasks = listOf(
         Task.CodeChange("Create User model"),
         Task.CodeChange("Add JWT library"),
@@ -168,15 +200,15 @@ val plan = Plan.ForTicket(
 ```
 
 **What happens:**
-- Agent reasons about the ticket using Ideas + Knowledge
-- Breaks work into concrete Tasks
+- Agent converts optimized approach into concrete Tasks
+- Breaks work into executable steps
 - Sets expectations and success criteria
 - Ticket status transitions to InProgress
 - Plan is remembered in agent's working memory
 
 ---
 
-### 6. Execute and Record Outcomes
+### 7. Execute and Record Outcomes
 
 ```kotlin
 for (task in plan.tasks) {
@@ -217,7 +249,7 @@ All outcomes are stored in `OutcomeMemoryRepository` for future learning.
 
 ---
 
-### 7. Extract Knowledge
+### 8. Loop - Extract Knowledge
 
 ```kotlin
 val knowledge = Knowledge.FromOutcome(
@@ -245,7 +277,7 @@ memoryService.storeKnowledge(
 
 ---
 
-### 8a. Success Path - Ticket Completion
+### 9a. Success Path - Ticket Completion
 
 ```kotlin
 ticketOrchestrator.transitionTicketStatus(
@@ -265,7 +297,7 @@ ticketOrchestrator.transitionTicketStatus(
 
 ---
 
-### 8b. Blocked Path - Escalation
+### 9b. Blocked Path - Escalation
 
 **Alternative scenario:** What if the agent gets stuck deciding between OAuth2 vs JWT?
 
@@ -343,7 +375,7 @@ Every action is observable, persistent, and can trigger reactive behavior in oth
 
 ## Key Takeaways
 
-1. **Autonomy:** Agents work independently through the perceive-reason-act-learn loop
+1. **Autonomy:** Agents work independently through the PROPEL loop (Perceive → Recall → Optimize → Plan → Execute → Loop)
 2. **Learning:** Every outcome is recorded and turned into searchable knowledge
 3. **Coordination:** Events enable agents to react to each other's work
 4. **Escalation:** Blockers automatically trigger meetings and human notification

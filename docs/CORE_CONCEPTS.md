@@ -8,7 +8,7 @@ This document explains the foundational concepts of AMPERE and how they work tog
 
 ## The AniMA Model
 
-AMPERE uses the **Animated Multi-Agent (AniMA)** prompting technique to define an AniMA Model Protocol (AMP) to describes how agents communicate, coordinate, and learn from each other.
+AMPERE uses the **Animated Multi-Agent (AniMA)** prompting technique in defining the AniMA Model Protocol (AMP), which describes how agents communicate, coordinate, and learn from each other.
 
 ### Why "Animated"?
 

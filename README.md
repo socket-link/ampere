@@ -256,7 +256,7 @@ AMPERE is built on the thesis that biological patterns provide superior agent co
 - **Agent systems** — Experience with LangChain, AutoGen, CrewAI, or similar
 - **Biological modeling** — Background in systems biology, neuroscience, or emergence
 
-**[→ Contributing Guide](CONTRIBUTING.md)** · **[→ Development Setup](docs/DEVELOPMENT.md)**
+**[→ Contributing Guide](CONTRIBUTING.md)**
 
 ---
 
@@ -267,7 +267,6 @@ AMPERE is built on the thesis that biological patterns provide superior agent co
 | [Core Concepts](docs/CORE_CONCEPTS.md) | Tickets, Tasks, Plans, Meetings, Outcomes, Knowledge |
 | [Agent Lifecycle](docs/AGENT_LIFECYCLE.md) | The PROPEL loop with detailed examples |
 | [CLI Reference](ampere-cli/README.md) | Complete command documentation |
-| [API Docs](https://socket-link.github.io/ampere/) | Generated KDoc reference |
 | [CLAUDE.md](CLAUDE.md) | Guide for AI-assisted development |
 
 ---
