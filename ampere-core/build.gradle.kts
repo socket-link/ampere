@@ -129,7 +129,7 @@ kotlin {
                 implementation(compose.components.resources)
                 implementation(compose.materialIconsExtended)
 
-                implementation("ai.koog:koog-agents:0.4.1")
+                implementation("ai.koog:koog-agents:0.5.4")
                 implementation("app.cash.sqldelight:coroutines-extensions:2.2.1")
                 implementation("app.cash.sqldelight:runtime:2.2.1")
                 implementation("com.aallam.openai:openai-client:4.0.1")
