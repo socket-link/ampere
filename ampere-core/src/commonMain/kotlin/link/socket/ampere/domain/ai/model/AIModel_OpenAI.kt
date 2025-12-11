@@ -484,14 +484,14 @@ sealed class AIModel_OpenAI(
         private val GPT_5_mini_FEATURES = AIModelFeatures(
             availableTools = GPT_5_mini_TOOLS,
             reasoningLevel = AIModelFeatures.RelativeReasoning.NORMAL,
-            speed = AIModelFeatures.RelativeSpeed.NORMAL,
+            speed = AIModelFeatures.RelativeSpeed.FAST,
             supportedInputs = GPT_5_mini_SUPPORTED_INPUTS,
             trainingCutoffDate = GPT_5_mini_CUTOFF,
         )
 
         private val GPT_5_nano_FEATURES = AIModelFeatures(
             availableTools = GPT_5_nano_TOOLS,
-            reasoningLevel = AIModelFeatures.RelativeReasoning.NORMAL,
+            reasoningLevel = AIModelFeatures.RelativeReasoning.LOW,
             speed = AIModelFeatures.RelativeSpeed.FAST,
             supportedInputs = GPT_5_nano_SUPPORTED_INPUTS,
             trainingCutoffDate = GPT_5_nano_CUTOFF,
@@ -547,8 +547,8 @@ sealed class AIModel_OpenAI(
 
         private val o3_mini_FEATURES = AIModelFeatures(
             availableTools = o3_mini_TOOLS,
-            reasoningLevel = AIModelFeatures.RelativeReasoning.HIGH,
-            speed = AIModelFeatures.RelativeSpeed.NORMAL,
+            reasoningLevel = AIModelFeatures.RelativeReasoning.NORMAL,
+            speed = AIModelFeatures.RelativeSpeed.FAST,
             supportedInputs = o3_mini_SUPPORTED_INPUTS,
             trainingCutoffDate = o3_mini_CUTOFF,
         )

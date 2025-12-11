@@ -343,7 +343,7 @@ sealed class AIModel_Gemini(
 
         private val _2_5_Flash_Lite_FEATURES = AIModelFeatures(
             availableTools = _2_5_Flash_Lite_TOOLS,
-            reasoningLevel = RelativeReasoning.NORMAL,
+            reasoningLevel = RelativeReasoning.LOW,
             speed = RelativeSpeed.FAST,
             supportedInputs = _2_5_Flash_Lite_SUPPORTED_INPUTS,
             trainingCutoffDate = _2_5_Flash_Lite_CUTOFF,

@@ -80,11 +80,7 @@ sealed class AIModel_Claude(
         name = Haiku_3_NAME,
         displayName = Haiku_3_DISPLAY_NAME,
         description = Haiku_3_DESCRIPTION,
-        features = featuresForHaiku(
-            availableTools = Haiku_3_TOOLS,
-            supportedInputs = Haiku_3_SUPPORTED_INPUTS,
-            cutoffDate = Haiku_3_CUTOFF,
-        ),
+        features = Haiku_3_FEATURES,
         limits = Haiku_3_LIMITS,
     )
 
@@ -400,10 +396,19 @@ sealed class AIModel_Claude(
             cutoffDate: GMTDate,
         ): AIModelFeatures = AIModelFeatures(
             availableTools = availableTools,
-            reasoningLevel = RelativeReasoning.HIGH,
+            reasoningLevel = RelativeReasoning.NORMAL,
             speed = RelativeSpeed.FAST,
             supportedInputs = supportedInputs,
             trainingCutoffDate = cutoffDate,
+        )
+
+        // Haiku 3 is older and weaker, so it gets LOW reasoning
+        private val Haiku_3_FEATURES = AIModelFeatures(
+            availableTools = Haiku_3_TOOLS,
+            reasoningLevel = RelativeReasoning.LOW,
+            speed = RelativeSpeed.FAST,
+            supportedInputs = Haiku_3_SUPPORTED_INPUTS,
+            trainingCutoffDate = Haiku_3_CUTOFF,
         )
 
         // ---- Model Names ----
