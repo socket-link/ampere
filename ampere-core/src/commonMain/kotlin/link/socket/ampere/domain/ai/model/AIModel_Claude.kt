@@ -88,6 +88,38 @@ sealed class AIModel_Claude(
         limits = Haiku_3_LIMITS,
     )
 
+    data object Opus_4_5 : AIModel_Claude(
+        name = Opus_4_5_NAME,
+        displayName = Opus_4_5_DISPLAY_NAME,
+        description = Opus_4_5_DESCRIPTION,
+        features = Opus_4_5_FEATURES,
+        limits = Opus_4_5_LIMITS,
+    )
+
+    data object Sonnet_4_5 : AIModel_Claude(
+        name = Sonnet_4_5_NAME,
+        displayName = Sonnet_4_5_DISPLAY_NAME,
+        description = Sonnet_4_5_DESCRIPTION,
+        features = featuresForSonnet(
+            availableTools = Sonnet_4_5_TOOLS,
+            supportedInputs = Sonnet_4_5_SUPPORTED_INPUTS,
+            cutoffDate = Sonnet_4_5_CUTOFF,
+        ),
+        limits = Sonnet_4_5_LIMITS,
+    )
+
+    data object Haiku_4_5 : AIModel_Claude(
+        name = Haiku_4_5_NAME,
+        displayName = Haiku_4_5_DISPLAY_NAME,
+        description = Haiku_4_5_DESCRIPTION,
+        features = featuresForHaiku(
+            availableTools = Haiku_4_5_TOOLS,
+            supportedInputs = Haiku_4_5_SUPPORTED_INPUTS,
+            cutoffDate = Haiku_4_5_CUTOFF,
+        ),
+        limits = Haiku_4_5_LIMITS,
+    )
+
     companion object Companion {
 
         // ---- Tools ----
@@ -114,6 +146,10 @@ sealed class AIModel_Claude(
         )
 
         private val Haiku_3_TOOLS = emptyList<ProvidedTool<AITool_Claude>>()
+
+        private val Opus_4_5_TOOLS: List<ProvidedTool<AITool_Claude>> = Opus_4_1_TOOLS
+        private val Sonnet_4_5_TOOLS: List<ProvidedTool<AITool_Claude>> = Opus_4_TOOLS
+        private val Haiku_4_5_TOOLS: List<ProvidedTool<AITool_Claude>> = Haiku_3_5_TOOLS
 
         // ---- Rate Limits ----
 
@@ -158,6 +194,10 @@ sealed class AIModel_Claude(
         )
         private val Haiku_3_RATE_LIMITS = Haiku_3_5_RATE_LIMITS
 
+        private val Opus_4_5_RATE_LIMITS = Opus_4_1_RATE_LIMITS
+        private val Sonnet_4_5_RATE_LIMITS = Sonnet_4_RATE_LIMITS
+        private val Haiku_4_5_RATE_LIMITS = Haiku_3_5_RATE_LIMITS
+
         // ---- Token Limits ----
 
         private val CONTEXT_WINDOW_TOKENS = TokenCount._200k
@@ -183,6 +223,10 @@ sealed class AIModel_Claude(
             contextWindow = CONTEXT_WINDOW_TOKENS,
             maxOutput = TokenCount._4096,
         )
+
+        private val Opus_4_5_TOKEN_LIMITS = Opus_4_1_TOKEN_LIMITS
+        private val Sonnet_4_5_TOKEN_LIMITS = Sonnet_4_TOKEN_LIMITS
+        private val Haiku_4_5_TOKEN_LIMITS = Haiku_3_5_TOKEN_LIMITS
 
         // ---- Limits ----
 
@@ -214,6 +258,21 @@ sealed class AIModel_Claude(
         private val Haiku_3_LIMITS = ModelLimits(
             rate = Haiku_3_RATE_LIMITS,
             token = Haiku_3_TOKEN_LIMITS,
+        )
+
+        private val Opus_4_5_LIMITS = ModelLimits(
+            rate = Opus_4_5_RATE_LIMITS,
+            token = Opus_4_5_TOKEN_LIMITS,
+        )
+
+        private val Sonnet_4_5_LIMITS = ModelLimits(
+            rate = Sonnet_4_5_RATE_LIMITS,
+            token = Sonnet_4_5_TOKEN_LIMITS,
+        )
+
+        private val Haiku_4_5_LIMITS = ModelLimits(
+            rate = Haiku_4_5_RATE_LIMITS,
+            token = Haiku_4_5_TOKEN_LIMITS,
         )
 
         // ---- Training Cutoffs ----
@@ -257,6 +316,33 @@ sealed class AIModel_Claude(
             seconds = 0,
         )
 
+        private val Opus_4_5_CUTOFF = GMTDate(
+            year = 2025,
+            month = Month.NOVEMBER,
+            dayOfMonth = 1,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
+        private val Sonnet_4_5_CUTOFF = GMTDate(
+            year = 2025,
+            month = Month.SEPTEMBER,
+            dayOfMonth = 1,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
+        private val Haiku_4_5_CUTOFF = GMTDate(
+            year = 2025,
+            month = Month.OCTOBER,
+            dayOfMonth = 1,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
         // ---- Supported Inputs ----
 
         private val Opus_4_1_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
@@ -265,6 +351,10 @@ sealed class AIModel_Claude(
         private val Sonnet_3_7_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
         private val Haiku_3_5_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
         private val Haiku_3_SUPPORTED_INPUTS = TEXT_AND_IMAGE
+
+        private val Opus_4_5_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
+        private val Sonnet_4_5_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
+        private val Haiku_4_5_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
 
         // ---- Model Features ----
 
@@ -282,6 +372,14 @@ sealed class AIModel_Claude(
             speed = RelativeSpeed.SLOW,
             supportedInputs = Opus_4_SUPPORTED_INPUTS,
             trainingCutoffDate = Opus_4_CUTOFF,
+        )
+
+        private val Opus_4_5_FEATURES = AIModelFeatures(
+            availableTools = Opus_4_5_TOOLS,
+            reasoningLevel = RelativeReasoning.HIGH,
+            speed = RelativeSpeed.SLOW,
+            supportedInputs = Opus_4_5_SUPPORTED_INPUTS,
+            trainingCutoffDate = Opus_4_5_CUTOFF,
         )
 
         private fun featuresForSonnet(
@@ -334,15 +432,30 @@ sealed class AIModel_Claude(
         private const val Haiku_3_DISPLAY_NAME = "Claude Haiku 3"
         private const val Haiku_3_DESCRIPTION = "Fast and compact model for near-instant responsiveness. Quick and accurate targeted performance."
 
+        private const val Opus_4_5_NAME = "claude-opus-4-5-20251101"
+        private const val Opus_4_5_DISPLAY_NAME = "Claude Opus 4.5"
+        private const val Opus_4_5_DESCRIPTION = "Our newest flagship model setting new standards across coding, agents, computer use, and office tasks. Supports an effort parameter for trading compute/tokens for reasoning depth."
+
+        private const val Sonnet_4_5_NAME = "claude-sonnet-4-5-20250929"
+        private const val Sonnet_4_5_DISPLAY_NAME = "Claude Sonnet 4.5"
+        private const val Sonnet_4_5_DESCRIPTION = "The best coding model in the world. Leads OSWorld at 61.4% and maintains concentration for 30+ hours on complex tasks. Features a 1M token context window."
+
+        private const val Haiku_4_5_NAME = "claude-haiku-4-5"
+        private const val Haiku_4_5_DISPLAY_NAME = "Claude Haiku 4.5"
+        private const val Haiku_4_5_DESCRIPTION = "Near-frontier coding power at a fraction of the cost. Matches Claude Sonnet 4's performance on coding tasks while being faster and more affordable."
+
         // ---- Models ----
 
         val ALL_MODELS = listOf(
             Opus_4_1,
             Opus_4,
+            Opus_4_5,
             Sonnet_4,
             Sonnet_3_7,
+            Sonnet_4_5,
             Haiku_3_5,
             Haiku_3,
+            Haiku_4_5,
         )
     }
 }

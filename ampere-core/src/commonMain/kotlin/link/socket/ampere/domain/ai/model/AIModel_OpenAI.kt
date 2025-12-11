@@ -101,6 +101,30 @@ sealed class AIModel_OpenAI(
         limits = o3_mini_LIMITS,
     )
 
+    data object GPT_5_1 : AIModel_OpenAI(
+        name = GPT_5_1_NAME,
+        displayName = GPT_5_1_DISPLAY_NAME,
+        description = GPT_5_1_DESCRIPTION,
+        features = GPT_5_1_FEATURES,
+        limits = GPT_5_1_LIMITS,
+    )
+
+    data object GPT_5_1_Chat_Latest : AIModel_OpenAI(
+        name = GPT_5_1_Chat_Latest_NAME,
+        displayName = GPT_5_1_Chat_Latest_DISPLAY_NAME,
+        description = GPT_5_1_Chat_Latest_DESCRIPTION,
+        features = GPT_5_1_Chat_Latest_FEATURES,
+        limits = GPT_5_1_Chat_Latest_LIMITS,
+    )
+
+    data object GPT_5_1_Codex_Max : AIModel_OpenAI(
+        name = GPT_5_1_Codex_Max_NAME,
+        displayName = GPT_5_1_Codex_Max_DISPLAY_NAME,
+        description = GPT_5_1_Codex_Max_DESCRIPTION,
+        features = GPT_5_1_Codex_Max_FEATURES,
+        limits = GPT_5_1_Codex_Max_LIMITS,
+    )
+
     companion object Companion {
 
         // ---- Tools ----
@@ -136,6 +160,14 @@ sealed class AIModel_OpenAI(
         private val o4_mini_TOOLS: List<ProvidedTool<AITool_OpenAI>> = listOf()
         private val o3_TOOLS: List<ProvidedTool<AITool_OpenAI>> = listOf()
         private val o3_mini_TOOLS: List<ProvidedTool<AITool_OpenAI>> = listOf()
+
+        private val GPT_5_1_TOOLS: List<ProvidedTool<AITool_OpenAI>> = GPT_5_TOOLS
+        private val GPT_5_1_Chat_Latest_TOOLS: List<ProvidedTool<AITool_OpenAI>> = GPT_5_TOOLS
+        private val GPT_5_1_Codex_Max_TOOLS: List<ProvidedTool<AITool_OpenAI>> = listOf(
+            ProvidedTool.CodeExecution(AITool_OpenAI.CodeExecution),
+            ProvidedTool.FileSearch(AITool_OpenAI.FileSearch),
+            ProvidedTool.MCP(AITool_OpenAI.MCP),
+        )
 
         // ---- Rate Limits ----
 
@@ -229,6 +261,16 @@ sealed class AIModel_OpenAI(
             tier5TPM = TokenCount._150m,
         )
 
+        private val GPT_5_1_RATE_LIMITS = GPT_5_RATE_LIMITS
+        private val GPT_5_1_Chat_Latest_RATE_LIMITS = GPT_5_RATE_LIMITS
+        private val GPT_5_1_Codex_Max_RATE_LIMITS = nonFreeRateLimitsFactory.createRateLimits(
+            tier1TPM = TokenCount._30k,
+            tier2TPM = TokenCount._450k,
+            tier3TPM = TokenCount._800k,
+            tier4TPM = TokenCount._2m,
+            tier5TPM = TokenCount._40m,
+        )
+
         // ---- Token Limits ----
 
         private val GPT_5_CONTEXT_WINDOW_TOKENS = TokenCount._400k
@@ -267,6 +309,10 @@ sealed class AIModel_OpenAI(
 
         private val o3_TOKEN_LIMITS = o4_mini_TOKEN_LIMITS
         private val o3_mini_TOKEN_LIMITS = o3_TOKEN_LIMITS
+
+        private val GPT_5_1_TOKEN_LIMITS = GPT_5_TOKEN_LIMITS
+        private val GPT_5_1_Chat_Latest_TOKEN_LIMITS = GPT_5_TOKEN_LIMITS
+        private val GPT_5_1_Codex_Max_TOKEN_LIMITS = GPT_5_TOKEN_LIMITS
 
         // ---- Limits ----
 
@@ -315,6 +361,21 @@ sealed class AIModel_OpenAI(
         private val o3_mini_LIMITS = ModelLimits(
             rate = o3_mini_RATE_LIMITS,
             token = o3_mini_TOKEN_LIMITS,
+        )
+
+        private val GPT_5_1_LIMITS = ModelLimits(
+            rate = GPT_5_1_RATE_LIMITS,
+            token = GPT_5_1_TOKEN_LIMITS,
+        )
+
+        private val GPT_5_1_Chat_Latest_LIMITS = ModelLimits(
+            rate = GPT_5_1_Chat_Latest_RATE_LIMITS,
+            token = GPT_5_1_Chat_Latest_TOKEN_LIMITS,
+        )
+
+        private val GPT_5_1_Codex_Max_LIMITS = ModelLimits(
+            rate = GPT_5_1_Codex_Max_RATE_LIMITS,
+            token = GPT_5_1_Codex_Max_TOKEN_LIMITS,
         )
 
         // ---- Training Cutoffs ----
@@ -381,6 +442,18 @@ sealed class AIModel_OpenAI(
             seconds = 0,
         )
 
+        private val GPT_5_1_CUTOFF = GMTDate(
+            year = 2025,
+            month = Month.OCTOBER,
+            dayOfMonth = 1,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
+        private val GPT_5_1_Chat_Latest_CUTOFF = GPT_5_1_CUTOFF
+        private val GPT_5_1_Codex_Max_CUTOFF = GPT_5_1_CUTOFF
+
         // ---- Supported Inputs ----
 
         private val GPT_5_SUPPORTED_INPUTS = TEXT_AND_IMAGE
@@ -393,6 +466,10 @@ sealed class AIModel_OpenAI(
         private val o4_mini_SUPPORTED_INPUTS = TEXT_AND_IMAGE
         private val o3_SUPPORTED_INPUTS = TEXT_AND_IMAGE
         private val o3_mini_SUPPORTED_INPUTS = TEXT
+
+        private val GPT_5_1_SUPPORTED_INPUTS = TEXT_AND_IMAGE
+        private val GPT_5_1_Chat_Latest_SUPPORTED_INPUTS = TEXT_AND_IMAGE
+        private val GPT_5_1_Codex_Max_SUPPORTED_INPUTS = TEXT_AND_IMAGE
 
         // ---- Model Features ----
 
@@ -476,6 +553,30 @@ sealed class AIModel_OpenAI(
             trainingCutoffDate = o3_mini_CUTOFF,
         )
 
+        private val GPT_5_1_FEATURES = AIModelFeatures(
+            availableTools = GPT_5_1_TOOLS,
+            reasoningLevel = AIModelFeatures.RelativeReasoning.HIGH,
+            speed = AIModelFeatures.RelativeSpeed.SLOW,
+            supportedInputs = GPT_5_1_SUPPORTED_INPUTS,
+            trainingCutoffDate = GPT_5_1_CUTOFF,
+        )
+
+        private val GPT_5_1_Chat_Latest_FEATURES = AIModelFeatures(
+            availableTools = GPT_5_1_Chat_Latest_TOOLS,
+            reasoningLevel = AIModelFeatures.RelativeReasoning.HIGH,
+            speed = AIModelFeatures.RelativeSpeed.FAST,
+            supportedInputs = GPT_5_1_Chat_Latest_SUPPORTED_INPUTS,
+            trainingCutoffDate = GPT_5_1_Chat_Latest_CUTOFF,
+        )
+
+        private val GPT_5_1_Codex_Max_FEATURES = AIModelFeatures(
+            availableTools = GPT_5_1_Codex_Max_TOOLS,
+            reasoningLevel = AIModelFeatures.RelativeReasoning.HIGH,
+            speed = AIModelFeatures.RelativeSpeed.NORMAL,
+            supportedInputs = GPT_5_1_Codex_Max_SUPPORTED_INPUTS,
+            trainingCutoffDate = GPT_5_1_Codex_Max_CUTOFF,
+        )
+
         // ---- Model Names ----
 
         private const val GPT_5_NAME = "gpt-5"
@@ -518,12 +619,27 @@ sealed class AIModel_OpenAI(
         private const val o3_mini_DISPLAY_NAME = "o3-mini"
         private const val o3_mini_DESCRIPTION = "o3-mini is our newest small reasoning model, providing high intelligence at the same cost and latency targets of o1-mini. o3-mini supports key developer features, like Structured Outputs, function calling, and Batch API."
 
+        private const val GPT_5_1_NAME = "gpt-5.1"
+        private const val GPT_5_1_DISPLAY_NAME = "GPT-5.1"
+        private const val GPT_5_1_DESCRIPTION = "GPT-5.1 is OpenAI's flagship model with configurable reasoning modes and enhanced capabilities for coding and agentic tasks."
+
+        private const val GPT_5_1_Chat_Latest_NAME = "gpt-5.1-chat-latest"
+        private const val GPT_5_1_Chat_Latest_DISPLAY_NAME = "GPT-5.1 Instant"
+        private const val GPT_5_1_Chat_Latest_DESCRIPTION = "GPT-5.1 Instant uses adaptive reasoning to decide when to think before responding, offering fast responses while maintaining accuracy on complex tasks."
+
+        private const val GPT_5_1_Codex_Max_NAME = "gpt-5.1-codex-max"
+        private const val GPT_5_1_Codex_Max_DISPLAY_NAME = "GPT-5.1 Codex Max"
+        private const val GPT_5_1_Codex_Max_DESCRIPTION = "GPT-5.1 Codex Max is a specialized model for agentic coding tasks, featuring compaction technology for working across millions of tokens in long-running agent loops."
+
         // ---- Models ----
 
         val ALL_MODELS = listOf(
             GPT_5,
             GPT_5_mini,
             GPT_5_nano,
+            GPT_5_1,
+            GPT_5_1_Chat_Latest,
+            GPT_5_1_Codex_Max,
             GPT_4_1,
             GPT_4_1_mini,
             GPT_4o,
