@@ -6,8 +6,9 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.event.Event
-import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.domain.event.EventRegistry
 import link.socket.ampere.agents.domain.event.EventType
+import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.subscription.Subscription
@@ -98,18 +99,8 @@ class EventRelayServiceImpl(
      * Returns a set of all known event types in the system.
      * This is used when subscribing to all events (no filter).
      *
-     * Note: This list should be kept in sync with all Event subclasses.
-     * A more robust solution would use reflection or a registry pattern,
-     * but for now we maintain this manually.
+     * Uses EventRegistry as the single source of truth for all event types.
      */
-   // TODO: Use registry pattern for events here
-    private fun getAllKnownEventTypes(): Set<EventType> {
-        return setOf(
-            Event.TaskCreated.EVENT_TYPE,
-            Event.QuestionRaised.EVENT_TYPE,
-            Event.CodeSubmitted.EVENT_TYPE,
-            // Add more event types as they are defined
-            // MessageEvent types, MeetingEvent types, TicketEvent types, etc.
-        )
-    }
+    private fun getAllKnownEventTypes(): Set<EventType> =
+        EventRegistry.allEventTypes.toSet()
 }

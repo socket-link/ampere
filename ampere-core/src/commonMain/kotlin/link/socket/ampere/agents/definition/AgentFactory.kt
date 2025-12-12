@@ -21,13 +21,12 @@ class AgentFactory(
     private val scope: CoroutineScope,
     private val ticketOrchestrator: TicketOrchestrator,
     private val aiConfigurationFactory: AIConfigurationFactory,
-    private val defaultAIConfiguration: AIConfiguration? = null,
 ) {
     private val toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode> =
         ToolWriteCodeFile(AgentActionAutonomy.ASK_BEFORE_ACTION)
 
     private val aiConfiguration: AIConfiguration
-        get() = defaultAIConfiguration ?: aiConfigurationFactory.getDefaultConfiguration()
+        get() = aiConfigurationFactory.getDefaultConfiguration()
 
     private val agentConfiguration: AgentConfiguration
         get() = AgentConfiguration(

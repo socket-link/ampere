@@ -6,7 +6,6 @@ import com.github.ajalt.mordant.rendering.TextColors.gray
 import com.github.ajalt.mordant.rendering.TextColors.green
 import com.github.ajalt.mordant.rendering.TextColors.magenta
 import com.github.ajalt.mordant.rendering.TextColors.red
-import com.github.ajalt.mordant.rendering.TextColors.white
 import com.github.ajalt.mordant.rendering.TextColors.yellow
 import com.github.ajalt.mordant.rendering.TextStyle
 import com.github.ajalt.mordant.terminal.Terminal
@@ -33,7 +32,7 @@ import link.socket.ampere.agents.domain.event.ToolEvent
  *
  * Color coding:
  * - Event types: Green (tasks/tickets), Magenta (questions/meetings), Cyan (code),
- *   Blue (messages), White (notifications)
+ *   Blue (messages), Gray (notifications - dimmed for less prominence)
  * - Urgency levels: Red (HIGH), Yellow (MEDIUM), Gray (LOW)
  * - Other: Gray (timestamps, sources)
  */
@@ -95,6 +94,11 @@ class EventRenderer(
     /**
      * Returns the appropriate icon and color for an event based on its type.
      *
+     * Visual hierarchy (from most to least prominent):
+     * - HIGH IMPORTANCE: TaskCreated, TicketEvent, QuestionRaised (green/magenta - actionable domain events)
+     * - MEDIUM IMPORTANCE: CodeSubmitted, MeetingEvent, MessageEvent (cyan/magenta/blue - workflow events)
+     * - LOW IMPORTANCE: NotificationEvent, ToolEvent, MemoryEvent (gray/yellow/cyan - meta/system events)
+     *
      * Current mapping:
      * - TaskCreated: 📋 green (tasks/tickets)
      * - QuestionRaised: ❓ magenta (questions/escalations need attention)
@@ -102,7 +106,7 @@ class EventRenderer(
      * - MeetingEvent: 📅 magenta (meetings)
      * - TicketEvent: 🎫 green (tickets)
      * - MessageEvent: 💬 blue (messages)
-     * - NotificationEvent: 🔔 white (notifications)
+     * - NotificationEvent: 🔔 gray (notifications - meta-events, less prominent)
      * - MemoryEvent: 🧠 cyan (knowledge/learning)
      * - ToolEvent: 🔧 yellow (tool registration/discovery)
      */
@@ -115,7 +119,7 @@ class EventRenderer(
             is MeetingEvent -> "📅" to magenta
             is MemoryEvent -> "🧠" to cyan
             is MessageEvent -> "💬" to blue
-            is NotificationEvent<*> -> "🔔" to white
+            is NotificationEvent<*> -> "🔔" to gray
             is ProductEvent -> "💡" to green
             is TicketEvent -> "🎫" to green
             is ToolEvent -> "🔧" to yellow

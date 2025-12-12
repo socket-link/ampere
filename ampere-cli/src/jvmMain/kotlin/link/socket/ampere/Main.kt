@@ -11,7 +11,6 @@ import link.socket.ampere.agents.definition.QualityAssuranceAgent
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.data.RepositoryFactory
 import link.socket.ampere.data.createJvmDriver
-import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.koog.KoogAgentFactory
 
@@ -29,8 +28,8 @@ fun main(args: Array<String>) {
     val ioScope = CoroutineScope(Dispatchers.IO)
     val jsonConfig = DEFAULT_JSON
 
-    val aiConfigurationFactory = AIConfigurationFactory()
     val koogAgentFactory = KoogAgentFactory()
+    val aiConfigurationFactory = AIConfigurationFactory()
     val repositoryFactory = RepositoryFactory(ioScope, databaseDriver, jsonConfig)
 
     val context = AmpereContext()
@@ -40,7 +39,6 @@ fun main(args: Array<String>) {
         scope = ioScope,
         ticketOrchestrator = environmentService.ticketOrchestrator,
         aiConfigurationFactory = aiConfigurationFactory,
-        defaultAIConfiguration = WriteCodeAgent.suggestedAIConfigurationBuilder(aiConfigurationFactory),
     )
 
     val codeAgent = agentFactory.create<CodeWriterAgent>(AgentType.CODE_WRITER)

@@ -16,9 +16,7 @@ import org.jline.terminal.Terminal
 class ObservationCommandRegistry(
     private val context: AmpereContext,
     private val terminal: Terminal,
-    private val executor: CommandExecutor,
-    private val statusBar: StatusBar,
-    private val filterCycler: EventFilterCycler
+    private val executor: CommandExecutor
 ) {
     private val renderer = CLIRenderer(TerminalFactory.createTerminal())
 
@@ -53,8 +51,7 @@ class ObservationCommandRegistry(
             val filters = parser.getAll("filter")
             val agents = parser.getAll("agent")
 
-            // Show initial status
-            statusBar.render(Mode.OBSERVING, filterCycler.current(), eventCount = 0)
+            // Show initial message
             terminal.writer().println(TerminalColors.info("Streaming events... Press Enter to stop"))
 
             executor.execute {
@@ -80,15 +77,6 @@ class ObservationCommandRegistry(
                 context.eventRelayService.subscribeToLiveEvents(relayFilters)
                     .collect { event ->
                         eventCount++
-
-                        // Update status bar every 10 events
-                        if (eventCount % 10 == 0) {
-                            statusBar.render(
-                                Mode.OBSERVING,
-                                filterCycler.current(),
-                                eventCount = eventCount
-                            )
-                        }
 
                         // Render the event
                         renderer.renderEvent(event)

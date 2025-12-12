@@ -33,6 +33,9 @@ class WatchCommand(
         Connects to the EventBus and renders events to terminal with color-coding
         and formatting for human readability.
 
+        Controls:
+          Press Ctrl+C to stop watching
+
         Examples:
           ampere watch                         # Watch all events
           ampere watch --filter TaskCreated    # Filter by event type
