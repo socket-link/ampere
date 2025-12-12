@@ -21,7 +21,7 @@ object TerminalColors {
     private const val CYAN = "\u001B[36m"
     private const val YELLOW = "\u001B[33m"
     private const val BLUE = "\u001B[34m"
-    private const val GRAY = "\u001B[90m"
+    private const val GRAY = "\u001B[37m"
     private const val BOLD = "\u001B[1m"
 
     /**
@@ -36,17 +36,4 @@ object TerminalColors {
     fun dim(message: String) = if (enabled) "$GRAY$message$RESET" else message
     fun emphasis(message: String) = if (enabled) "$BOLD$message$RESET" else message
     fun highlight(message: String) = if (enabled) "$BLUE$BOLD$message$RESET" else message
-
-    /**
-     * Returns all color test strings for verifying terminal support.
-     */
-    fun getColorTests(): List<Pair<String, String>> = listOf(
-        "Success" to success("Success message (should be green)"),
-        "Error" to error("Error message (should be red)"),
-        "Info" to info("Info message (should be cyan)"),
-        "Warning" to warning("Warning message (should be yellow)"),
-        "Highlight" to highlight("Highlighted text (should be bold blue)"),
-        "Dim" to dim("Dimmed text (should be gray)"),
-        "Emphasis" to emphasis("Emphasized text (should be bold)")
-    )
 }

@@ -27,7 +27,7 @@ sealed interface NotificationEvent<S : Subscription> : Event {
         override fun getSummary(
             formatUrgency: (Urgency) -> String,
             formatSource: (EventSource) -> String,
-        ): String = "Notification to $agentId ${formatUrgency(urgency)}"
+        ): String = "Notification to $agentId: ${event.getSummary(formatUrgency, formatSource)}"
 
 
         companion object {
@@ -50,7 +50,7 @@ sealed interface NotificationEvent<S : Subscription> : Event {
         override fun getSummary(
             formatUrgency: (Urgency) -> String,
             formatSource: (EventSource) -> String,
-        ): String = "Notification to human ${formatUrgency(urgency)}"
+        ): String = "Notification to human: ${event.getSummary(formatUrgency, formatSource)}"
 
 
         companion object {

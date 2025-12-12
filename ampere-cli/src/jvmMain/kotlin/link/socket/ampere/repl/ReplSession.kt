@@ -18,7 +18,7 @@ import org.jline.terminal.TerminalBuilder
  * This is the "brainstem interface" connecting human input to agent activity.
  */
 class ReplSession(
-    private val context: AmpereContext
+    context: AmpereContext
 ) {
     private val terminal: Terminal = TerminalBuilder.builder()
         .system(true)
@@ -38,8 +38,6 @@ class ReplSession(
 
     private val executor = CommandExecutor(terminal)
     private val statusBar = StatusBar(terminal)
-    private val modeManager = ModeManager()
-    private val filterCycler = EventFilterCycler()
 
     // Abstracted components for better separation of concerns
     private val terminalOps = TerminalOperations(terminal)
@@ -47,29 +45,9 @@ class ReplSession(
     private val helpDisplayManager = HelpDisplayManager(terminalOps)
     private val keyBindingManager = KeyBindingManager(reader)
     private val signalHandlerManager = SignalHandlerManager()
-    private val inputHandler = InputHandler(
-        terminal,
-        reader,
-        modeManager,
-        executor,
-        filterCycler,
-        terminalOps
-    )
-
-    // Add registry for observation commands
-    private val observationCommands = ObservationCommandRegistry(
-        context,
-        terminal,
-        executor,
-        statusBar,
-        filterCycler
-    )
-
-    // Add registry for action commands
-    private val actionCommands = ActionCommandRegistry(
-        context,
-        terminal
-    )
+    private val inputHandler = InputHandler(reader, executor, terminalOps)
+    private val observationCommandRegistry = ObservationCommandRegistry(context, terminal, executor)
+    private val actionCommandRegistry = ActionCommandRegistry(context, terminal)
 
     init {
         // Ensure history directory exists
@@ -118,10 +96,7 @@ class ReplSession(
     private fun runCommandLoop() {
         while (true) {
             try {
-                statusBar.render(
-                    modeManager.getCurrentMode(),
-                    if (modeManager.getCurrentMode() == Mode.OBSERVING) filterCycler.current() else null
-                )
+                statusBar.render()
 
                 val line = try {
                     inputHandler.readInput()
@@ -129,10 +104,6 @@ class ReplSession(
                     // Ctrl+D handling
                     inputHandler.handleCtrlD()
                     continue
-                } catch (e: EmergencyExitException) {
-                    // Double-Esc
-                    terminalOps.println("\n${TerminalColors.warning("Emergency exit!")}")
-                    break
                 }
 
                 if (line == null) continue
@@ -166,16 +137,13 @@ class ReplSession(
         val expandedInput = aliasExpander.expand(input)
 
         // Try observation commands first
-        val observationResult = observationCommands.executeIfMatches(expandedInput)
+        val observationResult = observationCommandRegistry.executeIfMatches(expandedInput)
         if (observationResult != null) {
-            if (observationResult == CommandResult.SUCCESS) {
-                modeManager.setMode(Mode.OBSERVING)
-            }
             return observationResult
         }
 
         // Try action commands
-        val actionResult = actionCommands.executeIfMatches(expandedInput)
+        val actionResult = actionCommandRegistry.executeIfMatches(expandedInput)
         if (actionResult != null) {
             return actionResult
         }
@@ -226,8 +194,3 @@ enum class CommandResult {
     EXIT,
     INTERRUPTED  // Added for Ctrl+C handling
 }
-
-/**
- * Exception thrown when user triggers emergency exit (double-tap Esc).
- */
-class EmergencyExitException : Exception()
