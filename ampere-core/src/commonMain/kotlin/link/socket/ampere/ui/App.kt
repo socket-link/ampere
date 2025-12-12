@@ -149,7 +149,7 @@ fun App(
                     agent = agent,
                 )
 
-                koogAgent.run("")
+                koogAgent?.run("")
 
                 onConversationFinishedExecuting()
             }
