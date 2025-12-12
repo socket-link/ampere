@@ -62,6 +62,14 @@ sealed class AIModel_Gemini(
         limits = _2_0_Flash_Lite_LIMITS,
     )
 
+    data object Pro_3_0 : AIModel_Gemini(
+        name = _3_0_Pro_NAME,
+        displayName = _3_0_Pro_DISPLAY_NAME,
+        description = _3_0_Pro_DESCRIPTION,
+        features = _3_0_Pro_FEATURES,
+        limits = _3_0_Pro_LIMITS,
+    )
+
     companion object Companion {
 
         // ---- Tools ----
@@ -81,6 +89,8 @@ sealed class AIModel_Gemini(
         )
 
         private val _2_0_Flash_Lite_TOOLS = emptyList<ProvidedTool<AITool_Gemini>>()
+
+        private val _3_0_Pro_TOOLS: List<ProvidedTool<AITool_Gemini>> = _2_5_Pro_TOOLS
 
         // ---- Rate Limits ----
 
@@ -199,6 +209,15 @@ sealed class AIModel_Gemini(
             tier3TPM = TokenCount._30m,
         )
 
+        private val _3_0_Pro_RateLimitsFactory = _2_5_Pro_RateLimitsFactory
+
+        private val _3_0_Pro_RATE_LIMITS = _3_0_Pro_RateLimitsFactory.createRateLimits(
+            tierFreeTPM = TokenCount._250k,
+            tier1TPM = TokenCount._2m,
+            tier2TPM = TokenCount._5m,
+            tier3TPM = TokenCount._8m,
+        )
+
         // ---- Token Limits ----
 
         private val CONTEXT_WINDOW_TOKENS = TokenCount._1m
@@ -217,6 +236,11 @@ sealed class AIModel_Gemini(
         )
 
         private val _2_0_Flash_Lite_TOKEN_LIMITS = _2_0_Flash_TOKEN_LIMITS
+
+        private val _3_0_Pro_TOKEN_LIMITS = TokenLimits(
+            contextWindow = CONTEXT_WINDOW_TOKENS,
+            maxOutput = TokenCount._64k,
+        )
 
         // ---- Limits ----
 
@@ -245,6 +269,11 @@ sealed class AIModel_Gemini(
             token = _2_0_Flash_Lite_TOKEN_LIMITS,
         )
 
+        private val _3_0_Pro_LIMITS = ModelLimits(
+            rate = _3_0_Pro_RATE_LIMITS,
+            token = _3_0_Pro_TOKEN_LIMITS,
+        )
+
         // ---- Training Cutoffs ----
 
         private val _2_5_Pro_CUTOFF = GMTDate(
@@ -270,6 +299,15 @@ sealed class AIModel_Gemini(
 
         private val _2_0_Flash_Lite_CUTOFF = _2_0_Flash_CUTOFF
 
+        private val _3_0_Pro_CUTOFF = GMTDate(
+            year = 2025,
+            month = Month.JANUARY,
+            dayOfMonth = 1,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
         // --- Supported Inputs ----
 
         private val _2_5_Pro_SUPPORTED_INPUTS = SupportedInputs.ALL
@@ -282,6 +320,8 @@ sealed class AIModel_Gemini(
         private val _2_5_Flash_Lite_SUPPORTED_INPUTS = _2_5_Pro_SUPPORTED_INPUTS
         private val _2_0_Flash_SUPPORTED_INPUTS = _2_5_Flash_SUPPORTED_INPUTS
         private val _2_0_Flash_Lite_SUPPORTED_INPUTS = _2_0_Flash_SUPPORTED_INPUTS
+
+        private val _3_0_Pro_SUPPORTED_INPUTS = SupportedInputs.ALL
 
         // ---- Model Features ----
 
@@ -303,7 +343,7 @@ sealed class AIModel_Gemini(
 
         private val _2_5_Flash_Lite_FEATURES = AIModelFeatures(
             availableTools = _2_5_Flash_Lite_TOOLS,
-            reasoningLevel = RelativeReasoning.NORMAL,
+            reasoningLevel = RelativeReasoning.LOW,
             speed = RelativeSpeed.FAST,
             supportedInputs = _2_5_Flash_Lite_SUPPORTED_INPUTS,
             trainingCutoffDate = _2_5_Flash_Lite_CUTOFF,
@@ -323,6 +363,14 @@ sealed class AIModel_Gemini(
             speed = RelativeSpeed.FAST,
             supportedInputs = _2_0_Flash_Lite_SUPPORTED_INPUTS,
             trainingCutoffDate = _2_0_Flash_Lite_CUTOFF,
+        )
+
+        private val _3_0_Pro_FEATURES = AIModelFeatures(
+            availableTools = _3_0_Pro_TOOLS,
+            reasoningLevel = RelativeReasoning.HIGH,
+            speed = RelativeSpeed.SLOW,
+            supportedInputs = _3_0_Pro_SUPPORTED_INPUTS,
+            trainingCutoffDate = _3_0_Pro_CUTOFF,
         )
 
         // ---- Model Names ----
@@ -347,6 +395,10 @@ sealed class AIModel_Gemini(
         private const val _2_0_Flash_Lite_DISPLAY_NAME = "Gemini 2.0 Flash Lite"
         private const val _2_0_Flash_Lite_DESCRIPTION = "A Gemini 2.0 Flash model optimized for cost efficiency and low latency."
 
+        private const val _3_0_Pro_NAME = "gemini-3-pro-latest"
+        private const val _3_0_Pro_DISPLAY_NAME = "Gemini 3 Pro"
+        private const val _3_0_Pro_DESCRIPTION = "Google's most intelligent AI model with state-of-the-art reasoning capabilities and advanced multimodal understanding. Achieves 1501 Elo on LMArena and reliably completes 10-15 coherent logical steps. Features a 1M token context window."
+
         // ---- Models ----
 
         val ALL_MODELS = listOf(
@@ -355,6 +407,7 @@ sealed class AIModel_Gemini(
             Flash_Lite_2_5,
             Flash_2_0,
             Flash_Lite_2_0,
+            Pro_3_0,
         )
     }
 }
