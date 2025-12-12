@@ -20,6 +20,9 @@ import com.github.ajalt.clikt.core.CliktCommand
  *   - ampere outcomes search: Find outcomes similar to a description
  *   - ampere outcomes executor: Show outcomes for a specific executor
  *   - ampere outcomes stats: Show aggregate outcome statistics
+ *
+ * Global flags:
+ * - --verbose / -v: Show detailed system logs during startup
  */
 class AmpereCommand : CliktCommand(
     name = "ampere",
@@ -33,6 +36,9 @@ class AmpereCommand : CliktCommand(
 
         AMPERE provides CLI tools for observing and affecting an autonomous
         multi-agent environment with built-in coordination, memory, and learning.
+
+        Global Options:
+          -v, --verbose    Show detailed system logs during startup
     """.trimIndent()
 ) {
     override fun run() = Unit
