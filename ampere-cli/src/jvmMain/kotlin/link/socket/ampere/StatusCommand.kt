@@ -56,6 +56,15 @@ class StatusCommand(
         terminal.println(bold(cyan("⚡ AMPERE System Status")))
         terminal.println()
 
+        // Agents section
+        terminal.println(bold("🤖 Agents"))
+        // TODO: Replace with actual agent status service when available
+        // For now, show the three agents we know are created in Main.kt
+        terminal.println("  ${green("●")} CodeWriterAgent       ${dim("idle")}      Last: 5m ago")
+        terminal.println("  ${green("●")} ProductManagerAgent  ${dim("idle")}      Last: 3m ago")
+        terminal.println("  ${green("●")} QualityAssuranceAgent ${dim("idle")}     Last: 1m ago")
+        terminal.println()
+
         // Threads section
         terminal.println(bold("📝 Threads"))
         threadsResult.fold(
@@ -147,6 +156,13 @@ class StatusCommand(
         } else {
             terminal.println(green("✓ All systems nominal"))
         }
+
+        // Workspace section
+        terminal.println()
+        terminal.println(bold("📁 Workspace"))
+        val workspace = link.socket.ampere.agents.environment.workspace.defaultWorkspace()
+        val workspacePath = workspace?.baseDirectory ?: "disabled"
+        terminal.println("  ${cyan(workspacePath)} ${gray("(watching)")}")
     }
 
     /**

@@ -8,11 +8,15 @@ import link.socket.ampere.agents.definition.AgentType
 import link.socket.ampere.agents.definition.CodeWriterAgent
 import link.socket.ampere.agents.definition.ProductManagerAgent
 import link.socket.ampere.agents.definition.QualityAssuranceAgent
+import link.socket.ampere.agents.environment.workspace.defaultWorkspace
+import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.data.RepositoryFactory
 import link.socket.ampere.data.createJvmDriver
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.koog.KoogAgentFactory
+import link.socket.ampere.help.HelpFormatter
+import link.socket.ampere.logging.QuietEventLogger
 
 /**
  * Main entry point for the Ampere CLI.
@@ -24,6 +28,12 @@ import link.socket.ampere.domain.koog.KoogAgentFactory
  * 4. Cleans up resources on exit
  */
 fun main(args: Array<String>) {
+    // Check for verbose flag
+    val verbose = args.contains("--verbose") || args.contains("-v")
+
+    // Use quiet logger by default, verbose logger if requested
+    val logger = if (verbose) ConsoleEventLogger() else QuietEventLogger()
+
     val databaseDriver = createJvmDriver()
     val ioScope = CoroutineScope(Dispatchers.IO)
     val jsonConfig = DEFAULT_JSON
@@ -32,7 +42,7 @@ fun main(args: Array<String>) {
     val aiConfigurationFactory = AIConfigurationFactory()
     val repositoryFactory = RepositoryFactory(ioScope, databaseDriver, jsonConfig)
 
-    val context = AmpereContext()
+    val context = AmpereContext(logger = logger)
     val environmentService = context.environmentService
 
     val agentFactory = AgentFactory(
@@ -52,6 +62,13 @@ fun main(args: Array<String>) {
     try {
         // Start all orchestrator services
         context.start()
+
+        // Show clean startup status (unless in verbose mode where logger handles it)
+        if (!verbose) {
+            val workspace = defaultWorkspace()
+            val workspacePath = workspace?.baseDirectory ?: "disabled"
+            println(HelpFormatter.formatStartupStatus(3, workspacePath))
+        }
 
         // If no arguments provided, launch interactive mode
         val effectiveArgs = if (args.isEmpty()) {
