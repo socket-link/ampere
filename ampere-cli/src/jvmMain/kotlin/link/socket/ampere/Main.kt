@@ -31,7 +31,8 @@ import link.socket.ampere.util.configureLogging
 fun main(args: Array<String>) {
     // Configure logging from environment variable (AMPERE_LOG_LEVEL)
     // CLI options (--verbose, --log-level, etc.) can override this per-command if needed
-    configureLogging(LoggingConfiguration.fromEnvironment())
+    val loggingConfig = LoggingConfiguration.fromEnvironment()
+    configureLogging(loggingConfig)
 
     val databaseDriver = createJvmDriver()
     val ioScope = CoroutineScope(Dispatchers.IO)
@@ -41,7 +42,10 @@ fun main(args: Array<String>) {
     val aiConfigurationFactory = AIConfigurationFactory()
     val repositoryFactory = RepositoryFactory(ioScope, databaseDriver, jsonConfig)
 
-    val context = AmpereContext()
+    // Create EventLogger based on logging configuration
+    val eventLogger = loggingConfig.createEventLogger()
+
+    val context = AmpereContext(logger = eventLogger)
     val environmentService = context.environmentService
 
     val agentFactory = AgentFactory(

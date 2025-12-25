@@ -60,6 +60,15 @@ class AgentMemoryService(
 
         // Emit event on success
         result.onSuccess { entry ->
+            // Extract source ID based on knowledge type
+            val sourceId = when (knowledge) {
+                is Knowledge.FromIdea -> knowledge.ideaId
+                is Knowledge.FromOutcome -> knowledge.outcomeId
+                is Knowledge.FromPerception -> knowledge.perceptionId
+                is Knowledge.FromPlan -> knowledge.planId
+                is Knowledge.FromTask -> knowledge.taskId
+            }
+
             val event = MemoryEvent.KnowledgeStored(
                 eventId = generateUUID("knowledge-stored", agentId, entry.id),
                 timestamp = Clock.System.now(),
@@ -68,6 +77,9 @@ class AgentMemoryService(
                 knowledgeType = entry.knowledgeType,
                 taskType = entry.taskType,
                 tags = entry.tags,
+                approach = knowledge.approach,
+                learnings = knowledge.learnings,
+                sourceId = sourceId,
             )
 
             eventBus.publish(event)
@@ -155,6 +167,25 @@ class AgentMemoryService(
                 .take(limit)
 
             // Emit event for observability
+            val retrievedSummaries = scoredKnowledge.take(5).map { scored ->
+                // Extract source ID based on knowledge type
+                val sourceId = when (scored.knowledge) {
+                    is Knowledge.FromIdea -> scored.knowledge.ideaId
+                    is Knowledge.FromOutcome -> scored.knowledge.outcomeId
+                    is Knowledge.FromPerception -> scored.knowledge.perceptionId
+                    is Knowledge.FromPlan -> scored.knowledge.planId
+                    is Knowledge.FromTask -> scored.knowledge.taskId
+                }
+
+                link.socket.ampere.agents.domain.event.RetrievedKnowledgeSummary(
+                    knowledgeType = scored.entry.knowledgeType,
+                    approach = scored.knowledge.approach,
+                    learnings = scored.knowledge.learnings,
+                    relevanceScore = scored.relevanceScore,
+                    sourceId = sourceId,
+                )
+            }
+
             val event = MemoryEvent.KnowledgeRecalled(
                 eventId = generateUUID("knowledge-recalled", agentId),
                 timestamp = currentTime,
@@ -167,6 +198,7 @@ class AgentMemoryService(
                     0.0
                 },
                 topKnowledgeIds = scoredKnowledge.map { it.entry.id },
+                retrievedKnowledge = retrievedSummaries,
             )
 
             eventBus.publish(event)

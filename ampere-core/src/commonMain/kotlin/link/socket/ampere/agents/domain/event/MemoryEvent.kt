@@ -7,6 +7,18 @@ import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeType
 import link.socket.ampere.agents.domain.memory.MemoryContext
 
 /**
+ * Summary of a retrieved knowledge entry for logging purposes.
+ */
+@Serializable
+data class RetrievedKnowledgeSummary(
+    val knowledgeType: KnowledgeType,
+    val approach: String,
+    val learnings: String,
+    val relevanceScore: Double,
+    val sourceId: String?,
+)
+
+/**
  * Base sealed interface for memory-related events.
  *
  * Memory events track the lifecycle of Knowledge storage and retrieval,
@@ -31,6 +43,9 @@ sealed interface MemoryEvent : Event {
         val taskType: String?,
         val tags: List<String>,
         override val urgency: Urgency = Urgency.LOW,
+        val approach: String? = null,  // What approach was tried
+        val learnings: String? = null,  // What was learned
+        val sourceId: String? = null,  // The outcome/idea/task ID this came from
     ) : MemoryEvent {
 
         override val eventType: EventType = EVENT_TYPE
@@ -39,13 +54,29 @@ sealed interface MemoryEvent : Event {
             formatUrgency: (Urgency) -> String,
             formatSource: (EventSource) -> String,
         ): String = buildString {
-            append("Knowledge stored: $knowledgeType")
-            taskType?.let { append(" ($it)") }
-            if (tags.isNotEmpty()) {
-                append(" [${tags.take(3).joinToString(", ")}]")
+            append("Knowledge stored from ")
+            append(knowledgeType.toString().replace("FROM_", "").lowercase().replaceFirstChar { it.uppercase() })
+
+            // Show source ID if available
+            sourceId?.let { append(" [$it]") }
+
+            // Show what was learned (truncated)
+            approach?.let {
+                val truncated = if (it.length > 60) it.take(60) + "..." else it
+                append(": \"$truncated\"")
             }
-            append(" ${formatUrgency(urgency)}")
-            append(" from ${formatSource(eventSource)}")
+
+            // Show task type and tags as context
+            val contextParts = mutableListOf<String>()
+            taskType?.let { contextParts.add("task=$it") }
+            if (tags.isNotEmpty()) {
+                contextParts.add("tags=${tags.take(2).joinToString(",")}")
+            }
+            if (contextParts.isNotEmpty()) {
+                append(" (${contextParts.joinToString(", ")})")
+            }
+
+            append(" by ${formatSource(eventSource)}")
         }
 
 
@@ -71,6 +102,7 @@ sealed interface MemoryEvent : Event {
         val averageRelevance: Double,
         val topKnowledgeIds: List<String>,
         override val urgency: Urgency = Urgency.LOW,
+        val retrievedKnowledge: List<RetrievedKnowledgeSummary> = emptyList(),  // Summaries of what was retrieved
     ) : MemoryEvent {
 
         override val eventType: EventType = EVENT_TYPE
@@ -79,13 +111,53 @@ sealed interface MemoryEvent : Event {
             formatUrgency: (Urgency) -> String,
             formatSource: (EventSource) -> String,
         ): String = buildString {
+            // Header: how many results
             append("Knowledge recalled: $resultsFound result(s)")
             if (resultsFound > 0) {
                 val roundedRelevance = ((averageRelevance * 100).toInt()) / 100.0
-                append(" (avg relevance: $roundedRelevance)")
+                append(" (avg relevance: ${String.format("%.2f", roundedRelevance)})")
             }
-            append(" ${formatUrgency(urgency)}")
-            append(" from ${formatSource(eventSource)}")
+
+            // Query context
+            if (context.description.isNotEmpty()) {
+                val truncated = if (context.description.length > 60) {
+                    context.description.take(60) + "..."
+                } else {
+                    context.description
+                }
+                append(" for: \"$truncated\"")
+            }
+
+            // Show task type and tags if specified
+            val contextParts = mutableListOf<String>()
+            if (context.taskType.isNotEmpty()) {
+                contextParts.add("task=${context.taskType}")
+            }
+            if (context.tags.isNotEmpty()) {
+                contextParts.add("tags=${context.tags.take(2).joinToString(",")}")
+            }
+            if (contextParts.isNotEmpty()) {
+                append(" (${contextParts.joinToString(", ")})")
+            }
+
+            append(" by ${formatSource(eventSource)}")
+
+            // Show what was actually retrieved (up to 3 entries)
+            if (retrievedKnowledge.isNotEmpty()) {
+                append("\n  Retrieved:")
+                retrievedKnowledge.take(3).forEachIndexed { index, summary ->
+                    append("\n    ${index + 1}. [${String.format("%.2f", summary.relevanceScore)}] ")
+                    val approachSnippet = if (summary.approach.length > 80) {
+                        summary.approach.take(80) + "..."
+                    } else {
+                        summary.approach
+                    }
+                    append("\"$approachSnippet\"")
+                }
+                if (retrievedKnowledge.size > 3) {
+                    append("\n    ... and ${retrievedKnowledge.size - 3} more")
+                }
+            }
         }
 
         companion object {
