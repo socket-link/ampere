@@ -32,10 +32,12 @@ import link.socket.ampere.domain.util.toClientModelId
 class QualityAssuranceAgent(
     override val agentConfiguration: AgentConfiguration,
     override val initialState: QualityAssuranceState = QualityAssuranceState.blank,
-    override val memoryService: AgentMemoryService? = null,
+    memoryServiceFactory: ((AgentId) -> AgentMemoryService)? = null,
 ) : AutonomousAgent<QualityAssuranceState>() {
 
     override val id: AgentId = generateUUID("QualityAssuranceAgent")
+
+    override val memoryService: AgentMemoryService? = memoryServiceFactory?.invoke(id)
 
     override val runLLMToEvaluatePerception: (perception: Perception<QualityAssuranceState>) -> Idea =
         { perception -> evaluatePerception(perception) }

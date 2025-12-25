@@ -37,10 +37,12 @@ class ProductManagerAgent(
     override val agentConfiguration: AgentConfiguration,
     private val ticketOrchestrator: TicketOrchestrator,
     override val initialState: ProductManagerState = ProductManagerState.blank,
-    override val memoryService: AgentMemoryService? = null,
+    memoryServiceFactory: ((AgentId) -> AgentMemoryService)? = null,
 ) : AutonomousAgent<ProductManagerState>() {
 
     override val id: AgentId = generateUUID("ProductManagerAgent")
+
+    override val memoryService: AgentMemoryService? = memoryServiceFactory?.invoke(id)
 
     override val runLLMToEvaluatePerception: (perception: Perception<ProductManagerState>) -> Idea =
         { perception -> evaluatePerception(perception) }

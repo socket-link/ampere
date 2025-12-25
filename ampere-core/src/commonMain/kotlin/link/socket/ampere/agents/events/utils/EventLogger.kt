@@ -25,30 +25,33 @@ interface EventLogger {
 }
 
 /**
- * Basic console logger that prints structured messages.
+ * Basic console logger that prints structured messages to stderr.
+ *
+ * Uses stderr to avoid mixing with application output (stdout),
+ * which is especially important for dashboard and watch commands.
  */
 class ConsoleEventLogger : EventLogger {
 
     override fun logPublish(event: Event) {
-        println(
+        System.err.println(
             "[EventBus][PUBLISH] type=${event.eventType} id=${event.eventId} ts=${event.timestamp} src=${event.eventSource.getIdentifier()}",
         )
     }
 
     override fun logSubscription(eventType: EventType, subscription: Subscription) {
-        println("[EventBus][SUBSCRIPTION] type=$eventType subscription=$subscription")
+        System.err.println("[EventBus][SUBSCRIPTION] type=$eventType subscription=$subscription")
     }
 
     override fun logUnsubscription(eventType: EventType, subscription: Subscription) {
-        println("[EventBus][UNSUBSCRIPTION] type=$eventType subscription=$subscription")
+        System.err.println("[EventBus][UNSUBSCRIPTION] type=$eventType subscription=$subscription")
     }
 
     override fun logError(message: String, throwable: Throwable?) {
-        println("[EventBus][ERROR] $message" + (throwable?.let { ": ${it::class.simpleName} - ${it.message}" } ?: ""))
+        System.err.println("[EventBus][ERROR] $message" + (throwable?.let { ": ${it::class.simpleName} - ${it.message}" } ?: ""))
         throwable?.printStackTrace()
     }
 
     override fun logInfo(message: String) {
-        println("[EventBus][INFO] $message")
+        System.err.println("[EventBus][INFO] $message")
     }
 }

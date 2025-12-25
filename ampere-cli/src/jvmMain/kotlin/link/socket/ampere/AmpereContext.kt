@@ -7,8 +7,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.Json
+import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeRepository
+import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.environment.workspace.defaultWorkspace
@@ -120,6 +124,32 @@ class AmpereContext(
      */
     val outcomeMemoryRepository: OutcomeMemoryRepository
         get() = environmentService.outcomeMemoryRepository
+
+    /**
+     * Knowledge repository for persistent agent memory.
+     * Shared across all agents to enable learning from each other's experiences.
+     */
+    private val knowledgeRepository: KnowledgeRepository by lazy {
+        KnowledgeRepositoryImpl(database)
+    }
+
+    /**
+     * Create an agent memory service for the specified agent.
+     *
+     * This factory method creates per-agent memory service instances that share
+     * the same underlying repository. This allows agents to learn from each other's
+     * experiences while maintaining agent-specific filtering and event tracking.
+     *
+     * @param agentId The ID of the agent that will use this memory service
+     * @return A configured AgentMemoryService instance
+     */
+    fun createMemoryService(agentId: AgentId): AgentMemoryService {
+        return AgentMemoryService(
+            agentId = agentId,
+            knowledgeRepository = knowledgeRepository,
+            eventBus = environmentService.eventBus
+        )
+    }
 
     /**
      * Ticket action service for creating and managing tickets from CLI.
@@ -260,11 +290,141 @@ class AmpereContext(
             logger: EventLogger,
             driver: JdbcSqliteDriver,
         ): Database {
-            // Check if the main table exists to determine if we need to create the schema
-            val schemaExists = try {
+            // Check if all required tables exist
+            val eventStoreExists = tableExists(driver, "EventStore")
+            val knowledgeStoreExists = tableExists(driver, "KnowledgeStore")
+
+            if (!eventStoreExists) {
+                // Full schema doesn't exist, create it
+                logger.logInfo("Database schema doesn't exist, creating all tables...")
+                try {
+                    Database.Schema.create(driver)
+                    logger.logInfo("Database schema created successfully")
+                } catch (e: Exception) {
+                    logger.logError("Error creating database schema: ${e.message}")
+                }
+            } else if (!knowledgeStoreExists) {
+                // EventStore exists but KnowledgeStore doesn't - need to add new tables
+                logger.logInfo("Adding KnowledgeStore tables to existing database...")
+                try {
+                    createKnowledgeStoreTables(driver)
+                    logger.logInfo("KnowledgeStore tables created successfully")
+                } catch (e: Exception) {
+                    logger.logError("Error creating KnowledgeStore tables: ${e.message}")
+                }
+            }
+
+            return Database(driver)
+        }
+
+        /**
+         * Manually create KnowledgeStore tables for existing databases.
+         */
+        private fun createKnowledgeStoreTables(driver: JdbcSqliteDriver) {
+            // Create KnowledgeStore table
+            driver.execute(
+                null,
+                """
+                CREATE TABLE IF NOT EXISTS KnowledgeStore (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    knowledge_type TEXT NOT NULL,
+                    approach TEXT NOT NULL,
+                    learnings TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    idea_id TEXT,
+                    outcome_id TEXT,
+                    perception_id TEXT,
+                    plan_id TEXT,
+                    task_id TEXT,
+                    task_type TEXT,
+                    complexity_level TEXT
+                )
+                """.trimIndent(),
+                0
+            )
+
+            // Create indexes
+            driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_knowledge_type ON KnowledgeStore(knowledge_type)", 0)
+            driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_knowledge_timestamp ON KnowledgeStore(timestamp DESC)", 0)
+            driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_knowledge_task_type ON KnowledgeStore(task_type)", 0)
+            driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_knowledge_complexity ON KnowledgeStore(complexity_level)", 0)
+
+            // Create KnowledgeTag table
+            driver.execute(
+                null,
+                """
+                CREATE TABLE IF NOT EXISTS KnowledgeTag (
+                    knowledge_id TEXT NOT NULL,
+                    tag TEXT NOT NULL,
+                    PRIMARY KEY (knowledge_id, tag),
+                    FOREIGN KEY (knowledge_id) REFERENCES KnowledgeStore(id) ON DELETE CASCADE
+                )
+                """.trimIndent(),
+                0
+            )
+
+            // Create tag indexes
+            driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_knowledge_tag_tag ON KnowledgeTag(tag)", 0)
+            driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_knowledge_tag_knowledge_id ON KnowledgeTag(knowledge_id)", 0)
+
+            // Create FTS table
+            driver.execute(
+                null,
+                """
+                CREATE VIRTUAL TABLE IF NOT EXISTS KnowledgeFts USING fts5(
+                    knowledge_id UNINDEXED,
+                    approach,
+                    learnings,
+                    content=KnowledgeStore,
+                    content_rowid=rowid
+                )
+                """.trimIndent(),
+                0
+            )
+
+            // Create triggers
+            driver.execute(
+                null,
+                """
+                CREATE TRIGGER IF NOT EXISTS knowledge_fts_insert AFTER INSERT ON KnowledgeStore BEGIN
+                    INSERT INTO KnowledgeFts(rowid, knowledge_id, approach, learnings)
+                    VALUES (new.rowid, new.id, new.approach, new.learnings);
+                END
+                """.trimIndent(),
+                0
+            )
+
+            driver.execute(
+                null,
+                """
+                CREATE TRIGGER IF NOT EXISTS knowledge_fts_delete AFTER DELETE ON KnowledgeStore BEGIN
+                    DELETE FROM KnowledgeFts WHERE rowid = old.rowid;
+                END
+                """.trimIndent(),
+                0
+            )
+
+            driver.execute(
+                null,
+                """
+                CREATE TRIGGER IF NOT EXISTS knowledge_fts_update AFTER UPDATE ON KnowledgeStore BEGIN
+                    DELETE FROM KnowledgeFts WHERE rowid = old.rowid;
+                    INSERT INTO KnowledgeFts(rowid, knowledge_id, approach, learnings)
+                    VALUES (new.rowid, new.id, new.approach, new.learnings);
+                END
+                """.trimIndent(),
+                0
+            )
+        }
+
+        /**
+         * Check if a table exists in the database.
+         */
+        private fun tableExists(driver: JdbcSqliteDriver, tableName: String): Boolean {
+            return try {
                 driver.executeQuery(
                     identifier = null,
-                    sql = "SELECT name FROM sqlite_master WHERE type='table' AND name='EventStore'",
+                    sql = "SELECT name FROM sqlite_master WHERE type='table' AND name='$tableName'",
                     mapper = { cursor ->
                         app.cash.sqldelight.db.QueryResult.Value(cursor.next().value)
                     },
@@ -272,16 +432,8 @@ class AmpereContext(
                     binders = null
                 ).value
             } catch (e: Exception) {
-                logger.logError("Error checking database schema: ${e.message}")
                 false
             }
-
-            if (!schemaExists) {
-                // Schema doesn't exist, create it
-                Database.Schema.create(driver)
-            }
-
-            return Database(driver)
         }
     }
 }
