@@ -9,30 +9,29 @@ import link.socket.ampere.agents.definition.CodeWriterAgent
 import link.socket.ampere.agents.definition.ProductManagerAgent
 import link.socket.ampere.agents.definition.QualityAssuranceAgent
 import link.socket.ampere.agents.environment.workspace.defaultWorkspace
-import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.data.RepositoryFactory
 import link.socket.ampere.data.createJvmDriver
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.koog.KoogAgentFactory
+import link.socket.ampere.util.LoggingConfiguration
 import link.socket.ampere.help.HelpFormatter
-import link.socket.ampere.logging.QuietEventLogger
+import link.socket.ampere.util.configureLogging
 
 /**
  * Main entry point for the Ampere CLI.
  *
  * This function:
- * 1. Creates an AmpereContext to initialize all dependencies
- * 2. Starts the environment orchestrator
- * 3. Runs the CLI command (defaults to interactive mode if no args)
- * 4. Cleans up resources on exit
+ * 1. Configures logging based on environment variables
+ * 2. Creates an AmpereContext to initialize all dependencies
+ * 3. Starts the environment orchestrator
+ * 4. Runs the CLI command (defaults to interactive mode if no args)
+ * 5. Cleans up resources on exit
  */
 fun main(args: Array<String>) {
-    // Check for verbose flag
-    val verbose = args.contains("--verbose") || args.contains("-v")
-
-    // Use quiet logger by default, verbose logger if requested
-    val logger = if (verbose) ConsoleEventLogger() else QuietEventLogger()
+    // Configure logging from environment variable (AMPERE_LOG_LEVEL)
+    // CLI options (--verbose, --log-level, etc.) can override this per-command if needed
+    configureLogging(LoggingConfiguration.fromEnvironment())
 
     val databaseDriver = createJvmDriver()
     val ioScope = CoroutineScope(Dispatchers.IO)
@@ -42,13 +41,14 @@ fun main(args: Array<String>) {
     val aiConfigurationFactory = AIConfigurationFactory()
     val repositoryFactory = RepositoryFactory(ioScope, databaseDriver, jsonConfig)
 
-    val context = AmpereContext(logger = logger)
+    val context = AmpereContext()
     val environmentService = context.environmentService
 
     val agentFactory = AgentFactory(
         scope = ioScope,
         ticketOrchestrator = environmentService.ticketOrchestrator,
         aiConfigurationFactory = aiConfigurationFactory,
+        memoryServiceFactory = { agentId -> context.createMemoryService(agentId) }
     )
 
     val codeAgent = agentFactory.create<CodeWriterAgent>(AgentType.CODE_WRITER)
@@ -63,13 +63,6 @@ fun main(args: Array<String>) {
         // Start all orchestrator services
         context.start()
 
-        // Show clean startup status (unless in verbose mode where logger handles it)
-        if (!verbose) {
-            val workspace = defaultWorkspace()
-            val workspacePath = workspace?.baseDirectory ?: "disabled"
-            println(HelpFormatter.formatStartupStatus(3, workspacePath))
-        }
-
         // If no arguments provided, launch interactive mode
         val effectiveArgs = if (args.isEmpty()) {
             arrayOf("interactive")
@@ -82,6 +75,7 @@ fun main(args: Array<String>) {
             .subcommands(
                 InteractiveCommand(context),
                 WatchCommand(context.eventRelayService),
+                DashboardCommand(context.eventRelayService),
                 ThreadCommand(context.threadViewService),
                 StatusCommand(context.threadViewService, context.ticketViewService),
                 OutcomesCommand(context.outcomeMemoryRepository)

@@ -34,13 +34,21 @@ sealed interface AIProvider<
             AIProvider_OpenAI,
         )
 
+        /**
+         * Global log level for OpenAI client HTTP logging.
+         * Set this before accessing any provider clients to configure logging.
+         * Defaults to None (quiet).
+         */
+        var globalLogLevel: LogLevel = LogLevel.None
+
         fun createClient(
             token: String,
             url: String? = null,
+            logLevel: LogLevel = globalLogLevel,
         ): Client = Client(
             token = token,
             logging = LoggingConfig(
-                logLevel = LogLevel.All,
+                logLevel = logLevel,
                 logger = Logger.Simple,
             ),
             timeout = Timeout(socket = 1.hours),

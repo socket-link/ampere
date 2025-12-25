@@ -59,9 +59,13 @@ open class CodeWriterAgent(
     private val coroutineScope: CoroutineScope,
     override val initialState: AgentState = CodeWriterState.blank,
     private val executor: Executor = FunctionExecutor.create(),
+    memoryServiceFactory: ((AgentId) -> link.socket.ampere.agents.domain.memory.AgentMemoryService)? = null,
 ) : AutonomousAgent<AgentState>() {
 
     override val id: AgentId = generateUUID("CodeWriterAgent")
+
+    override val memoryService: link.socket.ampere.agents.domain.memory.AgentMemoryService? =
+        memoryServiceFactory?.invoke(id)
 
     override val requiredTools: Set<Tool<*>> =
         setOf(toolWriteCodeFile)

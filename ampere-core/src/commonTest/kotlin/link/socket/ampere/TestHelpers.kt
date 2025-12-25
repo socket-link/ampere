@@ -154,7 +154,6 @@ fun stubProductManagerAgent(
         initialState = initialState,
         agentConfiguration = agentConfiguration,
         ticketOrchestrator = ticketOrchestrator,
-        memoryService = null,
     )
 
 fun stubQualityAssuranceState(
@@ -175,5 +174,4 @@ fun stubQualityAssuranceAgent(
     QualityAssuranceAgent(
         initialState = initialState,
         agentConfiguration = agentConfiguration,
-        memoryService = null,
     )

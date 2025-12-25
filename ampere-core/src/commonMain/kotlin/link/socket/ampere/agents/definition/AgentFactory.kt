@@ -3,6 +3,7 @@ package link.socket.ampere.agents.definition
 import kotlinx.coroutines.CoroutineScope
 import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.config.AgentConfiguration
+import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.events.tickets.TicketOrchestrator
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.Tool
@@ -21,6 +22,7 @@ class AgentFactory(
     private val scope: CoroutineScope,
     private val ticketOrchestrator: TicketOrchestrator,
     private val aiConfigurationFactory: AIConfigurationFactory,
+    private val memoryServiceFactory: ((AgentId) -> AgentMemoryService)? = null,
 ) {
     private val toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode> =
         ToolWriteCodeFile(AgentActionAutonomy.ASK_BEFORE_ACTION)
@@ -41,13 +43,16 @@ class AgentFactory(
             agentConfiguration = agentConfiguration,
             toolWriteCodeFile = toolWriteCodeFile,
             coroutineScope = scope,
+            memoryServiceFactory = memoryServiceFactory,
         ) as A
         AgentType.PRODUCT_MANAGER -> ProductManagerAgent(
             agentConfiguration = agentConfiguration,
             ticketOrchestrator = ticketOrchestrator,
+            memoryServiceFactory = memoryServiceFactory,
         ) as A
         AgentType.QUALITY_ASSURANCE -> QualityAssuranceAgent(
             agentConfiguration = agentConfiguration,
+            memoryServiceFactory = memoryServiceFactory,
         ) as A
     }
 

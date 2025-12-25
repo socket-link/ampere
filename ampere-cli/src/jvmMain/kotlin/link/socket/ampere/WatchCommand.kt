@@ -1,14 +1,20 @@
 package link.socket.ampere
 
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.parameters.options.default
+import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
+import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.relay.EventRelayFilters
 import link.socket.ampere.agents.events.relay.EventRelayService
+import link.socket.ampere.cli.watch.presentation.CognitiveClusterer
+import link.socket.ampere.cli.watch.presentation.EventCategorizer
+import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.renderer.CLIRenderer
 import link.socket.ampere.repl.TerminalFactory
 import link.socket.ampere.util.EventTypeParser
@@ -33,14 +39,22 @@ class WatchCommand(
         Connects to the EventBus and renders events to terminal with color-coding
         and formatting for human readability.
 
+        By default, routine cognitive operations (knowledge recall/storage) are hidden
+        to reduce noise. Use --verbose or --filter-significance all to see everything.
+
         Controls:
           Press Ctrl+C to stop watching
 
         Examples:
-          ampere watch                         # Watch all events
-          ampere watch --filter TaskCreated    # Filter by event type
+          ampere watch                                        # Watch significant events (default)
+          ampere watch --verbose                              # Show all events including routine
+          ampere watch --group-cognitive-cycles               # Group knowledge recall/store cycles
+          ampere watch -g -v                                  # Group cycles + show all events
+          ampere watch --filter-significance critical         # Only critical events
+          ampere watch --filter TaskCreated                   # Filter by event type
           ampere watch --filter TaskCreated --filter QuestionRaised  # Multiple types
-          ampere watch --agent agent-pm        # Filter by agent ID
+          ampere watch --agent agent-pm                       # Filter by agent ID
+          ampere watch --agent ProductManagerAgent --verbose  # Agent filter + all events
     """.trimIndent()
 ) {
     // Repeatable option for filtering by event types
@@ -55,6 +69,24 @@ class WatchCommand(
         help = "Filter by agent ID (e.g., agent-pm, agent-dev). Repeatable."
     ).multiple()
 
+    // Option for filtering by event significance
+    private val filterSignificance by option(
+        "--filter-significance", "-s",
+        help = "Filter by event significance: all, significant, critical. Default: significant (hides routine events)."
+    ).default("significant")
+
+    // Flag for verbose mode (show all events including routine)
+    private val verbose by option(
+        "--verbose", "-v",
+        help = "Show all events including routine cognitive operations (equivalent to --filter-significance all)."
+    ).flag()
+
+    // Flag for grouping cognitive cycles
+    private val groupCognitiveCycles by option(
+        "--group-cognitive-cycles", "-g",
+        help = "Group related knowledge recall/store events into cognitive cycles for cleaner output."
+    ).flag()
+
     override fun run() = runBlocking {
         // Show startup banner
         renderer.renderWatchBanner()
@@ -66,6 +98,12 @@ class WatchCommand(
             // Show active filters
             renderer.renderActiveFilters(filters)
 
+            // Create clusterer if grouping is enabled
+            val clusterer = if (groupCognitiveCycles) CognitiveClusterer() else null
+
+            // Track which events are part of clusters
+            val clusteredEventIds = mutableSetOf<String>()
+
             // Subscribe to live events and render them
             renderer.renderWatchStart()
 
@@ -73,7 +111,28 @@ class WatchCommand(
                 .collect { event ->
                     // Check if coroutine is cancelled before processing
                     ensureActive()
-                    renderer.renderEvent(event)
+
+                    // Try to cluster the event if grouping is enabled
+                    if (clusterer != null) {
+                        val cluster = clusterer.processEvent(event)
+                        if (cluster != null) {
+                            // Mark all events in the cluster as processed
+                            cluster.events.forEach { clusteredEventIds.add(it.eventId) }
+
+                            // Render the cluster
+                            renderer.renderCognitiveCluster(cluster)
+                        } else if (event.eventId !in clusteredEventIds) {
+                            // Event not part of a cluster yet, render it normally
+                            if (shouldDisplayEvent(event)) {
+                                renderer.renderEvent(event)
+                            }
+                        }
+                    } else {
+                        // No clustering, just filter by significance
+                        if (shouldDisplayEvent(event)) {
+                            renderer.renderEvent(event)
+                        }
+                    }
                 }
         } catch (e: CancellationException) {
             // Gracefully handle cancellation - just stop collecting
@@ -112,5 +171,23 @@ class WatchCommand(
             eventTypes = eventTypes,
             eventSources = eventSources
         )
+    }
+
+    /**
+     * Determine if an event should be displayed based on significance filtering.
+     */
+    private fun shouldDisplayEvent(event: Event): Boolean {
+        // Verbose mode shows everything
+        if (verbose) return true
+
+        val significance = EventCategorizer.categorize(event)
+
+        return when (filterSignificance.lowercase()) {
+            "all" -> true
+            "significant" -> significance == EventSignificance.SIGNIFICANT ||
+                           significance == EventSignificance.CRITICAL
+            "critical" -> significance == EventSignificance.CRITICAL
+            else -> significance.shouldDisplayByDefault
+        }
     }
 }

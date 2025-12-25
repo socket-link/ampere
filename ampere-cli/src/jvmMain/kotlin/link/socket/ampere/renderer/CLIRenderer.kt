@@ -12,9 +12,12 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.events.messages.MessageSender
 import link.socket.ampere.agents.events.relay.EventRelayFilters
 import link.socket.ampere.agents.events.tickets.TicketSummary
+import link.socket.ampere.cli.watch.presentation.CognitiveCluster
+import link.socket.ampere.cli.watch.presentation.CognitiveClusterType
 
 /**
  * Central renderer for all CLI output.
@@ -228,6 +231,52 @@ class CLIRenderer(
     }
 
     // ============================================================
+    // Cognitive Cluster Rendering
+    // ============================================================
+
+    /**
+     * Render a cognitive cluster with tree characters showing grouped events.
+     */
+    fun renderCognitiveCluster(cluster: CognitiveCluster) {
+        val timestamp = formatClusterTimestamp(cluster.startTimestamp)
+        val agentName = extractAgentName(cluster.agentId)
+
+        when (cluster.cycleType) {
+            CognitiveClusterType.KNOWLEDGE_RECALL_STORE -> {
+                // Header line with timestamp and cluster type
+                terminal.println(dim(timestamp) + "  🧠  " + cyan("Cognitive Cycle") + " " + dim("($agentName)"))
+
+                // Render each event in the cluster with tree characters
+                cluster.events.forEachIndexed { index, event ->
+                    val isLast = index == cluster.events.lastIndex
+                    val prefix = if (isLast) "     └─ " else "     ├─ "
+
+                    val description = when (event) {
+                        is MemoryEvent.KnowledgeRecalled -> {
+                            "recalled ${event.resultsFound} item(s)" +
+                                if (event.resultsFound > 0) {
+                                    val roundedRelevance = ((event.averageRelevance * 100).toInt()) / 100.0
+                                    " (avg relevance: $roundedRelevance)"
+                                } else ""
+                        }
+                        is MemoryEvent.KnowledgeStored -> {
+                            "stored ${event.knowledgeType} knowledge" +
+                                (event.taskType?.let { " ($it)" } ?: "")
+                        }
+                        else -> event.eventType
+                    }
+
+                    terminal.println(dim(prefix + description))
+                }
+            }
+            else -> {
+                // Other cluster types (future extension)
+                terminal.println(dim("$timestamp  📦  ${cluster.cycleType} from $agentName"))
+            }
+        }
+    }
+
+    // ============================================================
     // Utilities
     // ============================================================
 
@@ -241,6 +290,25 @@ class CLIRenderer(
             if (includeSeconds) {
                 append(":${localDateTime.second.toString().padStart(2, '0')}")
             }
+        }
+    }
+
+    private fun formatClusterTimestamp(instant: Instant): String {
+        return formatTimestamp(instant, includeDate = false, includeSeconds = true)
+    }
+
+    /**
+     * Extract a readable agent name from the agent ID.
+     * Agent IDs follow pattern: UUID-AgentName
+     */
+    private fun extractAgentName(agentId: String): String {
+        // Try to extract the agent name after the last hyphen
+        val parts = agentId.split("-")
+        return if (parts.size > 1 && parts.last().contains("Agent")) {
+            parts.last()
+        } else {
+            // Fallback to last 16 characters
+            agentId.takeLast(16)
         }
     }
 }

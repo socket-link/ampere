@@ -1,6 +1,9 @@
 package link.socket.ampere
 
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.parameters.options.flag
+import com.github.ajalt.clikt.parameters.options.option
+import link.socket.ampere.util.LoggingConfiguration
 
 /**
  * Root command for the Ampere CLI.
@@ -37,8 +40,12 @@ class AmpereCommand : CliktCommand(
         AMPERE provides CLI tools for observing and affecting an autonomous
         multi-agent environment with built-in coordination, memory, and learning.
 
-        Global Options:
-          -v, --verbose    Show detailed system logs during startup
+        Commands:
+        • watch       - Stream events in real-time (with filtering and grouping)
+        • dashboard  - Live-updating dashboard view of system state
+        • thread      - View and manage conversation threads
+        • status      - System-wide status overview
+        • outcomes   - Query execution outcomes and learnings
     """.trimIndent()
 ) {
     override fun run() = Unit
