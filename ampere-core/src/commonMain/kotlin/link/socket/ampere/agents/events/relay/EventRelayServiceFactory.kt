@@ -19,11 +19,11 @@ object EventRelayServiceFactory {
      */
     fun create(
         eventSerialBus: EventSerialBus,
-        eventRepository: EventRepository
+        eventRepository: EventRepository,
     ): EventRelayService {
         return EventRelayServiceImpl(
             eventSerialBus = eventSerialBus,
-            eventRepository = eventRepository
+            eventRepository = eventRepository,
         )
     }
 }

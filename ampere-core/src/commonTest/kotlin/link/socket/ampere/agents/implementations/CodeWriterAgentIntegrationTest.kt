@@ -77,14 +77,14 @@ class CodeWriterAgentIntegrationTest {
             mockPerception = ::createMockIdea,
             mockPlanning = ::createMockPlan,
             mockExecution = ::createMockSuccessOutcome,
-            mockEvaluation = ::createMockEvaluationIdea
+            mockEvaluation = ::createMockEvaluationIdea,
         )
 
         // Create a simple code change task
         val task = Task.CodeChange(
             id = "simple-task-1",
             status = TaskStatus.Pending,
-            description = "Create a simple data class User with fields name and email"
+            description = "Create a simple data class User with fields name and email",
         )
 
         // Run through the complete cognitive cycle
@@ -139,13 +139,13 @@ class CodeWriterAgentIntegrationTest {
             mockPerception = ::createMockIdea,
             mockPlanning = ::createMockPlan,
             mockExecution = ::createMockSuccessOutcome,
-            mockEvaluation = ::createMockEvaluationIdea
+            mockEvaluation = ::createMockEvaluationIdea,
         )
 
         val task = Task.CodeChange(
             id = "state-transition-task",
             status = TaskStatus.Pending,
-            description = "Test state transitions"
+            description = "Test state transitions",
         )
 
         // Initial state - should be blank
@@ -168,7 +168,11 @@ class CodeWriterAgentIntegrationTest {
         // Execute task
         val outcome = agent.runTask(task)
         val afterExecution = agent.getCurrentState()
-        assertEquals(outcome.id, afterExecution.getCurrentMemory().outcome.id, "Outcome should be stored in current memory")
+        assertEquals(
+            outcome.id,
+            afterExecution.getCurrentMemory().outcome.id,
+            "Outcome should be stored in current memory",
+        )
 
         // Verify past memory has accumulated
         val finalState = agent.getCurrentState()
@@ -195,14 +199,14 @@ class CodeWriterAgentIntegrationTest {
             agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
-            executor = FunctionExecutor.create()
+            executor = FunctionExecutor.create(),
         )
 
         // First task - execute and generate learnings
         val firstTask = Task.CodeChange(
             id = "learning-task-1",
             status = TaskStatus.Pending,
-            description = "Implement user authentication"
+            description = "Implement user authentication",
         )
 
         val firstPlan = agent.determinePlanForTask(firstTask, relevantKnowledge = emptyList())
@@ -216,14 +220,14 @@ class CodeWriterAgentIntegrationTest {
 
         // Store knowledge in agent state
         agent.getCurrentState().addToPastKnowledge(
-            rememberedKnowledgeFromOutcomes = listOf(firstKnowledge)
+            rememberedKnowledgeFromOutcomes = listOf(firstKnowledge),
         )
 
         // Second task - should benefit from first task's learnings
         val secondTask = Task.CodeChange(
             id = "learning-task-2",
             status = TaskStatus.Pending,
-            description = "Implement user authorization"
+            description = "Implement user authorization",
         )
 
         // Verify learnings are available in state
@@ -231,11 +235,11 @@ class CodeWriterAgentIntegrationTest {
         val knowledgeFromPastOutcomes = stateBeforeSecondTask.getPastMemory().knowledgeFromOutcomes
         assertTrue(
             knowledgeFromPastOutcomes.isNotEmpty(),
-            "Past knowledge should be available for second task"
+            "Past knowledge should be available for second task",
         )
         assertTrue(
             knowledgeFromPastOutcomes.any { it.approach == firstKnowledge.approach },
-            "First task's knowledge should be retrievable"
+            "First task's knowledge should be retrievable",
         )
 
         // Execute second task
@@ -263,13 +267,13 @@ class CodeWriterAgentIntegrationTest {
             agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
-            executor = FunctionExecutor.create()
+            executor = FunctionExecutor.create(),
         )
 
         val task = Task.CodeChange(
             id = "failure-task",
             status = TaskStatus.Pending,
-            description = "Task that will fail"
+            description = "Task that will fail",
         )
 
         // Execute task (should fail)
@@ -287,19 +291,19 @@ class CodeWriterAgentIntegrationTest {
         val failureKnowledge = agent.extractKnowledgeFromOutcome(
             outcome,
             task,
-            Plan.ForTask(task = task)
+            Plan.ForTask(task = task),
         )
         assertNotNull(failureKnowledge)
         assertTrue(
             failureKnowledge.learnings.contains("fail", ignoreCase = true),
-            "Learnings should mention failure"
+            "Learnings should mention failure",
         )
 
         // Verify agent can continue - create another task
         val recoveryTask = Task.CodeChange(
             id = "recovery-task",
             status = TaskStatus.Pending,
-            description = "Task after failure"
+            description = "Task after failure",
         )
 
         // Agent should still be able to plan and execute
@@ -333,25 +337,25 @@ class CodeWriterAgentIntegrationTest {
             mockPerception = ::createMockIdea,
             mockPlanning = ::createMockPlan,
             mockExecution = ::createMockSuccessOutcome,
-            mockEvaluation = ::createMockEvaluationIdea
+            mockEvaluation = ::createMockEvaluationIdea,
         )
 
         val tasks = listOf(
             Task.CodeChange(
                 id = "seq-task-1",
                 status = TaskStatus.Pending,
-                description = "Create User data class"
+                description = "Create User data class",
             ),
             Task.CodeChange(
                 id = "seq-task-2",
                 status = TaskStatus.Pending,
-                description = "Create UserRepository interface"
+                description = "Create UserRepository interface",
             ),
             Task.CodeChange(
                 id = "seq-task-3",
                 status = TaskStatus.Pending,
-                description = "Create UserService class"
-            )
+                description = "Create UserService class",
+            ),
         )
 
         val outcomes = mutableListOf<Outcome>()
@@ -369,7 +373,7 @@ class CodeWriterAgentIntegrationTest {
             // Extract and store knowledge
             val knowledge = agent.extractKnowledgeFromOutcome(outcome, task, plan)
             agent.getCurrentState().addToPastKnowledge(
-                rememberedKnowledgeFromOutcomes = listOf(knowledge)
+                rememberedKnowledgeFromOutcomes = listOf(knowledge),
             )
         }
 
@@ -384,15 +388,15 @@ class CodeWriterAgentIntegrationTest {
         val pastMemory = finalState.getPastMemory()
         assertTrue(
             pastMemory.knowledgeFromOutcomes.size >= 3,
-            "Should have accumulated knowledge from all tasks"
+            "Should have accumulated knowledge from all tasks",
         )
         assertTrue(
             pastMemory.tasks.size >= 3,
-            "Should have accumulated task history"
+            "Should have accumulated task history",
         )
         assertTrue(
             pastMemory.outcomes.size >= 3,
-            "Should have accumulated outcome history"
+            "Should have accumulated outcome history",
         )
     }
 
@@ -419,13 +423,13 @@ class CodeWriterAgentIntegrationTest {
             agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
-            executor = instrumentedExecutor
+            executor = instrumentedExecutor,
         )
 
         val task = Task.CodeChange(
             id = "executor-test-task",
             status = TaskStatus.Pending,
-            description = "Test executor usage"
+            description = "Test executor usage",
         )
 
         // Execute task
@@ -434,7 +438,7 @@ class CodeWriterAgentIntegrationTest {
         // Verify executor was called (not tool directly)
         assertTrue(
             instrumentedExecutor.executorWasCalled,
-            "Agent should invoke tools through executor, not directly"
+            "Agent should invoke tools through executor, not directly",
         )
     }
 
@@ -459,7 +463,7 @@ class CodeWriterAgentIntegrationTest {
             agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
-            executor = FunctionExecutor.create()
+            executor = FunctionExecutor.create(),
         )
 
         // Vague, natural language requirement (like a PM might give)
@@ -468,7 +472,7 @@ class CodeWriterAgentIntegrationTest {
         val task = Task.CodeChange(
             id = "jazz-test-task",
             status = TaskStatus.Pending,
-            description = vagueRequirement
+            description = vagueRequirement,
         )
 
         // Agent should autonomously transform this vague requirement into concrete code
@@ -504,7 +508,7 @@ class CodeWriterAgentIntegrationTest {
 
         assertTrue(
             plan.tasks.isNotEmpty() && outcome !is Outcome.Blank,
-            "Jazz Test: Agent should autonomously transform vague requirement into concrete action"
+            "Jazz Test: Agent should autonomously transform vague requirement into concrete action",
         )
     }
 
@@ -525,14 +529,14 @@ class CodeWriterAgentIntegrationTest {
             agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
-            executor = FunctionExecutor.create()
+            executor = FunctionExecutor.create(),
         )
 
         // Set initial task
         val task = Task.CodeChange(
             id = "runtime-loop-task",
             status = TaskStatus.Pending,
-            description = "Test runtime loop"
+            description = "Test runtime loop",
         )
         agent.getCurrentState().setNewTask(task)
 
@@ -556,7 +560,7 @@ class CodeWriterAgentIntegrationTest {
         // - Evaluated outcomes
         assertTrue(
             pastMemory.ideas.isNotEmpty() || pastMemory.plans.isNotEmpty(),
-            "Runtime loop should have executed cognitive functions"
+            "Runtime loop should have executed cognitive functions",
         )
 
         // Cleanup
@@ -578,7 +582,7 @@ class CodeWriterAgentIntegrationTest {
         mockPerception: ((Perception<AgentState>) -> Idea)? = null,
         mockPlanning: ((Task, List<Idea>) -> Plan)? = null,
         mockExecution: ((Task) -> Outcome)? = null,
-        mockEvaluation: ((List<Outcome>) -> Idea)? = null
+        mockEvaluation: ((List<Outcome>) -> Idea)? = null,
     ) : CodeWriterAgent(agentConfiguration, toolWriteCodeFile, coroutineScope, initialState, executor) {
 
         override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea =
@@ -600,7 +604,7 @@ class CodeWriterAgentIntegrationTest {
     private fun createMockIdea(perception: Perception<AgentState>): Idea {
         return Idea(
             name = "Mock perception analysis",
-            description = "Agent should execute the pending task (confidence: high)"
+            description = "Agent should execute the pending task (confidence: high)",
         )
     }
 
@@ -611,7 +615,7 @@ class CodeWriterAgentIntegrationTest {
         return Plan.ForTask(
             task = task,
             tasks = listOf(task),
-            estimatedComplexity = 1
+            estimatedComplexity = 1,
         )
     }
 
@@ -622,7 +626,7 @@ class CodeWriterAgentIntegrationTest {
         return TaskOutcome.Success.Full(
             id = "mock-outcome-${task.id}",
             task = task,
-            value = "Mock execution completed successfully"
+            value = "Mock execution completed successfully",
         )
     }
 
@@ -632,7 +636,7 @@ class CodeWriterAgentIntegrationTest {
     private fun createMockEvaluationIdea(outcomes: List<Outcome>): Idea {
         return Idea(
             name = "Mock outcome evaluation",
-            description = "Task completed successfully. Learning: Mock tools work as expected."
+            description = "Task completed successfully. Learning: Mock tools work as expected.",
         )
     }
 
@@ -683,7 +687,7 @@ class CodeWriterAgentIntegrationTest {
                         partiallyChangedFiles = null,
                     )
                 }
-            }
+            },
         )
     }
 }

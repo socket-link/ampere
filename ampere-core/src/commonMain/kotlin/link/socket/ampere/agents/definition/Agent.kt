@@ -32,7 +32,7 @@ import link.socket.ampere.util.logWith
 typealias AgentId = String
 
 @Serializable
-sealed interface Agent <S : AgentState> {
+sealed interface Agent<S : AgentState> {
 
     val id: AgentId
     val initialState: S
@@ -69,7 +69,7 @@ sealed interface Agent <S : AgentState> {
     suspend fun determinePlanForTask(
         task: Task,
         vararg ideas: Idea,
-        relevantKnowledge: List<KnowledgeWithScore> = emptyList()
+        relevantKnowledge: List<KnowledgeWithScore> = emptyList(),
     ): Plan
 
     suspend fun executePlan(plan: Plan): Outcome
@@ -94,7 +94,7 @@ sealed interface Agent <S : AgentState> {
     fun extractKnowledgeFromOutcome(
         outcome: Outcome,
         task: Task,
-        plan: Plan
+        plan: Plan,
     ): Knowledge
 
     /**
@@ -113,7 +113,7 @@ sealed interface Agent <S : AgentState> {
      */
     suspend fun recallRelevantKnowledge(
         context: MemoryContext,
-        limit: Int = 10
+        limit: Int = 10,
     ): Result<List<KnowledgeWithScore>> {
         // Check if memory service is available
         val service = memoryService
@@ -122,8 +122,8 @@ sealed interface Agent <S : AgentState> {
             return Result.failure(
                 AgentError.MemoryRecallFailure(
                     message = "Memory service not configured for this agent",
-                    cause = null
-                )
+                    cause = null,
+                ),
             )
         }
 
@@ -131,18 +131,20 @@ sealed interface Agent <S : AgentState> {
             // Query the persistent memory service
             val recallResult = service.recallRelevantKnowledge(
                 context = context,
-                limit = limit
+                limit = limit,
             )
 
             recallResult.fold(
                 onSuccess = { scoredKnowledge ->
                     logger.i {
                         "Recalled ${scoredKnowledge.size} relevant knowledge entries " +
-                        "with average relevance ${
-                            if (scoredKnowledge.isNotEmpty())
-                                scoredKnowledge.map { it.relevanceScore }.average()
-                            else 0.0
-                        }"
+                            "with average relevance ${
+                                if (scoredKnowledge.isNotEmpty()) {
+                                    scoredKnowledge.map { it.relevanceScore }.average()
+                                } else {
+                                    0.0
+                                }
+                            }"
                     }
                     Result.success(scoredKnowledge)
                 },
@@ -151,18 +153,18 @@ sealed interface Agent <S : AgentState> {
                     Result.failure(
                         AgentError.MemoryRecallFailure(
                             message = "Could not retrieve relevant knowledge: ${error.message}",
-                            cause = error
-                        )
+                            cause = error,
+                        ),
                     )
-                }
+                },
             )
         } catch (e: Exception) {
             logger.e(e) { "Exception during knowledge recall" }
             Result.failure(
                 AgentError.MemoryRecallFailure(
                     message = "Exception during knowledge recall: ${e.message}",
-                    cause = e
-                )
+                    cause = e,
+                ),
             )
         }
     }
@@ -182,7 +184,7 @@ sealed interface Agent <S : AgentState> {
     suspend fun storeKnowledge(
         knowledge: Knowledge,
         tags: List<String> = emptyList(),
-        taskType: String? = null
+        taskType: String? = null,
     ): Result<Unit> {
         val service = memoryService
         if (service == null) {
@@ -190,8 +192,8 @@ sealed interface Agent <S : AgentState> {
             return Result.failure(
                 AgentError.MemoryRecallFailure(
                     message = "Memory service not configured for this agent",
-                    cause = null
-                )
+                    cause = null,
+                ),
             )
         }
 
@@ -199,7 +201,7 @@ sealed interface Agent <S : AgentState> {
             service.storeKnowledge(
                 knowledge = knowledge,
                 tags = tags,
-                taskType = taskType
+                taskType = taskType,
             ).fold(
                 onSuccess = { entry ->
                     logger.i { "Stored knowledge entry ${entry.id} of type ${entry.knowledgeType}" }
@@ -207,19 +209,19 @@ sealed interface Agent <S : AgentState> {
                     // Also add to in-memory state for immediate access
                     when (knowledge) {
                         is Knowledge.FromIdea -> getCurrentState().addToPastKnowledge(
-                            rememberedKnowledgeFromIdeas = listOf(knowledge)
+                            rememberedKnowledgeFromIdeas = listOf(knowledge),
                         )
                         is Knowledge.FromOutcome -> getCurrentState().addToPastKnowledge(
-                            rememberedKnowledgeFromOutcomes = listOf(knowledge)
+                            rememberedKnowledgeFromOutcomes = listOf(knowledge),
                         )
                         is Knowledge.FromPerception -> getCurrentState().addToPastKnowledge(
-                            rememberedKnowledgeFromPerceptions = listOf(knowledge)
+                            rememberedKnowledgeFromPerceptions = listOf(knowledge),
                         )
                         is Knowledge.FromPlan -> getCurrentState().addToPastKnowledge(
-                            rememberedKnowledgeFromPlans = listOf(knowledge)
+                            rememberedKnowledgeFromPlans = listOf(knowledge),
                         )
                         is Knowledge.FromTask -> getCurrentState().addToPastKnowledge(
-                            rememberedKnowledgeFromTasks = listOf(knowledge)
+                            rememberedKnowledgeFromTasks = listOf(knowledge),
                         )
                     }
 
@@ -230,18 +232,18 @@ sealed interface Agent <S : AgentState> {
                     Result.failure(
                         AgentError.MemoryRecallFailure(
                             message = "Could not store knowledge: ${error.message}",
-                            cause = error
-                        )
+                            cause = error,
+                        ),
                     )
-                }
+                },
             )
         } catch (e: Exception) {
             logger.e(e) { "Exception during knowledge storage" }
             Result.failure(
                 AgentError.MemoryRecallFailure(
                     message = "Exception during knowledge storage: ${e.message}",
-                    cause = e
-                )
+                    cause = e,
+                ),
             )
         }
     }

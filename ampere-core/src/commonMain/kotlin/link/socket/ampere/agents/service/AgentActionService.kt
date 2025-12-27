@@ -24,7 +24,7 @@ class AgentActionService(
         return try {
             // Emit a low-priority task event that will wake the agent
             eventApi.publishTaskCreated(
-                taskId = "wake-${agentId}-${Clock.System.now().toEpochMilliseconds()}",
+                taskId = "wake-$agentId-${Clock.System.now().toEpochMilliseconds()}",
                 urgency = Urgency.LOW,
                 description = "Manual wake signal from CLI",
                 assignedTo = agentId,

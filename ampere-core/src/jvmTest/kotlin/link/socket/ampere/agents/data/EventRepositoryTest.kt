@@ -15,10 +15,10 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.domain.event.Event
-import link.socket.ampere.agents.events.EventRepository
-import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 
@@ -159,7 +159,7 @@ class EventRepositoryTest {
             // Query for events between t2 and t3 (inclusive)
             val result = repo.getEventsWithFilters(
                 fromTime = t2,
-                toTime = t3
+                toTime = t3,
             ).getOrNull()
 
             assertNotNull(result)
@@ -183,7 +183,7 @@ class EventRepositoryTest {
             val result = repo.getEventsWithFilters(
                 fromTime = now.minus(kotlin.time.Duration.parse("1s")),
                 toTime = now.plus(kotlin.time.Duration.parse("1s")),
-                eventTypes = setOf("TaskCreated")
+                eventTypes = setOf("TaskCreated"),
             ).getOrNull()
 
             assertNotNull(result)
@@ -212,7 +212,7 @@ class EventRepositoryTest {
             val result = repo.getEventsWithFilters(
                 fromTime = now.minus(kotlin.time.Duration.parse("1s")),
                 toTime = now.plus(kotlin.time.Duration.parse("1s")),
-                sourceIds = setOf("agent-A")
+                sourceIds = setOf("agent-A"),
             ).getOrNull()
 
             assertNotNull(result)
@@ -243,7 +243,7 @@ class EventRepositoryTest {
                 fromTime = now.minus(kotlin.time.Duration.parse("1s")),
                 toTime = now.plus(kotlin.time.Duration.parse("1s")),
                 eventTypes = setOf("TaskCreated"),
-                sourceIds = setOf("agent-A")
+                sourceIds = setOf("agent-A"),
             ).getOrNull()
 
             assertNotNull(result)
@@ -267,7 +267,7 @@ class EventRepositoryTest {
             // Query for time range before the event
             val result = repo.getEventsWithFilters(
                 fromTime = wayPast,
-                toTime = past
+                toTime = past,
             ).getOrNull()
 
             assertNotNull(result)
@@ -290,7 +290,7 @@ class EventRepositoryTest {
             // Query with fromTime == toTime
             val result = repo.getEventsWithFilters(
                 fromTime = t2,
-                toTime = t2
+                toTime = t2,
             ).getOrNull()
 
             assertNotNull(result)
@@ -314,7 +314,7 @@ class EventRepositoryTest {
             // Query should return in chronological order (ascending)
             val result = repo.getEventsWithFilters(
                 fromTime = t1,
-                toTime = t3
+                toTime = t3,
             ).getOrNull()
 
             assertNotNull(result)

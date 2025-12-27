@@ -13,12 +13,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
-import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.escalation.Escalation
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository

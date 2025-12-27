@@ -4,7 +4,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import link.socket.ampere.agents.events.escalation.EscalationProcess
 
 class EscalationTest {
 

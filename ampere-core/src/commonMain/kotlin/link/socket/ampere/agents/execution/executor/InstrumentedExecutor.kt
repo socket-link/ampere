@@ -3,8 +3,8 @@ package link.socket.ampere.agents.execution.executor
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.health.ExecutorSystemHealth
 import link.socket.ampere.agents.domain.concept.status.ExecutionStatus
+import link.socket.ampere.agents.domain.health.ExecutorSystemHealth
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
 
@@ -47,7 +47,7 @@ class InstrumentedExecutor(
 
     override suspend fun execute(
         request: ExecutionRequest<*>,
-        tool: Tool<*>
+        tool: Tool<*>,
     ): Flow<ExecutionStatus> {
         executorWasCalled = true
         executionCount++

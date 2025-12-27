@@ -17,5 +17,5 @@ enum class EnvironmentFileOperation {
     DELETE,
 
     /** A file was renamed */
-    RENAME;
+    RENAME,
 }

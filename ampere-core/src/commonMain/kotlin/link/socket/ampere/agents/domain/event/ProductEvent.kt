@@ -51,7 +51,6 @@ sealed interface ProductEvent : Event {
             append(" from ${formatSource(eventSource)}")
         }
 
-
         companion object {
             const val EVENT_TYPE: EventType = "ProductFeatureRequested"
         }
@@ -89,7 +88,6 @@ sealed interface ProductEvent : Event {
             append(" from ${formatSource(eventSource)}")
         }
 
-
         companion object {
             const val EVENT_TYPE: EventType = "ProductEpicDefined"
         }
@@ -124,7 +122,6 @@ sealed interface ProductEvent : Event {
             append(" ${formatUrgency(urgency)}")
             append(" from ${formatSource(eventSource)}")
         }
-
 
         companion object {
             const val EVENT_TYPE: EventType = "ProductPhaseDefined"

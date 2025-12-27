@@ -13,11 +13,11 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepositoryImpl
 import link.socket.ampere.agents.domain.concept.task.TaskId
+import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.results.ExecutionResult
@@ -336,7 +336,13 @@ class OutcomeMemoryRepositoryTest {
         // Create 10 outcomes with similar approaches
         repeat(10) { i ->
             val outcome = createSuccessfulOutcome()
-            repo.recordOutcome(ticketId1, executorId1, "Add validation logic $i", outcome, now.plus((i * 1000).milliseconds))
+            repo.recordOutcome(
+                ticketId1,
+                executorId1,
+                "Add validation logic $i",
+                outcome,
+                now.plus((i * 1000).milliseconds),
+            )
         }
 
         val result = repo.findSimilarOutcomes("validation", limit = 3)
@@ -396,7 +402,11 @@ class OutcomeMemoryRepositoryTest {
         // Simulate a ticket that was attempted multiple times
         val attempts = listOf(
             Triple("First try: add validation", createFailedOutcome(errorMessage = "Missing import"), now),
-            Triple("Second try: fix imports and add validation", createFailedOutcome(errorMessage = "Test failed"), now.plus(1.seconds)),
+            Triple(
+                "Second try: fix imports and add validation",
+                createFailedOutcome(errorMessage = "Test failed"),
+                now.plus(1.seconds),
+            ),
             Triple("Third try: fix tests and add validation", createSuccessfulOutcome(), now.plus(2.seconds)),
         )
 

@@ -10,10 +10,10 @@ import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
@@ -38,7 +38,7 @@ class ToolHierarchyTest {
     private fun createTestTicket(
         id: String = "ticket-1",
         title: String = "Test Ticket",
-        description: String = "Test description"
+        description: String = "Test description",
     ): Ticket = Ticket(
         id = id,
         title = title,
@@ -49,7 +49,7 @@ class ToolHierarchyTest {
         assignedAgentId = "agent-1",
         createdByAgentId = "pm-agent",
         createdAt = now,
-        updatedAt = now
+        updatedAt = now,
     )
 
     private fun createTestExecutionRequest(
@@ -58,15 +58,15 @@ class ToolHierarchyTest {
             ticket = createTestTicket(),
             task = Task.blank,
             instructions = "Test instructions",
-            knowledgeFromPastMemory = emptyList()
-        )
+            knowledgeFromPastMemory = emptyList(),
+            ),
     ): ExecutionRequest<ExecutionContext> = ExecutionRequest(
         context = context,
         constraints = ExecutionConstraints(
             timeoutMinutes = 30,
             requireTests = false,
-            requireLinting = false
-        )
+            requireLinting = false,
+        ),
     )
 
     // ==================== FUNCTIONTOOL TESTS ====================
@@ -79,7 +79,7 @@ class ToolHierarchyTest {
             name = "Test Tool",
             description = "A test tool",
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
-            executionFunction = { expectedOutcome }
+            executionFunction = { expectedOutcome },
         )
 
         val result = functionTool.execute(createTestExecutionRequest())
@@ -97,7 +97,7 @@ class ToolHierarchyTest {
             executionFunction = { request ->
                 functionCalled = true
                 Outcome.blank
-            }
+            },
         )
 
         functionTool.execute(createTestExecutionRequest())
@@ -111,7 +111,7 @@ class ToolHierarchyTest {
             name = "Unique Tool Name",
             description = "A detailed description",
             requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
-            executionFunction = { Outcome.blank }
+            executionFunction = { Outcome.blank },
         )
 
         assertEquals("unique-id", functionTool.id)
@@ -128,7 +128,7 @@ class ToolHierarchyTest {
             name = "Test",
             description = "Test",
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
-            executionFunction = { Outcome.blank }
+            executionFunction = { Outcome.blank },
         )
 
         val result = when (tool) {
@@ -153,7 +153,7 @@ class ToolHierarchyTest {
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("title", "string")
-            }
+            },
         )
 
         assertEquals("github-pr-tool", mcpTool.id)
@@ -174,7 +174,7 @@ class ToolHierarchyTest {
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "server-1",
             remoteToolName = "simple_action",
-            inputSchema = null
+            inputSchema = null,
         )
 
         assertEquals("simple-tool", mcpTool.id)
@@ -189,7 +189,7 @@ class ToolHierarchyTest {
             description = "Test",
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "server-1",
-            remoteToolName = "test_tool"
+            remoteToolName = "test_tool",
         )
 
         assertFailsWith<NotImplementedError> {
@@ -205,7 +205,7 @@ class ToolHierarchyTest {
             description = "Test",
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "server-1",
-            remoteToolName = "test"
+            remoteToolName = "test",
         )
 
         val result = when (tool) {
@@ -228,7 +228,7 @@ class ToolHierarchyTest {
                 name = "Function",
                 description = "Func",
                 requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
-                executionFunction = { Outcome.blank }
+                executionFunction = { Outcome.blank },
             ),
             McpTool(
                 id = "mcp",
@@ -236,8 +236,8 @@ class ToolHierarchyTest {
                 description = "MCP",
                 requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
                 serverId = "server",
-                remoteToolName = "tool"
-            )
+                remoteToolName = "tool",
+            ),
         )
 
         val results = tools.map { tool ->
@@ -264,7 +264,7 @@ class ToolHierarchyTest {
             name = "Serializable Tool",
             description = "Can be serialized",
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
-            executionFunction = { Outcome.blank }
+            executionFunction = { Outcome.blank },
         )
 
         // Verify all properties are accessible (these would be stored in registry)
@@ -286,7 +286,7 @@ class ToolHierarchyTest {
             remoteToolName = "github_action",
             inputSchema = buildJsonObject {
                 put("type", "object")
-            }
+            },
         )
 
         val json = Json.encodeToString(McpTool.serializer(), original)
@@ -310,7 +310,7 @@ class ToolHierarchyTest {
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             serverId = "server-1",
             remoteToolName = "simple",
-            inputSchema = null
+            inputSchema = null,
         )
 
         val json = Json.encodeToString(McpTool.serializer(), original)
@@ -332,7 +332,7 @@ class ToolHierarchyTest {
                 name = "Tool for ${level.name}",
                 description = "Test",
                 requiredAgentAutonomy = level,
-                executionFunction = { Outcome.blank }
+                executionFunction = { Outcome.blank },
             )
 
             assertEquals(level, tool.requiredAgentAutonomy)
@@ -350,7 +350,7 @@ class ToolHierarchyTest {
                 description = "Test",
                 requiredAgentAutonomy = level,
                 serverId = "server",
-                remoteToolName = "tool"
+                remoteToolName = "tool",
             )
 
             assertEquals(level, tool.requiredAgentAutonomy)
@@ -365,7 +365,7 @@ class ToolHierarchyTest {
                 name = "Tool 1",
                 description = "First tool",
                 requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
-                executionFunction = { Outcome.blank }
+                executionFunction = { Outcome.blank },
             ),
             McpTool(
                 id = "tool-2",
@@ -373,15 +373,15 @@ class ToolHierarchyTest {
                 description = "Second tool",
                 requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
                 serverId = "server",
-                remoteToolName = "tool2"
+                remoteToolName = "tool2",
             ),
             FunctionTool(
                 id = "tool-3",
                 name = "Tool 3",
                 description = "Third tool",
                 requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
-                executionFunction = { Outcome.blank }
-            )
+                executionFunction = { Outcome.blank },
+            ),
         )
 
         assertEquals(3, tools.size)

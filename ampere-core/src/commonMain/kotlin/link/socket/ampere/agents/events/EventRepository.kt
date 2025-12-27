@@ -129,7 +129,7 @@ class EventRepository(
                 queries
                     .getEventsBetween(
                         fromTime.toEpochMilliseconds(),
-                        toTime.toEpochMilliseconds()
+                        toTime.toEpochMilliseconds(),
                     )
                     .executeAsList()
             }.map { rows ->
@@ -155,7 +155,7 @@ class EventRepository(
         fromTime: Instant,
         toTime: Instant,
         eventTypes: Set<String>? = null,
-        sourceIds: Set<String>? = null
+        sourceIds: Set<String>? = null,
     ): Result<List<Event>> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -170,7 +170,7 @@ class EventRepository(
                             fromTime = fromMillis,
                             toTime = toMillis,
                             eventTypes = eventTypes,
-                            sourceIds = sourceIds
+                            sourceIds = sourceIds,
                         ).executeAsList()
                     }
                     // Only event types filter
@@ -178,7 +178,7 @@ class EventRepository(
                         queries.getEventsBetweenWithEventTypes(
                             fromTime = fromMillis,
                             toTime = toMillis,
-                            eventTypes = eventTypes
+                            eventTypes = eventTypes,
                         ).executeAsList()
                     }
                     // Only source IDs filter
@@ -186,14 +186,14 @@ class EventRepository(
                         queries.getEventsBetweenWithSourceIds(
                             fromTime = fromMillis,
                             toTime = toMillis,
-                            sourceIds = sourceIds
+                            sourceIds = sourceIds,
                         ).executeAsList()
                     }
                     // No filters, use the simple query
                     else -> {
                         queries.getEventsBetween(
                             fromMillis,
-                            toMillis
+                            toMillis,
                         ).executeAsList()
                     }
                 }

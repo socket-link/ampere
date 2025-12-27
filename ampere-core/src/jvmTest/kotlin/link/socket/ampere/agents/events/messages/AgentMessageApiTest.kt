@@ -206,8 +206,8 @@ class AgentMessageApiTest {
             // Verify status change events
             val statusChanges = received.filterIsInstance<MessageEvent.ThreadStatusChanged>()
             assertTrue(statusChanges.size >= 2)
-            assertTrue(statusChanges.any { it.newStatus == EventStatus.WaitingForHuman})
-            assertTrue(statusChanges.any { it.newStatus == EventStatus.Open})
+            assertTrue(statusChanges.any { it.newStatus == EventStatus.WaitingForHuman })
+            assertTrue(statusChanges.any { it.newStatus == EventStatus.Open })
         }
     }
 

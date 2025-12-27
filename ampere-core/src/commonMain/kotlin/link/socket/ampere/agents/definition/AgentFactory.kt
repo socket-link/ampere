@@ -55,5 +55,4 @@ class AgentFactory(
             memoryServiceFactory = memoryServiceFactory,
         ) as A
     }
-
 }

@@ -112,7 +112,7 @@ actual class CodeWriterAgentTest {
         toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode>,
         coroutineScope: CoroutineScope,
         private val perceptionResult: (Perception<AgentState>) -> Idea,
-        private val planningResult: ((Task, List<Idea>) -> Plan)? = null
+        private val planningResult: ((Task, List<Idea>) -> Plan)? = null,
     ) : CodeWriterAgent(agentConfiguration, toolWriteCodeFile, coroutineScope, initialState) {
 
         override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea =
@@ -133,7 +133,7 @@ actual class CodeWriterAgentTest {
                 task = stubTask,
                 instructions = "Write a function",
                 workspace = ExecutionWorkspace(tempDir.absolutePathString()),
-                instructionsPerFilePath = listOf()
+                instructionsPerFilePath = listOf(),
             ),
             constraints = ExecutionConstraints(),
         )
@@ -153,12 +153,12 @@ actual class CodeWriterAgentTest {
      * @return A CodeWriterAgent configured for testing
      */
     private fun createTestAgent(
-        perceptionResult: (Perception<AgentState>) -> Idea
+        perceptionResult: (Perception<AgentState>) -> Idea,
     ): TestableCodeWriterAgent {
         val aiConfig = FakeAIConfiguration()
         val agentConfig = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
-            aiConfiguration = aiConfig
+            aiConfiguration = aiConfig,
         )
 
         return TestableCodeWriterAgent(
@@ -166,7 +166,7 @@ actual class CodeWriterAgentTest {
             agentConfiguration = agentConfig,
             toolWriteCodeFile = stubTool,
             coroutineScope = testScope,
-            perceptionResult = perceptionResult
+            perceptionResult = perceptionResult,
         )
     }
 
@@ -179,12 +179,12 @@ actual class CodeWriterAgentTest {
      */
     private fun createTestAgentWithPlanning(
         perceptionResult: (Perception<AgentState>) -> Idea,
-        planningResult: (Task, List<Idea>) -> Plan
+        planningResult: (Task, List<Idea>) -> Plan,
     ): TestableCodeWriterAgent {
         val aiConfig = FakeAIConfiguration()
         val agentConfig = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
-            aiConfiguration = aiConfig
+            aiConfiguration = aiConfig,
         )
 
         return TestableCodeWriterAgent(
@@ -193,7 +193,7 @@ actual class CodeWriterAgentTest {
             toolWriteCodeFile = stubTool,
             coroutineScope = testScope,
             perceptionResult = perceptionResult,
-            planningResult = planningResult
+            planningResult = planningResult,
         )
     }
 
@@ -204,7 +204,7 @@ actual class CodeWriterAgentTest {
         val task = perception.currentState.getCurrentMemory().task
         return Idea(
             name = "Perception analysis for pending task",
-            description = "Agent has a pending code change task → Should plan implementation steps for the task (confidence: high)"
+            description = "Agent has a pending code change task → Should plan implementation steps for the task (confidence: high)",
         )
     }
 
@@ -218,7 +218,7 @@ actual class CodeWriterAgentTest {
                 Three consecutive failures detected in past outcomes → Should consider alternative approach or request human assistance (confidence: high)
 
                 Pattern suggests tool may not be suitable for this task → May need different tool or different task decomposition (confidence: medium)
-            """.trimIndent()
+            """.trimIndent(),
         )
     }
 
@@ -228,7 +228,7 @@ actual class CodeWriterAgentTest {
     private fun createEmptyStateIdea(perception: Perception<AgentState>): Idea {
         return Idea(
             name = "Perception analysis for current task",
-            description = "Agent has no active task → Awaiting new task assignment (confidence: high)"
+            description = "Agent has no active task → Awaiting new task assignment (confidence: high)",
         )
     }
 
@@ -238,7 +238,7 @@ actual class CodeWriterAgentTest {
     private fun createToolAvailabilityIdea(perception: Perception<AgentState>): Idea {
         return Idea(
             name = "Perception analysis for code writing",
-            description = "WriteCodeFile tool is available → Can execute code writing tasks (confidence: high)"
+            description = "WriteCodeFile tool is available → Can execute code writing tasks (confidence: high)",
         )
     }
 
@@ -248,7 +248,7 @@ actual class CodeWriterAgentTest {
     private fun createSuccessPatternIdea(perception: Perception<AgentState>): Idea {
         return Idea(
             name = "Perception analysis for similar task",
-            description = "Previous similar task completed successfully → Can use similar approach for current task (confidence: high)"
+            description = "Previous similar task completed successfully → Can use similar approach for current task (confidence: high)",
         )
     }
 
@@ -271,13 +271,13 @@ actual class CodeWriterAgentTest {
             Task.CodeChange(
                 id = "task-1",
                 status = TaskStatus.Pending,
-                description = "Implement a user authentication function"
-            )
+                description = "Implement a user authentication function",
+            ),
         )
 
         val perception = Perception(
             currentState = state,
-            ideas = emptyList()
+            ideas = emptyList(),
         )
 
         // Execute
@@ -307,8 +307,8 @@ actual class CodeWriterAgentTest {
             Task.CodeChange(
                 id = "task-retry",
                 status = TaskStatus.InProgress,
-                description = "Retry failed task"
-            )
+                description = "Retry failed task",
+            ),
         )
 
         // Add knowledge from failed outcomes
@@ -318,26 +318,26 @@ actual class CodeWriterAgentTest {
                     outcomeId = "outcome-1",
                     approach = "Attempted direct implementation",
                     learnings = "Failed due to missing context",
-                    timestamp = Clock.System.now()
+                    timestamp = Clock.System.now(),
                 ),
                 Knowledge.FromOutcome(
                     outcomeId = "outcome-2",
                     approach = "Attempted with different parameters",
                     learnings = "Still failed with similar error",
-                    timestamp = Clock.System.now()
+                    timestamp = Clock.System.now(),
                 ),
                 Knowledge.FromOutcome(
                     outcomeId = "outcome-3",
                     approach = "Attempted with retry logic",
                     learnings = "Continued to fail",
-                    timestamp = Clock.System.now()
-                )
-            )
+                    timestamp = Clock.System.now(),
+                ),
+            ),
         )
 
         val perception = Perception(
             currentState = state,
-            ideas = emptyList()
+            ideas = emptyList(),
         )
 
         // Execute
@@ -349,7 +349,7 @@ actual class CodeWriterAgentTest {
             idea.description.contains("failure", ignoreCase = true) ||
                 idea.description.contains("alternative", ignoreCase = true) ||
                 idea.description.contains("pattern", ignoreCase = true),
-            "Idea should mention failures or alternative approaches"
+            "Idea should mention failures or alternative approaches",
         )
     }
 
@@ -368,7 +368,7 @@ actual class CodeWriterAgentTest {
 
         val perception = Perception(
             currentState = state,
-            ideas = emptyList()
+            ideas = emptyList(),
         )
 
         // Execute
@@ -393,7 +393,7 @@ actual class CodeWriterAgentTest {
             val task = perception.currentState.getCurrentMemory().task
             Idea(
                 name = "Basic perception (fallback)",
-                description = "Code change task: Test task (Status: Pending)\n\nNote: Advanced perception analysis unavailable\n\nAvailable tools: ToolWriteCodeFile"
+                description = "Code change task: Test task (Status: Pending)\n\nNote: Advanced perception analysis unavailable\n\nAvailable tools: ToolWriteCodeFile",
             )
         }
 
@@ -402,13 +402,13 @@ actual class CodeWriterAgentTest {
             Task.CodeChange(
                 id = "task-1",
                 status = TaskStatus.Pending,
-                description = "Test task"
-            )
+                description = "Test task",
+            ),
         )
 
         val perception = Perception(
             currentState = state,
-            ideas = emptyList()
+            ideas = emptyList(),
         )
 
         // Execute - should not crash
@@ -421,7 +421,7 @@ actual class CodeWriterAgentTest {
         // Fallback ideas typically mention the current task
         assertTrue(
             idea.description.contains("task", ignoreCase = true) ||
-                idea.description.contains("fallback", ignoreCase = true)
+                idea.description.contains("fallback", ignoreCase = true),
         )
     }
 
@@ -440,13 +440,13 @@ actual class CodeWriterAgentTest {
             Task.CodeChange(
                 id = "task-1",
                 status = TaskStatus.Pending,
-                description = "Write a new function"
-            )
+                description = "Write a new function",
+            ),
         )
 
         val perception = Perception(
             currentState = state,
-            ideas = emptyList()
+            ideas = emptyList(),
         )
 
         // Execute
@@ -458,7 +458,7 @@ actual class CodeWriterAgentTest {
         assertTrue(
             idea.description.contains("tool", ignoreCase = true) ||
                 idea.description.contains("available", ignoreCase = true) ||
-                idea.description.contains("code", ignoreCase = true)
+                idea.description.contains("code", ignoreCase = true),
         )
     }
 
@@ -477,8 +477,8 @@ actual class CodeWriterAgentTest {
             Task.CodeChange(
                 id = "task-2",
                 status = TaskStatus.Pending,
-                description = "Implement another authentication function"
-            )
+                description = "Implement another authentication function",
+            ),
         )
 
         // Add successful knowledge
@@ -488,14 +488,14 @@ actual class CodeWriterAgentTest {
                     outcomeId = "outcome-success",
                     approach = "Used step-by-step implementation with tests",
                     learnings = "Approach worked well for authentication functions",
-                    timestamp = Clock.System.now()
-                )
-            )
+                    timestamp = Clock.System.now(),
+                ),
+            ),
         )
 
         val perception = Perception(
             currentState = state,
-            ideas = emptyList()
+            ideas = emptyList(),
         )
 
         // Execute
@@ -506,7 +506,7 @@ actual class CodeWriterAgentTest {
         assertTrue(
             idea.description.contains("success", ignoreCase = true) ||
                 idea.description.contains("similar", ignoreCase = true) ||
-                idea.description.contains("approach", ignoreCase = true)
+                idea.description.contains("approach", ignoreCase = true),
         )
     }
 
@@ -530,26 +530,26 @@ actual class CodeWriterAgentTest {
                             id = "step-1-${task.id}",
                             status = TaskStatus.Pending,
                             description = "Write a hello world function",
-                            assignedTo = AssignedTo.Agent("TestAgent")
-                        )
+                            assignedTo = AssignedTo.Agent("TestAgent"),
+                        ),
                     ),
                     estimatedComplexity = 1,
-                    expectations = Expectations.blank
+                    expectations = Expectations.blank,
                 )
-            }
+            },
         )
 
         val simpleTask = Task.CodeChange(
             id = "task-simple",
             status = TaskStatus.Pending,
-            description = "Create a hello world function"
+            description = "Create a hello world function",
         )
 
         val basicIdeas = listOf(
             Idea(
                 name = "Simple task",
-                description = "This is a straightforward single-function task"
-            )
+                description = "This is a straightforward single-function task",
+            ),
         )
 
         // Execute
@@ -579,36 +579,36 @@ actual class CodeWriterAgentTest {
                         Task.CodeChange(
                             id = "step-1-${task.id}",
                             status = TaskStatus.Pending,
-                            description = "Create User data class with name and email properties"
+                            description = "Create User data class with name and email properties",
                         ),
                         Task.CodeChange(
                             id = "step-2-${task.id}",
                             status = TaskStatus.Pending,
-                            description = "Add validation logic for email format"
+                            description = "Add validation logic for email format",
                         ),
                         Task.CodeChange(
                             id = "step-3-${task.id}",
                             status = TaskStatus.Pending,
-                            description = "Write unit tests for User class"
-                        )
+                            description = "Write unit tests for User class",
+                        ),
                     ),
                     estimatedComplexity = 6,
-                    expectations = Expectations.blank
+                    expectations = Expectations.blank,
                 )
-            }
+            },
         )
 
         val complexTask = Task.CodeChange(
             id = "task-complex",
             status = TaskStatus.Pending,
-            description = "Implement user authentication with validation and tests"
+            description = "Implement user authentication with validation and tests",
         )
 
         val complexIdeas = listOf(
             Idea(
                 name = "Complex task",
-                description = "This requires data model, validation, and testing"
-            )
+                description = "This requires data model, validation, and testing",
+            ),
         )
 
         // Execute
@@ -639,31 +639,31 @@ actual class CodeWriterAgentTest {
                         Task.CodeChange(
                             id = "step-1-${task.id}",
                             status = TaskStatus.Pending,
-                            description = "Write the implementation"
+                            description = "Write the implementation",
                         ),
                         Task.CodeChange(
                             id = "step-2-${task.id}",
                             status = TaskStatus.Pending,
-                            description = "Write tests for the implementation"
-                        )
+                            description = "Write tests for the implementation",
+                        ),
                     ),
                     estimatedComplexity = 4,
-                    expectations = Expectations.blank
+                    expectations = Expectations.blank,
                 )
-            }
+            },
         )
 
         val task = Task.CodeChange(
             id = "task-ordered",
             status = TaskStatus.Pending,
-            description = "Implement a feature with tests"
+            description = "Implement a feature with tests",
         )
 
         val ideas = listOf(
             Idea(
                 name = "Implementation strategy",
-                description = "Write implementation first, then tests"
-            )
+                description = "Write implementation first, then tests",
+            ),
         )
 
         // Execute
@@ -678,7 +678,7 @@ actual class CodeWriterAgentTest {
         val firstStep = plan.tasks[0] as Task.CodeChange
         assertTrue(
             firstStep.description.contains("implementation", ignoreCase = true) ||
-                firstStep.description.contains("write", ignoreCase = true)
+                firstStep.description.contains("write", ignoreCase = true),
         )
 
         // Second step should be tests
@@ -704,26 +704,26 @@ actual class CodeWriterAgentTest {
                             id = "step-1-${task.id}",
                             status = TaskStatus.Pending,
                             description = "Create User.kt file with data class User(name: String, email: String)",
-                            assignedTo = AssignedTo.Agent("TestAgent")
-                        )
+                            assignedTo = AssignedTo.Agent("TestAgent"),
+                        ),
                     ),
                     estimatedComplexity = 2,
-                    expectations = Expectations.blank
+                    expectations = Expectations.blank,
                 )
-            }
+            },
         )
 
         val task = Task.CodeChange(
             id = "task-detailed",
             status = TaskStatus.Pending,
-            description = "Create a user data class"
+            description = "Create a user data class",
         )
 
         val ideas = listOf(
             Idea(
                 name = "Implementation details",
-                description = "User should have name and email"
-            )
+                description = "User should have name and email",
+            ),
         )
 
         // Execute
@@ -779,19 +779,19 @@ actual class CodeWriterAgentTest {
                         Task.CodeChange(
                             id = "step-1-${task.id}",
                             status = TaskStatus.Pending,
-                            description = "Execute task: ${(task as Task.CodeChange).description}"
-                        )
+                            description = "Execute task: ${(task as Task.CodeChange).description}",
+                        ),
                     ),
                     estimatedComplexity = 3,
-                    expectations = Expectations.blank
+                    expectations = Expectations.blank,
                 )
-            }
+            },
         )
 
         val task = Task.CodeChange(
             id = "task-no-ideas",
             status = TaskStatus.Pending,
-            description = "Simple task"
+            description = "Simple task",
         )
 
         val noIdeas = emptyList<Idea>()
@@ -822,13 +822,13 @@ actual class CodeWriterAgentTest {
                         Task.CodeChange(
                             id = "step-1-${task.id}",
                             status = TaskStatus.Pending,
-                            description = "Simple step"
-                        )
+                            description = "Simple step",
+                        ),
                     ),
                     estimatedComplexity = 1,
-                    expectations = Expectations.blank
+                    expectations = Expectations.blank,
                 )
-            }
+            },
         )
 
         val complexAgent = createTestAgentWithPlanning(
@@ -841,12 +841,12 @@ actual class CodeWriterAgentTest {
                         Task.CodeChange(id = "step-2", status = TaskStatus.Pending, description = "Step 2"),
                         Task.CodeChange(id = "step-3", status = TaskStatus.Pending, description = "Step 3"),
                         Task.CodeChange(id = "step-4", status = TaskStatus.Pending, description = "Step 4"),
-                        Task.CodeChange(id = "step-5", status = TaskStatus.Pending, description = "Step 5")
+                        Task.CodeChange(id = "step-5", status = TaskStatus.Pending, description = "Step 5"),
                     ),
                     estimatedComplexity = 8,
-                    expectations = Expectations.blank
+                    expectations = Expectations.blank,
                 )
-            }
+            },
         )
 
         val simpleTask = Task.CodeChange(id = "simple", status = TaskStatus.Pending, description = "Simple")
@@ -857,8 +857,10 @@ actual class CodeWriterAgentTest {
         val complexPlan = complexAgent.runLLMToPlan(complexTask, emptyList())
 
         // Verify
-        assertTrue(simplePlan.estimatedComplexity < complexPlan.estimatedComplexity,
-            "Complex plan should have higher complexity than simple plan")
+        assertTrue(
+            simplePlan.estimatedComplexity < complexPlan.estimatedComplexity,
+            "Complex plan should have higher complexity than simple plan",
+        )
         assertTrue(simplePlan.estimatedComplexity in 1..3, "Simple plan complexity should be low")
         assertTrue(complexPlan.estimatedComplexity in 6..10, "Complex plan complexity should be high")
     }
@@ -896,7 +898,7 @@ actual class CodeWriterAgentTest {
         val meetingTask = MeetingTask.AgendaItem(
             id = "meeting-1",
             status = TaskStatus.Pending,
-            title = "Discuss architecture"
+            title = "Discuss architecture",
         )
 
         // Execute
@@ -982,7 +984,7 @@ actual class CodeWriterAgentTest {
         val task = Task.CodeChange(
             id = "test-task",
             status = TaskStatus.Pending,
-            description = "Create a data class for User"
+            description = "Create a data class for User",
         )
 
         // The implementation should:
@@ -1098,7 +1100,7 @@ actual class CodeWriterAgentTest {
         val aiConfig = FakeAIConfiguration()
         val agentConfig = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
-            aiConfiguration = aiConfig
+            aiConfiguration = aiConfig,
         )
 
         val testAgent = object : CodeWriterAgent(
@@ -1121,7 +1123,7 @@ actual class CodeWriterAgentTest {
 
                            Confidence: high
                            Evidence Count: 3
-                    """.trimIndent()
+                    """.trimIndent(),
                 )
             }
         }
@@ -1136,7 +1138,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("/absolute/path/User.kt"),
-                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null),
             ),
             ExecutionOutcome.CodeChanged.Success(
                 executorId = "executor-1",
@@ -1145,7 +1147,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("/absolute/path/Order.kt"),
-                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null),
             ),
             ExecutionOutcome.CodeChanged.Success(
                 executorId = "executor-1",
@@ -1154,8 +1156,8 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("/absolute/path/Product.kt"),
-                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
-            )
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null),
+            ),
         )
 
         // Execute
@@ -1168,7 +1170,7 @@ actual class CodeWriterAgentTest {
         assertTrue(
             idea.description.contains("pattern", ignoreCase = true) ||
                 idea.description.contains("learning", ignoreCase = true) ||
-                idea.description.contains("advice", ignoreCase = true)
+                idea.description.contains("advice", ignoreCase = true),
         )
     }
 
@@ -1184,7 +1186,7 @@ actual class CodeWriterAgentTest {
         val aiConfig = FakeAIConfiguration()
         val agentConfig = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
-            aiConfiguration = aiConfig
+            aiConfiguration = aiConfig,
         )
 
         val testAgent = object : CodeWriterAgent(
@@ -1206,7 +1208,7 @@ actual class CodeWriterAgentTest {
 
                            Confidence: medium
                            Evidence Count: 2
-                    """.trimIndent()
+                    """.trimIndent(),
                 )
             }
         }
@@ -1221,7 +1223,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(500.seconds),
                 changedFiles = listOf("Simple.kt"),
-                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null),
             ),
             ExecutionOutcome.CodeChanged.Failure(
                 executorId = "executor-1",
@@ -1231,9 +1233,9 @@ actual class CodeWriterAgentTest {
                 executionEndTimestamp = now.plus(3.seconds),
                 error = ExecutionError(
                     type = ExecutionError.Type.TOOL_UNAVAILABLE,
-                    message = "Complex task failed"
-                )
-            )
+                    message = "Complex task failed",
+                ),
+            ),
         )
 
         // Execute
@@ -1245,7 +1247,7 @@ actual class CodeWriterAgentTest {
             idea.description.contains("advice", ignoreCase = true) ||
                 idea.description.contains("break", ignoreCase = true) ||
                 idea.description.contains("smaller", ignoreCase = true),
-            "Evaluation should include actionable advice"
+            "Evaluation should include actionable advice",
         )
     }
 
@@ -1260,7 +1262,7 @@ actual class CodeWriterAgentTest {
         val aiConfig = FakeAIConfiguration()
         val agentConfig = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
-            aiConfiguration = aiConfig
+            aiConfiguration = aiConfig,
         )
 
         val testAgent = object : CodeWriterAgent(
@@ -1285,7 +1287,7 @@ actual class CodeWriterAgentTest {
 
                            Confidence: $confidence
                            Evidence Count: $evidenceCount
-                    """.trimIndent()
+                    """.trimIndent(),
                 )
             }
         }
@@ -1300,14 +1302,14 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("File1.kt"),
-                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
-            )
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null),
+            ),
         )
 
         val ideaFew = testAgent.runLLMToEvaluateOutcomes(fewOutcomes)
         assertTrue(
             ideaFew.description.contains("low", ignoreCase = true),
-            "Few examples should result in low confidence"
+            "Few examples should result in low confidence",
         )
 
         // Test with many examples (should be high confidence)
@@ -1319,14 +1321,14 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("File$i.kt"),
-                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null),
             )
         }
 
         val ideaMany = testAgent.runLLMToEvaluateOutcomes(manyOutcomes)
         assertTrue(
             ideaMany.description.contains("high", ignoreCase = true),
-            "Many examples should result in high confidence"
+            "Many examples should result in high confidence",
         )
     }
 
@@ -1341,7 +1343,7 @@ actual class CodeWriterAgentTest {
         val aiConfig = FakeAIConfiguration()
         val agentConfig = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
-            aiConfiguration = aiConfig
+            aiConfiguration = aiConfig,
         )
 
         val agentState = AgentState()
@@ -1364,16 +1366,16 @@ actual class CodeWriterAgentTest {
                     outcomeId = outcomes.firstOrNull()?.id ?: "test-outcome",
                     approach = "Test pattern identified",
                     learnings = "Test learning stored",
-                    timestamp = Clock.System.now()
+                    timestamp = Clock.System.now(),
                 )
 
                 initialState.addToPastKnowledge(
-                    rememberedKnowledgeFromOutcomes = listOf(knowledge)
+                    rememberedKnowledgeFromOutcomes = listOf(knowledge),
                 )
 
                 return Idea(
                     name = "Test evaluation",
-                    description = "Learning stored"
+                    description = "Learning stored",
                 )
             }
         }
@@ -1392,8 +1394,8 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("Test.kt"),
-                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
-            )
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null),
+            ),
         )
 
         // Execute
@@ -1417,7 +1419,7 @@ actual class CodeWriterAgentTest {
         val aiConfig = FakeAIConfiguration()
         val agentConfig = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
-            aiConfiguration = aiConfig
+            aiConfiguration = aiConfig,
         )
 
         val testAgent = object : CodeWriterAgent(
@@ -1442,7 +1444,7 @@ actual class CodeWriterAgentTest {
 
                            Confidence: medium
                            Evidence Count: ${outcomes.size}
-                    """.trimIndent()
+                    """.trimIndent(),
                 )
             }
         }
@@ -1457,7 +1459,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("Success1.kt"),
-                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null),
             ),
             ExecutionOutcome.CodeChanged.Failure(
                 executorId = "executor-1",
@@ -1467,8 +1469,8 @@ actual class CodeWriterAgentTest {
                 executionEndTimestamp = now.plus(2.seconds),
                 error = ExecutionError(
                     type = ExecutionError.Type.TOOL_UNAVAILABLE,
-                    message = "Failed"
-                )
+                    message = "Failed",
+                ),
             ),
             ExecutionOutcome.CodeChanged.Success(
                 executorId = "executor-1",
@@ -1477,8 +1479,8 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("Success2.kt"),
-                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
-            )
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null),
+            ),
         )
 
         // Execute
@@ -1502,7 +1504,7 @@ actual class CodeWriterAgentTest {
         val aiConfig = FakeAIConfiguration()
         val agentConfig = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
-            aiConfiguration = aiConfig
+            aiConfiguration = aiConfig,
         )
 
         val testAgent = object : CodeWriterAgent(
@@ -1533,7 +1535,7 @@ actual class CodeWriterAgentTest {
 
                            Confidence: medium
                            Evidence Count: 4
-                    """.trimIndent()
+                    """.trimIndent(),
                 )
             }
         }
@@ -1548,7 +1550,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(i.seconds),
                 changedFiles = listOf("File$i.kt"),
-                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null),
             )
         }
 
@@ -1561,7 +1563,7 @@ actual class CodeWriterAgentTest {
             idea.description.contains("pattern", ignoreCase = true) ||
                 idea.description.contains("consistently", ignoreCase = true) ||
                 idea.description.contains("correlate", ignoreCase = true),
-            "Should identify meta-patterns"
+            "Should identify meta-patterns",
         )
     }
 
@@ -1577,7 +1579,7 @@ actual class CodeWriterAgentTest {
         val aiConfig = FakeAIConfiguration()
         val agentConfig = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
-            aiConfiguration = aiConfig
+            aiConfiguration = aiConfig,
         )
 
         val agentState = AgentState()
@@ -1609,7 +1611,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("File1.kt"),
-                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null),
             ),
             ExecutionOutcome.CodeChanged.Success(
                 executorId = "executor-1",
@@ -1618,8 +1620,8 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("File2.kt"),
-                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
-            )
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null),
+            ),
         )
 
         // Execute
@@ -1634,7 +1636,7 @@ actual class CodeWriterAgentTest {
                 idea.description.contains("statistics", ignoreCase = true) ||
                 idea.description.contains("fallback", ignoreCase = true) ||
                 idea.description.contains("unavailable", ignoreCase = true),
-            "Fallback idea should mention limited analysis"
+            "Fallback idea should mention limited analysis",
         )
 
         // Verify fallback knowledge was still stored
@@ -1654,7 +1656,7 @@ actual class CodeWriterAgentTest {
         val aiConfig = FakeAIConfiguration()
         val agentConfig = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
-            aiConfiguration = aiConfig
+            aiConfiguration = aiConfig,
         )
 
         val testAgent = object : CodeWriterAgent(
@@ -1681,7 +1683,7 @@ actual class CodeWriterAgentTest {
 
                            Confidence: high
                            Evidence Count: 3
-                    """.trimIndent()
+                    """.trimIndent(),
                 )
             }
         }
@@ -1696,7 +1698,7 @@ actual class CodeWriterAgentTest {
                 executionStartTimestamp = now,
                 executionEndTimestamp = now.plus(1.seconds),
                 changedFiles = listOf("Success.kt"),
-                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null)
+                validation = ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null),
             ),
             ExecutionOutcome.CodeChanged.Failure(
                 executorId = "executor-1",
@@ -1706,8 +1708,8 @@ actual class CodeWriterAgentTest {
                 executionEndTimestamp = now.plus(1.seconds),
                 error = ExecutionError(
                     type = ExecutionError.Type.TOOL_UNAVAILABLE,
-                    message = "Failed 1"
-                )
+                    message = "Failed 1",
+                ),
             ),
             ExecutionOutcome.CodeChanged.Failure(
                 executorId = "executor-1",
@@ -1717,9 +1719,9 @@ actual class CodeWriterAgentTest {
                 executionEndTimestamp = now.plus(1.seconds),
                 error = ExecutionError(
                     type = ExecutionError.Type.TOOL_UNAVAILABLE,
-                    message = "Failed 2"
-                )
-            )
+                    message = "Failed 2",
+                ),
+            ),
         )
 
         // Execute
@@ -1732,7 +1734,7 @@ actual class CodeWriterAgentTest {
                 idea.description.contains("high", ignoreCase = true) ||
                 idea.description.contains("failure", ignoreCase = true) ||
                 idea.description.contains("warning", ignoreCase = true),
-            "Should warn about high failure rate"
+            "Should warn about high failure rate",
         )
     }
 }

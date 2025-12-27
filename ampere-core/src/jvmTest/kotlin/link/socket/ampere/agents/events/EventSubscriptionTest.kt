@@ -9,10 +9,10 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory
-import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.db.Database
 

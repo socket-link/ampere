@@ -9,7 +9,7 @@ import link.socket.ampere.agents.events.utils.generateUUID
 typealias PerceptionId = String
 
 @Serializable
-data class Perception <S : State>(
+data class Perception<S : State>(
     val currentState: S,
     val ideas: List<Idea>,
     val id: PerceptionId = generateUUID(*ideas.map { it.id }.toTypedArray()),

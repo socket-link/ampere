@@ -4,11 +4,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.concept.expectation.MeetingExpectations
 import link.socket.ampere.agents.domain.concept.outcome.MeetingOutcome
 import link.socket.ampere.agents.domain.concept.status.MeetingStatus
 import link.socket.ampere.agents.domain.concept.status.TaskStatus
+import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.concept.task.MeetingTask.AgendaItem
 import link.socket.ampere.agents.domain.event.EventSource
 
