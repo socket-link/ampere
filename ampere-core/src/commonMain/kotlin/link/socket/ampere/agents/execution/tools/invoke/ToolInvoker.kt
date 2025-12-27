@@ -42,8 +42,8 @@ class ToolInvoker<C : ExecutionContext>(
      * Invoke the wrapped tool with the provided request.
      *
      * Handles validation, measures timing, and transforms tool outcomes
-     * into invocation results. Emits ToolExecutionEvent.Started and
-     * ToolExecutionEvent.Completed events if eventApi is provided.
+     * into invocation results. Emits ToolEvent.ToolExecutionStarted and
+     * ToolEvent.ToolExecutionCompleted events if eventApi is provided.
      *
      * The execution flow:
      * 1. Generate invocation ID and emit Started event

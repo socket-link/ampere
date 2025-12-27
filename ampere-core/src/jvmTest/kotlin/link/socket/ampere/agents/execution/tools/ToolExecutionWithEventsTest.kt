@@ -21,6 +21,7 @@ import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.execution.tools.invoke.ToolInvoker
+import link.socket.ampere.agents.execution.tools.invoke.ToolInvocationResult
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 import kotlin.test.AfterTest
@@ -145,7 +146,7 @@ class ToolExecutionWithEventsTest {
         val result = invoker.invoke(request)
 
         // Verify the result
-        assertIs<link.socket.ampere.agents.execution.tools.invoke.ToolInvocationResult.Success>(result)
+        assertIs<ToolInvocationResult.Success>(result)
 
         // Allow events to be processed
         delay(100)
@@ -225,7 +226,7 @@ class ToolExecutionWithEventsTest {
         val result = invoker.invoke(request)
 
         // Verify the result is a failure
-        assertIs<link.socket.ampere.agents.execution.tools.invoke.ToolInvocationResult.Failed>(result)
+        assertIs<ToolInvocationResult.Failed>(result)
 
         // Allow events to be processed
         delay(100)
@@ -294,7 +295,7 @@ class ToolExecutionWithEventsTest {
         val result = invoker.invoke(request)
 
         // Verify the result
-        assertIs<link.socket.ampere.agents.execution.tools.invoke.ToolInvocationResult.Success>(result)
+        assertIs<ToolInvocationResult.Success>(result)
 
         // No events should be emitted (event repository should be empty or only have setup events)
         val events = eventRepository.getAllEvents().getOrNull()
