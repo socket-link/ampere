@@ -16,10 +16,14 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 class CognitiveClusterer(
     private val clusterWindowMs: Long = 500,
+    private val maxPendingEventsPerAgent: Int = 10,
     private val clock: Clock = Clock.System
 ) {
     private val pendingEventsByAgent = mutableMapOf<String, MutableList<PendingEvent>>()
     private val completedClusters = mutableListOf<CognitiveCluster>()
+
+    // State machine: track last KnowledgeRecalled event per agent for O(1) matching
+    private val lastRecallByAgent = mutableMapOf<String, PendingEvent>()
 
     private data class PendingEvent(val event: Event, val receivedAt: Instant)
 
@@ -33,8 +37,13 @@ class CognitiveClusterer(
         val pending = pendingEventsByAgent.getOrPut(agentId) { mutableListOf() }
         pending.add(PendingEvent(event, clock.now()))
 
-        // Check for completed patterns
-        return checkForKnowledgeCluster(agentId)?.also {
+        // Enforce size limit - remove oldest events if exceeded
+        while (pending.size > maxPendingEventsPerAgent) {
+            pending.removeAt(0)
+        }
+
+        // Check for completed patterns using O(1) state machine
+        return checkForKnowledgeCluster(agentId, event)?.also {
             // Remove clustered events from pending
             pending.removeAll { e -> it.events.contains(e.event) }
 
@@ -47,44 +56,73 @@ class CognitiveClusterer(
     }
 
     /**
-     * Check for a KnowledgeRecalled + KnowledgeStored cluster pattern.
+     * Check for a KnowledgeRecalled + KnowledgeStored cluster pattern using O(1) state machine.
      */
-    private fun checkForKnowledgeCluster(agentId: String): CognitiveCluster? {
-        val pending = pendingEventsByAgent[agentId] ?: return null
-        if (pending.size < 2) return null
+    private fun checkForKnowledgeCluster(agentId: String, currentEvent: Event): CognitiveCluster? {
+        when (currentEvent) {
+            is MemoryEvent.KnowledgeRecalled -> {
+                // Track this recall for potential future matching
+                lastRecallByAgent[agentId] = PendingEvent(currentEvent, clock.now())
+                return null
+            }
+            is MemoryEvent.KnowledgeStored -> {
+                // Check if we have a recent recall to pair with
+                val lastRecall = lastRecallByAgent[agentId] ?: return null
 
-        // Look for KnowledgeRecalled followed by KnowledgeStored
-        for (i in 0 until pending.size - 1) {
-            val first = pending[i]
-            val second = pending[i + 1]
+                val timeDiff = currentEvent.timestamp.toEpochMilliseconds() -
+                              lastRecall.event.timestamp.toEpochMilliseconds()
 
-            if (first.event is MemoryEvent.KnowledgeRecalled &&
-                second.event is MemoryEvent.KnowledgeStored
-            ) {
-                val timeDiff = second.event.timestamp.toEpochMilliseconds() -
-                              first.event.timestamp.toEpochMilliseconds()
+                return if (timeDiff <= clusterWindowMs) {
+                    // Clear the tracked recall since we matched it
+                    lastRecallByAgent.remove(agentId)
 
-                if (timeDiff <= clusterWindowMs) {
-                    return CognitiveCluster(
+                    CognitiveCluster(
                         agentId = agentId,
-                        startTimestamp = first.event.timestamp,
-                        events = listOf(first.event, second.event),
+                        startTimestamp = lastRecall.event.timestamp,
+                        events = listOf(lastRecall.event, currentEvent),
                         cycleType = CognitiveClusterType.KNOWLEDGE_RECALL_STORE
                     )
+                } else {
+                    // Too old, clear it and don't match
+                    lastRecallByAgent.remove(agentId)
+                    null
                 }
             }
+            else -> return null
         }
-
-        return null
     }
 
     /**
      * Remove old pending events that never completed a cluster.
+     * Also removes agent entries with no pending events to prevent unbounded map growth.
      */
     fun cleanup() {
         val cutoff = clock.now().minus(1000.milliseconds)
-        pendingEventsByAgent.values.forEach { pending ->
+        val agentsToRemove = mutableListOf<String>()
+
+        pendingEventsByAgent.forEach { (agentId, pending) ->
             pending.removeAll { it.receivedAt < cutoff }
+
+            // Mark agents with empty pending lists for removal
+            if (pending.isEmpty()) {
+                agentsToRemove.add(agentId)
+            }
+        }
+
+        // Remove agents with no pending events to prevent unbounded map growth
+        agentsToRemove.forEach { agentId ->
+            pendingEventsByAgent.remove(agentId)
+        }
+
+        // Also clean up stale lastRecall entries
+        val staleRecalls = mutableListOf<String>()
+        lastRecallByAgent.forEach { (agentId, pendingEvent) ->
+            if (pendingEvent.receivedAt < cutoff) {
+                staleRecalls.add(agentId)
+            }
+        }
+        staleRecalls.forEach { agentId ->
+            lastRecallByAgent.remove(agentId)
         }
     }
 

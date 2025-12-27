@@ -17,7 +17,29 @@ import link.socket.ampere.agents.domain.event.ToolEvent
  * what deserves conscious attention versus what can be processed automatically.
  */
 object EventCategorizer {
-    fun categorize(event: Event): EventSignificance = when (event) {
+    // Bounded cache to avoid repeated categorization of the same events
+    // Using LinkedHashMap for LRU eviction
+    private val categorizationCache = object : LinkedHashMap<String, EventSignificance>(
+        100, // Initial capacity
+        0.75f, // Load factor
+        true // Access order (LRU)
+    ) {
+        override fun removeEldestEntry(eldest: Map.Entry<String, EventSignificance>?): Boolean {
+            return size > 200 // Keep max 200 entries
+        }
+    }
+
+    fun categorize(event: Event): EventSignificance {
+        // Check cache first
+        categorizationCache[event.eventId]?.let { return it }
+
+        // Compute and cache
+        val significance = categorizeInternal(event)
+        categorizationCache[event.eventId] = significance
+        return significance
+    }
+
+    private fun categorizeInternal(event: Event): EventSignificance = when (event) {
         // Critical events require immediate human awareness
         is Event.QuestionRaised -> EventSignificance.CRITICAL
         is TicketEvent.TicketBlocked -> EventSignificance.CRITICAL

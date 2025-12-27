@@ -128,6 +128,8 @@ class WatchPresenter(
             consecutiveCognitiveCycles = newCycleCount,
             isIdle = newState == AgentState.IDLE
         )
+
+        invalidateCache()
     }
 
     private fun determineAgentState(event: Event, cycleCount: Int): AgentState {
@@ -162,6 +164,8 @@ class WatchPresenter(
         while (significantEvents.size > 20) {
             significantEvents.removeLast()
         }
+
+        invalidateCache()
     }
 
     private fun updateSystemVitals(significance: EventSignificance) {
@@ -182,23 +186,49 @@ class WatchPresenter(
                 systemVitals.lastSignificantEventTime
             }
         )
+
+        invalidateCache()
     }
 
     private fun updateIdleStates() {
         val now = clock.now()
         val idleThresholdMs = 5000L // 5 seconds without activity = idle
+        val removalThresholdMs = 30000L // 30 seconds idle = remove from memory
+
+        // Collect agents to remove (can't modify map while iterating)
+        val agentsToRemove = mutableListOf<String>()
+        var stateChanged = false
 
         agentStates.forEach { (agentId, state) ->
             val timeSinceActivity = now.toEpochMilliseconds() -
                                    state.lastActivityTimestamp.toEpochMilliseconds()
 
-            if (timeSinceActivity > idleThresholdMs && !state.isIdle) {
-                agentStates[agentId] = state.copy(
-                    currentState = AgentState.IDLE,
-                    isIdle = true,
-                    consecutiveCognitiveCycles = 0
-                )
+            when {
+                // Remove agents that have been idle for too long
+                timeSinceActivity > removalThresholdMs -> {
+                    agentsToRemove.add(agentId)
+                    stateChanged = true
+                }
+                // Mark as idle if past idle threshold
+                timeSinceActivity > idleThresholdMs && !state.isIdle -> {
+                    agentStates[agentId] = state.copy(
+                        currentState = AgentState.IDLE,
+                        isIdle = true,
+                        consecutiveCognitiveCycles = 0
+                    )
+                    stateChanged = true
+                }
             }
+        }
+
+        // Remove stale agents to prevent unbounded memory growth
+        agentsToRemove.forEach { agentId ->
+            agentStates.remove(agentId)
+        }
+
+        // Only invalidate cache if state actually changed
+        if (stateChanged) {
+            invalidateCache()
         }
     }
 
@@ -233,12 +263,29 @@ class WatchPresenter(
         }
     }
 
+    private var cachedViewState: WatchViewState? = null
+    private var cacheInvalidated = true
+
     fun getViewState(): WatchViewState {
-        return WatchViewState(
+        // Return cached view state if still valid
+        if (!cacheInvalidated && cachedViewState != null) {
+            return cachedViewState!!
+        }
+
+        // Create new view state snapshot
+        val viewState = WatchViewState(
             systemVitals = systemVitals,
             agentStates = agentStates.toMap(), // Immutable copy
             recentSignificantEvents = significantEvents.toList() // Immutable copy
         )
+
+        cachedViewState = viewState
+        cacheInvalidated = false
+        return viewState
+    }
+
+    private fun invalidateCache() {
+        cacheInvalidated = true
     }
 
     fun getRecentClusters(): List<CognitiveCluster> {
