@@ -56,9 +56,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Build the CLI
 ./gradlew :ampere-cli:installJvmDist
 
-# Watch events in real-time
+# Start the interactive dashboard (DEFAULT - runs when you just execute ./ampere-cli/ampere)
+./ampere-cli/ampere              # Same as 'ampere start'
+./ampere-cli/ampere start        # Interactive multi-modal dashboard
+
+# Dashboard keyboard controls (while dashboard is running):
+#   d - Dashboard mode (system vitals, agent status, recent events)
+#   e - Event stream mode (filtered event stream)
+#   m - Memory operations mode (knowledge recall/storage patterns)
+#   v - Toggle verbose mode (show/hide routine events)
+#   h or ? - Toggle help screen
+#   : - Command mode (issue commands to the system)
+#   ESC - Close help / Cancel command mode
+#   1-9 - Agent focus mode (detailed view of specific agent)
+#   q or Ctrl+C - Exit
+
+# Command mode (press ':' while in dashboard):
+#   :help - Show available commands
+#   :agents - List all active agents
+#   :ticket <id> - Show ticket details
+#   :thread <id> - Show conversation thread
+#   :quit - Exit dashboard
+
+# Watch events in real-time (alternative to dashboard, streaming mode)
 ./ampere-cli/ampere watch
+./ampere-cli/ampere watch --verbose                    # Show all events including routine
+./ampere-cli/ampere watch --group-cognitive-cycles     # Group knowledge operations
 ./ampere-cli/ampere watch --filter TaskCreated --agent agent-pm
+
+# Static dashboard view (non-interactive)
+./ampere-cli/ampere dashboard
+./ampere-cli/ampere dashboard --refresh-interval 2     # Update every 2 seconds
 
 # View conversation threads
 ./ampere-cli/ampere thread list
@@ -72,6 +100,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./ampere-cli/ampere outcomes search <query>
 ./ampere-cli/ampere outcomes executor <executor-id>
 ./ampere-cli/ampere outcomes stats
+
+# Interactive REPL session
+./ampere-cli/ampere interactive
 ```
 
 See [ampere-cli/README.md](ampere-cli/README.md) for complete CLI documentation.

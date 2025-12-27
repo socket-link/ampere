@@ -8,14 +8,12 @@ import link.socket.ampere.agents.definition.AgentType
 import link.socket.ampere.agents.definition.CodeWriterAgent
 import link.socket.ampere.agents.definition.ProductManagerAgent
 import link.socket.ampere.agents.definition.QualityAssuranceAgent
-import link.socket.ampere.agents.environment.workspace.defaultWorkspace
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.data.RepositoryFactory
 import link.socket.ampere.data.createJvmDriver
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.koog.KoogAgentFactory
 import link.socket.ampere.util.LoggingConfiguration
-import link.socket.ampere.help.HelpFormatter
 import link.socket.ampere.util.configureLogging
 
 /**
@@ -67,9 +65,9 @@ fun main(args: Array<String>) {
         // Start all orchestrator services
         context.start()
 
-        // If no arguments provided, launch interactive mode
+        // If no arguments provided, launch start (dashboard) mode
         val effectiveArgs = if (args.isEmpty()) {
-            arrayOf("interactive")
+            arrayOf("start")
         } else {
             args
         }
@@ -77,6 +75,8 @@ fun main(args: Array<String>) {
         // Run the CLI with injected dependencies
         AmpereCommand()
             .subcommands(
+                StartCommand(context.eventRelayService),
+                HelpCommand(),
                 InteractiveCommand(context),
                 WatchCommand(context.eventRelayService),
                 DashboardCommand(context.eventRelayService),
