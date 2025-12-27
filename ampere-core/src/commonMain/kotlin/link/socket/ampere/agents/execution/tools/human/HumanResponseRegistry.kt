@@ -44,7 +44,12 @@ class HumanResponseRegistry {
 
         return try {
             withTimeoutOrNull(timeout) {
-                deferred.await()
+                try {
+                    deferred.await()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Request was cancelled, return null
+                    null
+                }
             }
         } finally {
             pendingRequests.remove(requestId)
