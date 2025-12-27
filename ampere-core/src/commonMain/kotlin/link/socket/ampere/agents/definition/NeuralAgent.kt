@@ -10,7 +10,7 @@ import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
 
-interface NeuralAgent <S : AgentState> : Agent<S> {
+interface NeuralAgent<S : AgentState> : Agent<S> {
 
     val runLLMToEvaluatePerception: (perception: Perception<S>) -> Idea
     val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan

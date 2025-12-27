@@ -75,7 +75,7 @@ class ProductManagerAgent(
      */
     override suspend fun perceiveState(
         currentState: ProductManagerState,
-        vararg newIdeas: Idea
+        vararg newIdeas: Idea,
     ): Perception<ProductManagerState> {
         // Get fresh state from ticket orchestrator
         val freshState = getUpdatedAgentState()
@@ -120,7 +120,7 @@ class ProductManagerAgent(
     override suspend fun determinePlanForTask(
         task: Task,
         vararg ideas: Idea,
-        relevantKnowledge: List<KnowledgeWithScore>
+        relevantKnowledge: List<KnowledgeWithScore>,
     ): Plan {
         // Analyze past knowledge for actionable patterns
         val insights = analyzeKnowledge(relevantKnowledge)
@@ -140,8 +140,8 @@ class ProductManagerAgent(
                             description = "Define test specifications before implementation " +
                                 "(Past knowledge shows ${(insights.testFirstSuccessRate * 100).toInt()}% " +
                                 "success rate: ${insights.testFirstLearnings.take(100)})",
-                            assignedTo = task.assignedTo
-                        )
+                            assignedTo = task.assignedTo,
+                        ),
                     )
                 }
 
@@ -153,8 +153,8 @@ class ProductManagerAgent(
                             status = TaskStatus.Pending,
                             description = "Validate against known failure pattern: $failurePoint " +
                                 "(Past learnings: ${learnings.take(100)})",
-                            assignedTo = task.assignedTo
-                        )
+                            assignedTo = task.assignedTo,
+                        ),
                     )
                 }
 
@@ -166,8 +166,8 @@ class ProductManagerAgent(
                         status = TaskStatus.Pending,
                         description = "Implement ${task.description} in approximately $optimalTasks subtasks " +
                             "(Based on past success patterns: ${insights.decompositionLearnings.take(100)})",
-                        assignedTo = task.assignedTo
-                    )
+                        assignedTo = task.assignedTo,
+                    ),
                 )
 
                 // Adjust complexity based on insights
@@ -211,7 +211,9 @@ class ProductManagerAgent(
         val testFirstSuccessRate = if (testFirstKnowledge.isNotEmpty()) {
             // Assuming higher relevance scores correlate with successful approaches
             testFirstKnowledge.map { it.relevanceScore }.average()
-        } else 0.0
+        } else {
+            0.0
+        }
 
         // Extract common failure patterns from learnings
         val failures = relevantKnowledge
@@ -237,7 +239,9 @@ class ProductManagerAgent(
         }
         val optimalTaskCount = if (taskCounts.isNotEmpty()) {
             taskCounts.average().toInt()
-        } else null
+        } else {
+            null
+        }
 
         return PlanningInsights(
             testFirstSuccessRate = testFirstSuccessRate,
@@ -246,7 +250,7 @@ class ProductManagerAgent(
             optimalTaskCount = optimalTaskCount,
             decompositionLearnings = relevantKnowledge
                 .firstOrNull { it.knowledge.learnings.contains("task", ignoreCase = true) }
-                ?.knowledge?.learnings ?: ""
+                ?.knowledge?.learnings ?: "",
         )
     }
 
@@ -258,7 +262,7 @@ class ProductManagerAgent(
     override fun extractKnowledgeFromOutcome(
         outcome: Outcome,
         task: Task,
-        plan: Plan
+        plan: Plan,
     ): Knowledge {
         val taskDescription = when (task) {
             is Task.CodeChange -> task.description
@@ -310,7 +314,7 @@ class ProductManagerAgent(
             outcomeId = outcome.id,
             approach = approachDescription,
             learnings = learnings,
-            timestamp = Clock.System.now()
+            timestamp = Clock.System.now(),
         )
     }
 
@@ -408,19 +412,19 @@ class ProductManagerAgent(
         val messages = listOf(
             ChatMessage(
                 role = ChatRole.System,
-                content = systemMessage
+                content = systemMessage,
             ),
             ChatMessage(
                 role = ChatRole.User,
-                content = prompt
-            )
+                content = prompt,
+            ),
         )
 
         val request = ChatCompletionRequest(
             model = model.toClientModelId(),
             messages = messages,
             temperature = temperature,
-            maxTokens = maxTokens
+            maxTokens = maxTokens,
         )
 
         val completion = client.chatCompletion(request)
@@ -435,7 +439,7 @@ class ProductManagerAgent(
         prompt: String,
         systemMessage: String = "You are a product manager agent analyzing project state and making planning decisions. Respond only with valid JSON.",
         temperature: Double = 0.3,
-        maxTokens: Int = 500
+        maxTokens: Int = 500,
     ): String = runBlocking {
         val client = agentConfiguration.aiConfiguration.provider.client
         val model = agentConfiguration.aiConfiguration.model
@@ -443,19 +447,19 @@ class ProductManagerAgent(
         val messages = listOf(
             ChatMessage(
                 role = ChatRole.System,
-                content = systemMessage
+                content = systemMessage,
             ),
             ChatMessage(
                 role = ChatRole.User,
-                content = prompt
-            )
+                content = prompt,
+            ),
         )
 
         val request = ChatCompletionRequest(
             model = model.toClientModelId(),
             messages = messages,
             temperature = temperature,
-            maxTokens = maxTokens
+            maxTokens = maxTokens,
         )
 
         val completion = client.chatCompletion(request)
@@ -514,5 +518,5 @@ private data class PlanningInsights(
     val testFirstLearnings: String = "",
     val commonFailures: Map<String, String> = emptyMap(),
     val optimalTaskCount: Int? = null,
-    val decompositionLearnings: String = ""
+    val decompositionLearnings: String = "",
 )

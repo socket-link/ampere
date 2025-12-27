@@ -1,15 +1,15 @@
 package link.socket.ampere.agents.domain.memory
 
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
-import link.socket.ampere.agents.domain.concept.outcome.OutcomeId
 import link.socket.ampere.agents.domain.concept.Idea
 import link.socket.ampere.agents.domain.concept.IdeaId
 import link.socket.ampere.agents.domain.concept.Perception
 import link.socket.ampere.agents.domain.concept.PerceptionId
 import link.socket.ampere.agents.domain.concept.Plan
 import link.socket.ampere.agents.domain.concept.PlanId
+import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
+import link.socket.ampere.agents.domain.concept.outcome.Outcome
+import link.socket.ampere.agents.domain.concept.outcome.OutcomeId
 import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.domain.concept.task.TaskId
 

@@ -46,7 +46,7 @@ open class AgentState : State {
         memory = memory.copy(
             currentMemoryCell = memory.currentMemoryCell.copy(
                 idea = newIdea,
-            )
+            ),
         )
     }
 
@@ -60,7 +60,7 @@ open class AgentState : State {
         memory = memory.copy(
             currentMemoryCell = memory.currentMemoryCell.copy(
                 outcome = newOutcome,
-            )
+            ),
         )
     }
 
@@ -74,7 +74,7 @@ open class AgentState : State {
         memory = memory.copy(
             currentMemoryCell = memory.currentMemoryCell.copy(
                 perception = newPerception,
-            )
+            ),
         )
     }
 
@@ -88,7 +88,7 @@ open class AgentState : State {
         memory = memory.copy(
             currentMemoryCell = memory.currentMemoryCell.copy(
                 plan = newPlan,
-            )
+            ),
         )
     }
 
@@ -102,7 +102,7 @@ open class AgentState : State {
         memory = memory.copy(
             currentMemoryCell = memory.currentMemoryCell.copy(
                 task = newTask,
-            )
+            ),
         )
     }
 
@@ -114,7 +114,7 @@ open class AgentState : State {
         rememberedTasks: List<TaskId> = emptyList(),
     ) {
         memory = memory.copy(
-            pastMemoryCell = with(memory.pastMemoryCell){
+            pastMemoryCell = with(memory.pastMemoryCell) {
                 copy(
                     ideas = ideas.plus(rememberedIdeas.filter { it != "" }),
                     outcomes = outcomes.plus(rememberedOutcomes.filter { it != "" }),
@@ -122,7 +122,7 @@ open class AgentState : State {
                     plans = plans.plus(rememberedPlans.filter { it != "" }),
                     tasks = tasks.plus(rememberedTasks.filter { it != "" }),
                 )
-            }
+            },
         )
     }
 
@@ -134,7 +134,7 @@ open class AgentState : State {
         rememberedKnowledgeFromTasks: List<Knowledge.FromTask> = emptyList(),
     ) {
         memory = memory.copy(
-            pastMemoryCell = with(memory.pastMemoryCell){
+            pastMemoryCell = with(memory.pastMemoryCell) {
                 copy(
                     knowledgeFromIdeas = knowledgeFromIdeas.plus(rememberedKnowledgeFromIdeas),
                     knowledgeFromOutcomes = knowledgeFromOutcomes.plus(rememberedKnowledgeFromOutcomes),
@@ -142,7 +142,7 @@ open class AgentState : State {
                     knowledgeFromPlans = knowledgeFromPlans.plus(rememberedKnowledgeFromPlans),
                     knowledgeFromTasks = knowledgeFromTasks.plus(rememberedKnowledgeFromTasks),
                 )
-            }
+            },
         )
     }
 
@@ -164,7 +164,7 @@ open class AgentState : State {
 
     fun resetPastMemoryCell() {
         memory = memory.copy(
-            pastMemoryCell = AgentMemoryCell.Past.blank
+            pastMemoryCell = AgentMemoryCell.Past.blank,
         )
     }
 }

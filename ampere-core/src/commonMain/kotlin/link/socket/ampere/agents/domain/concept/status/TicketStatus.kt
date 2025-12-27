@@ -64,7 +64,7 @@ sealed interface TicketStatus : Status {
      */
     fun validTransitions(): Set<TicketStatus> = when (this) {
         is Backlog -> setOf(Ready, Done)
-        is Ready-> setOf(InProgress)
+        is Ready -> setOf(InProgress)
         is InProgress -> setOf(Blocked, InReview, Done)
         is Blocked -> setOf(InProgress)
         is InReview -> setOf(InProgress, Done)

@@ -47,7 +47,13 @@ class ConsoleEventLogger : EventLogger {
     }
 
     override fun logError(message: String, throwable: Throwable?) {
-        System.err.println("[EventBus][ERROR] $message" + (throwable?.let { ": ${it::class.simpleName} - ${it.message}" } ?: ""))
+        System.err.println(
+            "[EventBus][ERROR] $message" + (
+                throwable?.let {
+                    ": ${it::class.simpleName} - ${it.message}"
+                } ?: ""
+                ),
+        )
         throwable?.printStackTrace()
     }
 

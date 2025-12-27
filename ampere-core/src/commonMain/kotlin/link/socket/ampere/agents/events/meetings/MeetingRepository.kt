@@ -8,11 +8,11 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.concept.outcome.MeetingOutcome
 import link.socket.ampere.agents.domain.concept.status.MeetingStatus
 import link.socket.ampere.agents.domain.concept.status.TaskStatus
 import link.socket.ampere.agents.domain.concept.task.AgendaItemId
+import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.concept.task.MeetingTask
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.data.Repository

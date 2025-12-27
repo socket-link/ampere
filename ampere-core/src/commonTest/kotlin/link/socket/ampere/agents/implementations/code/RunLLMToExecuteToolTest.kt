@@ -7,14 +7,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.config.AgentConfiguration
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.definition.CodeWriterAgent
 import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.concept.status.TaskStatus
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.domain.concept.task.Task
-import link.socket.ampere.agents.definition.CodeWriterAgent
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.config.AgentConfiguration
+import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
@@ -75,8 +75,8 @@ class RunLLMToExecuteToolTest {
             agentDefinition = WriteCodeAgent,
             aiConfiguration = AIConfiguration_Default(
                 provider = AIProvider_Anthropic,
-                model = AIModel_Claude.Sonnet_4
-            )
+                model = AIModel_Claude.Sonnet_4,
+            ),
         )
     }
 
@@ -92,7 +92,7 @@ class RunLLMToExecuteToolTest {
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             executionFunction = { request ->
                 throw IllegalStateException("Tool should be executed through executor")
-            }
+            },
         )
 
         val agent = CodeWriterAgent(
@@ -127,7 +127,7 @@ class RunLLMToExecuteToolTest {
         assertIs<ExecutionOutcome.Failure>(outcome)
         assertTrue(
             (outcome as ExecutionOutcome.NoChanges.Failure).message.contains("no intent"),
-            "Error message should mention missing intent"
+            "Error message should mention missing intent",
         )
     }
 
@@ -153,7 +153,7 @@ class RunLLMToExecuteToolTest {
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             executionFunction = { request ->
                 throw IllegalStateException("Tool should be executed through executor")
-            }
+            },
         )
 
         val agent = CodeWriterAgent(
@@ -185,7 +185,7 @@ class RunLLMToExecuteToolTest {
         assertIs<ExecutionOutcome.Failure>(outcome)
         assertTrue(
             (outcome as ExecutionOutcome.NoChanges.Failure).message.contains("MCP tool"),
-            "Error message should mention MCP tools not being supported"
+            "Error message should mention MCP tools not being supported",
         )
     }
 
@@ -204,7 +204,7 @@ class RunLLMToExecuteToolTest {
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             executionFunction = { request ->
                 throw IllegalStateException("Tool should be executed through executor")
-            }
+            },
         )
 
         val agent = CodeWriterAgent(

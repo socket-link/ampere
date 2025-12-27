@@ -1,5 +1,15 @@
 package link.socket.ampere.agents.execution.tools
 
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
@@ -15,16 +25,6 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.human.GlobalHumanResponseRegistry
 import link.socket.ampere.agents.execution.tools.human.HumanResponseRegistry
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * End-to-end validation tests for human escalation flow.
@@ -62,14 +62,14 @@ class HumanEscalationFlowTest {
                 assignedAgentId = null,
                 createdByAgentId = "test-agent",
                 createdAt = Clock.System.now(),
-                updatedAt = Clock.System.now()
+                updatedAt = Clock.System.now(),
             ),
             task = Task.CodeChange(
                 id = generateUUID(),
                 status = TaskStatus.Pending,
-                description = "Test task"
+                description = "Test task",
             ),
-            instructions = instructions
+            instructions = instructions,
         )
     }
 

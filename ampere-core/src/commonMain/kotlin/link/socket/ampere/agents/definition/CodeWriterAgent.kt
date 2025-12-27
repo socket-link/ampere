@@ -123,7 +123,7 @@ open class CodeWriterAgent(
     override fun extractKnowledgeFromOutcome(
         outcome: Outcome,
         task: Task,
-        plan: Plan
+        plan: Plan,
     ): Knowledge.FromOutcome {
         // Build approach description from task and plan
         val approach = buildString {
@@ -214,7 +214,7 @@ open class CodeWriterAgent(
             outcomeId = outcome.id,
             approach = approach,
             learnings = learnings,
-            timestamp = Clock.System.now()
+            timestamp = Clock.System.now(),
         )
     }
 
@@ -359,7 +359,6 @@ open class CodeWriterAgent(
         return idea
     }
 
-
     // TODO: MMOOVOOVEEEEE
     /**
      * Calls the LLM with the given prompt and returns the response.
@@ -379,26 +378,28 @@ open class CodeWriterAgent(
         val messages = listOf(
             ChatMessage(
                 role = ChatRole.System,
-                content = "You are an analytical agent perception system. Respond only with valid JSON."
+                content = "You are an analytical agent perception system. Respond only with valid JSON.",
             ),
             ChatMessage(
                 role = ChatRole.User,
-                content = prompt
-            )
+                content = prompt,
+            ),
         )
 
         val request = ChatCompletionRequest(
             model = model.toClientModelId(),
             messages = messages,
             temperature = 0.3, // Low temperature for analytical, consistent responses
-            maxTokens = maxTokens
+            maxTokens = maxTokens,
         )
 
         val completion = client.chatCompletion(request)
 
         // Log token usage for monitoring
         completion.usage?.let { usage ->
-            println("[LLM] Tokens - Prompt: ${usage.promptTokens}, Completion: ${usage.completionTokens}, Total: ${usage.totalTokens} (limit: $maxTokens)")
+            println(
+                "[LLM] Tokens - Prompt: ${usage.promptTokens}, Completion: ${usage.completionTokens}, Total: ${usage.totalTokens} (limit: $maxTokens)",
+            )
         }
 
         completion.choices.firstOrNull()?.message?.content
@@ -458,7 +459,7 @@ open class CodeWriterAgent(
 
         return Idea(
             name = "Perception analysis for $taskDescription",
-            description = insights.joinToString("\n\n")
+            description = insights.joinToString("\n\n"),
         )
     }
 
@@ -488,7 +489,7 @@ open class CodeWriterAgent(
                 Note: Advanced perception analysis unavailable - $reason
 
                 Available tools: ${requiredTools.joinToString(", ") { it.id }}
-            """.trimIndent()
+            """.trimIndent(),
         )
     }
 
@@ -646,7 +647,7 @@ open class CodeWriterAgent(
                 assignedTo = when (task) {
                     is Task.CodeChange -> task.assignedTo
                     else -> null
-                }
+                },
             )
         }
 
@@ -654,7 +655,7 @@ open class CodeWriterAgent(
             task = task,
             tasks = planTasks,
             estimatedComplexity = complexity,
-            expectations = Expectations.Companion.blank
+            expectations = Expectations.Companion.blank,
         )
     }
 
@@ -713,14 +714,14 @@ open class CodeWriterAgent(
             assignedTo = when (task) {
                 is Task.CodeChange -> task.assignedTo
                 else -> null
-            }
+            },
         )
 
         return Plan.ForTask(
             task = task,
             tasks = listOf(fallbackTask),
             estimatedComplexity = 3,
-            expectations = Expectations.Companion.blank
+            expectations = Expectations.Companion.blank,
         )
     }
 
@@ -748,7 +749,7 @@ open class CodeWriterAgent(
             return createTaskFailureOutcome(
                 task,
                 "Unsupported task type: ${task::class.simpleName}. " +
-                    "CodeWriterAgent currently only supports Task.CodeChange"
+                    "CodeWriterAgent currently only supports Task.CodeChange",
             )
         }
 
@@ -934,8 +935,8 @@ open class CodeWriterAgent(
                 instructionsPerFilePath = listOf(fileSpec.path to fileSpec.content),
             ),
             constraints = ExecutionConstraints(
-                requireTests = false,  // Don't require tests for now
-                requireLinting = false,  // Don't require linting for now
+                requireTests = false, // Don't require tests for now
+                requireLinting = false, // Don't require linting for now
             ),
         )
     }
@@ -1112,7 +1113,7 @@ open class CodeWriterAgent(
         if (outcomes.isEmpty()) {
             return Idea(
                 name = "No outcomes to evaluate",
-                description = "No execution outcomes were provided for evaluation."
+                description = "No execution outcomes were provided for evaluation.",
             )
         }
 
@@ -1120,7 +1121,7 @@ open class CodeWriterAgent(
         if (outcomes.all { it is Outcome.Blank }) {
             return Idea(
                 name = "Only blank outcomes",
-                description = "All provided outcomes were blank - no learnings can be extracted."
+                description = "All provided outcomes were blank - no learnings can be extracted.",
             )
         }
 
@@ -1147,7 +1148,7 @@ open class CodeWriterAgent(
         // Store learnings in agent memory for future reference
         if (knowledgeEntries.isNotEmpty()) {
             initialState.addToPastKnowledge(
-                rememberedKnowledgeFromOutcomes = knowledgeEntries
+                rememberedKnowledgeFromOutcomes = knowledgeEntries,
             )
         }
 
@@ -1432,7 +1433,7 @@ open class CodeWriterAgent(
                         appendLine("Confidence: $confidence")
                         appendLine("Evidence Count: $evidenceCount")
                     },
-                    timestamp = now
+                    timestamp = now,
                 )
             } catch (e: Exception) {
                 // Skip malformed learning entries
@@ -1459,8 +1460,10 @@ open class CodeWriterAgent(
         val failureCount = outcomes.count { it is Outcome.Failure }
 
         val description = buildString {
-            appendLine("Learnings from ${outcomes.size} execution outcomes " +
-                    "($successCount successful, $failureCount failed):")
+            appendLine(
+                "Learnings from ${outcomes.size} execution outcomes " +
+                    "($successCount successful, $failureCount failed):",
+            )
             appendLine()
 
             if (knowledgeEntries.isEmpty()) {
@@ -1481,7 +1484,7 @@ open class CodeWriterAgent(
 
         return Idea(
             name = "Outcome evaluation: ${outcomes.size} executions analyzed",
-            description = description
+            description = description,
         )
     }
 
@@ -1515,7 +1518,9 @@ open class CodeWriterAgent(
 
             if (failureCount > successCount) {
                 appendLine("⚠ High failure rate suggests tasks may be too complex or tools inadequate.")
-                appendLine("Consider: Breaking tasks into smaller steps, validating inputs, or using different approaches.")
+                appendLine(
+                    "Consider: Breaking tasks into smaller steps, validating inputs, or using different approaches.",
+                )
             } else {
                 appendLine("✓ Reasonable success rate - continue with current approach.")
             }
@@ -1534,17 +1539,17 @@ open class CodeWriterAgent(
             } else {
                 "Continue with current approach"
             },
-            timestamp = now
+            timestamp = now,
         )
 
         // Store the fallback learning
         initialState.addToPastKnowledge(
-            rememberedKnowledgeFromOutcomes = listOf(fallbackKnowledge)
+            rememberedKnowledgeFromOutcomes = listOf(fallbackKnowledge),
         )
 
         return Idea(
             name = "Outcome evaluation (basic statistics)",
-            description = description
+            description = description,
         )
     }
 
@@ -1649,6 +1654,7 @@ open class CodeWriterAgent(
                     // For FunctionTools, we need to cast appropriately
                     @Suppress("UNCHECKED_CAST")
                     val typedTool = tool as Tool<ExecutionContext>
+
                     @Suppress("UNCHECKED_CAST")
                     val typedRequest = enrichedRequest as ExecutionRequest<ExecutionContext>
 

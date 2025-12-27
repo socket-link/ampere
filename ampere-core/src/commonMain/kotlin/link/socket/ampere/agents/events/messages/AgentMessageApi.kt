@@ -1,10 +1,10 @@
 package link.socket.ampere.agents.events.messages
 
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.concept.status.EventStatus
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MessageEvent
-import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.events.api.EventFilter
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus

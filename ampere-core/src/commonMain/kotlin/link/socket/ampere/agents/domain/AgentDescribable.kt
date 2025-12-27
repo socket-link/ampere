@@ -62,7 +62,7 @@ object AgentTypeDescriber {
      */
     fun <T : AgentDescribable> formatGroupedByHierarchy(
         types: List<T>,
-        title: String = "Available types:"
+        title: String = "Available types:",
     ): String = buildString {
         appendLine(title)
         appendLine()
@@ -94,7 +94,7 @@ object AgentTypeDescriber {
     fun <T : AgentDescribable> formatGrouped(
         types: List<T>,
         grouper: (T) -> String,
-        title: String = "Available types:"
+        title: String = "Available types:",
     ): String = buildString {
         appendLine(title)
         appendLine()

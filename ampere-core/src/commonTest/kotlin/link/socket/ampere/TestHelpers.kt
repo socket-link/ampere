@@ -40,7 +40,7 @@ fun stubSuccessOutcome(): Outcome.Success =
         taskId = "test-task",
         executionStartTimestamp = Clock.System.now(),
         executionEndTimestamp = Clock.System.now() + 1.seconds,
-        message = "Test success"
+        message = "Test success",
     )
 
 /** Create a test failure outcome */
@@ -51,7 +51,7 @@ fun stubFailureOutcome(): Outcome.Failure =
         taskId = "test-task",
         executionStartTimestamp = Clock.System.now(),
         executionEndTimestamp = Clock.System.now() + 1.seconds,
-        message = "Test failure"
+        message = "Test failure",
     )
 
 /** Create a test agent configuration */
@@ -59,8 +59,8 @@ fun stubAgentConfiguration() = AgentConfiguration(
     agentDefinition = WriteCodeAgent,
     aiConfiguration = AIConfiguration_Default(
         provider = AIProvider_Anthropic,
-        model = AIModel_Claude.Sonnet_4
-    )
+        model = AIModel_Claude.Sonnet_4,
+    ),
 )
 
 /** Create a test knowledge entry for FROM_OUTCOME type */
@@ -70,7 +70,7 @@ fun stubKnowledgeEntry(
     learnings: String,
     outcomeId: String,
     tags: List<String> = emptyList(),
-    taskType: String? = null
+    taskType: String? = null,
 ) = KnowledgeEntry(
     id = id,
     knowledgeType = KnowledgeType.FROM_OUTCOME,
@@ -79,7 +79,7 @@ fun stubKnowledgeEntry(
     timestamp = Clock.System.now(),
     outcomeId = outcomeId,
     taskType = taskType,
-    tags = tags
+    tags = tags,
 )
 
 val STUB_ID = "stub-id"
@@ -97,7 +97,7 @@ fun stubTask(
     )
 
 fun stubPlan(
-    task: Task = stubTask()
+    task: Task = stubTask(),
 ): Plan.ForTask =
     Plan.ForTask(task)
 

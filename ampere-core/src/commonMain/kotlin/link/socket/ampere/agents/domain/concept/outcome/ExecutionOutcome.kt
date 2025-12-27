@@ -2,8 +2,8 @@ package link.socket.ampere.agents.domain.concept.outcome
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.concept.task.TaskId
+import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.ExecutorId

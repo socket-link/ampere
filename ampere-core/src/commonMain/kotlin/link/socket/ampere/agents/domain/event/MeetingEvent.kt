@@ -28,7 +28,9 @@ sealed interface MeetingEvent : Event {
         override fun getSummary(
             formatUrgency: (Urgency) -> String,
             formatSource: (EventSource) -> String,
-        ): String = "Meeting scheduled: ${meeting.invitation.title} ${formatUrgency(urgency)} from ${formatSource(eventSource)}"
+        ): String = "Meeting scheduled: ${meeting.invitation.title} ${formatUrgency(urgency)} from ${formatSource(
+            eventSource,
+        )}"
 
         companion object Companion {
             const val EVENT_TYPE: EventType = "MeetingScheduled"

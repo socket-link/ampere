@@ -38,7 +38,7 @@ sealed interface ExecutionStatus : Status {
         override val executorId: String,
         override val timestamp: Instant,
         val description: String,
-        val filesAnalyzed: Int? = null
+        val filesAnalyzed: Int? = null,
     ) : ExecutionStatus {
 
         override val isClosed: Boolean = false
@@ -50,7 +50,7 @@ sealed interface ExecutionStatus : Status {
     data class Planning(
         override val executorId: ExecutorId,
         override val timestamp: Instant,
-        val strategy: String
+        val strategy: String,
     ) : ExecutionStatus {
 
         override val isClosed: Boolean = false
@@ -76,7 +76,7 @@ sealed interface ExecutionStatus : Status {
         override val executorId: ExecutorId,
         override val timestamp: Instant,
         val testType: String,
-        val detail: String
+        val detail: String,
     ) : ExecutionStatus {
 
         override val isClosed: Boolean = false
@@ -88,7 +88,7 @@ sealed interface ExecutionStatus : Status {
     data class Linting(
         override val executorId: ExecutorId,
         override val timestamp: Instant,
-        val detail: String
+        val detail: String,
     ) : ExecutionStatus {
 
         override val isClosed: Boolean = false
@@ -100,7 +100,7 @@ sealed interface ExecutionStatus : Status {
     data class Completed(
         override val executorId: ExecutorId,
         override val timestamp: Instant,
-        val result: ExecutionOutcome.Success
+        val result: ExecutionOutcome.Success,
     ) : ExecutionStatus {
 
         override val isClosed: Boolean = true
@@ -112,7 +112,7 @@ sealed interface ExecutionStatus : Status {
     data class Failed(
         override val executorId: ExecutorId,
         override val timestamp: Instant,
-        val result: ExecutionOutcome.Failure
+        val result: ExecutionOutcome.Failure,
     ) : ExecutionStatus {
 
         override val isClosed: Boolean = true

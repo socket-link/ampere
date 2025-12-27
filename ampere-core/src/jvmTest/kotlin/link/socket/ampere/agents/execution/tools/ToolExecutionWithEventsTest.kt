@@ -1,28 +1,6 @@
 package link.socket.ampere.agents.execution.tools
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
-import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
-import link.socket.ampere.agents.domain.concept.status.TaskStatus
-import link.socket.ampere.agents.domain.concept.status.TicketStatus
-import link.socket.ampere.agents.domain.concept.task.Task
-import link.socket.ampere.agents.events.EventRepository
-import link.socket.ampere.agents.events.api.AgentEventApi
-import link.socket.ampere.agents.events.bus.EventSerialBusFactory
-import link.socket.ampere.agents.events.tickets.Ticket
-import link.socket.ampere.agents.events.tickets.TicketPriority
-import link.socket.ampere.agents.events.tickets.TicketType
-import link.socket.ampere.agents.events.utils.generateUUID
-import link.socket.ampere.agents.execution.request.ExecutionConstraints
-import link.socket.ampere.agents.execution.request.ExecutionContext
-import link.socket.ampere.agents.execution.request.ExecutionRequest
-import link.socket.ampere.agents.domain.event.ToolEvent
-import link.socket.ampere.agents.execution.tools.invoke.ToolInvoker
-import link.socket.ampere.data.DEFAULT_JSON
-import link.socket.ampere.db.Database
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -33,6 +11,27 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.concept.status.TaskStatus
+import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.event.ToolEvent
+import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.bus.EventSerialBusFactory
+import link.socket.ampere.agents.events.tickets.Ticket
+import link.socket.ampere.agents.events.tickets.TicketPriority
+import link.socket.ampere.agents.events.tickets.TicketType
+import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.agents.execution.request.ExecutionConstraints
+import link.socket.ampere.agents.execution.request.ExecutionContext
+import link.socket.ampere.agents.execution.request.ExecutionRequest
+import link.socket.ampere.agents.execution.tools.invoke.ToolInvoker
+import link.socket.ampere.data.DEFAULT_JSON
+import link.socket.ampere.db.Database
 
 /**
  * End-to-end validation tests for tool execution with event emission.
@@ -66,7 +65,7 @@ class ToolExecutionWithEventsTest {
         agentEventApi = AgentEventApi(
             agentId = "test-agent",
             eventRepository = eventRepository,
-            eventSerialBus = eventBus
+            eventSerialBus = eventBus,
         )
     }
 
@@ -85,13 +84,13 @@ class ToolExecutionWithEventsTest {
         assignedAgentId = null,
         createdByAgentId = "test-agent",
         createdAt = Clock.System.now(),
-        updatedAt = Clock.System.now()
+        updatedAt = Clock.System.now(),
     )
 
     private fun createTestTask(): Task.CodeChange = Task.CodeChange(
         id = generateUUID(),
         status = TaskStatus.Pending,
-        description = "Test task"
+        description = "Test task",
     )
 
     /**
@@ -115,9 +114,9 @@ class ToolExecutionWithEventsTest {
                     taskId = request.context.task.id,
                     executionStartTimestamp = Clock.System.now(),
                     executionEndTimestamp = Clock.System.now(),
-                    message = "Success"
+                    message = "Success",
                 )
-            }
+            },
         )
 
         // Create invoker WITH event API
@@ -127,7 +126,7 @@ class ToolExecutionWithEventsTest {
             executorId = "test-executor",
             ticket = createTestTicket(),
             task = createTestTask(),
-            instructions = "Test instructions"
+            instructions = "Test instructions",
         )
 
         val request = ExecutionRequest(
@@ -137,8 +136,8 @@ class ToolExecutionWithEventsTest {
                 maxFilesChanged = 100,
                 requireTests = false,
                 requireLinting = false,
-                allowBreakingChanges = false
-            )
+                allowBreakingChanges = false,
+            ),
         )
 
         // Invoke the tool
@@ -196,9 +195,9 @@ class ToolExecutionWithEventsTest {
                     taskId = request.context.task.id,
                     executionStartTimestamp = Clock.System.now(),
                     executionEndTimestamp = Clock.System.now(),
-                    message = "Intentional failure"
+                    message = "Intentional failure",
                 )
-            }
+            },
         )
 
         val invoker = ToolInvoker(tool, agentEventApi)
@@ -207,7 +206,7 @@ class ToolExecutionWithEventsTest {
             executorId = "test-executor",
             ticket = createTestTicket(),
             task = createTestTask(),
-            instructions = "Test instructions"
+            instructions = "Test instructions",
         )
 
         val request = ExecutionRequest(
@@ -217,8 +216,8 @@ class ToolExecutionWithEventsTest {
                 maxFilesChanged = 100,
                 requireTests = false,
                 requireLinting = false,
-                allowBreakingChanges = false
-            )
+                allowBreakingChanges = false,
+            ),
         )
 
         // Invoke the tool
@@ -264,9 +263,9 @@ class ToolExecutionWithEventsTest {
                     taskId = request.context.task.id,
                     executionStartTimestamp = Clock.System.now(),
                     executionEndTimestamp = Clock.System.now(),
-                    message = "Success"
+                    message = "Success",
                 )
-            }
+            },
         )
 
         // Create invoker WITHOUT event API
@@ -276,7 +275,7 @@ class ToolExecutionWithEventsTest {
             executorId = "test-executor",
             ticket = createTestTicket(),
             task = createTestTask(),
-            instructions = "Test instructions"
+            instructions = "Test instructions",
         )
 
         val request = ExecutionRequest(
@@ -286,8 +285,8 @@ class ToolExecutionWithEventsTest {
                 maxFilesChanged = 100,
                 requireTests = false,
                 requireLinting = false,
-                allowBreakingChanges = false
-            )
+                allowBreakingChanges = false,
+            ),
         )
 
         // Invoke the tool - should work without errors

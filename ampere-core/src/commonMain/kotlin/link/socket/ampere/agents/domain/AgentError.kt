@@ -21,12 +21,12 @@ sealed class AgentError : Exception() {
      */
     data class MemoryRecallFailure(
         override val message: String,
-        override val cause: Throwable? = null
+        override val cause: Throwable? = null,
     ) : AgentError() {
         // Secondary constructor for non-Throwable causes
         constructor(message: String, cause: Any?) : this(
             message = message,
-            cause = cause as? Throwable
+            cause = cause as? Throwable,
         )
     }
 }

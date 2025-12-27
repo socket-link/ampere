@@ -4,9 +4,9 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
-import link.socket.ampere.agents.domain.Urgency
 
 class EventFiltersTest {
 
@@ -19,7 +19,7 @@ class EventFiltersTest {
     private fun taskEvent(
         eventId: String = "evt-1",
         source: EventSource = stubSourceA,
-        urgency: Urgency = Urgency.HIGH
+        urgency: Urgency = Urgency.HIGH,
     ): Event.TaskCreated = Event.TaskCreated(
         eventId = eventId,
         urgency = urgency,
@@ -33,7 +33,7 @@ class EventFiltersTest {
     private fun questionEvent(
         eventId: String = "evt-2",
         source: EventSource = stubSourceC,
-        urgency: Urgency = Urgency.MEDIUM
+        urgency: Urgency = Urgency.MEDIUM,
     ): Event.QuestionRaised = Event.QuestionRaised(
         eventId = eventId,
         timestamp = Clock.System.now(),
@@ -46,7 +46,7 @@ class EventFiltersTest {
     private fun codeSubmittedEvent(
         eventId: String = "evt-3",
         source: EventSource = stubSourceD,
-        urgency: Urgency = Urgency.LOW
+        urgency: Urgency = Urgency.LOW,
     ): Event.CodeSubmitted = Event.CodeSubmitted(
         eventId = eventId,
         timestamp = Clock.System.now(),
@@ -71,7 +71,7 @@ class EventFiltersTest {
     @Test
     fun `filter by event type matches correctly`() {
         val filter = EventRelayFilters(
-            eventTypes = setOf(Event.TaskCreated.EVENT_TYPE)
+            eventTypes = setOf(Event.TaskCreated.EVENT_TYPE),
         )
 
         assertFalse(filter.isEmpty())
@@ -85,8 +85,8 @@ class EventFiltersTest {
         val filter = EventRelayFilters(
             eventTypes = setOf(
                 Event.TaskCreated.EVENT_TYPE,
-                Event.QuestionRaised.EVENT_TYPE
-            )
+                Event.QuestionRaised.EVENT_TYPE,
+            ),
         )
 
         assertTrue(filter.matches(taskEvent()))
@@ -130,7 +130,7 @@ class EventFiltersTest {
     @Test
     fun `filter by multiple urgency levels uses OR logic`() {
         val filter = EventRelayFilters(
-            urgencies = setOf(Urgency.HIGH, Urgency.MEDIUM)
+            urgencies = setOf(Urgency.HIGH, Urgency.MEDIUM),
         )
 
         assertTrue(filter.matches(taskEvent(urgency = Urgency.HIGH)))
@@ -141,7 +141,7 @@ class EventFiltersTest {
     @Test
     fun `filter by event ID matches correctly`() {
         val filter = EventRelayFilters(
-            eventIds = setOf("evt-1")
+            eventIds = setOf("evt-1"),
         )
 
         assertTrue(filter.matches(taskEvent(eventId = "evt-1")))
@@ -153,28 +153,36 @@ class EventFiltersTest {
         val filter = EventRelayFilters(
             eventTypes = setOf(Event.TaskCreated.EVENT_TYPE),
             eventSources = setOf(stubSourceA),
-            urgencies = setOf(Urgency.HIGH)
+            urgencies = setOf(Urgency.HIGH),
         )
 
         // Matches all criteria
-        assertTrue(filter.matches(
-            taskEvent(source = stubSourceA, urgency = Urgency.HIGH)
-        ))
+        assertTrue(
+            filter.matches(
+                taskEvent(source = stubSourceA, urgency = Urgency.HIGH),
+            ),
+        )
 
         // Wrong event type
-        assertFalse(filter.matches(
-            questionEvent(source = stubSourceA, urgency = Urgency.HIGH)
-        ))
+        assertFalse(
+            filter.matches(
+                questionEvent(source = stubSourceA, urgency = Urgency.HIGH),
+            ),
+        )
 
         // Wrong source
-        assertFalse(filter.matches(
-            taskEvent(source = stubSourceB, urgency = Urgency.HIGH)
-        ))
+        assertFalse(
+            filter.matches(
+                taskEvent(source = stubSourceB, urgency = Urgency.HIGH),
+            ),
+        )
 
         // Wrong urgency
-        assertFalse(filter.matches(
-            taskEvent(source = stubSourceA, urgency = Urgency.LOW)
-        ))
+        assertFalse(
+            filter.matches(
+                taskEvent(source = stubSourceA, urgency = Urgency.LOW),
+            ),
+        )
     }
 
     @Test

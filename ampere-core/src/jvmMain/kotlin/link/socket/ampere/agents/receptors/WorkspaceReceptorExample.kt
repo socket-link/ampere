@@ -1,17 +1,17 @@
 package link.socket.ampere.agents.receptors
 
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.domain.event.ProductEvent
+import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.util.logWith
-import java.io.File
 
 /**
  * Example demonstrating how to set up and use the FileSystemReceptor
@@ -66,7 +66,7 @@ class WorkspaceReceptorExample(
         mapper = WorkspaceEventMapper(
             agentEventApi = eventApi,
             mapperId = "mapper-workspace",
-            scope = scope
+            scope = scope,
         )
         mapper.startWithEventBus(eventBus)
         logger.i { "Started WorkspaceEventMapper" }
@@ -80,7 +80,7 @@ class WorkspaceReceptorExample(
             fileFilter = { file ->
                 // Only monitor markdown files
                 file.extension.lowercase() == "md"
-            }
+            },
         )
         receptor.start()
         logger.i { "Started FileSystemReceptor" }
@@ -104,7 +104,7 @@ class WorkspaceReceptorExample(
         // Subscribe to FeatureRequested events
         eventBus.subscribe<ProductEvent.FeatureRequested, EventSubscription.ByEventClassType>(
             agentId = "pm-agent-simulator",
-            eventType = ProductEvent.FeatureRequested.EVENT_TYPE
+            eventType = ProductEvent.FeatureRequested.EVENT_TYPE,
         ) { event, _ ->
             logger.i { "\n=== FEATURE REQUESTED ===" }
             logger.i { "Title: ${event.featureTitle}" }
@@ -122,7 +122,7 @@ class WorkspaceReceptorExample(
         // Subscribe to EpicDefined events
         eventBus.subscribe<ProductEvent.EpicDefined, EventSubscription.ByEventClassType>(
             agentId = "pm-agent-simulator",
-            eventType = ProductEvent.EpicDefined.EVENT_TYPE
+            eventType = ProductEvent.EpicDefined.EVENT_TYPE,
         ) { event, _ ->
             logger.i { "\n=== EPIC DEFINED ===" }
             logger.i { "Title: ${event.epicTitle}" }
@@ -139,7 +139,7 @@ class WorkspaceReceptorExample(
         // Subscribe to PhaseDefined events
         eventBus.subscribe<ProductEvent.PhaseDefined, EventSubscription.ByEventClassType>(
             agentId = "pm-agent-simulator",
-            eventType = ProductEvent.PhaseDefined.EVENT_TYPE
+            eventType = ProductEvent.PhaseDefined.EVENT_TYPE,
         ) { event, _ ->
             logger.i { "\n=== PHASE DEFINED ===" }
             logger.i { "Title: ${event.phaseTitle}" }

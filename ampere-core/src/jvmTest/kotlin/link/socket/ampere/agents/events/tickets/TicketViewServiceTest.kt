@@ -125,16 +125,16 @@ class TicketViewServiceTest {
 
             // Create tickets with different priorities and timestamps
             ticketRepository.createTicket(
-                createTicket(id = "low-new", priority = TicketPriority.LOW, createdAt = newer)
+                createTicket(id = "low-new", priority = TicketPriority.LOW, createdAt = newer),
             )
             ticketRepository.createTicket(
-                createTicket(id = "high-old", priority = TicketPriority.HIGH, createdAt = older)
+                createTicket(id = "high-old", priority = TicketPriority.HIGH, createdAt = older),
             )
             ticketRepository.createTicket(
-                createTicket(id = "high-new", priority = TicketPriority.HIGH, createdAt = newer)
+                createTicket(id = "high-new", priority = TicketPriority.HIGH, createdAt = newer),
             )
             ticketRepository.createTicket(
-                createTicket(id = "medium-old", priority = TicketPriority.MEDIUM, createdAt = older)
+                createTicket(id = "medium-old", priority = TicketPriority.MEDIUM, createdAt = older),
             )
 
             val result = ticketViewService.listActiveTickets()
@@ -186,7 +186,7 @@ class TicketViewServiceTest {
     fun `listActiveTickets includes unassigned tickets`() {
         runBlocking {
             ticketRepository.createTicket(
-                createTicket(id = "unassigned", assignedAgentId = null, status = TicketStatus.Ready)
+                createTicket(id = "unassigned", assignedAgentId = null, status = TicketStatus.Ready),
             )
 
             val result = ticketViewService.listActiveTickets()

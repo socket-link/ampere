@@ -9,22 +9,26 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.domain.memory.AgentMemoryService
-import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
-import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeRepositoryImpl
-import link.socket.ampere.agents.domain.memory.MemoryContext
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
+import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.definition.AutonomousAgent
 import link.socket.ampere.agents.domain.concept.Idea
 import link.socket.ampere.agents.domain.concept.Perception
 import link.socket.ampere.agents.domain.concept.Plan
-import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
+import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeRepositoryImpl
+import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.domain.config.AgentConfiguration
+import link.socket.ampere.agents.domain.memory.AgentMemoryService
+import link.socket.ampere.agents.domain.memory.MemoryContext
+import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
@@ -33,10 +37,6 @@ import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModel
 import link.socket.ampere.domain.ai.provider.AIProvider
-import kotlin.time.Duration.Companion.days
-import link.socket.ampere.agents.domain.config.AgentConfiguration
-import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.definition.AutonomousAgent
 
 /**
  * Comprehensive test suite for Agent memory recall functionality.
@@ -455,13 +455,13 @@ private class TestAgentWithMemory(
     // Expose protected methods for testing
     suspend fun testRecallRelevantKnowledge(
         context: MemoryContext,
-        limit: Int = 10
+        limit: Int = 10,
     ) = recallRelevantKnowledge(context, limit)
 
     suspend fun testStoreKnowledge(
         knowledge: Knowledge,
         tags: List<String> = emptyList(),
-        taskType: String? = null
+        taskType: String? = null,
     ) = storeKnowledge(knowledge, tags, taskType)
 
     // Implement abstract methods (not needed for these tests, provide stubs)
@@ -480,7 +480,7 @@ private class TestAgentWithMemory(
             outcomeId = outcome.id,
             approach = "Test approach",
             learnings = "Test learnings",
-            timestamp = Clock.System.now()
+            timestamp = Clock.System.now(),
         )
     }
 }
@@ -504,7 +504,7 @@ private class TestAgentWithoutMemory(
     // Expose protected methods for testing
     suspend fun testRecallRelevantKnowledge(
         context: MemoryContext,
-        limit: Int = 10
+        limit: Int = 10,
     ) = recallRelevantKnowledge(context, limit)
 
     // Implement abstract methods
@@ -523,7 +523,7 @@ private class TestAgentWithoutMemory(
             outcomeId = outcome.id,
             approach = "Test approach",
             learnings = "Test learnings",
-            timestamp = Clock.System.now()
+            timestamp = Clock.System.now(),
         )
     }
 }

@@ -2,9 +2,9 @@ package link.socket.ampere.agents.tools
 
 import co.touchlab.kermit.Logger
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.concept.outcome.Outcome
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.results.ExecutionResult
@@ -52,7 +52,7 @@ fun createLocalToolSet(): List<FunctionTool<*>> {
             requiredAgentAutonomy = AgentActionAutonomy.ACT_WITH_NOTIFICATION,
             executionFunction = { request ->
                 executeWriteCode(request)
-            }
+            },
         ),
 
         // ReadCode tool - Allows agents to read source code files
@@ -65,7 +65,7 @@ fun createLocalToolSet(): List<FunctionTool<*>> {
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             executionFunction = { request ->
                 executeReadCode(request)
-            }
+            },
         ),
 
         // AskHuman tool - Escalates decisions to human operators
@@ -78,7 +78,7 @@ fun createLocalToolSet(): List<FunctionTool<*>> {
             requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
             executionFunction = { request ->
                 executeAskHuman(request)
-            }
+            },
         ),
 
         // CreateTicket tool - Creates tasks in the issue tracking system
@@ -90,7 +90,7 @@ fun createLocalToolSet(): List<FunctionTool<*>> {
             requiredAgentAutonomy = AgentActionAutonomy.ACT_WITH_NOTIFICATION,
             executionFunction = { request ->
                 executeCreateTicket(request)
-            }
+            },
         ),
 
         // RunTests tool - Executes test suites
@@ -102,7 +102,7 @@ fun createLocalToolSet(): List<FunctionTool<*>> {
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             executionFunction = { request ->
                 executeRunTests(request)
-            }
+            },
         ),
     )
 }
@@ -128,7 +128,7 @@ fun createLocalToolSet(): List<FunctionTool<*>> {
  */
 suspend fun initializeLocalTools(
     registry: ToolRegistry,
-    logger: Logger = Logger.withTag("ToolInitializer")
+    logger: Logger = Logger.withTag("ToolInitializer"),
 ): Result<ToolInitializationResult> {
     logger.i { "Starting local tool initialization..." }
 
@@ -159,10 +159,10 @@ suspend fun initializeLocalTools(
                         ToolRegistrationFailure(
                             toolId = tool.id,
                             toolName = tool.name,
-                            error = error.message ?: "Unknown error"
-                        )
+                            error = error.message ?: "Unknown error",
+                        ),
                     )
-                }
+                },
             )
         } catch (e: Exception) {
             logger.w(e) { "✗ Exception while registering tool: ${tool.name} (${tool.id})" }
@@ -171,8 +171,8 @@ suspend fun initializeLocalTools(
                 ToolRegistrationFailure(
                     toolId = tool.id,
                     toolName = tool.name,
-                    error = e.message ?: "Unknown exception"
-                )
+                    error = e.message ?: "Unknown exception",
+                ),
             )
         }
     }
@@ -181,7 +181,7 @@ suspend fun initializeLocalTools(
         totalTools = tools.size,
         successfulRegistrations = successCount,
         failedRegistrations = failureCount,
-        failures = failures
+        failures = failures,
     )
 
     if (failureCount > 0) {
@@ -206,7 +206,7 @@ data class ToolInitializationResult(
     val totalTools: Int,
     val successfulRegistrations: Int,
     val failedRegistrations: Int,
-    val failures: List<ToolRegistrationFailure>
+    val failures: List<ToolRegistrationFailure>,
 ) {
     /** Whether all tools were registered successfully */
     val isFullSuccess: Boolean
@@ -223,7 +223,7 @@ data class ToolInitializationResult(
 data class ToolRegistrationFailure(
     val toolId: String,
     val toolName: String,
-    val error: String
+    val error: String,
 )
 
 // ==================== TOOL EXECUTION FUNCTIONS ====================
@@ -235,7 +235,7 @@ data class ToolRegistrationFailure(
  * This is a placeholder implementation that will be replaced with actual code writing logic.
  */
 private suspend fun executeWriteCode(
-    request: ExecutionRequest<ExecutionContext.Code.WriteCode>
+    request: ExecutionRequest<ExecutionContext.Code.WriteCode>,
 ): Outcome {
     // TODO: Implement actual code writing logic
     // This should integrate with the workspace and file system
@@ -251,8 +251,8 @@ private suspend fun executeWriteCode(
             codeChanges = null,
             compilation = null,
             linting = null,
-            tests = null
-        )
+            tests = null,
+        ),
     )
 }
 
@@ -261,7 +261,7 @@ private suspend fun executeWriteCode(
  * This is a placeholder implementation that will be replaced with actual code reading logic.
  */
 private suspend fun executeReadCode(
-    request: ExecutionRequest<ExecutionContext.Code.ReadCode>
+    request: ExecutionRequest<ExecutionContext.Code.ReadCode>,
 ): Outcome {
     // TODO: Implement actual code reading logic
     // This should integrate with the workspace and file system
@@ -272,7 +272,7 @@ private suspend fun executeReadCode(
         taskId = request.context.task.id,
         executionStartTimestamp = now,
         executionEndTimestamp = now,
-        readFiles = request.context.filePathsToRead.map { it to "// File content placeholder" }
+        readFiles = request.context.filePathsToRead.map { it to "// File content placeholder" },
     )
 }
 
@@ -281,7 +281,7 @@ private suspend fun executeReadCode(
  * This is a placeholder implementation that will be replaced with actual human escalation logic.
  */
 private suspend fun executeAskHuman(
-    request: ExecutionRequest<ExecutionContext>
+    request: ExecutionRequest<ExecutionContext>,
 ): Outcome {
     // TODO: Implement actual human escalation logic
     // This should integrate with the escalation system
@@ -292,7 +292,7 @@ private suspend fun executeAskHuman(
         taskId = request.context.task.id,
         executionStartTimestamp = now,
         executionEndTimestamp = now,
-        message = "AskHuman tool executed (placeholder): ${request.context.instructions}"
+        message = "AskHuman tool executed (placeholder): ${request.context.instructions}",
     )
 }
 
@@ -301,7 +301,7 @@ private suspend fun executeAskHuman(
  * This is a placeholder implementation that will be replaced with actual ticket creation logic.
  */
 private suspend fun executeCreateTicket(
-    request: ExecutionRequest<ExecutionContext>
+    request: ExecutionRequest<ExecutionContext>,
 ): Outcome {
     // TODO: Implement actual ticket creation logic
     // This should integrate with the ticket/event system
@@ -312,7 +312,7 @@ private suspend fun executeCreateTicket(
         taskId = request.context.task.id,
         executionStartTimestamp = now,
         executionEndTimestamp = now,
-        message = "CreateTicket tool executed (placeholder) for task: ${request.context.task.id}"
+        message = "CreateTicket tool executed (placeholder) for task: ${request.context.task.id}",
     )
 }
 
@@ -321,7 +321,7 @@ private suspend fun executeCreateTicket(
  * This is a placeholder implementation that will be replaced with actual test execution logic.
  */
 private suspend fun executeRunTests(
-    request: ExecutionRequest<ExecutionContext>
+    request: ExecutionRequest<ExecutionContext>,
 ): Outcome {
     // TODO: Implement actual test execution logic
     // This should integrate with the test runner
@@ -332,6 +332,6 @@ private suspend fun executeRunTests(
         taskId = request.context.task.id,
         executionStartTimestamp = now,
         executionEndTimestamp = now,
-        message = "RunTests tool executed (placeholder)"
+        message = "RunTests tool executed (placeholder)",
     )
 }

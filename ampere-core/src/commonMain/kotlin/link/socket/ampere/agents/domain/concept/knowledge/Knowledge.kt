@@ -2,10 +2,10 @@ package link.socket.ampere.agents.domain.concept.knowledge
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.concept.outcome.OutcomeId
 import link.socket.ampere.agents.domain.concept.IdeaId
 import link.socket.ampere.agents.domain.concept.PerceptionId
 import link.socket.ampere.agents.domain.concept.PlanId
+import link.socket.ampere.agents.domain.concept.outcome.OutcomeId
 import link.socket.ampere.agents.domain.concept.task.TaskId
 
 /**

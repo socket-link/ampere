@@ -1,8 +1,8 @@
 package link.socket.ampere.agents.execution.tools
 
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.execution.request.ExecutionContext
 
 actual suspend fun executeReadCodebase(
@@ -28,7 +28,7 @@ actual suspend fun executeReadCodebase(
                 error = ExecutionError(
                     type = ExecutionError.Type.WORKSPACE_ERROR,
                     message = "Path does not exist: $filePath",
-                )
+                ),
             )
         }
 
@@ -44,7 +44,7 @@ actual suspend fun executeReadCodebase(
             taskId = context.task.id,
             executionStartTimestamp = executionStartTimestamp,
             executionEndTimestamp = Clock.System.now(),
-            readFiles = listOf(filePath to result.toString())
+            readFiles = listOf(filePath to result.toString()),
         )
     } catch (e: SecurityException) {
         ExecutionOutcome.CodeReading.Failure(
@@ -56,7 +56,7 @@ actual suspend fun executeReadCodebase(
             error = ExecutionError(
                 type = ExecutionError.Type.WORKSPACE_ERROR,
                 message = "Access outside root directory is not allowed: $filePath. \n ${e.message}",
-            )
+            ),
         )
     }
 }

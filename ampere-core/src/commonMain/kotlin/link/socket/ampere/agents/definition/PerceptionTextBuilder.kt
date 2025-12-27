@@ -40,7 +40,7 @@ fun <S : AgentState> perception(
             Idea(
                 name = perceptionText(block),
             ),
-        )
+        ),
     )
 
 /**

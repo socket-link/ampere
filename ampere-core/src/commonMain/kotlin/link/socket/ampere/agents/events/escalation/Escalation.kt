@@ -23,7 +23,7 @@ sealed class Escalation : AgentDescribable {
     abstract override val description: String
 
     override fun describeProperties(): Map<String, String> = mapOf(
-        "escalationProcess" to escalationProcess.typeName
+        "escalationProcess" to escalationProcess.typeName,
     )
 
     // ==================== Discussion Escalations ====================
@@ -280,7 +280,7 @@ sealed class Escalation : AgentDescribable {
          */
         fun allTypesForPrompt(): String = AgentTypeDescriber.formatGroupedByHierarchy(
             types = allTypes(),
-            title = "Available escalation types:"
+            title = "Available escalation types:",
         )
     }
 }

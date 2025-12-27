@@ -2,9 +2,9 @@ package link.socket.ampere.agents.environment
 
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepository
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.EventRouter
-import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -12,6 +12,7 @@ import link.socket.ampere.agents.events.meetings.AgentMeetingsApiFactory
 import link.socket.ampere.agents.events.meetings.Meeting
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
+import link.socket.ampere.agents.events.meetings.MeetingSchedulingService
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.AgentMessageApiFactory
 import link.socket.ampere.agents.events.messages.MessageRepository
@@ -19,7 +20,6 @@ import link.socket.ampere.agents.events.tickets.TicketOrchestrator
 import link.socket.ampere.agents.events.tickets.TicketRepository
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
-import link.socket.ampere.agents.events.meetings.MeetingSchedulingService
 
 /**
  * Top-level orchestrator that coordinates all domain orchestrators.
