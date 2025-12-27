@@ -2,6 +2,7 @@ package link.socket.ampere.cli.watch.presentation
 
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.FileSystemEvent
+import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
@@ -44,6 +45,7 @@ object EventCategorizer {
         is Event.QuestionRaised -> EventSignificance.CRITICAL
         is TicketEvent.TicketBlocked -> EventSignificance.CRITICAL
         is MessageEvent.EscalationRequested -> EventSignificance.CRITICAL
+        is HumanInteractionEvent.InputRequested -> EventSignificance.CRITICAL
 
         // Significant events represent state changes worth noting
         is Event.TaskCreated -> EventSignificance.SIGNIFICANT
@@ -66,6 +68,8 @@ object EventCategorizer {
         is ProductEvent.EpicDefined -> EventSignificance.SIGNIFICANT
         is ProductEvent.PhaseDefined -> EventSignificance.SIGNIFICANT
         is FileSystemEvent -> EventSignificance.SIGNIFICANT
+        is HumanInteractionEvent.InputProvided -> EventSignificance.SIGNIFICANT
+        is HumanInteractionEvent.RequestTimedOut -> EventSignificance.SIGNIFICANT
 
         // Routine cognitive operations - maintenance work
         is MemoryEvent.KnowledgeRecalled -> EventSignificance.ROUTINE
@@ -74,5 +78,7 @@ object EventCategorizer {
         is ToolEvent.ToolRegistered -> EventSignificance.ROUTINE
         is ToolEvent.ToolUnregistered -> EventSignificance.ROUTINE
         is ToolEvent.ToolDiscoveryComplete -> EventSignificance.ROUTINE
+        is ToolEvent.ToolExecutionStarted -> EventSignificance.ROUTINE
+        is ToolEvent.ToolExecutionCompleted -> EventSignificance.ROUTINE
     }
 }

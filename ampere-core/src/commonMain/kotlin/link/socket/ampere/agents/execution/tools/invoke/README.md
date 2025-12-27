@@ -82,8 +82,8 @@ val invoker = ToolInvoker(tool, eventApi)
 val result = invoker.invoke(request)
 
 // Events emitted:
-// 1. ToolExecutionEvent.Started - before execution
-// 2. ToolExecutionEvent.Completed - after execution (with success/failure/duration metadata)
+// 1. ToolEvent.ToolExecutionStarted - before execution
+// 2. ToolEvent.ToolExecutionCompleted - after execution (with success/failure/duration metadata)
 ```
 
 ### Code Context Tools
@@ -194,39 +194,39 @@ class MyAgent(
 
 ## Event Schema
 
-### ToolExecutionEvent.Started
+### ToolEvent.ToolExecutionStarted
 
 Emitted before tool execution begins.
 
 ```kotlin
-data class Started(
+data class ToolExecutionStarted(
     eventId: EventId,
     timestamp: Instant,
     eventSource: EventSource,
     urgency: Urgency,
-    invocationId: ToolInvocationId,  // Unique per invocation
+    invocationId: String,            // Unique per invocation
     toolId: ToolId,
     toolName: String
-)
+) : ToolEvent
 ```
 
-### ToolExecutionEvent.Completed
+### ToolEvent.ToolExecutionCompleted
 
 Emitted after tool execution finishes (success or failure).
 
 ```kotlin
-data class Completed(
+data class ToolExecutionCompleted(
     eventId: EventId,
     timestamp: Instant,
     eventSource: EventSource,
     urgency: Urgency,
-    invocationId: ToolInvocationId,  // Matches Started event
+    invocationId: String,            // Matches Started event
     toolId: ToolId,
     toolName: String,
     success: Boolean,                // true if succeeded, false if failed
     durationMs: Long,                // Execution duration in milliseconds
     errorMessage: String? = null     // Error message if failed, null if succeeded
-)
+) : ToolEvent
 ```
 
 ## Testing

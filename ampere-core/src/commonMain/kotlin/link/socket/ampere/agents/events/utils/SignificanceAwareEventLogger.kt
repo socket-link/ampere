@@ -5,6 +5,7 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.domain.event.FileSystemEvent
+import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
@@ -110,6 +111,11 @@ class SignificanceAwareEventLogger(
         is ToolEvent.ToolRegistered -> EventSignificance.ROUTINE
         is ToolEvent.ToolUnregistered -> EventSignificance.ROUTINE
         is ToolEvent.ToolDiscoveryComplete -> EventSignificance.ROUTINE
+        is ToolEvent.ToolExecutionStarted -> EventSignificance.ROUTINE
+        is ToolEvent.ToolExecutionCompleted -> EventSignificance.ROUTINE
+        is HumanInteractionEvent.InputRequested -> EventSignificance.CRITICAL
+        is HumanInteractionEvent.InputProvided -> EventSignificance.SIGNIFICANT
+        is HumanInteractionEvent.RequestTimedOut -> EventSignificance.SIGNIFICANT
     }
 
     private fun formatUrgency(urgency: Urgency): String = when (urgency) {

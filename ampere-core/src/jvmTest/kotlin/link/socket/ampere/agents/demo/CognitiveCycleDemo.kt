@@ -1,28 +1,28 @@
 package link.socket.ampere.agents.demo
 
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.CodeWriterAgent
+import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.concept.status.TaskStatus
 import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.config.AgentConfiguration
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.request.ExecutionContext
+import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
-import link.socket.ampere.agents.domain.config.AgentConfiguration
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
-import kotlinx.datetime.Clock
-import kotlin.time.Duration.Companion.milliseconds
-import java.io.File
 
 /**
  * Manual demonstration and validation of the PROPEL cognitive cycle.

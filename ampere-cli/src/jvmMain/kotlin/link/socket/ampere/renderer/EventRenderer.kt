@@ -15,6 +15,7 @@ import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.FileSystemEvent
+import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
@@ -109,6 +110,7 @@ class EventRenderer(
      * - NotificationEvent: 🔔 gray (notifications - meta-events, less prominent)
      * - MemoryEvent: 🧠 cyan (knowledge/learning)
      * - ToolEvent: 🔧 yellow (tool registration/discovery)
+     * - HumanInteractionEvent: 🙋 red (human input required - critical attention)
      */
     private fun getIconAndColor(event: Event): Pair<String, TextStyle> {
         return when (event) {
@@ -116,6 +118,7 @@ class EventRenderer(
             is Event.QuestionRaised -> "❓" to magenta
             is Event.TaskCreated -> "📋" to green
             is FileSystemEvent -> "📄" to cyan
+            is HumanInteractionEvent -> "🙋" to red
             is MeetingEvent -> "📅" to magenta
             is MemoryEvent -> "🧠" to cyan
             is MessageEvent -> "💬" to blue
