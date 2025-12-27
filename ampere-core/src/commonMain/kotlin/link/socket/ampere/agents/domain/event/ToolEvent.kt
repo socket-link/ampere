@@ -114,6 +114,85 @@ sealed interface ToolEvent : Event {
     }
 
     /**
+     * A tool invocation has started.
+     *
+     * Emitted by ToolInvoker immediately before a tool's execute() method is called.
+     *
+     * @property invocationId Unique identifier for this specific tool invocation
+     * @property toolId The ID of the tool being executed
+     * @property toolName The name of the tool being executed
+     */
+    @Serializable
+    data class ToolExecutionStarted(
+        override val eventId: EventId,
+        override val timestamp: Instant,
+        override val eventSource: EventSource,
+        override val urgency: Urgency,
+        val invocationId: String,
+        val toolId: ToolId,
+        val toolName: String,
+    ) : ToolEvent {
+
+        override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Tool started: $toolName ($toolId)")
+            append(" ${formatUrgency(urgency)}")
+        }
+
+        companion object {
+            const val EVENT_TYPE: EventType = "ToolExecutionStarted"
+        }
+    }
+
+    /**
+     * A tool invocation has completed (successfully or with failure).
+     *
+     * Emitted by ToolInvoker after a tool's execute() method returns.
+     *
+     * @property invocationId Unique ID matching the Started event
+     * @property toolId The ID of the tool that was executed
+     * @property toolName The name of the tool that was executed
+     * @property success Whether the execution succeeded
+     * @property durationMs Execution duration in milliseconds
+     * @property errorMessage Error message if failed, null if succeeded
+     */
+    @Serializable
+    data class ToolExecutionCompleted(
+        override val eventId: EventId,
+        override val timestamp: Instant,
+        override val eventSource: EventSource,
+        override val urgency: Urgency,
+        val invocationId: String,
+        val toolId: ToolId,
+        val toolName: String,
+        val success: Boolean,
+        val durationMs: Long,
+        val errorMessage: String? = null,
+    ) : ToolEvent {
+
+        override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Tool completed: $toolName ($toolId)")
+            append(" - ${if (success) "SUCCESS" else "FAILED"}")
+            append(" in ${durationMs}ms")
+            errorMessage?.let { append(" - $it") }
+            append(" ${formatUrgency(urgency)}")
+        }
+
+        companion object {
+            const val EVENT_TYPE: EventType = "ToolExecutionCompleted"
+        }
+    }
+
+    /**
      * Tool discovery process has completed.
      *
      * Emitted when:

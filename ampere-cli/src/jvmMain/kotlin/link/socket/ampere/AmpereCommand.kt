@@ -43,6 +43,7 @@ class AmpereCommand : CliktCommand(
           thread       View and manage conversation threads
           status       System-wide status overview
           outcomes     View execution outcomes and learnings
+          respond      Respond to agent human input requests
 
         Interactive Dashboard Controls:
           Viewing Modes:
@@ -72,6 +73,7 @@ class AmpereCommand : CliktCommand(
           ampere watch --filter TaskCreated   # Watch task events only
           ampere thread list                  # List conversation threads
           ampere outcomes stats               # View learning statistics
+          ampere respond abc-123 "Approved"   # Respond to human input request
 
         For more information on specific commands:
           ampere <command> --help
