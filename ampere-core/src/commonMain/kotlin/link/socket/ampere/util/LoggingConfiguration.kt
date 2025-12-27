@@ -99,7 +99,7 @@ data class LoggingConfiguration(
             silentEventBus -> link.socket.ampere.agents.events.utils.SilentEventLogger()
             else -> link.socket.ampere.agents.events.utils.SignificanceAwareEventLogger(
                 showRoutineEvents = showRoutineEvents,
-                showSubscriptions = showEventSubscriptions
+                showSubscriptions = showEventSubscriptions,
             )
         }
     }

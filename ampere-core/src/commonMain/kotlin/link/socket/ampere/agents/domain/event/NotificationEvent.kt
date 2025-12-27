@@ -29,7 +29,6 @@ sealed interface NotificationEvent<S : Subscription> : Event {
             formatSource: (EventSource) -> String,
         ): String = "Notification to $agentId: ${event.getSummary(formatUrgency, formatSource)}"
 
-
         companion object {
             const val EVENT_TYPE: EventType = "NotificationToAgent"
         }
@@ -51,7 +50,6 @@ sealed interface NotificationEvent<S : Subscription> : Event {
             formatUrgency: (Urgency) -> String,
             formatSource: (EventSource) -> String,
         ): String = "Notification to human: ${event.getSummary(formatUrgency, formatSource)}"
-
 
         companion object {
             const val EVENT_TYPE: EventType = "NotificationToHuman"

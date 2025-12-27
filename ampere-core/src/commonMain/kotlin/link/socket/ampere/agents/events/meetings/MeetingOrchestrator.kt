@@ -1,10 +1,10 @@
 package link.socket.ampere.agents.events.meetings
 
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.concept.outcome.MeetingOutcome
 import link.socket.ampere.agents.domain.concept.status.MeetingStatus
 import link.socket.ampere.agents.domain.concept.status.TaskStatus
+import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.concept.task.MeetingTask
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MeetingEvent

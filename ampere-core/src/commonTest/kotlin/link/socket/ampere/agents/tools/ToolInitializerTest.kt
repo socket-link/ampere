@@ -11,10 +11,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.tickets.Ticket
@@ -47,7 +47,7 @@ class ToolInitializerTest {
     private fun createTestTicket(
         id: String = "ticket-1",
         title: String = "Test Ticket",
-        description: String = "Test description"
+        description: String = "Test description",
     ): Ticket = Ticket(
         id = id,
         title = title,
@@ -58,7 +58,7 @@ class ToolInitializerTest {
         assignedAgentId = "agent-1",
         createdByAgentId = "pm-agent",
         createdAt = now,
-        updatedAt = now
+        updatedAt = now,
     )
 
     private fun createTestExecutionRequest(
@@ -67,15 +67,15 @@ class ToolInitializerTest {
             ticket = createTestTicket(),
             task = Task.blank,
             instructions = "Test instructions",
-            knowledgeFromPastMemory = emptyList()
-        )
+            knowledgeFromPastMemory = emptyList(),
+            ),
     ): ExecutionRequest<ExecutionContext> = ExecutionRequest(
         context = context,
         constraints = ExecutionConstraints(
             timeoutMinutes = 30,
             requireTests = false,
-            requireLinting = false
-        )
+            requireLinting = false,
+        ),
     )
 
     /**
@@ -88,7 +88,7 @@ class ToolInitializerTest {
         val repository = ToolRegistryRepository(
             json = Json { prettyPrint = true },
             scope = scope,
-            database = database
+            database = database,
         )
         val eventBus = EventSerialBus(scope = scope)
         val eventSource = EventSource.Agent(agentId = "test-source")
@@ -96,7 +96,7 @@ class ToolInitializerTest {
         return ToolRegistry(
             repository = repository,
             eventBus = eventBus,
-            eventSource = eventSource
+            eventSource = eventSource,
         )
     }
 
@@ -110,7 +110,7 @@ class ToolInitializerTest {
         // For now, we'll use a mock that allows testing the logic
         throw NotImplementedError(
             "In-memory database creation is platform-specific. " +
-            "This test should be run on JVM or Android where SQLite is available."
+                "This test should be run on JVM or Android where SQLite is available.",
         )
     }
 
@@ -144,35 +144,35 @@ class ToolInitializerTest {
         assertEquals(
             AgentActionAutonomy.ACT_WITH_NOTIFICATION,
             toolMap["write_code"]?.requiredAgentAutonomy,
-            "WriteCode should require ACT_WITH_NOTIFICATION"
+            "WriteCode should require ACT_WITH_NOTIFICATION",
         )
 
         // ReadCode is FULLY_AUTONOMOUS
         assertEquals(
             AgentActionAutonomy.FULLY_AUTONOMOUS,
             toolMap["read_code"]?.requiredAgentAutonomy,
-            "ReadCode should be FULLY_AUTONOMOUS"
+            "ReadCode should be FULLY_AUTONOMOUS",
         )
 
         // AskHuman requires ASK_BEFORE_ACTION
         assertEquals(
             AgentActionAutonomy.ASK_BEFORE_ACTION,
             toolMap["ask_human"]?.requiredAgentAutonomy,
-            "AskHuman should require ASK_BEFORE_ACTION"
+            "AskHuman should require ASK_BEFORE_ACTION",
         )
 
         // CreateTicket requires ACT_WITH_NOTIFICATION
         assertEquals(
             AgentActionAutonomy.ACT_WITH_NOTIFICATION,
             toolMap["create_ticket"]?.requiredAgentAutonomy,
-            "CreateTicket should require ACT_WITH_NOTIFICATION"
+            "CreateTicket should require ACT_WITH_NOTIFICATION",
         )
 
         // RunTests is FULLY_AUTONOMOUS
         assertEquals(
             AgentActionAutonomy.FULLY_AUTONOMOUS,
             toolMap["run_tests"]?.requiredAgentAutonomy,
-            "RunTests should be FULLY_AUTONOMOUS"
+            "RunTests should be FULLY_AUTONOMOUS",
         )
     }
 
@@ -195,7 +195,7 @@ class ToolInitializerTest {
         assertEquals(
             tools1.map { it.id }.toSet(),
             tools2.map { it.id }.toSet(),
-            "Should return same tool IDs each time"
+            "Should return same tool IDs each time",
         )
     }
 
@@ -306,9 +306,9 @@ class ToolInitializerTest {
                 ToolRegistrationFailure(
                     toolId = "failing_tool",
                     toolName = "Failing Tool",
-                    error = "Mock failure"
-                )
-            )
+                    error = "Mock failure",
+                ),
+            ),
         )
 
         assertEquals(2, expectedResult.successfulRegistrations)
@@ -331,16 +331,16 @@ class ToolInitializerTest {
             task = Task.blank,
             instructions = "Test write code",
             workspace = link.socket.ampere.agents.environment.workspace.ExecutionWorkspace(
-                baseDirectory = "/test/workspace"
+                baseDirectory = "/test/workspace",
             ),
-            instructionsPerFilePath = listOf("test.kt" to "// Test code")
+            instructionsPerFilePath = listOf("test.kt" to "// Test code"),
         )
 
         val outcome = writeCodeTool!!.execute(
             ExecutionRequest(
                 context = context,
-                constraints = ExecutionConstraints()
-            )
+                constraints = ExecutionConstraints(),
+            ),
         )
 
         assertTrue(outcome is ExecutionOutcome.CodeChanged.Success, "Should return CodeChanged.Success")
@@ -360,16 +360,16 @@ class ToolInitializerTest {
             task = Task.blank,
             instructions = "Test read code",
             workspace = link.socket.ampere.agents.environment.workspace.ExecutionWorkspace(
-                baseDirectory = "/test/workspace"
+                baseDirectory = "/test/workspace",
             ),
-            filePathsToRead = listOf("test.kt", "main.kt")
+            filePathsToRead = listOf("test.kt", "main.kt"),
         )
 
         val outcome = readCodeTool!!.execute(
             ExecutionRequest(
                 context = context,
-                constraints = ExecutionConstraints()
-            )
+                constraints = ExecutionConstraints(),
+            ),
         )
 
         assertTrue(outcome is ExecutionOutcome.CodeReading.Success, "Should return CodeReading.Success")

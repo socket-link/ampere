@@ -15,7 +15,7 @@ data class MarkdownContent(
         FEATURE,
         EPIC,
         PHASE,
-        UNKNOWN
+        UNKNOWN,
     }
 }
 
@@ -63,7 +63,7 @@ object MarkdownContentParser {
     fun parseContent(
         content: String,
         fileName: String = "unknown.md",
-        filePath: String = ""
+        filePath: String = "",
     ): MarkdownContent {
         val lines = content.lines()
 
@@ -83,7 +83,7 @@ object MarkdownContentParser {
             title = title,
             description = description,
             metadata = metadata,
-            contentType = contentType
+            contentType = contentType,
         )
     }
 
@@ -162,7 +162,7 @@ object MarkdownContentParser {
     private fun determineContentType(
         filePath: String,
         metadata: Map<String, String>,
-        title: String
+        title: String,
     ): MarkdownContent.ContentType {
         // Check metadata first
         metadata["Type"]?.lowercase()?.let { type ->

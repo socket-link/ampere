@@ -1,7 +1,7 @@
 package link.socket.ampere.agents.execution.tools
 
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.execution.request.ExecutionContext
 
 expect suspend fun executeWriteCodeFile(
@@ -25,7 +25,7 @@ fun ToolWriteCodeFile(
         executionFunction = { executionRequest ->
             // TODO: Handle execution request constraints
             executeWriteCodeFile(executionRequest.context)
-        }
+        },
     )
 }
 

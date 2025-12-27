@@ -2,10 +2,10 @@ package link.socket.ampere.agents.service
 
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.TicketEvent
-import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketId

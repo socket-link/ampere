@@ -1,11 +1,11 @@
 package link.socket.ampere.agents.execution.tools
 
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.human.GlobalHumanResponseRegistry
-import link.socket.ampere.agents.events.utils.generateUUID
-import kotlin.time.Duration.Companion.minutes
 
 actual suspend fun executeAskHuman(
     context: ExecutionContext.NoChanges,
@@ -14,7 +14,8 @@ actual suspend fun executeAskHuman(
     val requestId = generateUUID()
 
     // Display the question to console (will also be visible in CLI dashboard through events)
-    println("""
+    println(
+        """
         ════════════════════════════════════════
         🤔 HUMAN INPUT REQUIRED
         ════════════════════════════════════════
@@ -28,12 +29,13 @@ actual suspend fun executeAskHuman(
         To respond, use:
         ./ampere-cli/ampere respond $requestId "<your response>"
         ════════════════════════════════════════
-    """.trimIndent())
+        """.trimIndent(),
+    )
 
     // Wait for human response (blocks agent execution)
     val humanResponse = GlobalHumanResponseRegistry.instance.waitForResponse(
         requestId = requestId,
-        timeout = 30.minutes
+        timeout = 30.minutes,
     )
 
     return if (humanResponse != null) {

@@ -16,7 +16,7 @@ class DefaultTicketViewService(
                 .filter { it.status != TicketStatus.Done }
                 .sortedWith(
                     compareByDescending<Ticket> { it.priority.ordinal }
-                        .thenBy { it.createdAt }
+                        .thenBy { it.createdAt },
                 )
                 .map { ticket ->
                     TicketSummary(
@@ -67,8 +67,8 @@ class DefaultTicketViewService(
         // Check if there's an explicit "Acceptance Criteria" section
         val acIndex = lines.indexOfFirst { line ->
             line.trim().startsWith("Acceptance Criteria", ignoreCase = true) ||
-            line.trim().startsWith("AC:", ignoreCase = true) ||
-            line.trim().startsWith("Acceptance:", ignoreCase = true)
+                line.trim().startsWith("AC:", ignoreCase = true) ||
+                line.trim().startsWith("Acceptance:", ignoreCase = true)
         }
 
         val relevantLines = if (acIndex >= 0) {
@@ -77,9 +77,9 @@ class DefaultTicketViewService(
                 .indexOfFirst { line ->
                     val trimmed = line.trim()
                     trimmed.endsWith(":") &&
-                    trimmed.isNotEmpty() &&
-                    trimmed.first().isUpperCase() &&
-                    !trimmed.matches(Regex("^[-*].*"))
+                        trimmed.isNotEmpty() &&
+                        trimmed.first().isUpperCase() &&
+                        !trimmed.matches(Regex("^[-*].*"))
                 }
 
             val endIndex = if (nextSectionIndex >= 0) {

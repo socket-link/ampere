@@ -8,14 +8,14 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.definition.ProductManagerAgent
+import link.socket.ampere.agents.definition.QualityAssuranceAgent
 import link.socket.ampere.agents.domain.concept.Plan
 import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
 import link.socket.ampere.agents.domain.concept.status.TaskStatus
 import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
-import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.definition.ProductManagerAgent
-import link.socket.ampere.agents.definition.QualityAssuranceAgent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
@@ -104,7 +104,7 @@ class AgentLearningLoopIntegrationTest {
         val firstTask = Task.CodeChange(
             id = "task-1",
             status = TaskStatus.Pending,
-            description = "Implement authentication feature"
+            description = "Implement authentication feature",
         )
 
         val firstPlan = productManagerAgent.determinePlanForTask(firstTask, relevantKnowledge = emptyList())
@@ -120,10 +120,10 @@ class AgentLearningLoopIntegrationTest {
                     Task.CodeChange(
                         id = "subtask-1",
                         status = TaskStatus.Pending,
-                        description = "Define test specifications"
-                    )
-                )
-            )
+                        description = "Define test specifications",
+                    ),
+                ),
+            ),
         )
 
         assertTrue(extractedKnowledge.approach.isNotEmpty())
@@ -133,7 +133,7 @@ class AgentLearningLoopIntegrationTest {
         val secondTask = Task.CodeChange(
             id = "task-2",
             status = TaskStatus.Pending,
-            description = "Implement authorization feature"
+            description = "Implement authorization feature",
         )
 
         val recalledKnowledge = listOf(
@@ -144,11 +144,11 @@ class AgentLearningLoopIntegrationTest {
                     learnings = extractedKnowledge.learnings,
                     outcomeId = firstOutcome.id,
                     tags = listOf("success"),
-                    taskType = "code_change"
+                    taskType = "code_change",
                 ),
                 knowledge = extractedKnowledge,
-                relevanceScore = 0.9
-            )
+                relevanceScore = 0.9,
+            ),
         )
 
         val secondPlan = productManagerAgent.determinePlanForTask(secondTask, relevantKnowledge = recalledKnowledge)
@@ -161,7 +161,7 @@ class AgentLearningLoopIntegrationTest {
         val task = Task.CodeChange(
             id = "cold-start-task",
             status = TaskStatus.Pending,
-            description = "Implement new feature"
+            description = "Implement new feature",
         )
 
         val pmPlan = productManagerAgent.determinePlanForTask(task, relevantKnowledge = emptyList())
@@ -176,7 +176,7 @@ class AgentLearningLoopIntegrationTest {
         val task = Task.CodeChange(
             id = "consistency-task",
             status = TaskStatus.Pending,
-            description = "Test task"
+            description = "Test task",
         )
 
         val plan = Plan.ForTask(task = task)

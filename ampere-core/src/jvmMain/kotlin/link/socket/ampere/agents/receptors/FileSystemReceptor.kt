@@ -128,7 +128,7 @@ class FileSystemReceptor(
             service,
             StandardWatchEventKinds.ENTRY_CREATE,
             StandardWatchEventKinds.ENTRY_MODIFY,
-            StandardWatchEventKinds.ENTRY_DELETE
+            StandardWatchEventKinds.ENTRY_DELETE,
         )
 
         // Register all subdirectories
@@ -214,7 +214,7 @@ class FileSystemReceptor(
             fileName = filePath.name,
             fileExtension = filePath.extension.takeIf { it.isNotEmpty() },
             workspacePath = workspacePathObj.absolutePathString(),
-            relativePath = filePath.relativeTo(workspacePathObj).pathString
+            relativePath = filePath.relativeTo(workspacePathObj).pathString,
         )
 
         logger.i { "File created: ${event.relativePath}" }
@@ -234,7 +234,7 @@ class FileSystemReceptor(
             fileName = filePath.name,
             fileExtension = filePath.extension.takeIf { it.isNotEmpty() },
             workspacePath = workspacePathObj.absolutePathString(),
-            relativePath = filePath.relativeTo(workspacePathObj).pathString
+            relativePath = filePath.relativeTo(workspacePathObj).pathString,
         )
 
         logger.d { "File modified: ${event.relativePath}" }
@@ -254,7 +254,7 @@ class FileSystemReceptor(
             fileName = filePath.name,
             fileExtension = filePath.extension.takeIf { it.isNotEmpty() },
             workspacePath = workspacePathObj.absolutePathString(),
-            relativePath = filePath.relativeTo(workspacePathObj).pathString
+            relativePath = filePath.relativeTo(workspacePathObj).pathString,
         )
 
         logger.d { "File deleted: ${event.relativePath}" }

@@ -1,13 +1,18 @@
 package link.socket.ampere.agents.execution.tools.invoke
 
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.domain.concept.status.TaskStatus
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
@@ -15,13 +20,8 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
-import link.socket.ampere.agents.execution.tools.FunctionTool
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.milliseconds
 import link.socket.ampere.agents.execution.results.ExecutionResult
+import link.socket.ampere.agents.execution.tools.FunctionTool
 
 /**
  * Tests for ToolInvoker - the motor neuron abstraction for tool execution.
@@ -45,20 +45,20 @@ class ToolInvokerTest {
         assignedAgentId = null,
         createdByAgentId = "test-agent",
         createdAt = Clock.System.now(),
-        updatedAt = Clock.System.now()
+        updatedAt = Clock.System.now(),
     )
 
     private fun createTestTask(): Task.CodeChange = Task.CodeChange(
         id = generateUUID(),
         status = TaskStatus.Pending,
-        description = "Test task"
+        description = "Test task",
     )
 
     private fun createTestContext(): ExecutionContext.NoChanges = ExecutionContext.NoChanges(
         executorId = "test-executor",
         ticket = createTestTicket(),
         task = createTestTask(),
-        instructions = "Test instructions"
+        instructions = "Test instructions",
     )
 
     private fun createTestRequest(context: ExecutionContext.NoChanges): ExecutionRequest<ExecutionContext.NoChanges> =
@@ -69,8 +69,8 @@ class ToolInvokerTest {
                 maxFilesChanged = 100,
                 requireTests = false,
                 requireLinting = false,
-                allowBreakingChanges = false
-            )
+                allowBreakingChanges = false,
+            ),
         )
 
     /**
@@ -96,9 +96,9 @@ class ToolInvokerTest {
                     taskId = request.context.task.id,
                     executionStartTimestamp = Clock.System.now(),
                     executionEndTimestamp = Clock.System.now(),
-                    message = "hello world"
+                    message = "hello world",
                 )
-            }
+            },
         )
 
         // Create invoker wrapping the tool
@@ -139,9 +139,9 @@ class ToolInvokerTest {
                     taskId = request.context.task.id,
                     executionStartTimestamp = Clock.System.now(),
                     executionEndTimestamp = Clock.System.now(),
-                    message = "ok"
+                    message = "ok",
                 )
-            }
+            },
         )
 
         val invoker = ToolInvoker(tool)
@@ -172,7 +172,7 @@ class ToolInvokerTest {
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             executionFunction = { _ ->
                 throw IllegalStateException("Tool failure simulation")
-            }
+            },
         )
 
         val invoker = ToolInvoker(tool)
@@ -210,9 +210,9 @@ class ToolInvokerTest {
                     taskId = request.context.task.id,
                     executionStartTimestamp = Clock.System.now(),
                     executionEndTimestamp = Clock.System.now(),
-                    message = "Something went wrong"
+                    message = "Something went wrong",
                 )
-            }
+            },
         )
 
         val invoker = ToolInvoker(tool)
@@ -252,9 +252,9 @@ class ToolInvokerTest {
                     taskId = request.context.task.id,
                     executionStartTimestamp = start,
                     executionEndTimestamp = Clock.System.now(),
-                    message = "done"
+                    message = "done",
                 )
-            }
+            },
         )
 
         val invoker = ToolInvoker(tool)
@@ -289,9 +289,9 @@ class ToolInvokerTest {
                     taskId = request.context.task.id,
                     executionStartTimestamp = Clock.System.now(),
                     executionEndTimestamp = Clock.System.now(),
-                    message = "result-a"
+                    message = "result-a",
                 )
-            }
+            },
         )
 
         val tool2 = FunctionTool<ExecutionContext.NoChanges>(
@@ -306,9 +306,9 @@ class ToolInvokerTest {
                     taskId = request.context.task.id,
                     executionStartTimestamp = Clock.System.now(),
                     executionEndTimestamp = Clock.System.now(),
-                    message = "result-b"
+                    message = "result-b",
                 )
-            }
+            },
         )
 
         val invoker1 = ToolInvoker(tool1)
@@ -347,7 +347,7 @@ class ToolInvokerTest {
             name = "Blank Tool",
             description = "Returns blank outcome",
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
-            executionFunction = { _ -> Outcome.blank }
+            executionFunction = { _ -> Outcome.blank },
         )
 
         val invoker = ToolInvoker(tool)
@@ -386,10 +386,10 @@ class ToolInvokerTest {
                         codeChanges = null,
                         compilation = null,
                         linting = null,
-                        tests = null
-                    )
+                        tests = null,
+                    ),
                 )
-            }
+            },
         )
 
         val invoker = ToolInvoker(tool)
@@ -400,12 +400,12 @@ class ToolInvokerTest {
             task = createTestTask(),
             instructions = "Write some code",
             workspace = link.socket.ampere.agents.environment.workspace.ExecutionWorkspace(
-                baseDirectory = "/tmp/test"
+                baseDirectory = "/tmp/test",
             ),
             instructionsPerFilePath = listOf(
                 "/tmp/test/file1.kt" to "fun main() {}",
-                "/tmp/test/file2.kt" to "class Test {}"
-            )
+                "/tmp/test/file2.kt" to "class Test {}",
+            ),
         )
 
         val request = ExecutionRequest(
@@ -415,8 +415,8 @@ class ToolInvokerTest {
                 maxFilesChanged = 100,
                 requireTests = false,
                 requireLinting = false,
-                allowBreakingChanges = true
-            )
+                allowBreakingChanges = true,
+            ),
         )
 
         val result = invoker.invoke(request)

@@ -25,7 +25,7 @@ class AgentSystemIntegrationTest {
                 "ask_human" to ToolAskHuman(AgentActionAutonomy.FULLY_AUTONOMOUS),
                 "write_code_file" to ToolWriteCodeFile(AgentActionAutonomy.SELF_CORRECTING),
                 "read_codebase" to ToolReadCodebase(AgentActionAutonomy.ASK_BEFORE_ACTION),
-                "run_tests" to ToolRunTests(AgentActionAutonomy.ACT_WITH_NOTIFICATION)
+                "run_tests" to ToolRunTests(AgentActionAutonomy.ACT_WITH_NOTIFICATION),
             )
 
             // TODO: Write agent autonomy testing here

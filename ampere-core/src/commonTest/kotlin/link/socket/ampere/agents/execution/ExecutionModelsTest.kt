@@ -14,7 +14,7 @@ class ExecutionModelsTest {
     private fun createTestTicket(
         id: String = "ticket-1",
         title: String = "Test Ticket",
-        description: String = "Test description"
+        description: String = "Test description",
     ): Ticket = Ticket(
         id = id,
         title = title,
@@ -25,7 +25,7 @@ class ExecutionModelsTest {
         assignedAgentId = "agent-1",
         createdByAgentId = "pm-agent",
         createdAt = now,
-        updatedAt = now
+        updatedAt = now,
     )
 
     // TODO: Add tests for ExecutionContext subtypes

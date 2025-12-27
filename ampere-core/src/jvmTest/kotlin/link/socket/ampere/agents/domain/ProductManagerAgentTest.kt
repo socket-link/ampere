@@ -9,13 +9,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.definition.ProductManagerAgent
 import link.socket.ampere.agents.domain.concept.Plan
 import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
 import link.socket.ampere.agents.domain.concept.status.TaskStatus
 import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
-import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.definition.ProductManagerAgent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
@@ -100,22 +100,22 @@ class ProductManagerAgentTest {
                     learnings = "Test-first approach prevented issues in authentication flow",
                     outcomeId = "outcome-1",
                     tags = listOf("success", "test"),
-                    taskType = "code_change"
+                    taskType = "code_change",
                 ),
                 knowledge = Knowledge.FromOutcome(
                     outcomeId = "outcome-1",
                     approach = "Used test-first approach with 3 tasks",
                     learnings = "Test-first approach prevented issues in authentication flow",
-                    timestamp = Clock.System.now()
+                    timestamp = Clock.System.now(),
                 ),
-                relevanceScore = 0.9
-            )
+                relevanceScore = 0.9,
+            ),
         )
 
         val task = Task.CodeChange(
             id = "task-1",
             status = TaskStatus.Pending,
-            description = "Implement user profile feature"
+            description = "Implement user profile feature",
         )
 
         val plan = productManagerAgent.determinePlanForTask(task, relevantKnowledge = testFirstKnowledge)
@@ -128,7 +128,7 @@ class ProductManagerAgentTest {
         val task = Task.CodeChange(
             id = "task-4",
             status = TaskStatus.Pending,
-            description = "Implement authentication system"
+            description = "Implement authentication system",
         )
 
         val plan = Plan.ForTask(task = task)
@@ -146,7 +146,7 @@ class ProductManagerAgentTest {
         val task = Task.CodeChange(
             id = "task-6",
             status = TaskStatus.Pending,
-            description = "Implement new feature"
+            description = "Implement new feature",
         )
 
         val plan = productManagerAgent.determinePlanForTask(task = task, relevantKnowledge = emptyList())

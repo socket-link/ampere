@@ -34,7 +34,6 @@ sealed interface Event {
     /** Urgency level of the event. */
     val urgency: Urgency
 
-
     fun getSummary(
         formatUrgency: (Urgency) -> String,
         formatSource: (EventSource) -> String,

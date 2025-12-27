@@ -23,7 +23,7 @@ import link.socket.ampere.agents.events.utils.generateUUID
  */
 class EventRelayServiceImpl(
     private val eventSerialBus: EventSerialBus,
-    private val eventRepository: EventRepository
+    private val eventRepository: EventRepository,
 ) : EventRelayService {
 
     override fun subscribeToLiveEvents(filters: EventRelayFilters): Flow<Event> = callbackFlow {
@@ -41,7 +41,7 @@ class EventRelayServiceImpl(
                     if (filters.matches(event)) {
                         trySend(event)
                     }
-                }
+                },
             )
         }
 
@@ -57,7 +57,7 @@ class EventRelayServiceImpl(
     override suspend fun replayEvents(
         fromTime: Instant,
         toTime: Instant,
-        filters: EventRelayFilters
+        filters: EventRelayFilters,
     ): Result<Flow<Event>> {
         // Extract filter values for database-level filtering
         val eventTypes = filters.eventTypes?.toSet()
@@ -70,7 +70,7 @@ class EventRelayServiceImpl(
                 fromTime = fromTime,
                 toTime = toTime,
                 eventTypes = eventTypes,
-                sourceIds = sourceIds
+                sourceIds = sourceIds,
             ).map { events ->
                 flow {
                     // Apply remaining filters (urgency, eventId) in-memory

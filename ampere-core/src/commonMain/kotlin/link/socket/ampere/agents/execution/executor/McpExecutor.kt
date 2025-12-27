@@ -8,11 +8,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import link.socket.ampere.agents.domain.error.ExecutionError
-import link.socket.ampere.agents.domain.health.ExecutorSystemHealth
 import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.concept.status.ExecutionStatus
 import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.domain.error.ExecutionError
+import link.socket.ampere.agents.domain.health.ExecutorSystemHealth
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
@@ -79,7 +79,7 @@ class McpExecutor(
                     version = null,
                     isAvailable = false,
                     issues = listOf("ServerManager not configured"),
-                )
+                ),
             )
         }
 
@@ -90,7 +90,7 @@ class McpExecutor(
                 version = "1.0.0",
                 isAvailable = true,
                 issues = emptyList(),
-            )
+            ),
         )
     }
 
@@ -137,7 +137,7 @@ class McpExecutor(
                             isRetryable = false,
                         ),
                     ),
-                )
+                ),
             )
             return@flow
         }
@@ -147,7 +147,7 @@ class McpExecutor(
             ExecutionStatus.Started(
                 executorId = id,
                 timestamp = Clock.System.now(),
-            )
+            ),
         )
 
         // Verify ServerManager is available
@@ -167,7 +167,7 @@ class McpExecutor(
                             isRetryable = false,
                         ),
                     ),
-                )
+                ),
             )
             return@flow
         }
@@ -190,7 +190,7 @@ class McpExecutor(
                             isRetryable = true,
                         ),
                     ),
-                )
+                ),
             )
             return@flow
         }
@@ -211,7 +211,7 @@ class McpExecutor(
                             isRetryable = true,
                         ),
                     ),
-                )
+                ),
             )
             return@flow
         }
@@ -222,7 +222,7 @@ class McpExecutor(
                 executorId = id,
                 timestamp = Clock.System.now(),
                 strategy = "Invoking MCP tool '${tool.name}' on server '${tool.serverId}'",
-            )
+            ),
         )
 
         try {
@@ -254,7 +254,7 @@ class McpExecutor(
                                 executorId = id,
                                 timestamp = Clock.System.now(),
                                 result = outcome,
-                            )
+                            ),
                         )
                     }
                     is ExecutionOutcome.Failure -> {
@@ -264,7 +264,7 @@ class McpExecutor(
                                 executorId = id,
                                 timestamp = Clock.System.now(),
                                 result = outcome,
-                            )
+                            ),
                         )
                     }
                     else -> {
@@ -283,7 +283,7 @@ class McpExecutor(
                                         isRetryable = false,
                                     ),
                                 ),
-                            )
+                            ),
                         )
                     }
                 }
@@ -303,7 +303,7 @@ class McpExecutor(
                                 isRetryable = true,
                             ),
                         ),
-                    )
+                    ),
                 )
             }
         } catch (e: Exception) {
@@ -323,7 +323,7 @@ class McpExecutor(
                             isRetryable = false,
                         ),
                     ),
-                )
+                ),
             )
         }
     }
@@ -371,7 +371,7 @@ class McpExecutor(
             if (request.context.knowledgeFromPastMemory.isNotEmpty()) {
                 put(
                     "pastAttempts",
-                    request.context.knowledgeFromPastMemory.size.toString()
+                    request.context.knowledgeFromPastMemory.size.toString(),
                 )
             }
         }

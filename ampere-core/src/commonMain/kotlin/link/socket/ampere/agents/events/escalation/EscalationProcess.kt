@@ -21,7 +21,7 @@ sealed class EscalationProcess : AgentDescribable {
 
     override fun describeProperties(): Map<String, String> = mapOf(
         "requiresMeeting" to requiresMeeting.toString(),
-        "requiresHuman" to requiresHuman.toString()
+        "requiresHuman" to requiresHuman.toString(),
     )
 
     /**

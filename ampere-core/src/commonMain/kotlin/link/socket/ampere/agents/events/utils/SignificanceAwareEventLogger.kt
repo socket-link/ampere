@@ -27,7 +27,7 @@ import link.socket.ampere.agents.events.subscription.Subscription
  */
 class SignificanceAwareEventLogger(
     private val showRoutineEvents: Boolean = false,
-    private val showSubscriptions: Boolean = false
+    private val showSubscriptions: Boolean = false,
 ) : EventLogger {
 
     override fun logPublish(event: Event) {
@@ -49,7 +49,7 @@ class SignificanceAwareEventLogger(
         // Use the event's built-in summary method for rich details
         val summary = event.getSummary(
             formatUrgency = { urgency -> formatUrgency(urgency) },
-            formatSource = { source -> formatSource(source) }
+            formatSource = { source -> formatSource(source) },
         )
 
         System.err.println("$severityTag $summary")
@@ -68,7 +68,13 @@ class SignificanceAwareEventLogger(
     }
 
     override fun logError(message: String, throwable: Throwable?) {
-        System.err.println("[EventBus][ERROR] $message" + (throwable?.let { ": ${it::class.simpleName} - ${it.message}" } ?: ""))
+        System.err.println(
+            "[EventBus][ERROR] $message" + (
+                throwable?.let {
+                    ": ${it::class.simpleName} - ${it.message}"
+                } ?: ""
+                ),
+        )
         throwable?.printStackTrace()
     }
 
@@ -150,6 +156,6 @@ class SignificanceAwareEventLogger(
     private enum class EventSignificance {
         CRITICAL,
         SIGNIFICANT,
-        ROUTINE
+        ROUTINE,
     }
 }

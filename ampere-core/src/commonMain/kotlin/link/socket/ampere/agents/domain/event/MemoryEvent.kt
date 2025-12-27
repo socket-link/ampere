@@ -43,9 +43,9 @@ sealed interface MemoryEvent : Event {
         val taskType: String?,
         val tags: List<String>,
         override val urgency: Urgency = Urgency.LOW,
-        val approach: String? = null,  // What approach was tried
-        val learnings: String? = null,  // What was learned
-        val sourceId: String? = null,  // The outcome/idea/task ID this came from
+        val approach: String? = null, // What approach was tried
+        val learnings: String? = null, // What was learned
+        val sourceId: String? = null, // The outcome/idea/task ID this came from
     ) : MemoryEvent {
 
         override val eventType: EventType = EVENT_TYPE
@@ -79,7 +79,6 @@ sealed interface MemoryEvent : Event {
             append(" by ${formatSource(eventSource)}")
         }
 
-
         companion object {
             const val EVENT_TYPE: EventType = "KnowledgeStored"
         }
@@ -102,7 +101,7 @@ sealed interface MemoryEvent : Event {
         val averageRelevance: Double,
         val topKnowledgeIds: List<String>,
         override val urgency: Urgency = Urgency.LOW,
-        val retrievedKnowledge: List<RetrievedKnowledgeSummary> = emptyList(),  // Summaries of what was retrieved
+        val retrievedKnowledge: List<RetrievedKnowledgeSummary> = emptyList(), // Summaries of what was retrieved
     ) : MemoryEvent {
 
         override val eventType: EventType = EVENT_TYPE

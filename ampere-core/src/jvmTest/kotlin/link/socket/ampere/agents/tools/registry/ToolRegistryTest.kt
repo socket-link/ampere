@@ -14,8 +14,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.concept.outcome.Outcome
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -85,7 +85,7 @@ class ToolRegistryTest {
             requiredAgentAutonomy = autonomy,
             executionFunction = { _: ExecutionRequest<ExecutionContext> ->
                 Outcome.Blank
-            }
+            },
         )
     }
 
@@ -115,13 +115,13 @@ class ToolRegistryTest {
             val functionTool = createFunctionTool(
                 id = "func-1",
                 name = "Write Code",
-                description = "Writes code to a file"
+                description = "Writes code to a file",
             )
             val mcpTool = createMcpTool(
                 id = "mcp-1",
                 name = "GitHub PR",
                 description = "Creates a GitHub pull request",
-                serverId = "github-server"
+                serverId = "github-server",
             )
 
             registry.registerTool(functionTool).getOrThrow()
@@ -160,7 +160,7 @@ class ToolRegistryTest {
                 id = "tool-1",
                 name = "Test Tool",
                 description = "A test tool",
-                autonomy = AgentActionAutonomy.ACT_WITH_NOTIFICATION
+                autonomy = AgentActionAutonomy.ACT_WITH_NOTIFICATION,
             )
 
             registry.registerTool(tool).getOrThrow()
@@ -184,25 +184,25 @@ class ToolRegistryTest {
                 id = "ask-1",
                 name = "Ask Tool",
                 description = "Requires asking",
-                autonomy = AgentActionAutonomy.ASK_BEFORE_ACTION
+                autonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
             )
             val actWithNotifyTool = createFunctionTool(
                 id = "notify-1",
                 name = "Notify Tool",
                 description = "Acts with notification",
-                autonomy = AgentActionAutonomy.ACT_WITH_NOTIFICATION
+                autonomy = AgentActionAutonomy.ACT_WITH_NOTIFICATION,
             )
             val fullyAutoTool = createFunctionTool(
                 id = "auto-1",
                 name = "Auto Tool",
                 description = "Fully autonomous",
-                autonomy = AgentActionAutonomy.FULLY_AUTONOMOUS
+                autonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             )
             val selfCorrectTool = createFunctionTool(
                 id = "correct-1",
                 name = "Self-Correct Tool",
                 description = "Self-correcting",
-                autonomy = AgentActionAutonomy.SELF_CORRECTING
+                autonomy = AgentActionAutonomy.SELF_CORRECTING,
             )
 
             registry.registerTool(askBeforeTool).getOrThrow()
@@ -243,18 +243,18 @@ class ToolRegistryTest {
                 id = "github-1",
                 name = "GitHub PR Creator",
                 description = "Creates pull requests on GitHub",
-                serverId = "github-server"
+                serverId = "github-server",
             )
             val codeTool = createFunctionTool(
                 id = "code-1",
                 name = "Code Writer",
-                description = "Writes code to files"
+                description = "Writes code to files",
             )
             val databaseTool = createMcpTool(
                 id = "db-1",
                 name = "Database Query",
                 description = "Queries PostgreSQL databases",
-                serverId = "db-server"
+                serverId = "db-server",
             )
 
             registry.registerTool(githubTool).getOrThrow()
@@ -290,7 +290,7 @@ class ToolRegistryTest {
             val tool = createFunctionTool(
                 id = "tool-to-remove",
                 name = "Temporary Tool",
-                description = "This will be removed"
+                description = "This will be removed",
             )
 
             registry.registerTool(tool).getOrThrow()
@@ -330,19 +330,19 @@ class ToolRegistryTest {
                 id = "mcp-1",
                 name = "Tool 1",
                 description = "First tool",
-                serverId = "server-x"
+                serverId = "server-x",
             )
             val tool2 = createMcpTool(
                 id = "mcp-2",
                 name = "Tool 2",
                 description = "Second tool",
-                serverId = "server-x"
+                serverId = "server-x",
             )
             val tool3 = createMcpTool(
                 id = "mcp-3",
                 name = "Tool 3",
                 description = "Third tool",
-                serverId = "server-y"
+                serverId = "server-y",
             )
 
             registry.registerTool(tool1).getOrThrow()
@@ -371,13 +371,13 @@ class ToolRegistryTest {
             val tool1 = createFunctionTool(
                 id = "persisted-1",
                 name = "Persisted Tool 1",
-                description = "First persisted tool"
+                description = "First persisted tool",
             )
             val tool2 = createMcpTool(
                 id = "persisted-2",
                 name = "Persisted Tool 2",
                 description = "Second persisted tool",
-                serverId = "test-server"
+                serverId = "test-server",
             )
 
             // Register tools

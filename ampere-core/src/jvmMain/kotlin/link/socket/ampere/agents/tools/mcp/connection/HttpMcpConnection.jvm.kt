@@ -44,7 +44,7 @@ actual class HttpClientHandler {
             // Check for successful response
             if (!response.status.isSuccess()) {
                 throw McpConnectionException(
-                    "Endpoint validation failed: ${response.status.value} ${response.status.description}"
+                    "Endpoint validation failed: ${response.status.value} ${response.status.description}",
                 )
             }
         }
@@ -71,7 +71,7 @@ actual class HttpClientHandler {
             // Check for successful response
             if (!response.status.isSuccess()) {
                 throw McpConnectionException(
-                    "HTTP request failed: ${response.status.value} ${response.status.description}"
+                    "HTTP request failed: ${response.status.value} ${response.status.description}",
                 )
             }
 

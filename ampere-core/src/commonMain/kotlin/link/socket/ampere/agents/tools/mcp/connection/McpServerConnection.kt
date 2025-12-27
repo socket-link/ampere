@@ -1,9 +1,9 @@
 package link.socket.ampere.agents.tools.mcp.connection
 
+import kotlinx.serialization.json.JsonElement
 import link.socket.ampere.agents.tools.mcp.protocol.InitializeResult
 import link.socket.ampere.agents.tools.mcp.protocol.McpToolDescriptor
 import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
-import kotlinx.serialization.json.JsonElement
 
 /**
  * McpServerConnection - Abstract interface for MCP server connections.

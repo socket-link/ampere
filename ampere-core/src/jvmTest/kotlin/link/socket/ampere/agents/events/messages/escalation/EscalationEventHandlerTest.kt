@@ -12,8 +12,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.domain.event.MessageEvent
+import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.agents.events.escalation.EscalationEventHandler

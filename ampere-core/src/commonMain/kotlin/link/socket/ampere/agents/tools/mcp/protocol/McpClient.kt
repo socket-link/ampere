@@ -261,7 +261,7 @@ class McpClient(
      * Generates a unique request ID.
      */
     private fun generateRequestId(prefix: String): String {
-        return "${prefix}-${generateUUID(prefix)}"
+        return "$prefix-${generateUUID(prefix)}"
     }
 }
 

@@ -1,9 +1,9 @@
 package link.socket.ampere.agents.execution.tools.human
 
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
 
 typealias HumanRequestId = String
 
@@ -37,7 +37,7 @@ class HumanResponseRegistry {
      */
     suspend fun waitForResponse(
         requestId: HumanRequestId,
-        timeout: Duration = 30.minutes
+        timeout: Duration = 30.minutes,
     ): String? {
         val deferred = CompletableDeferred<String>()
         pendingRequests[requestId] = deferred

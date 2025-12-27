@@ -1,11 +1,11 @@
 package link.socket.ampere.domain.agent
 
-import link.socket.ampere.agents.events.escalation.Escalation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import link.socket.ampere.agents.domain.AgentDescribable
 import link.socket.ampere.agents.domain.AgentTypeDescriber
+import link.socket.ampere.agents.events.escalation.Escalation
 import link.socket.ampere.agents.events.escalation.EscalationProcess
 
 class AgentDescribableTest {
@@ -16,7 +16,7 @@ class AgentDescribableTest {
      * Simple implementation for testing basic functionality.
      */
     private data class SimpleDescribable(
-        override val description: String
+        override val description: String,
     ) : AgentDescribable
 
     /**
@@ -24,7 +24,7 @@ class AgentDescribableTest {
      */
     private data class CustomNameDescribable(
         override val typeName: String,
-        override val description: String
+        override val description: String,
     ) : AgentDescribable
 
     /**
@@ -33,11 +33,11 @@ class AgentDescribableTest {
     private data class DescribableWithProperties(
         override val description: String,
         val property1: String,
-        val property2: Int
+        val property2: Int,
     ) : AgentDescribable {
         override fun describeProperties(): Map<String, String> = mapOf(
             "property1" to property1,
-            "property2" to property2.toString()
+            "property2" to property2.toString(),
         )
     }
 
@@ -46,10 +46,10 @@ class AgentDescribableTest {
      */
     private data class NestedDescribable(
         override val description: String,
-        val nested: AgentDescribable
+        val nested: AgentDescribable,
     ) : AgentDescribable {
         override fun describeProperties(): Map<String, String> = mapOf(
-            "nested" to nested.typeName
+            "nested" to nested.typeName,
         )
     }
 
@@ -88,7 +88,7 @@ class AgentDescribableTest {
         val describable = DescribableWithProperties(
             description = "With properties",
             property1 = "value1",
-            property2 = 42
+            property2 = 42,
         )
         val properties = describable.describeProperties()
 
@@ -102,7 +102,7 @@ class AgentDescribableTest {
         val nested = SimpleDescribable("Nested description")
         val parent = NestedDescribable(
             description = "Parent description",
-            nested = nested
+            nested = nested,
         )
 
         val properties = parent.describeProperties()
@@ -124,7 +124,7 @@ class AgentDescribableTest {
         val describable = DescribableWithProperties(
             description = "With properties",
             property1 = "value1",
-            property2 = 42
+            property2 = 42,
         )
         val result = describable.toPromptString()
 
@@ -168,7 +168,7 @@ class AgentDescribableTest {
 
         val result = AgentTypeDescriber.formatGroupedByHierarchy(
             types = types,
-            title = "Custom Title:"
+            title = "Custom Title:",
         )
 
         assertTrue(result.startsWith("Custom Title:"))
@@ -196,7 +196,7 @@ class AgentDescribableTest {
 
         val result = AgentTypeDescriber.formatGrouped(
             types = types,
-            grouper = { if (it.description.contains("A")) "Group A" else "Group B" }
+            grouper = { if (it.description.contains("A")) "Group A" else "Group B" },
         )
 
         assertTrue(result.contains("## Group A"))
@@ -210,7 +210,7 @@ class AgentDescribableTest {
         val result = AgentTypeDescriber.formatGrouped(
             types = types,
             grouper = { "Group" },
-            title = "My Custom Title:"
+            title = "My Custom Title:",
         )
 
         assertTrue(result.startsWith("My Custom Title:"))
@@ -233,7 +233,7 @@ class AgentDescribableTest {
         val describable = DescribableWithProperties(
             description = "With props",
             property1 = "val1",
-            property2 = 100
+            property2 = 100,
         )
 
         val result = AgentTypeDescriber.describeInDetail(describable)

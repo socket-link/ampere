@@ -65,7 +65,7 @@ class QualityAssuranceAgent(
     override suspend fun determinePlanForTask(
         task: Task,
         vararg ideas: Idea,
-        relevantKnowledge: List<KnowledgeWithScore>
+        relevantKnowledge: List<KnowledgeWithScore>,
     ): Plan {
         // Analyze past knowledge for validation insights
         val insights = analyzeValidationKnowledge(relevantKnowledge)
@@ -80,12 +80,12 @@ class QualityAssuranceAgent(
                 insights.effectiveChecks.toList().sortedByDescending { it.second }.forEach { (checkType, effectiveness) ->
                     planTasks.add(
                         Task.CodeChange(
-                            id = generateUUID("${task.id}-validate-${checkType}"),
+                            id = generateUUID("${task.id}-validate-$checkType"),
                             status = TaskStatus.Pending,
                             description = "Run $checkType validation (${(effectiveness * 100).toInt()}% " +
                                 "effectiveness from past experience)",
-                            assignedTo = task.assignedTo
-                        )
+                            assignedTo = task.assignedTo,
+                        ),
                     )
                 }
 
@@ -96,8 +96,8 @@ class QualityAssuranceAgent(
                             id = generateUUID("${task.id}-check-${issueType.hashCode()}"),
                             status = TaskStatus.Pending,
                             description = "Extra validation for commonly missed: $issueType",
-                            assignedTo = task.assignedTo
-                        )
+                            assignedTo = task.assignedTo,
+                        ),
                     )
                 }
 
@@ -108,24 +108,24 @@ class QualityAssuranceAgent(
                             id = generateUUID("${task.id}-syntax"),
                             status = TaskStatus.Pending,
                             description = "Syntax and compilation validation for ${task.description}",
-                            assignedTo = task.assignedTo
-                        )
+                            assignedTo = task.assignedTo,
+                        ),
                     )
                     planTasks.add(
                         Task.CodeChange(
                             id = generateUUID("${task.id}-style"),
                             status = TaskStatus.Pending,
                             description = "Code style and standards validation",
-                            assignedTo = task.assignedTo
-                        )
+                            assignedTo = task.assignedTo,
+                        ),
                     )
                     planTasks.add(
                         Task.CodeChange(
                             id = generateUUID("${task.id}-logic"),
                             status = TaskStatus.Pending,
                             description = "Logic and correctness validation",
-                            assignedTo = task.assignedTo
-                        )
+                            assignedTo = task.assignedTo,
+                        ),
                     )
                 }
 
@@ -173,7 +173,9 @@ class QualityAssuranceAgent(
             if (relevantChecks.isNotEmpty()) {
                 // Effectiveness = average relevance score of checks mentioning this type
                 checkType to relevantChecks.map { it.relevanceScore }.average()
-            } else null
+            } else {
+                null
+            }
         }.toMap()
 
         // Extract commonly missed issue types from failure learnings
@@ -199,7 +201,7 @@ class QualityAssuranceAgent(
 
         return ValidationInsights(
             effectiveChecks = effectiveChecks,
-            commonlyMissedIssues = missedIssues
+            commonlyMissedIssues = missedIssues,
         )
     }
 
@@ -212,7 +214,7 @@ class QualityAssuranceAgent(
     override fun extractKnowledgeFromOutcome(
         outcome: Outcome,
         task: Task,
-        plan: Plan
+        plan: Plan,
     ): Knowledge {
         val taskDescription = when (task) {
             is Task.CodeChange -> task.description
@@ -271,7 +273,7 @@ class QualityAssuranceAgent(
             outcomeId = outcome.id,
             approach = approachDescription,
             learnings = learnings,
-            timestamp = Clock.System.now()
+            timestamp = Clock.System.now(),
         )
     }
 
@@ -294,19 +296,19 @@ class QualityAssuranceAgent(
         val messages = listOf(
             ChatMessage(
                 role = ChatRole.System,
-                content = systemMessage
+                content = systemMessage,
             ),
             ChatMessage(
                 role = ChatRole.User,
-                content = prompt
-            )
+                content = prompt,
+            ),
         )
 
         val request = ChatCompletionRequest(
             model = model.toClientModelId(),
             messages = messages,
             temperature = temperature,
-            maxTokens = maxTokens
+            maxTokens = maxTokens,
         )
 
         val completion = client.chatCompletion(request)
@@ -321,7 +323,7 @@ class QualityAssuranceAgent(
         prompt: String,
         systemMessage: String = "You are a quality assurance agent analyzing code quality and identifying issues. Respond only with valid JSON.",
         temperature: Double = 0.3,
-        maxTokens: Int = 500
+        maxTokens: Int = 500,
     ): String = runBlocking {
         val client = agentConfiguration.aiConfiguration.provider.client
         val model = agentConfiguration.aiConfiguration.model
@@ -329,19 +331,19 @@ class QualityAssuranceAgent(
         val messages = listOf(
             ChatMessage(
                 role = ChatRole.System,
-                content = systemMessage
+                content = systemMessage,
             ),
             ChatMessage(
                 role = ChatRole.User,
-                content = prompt
-            )
+                content = prompt,
+            ),
         )
 
         val request = ChatCompletionRequest(
             model = model.toClientModelId(),
             messages = messages,
             temperature = temperature,
-            maxTokens = maxTokens
+            maxTokens = maxTokens,
         )
 
         val completion = client.chatCompletion(request)
@@ -397,5 +399,5 @@ class QualityAssuranceAgent(
  */
 private data class ValidationInsights(
     val effectiveChecks: Map<String, Double> = emptyMap(), // check type -> effectiveness score
-    val commonlyMissedIssues: List<String> = emptyList()
+    val commonlyMissedIssues: List<String> = emptyList(),
 )
