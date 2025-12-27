@@ -21,7 +21,7 @@ typealias HumanRequestId = String
  */
 class HumanResponseRegistry {
 
-    private val pendingRequests = mutableMapOf<HumanRequestId, CompletableDeferred<String?>>()
+    private val pendingRequests = mutableMapOf<HumanRequestId, CompletableDeferred<String>>()
 
     /**
      * Register a new human interaction request and wait for response.
@@ -39,7 +39,7 @@ class HumanResponseRegistry {
         requestId: HumanRequestId,
         timeout: Duration = 30.minutes
     ): String? {
-        val deferred = CompletableDeferred<String?>()
+        val deferred = CompletableDeferred<String>()
         pendingRequests[requestId] = deferred
 
         return try {
@@ -80,7 +80,7 @@ class HumanResponseRegistry {
     fun cancelRequest(requestId: HumanRequestId): Boolean {
         val deferred = pendingRequests.remove(requestId)
         return if (deferred != null) {
-            deferred.complete(null)
+            deferred.cancel()
             true
         } else {
             false
@@ -109,7 +109,7 @@ class HumanResponseRegistry {
      * All waiting requests will receive null responses.
      */
     fun clearAll() {
-        pendingRequests.values.forEach { it.complete(null) }
+        pendingRequests.values.forEach { it.cancel() }
         pendingRequests.clear()
     }
 }
