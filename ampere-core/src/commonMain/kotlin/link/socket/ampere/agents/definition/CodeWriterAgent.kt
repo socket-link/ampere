@@ -342,7 +342,7 @@ open class CodeWriterAgent(
 
         // Call the LLM
         val llmResponse = try {
-            callLLM(perceptionPrompt)
+            callLLM(perceptionPrompt, maxTokens = 500)
         } catch (e: Exception) {
             // Fallback if LLM call fails
             return createFallbackIdea(currentTask, "LLM call failed: ${e.message}")
@@ -367,9 +367,12 @@ open class CodeWriterAgent(
      * This uses the agent's configured AI provider and model to generate a response.
      *
      * @param prompt The prompt to send to the LLM
+     * @param maxTokens Maximum tokens for the response (default: 4000)
      * @return The LLM's response text
      */
-    override fun callLLM(prompt: String): String = runBlocking {
+    override fun callLLM(prompt: String): String = callLLM(prompt, 4000)
+
+    fun callLLM(prompt: String, maxTokens: Int = 4000): String = runBlocking {
         val client = agentConfiguration.aiConfiguration.provider.client
         val model = agentConfiguration.aiConfiguration.model
 
@@ -388,10 +391,16 @@ open class CodeWriterAgent(
             model = model.toClientModelId(),
             messages = messages,
             temperature = 0.3, // Low temperature for analytical, consistent responses
-            maxTokens = 500
+            maxTokens = maxTokens
         )
 
         val completion = client.chatCompletion(request)
+
+        // Log token usage for monitoring
+        completion.usage?.let { usage ->
+            println("[LLM] Tokens - Prompt: ${usage.promptTokens}, Completion: ${usage.completionTokens}, Total: ${usage.totalTokens} (limit: $maxTokens)")
+        }
+
         completion.choices.firstOrNull()?.message?.content
             ?: throw IllegalStateException("No response from LLM")
     }
@@ -566,7 +575,7 @@ open class CodeWriterAgent(
 
         // Call LLM
         val llmResponse = try {
-            callLLM(planningPrompt)
+            callLLM(planningPrompt, maxTokens = 1000)
         } catch (e: Exception) {
             // Fallback: create a simple single-step plan
             return createFallbackPlan(task, "LLM call failed: ${e.message}")
@@ -1123,7 +1132,7 @@ open class CodeWriterAgent(
 
         // Call LLM to generate insights
         val llmResponse = try {
-            callLLM(evaluationPrompt)
+            callLLM(evaluationPrompt, maxTokens = 1000)
         } catch (e: Exception) {
             return createFallbackLearningIdea(outcomes, "LLM call failed: ${e.message}")
         }

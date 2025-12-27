@@ -37,10 +37,14 @@ sealed interface EventStatus : Status {
     }
 
     companion object {
-        fun fromName(name: String): EventStatus = when (name) {
-            Open.name -> Open
-            WaitingForHuman.name -> WaitingForHuman
-            Resolved.name -> Resolved
+        fun fromName(name: String): EventStatus = when (name.lowercase()) {
+            Open.name.lowercase() -> Open
+            WaitingForHuman.name.lowercase() -> WaitingForHuman
+            Resolved.name.lowercase() -> Resolved
+            // Legacy support for old database entries
+            "open" -> Open
+            "waiting for human" -> WaitingForHuman
+            "resolved" -> Resolved
             else -> throw IllegalArgumentException("Invalid event status: $name")
         }
     }

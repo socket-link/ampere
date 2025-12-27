@@ -44,6 +44,7 @@ class AmpereCommand : CliktCommand(
           status       System-wide status overview
           outcomes     View execution outcomes and learnings
           respond      Respond to agent human input requests
+          jazz-test    Run end-to-end autonomous agent demo
 
         Interactive Dashboard Controls:
           Viewing Modes:
@@ -69,6 +70,7 @@ class AmpereCommand : CliktCommand(
         Examples:
           ampere                              # Start dashboard
           ampere help                         # Show this help
+          ampere jazz-test                    # Run autonomous agent demo
           ampere watch --verbose              # Watch all events
           ampere watch --filter TaskCreated   # Watch task events only
           ampere thread list                  # List conversation threads
