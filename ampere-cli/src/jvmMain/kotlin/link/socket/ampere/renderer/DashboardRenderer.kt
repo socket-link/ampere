@@ -27,14 +27,14 @@ class DashboardRenderer(
     // Spinner characters cycle
     private val spinners = arrayOf("◐", "◓", "◑", "◒")
 
-    fun render(viewState: WatchViewState): String {
+    fun render(viewState: WatchViewState, verboseMode: Boolean = false): String {
         return buildString {
             // Clear screen and move cursor to home
             append("\u001B[2J") // Clear screen
             append("\u001B[H")  // Move cursor to home
 
             // System vitals header
-            appendSystemVitals(viewState.systemVitals)
+            appendSystemVitals(viewState.systemVitals, verboseMode)
             append("\n\n")
 
             // Agent activity panel
@@ -50,7 +50,7 @@ class DashboardRenderer(
         }
     }
 
-    private fun StringBuilder.appendSystemVitals(vitals: link.socket.ampere.cli.watch.presentation.SystemVitals) {
+    private fun StringBuilder.appendSystemVitals(vitals: link.socket.ampere.cli.watch.presentation.SystemVitals, verboseMode: Boolean) {
         val stateColor = when (vitals.systemState) {
             SystemState.IDLE -> TextColors.green
             SystemState.WORKING -> TextColors.blue
@@ -63,6 +63,10 @@ class DashboardRenderer(
         } ?: "never"
 
         append(terminal.render(bold(TextColors.cyan("AMPERE Dashboard"))))
+        if (verboseMode) {
+            append(" ")
+            append(terminal.render(TextColors.yellow("(verbose)")))
+        }
         append(" • ")
         append("${vitals.activeAgentCount} agents active")
         append(" • ")

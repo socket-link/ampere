@@ -55,7 +55,7 @@ class KeyboardInputHandler(
     /**
      * Process a key press and return the new view configuration if it changed.
      */
-    fun processKey(key: Char, current: WatchViewConfig): WatchViewConfig? {
+    fun processKey(key: Char, current: WatchViewConfig, agentIndexMap: AgentIndexMap? = null): WatchViewConfig? {
         // If in command mode, handle differently
         if (current.mode == WatchMode.COMMAND) {
             return when {
@@ -80,6 +80,11 @@ class KeyboardInputHandler(
             }
         }
 
+        // Check for Ctrl+C (exit signal)
+        if (key.code == 3) { // Ctrl+C
+            return null // Signal to exit (handled specially in StartCommand)
+        }
+
         // Normal mode key handling
         return when (key.lowercaseChar()) {
             'd' -> current.copy(mode = WatchMode.DASHBOARD, showHelp = false)
@@ -91,9 +96,13 @@ class KeyboardInputHandler(
             27.toChar() -> current.copy(showHelp = false) // ESC closes help
             // Agent focus modes (1-9)
             in '1'..'9' -> {
-                // Would need to map numbers to actual agent IDs
-                // For now, just switch to agent focus mode
-                current.copy(mode = WatchMode.AGENT_FOCUS, showHelp = false)
+                val index = key - '0'
+                val agentId = agentIndexMap?.getAgentId(index)
+                if (agentId != null) {
+                    current.copy(mode = WatchMode.AGENT_FOCUS, focusedAgentId = agentId, showHelp = false)
+                } else {
+                    null // No agent at that index
+                }
             }
             'q' -> null // Will be handled specially for quit
             else -> null // No change
