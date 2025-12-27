@@ -2,16 +2,23 @@ package link.socket.ampere
 
 import com.github.ajalt.clikt.core.CliktCommand
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.events.relay.EventRelayService
 import link.socket.ampere.cli.watch.KeyboardInputHandler
 import link.socket.ampere.cli.watch.WatchMode
 import link.socket.ampere.cli.watch.WatchViewConfig
 import link.socket.ampere.cli.watch.presentation.WatchPresenter
+import link.socket.ampere.cli.watch.presentation.WatchViewState
 import link.socket.ampere.renderer.DashboardRenderer
 import link.socket.ampere.renderer.HelpOverlayRenderer
 import link.socket.ampere.repl.TerminalFactory
+import java.io.PrintWriter
+import java.io.StringWriter
 
 /**
  * Start the AMPERE environment with an interactive multi-modal dashboard.
@@ -69,14 +76,12 @@ class StartCommand(
         val inputHandler = KeyboardInputHandler(terminal)
 
         var config = WatchViewConfig(mode = WatchMode.DASHBOARD, verboseMode = false)
+        var lastRenderedOutput: String? = null
+        var lastViewState: WatchViewState? = null
 
         try {
             // Initialize terminal for full-screen rendering
-            print("\u001B[?1049h")  // Enter alternate screen buffer
-            print("\u001B[?25l")    // Hide cursor
-            print("\u001B[2J")      // Clear screen
-            print("\u001B[H")       // Move cursor to home
-            System.out.flush()
+            initializeTerminal()
 
             // Start the presenter
             presenter.start()
@@ -84,81 +89,44 @@ class StartCommand(
             // Wait a moment for initial events to be processed
             delay(500)
 
-            // Render loop
-            while (true) {
-                // Check for keyboard input
-                val key = inputHandler.readKey()
-                if (key != null) {
-                    val newConfig = inputHandler.processKey(key, config)
-                    if (newConfig != null) {
-                        config = newConfig
+            // Launch input handling in background
+            val inputJob = launch {
+                while (isActive) {
+                    val key = inputHandler.readKey()
+                    if (key != null) {
+                        val newConfig = inputHandler.processKey(key, config)
+                        if (newConfig != null) {
+                            config = newConfig
+                            // Force re-render on config change
+                            lastRenderedOutput = null
+                        }
                     }
+                    delay(50) // Short delay to prevent busy-waiting
                 }
-
-                // Render based on current mode and state
-                if (config.showHelp) {
-                    // Help overlay takes precedence
-                    val output = helpRenderer.render()
-                    print(output)
-                    System.out.flush()
-                } else when (config.mode) {
-                    WatchMode.DASHBOARD -> {
-                        val viewState = presenter.getViewState()
-                        val output = renderer.render(viewState)
-                        print(output)
-                        System.out.flush()
-                    }
-                    WatchMode.EVENT_STREAM -> {
-                        // TODO: Implement event stream rendering
-                        print("\u001B[2J\u001B[H")  // Clear screen and home
-                        println("Event Stream Mode")
-                        println("Press 'd' to return to dashboard, 'h' for help")
-                        println()
-                        println("(Event stream rendering not yet implemented)")
-                        System.out.flush()
-                    }
-                    WatchMode.MEMORY_OPS -> {
-                        // TODO: Implement memory ops rendering
-                        print("\u001B[2J\u001B[H")  // Clear screen and home
-                        println("Memory Operations Mode")
-                        println("Press 'd' to return to dashboard, 'h' for help")
-                        println()
-                        println("(Memory ops rendering not yet implemented)")
-                        System.out.flush()
-                    }
-                    WatchMode.AGENT_FOCUS -> {
-                        // TODO: Implement agent focus rendering
-                        print("\u001B[2J\u001B[H")  // Clear screen and home
-                        println("Agent Focus Mode")
-                        println("Press 'd' to return to dashboard, 'h' for help")
-                        println()
-                        println("(Agent focus rendering not yet implemented)")
-                        System.out.flush()
-                    }
-                    WatchMode.HELP -> {
-                        // This shouldn't happen (use showHelp instead), but handle it
-                        val output = helpRenderer.render()
-                        print(output)
-                        System.out.flush()
-                    }
-                    WatchMode.COMMAND -> {
-                        // Render current view with command prompt at bottom
-                        val viewState = presenter.getViewState()
-                        val output = renderer.render(viewState)
-                        print(output)
-
-                        // Add command prompt at bottom
-                        print("\u001B[${terminal.info.height};1H")  // Move to bottom line
-                        print("\u001B[2K")  // Clear line
-                        print(":${config.commandInput}")
-                        print("\u001B[?25h")  // Show cursor for typing
-                        System.out.flush()
-                    }
-                }
-
-                // Wait before next refresh
-                delay(1000)
             }
+
+            // Launch rendering in background
+            val renderJob = launch(Dispatchers.IO) {
+                while (isActive) {
+                    val output = generateOutput(
+                        config, presenter, renderer, helpRenderer, terminal, lastViewState
+                    )
+
+                    // Only flush to terminal if output changed
+                    if (output != lastRenderedOutput) {
+                        print(output)
+                        System.out.flush()
+                        lastRenderedOutput = output
+                    }
+
+                    delay(250) // Render at 4 FPS instead of 1 FPS for better responsiveness
+                }
+            }
+
+            // Wait for jobs (they run until cancellation)
+            inputJob.join()
+            renderJob.join()
+
         } catch (e: CancellationException) {
             // Clean shutdown
             throw e
@@ -172,15 +140,82 @@ class StartCommand(
         } finally {
             presenter.stop()
             inputHandler.close()  // Restore terminal to normal mode
-
-            // Restore terminal state
-            print("\u001B[2J")       // Clear screen
-            print("\u001B[H")        // Move cursor to home
-            print("\u001B[?25h")     // Show cursor
-            print("\u001B[?1049l")   // Exit alternate screen buffer
-            System.out.flush()
-
+            restoreTerminal()
             println("\nAMPERE dashboard stopped")
+        }
+    }
+
+    private fun initializeTerminal() {
+        print("\u001B[?1049h")  // Enter alternate screen buffer
+        print("\u001B[?25l")    // Hide cursor
+        print("\u001B[2J")      // Clear screen
+        print("\u001B[H")       // Move cursor to home
+        System.out.flush()
+    }
+
+    private fun restoreTerminal() {
+        print("\u001B[2J")       // Clear screen
+        print("\u001B[H")        // Move cursor to home
+        print("\u001B[?25h")     // Show cursor
+        print("\u001B[?1049l")   // Exit alternate screen buffer
+        System.out.flush()
+    }
+
+    private fun generateOutput(
+        config: WatchViewConfig,
+        presenter: WatchPresenter,
+        renderer: DashboardRenderer,
+        helpRenderer: HelpOverlayRenderer,
+        terminal: com.github.ajalt.mordant.terminal.Terminal,
+        lastViewState: WatchViewState?
+    ): String {
+        return if (config.showHelp) {
+            helpRenderer.render()
+        } else when (config.mode) {
+            WatchMode.DASHBOARD -> {
+                val viewState = presenter.getViewState()
+                renderer.render(viewState)
+            }
+            WatchMode.EVENT_STREAM -> {
+                buildString {
+                    append("\u001B[2J\u001B[H")  // Clear screen and home
+                    appendLine("Event Stream Mode")
+                    appendLine("Press 'd' to return to dashboard, 'h' for help")
+                    appendLine()
+                    appendLine("(Event stream rendering not yet implemented)")
+                }
+            }
+            WatchMode.MEMORY_OPS -> {
+                buildString {
+                    append("\u001B[2J\u001B[H")  // Clear screen and home
+                    appendLine("Memory Operations Mode")
+                    appendLine("Press 'd' to return to dashboard, 'h' for help")
+                    appendLine()
+                    appendLine("(Memory ops rendering not yet implemented)")
+                }
+            }
+            WatchMode.AGENT_FOCUS -> {
+                buildString {
+                    append("\u001B[2J\u001B[H")  // Clear screen and home
+                    appendLine("Agent Focus Mode")
+                    appendLine("Press 'd' to return to dashboard, 'h' for help")
+                    appendLine()
+                    appendLine("(Agent focus rendering not yet implemented)")
+                }
+            }
+            WatchMode.HELP -> {
+                helpRenderer.render()
+            }
+            WatchMode.COMMAND -> {
+                val viewState = presenter.getViewState()
+                buildString {
+                    append(renderer.render(viewState))
+                    append("\u001B[${terminal.info.height};1H")  // Move to bottom line
+                    append("\u001B[2K")  // Clear line
+                    append(":${config.commandInput}")
+                    append("\u001B[?25h")  // Show cursor for typing
+                }
+            }
         }
     }
 }
