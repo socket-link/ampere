@@ -1,9 +1,6 @@
 package link.socket.ampere
 
 import com.github.ajalt.clikt.core.CliktCommand
-import com.github.ajalt.clikt.parameters.options.flag
-import com.github.ajalt.clikt.parameters.options.option
-import link.socket.ampere.util.LoggingConfiguration
 
 /**
  * Root command for the Ampere CLI.
@@ -30,22 +27,54 @@ import link.socket.ampere.util.LoggingConfiguration
 class AmpereCommand : CliktCommand(
     name = "ampere",
     help = """
-        AMPERE Interactive CLI
+        AMPERE - Animated Multi-Agent Prompting Environment
 
-        Framework hierarchy:
-        • AniMA - Animated Multi-Agent prompting framework
-        • AMP - AniMA Model Protocol specification
-        • AMPERE - AMP Example Runtime Environment (this implementation)
+        Usage:
+          ampere                    # Start interactive dashboard (default)
+          ampere start              # Start interactive dashboard (explicit)
+          ampere <command>          # Run specific command
 
-        AMPERE provides CLI tools for observing and affecting an autonomous
-        multi-agent environment with built-in coordination, memory, and learning.
+        Main Commands:
+          start        Interactive multi-modal dashboard (default)
+          help         Show comprehensive help message
+          watch        Stream events in real-time with filtering
+          dashboard    Static live-updating dashboard
+          interactive  REPL session for direct interaction
+          thread       View and manage conversation threads
+          status       System-wide status overview
+          outcomes     View execution outcomes and learnings
 
-        Commands:
-        • watch       - Stream events in real-time (with filtering and grouping)
-        • dashboard  - Live-updating dashboard view of system state
-        • thread      - View and manage conversation threads
-        • status      - System-wide status overview
-        • outcomes   - Query execution outcomes and learnings
+        Interactive Dashboard Controls:
+          Viewing Modes:
+            d          Dashboard - System vitals, agent status, recent events
+            e          Event Stream - Filtered stream of significant events
+            m          Memory Operations - Knowledge recall/storage patterns
+            1-9        Agent Focus - Detailed view of specific agent
+
+          Options:
+            v          Toggle verbose mode (show/hide routine events)
+            h  or  ?   Toggle help screen
+            :          Command mode - Issue commands to the system
+            ESC        Close help / Cancel command mode
+            q  or Ctrl+C   Exit dashboard
+
+        Command Mode (press ':' in dashboard):
+            :help         Show available commands
+            :agents       List all active agents
+            :ticket <id>  Show ticket details
+            :thread <id>  Show conversation thread
+            :quit         Exit dashboard
+
+        Examples:
+          ampere                              # Start dashboard
+          ampere help                         # Show this help
+          ampere watch --verbose              # Watch all events
+          ampere watch --filter TaskCreated   # Watch task events only
+          ampere thread list                  # List conversation threads
+          ampere outcomes stats               # View learning statistics
+
+        For more information on specific commands:
+          ampere <command> --help
     """.trimIndent()
 ) {
     override fun run() = Unit
