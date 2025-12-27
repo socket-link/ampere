@@ -85,13 +85,21 @@ class ToolExecutionWithEventsTest {
         assignedAgentId = null,
         createdByAgentId = "test-agent",
         createdAt = Clock.System.now(),
+<<<<<<< HEAD
         updatedAt = Clock.System.now(),
+=======
+        updatedAt = Clock.System.now()
+>>>>>>> 38ce6bd (Finish tool implementation)
     )
 
     private fun createTestTask(): Task.CodeChange = Task.CodeChange(
         id = generateUUID(),
         status = TaskStatus.Pending,
+<<<<<<< HEAD
         description = "Test task",
+=======
+        description = "Test task"
+>>>>>>> 38ce6bd (Finish tool implementation)
     )
 
     /**
@@ -115,9 +123,15 @@ class ToolExecutionWithEventsTest {
                     taskId = request.context.task.id,
                     executionStartTimestamp = Clock.System.now(),
                     executionEndTimestamp = Clock.System.now(),
+<<<<<<< HEAD
                     message = "Success",
                 )
             },
+=======
+                    message = "Success"
+                )
+            }
+>>>>>>> 38ce6bd (Finish tool implementation)
         )
 
         // Create invoker WITH event API
@@ -127,7 +141,11 @@ class ToolExecutionWithEventsTest {
             executorId = "test-executor",
             ticket = createTestTicket(),
             task = createTestTask(),
+<<<<<<< HEAD
             instructions = "Test instructions",
+=======
+            instructions = "Test instructions"
+>>>>>>> 38ce6bd (Finish tool implementation)
         )
 
         val request = ExecutionRequest(
@@ -137,15 +155,24 @@ class ToolExecutionWithEventsTest {
                 maxFilesChanged = 100,
                 requireTests = false,
                 requireLinting = false,
+<<<<<<< HEAD
                 allowBreakingChanges = false,
             ),
+=======
+                allowBreakingChanges = false
+            )
+>>>>>>> 38ce6bd (Finish tool implementation)
         )
 
         // Invoke the tool
         val result = invoker.invoke(request)
 
         // Verify the result
+<<<<<<< HEAD
         assertIs<ToolInvocationResult.Success>(result)
+=======
+        assertIs<link.socket.ampere.agents.execution.tools.invoke.ToolInvocationResult.Success>(result)
+>>>>>>> 38ce6bd (Finish tool implementation)
 
         // Allow events to be processed
         delay(100)
@@ -196,9 +223,15 @@ class ToolExecutionWithEventsTest {
                     taskId = request.context.task.id,
                     executionStartTimestamp = Clock.System.now(),
                     executionEndTimestamp = Clock.System.now(),
+<<<<<<< HEAD
                     message = "Intentional failure",
                 )
             },
+=======
+                    message = "Intentional failure"
+                )
+            }
+>>>>>>> 38ce6bd (Finish tool implementation)
         )
 
         val invoker = ToolInvoker(tool, agentEventApi)
@@ -207,7 +240,11 @@ class ToolExecutionWithEventsTest {
             executorId = "test-executor",
             ticket = createTestTicket(),
             task = createTestTask(),
+<<<<<<< HEAD
             instructions = "Test instructions",
+=======
+            instructions = "Test instructions"
+>>>>>>> 38ce6bd (Finish tool implementation)
         )
 
         val request = ExecutionRequest(
@@ -217,15 +254,24 @@ class ToolExecutionWithEventsTest {
                 maxFilesChanged = 100,
                 requireTests = false,
                 requireLinting = false,
+<<<<<<< HEAD
                 allowBreakingChanges = false,
             ),
+=======
+                allowBreakingChanges = false
+            )
+>>>>>>> 38ce6bd (Finish tool implementation)
         )
 
         // Invoke the tool
         val result = invoker.invoke(request)
 
         // Verify the result is a failure
+<<<<<<< HEAD
         assertIs<ToolInvocationResult.Failed>(result)
+=======
+        assertIs<link.socket.ampere.agents.execution.tools.invoke.ToolInvocationResult.Failed>(result)
+>>>>>>> 38ce6bd (Finish tool implementation)
 
         // Allow events to be processed
         delay(100)
@@ -264,9 +310,15 @@ class ToolExecutionWithEventsTest {
                     taskId = request.context.task.id,
                     executionStartTimestamp = Clock.System.now(),
                     executionEndTimestamp = Clock.System.now(),
+<<<<<<< HEAD
                     message = "Success",
                 )
             },
+=======
+                    message = "Success"
+                )
+            }
+>>>>>>> 38ce6bd (Finish tool implementation)
         )
 
         // Create invoker WITHOUT event API
@@ -276,7 +328,11 @@ class ToolExecutionWithEventsTest {
             executorId = "test-executor",
             ticket = createTestTicket(),
             task = createTestTask(),
+<<<<<<< HEAD
             instructions = "Test instructions",
+=======
+            instructions = "Test instructions"
+>>>>>>> 38ce6bd (Finish tool implementation)
         )
 
         val request = ExecutionRequest(
@@ -286,15 +342,24 @@ class ToolExecutionWithEventsTest {
                 maxFilesChanged = 100,
                 requireTests = false,
                 requireLinting = false,
+<<<<<<< HEAD
                 allowBreakingChanges = false,
             ),
+=======
+                allowBreakingChanges = false
+            )
+>>>>>>> 38ce6bd (Finish tool implementation)
         )
 
         // Invoke the tool - should work without errors
         val result = invoker.invoke(request)
 
         // Verify the result
+<<<<<<< HEAD
         assertIs<ToolInvocationResult.Success>(result)
+=======
+        assertIs<link.socket.ampere.agents.execution.tools.invoke.ToolInvocationResult.Success>(result)
+>>>>>>> 38ce6bd (Finish tool implementation)
 
         // No events should be emitted (event repository should be empty or only have setup events)
         val events = eventRepository.getAllEvents().getOrNull()
