@@ -2,6 +2,7 @@ package link.socket.ampere.agents.execution.tools.human
 
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -46,6 +47,9 @@ class HumanResponseRegistry {
             withTimeoutOrNull(timeout) {
                 deferred.await()
             }
+        } catch (e: CancellationException) {
+            // When cancelled via cancelRequest(), return null
+            null
         } finally {
             pendingRequests.remove(requestId)
         }
