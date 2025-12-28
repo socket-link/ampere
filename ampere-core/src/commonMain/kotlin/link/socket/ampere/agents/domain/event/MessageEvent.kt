@@ -19,7 +19,7 @@ sealed interface MessageEvent : Event {
     data class ThreadCreated(
         override val eventId: EventId,
         val thread: MessageThread,
-        override val urgency: Urgency = Urgency.MEDIUM
+        override val urgency: Urgency = Urgency.MEDIUM,
     ) : MessageEvent {
 
         override val eventType: EventType = EVENT_TYPE
@@ -43,7 +43,7 @@ sealed interface MessageEvent : Event {
         override val threadId: MessageThreadId,
         val channel: MessageChannel,
         val message: Message,
-        override val urgency: Urgency = Urgency.LOW
+        override val urgency: Urgency = Urgency.LOW,
     ) : MessageEvent {
 
         override val eventType: EventType = EVENT_TYPE
@@ -68,7 +68,7 @@ sealed interface MessageEvent : Event {
         override val threadId: MessageThreadId,
         val oldStatus: EventStatus,
         val newStatus: EventStatus,
-        override val urgency: Urgency = Urgency.MEDIUM
+        override val urgency: Urgency = Urgency.MEDIUM,
     ) : MessageEvent {
 
         override val eventType: EventType = EVENT_TYPE
@@ -91,7 +91,7 @@ sealed interface MessageEvent : Event {
         override val threadId: MessageThreadId,
         val reason: String,
         val context: Map<String, String> = emptyMap(),
-        override val urgency: Urgency = Urgency.HIGH
+        override val urgency: Urgency = Urgency.HIGH,
     ) : MessageEvent {
 
         override val eventType: EventType = EVENT_TYPE

@@ -1,7 +1,5 @@
 package link.socket.ampere.agents.events.escalation
 
-import link.socket.ampere.agents.events.escalation.Escalation
-
 /**
  * Represents the decision made by an escalation policy.
  *
@@ -22,8 +20,10 @@ data class EscalationDecision(
     enum class UrgencyLevel {
         /** Normal escalation - no immediate action required. */
         NORMAL,
+
         /** Elevated urgency - should be addressed soon. */
         ELEVATED,
+
         /** Critical urgency - requires immediate attention. */
         CRITICAL,
     }

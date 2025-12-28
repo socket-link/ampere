@@ -52,7 +52,6 @@ sealed interface FileSystemEvent : Event {
             append(" from ${formatSource(eventSource)}")
         }
 
-
         companion object {
             const val EVENT_TYPE: EventType = "FileCreated"
         }
@@ -86,7 +85,6 @@ sealed interface FileSystemEvent : Event {
             append(" from ${formatSource(eventSource)}")
         }
 
-
         companion object {
             const val EVENT_TYPE: EventType = "FileModified"
         }
@@ -118,7 +116,6 @@ sealed interface FileSystemEvent : Event {
             append(" ${formatUrgency(urgency)}")
             append(" from ${formatSource(eventSource)}")
         }
-
 
         companion object {
             const val EVENT_TYPE: EventType = "FileDeleted"

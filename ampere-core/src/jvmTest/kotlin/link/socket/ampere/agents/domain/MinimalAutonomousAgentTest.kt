@@ -13,20 +13,20 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.config.AgentConfiguration
-import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
+import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.definition.AutonomousAgent
 import link.socket.ampere.agents.domain.concept.Idea
 import link.socket.ampere.agents.domain.concept.Perception
 import link.socket.ampere.agents.domain.concept.Plan
-import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
+import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.domain.concept.status.TaskStatus
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.concept.task.Task
-import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.definition.AutonomousAgent
+import link.socket.ampere.agents.domain.config.AgentConfiguration
+import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
@@ -106,7 +106,7 @@ class MinimalAutonomousAgentTest {
             executionStartTimestamp = Clock.System.now(),
             executionEndTimestamp = Clock.System.now() + 1.seconds,
             message = "Success",
-        )
+            ),
     ) : AutonomousAgent<AgentState>() {
         override val id: AgentId = "TestAgent"
         override val initialState: AgentState = AgentState()
@@ -148,7 +148,7 @@ class MinimalAutonomousAgentTest {
                 outcomeId = outcome.id,
                 approach = "Test approach",
                 learnings = "Test learnings",
-                timestamp = Clock.System.now()
+                timestamp = Clock.System.now(),
             )
         }
 

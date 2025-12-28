@@ -1,16 +1,16 @@
 package link.socket.ampere.agents.execution.tools.invoke
 
+import kotlin.time.Duration
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.domain.event.EventSource
-import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
-import kotlin.time.Duration
 
 /**
  * Motor neuron that translates agent intent into tool invocation.
@@ -35,7 +35,7 @@ import kotlin.time.Duration
  */
 class ToolInvoker<C : ExecutionContext>(
     val tool: Tool<C>,
-    private val eventApi: AgentEventApi? = null
+    private val eventApi: AgentEventApi? = null,
 ) {
 
     /**
@@ -70,7 +70,7 @@ class ToolInvoker<C : ExecutionContext>(
                 urgency = Urgency.LOW,
                 invocationId = invocationId,
                 toolId = tool.id,
-                toolName = tool.name
+                toolName = tool.name,
             )
             api.publish(startedEvent)
         }
@@ -87,7 +87,7 @@ class ToolInvoker<C : ExecutionContext>(
                 taskId = request.context.task.id,
                 executionStartTimestamp = startTime,
                 executionEndTimestamp = Clock.System.now(),
-                message = "Tool execution failed unexpectedly: ${e.message ?: e::class.simpleName}"
+                message = "Tool execution failed unexpectedly: ${e.message ?: e::class.simpleName}",
             )
         }
 
@@ -99,7 +99,7 @@ class ToolInvoker<C : ExecutionContext>(
             is Outcome.Success -> ToolInvocationResult.Success(
                 outcome = outcome,
                 toolId = tool.id,
-                duration = duration
+                duration = duration,
             )
             is Outcome.Failure -> ToolInvocationResult.Failed(
                 outcome = outcome,
@@ -110,7 +110,7 @@ class ToolInvoker<C : ExecutionContext>(
                     else -> "Tool execution failed"
                 },
                 toolId = tool.id,
-                duration = duration
+                duration = duration,
             )
             is Outcome.Blank -> ToolInvocationResult.Blank
             // Handle other outcome types (MeetingOutcome, etc.) that tools shouldn't normally return
@@ -123,11 +123,11 @@ class ToolInvoker<C : ExecutionContext>(
                         taskId = request.context.task.id,
                         executionStartTimestamp = startTime,
                         executionEndTimestamp = endTime,
-                        message = "Tool returned unexpected outcome type: ${outcome::class.simpleName}"
+                        message = "Tool returned unexpected outcome type: ${outcome::class.simpleName}",
                     ),
                     error = "Tool returned unexpected outcome type: ${outcome::class.simpleName}",
                     toolId = tool.id,
-                    duration = duration
+                    duration = duration,
                 )
             }
         }
@@ -150,7 +150,7 @@ class ToolInvoker<C : ExecutionContext>(
                 errorMessage = when (invocationResult) {
                     is ToolInvocationResult.Failed -> invocationResult.error
                     else -> null
-                }
+                },
             )
             api.publish(completedEvent)
         }
@@ -222,7 +222,7 @@ sealed interface ToolInvocationResult {
     data class Success(
         val outcome: Outcome.Success,
         val toolId: String,
-        val duration: Duration
+        val duration: Duration,
     ) : ToolInvocationResult
 
     /**
@@ -237,7 +237,7 @@ sealed interface ToolInvocationResult {
         val outcome: Outcome.Failure,
         val error: String,
         val toolId: String,
-        val duration: Duration
+        val duration: Duration,
     ) : ToolInvocationResult
 
     /**

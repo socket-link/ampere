@@ -2,7 +2,6 @@ package link.socket.ampere.agents.domain.event
 
 import link.socket.ampere.agents.domain.event.EventRegistry.allEventTypes
 
-
 /**
  * Central registry of all event types in the system.
  *

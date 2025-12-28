@@ -3,6 +3,7 @@ package link.socket.ampere.agents.events.tickets
 import kotlin.time.Duration.Companion.hours
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.concept.status.EventStatus
 import link.socket.ampere.agents.domain.concept.status.MeetingStatus
@@ -12,7 +13,6 @@ import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.concept.task.MeetingTask
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.TicketEvent
-import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.escalation.Escalation
 import link.socket.ampere.agents.events.meetings.Meeting

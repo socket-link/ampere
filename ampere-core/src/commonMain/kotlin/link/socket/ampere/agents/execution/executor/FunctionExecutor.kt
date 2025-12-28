@@ -5,10 +5,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.error.ExecutionError
-import link.socket.ampere.agents.domain.health.ExecutorSystemHealth
 import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.concept.status.ExecutionStatus
+import link.socket.ampere.agents.domain.error.ExecutionError
+import link.socket.ampere.agents.domain.health.ExecutorSystemHealth
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.FunctionTool
@@ -56,7 +56,7 @@ class FunctionExecutor(
                 version = "1.0.0",
                 isAvailable = true,
                 issues = emptyList(),
-            )
+            ),
         )
     }
 
@@ -100,7 +100,7 @@ class FunctionExecutor(
                             isRetryable = false,
                         ),
                     ),
-                )
+                ),
             )
             return@flow
         }
@@ -110,7 +110,7 @@ class FunctionExecutor(
             ExecutionStatus.Started(
                 executorId = id,
                 timestamp = Clock.System.now(),
-            )
+            ),
         )
 
         // Emit Planning status
@@ -119,7 +119,7 @@ class FunctionExecutor(
                 executorId = id,
                 timestamp = Clock.System.now(),
                 strategy = "Executing function tool '${tool.name}'",
-            )
+            ),
         )
 
         try {
@@ -129,7 +129,7 @@ class FunctionExecutor(
             // Cast is safe because we validated tool is FunctionTool above
             @Suppress("UNCHECKED_CAST")
             val outcome = (tool as FunctionTool<ExecutionContext>).execute(
-                request as ExecutionRequest<ExecutionContext>
+                request as ExecutionRequest<ExecutionContext>,
             )
 
             // Emit appropriate status based on outcome type
@@ -141,7 +141,7 @@ class FunctionExecutor(
                             executorId = id,
                             timestamp = Clock.System.now(),
                             result = outcome,
-                        )
+                        ),
                     )
                 }
                 is ExecutionOutcome.Failure -> {
@@ -151,7 +151,7 @@ class FunctionExecutor(
                             executorId = id,
                             timestamp = Clock.System.now(),
                             result = outcome,
-                        )
+                        ),
                     )
                 }
                 else -> {
@@ -170,7 +170,7 @@ class FunctionExecutor(
                                     isRetryable = false,
                                 ),
                             ),
-                        )
+                        ),
                     )
                 }
             }
@@ -191,7 +191,7 @@ class FunctionExecutor(
                             isRetryable = false,
                         ),
                     ),
-                )
+                ),
             )
         }
     }

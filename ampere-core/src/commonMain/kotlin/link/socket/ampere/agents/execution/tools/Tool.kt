@@ -2,8 +2,8 @@ package link.socket.ampere.agents.execution.tools
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.concept.outcome.Outcome
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 
@@ -132,7 +132,7 @@ data class McpTool(
         // integration is complete.
         throw NotImplementedError(
             "MCP tool execution is not yet implemented. " +
-            "This will be added in task AMP-203.4 (MCP Server Integration)."
+                "This will be added in task AMP-203.4 (MCP Server Integration).",
         )
     }
 }
@@ -148,12 +148,12 @@ internal object ExecutionFunctionSerializer :
 
     override val descriptor = kotlinx.serialization.descriptors.PrimitiveSerialDescriptor(
         "ExecutionFunction",
-        kotlinx.serialization.descriptors.PrimitiveKind.STRING
+        kotlinx.serialization.descriptors.PrimitiveKind.STRING,
     )
 
     override fun serialize(
         encoder: kotlinx.serialization.encoding.Encoder,
-        value: suspend (ExecutionRequest<*>) -> Outcome
+        value: suspend (ExecutionRequest<*>) -> Outcome,
     ) {
         // Functions cannot be serialized directly
         encoder.encodeString("<<function>>")

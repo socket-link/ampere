@@ -24,7 +24,7 @@ import link.socket.ampere.agents.execution.tools.Tool
  * Contract for autonomous agents.
  */
 @Serializable
-abstract class AutonomousAgent <S : AgentState> : Agent<S>, NeuralAgent<S> {
+abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
 
     // ==================== Agent Metadata ====================
 
@@ -93,12 +93,12 @@ abstract class AutonomousAgent <S : AgentState> : Agent<S>, NeuralAgent<S> {
             is Task.CodeChange -> MemoryContext(
                 taskType = "code_change",
                 tags = emptySet(),
-                description = task.description
+                description = task.description,
             )
             else -> MemoryContext(
                 taskType = "generic",
                 tags = emptySet(),
-                description = "Generic task: ${task.id}"
+                description = "Generic task: ${task.id}",
             )
         }
 
@@ -197,7 +197,7 @@ abstract class AutonomousAgent <S : AgentState> : Agent<S>, NeuralAgent<S> {
     override suspend fun determinePlanForTask(
         task: Task,
         vararg ideas: Idea,
-        relevantKnowledge: List<KnowledgeWithScore>
+        relevantKnowledge: List<KnowledgeWithScore>,
     ): Plan {
         // Note: AutonomousAgent implementations should override this to incorporate
         // relevantKnowledge into their planning. The base implementation here

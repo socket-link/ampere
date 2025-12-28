@@ -9,12 +9,12 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonElement
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.concept.status.ExecutionStatus
 import link.socket.ampere.agents.domain.concept.status.TaskStatus
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
@@ -122,7 +122,7 @@ class McpExecutorTest {
         // Verify result message contains expected text
         assertTrue(
             outcome.message.contains("concatenated"),
-            "Result message should contain tool output"
+            "Result message should contain tool output",
         )
     }
 
@@ -175,7 +175,7 @@ class McpExecutorTest {
         val message = (outcome as ExecutionOutcome.NoChanges.Failure).message
         assertTrue(
             message.contains("not connected"),
-            "Error message should mention server not connected"
+            "Error message should mention server not connected",
         )
     }
 
@@ -223,7 +223,7 @@ class McpExecutorTest {
         val message = (outcome as ExecutionOutcome.NoChanges.Failure).message
         assertTrue(
             message.contains("not an MCP tool"),
-            "Error message should explain type mismatch"
+            "Error message should explain type mismatch",
         )
     }
 
@@ -406,15 +406,15 @@ class McpExecutorTest {
         // Check that each type is present
         assertTrue(
             statuses.any { it is ExecutionStatus.Started },
-            "Should emit Started status"
+            "Should emit Started status",
         )
         assertTrue(
             statuses.any { it is ExecutionStatus.Planning },
-            "Should emit Planning status"
+            "Should emit Planning status",
         )
         assertTrue(
             statuses.any { it is ExecutionStatus.Completed },
-            "Should emit Completed status"
+            "Should emit Completed status",
         )
 
         // Verify only the final status has isClosed = true
@@ -480,7 +480,7 @@ class McpExecutorTest {
         // Should provide default message for empty content
         assertTrue(
             outcome.message.contains("successfully") || outcome.message.contains("no output"),
-            "Should have sensible default message"
+            "Should have sensible default message",
         )
     }
 
@@ -539,7 +539,7 @@ class McpExecutorTest {
         val message = (outcome as ExecutionOutcome.NoChanges.Failure).message
         assertTrue(
             message.contains("timeout") || message.contains("failed"),
-            "Error message should include details: $message"
+            "Error message should include details: $message",
         )
     }
 
@@ -598,7 +598,7 @@ class McpExecutorTest {
             val finalStatus = statuses.last()
             assertIs<ExecutionStatus.Completed>(
                 finalStatus,
-                "Execution $i should complete successfully"
+                "Execution $i should complete successfully",
             )
         }
 
@@ -653,7 +653,7 @@ class McpExecutorTest {
         val message = (outcome as ExecutionOutcome.NoChanges.Failure).message
         assertTrue(
             message.contains("not active"),
-            "Error should mention connection not active"
+            "Error should mention connection not active",
         )
     }
 
@@ -716,7 +716,7 @@ class McpExecutorTest {
         // Verify error message is propagated
         assertTrue(
             outcome.message.contains("Invalid parameters"),
-            "Should include tool's error message"
+            "Should include tool's error message",
         )
     }
 

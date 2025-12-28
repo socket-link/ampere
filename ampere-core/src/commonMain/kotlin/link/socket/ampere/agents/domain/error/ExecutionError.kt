@@ -19,15 +19,20 @@ data class ExecutionError(
     enum class Type {
         /** Execution exceeded time limit */
         TIMEOUT,
+
         /** The underlying tool is not available or not configured */
         TOOL_UNAVAILABLE,
+
         /** Problem with the workspace (permissions, missing files, etc.) */
         WORKSPACE_ERROR,
+
         /** Code failed to compile */
         COMPILATION_FAILED,
+
         /** Tests failed */
         TESTS_FAILED,
+
         /** Unexpected error */
-        UNEXPECTED;
+        UNEXPECTED,
     }
 }

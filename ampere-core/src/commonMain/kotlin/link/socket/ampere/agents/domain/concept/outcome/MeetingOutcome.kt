@@ -2,8 +2,8 @@ package link.socket.ampere.agents.domain.concept.outcome
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.SprintId
+import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.event.EventSource
 
 /** Types of outcomes that a meeting can produce. */

@@ -28,20 +28,20 @@ class MemoryContextTest {
         approach: String,
         learnings: String,
         timestamp: Instant = now,
-        outcomeId: OutcomeId = "outcome-123"
+        outcomeId: OutcomeId = "outcome-123",
     ): Knowledge.FromOutcome {
         return Knowledge.FromOutcome(
             outcomeId = outcomeId,
             approach = approach,
             learnings = learnings,
-            timestamp = timestamp
+            timestamp = timestamp,
         )
     }
 
     private fun createDatabaseMigrationContext(
         description: String = "implement new database migration for user table schema changes",
         tags: Set<String> = setOf("database", "migration", "schema"),
-        complexity: ComplexityLevel? = ComplexityLevel.MODERATE
+        complexity: ComplexityLevel? = ComplexityLevel.MODERATE,
     ): MemoryContext {
         return MemoryContext(
             taskType = "database_migration",
@@ -49,7 +49,7 @@ class MemoryContextTest {
             description = description,
             projectContext = "user-service",
             timeConstraint = null,
-            complexity = complexity
+            complexity = complexity,
         )
     }
 
@@ -64,19 +64,22 @@ class MemoryContextTest {
         val databaseKnowledge = createKnowledgeFromOutcome(
             approach = "Created migration script with schema validation before applying database changes",
             learnings = "Always run dry-run validation before applying schema changes to prevent data loss",
-            timestamp = now.minus(7.days)
+            timestamp = now.minus(7.days),
         )
 
         val uiKnowledge = createKnowledgeFromOutcome(
             approach = "Updated React component styling with CSS modules",
             learnings = "Component styling should use CSS modules for better isolation",
-            timestamp = now.minus(7.days)
+            timestamp = now.minus(7.days),
         )
 
         val dbScore = context.similarityScore(databaseKnowledge, currentTime = now)
         val uiScore = context.similarityScore(uiKnowledge, currentTime = now)
 
-        assertTrue(dbScore > uiScore, "Database knowledge should score higher than UI knowledge for database migration context")
+        assertTrue(
+            dbScore > uiScore,
+            "Database knowledge should score higher than UI knowledge for database migration context",
+        )
         assertTrue(dbScore > 0.5, "Database knowledge should have significant similarity (>0.5)")
         assertTrue(uiScore < 0.3, "UI knowledge should have low similarity (<0.3)")
     }
@@ -88,19 +91,19 @@ class MemoryContextTest {
         val recentKnowledge = createKnowledgeFromOutcome(
             approach = "Database migration with schema validation",
             learnings = "Validate schema changes before applying",
-            timestamp = now.minus(5.days) // Very recent (within 7 days)
+            timestamp = now.minus(5.days), // Very recent (within 7 days)
         )
 
         val olderKnowledge = createKnowledgeFromOutcome(
             approach = "Database migration with schema validation",
             learnings = "Validate schema changes before applying",
-            timestamp = now.minus(45.days) // Moderately recent (within 90 days)
+            timestamp = now.minus(45.days), // Moderately recent (within 90 days)
         )
 
         val veryOldKnowledge = createKnowledgeFromOutcome(
             approach = "Database migration with schema validation",
             learnings = "Validate schema changes before applying",
-            timestamp = now.minus(180.days) // Older (>90 days)
+            timestamp = now.minus(180.days), // Older (>90 days)
         )
 
         val recentScore = context.similarityScore(recentKnowledge, currentTime = now)
@@ -117,25 +120,25 @@ class MemoryContextTest {
             taskType = "api_endpoint",
             tags = setOf("backend", "rest", "validation"),
             description = "implement REST API endpoint with input validation and error handling",
-            projectContext = "api-service"
+            projectContext = "api-service",
         )
 
         val highOverlapKnowledge = createKnowledgeFromOutcome(
             approach = "Created REST API endpoint with comprehensive input validation",
             learnings = "Input validation should happen before business logic to improve error handling and security",
-            timestamp = now.minus(10.days)
+            timestamp = now.minus(10.days),
         )
 
         val mediumOverlapKnowledge = createKnowledgeFromOutcome(
             approach = "Implemented GraphQL endpoint with schema validation",
             learnings = "Schema validation prevents invalid data from entering the system",
-            timestamp = now.minus(10.days)
+            timestamp = now.minus(10.days),
         )
 
         val lowOverlapKnowledge = createKnowledgeFromOutcome(
             approach = "Fixed frontend button click handler",
             learnings = "Event handlers should be debounced to prevent duplicate submissions",
-            timestamp = now.minus(10.days)
+            timestamp = now.minus(10.days),
         )
 
         val highScore = context.similarityScore(highOverlapKnowledge, currentTime = now)
@@ -152,19 +155,19 @@ class MemoryContextTest {
             taskType = "testing",
             tags = setOf("unit-tests", "kotlin"),
             description = "write unit tests for UserRepository with mocked database",
-            projectContext = "test-suite"
+            projectContext = "test-suite",
         )
 
         val upperCaseKnowledge = createKnowledgeFromOutcome(
             approach = "WRITE UNIT TESTS FOR REPOSITORY WITH MOCKED DATABASE",
             learnings = "MOCKING DATABASE MAKES TESTS FASTER AND MORE RELIABLE",
-            timestamp = now.minus(5.days)
+            timestamp = now.minus(5.days),
         )
 
         val lowerCaseKnowledge = createKnowledgeFromOutcome(
             approach = "write unit tests for repository with mocked database",
             learnings = "mocking database makes tests faster and more reliable",
-            timestamp = now.minus(5.days)
+            timestamp = now.minus(5.days),
         )
 
         val upperScore = context.similarityScore(upperCaseKnowledge, currentTime = now)
@@ -181,13 +184,13 @@ class MemoryContextTest {
         val perfectMatchKnowledge = createKnowledgeFromOutcome(
             approach = "implement new database migration for user table schema changes",
             learnings = "database migration schema changes require validation",
-            timestamp = now.minus(1.days)
+            timestamp = now.minus(1.days),
         )
 
         val noMatchKnowledge = createKnowledgeFromOutcome(
             approach = "xyz abc qwerty",
             learnings = "foo bar baz",
-            timestamp = now.minus(1.days)
+            timestamp = now.minus(1.days),
         )
 
         val perfectScore = context.similarityScore(perfectMatchKnowledge, currentTime = now)
@@ -211,28 +214,28 @@ class MemoryContextTest {
         val veryRecentKnowledge = createKnowledgeFromOutcome(
             approach = baseApproach,
             learnings = baseLearnings,
-            timestamp = now.minus(3.days)
+            timestamp = now.minus(3.days),
         )
 
         // Recent (< 30 days) - recency score 0.7
         val recentKnowledge = createKnowledgeFromOutcome(
             approach = baseApproach,
             learnings = baseLearnings,
-            timestamp = now.minus(20.days)
+            timestamp = now.minus(20.days),
         )
 
         // Moderately recent (< 90 days) - recency score 0.4
         val moderateKnowledge = createKnowledgeFromOutcome(
             approach = baseApproach,
             learnings = baseLearnings,
-            timestamp = now.minus(60.days)
+            timestamp = now.minus(60.days),
         )
 
         // Older (>= 90 days) - recency score 0.2
         val oldKnowledge = createKnowledgeFromOutcome(
             approach = baseApproach,
             learnings = baseLearnings,
-            timestamp = now.minus(120.days)
+            timestamp = now.minus(120.days),
         )
 
         val veryRecentScore = context.similarityScore(veryRecentKnowledge, currentTime = now)
@@ -263,13 +266,13 @@ class MemoryContextTest {
             description = "do something",
             projectContext = null,
             timeConstraint = null,
-            complexity = null
+            complexity = null,
         )
 
         val knowledge = createKnowledgeFromOutcome(
             approach = "implemented feature with comprehensive testing",
             learnings = "testing is important for quality",
-            timestamp = now.minus(5.days)
+            timestamp = now.minus(5.days),
         )
 
         // Should not throw an exception
@@ -285,13 +288,13 @@ class MemoryContextTest {
             taskType = "test_task",
             tags = setOf("testing"),
             description = "",
-            projectContext = null
+            projectContext = null,
         )
 
         val knowledge = createKnowledgeFromOutcome(
             approach = "some approach",
             learnings = "some learnings",
-            timestamp = now.minus(5.days)
+            timestamp = now.minus(5.days),
         )
 
         // Should not throw an exception
@@ -308,13 +311,13 @@ class MemoryContextTest {
             taskType = "code_review",
             tags = setOf("review"),
             description = "review pull request for user-authentication module",
-            projectContext = "auth-service"
+            projectContext = "auth-service",
         )
 
         val knowledge = createKnowledgeFromOutcome(
             approach = "Reviewed PR #123: user-authentication (OAuth2.0) implementation!",
             learnings = "Authentication flows should be reviewed for: security, error-handling & edge-cases.",
-            timestamp = now.minus(5.days)
+            timestamp = now.minus(5.days),
         )
 
         // Should handle special characters without errors
@@ -331,13 +334,13 @@ class MemoryContextTest {
             taskType = "database_migration",
             tags = setOf("database", "migration"),
             description = description,
-            projectContext = "db-service"
+            projectContext = "db-service",
         )
 
         val identicalKnowledge = createKnowledgeFromOutcome(
             approach = description,
             learnings = description,
-            timestamp = now.minus(2.days) // Very recent
+            timestamp = now.minus(2.days), // Very recent
         )
 
         val score = context.similarityScore(identicalKnowledge, currentTime = now)
@@ -377,7 +380,7 @@ class MemoryContextTest {
         val end = now.minus(10.days)
 
         assertFailsWith<IllegalArgumentException>(
-            message = "TimeRange should reject end before start"
+            message = "TimeRange should reject end before start",
         ) {
             TimeRange(start, end)
         }
@@ -417,25 +420,25 @@ class MemoryContextTest {
             taskType = "refactoring",
             tags = setOf("kotlin", "clean-code", "repository-pattern"),
             description = "refactor UserRepository to follow clean architecture with repository pattern and dependency injection",
-            projectContext = "backend-service"
+            projectContext = "backend-service",
         )
 
         val perfectMatch = createKnowledgeFromOutcome(
             approach = "Refactored UserRepository following repository pattern with dependency injection for clean architecture",
             learnings = "Repository pattern with dependency injection improves testability and follows clean architecture principles",
-            timestamp = now.minus(5.days)
+            timestamp = now.minus(5.days),
         )
 
         val partialMatch = createKnowledgeFromOutcome(
             approach = "Refactored OrderService with dependency injection",
             learnings = "Dependency injection makes code more testable",
-            timestamp = now.minus(5.days)
+            timestamp = now.minus(5.days),
         )
 
         val noMatch = createKnowledgeFromOutcome(
             approach = "Fixed CSS styling bug in navigation menu",
             learnings = "Use CSS Grid for better layout control",
-            timestamp = now.minus(5.days)
+            timestamp = now.minus(5.days),
         )
 
         val perfectScore = context.similarityScore(perfectMatch, currentTime = now)
@@ -456,7 +459,7 @@ class MemoryContextTest {
             description = "test description",
             projectContext = "test-project",
             timeConstraint = TimeRange(now.minus(10.days), now),
-            complexity = ComplexityLevel.COMPLEX
+            complexity = ComplexityLevel.COMPLEX,
         )
 
         // In a real scenario, you would serialize/deserialize using kotlinx.serialization

@@ -1,9 +1,10 @@
 package link.socket.ampere.agents.execution.tools.human
 
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
 
 typealias HumanRequestId = String
 
@@ -21,7 +22,7 @@ typealias HumanRequestId = String
  */
 class HumanResponseRegistry {
 
-    private val pendingRequests = mutableMapOf<HumanRequestId, CompletableDeferred<String?>>()
+    private val pendingRequests = mutableMapOf<HumanRequestId, CompletableDeferred<String>>()
 
     /**
      * Register a new human interaction request and wait for response.
@@ -37,15 +38,18 @@ class HumanResponseRegistry {
      */
     suspend fun waitForResponse(
         requestId: HumanRequestId,
-        timeout: Duration = 30.minutes
+        timeout: Duration = 30.minutes,
     ): String? {
-        val deferred = CompletableDeferred<String?>()
+        val deferred = CompletableDeferred<String>()
         pendingRequests[requestId] = deferred
 
         return try {
             withTimeoutOrNull(timeout) {
                 deferred.await()
             }
+        } catch (e: CancellationException) {
+            // When cancelled via cancelRequest(), return null
+            null
         } finally {
             pendingRequests.remove(requestId)
         }
@@ -80,7 +84,7 @@ class HumanResponseRegistry {
     fun cancelRequest(requestId: HumanRequestId): Boolean {
         val deferred = pendingRequests.remove(requestId)
         return if (deferred != null) {
-            deferred.complete(null)
+            deferred.cancel()
             true
         } else {
             false
@@ -109,7 +113,7 @@ class HumanResponseRegistry {
      * All waiting requests will receive null responses.
      */
     fun clearAll() {
-        pendingRequests.values.forEach { it.complete(null) }
+        pendingRequests.values.forEach { it.cancel() }
         pendingRequests.clear()
     }
 }

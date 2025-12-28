@@ -8,6 +8,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -16,7 +17,6 @@ import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeType
 import link.socket.ampere.db.Database
-import kotlin.time.Duration.Companion.days
 
 /**
  * Comprehensive test suite for KnowledgeRepository.

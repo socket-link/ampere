@@ -1,14 +1,13 @@
 package link.socket.ampere.agents.tools.mcp
 
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import link.socket.ampere.agents.tools.mcp.protocol.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import link.socket.ampere.agents.tools.mcp.protocol.*
 
 /**
  * Tests for McpClient - MCP protocol implementation.

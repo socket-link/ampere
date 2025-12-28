@@ -1,9 +1,9 @@
 package link.socket.ampere.domain.ai.provider
 
 import com.aallam.openai.client.OpenAI as Client
+import link.socket.ampere.core.config.KotlinConfig
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 import link.socket.ampere.domain.tool.AITool_OpenAI
-import link.socket.ampere.core.config.KotlinConfig
 
 private const val ID = "openai"
 private const val NAME = "OpenAI"

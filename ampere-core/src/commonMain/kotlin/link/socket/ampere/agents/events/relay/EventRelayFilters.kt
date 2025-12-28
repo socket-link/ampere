@@ -1,10 +1,10 @@
 package link.socket.ampere.agents.events.relay
 
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.EventType
-import link.socket.ampere.agents.domain.Urgency
 
 /**
  * Filter criteria for event streams.
@@ -32,7 +32,7 @@ data class EventRelayFilters(
     val eventTypes: Set<EventType>? = null,
     val eventSources: Set<EventSource>? = null,
     val urgencies: Set<Urgency>? = null,
-    val eventIds: Set<EventId>? = null
+    val eventIds: Set<EventId>? = null,
 ) {
     /**
      * Returns true if all filters are null (i.e., no filtering).

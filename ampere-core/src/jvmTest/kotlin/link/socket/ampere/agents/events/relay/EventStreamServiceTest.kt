@@ -17,10 +17,10 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.domain.event.Event
-import link.socket.ampere.agents.events.EventRepository
-import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
@@ -59,7 +59,7 @@ class EventStreamServiceTest {
         eventId: String = "evt-1",
         source: EventSource = stubSourceA,
         urgency: Urgency = Urgency.HIGH,
-        timestamp: Instant = Clock.System.now()
+        timestamp: Instant = Clock.System.now(),
     ): Event.TaskCreated = Event.TaskCreated(
         eventId = eventId,
         urgency = urgency,
@@ -74,7 +74,7 @@ class EventStreamServiceTest {
         eventId: String = "evt-2",
         source: EventSource = stubSourceB,
         urgency: Urgency = Urgency.MEDIUM,
-        timestamp: Instant = Clock.System.now()
+        timestamp: Instant = Clock.System.now(),
     ): Event.QuestionRaised = Event.QuestionRaised(
         eventId = eventId,
         timestamp = timestamp,
@@ -117,7 +117,7 @@ class EventStreamServiceTest {
         runBlocking {
             val events = mutableListOf<Event>()
             val filter = EventRelayFilters(
-                eventTypes = setOf(Event.TaskCreated.EVENT_TYPE)
+                eventTypes = setOf(Event.TaskCreated.EVENT_TYPE),
             )
 
             val job = launch {
@@ -208,7 +208,7 @@ class EventStreamServiceTest {
             // Replay events from past to now (should get 2 events)
             val result = service.replayEvents(
                 fromTime = past - 100.milliseconds,
-                toTime = now + 100.milliseconds
+                toTime = now + 100.milliseconds,
             ).getOrThrow()
 
             val events = result.toList()
@@ -232,7 +232,7 @@ class EventStreamServiceTest {
             // Replay events from way past to past (should get nothing)
             val result = service.replayEvents(
                 fromTime = wayPast,
-                toTime = past
+                toTime = past,
             ).getOrThrow()
 
             val events = result.toList()
@@ -255,12 +255,12 @@ class EventStreamServiceTest {
 
             // Replay with filter for TaskCreated only
             val filter = EventRelayFilters(
-                eventTypes = setOf(Event.TaskCreated.EVENT_TYPE)
+                eventTypes = setOf(Event.TaskCreated.EVENT_TYPE),
             )
             val result = service.replayEvents(
                 fromTime = now - 100.milliseconds,
                 toTime = now + 100.milliseconds,
-                filters = filter
+                filters = filter,
             ).getOrThrow()
 
             val events = result.toList()
@@ -291,7 +291,7 @@ class EventStreamServiceTest {
             // Replay should return in chronological order
             val result = service.replayEvents(
                 fromTime = t1 - 100.milliseconds,
-                toTime = t3 + 100.milliseconds
+                toTime = t3 + 100.milliseconds,
             ).getOrThrow()
 
             val events = result.toList()
@@ -313,19 +313,19 @@ class EventStreamServiceTest {
                 eventId = "evt-1",
                 source = stubSourceA,
                 urgency = Urgency.HIGH,
-                timestamp = now
+                timestamp = now,
             )
             val event2 = taskEvent(
                 eventId = "evt-2",
                 source = stubSourceB,
                 urgency = Urgency.HIGH,
-                timestamp = now
+                timestamp = now,
             )
             val event3 = taskEvent(
                 eventId = "evt-3",
                 source = stubSourceA,
                 urgency = Urgency.LOW,
-                timestamp = now
+                timestamp = now,
             )
 
             eventRepository.saveEvent(event1).getOrThrow()
@@ -335,12 +335,12 @@ class EventStreamServiceTest {
             // Filter for agent-A AND HIGH urgency
             val filter = EventRelayFilters(
                 eventSources = setOf(stubSourceA),
-                urgencies = setOf(Urgency.HIGH)
+                urgencies = setOf(Urgency.HIGH),
             )
             val result = service.replayEvents(
                 fromTime = now - 100.milliseconds,
                 toTime = now + 100.milliseconds,
-                filters = filter
+                filters = filter,
             ).getOrThrow()
 
             val events = result.toList()

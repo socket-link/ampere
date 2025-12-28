@@ -193,13 +193,17 @@ class DefaultEscalationPolicy(
         when {
             totalBlocked >= config.blockedTicketThresholdCritical -> {
                 urgencyLevel = EscalationDecision.UrgencyLevel.CRITICAL
-                reasons.add("Critical: $totalBlocked tickets now blocked (threshold: ${config.blockedTicketThresholdCritical})")
+                reasons.add(
+                    "Critical: $totalBlocked tickets now blocked (threshold: ${config.blockedTicketThresholdCritical})",
+                )
             }
             totalBlocked >= config.blockedTicketThresholdElevated -> {
                 if (urgencyLevel < EscalationDecision.UrgencyLevel.ELEVATED) {
                     urgencyLevel = EscalationDecision.UrgencyLevel.ELEVATED
                 }
-                reasons.add("Elevated: $totalBlocked tickets now blocked (threshold: ${config.blockedTicketThresholdElevated})")
+                reasons.add(
+                    "Elevated: $totalBlocked tickets now blocked (threshold: ${config.blockedTicketThresholdElevated})",
+                )
             }
         }
 
@@ -210,13 +214,17 @@ class DefaultEscalationPolicy(
                 if (urgencyLevel < EscalationDecision.UrgencyLevel.CRITICAL) {
                     urgencyLevel = EscalationDecision.UrgencyLevel.CRITICAL
                 }
-                reasons.add("Critical: $overdueCount tickets overdue (threshold: ${config.overdueTicketThresholdCritical})")
+                reasons.add(
+                    "Critical: $overdueCount tickets overdue (threshold: ${config.overdueTicketThresholdCritical})",
+                )
             }
             overdueCount >= config.overdueTicketThresholdElevated -> {
                 if (urgencyLevel < EscalationDecision.UrgencyLevel.ELEVATED) {
                     urgencyLevel = EscalationDecision.UrgencyLevel.ELEVATED
                 }
-                reasons.add("Elevated: $overdueCount tickets overdue (threshold: ${config.overdueTicketThresholdElevated})")
+                reasons.add(
+                    "Elevated: $overdueCount tickets overdue (threshold: ${config.overdueTicketThresholdElevated})",
+                )
             }
         }
 
@@ -239,7 +247,9 @@ class DefaultEscalationPolicy(
             if (urgencyLevel < EscalationDecision.UrgencyLevel.ELEVATED) {
                 urgencyLevel = EscalationDecision.UrgencyLevel.ELEVATED
             }
-            reasons.add("$overloadedAgents agents have high workload (>${config.agentHighWorkloadThreshold} active tickets)")
+            reasons.add(
+                "$overloadedAgents agents have high workload (>${config.agentHighWorkloadThreshold} active tickets)",
+            )
         }
 
         // Check if the assigned agent is already overloaded

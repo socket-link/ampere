@@ -1,20 +1,20 @@
 package link.socket.ampere.agents.receptors
 
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
-import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.util.logWith
-import java.io.File
 
 /**
  * WorkspaceEventMapper subscribes to FileSystemEvents and maps them to
@@ -158,7 +158,7 @@ class WorkspaceEventMapper(
     private suspend fun emitFeatureRequested(
         content: MarkdownContent,
         sourceEvent: FileSystemEvent.FileCreated,
-        pathContext: PathContext
+        pathContext: PathContext,
     ) {
         val event = ProductEvent.FeatureRequested(
             eventId = generateUUID(mapperId),
@@ -172,7 +172,7 @@ class WorkspaceEventMapper(
             act = content.metadata["Act"] ?: pathContext.act,
             requestedBy = mapperId,
             metadata = content.metadata,
-            sourceFilePath = sourceEvent.filePath
+            sourceFilePath = sourceEvent.filePath,
         )
 
         logger.i { "Emitting FeatureRequested: ${event.featureTitle}" }
@@ -185,7 +185,7 @@ class WorkspaceEventMapper(
     private suspend fun emitEpicDefined(
         content: MarkdownContent,
         sourceEvent: FileSystemEvent.FileCreated,
-        pathContext: PathContext
+        pathContext: PathContext,
     ) {
         val event = ProductEvent.EpicDefined(
             eventId = generateUUID(mapperId),
@@ -197,7 +197,7 @@ class WorkspaceEventMapper(
             phase = content.metadata["Phase"] ?: pathContext.phase,
             act = content.metadata["Act"] ?: pathContext.act,
             metadata = content.metadata,
-            sourceFilePath = sourceEvent.filePath
+            sourceFilePath = sourceEvent.filePath,
         )
 
         logger.i { "Emitting EpicDefined: ${event.epicTitle}" }
@@ -210,7 +210,7 @@ class WorkspaceEventMapper(
     private suspend fun emitPhaseDefined(
         content: MarkdownContent,
         sourceEvent: FileSystemEvent.FileCreated,
-        pathContext: PathContext
+        pathContext: PathContext,
     ) {
         val event = ProductEvent.PhaseDefined(
             eventId = generateUUID(mapperId),
@@ -221,7 +221,7 @@ class WorkspaceEventMapper(
             description = content.description,
             act = content.metadata["Act"] ?: pathContext.act,
             metadata = content.metadata,
-            sourceFilePath = sourceEvent.filePath
+            sourceFilePath = sourceEvent.filePath,
         )
 
         logger.i { "Emitting PhaseDefined: ${event.phaseTitle}" }

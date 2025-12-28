@@ -5,12 +5,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.domain.concept.Idea
 import link.socket.ampere.agents.domain.concept.Perception
 import link.socket.ampere.agents.domain.concept.Plan
-import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.domain.state.AgentState
 
 class CoreAgentTypesTest {
 

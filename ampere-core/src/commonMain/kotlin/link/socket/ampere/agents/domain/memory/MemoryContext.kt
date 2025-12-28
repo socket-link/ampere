@@ -29,7 +29,7 @@ data class MemoryContext(
     val timeConstraint: TimeRange? = null,
 
     /** Optional: complexity estimate to find similarly-complex past attempts */
-    val complexity: ComplexityLevel? = null
+    val complexity: ComplexityLevel? = null,
 ) {
     /**
      * Calculate a similarity score with a Knowledge entry based on overlapping context.
@@ -48,10 +48,10 @@ data class MemoryContext(
         // Temporal proximity: more recent knowledge is often more relevant
         val ageInDays = (currentTime - knowledge.timestamp).inWholeDays
         val recencyScore = when {
-            ageInDays < 7 -> 1.0    // Very recent
-            ageInDays < 30 -> 0.7   // Recent
-            ageInDays < 90 -> 0.4   // Moderately recent
-            else -> 0.2             // Older
+            ageInDays < 7 -> 1.0 // Very recent
+            ageInDays < 30 -> 0.7 // Recent
+            ageInDays < 90 -> 0.4 // Moderately recent
+            else -> 0.2 // Older
         }
         score += recencyScore * 0.3 // Weight recency at 30%
 
@@ -78,7 +78,7 @@ data class MemoryContext(
 @Serializable
 data class TimeRange(
     val start: Instant,
-    val end: Instant
+    val end: Instant,
 ) {
     init {
         require(end >= start) { "Time range end must be at or after start" }
@@ -109,5 +109,5 @@ enum class ComplexityLevel {
     COMPLEX,
 
     /** No clear established pattern */
-    NOVEL
+    NOVEL,
 }

@@ -5,9 +5,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
-import link.socket.ampere.agents.domain.Urgency
 
 class EventSerializationTest {
 
