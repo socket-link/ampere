@@ -46,6 +46,7 @@ class AmpereCommand : CliktCommand(
           thread       View and manage conversation threads
           status       System-wide status overview
           outcomes     View execution outcomes and learnings
+          issues       Manage GitHub issues (create from JSON)
           respond      Respond to agent human input requests
           test         Run tests and demonstrations (jazz, ticket)
           jazz-test    Run end-to-end autonomous agent demo (legacy)
@@ -80,6 +81,7 @@ class AmpereCommand : CliktCommand(
           ampere watch --filter TaskCreated   # Watch task events only
           ampere thread list                  # List conversation threads
           ampere outcomes stats               # View learning statistics
+          ampere issues create -f epic.json   # Create issues from file
           ampere respond abc-123 "Approved"   # Respond to human input request
 
         For more information on specific commands:

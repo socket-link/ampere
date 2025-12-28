@@ -101,13 +101,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./ampere-cli/ampere outcomes executor <executor-id>
 ./ampere-cli/ampere outcomes stats
 
+# Manage GitHub issues
+./ampere-cli/ampere issues create -f .ampere/issues/epic.json        # Create issues from file
+./ampere-cli/ampere issues create --stdin < epic.json                # Create from stdin
+./ampere-cli/ampere issues create -f epic.json --dry-run             # Validate without creating
+
 # Interactive REPL session
 ./ampere-cli/ampere interactive
 
 # Run tests and demonstrations
 ./ampere-cli/ampere test jazz                          # Autonomous agent demo (Fibonacci)
 ./ampere-cli/ampere test ticket                        # GitHub issue creation demo
-./ampere-cli/ampere jazz-test                          # Legacy command (same as test jazz)
 ```
 
 See [ampere-cli/README.md](ampere-cli/README.md) for complete CLI documentation.
