@@ -3,6 +3,10 @@ package link.socket.ampere.agents.execution.tools.invoke
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.concept.outcome.Outcome
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
@@ -20,35 +24,56 @@ import kotlin.time.Duration
  * - Type-safe execution with validation
  * - Error isolation and transformation
  * - Timing measurement
+ * - Optional event emission for observability
  *
  * This is the abstraction that agents use directly when they need to invoke
  * specific tools during their cognitive loop.
  *
  * @param C The execution context type this tool operates on
  * @property tool The tool this invoker wraps and executes
+ * @property eventApi Optional event API for publishing tool execution events
  */
 class ToolInvoker<C : ExecutionContext>(
-    val tool: Tool<C>
+    val tool: Tool<C>,
+    private val eventApi: AgentEventApi? = null
 ) {
 
     /**
      * Invoke the wrapped tool with the provided request.
      *
      * Handles validation, measures timing, and transforms tool outcomes
-     * into invocation results.
+     * into invocation results. Emits ToolEvent.ToolExecutionStarted and
+     * ToolEvent.ToolExecutionCompleted events if eventApi is provided.
      *
      * The execution flow:
-     * 1. Validate request context type matches tool's expected type
-     * 2. Execute the tool
-     * 3. Measure execution duration
-     * 4. Transform tool Outcome to ToolInvocationResult
-     * 5. Return ToolInvocationResult
+     * 1. Generate invocation ID and emit Started event
+     * 2. Validate request context type matches tool's expected type
+     * 3. Execute the tool
+     * 4. Measure execution duration
+     * 5. Emit Completed event with success/failure status
+     * 6. Transform tool Outcome to ToolInvocationResult
+     * 7. Return ToolInvocationResult
      *
      * @param request The execution request with context and parameters
      * @return ToolInvocationResult representing success or failure
      */
     suspend fun invoke(request: ExecutionRequest<C>): ToolInvocationResult {
         val startTime = Clock.System.now()
+        val invocationId = generateUUID()
+
+        // Emit Started event
+        eventApi?.let { api ->
+            val startedEvent = link.socket.ampere.agents.domain.event.ToolEvent.ToolExecutionStarted(
+                eventId = generateUUID(),
+                timestamp = startTime,
+                eventSource = EventSource.Agent(api.agentId),
+                urgency = Urgency.LOW,
+                invocationId = invocationId,
+                toolId = tool.id,
+                toolName = tool.name
+            )
+            api.publish(startedEvent)
+        }
 
         // Delegate actual execution to the tool
         val outcome = try {
@@ -105,6 +130,29 @@ class ToolInvoker<C : ExecutionContext>(
                     duration = duration
                 )
             }
+        }
+
+        // Emit Completed event
+        eventApi?.let { api ->
+            val completedEvent = link.socket.ampere.agents.domain.event.ToolEvent.ToolExecutionCompleted(
+                eventId = generateUUID(),
+                timestamp = endTime,
+                eventSource = EventSource.Agent(api.agentId),
+                urgency = when (invocationResult) {
+                    is ToolInvocationResult.Failed -> Urgency.MEDIUM
+                    else -> Urgency.LOW
+                },
+                invocationId = invocationId,
+                toolId = tool.id,
+                toolName = tool.name,
+                success = invocationResult is ToolInvocationResult.Success,
+                durationMs = duration.inWholeMilliseconds,
+                errorMessage = when (invocationResult) {
+                    is ToolInvocationResult.Failed -> invocationResult.error
+                    else -> null
+                }
+            )
+            api.publish(completedEvent)
         }
 
         return invocationResult

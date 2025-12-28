@@ -82,7 +82,8 @@ fun main(args: Array<String>) {
                 DashboardCommand(context.eventRelayService),
                 ThreadCommand(context.threadViewService),
                 StatusCommand(context.threadViewService, context.ticketViewService),
-                OutcomesCommand(context.outcomeMemoryRepository)
+                OutcomesCommand(context.outcomeMemoryRepository),
+                RespondCommand()
             )
             .main(effectiveArgs)
     } finally {
