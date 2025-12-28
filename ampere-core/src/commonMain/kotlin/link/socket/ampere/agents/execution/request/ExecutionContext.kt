@@ -6,6 +6,7 @@ import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.execution.executor.ExecutorId
+import link.socket.ampere.agents.execution.tools.issue.BatchIssueCreateRequest
 
 /** Additional context used to help the executor perform a task */
 @Serializable
@@ -62,4 +63,14 @@ sealed interface ExecutionContext {
             override val knowledgeFromPastMemory: List<Knowledge> = emptyList(),
         ) : Code
     }
+
+    @Serializable
+    data class IssueManagement(
+        override val executorId: ExecutorId,
+        override val ticket: Ticket,
+        override val task: Task,
+        override val instructions: String,
+        val issueRequest: BatchIssueCreateRequest,
+        override val knowledgeFromPastMemory: List<Knowledge> = emptyList(),
+    ) : ExecutionContext
 }

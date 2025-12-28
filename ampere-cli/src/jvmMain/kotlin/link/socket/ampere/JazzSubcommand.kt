@@ -1,26 +1,28 @@
 package link.socket.ampere
 
 import com.github.ajalt.clikt.core.CliktCommand
-import link.socket.ampere.demo.main as runJazzTest
 
 /**
- * CLI command to run the Jazz Test - an end-to-end autonomous agent demonstration.
+ * Subcommand for running the Jazz Test.
  *
- * This command runs the complete Jazz Test scenario:
- * 1. Starts the AMPERE environment
- * 2. Creates a CodeWriterAgent
- * 3. Creates and assigns a Fibonacci ticket
- * 4. Agent autonomously runs through the PROPEL cognitive cycle
- * 5. Generates working Kotlin code
+ * This is a subcommand of `test`, invoked via `ampere test jazz`.
+ * It runs the same Jazz Test as the standalone `ampere jazz-test` command.
+ *
+ * The Jazz Test demonstrates:
+ * 1. Starting the AMPERE environment
+ * 2. Creating a CodeWriterAgent
+ * 3. Assigning a ticket (Fibonacci function implementation)
+ * 4. Agent autonomously running through PROPEL cognitive cycle
+ * 5. Generating working Kotlin code
  *
  * Usage:
- *   ampere jazz-test
+ *   ampere test jazz
  *
- * To observe with the dashboard, run in another terminal:
+ * To observe with the dashboard:
  *   ampere start
  */
-class JazzTestCommand : CliktCommand(
-    name = "jazz-test",
+class JazzSubcommand : CliktCommand(
+    name = "jazz",
     help = """
         Run the Jazz Test - End-to-end autonomous agent demonstration.
 
@@ -44,8 +46,8 @@ class JazzTestCommand : CliktCommand(
           1 - Agent focus mode (detailed agent view)
 
         Examples:
-          ampere jazz-test              # Run the test
-          ampere jazz-test --help       # Show this help
+          ampere test jazz              # Run the test
+          ampere test jazz --help       # Show this help
 
         Note: Requires Anthropic API key in local.properties
     """.trimIndent()
@@ -56,6 +58,6 @@ class JazzTestCommand : CliktCommand(
         echo()
 
         // Call the JazzTestRunner main function
-        runJazzTest()
+        link.socket.ampere.demo.main()
     }
 }

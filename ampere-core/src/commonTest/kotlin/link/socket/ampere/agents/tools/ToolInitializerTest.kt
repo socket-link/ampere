@@ -68,7 +68,7 @@ class ToolInitializerTest {
             task = Task.blank,
             instructions = "Test instructions",
             knowledgeFromPastMemory = emptyList(),
-            ),
+        ),
     ): ExecutionRequest<ExecutionContext> = ExecutionRequest(
         context = context,
         constraints = ExecutionConstraints(

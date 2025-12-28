@@ -8,6 +8,7 @@ import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.results.ExecutionResult
+import link.socket.ampere.agents.execution.tools.issue.BatchIssueCreateResponse
 
 /**
  * Standardized execution outcomes.
@@ -146,6 +147,39 @@ sealed interface ExecutionOutcome : Outcome {
             val error: ExecutionError,
             val partiallyChangedFiles: List<String>? = null,
         ) : CodeChanged, ExecutionOutcome.Failure {
+
+            override val id: OutcomeId =
+                generateUUID(executorId)
+        }
+    }
+
+    @Serializable
+    sealed interface IssueManagement : ExecutionOutcome {
+
+        @Serializable
+        data class Success(
+            override val executorId: ExecutorId,
+            override val ticketId: TicketId,
+            override val taskId: TaskId,
+            override val executionStartTimestamp: Instant,
+            override val executionEndTimestamp: Instant,
+            val response: BatchIssueCreateResponse,
+        ) : IssueManagement, ExecutionOutcome.Success {
+
+            override val id: OutcomeId =
+                generateUUID(executorId)
+        }
+
+        @Serializable
+        data class Failure(
+            override val executorId: ExecutorId,
+            override val ticketId: TicketId,
+            override val taskId: TaskId,
+            override val executionStartTimestamp: Instant,
+            override val executionEndTimestamp: Instant,
+            val error: ExecutionError,
+            val partialResponse: BatchIssueCreateResponse? = null,
+        ) : IssueManagement, ExecutionOutcome.Failure {
 
             override val id: OutcomeId =
                 generateUUID(executorId)
