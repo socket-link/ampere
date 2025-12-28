@@ -83,6 +83,7 @@ fun main(args: Array<String>) {
                 ThreadCommand(context.threadViewService),
                 StatusCommand(context.threadViewService, context.ticketViewService),
                 OutcomesCommand(context.outcomeMemoryRepository),
+                IssuesCommand(),
                 RespondCommand(),
                 TestCommand(),
             )
