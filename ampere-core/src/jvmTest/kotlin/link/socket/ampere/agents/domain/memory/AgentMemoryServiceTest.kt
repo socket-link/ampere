@@ -361,7 +361,10 @@ class AgentMemoryServiceTest {
             // Should find the authentication knowledge entry
             // The FTS or LIKE fallback should match on "authentication" and "tokens"
             assertTrue(recalled.isNotEmpty(), "Should find at least one knowledge entry")
-            assertTrue(recalled.any { it.entry.outcomeId == "outcome-1" }, "Should find the authentication knowledge entry")
+            assertTrue(
+                recalled.any { it.entry.outcomeId == "outcome-1" },
+                "Should find the authentication knowledge entry",
+            )
         }
     }
     // ==================== Test 4: Temporal Filtering ====================

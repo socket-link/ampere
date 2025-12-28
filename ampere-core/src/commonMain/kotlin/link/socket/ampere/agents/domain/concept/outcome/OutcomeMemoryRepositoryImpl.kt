@@ -57,6 +57,12 @@ class OutcomeMemoryRepositoryImpl(
                 is ExecutionOutcome.NoChanges.Failure -> {
                     0 to outcome.message
                 }
+                is ExecutionOutcome.IssueManagement.Success -> {
+                    outcome.response.created.size to null
+                }
+                is ExecutionOutcome.IssueManagement.Failure -> {
+                    (outcome.partialResponse?.created?.size ?: 0) to outcome.error.message
+                }
                 is ExecutionOutcome.Blank -> {
                     0 to null
                 }

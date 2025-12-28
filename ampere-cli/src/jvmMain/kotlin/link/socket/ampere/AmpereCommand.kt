@@ -20,6 +20,9 @@ import com.github.ajalt.clikt.core.CliktCommand
  *   - ampere outcomes search: Find outcomes similar to a description
  *   - ampere outcomes executor: Show outcomes for a specific executor
  *   - ampere outcomes stats: Show aggregate outcome statistics
+ * - ampere test: Run tests and demonstrations
+ *   - ampere test jazz: Autonomous agent demonstration
+ *   - ampere test ticket: Issue creation demonstration
  *
  * Global flags:
  * - --verbose / -v: Show detailed system logs during startup
@@ -44,7 +47,8 @@ class AmpereCommand : CliktCommand(
           status       System-wide status overview
           outcomes     View execution outcomes and learnings
           respond      Respond to agent human input requests
-          jazz-test    Run end-to-end autonomous agent demo
+          test         Run tests and demonstrations (jazz, ticket)
+          jazz-test    Run end-to-end autonomous agent demo (legacy)
 
         Interactive Dashboard Controls:
           Viewing Modes:
@@ -70,7 +74,8 @@ class AmpereCommand : CliktCommand(
         Examples:
           ampere                              # Start dashboard
           ampere help                         # Show this help
-          ampere jazz-test                    # Run autonomous agent demo
+          ampere test jazz                    # Run autonomous agent demo
+          ampere test ticket                  # Run issue creation demo
           ampere watch --verbose              # Watch all events
           ampere watch --filter TaskCreated   # Watch task events only
           ampere thread list                  # List conversation threads

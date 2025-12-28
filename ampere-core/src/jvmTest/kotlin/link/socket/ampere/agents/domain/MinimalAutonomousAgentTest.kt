@@ -106,7 +106,7 @@ class MinimalAutonomousAgentTest {
             executionStartTimestamp = Clock.System.now(),
             executionEndTimestamp = Clock.System.now() + 1.seconds,
             message = "Success",
-            ),
+        ),
     ) : AutonomousAgent<AgentState>() {
         override val id: AgentId = "TestAgent"
         override val initialState: AgentState = AgentState()

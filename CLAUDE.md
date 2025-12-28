@@ -103,6 +103,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Interactive REPL session
 ./ampere-cli/ampere interactive
+
+# Run tests and demonstrations
+./ampere-cli/ampere test jazz                          # Autonomous agent demo (Fibonacci)
+./ampere-cli/ampere test ticket                        # GitHub issue creation demo
+./ampere-cli/ampere jazz-test                          # Legacy command (same as test jazz)
 ```
 
 See [ampere-cli/README.md](ampere-cli/README.md) for complete CLI documentation.

@@ -84,7 +84,7 @@ fun main(args: Array<String>) {
                 StatusCommand(context.threadViewService, context.ticketViewService),
                 OutcomesCommand(context.outcomeMemoryRepository),
                 RespondCommand(),
-                JazzTestCommand()
+                TestCommand(),
             )
             .main(effectiveArgs)
     } finally {
