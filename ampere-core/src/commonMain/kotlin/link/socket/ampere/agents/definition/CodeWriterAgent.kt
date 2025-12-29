@@ -27,6 +27,7 @@ import link.socket.ampere.agents.domain.concept.status.TaskStatus
 import link.socket.ampere.agents.domain.concept.status.TicketStatus
 import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.concept.task.MeetingTask
+import link.socket.ampere.agents.domain.concept.task.PMTask
 import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.domain.concept.task.TicketTask
 import link.socket.ampere.agents.domain.config.AgentConfiguration
@@ -132,6 +133,7 @@ open class CodeWriterAgent(
                 is MeetingTask.AgendaItem -> append("Meeting item: ${task.title}")
                 is TicketTask.CompleteSubticket -> append("Subticket: ${task.id}")
                 is Task.Blank -> append("No specific task")
+                else -> append("Task: ${task.id}")
             }
 
             if (plan is Plan.ForTask && plan.tasks.isNotEmpty()) {
@@ -271,6 +273,11 @@ open class CodeWriterAgent(
                 }
                 is Task.Blank -> {
                     appendLine("  No active task")
+                }
+                else -> {
+                    appendLine("  Type: ${currentTask::class.simpleName}")
+                    appendLine("  ID: ${currentTask.id}")
+                    appendLine("  Status: ${currentTask.status}")
                 }
             }
             appendLine()
@@ -455,6 +462,7 @@ open class CodeWriterAgent(
             is MeetingTask.AgendaItem -> task.title
             is TicketTask.CompleteSubticket -> "subticket ${task.id}"
             is Task.Blank -> "current task"
+            else -> "task ${task.id}"
         }
 
         return Idea(
@@ -478,6 +486,7 @@ open class CodeWriterAgent(
             is Task.CodeChange -> "Code change task: ${task.description} (Status: ${task.status})"
             is MeetingTask.AgendaItem -> "Meeting agenda item: ${task.title} (Status: ${task.status})"
             is TicketTask.CompleteSubticket -> "Complete subticket: ${task.id} (Status: ${task.status})"
+            is PMTask -> "Project management: ${task.id} "
             is Task.Blank -> "No active task"
         }
 
@@ -523,6 +532,7 @@ open class CodeWriterAgent(
             is MeetingTask.AgendaItem -> task.title
             is TicketTask.CompleteSubticket -> "Complete subticket ${task.id}"
             is Task.Blank -> return Plan.Companion.blank
+            else -> "Task ${task.id}"
         }
 
         // Synthesize ideas into planning context
@@ -644,10 +654,7 @@ open class CodeWriterAgent(
                 id = "step-${index + 1}-${task.id}",
                 status = TaskStatus.Pending,
                 description = description,
-                assignedTo = when (task) {
-                    is Task.CodeChange -> task.assignedTo
-                    else -> null
-                },
+                assignedTo = if (task is Task.CodeChange) task.assignedTo else null,
             )
         }
 
@@ -704,6 +711,7 @@ open class CodeWriterAgent(
             is MeetingTask.AgendaItem -> task.title
             is TicketTask.CompleteSubticket -> "Complete subticket ${task.id}"
             is Task.Blank -> return Plan.Companion.blank
+            else -> "Task ${task.id}"
         }
 
         // Create a simple single-step plan as fallback
@@ -711,10 +719,7 @@ open class CodeWriterAgent(
             id = "step-1-${task.id}",
             status = TaskStatus.Pending,
             description = "Execute: $taskDescription (Note: Advanced planning unavailable - $reason)",
-            assignedTo = when (task) {
-                is Task.CodeChange -> task.assignedTo
-                else -> null
-            },
+            assignedTo = if (task is Task.CodeChange) task.assignedTo else null,
         )
 
         return Plan.ForTask(
@@ -959,9 +964,13 @@ open class CodeWriterAgent(
             type = TicketType.TASK,
             priority = TicketPriority.MEDIUM,
             status = TicketStatus.InProgress,
-            assignedAgentId = when (val assignedTo = task.assignedTo) {
-                is AssignedTo.Agent -> assignedTo.agentId
-                else -> id
+            assignedAgentId = if (task is Task.CodeChange) {
+                when (val assignedTo = task.assignedTo) {
+                    is AssignedTo.Agent -> assignedTo.agentId
+                    else -> id
+                }
+            } else {
+                id
             },
             createdByAgentId = id,
             createdAt = now,

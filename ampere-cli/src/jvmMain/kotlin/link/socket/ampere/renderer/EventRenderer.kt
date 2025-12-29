@@ -20,6 +20,7 @@ import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
+import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
@@ -123,6 +124,7 @@ class EventRenderer(
             is MemoryEvent -> "🧠" to cyan
             is MessageEvent -> "💬" to blue
             is NotificationEvent<*> -> "🔔" to gray
+            is PlanEvent -> "📋" to magenta
             is ProductEvent -> "💡" to green
             is TicketEvent -> "🎫" to green
             is ToolEvent -> "🔧" to yellow

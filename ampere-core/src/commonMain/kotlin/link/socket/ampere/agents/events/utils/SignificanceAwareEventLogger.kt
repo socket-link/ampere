@@ -10,6 +10,7 @@ import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
+import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
@@ -109,6 +110,10 @@ class SignificanceAwareEventLogger(
         is ProductEvent.EpicDefined -> EventSignificance.SIGNIFICANT
         is ProductEvent.PhaseDefined -> EventSignificance.SIGNIFICANT
         is FileSystemEvent -> EventSignificance.SIGNIFICANT
+        is PlanEvent.PlanStepStarted -> EventSignificance.SIGNIFICANT
+        is PlanEvent.PlanStepCompleted -> EventSignificance.SIGNIFICANT
+        is PlanEvent.TaskAssigned -> EventSignificance.SIGNIFICANT
+        is PlanEvent.MonitoringStarted -> EventSignificance.SIGNIFICANT
 
         // Routine cognitive operations - maintenance work
         is MemoryEvent.KnowledgeRecalled -> EventSignificance.ROUTINE
