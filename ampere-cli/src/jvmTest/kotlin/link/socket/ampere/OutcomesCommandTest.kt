@@ -2,9 +2,9 @@ package link.socket.ampere
 
 import com.github.ajalt.clikt.testing.test
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemory
-import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepository
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.OutcomeMemory
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import org.junit.jupiter.api.Test

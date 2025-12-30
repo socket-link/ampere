@@ -13,11 +13,11 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepository
-import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepositoryImpl
-import link.socket.ampere.agents.domain.concept.task.TaskId
 import link.socket.ampere.agents.domain.error.ExecutionError
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepositoryImpl
+import link.socket.ampere.agents.domain.task.TaskId
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.results.ExecutionResult

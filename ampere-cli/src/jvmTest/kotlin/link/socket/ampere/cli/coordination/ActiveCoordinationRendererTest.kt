@@ -5,9 +5,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.domain.concept.status.MeetingStatus
-import link.socket.ampere.agents.domain.concept.task.AssignedTo
+import link.socket.ampere.agents.domain.status.MeetingStatus
+import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.events.meetings.Meeting
 import link.socket.ampere.agents.events.meetings.MeetingInvitation
 import link.socket.ampere.agents.events.meetings.MeetingMessagingDetails

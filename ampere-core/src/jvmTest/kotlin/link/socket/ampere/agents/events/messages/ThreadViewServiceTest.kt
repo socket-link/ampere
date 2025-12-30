@@ -14,7 +14,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.concept.status.EventStatus
+import link.socket.ampere.agents.domain.status.EventStatus
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 

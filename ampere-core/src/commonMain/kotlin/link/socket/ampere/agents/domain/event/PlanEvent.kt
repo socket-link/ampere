@@ -4,7 +4,7 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
-import link.socket.ampere.agents.domain.concept.outcome.StepOutcome
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 
 /**
  * Events related to plan execution in the Project Manager Agent.

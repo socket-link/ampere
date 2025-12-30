@@ -13,20 +13,20 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.AutonomousAgent
-import link.socket.ampere.agents.domain.concept.Idea
-import link.socket.ampere.agents.domain.concept.Perception
-import link.socket.ampere.agents.domain.concept.Plan
-import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
-import link.socket.ampere.agents.domain.concept.status.TaskStatus
-import link.socket.ampere.agents.domain.concept.status.TicketStatus
-import link.socket.ampere.agents.domain.concept.task.AssignedTo
-import link.socket.ampere.agents.domain.concept.task.Task
-import link.socket.ampere.agents.domain.config.AgentConfiguration
+import link.socket.ampere.agents.domain.knowledge.Knowledge
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.reasoning.Idea
+import link.socket.ampere.agents.domain.reasoning.Perception
+import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.status.TaskStatus
+import link.socket.ampere.agents.domain.status.TicketStatus
+import link.socket.ampere.agents.domain.task.AssignedTo
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
@@ -115,10 +115,12 @@ class MinimalAutonomousAgentTest {
             aiConfiguration = FakeAIConfiguration(),
         )
 
-        override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea = { _ -> perceiveResult }
+        override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea =
+            { _ -> perceiveResult }
         override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan = { _, _ -> planResult }
         override val runLLMToExecuteTask: (task: Task) -> Outcome = { _ -> executeResult }
-        override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome = { _, _ -> executeResult }
+        override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome =
+            { _, _ -> executeResult }
         override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { _ -> perceiveResult }
 
         override fun callLLM(prompt: String): String {

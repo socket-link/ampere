@@ -1,7 +1,7 @@
 package link.socket.ampere.repl
 
 import link.socket.ampere.AmpereContext
-import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
 import org.jline.terminal.Terminal

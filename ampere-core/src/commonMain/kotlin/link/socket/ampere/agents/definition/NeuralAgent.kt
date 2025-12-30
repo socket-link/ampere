@@ -1,12 +1,12 @@
 package link.socket.ampere.agents.definition
 
-import link.socket.ampere.agents.domain.concept.Idea
-import link.socket.ampere.agents.domain.concept.Perception
-import link.socket.ampere.agents.domain.concept.Plan
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
-import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.reasoning.Idea
+import link.socket.ampere.agents.domain.reasoning.Perception
+import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
 

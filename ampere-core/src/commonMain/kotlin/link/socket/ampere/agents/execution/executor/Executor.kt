@@ -2,10 +2,10 @@ package link.socket.ampere.agents.execution.executor
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.concept.status.ExecutionStatus
-import link.socket.ampere.agents.domain.health.ExecutorSystemHealth
+import link.socket.ampere.agents.domain.status.ExecutionStatus
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.agents.health.ExecutorSystemHealth
 
 typealias ExecutorId = String
 

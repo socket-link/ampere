@@ -2,21 +2,21 @@ package link.socket.ampere
 
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.definition.ProductManagerAgent
-import link.socket.ampere.agents.definition.QualityAssuranceAgent
-import link.socket.ampere.agents.definition.pm.ProductManagerState
-import link.socket.ampere.agents.definition.qa.QualityAssuranceState
-import link.socket.ampere.agents.domain.concept.Plan
-import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeEntry
-import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeType
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
-import link.socket.ampere.agents.domain.concept.status.TicketStatus
-import link.socket.ampere.agents.domain.concept.task.MeetingTask
-import link.socket.ampere.agents.domain.concept.task.Task
-import link.socket.ampere.agents.domain.concept.task.TaskId
-import link.socket.ampere.agents.domain.config.AgentConfiguration
+import link.socket.ampere.agents.definition.ProductAgent
+import link.socket.ampere.agents.definition.QualityAgent
+import link.socket.ampere.agents.definition.product.ProductAgentState
+import link.socket.ampere.agents.definition.qa.QualityState
+import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
+import link.socket.ampere.agents.domain.knowledge.KnowledgeType
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.reasoning.Plan
+import link.socket.ampere.agents.domain.status.TicketStatus
+import link.socket.ampere.agents.domain.task.MeetingTask
+import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.domain.task.TaskId
 import link.socket.ampere.agents.events.tickets.AgentWorkload
 import link.socket.ampere.agents.events.tickets.BacklogSummary
 import link.socket.ampere.agents.events.tickets.Ticket
@@ -133,8 +133,8 @@ fun stubProductManagerState(
     upcomingDeadlines: List<Ticket> = emptyList(),
     blockedTickets: List<Ticket> = emptyList(),
     overdueTickets: List<Ticket> = emptyList(),
-): ProductManagerState =
-    ProductManagerState(
+): ProductAgentState =
+    ProductAgentState(
         outcome = outcome,
         task = task,
         plan = plan,
@@ -147,10 +147,10 @@ fun stubProductManagerState(
 
 fun stubProductManagerAgent(
     ticketOrchestrator: TicketOrchestrator,
-    initialState: ProductManagerState = stubProductManagerState(),
+    initialState: ProductAgentState = stubProductManagerState(),
     agentConfiguration: AgentConfiguration = stubAgentConfiguration(),
-): ProductManagerAgent =
-    ProductManagerAgent(
+): ProductAgent =
+    ProductAgent(
         initialState = initialState,
         agentConfiguration = agentConfiguration,
         ticketOrchestrator = ticketOrchestrator,
@@ -160,18 +160,18 @@ fun stubQualityAssuranceState(
     task: Task = stubTask(),
     plan: Plan = stubPlan(task),
     outcome: Outcome = stubOutcome(),
-): QualityAssuranceState =
-    QualityAssuranceState(
+): QualityState =
+    QualityState(
         task = task,
         plan = plan,
         outcome = outcome,
     )
 
 fun stubQualityAssuranceAgent(
-    initialState: QualityAssuranceState = stubQualityAssuranceState(),
+    initialState: QualityState = stubQualityAssuranceState(),
     agentConfiguration: AgentConfiguration = stubAgentConfiguration(),
-): QualityAssuranceAgent =
-    QualityAssuranceAgent(
+): QualityAgent =
+    QualityAgent(
         initialState = initialState,
         agentConfiguration = agentConfiguration,
     )

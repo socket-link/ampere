@@ -1,17 +1,17 @@
 package link.socket.ampere.agents.domain.memory
 
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.concept.Idea
-import link.socket.ampere.agents.domain.concept.IdeaId
-import link.socket.ampere.agents.domain.concept.Perception
-import link.socket.ampere.agents.domain.concept.PerceptionId
-import link.socket.ampere.agents.domain.concept.Plan
-import link.socket.ampere.agents.domain.concept.PlanId
-import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
-import link.socket.ampere.agents.domain.concept.outcome.OutcomeId
-import link.socket.ampere.agents.domain.concept.task.Task
-import link.socket.ampere.agents.domain.concept.task.TaskId
+import link.socket.ampere.agents.domain.knowledge.Knowledge
+import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.outcome.OutcomeId
+import link.socket.ampere.agents.domain.reasoning.Idea
+import link.socket.ampere.agents.domain.reasoning.IdeaId
+import link.socket.ampere.agents.domain.reasoning.Perception
+import link.socket.ampere.agents.domain.reasoning.PerceptionId
+import link.socket.ampere.agents.domain.reasoning.Plan
+import link.socket.ampere.agents.domain.reasoning.PlanId
+import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.domain.task.TaskId
 
 @Serializable
 sealed interface AgentMemoryCell {

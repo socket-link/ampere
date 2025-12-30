@@ -15,20 +15,20 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.AutonomousAgent
-import link.socket.ampere.agents.domain.concept.Idea
-import link.socket.ampere.agents.domain.concept.Perception
-import link.socket.ampere.agents.domain.concept.Plan
-import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
-import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeRepositoryImpl
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
-import link.socket.ampere.agents.domain.concept.task.Task
-import link.socket.ampere.agents.domain.config.AgentConfiguration
+import link.socket.ampere.agents.domain.knowledge.Knowledge
+import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.memory.MemoryContext
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.reasoning.Idea
+import link.socket.ampere.agents.domain.reasoning.Perception
+import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
@@ -468,7 +468,8 @@ private class TestAgentWithMemory(
     override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea = { Idea.blank }
     override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan = { _, _ -> Plan.blank }
     override val runLLMToExecuteTask: (task: Task) -> Outcome = { Outcome.blank }
-    override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome = { _, _ -> ExecutionOutcome.blank }
+    override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome =
+        { _, _ -> ExecutionOutcome.blank }
     override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { Idea.blank }
 
     override fun callLLM(prompt: String): String {
@@ -511,7 +512,8 @@ private class TestAgentWithoutMemory(
     override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea = { Idea.blank }
     override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan = { _, _ -> Plan.blank }
     override val runLLMToExecuteTask: (task: Task) -> Outcome = { Outcome.blank }
-    override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome = { _, _ -> ExecutionOutcome.blank }
+    override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome =
+        { _, _ -> ExecutionOutcome.blank }
     override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { Idea.blank }
 
     override fun callLLM(prompt: String): String {

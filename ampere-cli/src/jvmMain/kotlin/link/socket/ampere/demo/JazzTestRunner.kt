@@ -12,16 +12,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.AmpereContext
-import link.socket.ampere.agents.definition.CodeWriterAgent
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
-import link.socket.ampere.agents.domain.config.AgentConfiguration
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.definition.CodeAgent
+import link.socket.ampere.agents.definition.code.CodeState
+import link.socket.ampere.agents.config.AgentActionAutonomy
+import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.TicketEvent
-import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.status.TaskStatus
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.tickets.TicketBuilder
-import link.socket.ampere.agents.events.tickets.TicketOrchestrator
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
@@ -90,8 +91,8 @@ fun main() {
             )
 
             // Create CodeWriterAgent
-            val agent = CodeWriterAgent(
-                initialState = AgentState(),
+            val agent = CodeAgent(
+                initialState = CodeState.blank,
                 agentConfiguration = agentConfig,
                 toolWriteCodeFile = writeCodeTool,
                 coroutineScope = agentScope,
@@ -317,7 +318,7 @@ fun main() {
  * Handle ticket assignment by running the cognitive cycle.
  */
 private suspend fun handleTicketAssignment(
-    agent: CodeWriterAgent,
+    agent: CodeAgent,
     ticketId: String,
     context: AmpereContext
 ) {
@@ -334,9 +335,9 @@ private suspend fun handleTicketAssignment(
         println()
 
         // Convert ticket to task
-        val task = link.socket.ampere.agents.domain.concept.task.Task.CodeChange(
+        val task = Task.CodeChange(
             id = "task-$ticketId",
-            status = link.socket.ampere.agents.domain.concept.status.TaskStatus.Pending,
+            status = TaskStatus.Pending,
             description = ticket.description
         )
 

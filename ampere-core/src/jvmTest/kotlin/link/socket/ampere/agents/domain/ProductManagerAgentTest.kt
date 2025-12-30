@@ -10,12 +10,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.definition.ProductManagerAgent
-import link.socket.ampere.agents.domain.concept.Plan
-import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
-import link.socket.ampere.agents.domain.concept.status.TaskStatus
-import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.definition.ProductAgent
+import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
+import link.socket.ampere.agents.domain.reasoning.Plan
+import link.socket.ampere.agents.domain.status.TaskStatus
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
@@ -44,7 +44,7 @@ class ProductManagerAgentTest {
     private lateinit var meetingOrchestrator: MeetingOrchestrator
     private lateinit var ticketOrchestrator: TicketOrchestrator
 
-    private lateinit var productManagerAgent: ProductManagerAgent
+    private lateinit var productAgent: ProductAgent
 
     private val testScope = CoroutineScope(Dispatchers.Default)
     private val stubOrchestratorAgentId: AgentId = "orchestrator-agent"
@@ -80,7 +80,7 @@ class ProductManagerAgentTest {
             meetingSchedulingService = meetingSchedulingService,
         )
 
-        productManagerAgent = stubProductManagerAgent(
+        productAgent = stubProductManagerAgent(
             ticketOrchestrator = ticketOrchestrator,
         )
     }
@@ -118,7 +118,7 @@ class ProductManagerAgentTest {
             description = "Implement user profile feature",
         )
 
-        val plan = productManagerAgent.determinePlanForTask(task, relevantKnowledge = testFirstKnowledge)
+        val plan = productAgent.determinePlanForTask(task, relevantKnowledge = testFirstKnowledge)
 
         assertTrue(plan.tasks.isNotEmpty(), "Plan should include tasks")
     }
@@ -134,7 +134,7 @@ class ProductManagerAgentTest {
         val plan = Plan.ForTask(task = task)
         val outcome = stubSuccessOutcome()
 
-        val knowledge = productManagerAgent.extractKnowledgeFromOutcome(outcome, task, plan)
+        val knowledge = productAgent.extractKnowledgeFromOutcome(outcome, task, plan)
 
         assertTrue(knowledge.approach.isNotEmpty(), "Approach should be captured")
         assertTrue(knowledge.learnings.contains("Success"), "Learnings should mention success")
@@ -149,7 +149,7 @@ class ProductManagerAgentTest {
             description = "Implement new feature",
         )
 
-        val plan = productManagerAgent.determinePlanForTask(task = task, relevantKnowledge = emptyList())
+        val plan = productAgent.determinePlanForTask(task = task, relevantKnowledge = emptyList())
 
         assertTrue(plan.tasks.isNotEmpty(), "Plan should include tasks even without knowledge")
     }

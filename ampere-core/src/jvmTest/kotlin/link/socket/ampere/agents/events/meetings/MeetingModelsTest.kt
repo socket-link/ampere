@@ -4,13 +4,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.concept.expectation.MeetingExpectations
-import link.socket.ampere.agents.domain.concept.outcome.MeetingOutcome
-import link.socket.ampere.agents.domain.concept.status.MeetingStatus
-import link.socket.ampere.agents.domain.concept.status.TaskStatus
-import link.socket.ampere.agents.domain.concept.task.AssignedTo
-import link.socket.ampere.agents.domain.concept.task.MeetingTask.AgendaItem
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.expectation.MeetingExpectation
+import link.socket.ampere.agents.domain.outcome.MeetingOutcome
+import link.socket.ampere.agents.domain.status.MeetingStatus
+import link.socket.ampere.agents.domain.status.TaskStatus
+import link.socket.ampere.agents.domain.task.AssignedTo
+import link.socket.ampere.agents.domain.task.MeetingTask.AgendaItem
 
 class MeetingModelsTest {
 
@@ -43,7 +43,7 @@ class MeetingModelsTest {
             ),
         )
 
-        val outcomeRequirements = MeetingExpectations(
+        val outcomeRequirements = MeetingExpectation(
             requirementsDescription = "Implement new API",
             expectedOutcomes = listOf(
                 MeetingOutcome.ActionItem::class,

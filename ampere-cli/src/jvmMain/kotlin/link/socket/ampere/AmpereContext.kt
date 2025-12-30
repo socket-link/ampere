@@ -8,9 +8,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeRepository
-import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeRepositoryImpl
-import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepository
+import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
+import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.environment.EnvironmentService

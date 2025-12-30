@@ -5,9 +5,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import link.socket.ampere.agents.definition.AgentFactory
 import link.socket.ampere.agents.definition.AgentType
-import link.socket.ampere.agents.definition.CodeWriterAgent
-import link.socket.ampere.agents.definition.ProductManagerAgent
-import link.socket.ampere.agents.definition.QualityAssuranceAgent
+import link.socket.ampere.agents.definition.CodeAgent
+import link.socket.ampere.agents.definition.ProductAgent
+import link.socket.ampere.agents.definition.QualityAgent
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.data.RepositoryFactory
 import link.socket.ampere.data.createJvmDriver
@@ -53,9 +53,9 @@ fun main(args: Array<String>) {
         memoryServiceFactory = { agentId -> context.createMemoryService(agentId) }
     )
 
-    val codeAgent = agentFactory.create<CodeWriterAgent>(AgentType.CODE_WRITER)
-    val productAgent = agentFactory.create<ProductManagerAgent>(AgentType.PRODUCT_MANAGER)
-    val qualityAgent = agentFactory.create<QualityAssuranceAgent>(AgentType.QUALITY_ASSURANCE)
+    val codeAgent = agentFactory.create<CodeAgent>(AgentType.CODE)
+    val productAgent = agentFactory.create<ProductAgent>(AgentType.PRODUCT)
+    val qualityAgent = agentFactory.create<QualityAgent>(AgentType.QUALITY)
 
     codeAgent.initialize(ioScope)
     productAgent.initialize(ioScope)

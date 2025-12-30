@@ -9,13 +9,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.definition.ProductManagerAgent
-import link.socket.ampere.agents.definition.QualityAssuranceAgent
-import link.socket.ampere.agents.domain.concept.Plan
-import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
-import link.socket.ampere.agents.domain.concept.status.TaskStatus
-import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.definition.ProductAgent
+import link.socket.ampere.agents.definition.QualityAgent
+import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
+import link.socket.ampere.agents.domain.reasoning.Plan
+import link.socket.ampere.agents.domain.status.TaskStatus
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
@@ -49,8 +49,8 @@ class AgentLearningLoopIntegrationTest {
     private lateinit var meetingOrchestrator: MeetingOrchestrator
     private lateinit var ticketOrchestrator: TicketOrchestrator
 
-    private lateinit var productManagerAgent: ProductManagerAgent
-    private lateinit var qualityAssuranceAgent: QualityAssuranceAgent
+    private lateinit var productAgent: ProductAgent
+    private lateinit var qualityAgent: QualityAgent
 
     private val testScope = CoroutineScope(Dispatchers.Default)
     private val stubOrchestratorAgentId: AgentId = "orchestrator-agent"
@@ -86,11 +86,11 @@ class AgentLearningLoopIntegrationTest {
             meetingSchedulingService = meetingSchedulingService,
         )
 
-        productManagerAgent = stubProductManagerAgent(
+        productAgent = stubProductManagerAgent(
             ticketOrchestrator = ticketOrchestrator,
         )
 
-        qualityAssuranceAgent = stubQualityAssuranceAgent()
+        qualityAgent = stubQualityAssuranceAgent()
     }
 
     @AfterTest
@@ -107,11 +107,11 @@ class AgentLearningLoopIntegrationTest {
             description = "Implement authentication feature",
         )
 
-        val firstPlan = productManagerAgent.determinePlanForTask(firstTask, relevantKnowledge = emptyList())
+        val firstPlan = productAgent.determinePlanForTask(firstTask, relevantKnowledge = emptyList())
         val firstOutcome = stubSuccessOutcome()
 
         // Extract knowledge from first execution
-        val extractedKnowledge = productManagerAgent.extractKnowledgeFromOutcome(
+        val extractedKnowledge = productAgent.extractKnowledgeFromOutcome(
             firstOutcome,
             firstTask,
             Plan.ForTask(
@@ -151,7 +151,7 @@ class AgentLearningLoopIntegrationTest {
             ),
         )
 
-        val secondPlan = productManagerAgent.determinePlanForTask(secondTask, relevantKnowledge = recalledKnowledge)
+        val secondPlan = productAgent.determinePlanForTask(secondTask, relevantKnowledge = recalledKnowledge)
 
         assertTrue(secondPlan.tasks.isNotEmpty())
     }
@@ -164,8 +164,8 @@ class AgentLearningLoopIntegrationTest {
             description = "Implement new feature",
         )
 
-        val pmPlan = productManagerAgent.determinePlanForTask(task, relevantKnowledge = emptyList())
-        val validationPlan = qualityAssuranceAgent.determinePlanForTask(task, relevantKnowledge = emptyList())
+        val pmPlan = productAgent.determinePlanForTask(task, relevantKnowledge = emptyList())
+        val validationPlan = qualityAgent.determinePlanForTask(task, relevantKnowledge = emptyList())
 
         assertTrue(pmPlan.tasks.isNotEmpty(), "PM should create plan without knowledge")
         assertTrue(validationPlan.tasks.isNotEmpty(), "Validation should create plan without knowledge")
@@ -183,11 +183,11 @@ class AgentLearningLoopIntegrationTest {
 
         // Extract from success
         val successOutcome = stubSuccessOutcome()
-        val successKnowledge = productManagerAgent.extractKnowledgeFromOutcome(successOutcome, task, plan)
+        val successKnowledge = productAgent.extractKnowledgeFromOutcome(successOutcome, task, plan)
 
         // Extract from failure
         val failureOutcome = stubFailureOutcome()
-        val failureKnowledge = productManagerAgent.extractKnowledgeFromOutcome(failureOutcome, task, plan)
+        val failureKnowledge = productAgent.extractKnowledgeFromOutcome(failureOutcome, task, plan)
 
         assertTrue(successKnowledge is Knowledge.FromOutcome)
         assertTrue(failureKnowledge is Knowledge.FromOutcome)

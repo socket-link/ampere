@@ -2,8 +2,8 @@ package link.socket.ampere.cli.watch.presentation
 
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.Urgency
-import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeType
-import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.knowledge.KnowledgeType
+import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MemoryEvent

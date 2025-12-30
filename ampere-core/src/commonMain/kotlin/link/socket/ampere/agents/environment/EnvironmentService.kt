@@ -3,10 +3,10 @@ package link.socket.ampere.agents.environment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventRegistry
 import link.socket.ampere.agents.domain.event.EventType
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.api.EventHandler

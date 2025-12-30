@@ -4,11 +4,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.AutonomousAgent
-import link.socket.ampere.agents.domain.concept.status.MeetingStatus
-import link.socket.ampere.agents.domain.concept.status.TaskStatus
-import link.socket.ampere.agents.domain.concept.task.AssignedTo
 import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.status.MeetingStatus
+import link.socket.ampere.agents.domain.status.TaskStatus
+import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 
@@ -163,7 +163,7 @@ class MeetingParticipationHandler(
      */
     suspend fun handleMeetingStart(
         event: MeetingEvent.MeetingStarted,
-        agent: AutonomousAgent<AgentState>,
+        agent: AutonomousAgent<*>,
     ) {
         // Post a message announcing agent's presence
         messageApi.postMessage(
@@ -204,7 +204,7 @@ class MeetingParticipationHandler(
      */
     suspend fun handleAgendaItem(
         event: MeetingEvent.AgendaItemStarted,
-        agent: AutonomousAgent<AgentState>,
+        agent: AutonomousAgent<*>,
     ) {
         // Get the meeting to find the thread ID
         val meetingResult = meetingRepository.getMeeting(event.meetingId)

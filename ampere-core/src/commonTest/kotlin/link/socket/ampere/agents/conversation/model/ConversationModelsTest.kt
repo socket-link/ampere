@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.domain.concept.status.EventStatus
+import link.socket.ampere.agents.domain.status.EventStatus
 import link.socket.ampere.agents.events.messages.Message
 import link.socket.ampere.agents.events.messages.MessageChannel
 import link.socket.ampere.agents.events.messages.MessageSender

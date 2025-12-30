@@ -1,15 +1,15 @@
 package link.socket.ampere.agents.tools
 
 import java.io.File
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
+import link.socket.ampere.agents.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.execution.tools.Tool
 
 /**
  * Android actual for WriteCodeFileTool using java.io.File APIs.
  */
 actual class WriteCodeFileTool actual constructor(
-    private val baseDirectory: String
+    private val baseDirectory: String,
 ) : Tool {
     actual override val name: String = "write_code_file"
     actual override val description: String = "Generates a single code file with specified content"
@@ -42,14 +42,14 @@ actual class WriteCodeFileTool actual constructor(
 
             Outcome(
                 success = true,
-                result = $$"File written: ${file.absolutePath}",
+                result = "File written: ${file.absolutePath}",
             )
         } catch (e: Exception) {
             // TODO: Log exception
             Outcome(
                 success = false,
                 result = null,
-                errorMessage = $$"Failed to write file: ${e.message}",
+                errorMessage = "Failed to write file: ${e.message}",
             )
         }
     }

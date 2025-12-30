@@ -18,23 +18,23 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.definition.CodeWriterAgent
-import link.socket.ampere.agents.domain.concept.Idea
-import link.socket.ampere.agents.domain.concept.Perception
-import link.socket.ampere.agents.domain.concept.Plan
-import link.socket.ampere.agents.domain.concept.expectation.Expectations
-import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
-import link.socket.ampere.agents.domain.concept.status.TaskStatus
-import link.socket.ampere.agents.domain.concept.status.TicketStatus
-import link.socket.ampere.agents.domain.concept.task.AssignedTo
-import link.socket.ampere.agents.domain.concept.task.MeetingTask
-import link.socket.ampere.agents.domain.concept.task.Task
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
-import link.socket.ampere.agents.domain.config.AgentConfiguration
+import link.socket.ampere.agents.config.AgentActionAutonomy
+import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.definition.CodeAgent
+import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.error.ExecutionError
-import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.expectation.Expectations
+import link.socket.ampere.agents.domain.knowledge.Knowledge
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.reasoning.Idea
+import link.socket.ampere.agents.domain.reasoning.Perception
+import link.socket.ampere.agents.domain.reasoning.Plan
+import link.socket.ampere.agents.domain.status.TaskStatus
+import link.socket.ampere.agents.domain.status.TicketStatus
+import link.socket.ampere.agents.domain.task.AssignedTo
+import link.socket.ampere.agents.domain.task.MeetingTask
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
@@ -106,16 +106,16 @@ actual class CodeWriterAgentTest {
      * Test agent that allows us to control the perception evaluation result
      * without actually calling the LLM.
      */
-    private class TestableCodeWriterAgent(
-        initialState: AgentState,
+    private class TestableCodeAgent(
+        initialState: CodeState,
         agentConfiguration: AgentConfiguration,
         toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode>,
         coroutineScope: CoroutineScope,
-        private val perceptionResult: (Perception<AgentState>) -> Idea,
+        private val perceptionResult: (Perception<CodeState>) -> Idea,
         private val planningResult: ((Task, List<Idea>) -> Plan)? = null,
-    ) : CodeWriterAgent(agentConfiguration, toolWriteCodeFile, coroutineScope, initialState) {
+    ) : CodeAgent(agentConfiguration, toolWriteCodeFile, coroutineScope, initialState) {
 
-        override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea =
+        override val runLLMToEvaluatePerception: (perception: Perception<CodeState>) -> Idea =
             perceptionResult
 
         override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan =
@@ -153,16 +153,16 @@ actual class CodeWriterAgentTest {
      * @return A CodeWriterAgent configured for testing
      */
     private fun createTestAgent(
-        perceptionResult: (Perception<AgentState>) -> Idea,
-    ): TestableCodeWriterAgent {
+        perceptionResult: (Perception<CodeState>) -> Idea,
+    ): TestableCodeAgent {
         val aiConfig = FakeAIConfiguration()
         val agentConfig = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
             aiConfiguration = aiConfig,
         )
 
-        return TestableCodeWriterAgent(
-            initialState = AgentState(),
+        return TestableCodeAgent(
+            initialState = CodeState.blank,
             agentConfiguration = agentConfig,
             toolWriteCodeFile = stubTool,
             coroutineScope = testScope,
@@ -178,17 +178,17 @@ actual class CodeWriterAgentTest {
      * @return A CodeWriterAgent configured for testing
      */
     private fun createTestAgentWithPlanning(
-        perceptionResult: (Perception<AgentState>) -> Idea,
+        perceptionResult: (Perception<CodeState>) -> Idea,
         planningResult: (Task, List<Idea>) -> Plan,
-    ): TestableCodeWriterAgent {
+    ): TestableCodeAgent {
         val aiConfig = FakeAIConfiguration()
         val agentConfig = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
             aiConfiguration = aiConfig,
         )
 
-        return TestableCodeWriterAgent(
-            initialState = AgentState(),
+        return TestableCodeAgent(
+            initialState = CodeState.blank,
             agentConfiguration = agentConfig,
             toolWriteCodeFile = stubTool,
             coroutineScope = testScope,
@@ -200,18 +200,19 @@ actual class CodeWriterAgentTest {
     /**
      * Creates an Idea simulating LLM insight generation about a pending task.
      */
-    private fun createPendingTaskIdea(perception: Perception<AgentState>): Idea {
+    private fun createPendingTaskIdea(perception: Perception<CodeState>): Idea {
         val task = perception.currentState.getCurrentMemory().task
         return Idea(
             name = "Perception analysis for pending task",
-            description = "Agent has a pending code change task → Should plan implementation steps for the task (confidence: high)",
+            description = "Agent has a pending code change task → " +
+                "Should plan implementation steps for the task (confidence: high)",
         )
     }
 
     /**
      * Creates an Idea simulating LLM detection of failure patterns.
      */
-    private fun createFailurePatternIdea(perception: Perception<AgentState>): Idea {
+    private fun createFailurePatternIdea(perception: Perception<CodeState>): Idea {
         return Idea(
             name = "Perception analysis for pattern detection",
             description = """
@@ -225,7 +226,7 @@ actual class CodeWriterAgentTest {
     /**
      * Creates an Idea for empty/idle state.
      */
-    private fun createEmptyStateIdea(perception: Perception<AgentState>): Idea {
+    private fun createEmptyStateIdea(perception: Perception<CodeState>): Idea {
         return Idea(
             name = "Perception analysis for current task",
             description = "Agent has no active task → Awaiting new task assignment (confidence: high)",
@@ -235,7 +236,7 @@ actual class CodeWriterAgentTest {
     /**
      * Creates an Idea about available tools.
      */
-    private fun createToolAvailabilityIdea(perception: Perception<AgentState>): Idea {
+    private fun createToolAvailabilityIdea(perception: Perception<CodeState>): Idea {
         return Idea(
             name = "Perception analysis for code writing",
             description = "WriteCodeFile tool is available → Can execute code writing tasks (confidence: high)",
@@ -245,10 +246,11 @@ actual class CodeWriterAgentTest {
     /**
      * Creates an Idea about successful patterns.
      */
-    private fun createSuccessPatternIdea(perception: Perception<AgentState>): Idea {
+    private fun createSuccessPatternIdea(perception: Perception<CodeState>): Idea {
         return Idea(
             name = "Perception analysis for similar task",
-            description = "Previous similar task completed successfully → Can use similar approach for current task (confidence: high)",
+            description = "Previous similar task completed successfully → " +
+                "Can use similar approach for current task (confidence: high)",
         )
     }
 
@@ -266,7 +268,7 @@ actual class CodeWriterAgentTest {
         val agent = createTestAgent(::createPendingTaskIdea)
 
         // Create a state with one pending task
-        val state = AgentState()
+        val state = CodeState.blank
         state.setNewTask(
             Task.CodeChange(
                 id = "task-1",
@@ -302,7 +304,7 @@ actual class CodeWriterAgentTest {
         val agent = createTestAgent(::createFailurePatternIdea)
 
         // Create a state with failure outcomes
-        val state = AgentState()
+        val state = CodeState.blank
         state.setNewTask(
             Task.CodeChange(
                 id = "task-retry",
@@ -364,7 +366,7 @@ actual class CodeWriterAgentTest {
         val agent = createTestAgent(::createEmptyStateIdea)
 
         // Create empty state
-        val state = AgentState()
+        val state = CodeState.blank
 
         val perception = Perception(
             currentState = state,
@@ -393,11 +395,13 @@ actual class CodeWriterAgentTest {
             val task = perception.currentState.getCurrentMemory().task
             Idea(
                 name = "Basic perception (fallback)",
-                description = "Code change task: Test task (Status: Pending)\n\nNote: Advanced perception analysis unavailable\n\nAvailable tools: ToolWriteCodeFile",
+                description = "Code change task: Test task (Status: Pending)\n\n" +
+                    "Note: Advanced perception analysis unavailable\n\n" +
+                    "Available tools: ToolWriteCodeFile",
             )
         }
 
-        val state = AgentState()
+        val state = CodeState.blank
         state.setNewTask(
             Task.CodeChange(
                 id = "task-1",
@@ -435,7 +439,7 @@ actual class CodeWriterAgentTest {
         // Setup: Create agent that identifies tools
         val agent = createTestAgent(::createToolAvailabilityIdea)
 
-        val state = AgentState()
+        val state = CodeState.blank
         state.setNewTask(
             Task.CodeChange(
                 id = "task-1",
@@ -472,7 +476,7 @@ actual class CodeWriterAgentTest {
         // Setup: Create agent that recognizes success patterns
         val agent = createTestAgent(::createSuccessPatternIdea)
 
-        val state = AgentState()
+        val state = CodeState.blank
         state.setNewTask(
             Task.CodeChange(
                 id = "task-2",
@@ -1103,7 +1107,7 @@ actual class CodeWriterAgentTest {
             aiConfiguration = aiConfig,
         )
 
-        val testAgent = object : CodeWriterAgent(
+        val testAgent = object : CodeAgent(
             agentConfig,
             stubTool,
             testScope,
@@ -1189,7 +1193,7 @@ actual class CodeWriterAgentTest {
             aiConfiguration = aiConfig,
         )
 
-        val testAgent = object : CodeWriterAgent(
+        val testAgent = object : CodeAgent(
             agentConfig,
             stubTool,
             testScope,
@@ -1265,7 +1269,7 @@ actual class CodeWriterAgentTest {
             aiConfiguration = aiConfig,
         )
 
-        val testAgent = object : CodeWriterAgent(
+        val testAgent = object : CodeAgent(
             agentConfig,
             stubTool,
             testScope,
@@ -1346,21 +1350,20 @@ actual class CodeWriterAgentTest {
             aiConfiguration = aiConfig,
         )
 
-        val agentState = AgentState()
+        // Create a fresh state instance for this test (not using shared CodeState.blank)
+        val agentState = CodeState(
+            outcome = Outcome.blank,
+            task = Task.Blank,
+            plan = Plan.blank,
+        )
 
-        val testAgent = object : CodeWriterAgent(
+        val testAgent = object : CodeAgent(
             agentConfig,
             stubTool,
             testScope,
             agentState,
         ) {
             override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { outcomes ->
-                // Call the real implementation which should store knowledge
-                evaluateOutcomesAndGenerateLearnings(outcomes)
-            }
-
-            // Make the private method accessible for testing
-            public override fun evaluateOutcomesAndGenerateLearnings(outcomes: List<Outcome>): Idea {
                 // For this test, create knowledge manually and store it
                 val knowledge = Knowledge.FromOutcome(
                     outcomeId = outcomes.firstOrNull()?.id ?: "test-outcome",
@@ -1373,14 +1376,14 @@ actual class CodeWriterAgentTest {
                     rememberedKnowledgeFromOutcomes = listOf(knowledge),
                 )
 
-                return Idea(
+                Idea(
                     name = "Test evaluation",
                     description = "Learning stored",
                 )
             }
         }
 
-        // Verify no knowledge initially
+        // Verify no knowledge initially (fresh state should be empty)
         val initialKnowledge = agentState.getPastMemory().knowledgeFromOutcomes
         assertTrue(initialKnowledge.isEmpty(), "Should start with no knowledge")
 
@@ -1422,7 +1425,7 @@ actual class CodeWriterAgentTest {
             aiConfiguration = aiConfig,
         )
 
-        val testAgent = object : CodeWriterAgent(
+        val testAgent = object : CodeAgent(
             agentConfig,
             stubTool,
             testScope,
@@ -1507,7 +1510,7 @@ actual class CodeWriterAgentTest {
             aiConfiguration = aiConfig,
         )
 
-        val testAgent = object : CodeWriterAgent(
+        val testAgent = object : CodeAgent(
             agentConfig,
             stubTool,
             testScope,
@@ -1582,22 +1585,29 @@ actual class CodeWriterAgentTest {
             aiConfiguration = aiConfig,
         )
 
-        val agentState = AgentState()
+        val agentState = CodeState.blank
 
-        val testAgent = object : CodeWriterAgent(
+        val testAgent = object : CodeAgent(
             agentConfig,
             stubTool,
             testScope,
             agentState,
         ) {
             override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { outcomes ->
-                // Simulate fallback by calling the fallback method directly
-                createFallbackLearningIdea(outcomes, "Test: LLM call failed")
-            }
+                // Simulate fallback when LLM analysis fails
+                val successCount = outcomes.count { it is Outcome.Success }
+                val failCount = outcomes.count { it is Outcome.Failure }
 
-            // Make private method accessible for testing
-            public override fun createFallbackLearningIdea(outcomes: List<Outcome>, reason: String): Idea {
-                return super.createFallbackLearningIdea(outcomes, reason)
+                Idea(
+                    name = "Outcome evaluation (basic statistics)",
+                    description = buildString {
+                        appendLine("Basic outcome statistics (advanced analysis unavailable - Test: LLM call failed):")
+                        appendLine()
+                        appendLine("Total Outcomes: ${outcomes.size}")
+                        appendLine("Successful: $successCount")
+                        appendLine("Failed: $failCount")
+                    },
+                )
             }
         }
 
@@ -1659,7 +1669,7 @@ actual class CodeWriterAgentTest {
             aiConfiguration = aiConfig,
         )
 
-        val testAgent = object : CodeWriterAgent(
+        val testAgent = object : CodeAgent(
             agentConfig,
             stubTool,
             testScope,

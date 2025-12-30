@@ -7,7 +7,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.domain.concept.status.EventStatus
+import link.socket.ampere.agents.domain.status.EventStatus
 import link.socket.ampere.data.Repository
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.messages.MessageStoreQueries
