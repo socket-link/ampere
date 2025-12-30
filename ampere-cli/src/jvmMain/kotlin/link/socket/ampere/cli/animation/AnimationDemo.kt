@@ -1,7 +1,11 @@
 package link.socket.ampere.cli.animation
 
+import com.github.ajalt.mordant.rendering.TextColors
+import com.github.ajalt.mordant.rendering.TextStyles
+import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import link.socket.ampere.repl.TerminalFactory
 
 /**
  * Runnable demo that showcases AMPERE lightning animation primitives.
@@ -15,28 +19,75 @@ import kotlinx.coroutines.runBlocking
  * Or configure as a main class in your IDE.
  */
 fun main() = runBlocking {
-    println("\u001b[2J\u001b[H") // Clear screen and move cursor to home
-    println("⚡ AMPERE Animation Demo\n")
+    val terminal = TerminalFactory.createTerminal()
 
-    // Demo 1: Discharge sequence
-    println("1. Discharge Sequence (3 seconds)")
-    print("   ")
-    runSequenceDemo(LightningAnimator.DISCHARGE_SEQUENCE, 3000)
-    println("\n")
+    try {
+        // Initialize terminal for proper animation rendering
+        initializeTerminal()
 
-    // Demo 2: Compact sequence
-    println("2. Compact Sequence (2 seconds)")
-    print("   ")
-    runSequenceDemo(LightningAnimator.COMPACT_SEQUENCE, 2000)
-    println("\n")
+        // Header
+        print(terminal.render(TextStyles.bold(TextColors.cyan("⚡ AMPERE Animation Demo"))))
+        print("\n\n")
+        System.out.flush()
+        delay(500)
 
-    // Demo 3: Corona effect
-    println("3. Corona Glow on 'AMPERE' (3 seconds)")
-    print("   ")
-    runCoronaDemo("AMPERE", 3000)
-    println("\n")
+        // Demo 1: Discharge sequence
+        print(terminal.render(TextColors.yellow("1. Discharge Sequence (3 seconds)")))
+        print("\n   ")
+        System.out.flush()
+        runSequenceDemo(LightningAnimator.DISCHARGE_SEQUENCE, 3000)
+        print("\n\n")
+        System.out.flush()
+        delay(500)
 
-    println("Demo complete!")
+        // Demo 2: Compact sequence
+        print(terminal.render(TextColors.yellow("2. Compact Sequence (2 seconds)")))
+        print("\n   ")
+        System.out.flush()
+        runSequenceDemo(LightningAnimator.COMPACT_SEQUENCE, 2000)
+        print("\n\n")
+        System.out.flush()
+        delay(500)
+
+        // Demo 3: Corona effect
+        print(terminal.render(TextColors.yellow("3. Corona Glow on 'AMPERE' (3 seconds)")))
+        print("\n   ")
+        System.out.flush()
+        runCoronaDemo("AMPERE", 3000)
+        print("\n\n")
+        System.out.flush()
+        delay(500)
+
+        print(terminal.render(TextStyles.bold(TextColors.green("Demo complete!"))))
+        print("\n")
+        System.out.flush()
+        delay(1000)
+
+    } finally {
+        restoreTerminal()
+    }
+}
+
+/**
+ * Initialize terminal for animation rendering.
+ * - Hide cursor for smooth animations
+ * - Clear screen
+ */
+private fun initializeTerminal() {
+    print("\u001B[?25l")    // Hide cursor
+    print("\u001B[2J")      // Clear screen
+    print("\u001B[H")       // Move cursor to home
+    System.out.flush()
+}
+
+/**
+ * Restore terminal to normal state.
+ */
+private fun restoreTerminal() {
+    print("\u001B[?25h")     // Show cursor
+    print("\u001B[2J")       // Clear screen
+    print("\u001B[H")        // Move cursor to home
+    System.out.flush()
 }
 
 /**
