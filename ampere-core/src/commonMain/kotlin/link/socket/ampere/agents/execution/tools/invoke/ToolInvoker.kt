@@ -3,9 +3,9 @@ package link.socket.ampere.agents.execution.tools.invoke
 import kotlin.time.Duration
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.Urgency
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionContext

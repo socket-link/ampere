@@ -5,14 +5,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.status.ExecutionStatus
 import link.socket.ampere.agents.domain.error.ExecutionError
-import link.socket.ampere.agents.domain.health.ExecutorSystemHealth
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.status.ExecutionStatus
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.agents.health.ExecutorSystemHealth
 
 /**
  * FunctionExecutor - Executor implementation for locally-defined FunctionTools.

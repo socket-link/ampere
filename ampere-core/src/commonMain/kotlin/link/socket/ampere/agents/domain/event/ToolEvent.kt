@@ -2,8 +2,8 @@ package link.socket.ampere.agents.domain.event
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.Urgency
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
 import link.socket.ampere.agents.execution.tools.ToolId
 
 /**

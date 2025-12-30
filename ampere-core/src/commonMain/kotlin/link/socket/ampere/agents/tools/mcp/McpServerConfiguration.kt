@@ -1,7 +1,7 @@
 package link.socket.ampere.agents.tools.mcp
 
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.execution.tools.McpServerId
 
 /**

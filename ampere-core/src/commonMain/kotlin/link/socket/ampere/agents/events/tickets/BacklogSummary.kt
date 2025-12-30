@@ -2,7 +2,7 @@ package link.socket.ampere.agents.events.tickets
 
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.status.TicketStatus
 
 /**
  * Summary of the current backlog state for PM agent perception.

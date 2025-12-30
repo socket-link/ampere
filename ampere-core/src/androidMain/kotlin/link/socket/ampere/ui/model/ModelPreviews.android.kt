@@ -89,7 +89,7 @@ private fun ModelRecommendationScreenPreview() {
                     "Feature Note 2" to Importance.NOT_CRITICAL,
                 ),
                 tags = listOf("Tag 1", "Tag 2"),
-            )
+            ),
         ),
         onModelSelected = {},
     )

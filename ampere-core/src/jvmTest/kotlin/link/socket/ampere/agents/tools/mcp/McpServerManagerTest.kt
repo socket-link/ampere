@@ -10,7 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.tools.mcp.connection.McpServerConnection

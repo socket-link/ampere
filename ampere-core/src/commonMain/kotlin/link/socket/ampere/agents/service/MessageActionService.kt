@@ -1,8 +1,8 @@
 package link.socket.ampere.agents.service
 
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.concept.status.EventStatus
 import link.socket.ampere.agents.domain.event.MessageEvent
+import link.socket.ampere.agents.domain.status.EventStatus
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.messages.Message
 import link.socket.ampere.agents.events.messages.MessageChannel

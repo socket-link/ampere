@@ -2,7 +2,7 @@ package link.socket.ampere.agents.environment
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.domain.concept.outcome.OutcomeMemoryRepositoryImpl
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepositoryImpl
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
 import link.socket.ampere.agents.events.bus.EventSerialBus

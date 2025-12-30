@@ -3,6 +3,7 @@ package link.socket.ampere.cli.coordination
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.status.MeetingStatus
 import link.socket.ampere.coordination.AgentInteraction
 import link.socket.ampere.coordination.CoordinationEdge
 import link.socket.ampere.coordination.CoordinationState
@@ -315,7 +316,7 @@ class StatisticsRendererTest {
                 meeting = link.socket.ampere.agents.events.meetings.Meeting(
                     id = "meeting-$index",
                     type = link.socket.ampere.agents.events.meetings.MeetingType.AdHoc(reason = "Test meeting"),
-                    status = link.socket.ampere.agents.domain.concept.status.MeetingStatus.InProgress(
+                    status = MeetingStatus.InProgress(
                         startedAt = now,
                         messagingDetails = link.socket.ampere.agents.events.meetings.MeetingMessagingDetails(
                             messageChannelId = "channel-$index",

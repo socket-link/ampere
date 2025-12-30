@@ -3,7 +3,7 @@ package link.socket.ampere.agents.domain.memory
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
+import link.socket.ampere.agents.domain.knowledge.Knowledge
 
 /**
  * Represents the current context an agent is operating within.

@@ -14,12 +14,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.domain.concept.status.TaskStatus
-import link.socket.ampere.agents.domain.concept.status.TicketStatus
-import link.socket.ampere.agents.domain.concept.task.AssignedTo
-import link.socket.ampere.agents.domain.concept.task.MeetingTask.AgendaItem
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.TicketEvent
+import link.socket.ampere.agents.domain.status.TaskStatus
+import link.socket.ampere.agents.domain.status.TicketStatus
+import link.socket.ampere.agents.domain.task.AssignedTo
+import link.socket.ampere.agents.domain.task.MeetingTask.AgendaItem
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.escalation.Escalation

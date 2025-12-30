@@ -1,6 +1,6 @@
 package link.socket.ampere.agents.events.tickets
 
-import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.status.TicketStatus
 
 /**
  * Default implementation of TicketViewService that queries ticket state

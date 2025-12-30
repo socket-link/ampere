@@ -12,10 +12,10 @@ import kotlin.time.Duration.Companion.days
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
-import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeRepository
-import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeRepositoryImpl
-import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeType
+import link.socket.ampere.agents.domain.knowledge.Knowledge
+import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
+import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
+import link.socket.ampere.agents.domain.knowledge.KnowledgeType
 import link.socket.ampere.db.Database
 
 /**

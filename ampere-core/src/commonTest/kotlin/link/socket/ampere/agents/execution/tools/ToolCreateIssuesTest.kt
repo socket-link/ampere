@@ -2,7 +2,7 @@ package link.socket.ampere.agents.execution.tools
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.config.AgentActionAutonomy
 
 class ToolCreateIssuesTest {
 

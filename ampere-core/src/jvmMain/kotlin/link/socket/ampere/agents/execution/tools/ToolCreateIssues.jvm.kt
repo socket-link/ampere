@@ -1,8 +1,8 @@
 package link.socket.ampere.agents.execution.tools
 
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.error.ExecutionError
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.integrations.issues.BatchIssueCreator
 import link.socket.ampere.integrations.issues.github.GitHubCliProvider

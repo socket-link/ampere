@@ -7,6 +7,7 @@ import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
+import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
@@ -70,6 +71,10 @@ object EventCategorizer {
         is FileSystemEvent -> EventSignificance.SIGNIFICANT
         is HumanInteractionEvent.InputProvided -> EventSignificance.SIGNIFICANT
         is HumanInteractionEvent.RequestTimedOut -> EventSignificance.SIGNIFICANT
+        is PlanEvent.PlanStepStarted -> EventSignificance.SIGNIFICANT
+        is PlanEvent.PlanStepCompleted -> EventSignificance.SIGNIFICANT
+        is PlanEvent.TaskAssigned -> EventSignificance.SIGNIFICANT
+        is PlanEvent.MonitoringStarted -> EventSignificance.SIGNIFICANT
 
         // Routine cognitive operations - maintenance work
         is MemoryEvent.KnowledgeRecalled -> EventSignificance.ROUTINE

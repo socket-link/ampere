@@ -3,13 +3,13 @@ package link.socket.ampere.agents.events.meetings
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.concept.outcome.MeetingOutcome
-import link.socket.ampere.agents.domain.concept.status.MeetingStatus
-import link.socket.ampere.agents.domain.concept.task.AssignedTo
-import link.socket.ampere.agents.domain.concept.task.MeetingTask.AgendaItem
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MeetingEvent
+import link.socket.ampere.agents.domain.outcome.MeetingOutcome
+import link.socket.ampere.agents.domain.status.MeetingStatus
+import link.socket.ampere.agents.domain.task.AssignedTo
+import link.socket.ampere.agents.domain.task.MeetingTask.AgendaItem
 
 class MeetingEventsTest {
 

@@ -13,19 +13,22 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.definition.CodeWriterAgent
-import link.socket.ampere.agents.domain.concept.Idea
-import link.socket.ampere.agents.domain.concept.Perception
-import link.socket.ampere.agents.domain.concept.Plan
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.outcome.Outcome
-import link.socket.ampere.agents.domain.concept.outcome.TaskOutcome
-import link.socket.ampere.agents.domain.concept.status.TaskStatus
-import link.socket.ampere.agents.domain.concept.task.Task
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
-import link.socket.ampere.agents.domain.config.AgentConfiguration
+import link.socket.ampere.agents.config.AgentActionAutonomy
+import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.definition.CodeAgent
+import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.error.ExecutionError
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.outcome.TaskOutcome
+import link.socket.ampere.agents.domain.reasoning.AgentReasoning
+import link.socket.ampere.agents.domain.reasoning.EvaluationResult
+import link.socket.ampere.agents.domain.reasoning.Idea
+import link.socket.ampere.agents.domain.reasoning.Perception
+import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.status.TaskStatus
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.executor.InstrumentedExecutor
@@ -68,16 +71,16 @@ class CodeWriterAgentIntegrationTest {
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = true)
         val executor = FunctionExecutor.create()
 
-        val agent = TestableCodeWriterAgent(
-            initialState = AgentState(),
+        // Create mock reasoning that returns predetermined responses
+        val mockReasoning = createMockReasoning()
+
+        val agent = CodeAgent(
+            initialState = CodeState.blank,
             agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
             executor = executor,
-            mockPerception = ::createMockIdea,
-            mockPlanning = ::createMockPlan,
-            mockExecution = ::createMockSuccessOutcome,
-            mockEvaluation = ::createMockEvaluationIdea,
+            reasoningOverride = mockReasoning,
         )
 
         // Create a simple code change task
@@ -130,16 +133,15 @@ class CodeWriterAgentIntegrationTest {
     @Test
     fun `test cognitive state transitions`() = runBlocking {
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = true)
-        val agent = TestableCodeWriterAgent(
-            initialState = AgentState(),
+        val mockReasoning = createMockReasoning()
+
+        val agent = CodeAgent(
+            initialState = CodeState.blank,
             agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
             executor = FunctionExecutor.create(),
-            mockPerception = ::createMockIdea,
-            mockPlanning = ::createMockPlan,
-            mockExecution = ::createMockSuccessOutcome,
-            mockEvaluation = ::createMockEvaluationIdea,
+            reasoningOverride = mockReasoning,
         )
 
         val task = Task.CodeChange(
@@ -194,8 +196,8 @@ class CodeWriterAgentIntegrationTest {
     @Test
     fun `test learnings persist across tasks`() = runBlocking {
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = true)
-        val agent = CodeWriterAgent(
-            initialState = AgentState(),
+        val agent = CodeAgent(
+            initialState = CodeState.blank,
             agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
@@ -262,8 +264,8 @@ class CodeWriterAgentIntegrationTest {
     fun `test failure recovery`() = runBlocking {
         // Create a mock tool that always fails
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = false)
-        val agent = CodeWriterAgent(
-            initialState = AgentState(),
+        val agent = CodeAgent(
+            initialState = CodeState.blank,
             agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
@@ -328,16 +330,15 @@ class CodeWriterAgentIntegrationTest {
     @Test
     fun `test multiple tasks processed sequentially`() = runBlocking {
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = true)
-        val agent = TestableCodeWriterAgent(
-            initialState = AgentState(),
+        val mockReasoning = createMockReasoning()
+
+        val agent = CodeAgent(
+            initialState = CodeState.blank,
             agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
             executor = FunctionExecutor.create(),
-            mockPerception = ::createMockIdea,
-            mockPlanning = ::createMockPlan,
-            mockExecution = ::createMockSuccessOutcome,
-            mockEvaluation = ::createMockEvaluationIdea,
+            reasoningOverride = mockReasoning,
         )
 
         val tasks = listOf(
@@ -418,8 +419,8 @@ class CodeWriterAgentIntegrationTest {
         val instrumentedExecutor = InstrumentedExecutor()
 
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = true)
-        val agent = CodeWriterAgent(
-            initialState = AgentState(),
+        val agent = CodeAgent(
+            initialState = CodeState.blank,
             agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
@@ -458,8 +459,8 @@ class CodeWriterAgentIntegrationTest {
     @Test
     fun `test the Jazz Test - vague requirement to working code`() = runBlocking {
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = true)
-        val agent = CodeWriterAgent(
-            initialState = AgentState(),
+        val agent = CodeAgent(
+            initialState = CodeState.blank,
             agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
@@ -524,8 +525,8 @@ class CodeWriterAgentIntegrationTest {
     @Test
     fun `test runtime loop integration`() = runBlocking {
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = true)
-        val agent = CodeWriterAgent(
-            initialState = AgentState(),
+        val agent = CodeAgent(
+            initialState = CodeState.blank,
             agentConfiguration = stubAgentConfiguration(),
             toolWriteCodeFile = mockTool,
             coroutineScope = this,
@@ -570,74 +571,60 @@ class CodeWriterAgentIntegrationTest {
     // ==================== Helper Functions ====================
 
     /**
-     * Testable agent that allows controlling LLM responses without actual API calls.
-     * This enables testing the cognitive loop without requiring LLM credentials.
+     * Creates a mock AgentReasoning that returns predetermined responses
+     * without requiring a real LLM connection.
+     *
+     * This enables testing the cognitive loop without LLM credentials.
      */
-    private class TestableCodeWriterAgent(
-        initialState: AgentState,
-        agentConfiguration: AgentConfiguration,
-        toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode>,
-        coroutineScope: CoroutineScope,
-        executor: Executor,
-        mockPerception: ((Perception<AgentState>) -> Idea)? = null,
-        mockPlanning: ((Task, List<Idea>) -> Plan)? = null,
-        mockExecution: ((Task) -> Outcome)? = null,
-        mockEvaluation: ((List<Outcome>) -> Idea)? = null,
-    ) : CodeWriterAgent(agentConfiguration, toolWriteCodeFile, coroutineScope, initialState, executor) {
+    private fun createMockReasoning(): AgentReasoning {
+        return AgentReasoning.createForTesting("test-executor") {
+            onPerception { perception: Perception<AgentState> ->
+                Idea(
+                    name = "Mock perception analysis",
+                    description = "Agent should execute the pending task (confidence: high)",
+                )
+            }
 
-        override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea =
-            mockPerception ?: super.runLLMToEvaluatePerception
+            onPlanning { task: Task, ideas: List<Idea> ->
+                Plan.ForTask(
+                    task = task,
+                    tasks = listOf(task),
+                    estimatedComplexity = 1,
+                )
+            }
 
-        override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan =
-            mockPlanning ?: super.runLLMToPlan
+            onToolExecution { tool, request ->
+                val now = Clock.System.now()
+                ExecutionOutcome.CodeChanged.Success(
+                    executorId = "mock-executor",
+                    ticketId = request.context.ticket.id,
+                    taskId = request.context.task.id,
+                    executionStartTimestamp = now,
+                    executionEndTimestamp = now + 100.milliseconds,
+                    changedFiles = listOf("MockFile.kt"),
+                    validation = ExecutionResult(
+                        codeChanges = null,
+                        compilation = null,
+                        linting = null,
+                        tests = null,
+                    ),
+                )
+            }
 
-        override val runLLMToExecuteTask: (task: Task) -> Outcome =
-            mockExecution ?: super.runLLMToExecuteTask
+            onOutcomeEvaluation { outcomes: List<Outcome> ->
+                EvaluationResult(
+                    summaryIdea = Idea(
+                        name = "Mock outcome evaluation",
+                        description = "Task completed successfully. Learning: Mock tools work as expected.",
+                    ),
+                    knowledge = emptyList(),
+                )
+            }
 
-        override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea =
-            mockEvaluation ?: super.runLLMToEvaluateOutcomes
-    }
-
-    /**
-     * Creates a simple mock idea for perception.
-     */
-    private fun createMockIdea(perception: Perception<AgentState>): Idea {
-        return Idea(
-            name = "Mock perception analysis",
-            description = "Agent should execute the pending task (confidence: high)",
-        )
-    }
-
-    /**
-     * Creates a simple mock plan for a task.
-     */
-    private fun createMockPlan(task: Task, ideas: List<Idea>): Plan {
-        return Plan.ForTask(
-            task = task,
-            tasks = listOf(task),
-            estimatedComplexity = 1,
-        )
-    }
-
-    /**
-     * Creates a mock success outcome for task execution.
-     */
-    private fun createMockSuccessOutcome(task: Task): Outcome {
-        return TaskOutcome.Success.Full(
-            id = "mock-outcome-${task.id}",
-            task = task,
-            value = "Mock execution completed successfully",
-        )
-    }
-
-    /**
-     * Creates a mock idea for outcome evaluation.
-     */
-    private fun createMockEvaluationIdea(outcomes: List<Outcome>): Idea {
-        return Idea(
-            name = "Mock outcome evaluation",
-            description = "Task completed successfully. Learning: Mock tools work as expected.",
-        )
+            onLLMCall { prompt: String ->
+                "Mock LLM response for: $prompt"
+            }
+        }
     }
 
     /**

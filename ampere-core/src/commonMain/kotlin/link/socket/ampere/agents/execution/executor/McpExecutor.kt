@@ -8,16 +8,16 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.status.ExecutionStatus
-import link.socket.ampere.agents.domain.concept.task.Task
 import link.socket.ampere.agents.domain.error.ExecutionError
-import link.socket.ampere.agents.domain.health.ExecutorSystemHealth
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.status.ExecutionStatus
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.agents.health.ExecutorSystemHealth
 import link.socket.ampere.agents.tools.mcp.ServerManager
 import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
 

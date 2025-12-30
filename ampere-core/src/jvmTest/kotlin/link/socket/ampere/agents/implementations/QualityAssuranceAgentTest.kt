@@ -5,23 +5,23 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.definition.QualityAssuranceAgent
-import link.socket.ampere.agents.domain.concept.Plan
-import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
-import link.socket.ampere.agents.domain.concept.status.TaskStatus
-import link.socket.ampere.agents.domain.concept.task.Task
+import link.socket.ampere.agents.definition.QualityAgent
+import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
+import link.socket.ampere.agents.domain.reasoning.Plan
+import link.socket.ampere.agents.domain.status.TaskStatus
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.stubKnowledgeEntry
 import link.socket.ampere.stubQualityAssuranceAgent
 import link.socket.ampere.stubSuccessOutcome
 
 class QualityAssuranceAgentTest {
 
-    private lateinit var qualityAssuranceAgent: QualityAssuranceAgent
+    private lateinit var qualityAgent: QualityAgent
 
     @BeforeTest
     fun setUp() {
-        qualityAssuranceAgent = stubQualityAssuranceAgent()
+        qualityAgent = stubQualityAssuranceAgent()
     }
 
     @Test
@@ -52,7 +52,7 @@ class QualityAssuranceAgentTest {
             description = "Validate user input handling",
         )
 
-        val plan = qualityAssuranceAgent.determinePlanForTask(task, relevantKnowledge = validationKnowledge)
+        val plan = qualityAgent.determinePlanForTask(task, relevantKnowledge = validationKnowledge)
 
         assertTrue(plan.tasks.isNotEmpty(), "Plan should include validation tasks")
     }
@@ -68,7 +68,7 @@ class QualityAssuranceAgentTest {
         val plan = Plan.ForTask(task = task)
         val outcome = stubSuccessOutcome()
 
-        val knowledge = qualityAssuranceAgent.extractKnowledgeFromOutcome(outcome, task, plan)
+        val knowledge = qualityAgent.extractKnowledgeFromOutcome(outcome, task, plan)
 
         assertTrue(knowledge.approach.isNotEmpty(), "Approach should be captured")
         assertTrue(knowledge.learnings.contains("Success"), "Learnings should mention success")
@@ -83,7 +83,7 @@ class QualityAssuranceAgentTest {
             description = "Validate new feature",
         )
 
-        val plan = qualityAssuranceAgent.determinePlanForTask(task, relevantKnowledge = emptyList())
+        val plan = qualityAgent.determinePlanForTask(task, relevantKnowledge = emptyList())
 
         assertTrue(plan.tasks.isNotEmpty(), "Plan should include default validation tasks")
     }

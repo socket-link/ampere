@@ -1,6 +1,6 @@
 package link.socket.ampere.agents.events.escalation
 
-import link.socket.ampere.agents.definition.pm.ProductManagerState
+import link.socket.ampere.agents.definition.product.ProductAgentState
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 
@@ -182,7 +182,7 @@ class DefaultEscalationPolicy(
     // ==================== Project State Evaluation ====================
 
     private fun evaluateProjectState(
-        state: ProductManagerState,
+        state: ProductAgentState,
         currentTicket: Ticket,
     ): UrgencyEvaluation {
         val reasons = mutableListOf<String>()

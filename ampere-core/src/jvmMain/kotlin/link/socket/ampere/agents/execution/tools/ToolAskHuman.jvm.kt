@@ -2,7 +2,7 @@ package link.socket.ampere.agents.execution.tools
 
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.human.GlobalHumanResponseRegistry

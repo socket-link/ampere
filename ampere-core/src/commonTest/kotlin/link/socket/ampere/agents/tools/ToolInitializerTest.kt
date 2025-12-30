@@ -11,11 +11,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.status.TicketStatus
-import link.socket.ampere.agents.domain.concept.task.Task
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
+import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.status.TicketStatus
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority

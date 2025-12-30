@@ -3,8 +3,8 @@ package link.socket.ampere.agents.domain.event
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.Urgency
-import link.socket.ampere.agents.domain.concept.outcome.MeetingOutcome
-import link.socket.ampere.agents.domain.concept.task.MeetingTask
+import link.socket.ampere.agents.domain.outcome.MeetingOutcome
+import link.socket.ampere.agents.domain.task.MeetingTask
 import link.socket.ampere.agents.events.meetings.Meeting
 
 /**

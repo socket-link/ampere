@@ -1,6 +1,6 @@
 package link.socket.ampere.agents.events.messages
 
-import link.socket.ampere.agents.domain.concept.status.EventStatus
+import link.socket.ampere.agents.domain.status.EventStatus
 
 /**
  * Default implementation of ThreadViewService that queries thread state

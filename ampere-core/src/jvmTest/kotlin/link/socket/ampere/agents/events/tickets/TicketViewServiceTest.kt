@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.db.Database
 
 class TicketViewServiceTest {

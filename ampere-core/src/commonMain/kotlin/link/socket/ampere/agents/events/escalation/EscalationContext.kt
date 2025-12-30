@@ -1,7 +1,7 @@
 package link.socket.ampere.agents.events.escalation
 
 import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.definition.pm.ProductManagerState
+import link.socket.ampere.agents.definition.product.ProductAgentState
 import link.socket.ampere.agents.events.tickets.Ticket
 
 /**
@@ -17,5 +17,5 @@ data class EscalationContext(
     /** The agent reporting the blocker. */
     val reportedByAgentId: AgentId,
     /** The current project state. May be null if not available. */
-    val projectState: ProductManagerState?,
+    val projectState: ProductAgentState?,
 )

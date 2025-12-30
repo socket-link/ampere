@@ -6,7 +6,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.concept.status.TicketStatus
+import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType

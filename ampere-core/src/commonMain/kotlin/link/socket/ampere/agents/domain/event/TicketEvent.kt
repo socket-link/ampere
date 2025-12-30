@@ -4,8 +4,8 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
-import link.socket.ampere.agents.domain.concept.status.TicketStatus
-import link.socket.ampere.agents.domain.concept.task.AssignedTo
+import link.socket.ampere.agents.domain.status.TicketStatus
+import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.events.meetings.MeetingId
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.events.tickets.TicketPriority

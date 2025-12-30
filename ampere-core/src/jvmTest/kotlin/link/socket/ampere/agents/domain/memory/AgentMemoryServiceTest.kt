@@ -17,12 +17,12 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.domain.concept.knowledge.Knowledge
-import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeRepository
-import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeRepositoryImpl
-import link.socket.ampere.agents.domain.concept.knowledge.KnowledgeType
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MemoryEvent
+import link.socket.ampere.agents.domain.knowledge.Knowledge
+import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
+import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
+import link.socket.ampere.agents.domain.knowledge.KnowledgeType
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription

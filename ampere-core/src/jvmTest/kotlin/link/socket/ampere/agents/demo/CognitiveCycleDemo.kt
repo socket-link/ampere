@@ -7,13 +7,13 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.definition.CodeWriterAgent
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.concept.status.TaskStatus
-import link.socket.ampere.agents.domain.concept.task.Task
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
-import link.socket.ampere.agents.domain.config.AgentConfiguration
-import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.config.AgentActionAutonomy
+import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.definition.CodeAgent
+import link.socket.ampere.agents.definition.code.CodeState
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.status.TaskStatus
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.results.ExecutionResult
@@ -62,8 +62,8 @@ class CognitiveCycleDemo {
             )
 
             // Create the CodeWriterAgent
-            val agent = CodeWriterAgent(
-                initialState = AgentState(),
+            val agent = CodeAgent(
+                initialState = CodeState.blank,
                 agentConfiguration = agentConfig,
                 toolWriteCodeFile = mockWriteCodeFile,
                 coroutineScope = this,
@@ -77,7 +77,8 @@ class CognitiveCycleDemo {
             val task = Task.CodeChange(
                 id = "demo-task-001",
                 status = TaskStatus.Pending,
-                description = "Create a simple User data class with fields: name (String), email (String), and age (Int)",
+                description = "Create a simple User data class with fields: " +
+                    "name (String), email (String), and age (Int)",
             )
 
             println("Task: ${task.description}")
