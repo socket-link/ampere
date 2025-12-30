@@ -70,10 +70,12 @@ fun main() = runBlocking {
 
 /**
  * Initialize terminal for animation rendering.
+ * - Enter alternate screen buffer
  * - Hide cursor for smooth animations
  * - Clear screen
  */
 private fun initializeTerminal() {
+    print("\u001B[?1049h")  // Enter alternate screen buffer
     print("\u001B[?25l")    // Hide cursor
     print("\u001B[2J")      // Clear screen
     print("\u001B[H")       // Move cursor to home
@@ -84,9 +86,10 @@ private fun initializeTerminal() {
  * Restore terminal to normal state.
  */
 private fun restoreTerminal() {
-    print("\u001B[?25h")     // Show cursor
     print("\u001B[2J")       // Clear screen
     print("\u001B[H")        // Move cursor to home
+    print("\u001B[?25h")     // Show cursor
+    print("\u001B[?1049l")   // Exit alternate screen buffer
     System.out.flush()
 }
 
