@@ -39,21 +39,21 @@ class StatusBar(private val terminal: Terminal) {
      * @param width Total width available
      * @param shortcuts List of keyboard shortcuts to display
      * @param status Current system status
-     * @param expandedEvent Currently expanded event index (null if none)
+     * @param focusedAgent Currently focused agent index (null if none)
      * @return Formatted status bar string
      */
     fun render(
         width: Int,
         shortcuts: List<Shortcut>,
         status: SystemStatus,
-        expandedEvent: Int? = null
+        focusedAgent: Int? = null
     ): String {
         val shortcutsStr = renderShortcuts(shortcuts)
         val statusStr = renderStatus(status)
 
-        // If an event is expanded, show hint
-        val expandHint = if (expandedEvent != null) {
-            terminal.render(dim(" [ESC] collapse"))
+        // If an agent is focused, show hint to return
+        val focusHint = if (focusedAgent != null) {
+            terminal.render(dim(" [ESC/d] return"))
         } else {
             ""
         }
@@ -61,11 +61,11 @@ class StatusBar(private val terminal: Terminal) {
         // Calculate padding between shortcuts and status
         val shortcutsVisible = shortcutsStr.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
         val statusVisible = statusStr.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
-        val hintVisible = expandHint.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
+        val hintVisible = focusHint.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
 
         val padding = (width - shortcutsVisible - statusVisible - hintVisible).coerceAtLeast(1)
 
-        return "$shortcutsStr$expandHint${" ".repeat(padding)}$statusStr"
+        return "$shortcutsStr$focusHint${" ".repeat(padding)}$statusStr"
     }
 
     private fun renderShortcuts(shortcuts: List<Shortcut>): String {
@@ -107,6 +107,7 @@ class StatusBar(private val terminal: Terminal) {
             Shortcut('d', "dashboard", activeMode == "dashboard"),
             Shortcut('e', "events", activeMode == "events"),
             Shortcut('m', "memory", activeMode == "memory"),
+            Shortcut('1', "agent", activeMode == "agent_focus"),
             Shortcut('v', "verbose"),
             Shortcut('h', "help"),
             Shortcut('q', "quit")

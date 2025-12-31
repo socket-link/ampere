@@ -64,23 +64,35 @@ class RichEventPane(
         val lines = mutableListOf<String>()
 
         // Header
-        lines.add(terminal.render(bold(TextColors.cyan("EVENT STREAM"))))
+        val headerText = if (verboseMode) "EVENT STREAM (verbose)" else "EVENT STREAM"
+        lines.add(terminal.render(bold(TextColors.cyan(headerText))))
         lines.add("")
 
-        if (events.isEmpty()) {
+        // Filter events based on verbose mode
+        val visibleEvents = if (verboseMode) {
+            events
+        } else {
+            events.filter { it.significance != EventSignificance.ROUTINE }
+        }
+
+        if (visibleEvents.isEmpty()) {
             lines.add(terminal.render(dim("No events yet")))
             lines.add("")
             lines.add(terminal.render(dim("Events will appear")))
             lines.add(terminal.render(dim("as the agent works")))
+            if (!verboseMode && events.isNotEmpty()) {
+                lines.add("")
+                lines.add(terminal.render(dim("Press 'v' for verbose")))
+            }
         } else {
-            val expanded = expandedIndex?.let { idx -> events.find { it.index == idx } }
+            val expanded = expandedIndex?.let { idx -> visibleEvents.find { it.index == idx } }
 
             if (expanded != null) {
                 // Show expanded event details
                 lines.addAll(renderExpandedEvent(expanded, width))
             } else {
                 // Show event list
-                events.forEach { event ->
+                visibleEvents.forEach { event ->
                     lines.addAll(renderEventSummary(event, width))
                     if (lines.size >= height - 2) return@forEach
                 }

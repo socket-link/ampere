@@ -11,7 +11,7 @@ import org.jline.utils.NonBlockingReader
  *
  * Simplified input handler focused on demo navigation:
  * - Mode switching (d/e/m)
- * - Event expansion (1-9)
+ * - Agent focus (1-9)
  * - Verbose toggle (v)
  * - Help overlay (h/?)
  * - Exit (q/Ctrl+C)
@@ -31,7 +31,7 @@ class DemoInputHandler(
      */
     data class DemoViewConfig(
         val mode: DemoMode = DemoMode.EVENTS,
-        val expandedEventIndex: Int? = null,
+        val focusedAgentIndex: Int? = null,
         val verboseMode: Boolean = false,
         val showHelp: Boolean = false
     )
@@ -42,7 +42,8 @@ class DemoInputHandler(
     enum class DemoMode {
         DASHBOARD,
         EVENTS,
-        MEMORY
+        MEMORY,
+        AGENT_FOCUS
     }
 
     /**
@@ -83,7 +84,9 @@ class DemoInputHandler(
         if (key.code == 27) {
             return when {
                 current.showHelp -> KeyResult.ConfigChange(current.copy(showHelp = false))
-                current.expandedEventIndex != null -> KeyResult.ConfigChange(current.copy(expandedEventIndex = null))
+                current.mode == DemoMode.AGENT_FOCUS -> KeyResult.ConfigChange(
+                    current.copy(mode = DemoMode.DASHBOARD, focusedAgentIndex = null)
+                )
                 else -> KeyResult.NoChange
             }
         }
@@ -95,17 +98,17 @@ class DemoInputHandler(
 
         // Normal key handling
         return when (key.lowercaseChar()) {
-            'd' -> KeyResult.ConfigChange(current.copy(mode = DemoMode.DASHBOARD, showHelp = false))
-            'e' -> KeyResult.ConfigChange(current.copy(mode = DemoMode.EVENTS, showHelp = false))
-            'm' -> KeyResult.ConfigChange(current.copy(mode = DemoMode.MEMORY, showHelp = false))
+            'd' -> KeyResult.ConfigChange(current.copy(mode = DemoMode.DASHBOARD, focusedAgentIndex = null, showHelp = false))
+            'e' -> KeyResult.ConfigChange(current.copy(mode = DemoMode.EVENTS, focusedAgentIndex = null, showHelp = false))
+            'm' -> KeyResult.ConfigChange(current.copy(mode = DemoMode.MEMORY, focusedAgentIndex = null, showHelp = false))
             'v' -> KeyResult.ConfigChange(current.copy(verboseMode = !current.verboseMode))
             'h', '?' -> KeyResult.ConfigChange(current.copy(showHelp = true))
             'q' -> KeyResult.Exit
 
-            // Number keys for event expansion
+            // Number keys for agent focus mode
             in '1'..'9' -> {
                 val index = key - '0'
-                KeyResult.ConfigChange(current.copy(expandedEventIndex = index))
+                KeyResult.ConfigChange(current.copy(mode = DemoMode.AGENT_FOCUS, focusedAgentIndex = index))
             }
 
             else -> KeyResult.NoChange

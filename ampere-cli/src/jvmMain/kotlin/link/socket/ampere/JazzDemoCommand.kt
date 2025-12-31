@@ -1,6 +1,10 @@
 package link.socket.ampere
 
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.mordant.rendering.TextColors
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
+import com.github.ajalt.mordant.terminal.Terminal
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -12,13 +16,15 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.definition.CodeWriterAgent
-import link.socket.ampere.agents.domain.concept.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.config.AgentActionAutonomy
-import link.socket.ampere.agents.domain.config.AgentConfiguration
+import link.socket.ampere.agents.config.AgentActionAutonomy
+import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.definition.CodeAgent
+import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.TicketEvent
-import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.status.TaskStatus
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.tickets.TicketBuilder
 import link.socket.ampere.agents.events.tickets.TicketPriority
@@ -27,33 +33,35 @@ import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
-import link.socket.ampere.cli.animation.AnimationTerminal
 import link.socket.ampere.cli.layout.AgentMemoryPane
 import link.socket.ampere.cli.layout.DemoInputHandler
 import link.socket.ampere.cli.layout.JazzProgressPane
 import link.socket.ampere.cli.layout.RichEventPane
 import link.socket.ampere.cli.layout.StatusBar
 import link.socket.ampere.cli.layout.ThreeColumnLayout
+import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.WatchPresenter
+import link.socket.ampere.cli.watch.presentation.WatchViewState
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
+import link.socket.ampere.repl.TerminalFactory
 
 /**
  * Jazz Test Demo with 3-column interactive visualization.
  *
  * This demo runs the Jazz Test (autonomous agent writing Fibonacci code)
  * with a 3-column layout showing:
- * - Left pane (30%): Event stream with expandable details
+ * - Left pane (30%): Event stream
  * - Middle pane (50%): Cognitive cycle progress
  * - Right pane (20%): Agent status and memory stats
  *
  * Keyboard controls:
  * - d/e/m: Switch view modes (dashboard/events/memory)
- * - 1-9: Expand event details
- * - ESC: Collapse expanded event
- * - v: Toggle verbose mode
+ * - 1-9: Focus on agent (detailed view)
+ * - ESC: Return from agent focus
+ * - v: Toggle verbose mode (show/hide routine events)
  * - h/?: Show help
  * - q/Ctrl+C: Exit
  *
@@ -71,16 +79,16 @@ class JazzDemoCommand(
         an agent write a Fibonacci function in Kotlin. This command
         shows the execution with a 3-column layout:
 
-        Left pane:   Event stream (expandable with 1-9 keys)
+        Left pane:   Event stream (filtered by significance)
         Middle pane: Cognitive cycle progress (PERCEIVE → PLAN → EXECUTE → LEARN)
         Right pane:  Agent status and memory statistics
 
         Keyboard controls:
-          d/e/m   - Switch view modes
-          1-9     - Expand event details
-          ESC     - Collapse expanded event
-          v       - Toggle verbose mode
-          h/?     - Show help
+          d/e/m    - Switch view modes
+          1-9      - Focus on agent (detailed view)
+          ESC      - Return from agent focus
+          v        - Toggle verbose mode (show/hide routine events)
+          h/?      - Show help
           q/Ctrl+C - Exit
 
         The agent autonomously:
@@ -98,8 +106,7 @@ class JazzDemoCommand(
         val context = contextProvider()
         val agentScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-        val animTerminal = AnimationTerminal(useAlternateBuffer = true)
-        val terminal = animTerminal.terminal
+        val terminal = TerminalFactory.createTerminal()
 
         // Create 3-column layout and panes
         val layout = ThreeColumnLayout(terminal)
@@ -123,7 +130,7 @@ class JazzDemoCommand(
 
         try {
             // Initialize terminal and start services
-            animTerminal.initialize()
+            initializeTerminal()
             context.start()
             presenter.start()
 
@@ -142,8 +149,7 @@ class JazzDemoCommand(
                             }
                             is DemoInputHandler.KeyResult.ConfigChange -> {
                                 viewConfig = result.newConfig
-                                // Update event pane expansion
-                                eventPane.expandedIndex = viewConfig.expandedEventIndex
+                                // Update event pane verbose mode
                                 eventPane.verboseMode = viewConfig.verboseMode
                             }
                             is DemoInputHandler.KeyResult.NoChange -> {}
@@ -169,17 +175,28 @@ class JazzDemoCommand(
                         DemoInputHandler.DemoMode.DASHBOARD -> "dashboard"
                         DemoInputHandler.DemoMode.EVENTS -> "events"
                         DemoInputHandler.DemoMode.MEMORY -> "memory"
+                        DemoInputHandler.DemoMode.AGENT_FOCUS -> "agent_focus"
                     }
                     val shortcuts = StatusBar.defaultShortcuts(activeMode)
                     val statusBarStr = statusBar.render(
                         width = terminal.info.width,
                         shortcuts = shortcuts,
                         status = systemStatus,
-                        expandedEvent = viewConfig.expandedEventIndex
+                        focusedAgent = viewConfig.focusedAgentIndex
                     )
 
-                    // Render the 3-column layout
-                    val output = layout.render(eventPane, jazzPane, memoryPane, statusBarStr)
+                    // Render based on mode
+                    val output = when (viewConfig.mode) {
+                        DemoInputHandler.DemoMode.AGENT_FOCUS -> {
+                            renderAgentFocusView(
+                                terminal, memoryState, watchState, jazzPane, statusBarStr
+                            )
+                        }
+                        else -> {
+                            // Render the 3-column layout
+                            layout.render(eventPane, jazzPane, memoryPane, statusBarStr)
+                        }
+                    }
                     print(output)
                     System.out.flush()
 
@@ -210,9 +227,25 @@ class JazzDemoCommand(
             presenter.stop()
             agentScope.cancel()
             context.close()
-            animTerminal.restore()
+            restoreTerminal()
             println("\nJazz Demo completed")
         }
+    }
+
+    private fun initializeTerminal() {
+        print("\u001B[?1049h")  // Enter alternate screen buffer
+        print("\u001B[?25l")    // Hide cursor
+        print("\u001B[2J")      // Clear screen
+        print("\u001B[H")       // Move cursor to home
+        System.out.flush()
+    }
+
+    private fun restoreTerminal() {
+        print("\u001B[2J")       // Clear screen
+        print("\u001B[H")        // Move cursor to home
+        print("\u001B[?25h")     // Show cursor
+        print("\u001B[?1049l")   // Exit alternate screen buffer
+        System.out.flush()
     }
 
     /**
@@ -275,9 +308,9 @@ class JazzDemoCommand(
             )
         )
 
-        // Create CodeWriterAgent
-        val agent = CodeWriterAgent(
-            initialState = AgentState(),
+        // Create CodeAgent
+        val agent = CodeAgent(
+            initialState = CodeState.blank,
             agentConfiguration = agentConfig,
             toolWriteCodeFile = writeCodeTool,
             coroutineScope = agentScope,
@@ -360,7 +393,7 @@ class JazzDemoCommand(
     }
 
     private suspend fun handleTicketAssignment(
-        agent: CodeWriterAgent,
+        agent: CodeAgent,
         ticketId: String,
         context: AmpereContext,
         jazzPane: JazzProgressPane
@@ -372,9 +405,9 @@ class JazzDemoCommand(
                 return
             }
 
-            val task = link.socket.ampere.agents.domain.concept.task.Task.CodeChange(
+            val task = Task.CodeChange(
                 id = "task-$ticketId",
-                status = link.socket.ampere.agents.domain.concept.status.TaskStatus.Pending,
+                status = TaskStatus.Pending,
                 description = ticket.description
             )
 
@@ -423,6 +456,105 @@ class JazzDemoCommand(
 
         } catch (e: Exception) {
             jazzPane.setFailed(e.message ?: "Unknown error")
+        }
+    }
+
+    /**
+     * Render a full-screen agent focus view.
+     */
+    private fun renderAgentFocusView(
+        terminal: Terminal,
+        memoryState: AgentMemoryPane.AgentMemoryState,
+        watchState: WatchViewState,
+        jazzPane: JazzProgressPane,
+        statusBarStr: String
+    ): String {
+        return buildString {
+            // Clear screen and move cursor to home
+            append("\u001B[2J")
+            append("\u001B[H")
+
+            val width = terminal.info.width
+            val height = terminal.info.height
+
+            // Header
+            append(terminal.render(bold(TextColors.cyan("AGENT FOCUS: ${memoryState.agentName}"))))
+            append("\n\n")
+
+            // Agent state section
+            append(terminal.render(bold("Current State")))
+            append("\n")
+
+            val stateColor = when (memoryState.agentState) {
+                AgentMemoryPane.AgentDisplayState.WORKING -> TextColors.green
+                AgentMemoryPane.AgentDisplayState.THINKING -> TextColors.yellow
+                AgentMemoryPane.AgentDisplayState.IDLE -> TextColors.gray
+                AgentMemoryPane.AgentDisplayState.WAITING -> TextColors.yellow
+                AgentMemoryPane.AgentDisplayState.IN_MEETING -> TextColors.blue
+            }
+
+            append("  Status: ")
+            append(terminal.render(stateColor(memoryState.agentState.name.lowercase())))
+            append("\n")
+
+            memoryState.currentPhase?.let { phase ->
+                append("  Phase: ")
+                append(terminal.render(TextColors.cyan(phase)))
+                append("\n")
+            }
+            append("\n")
+
+            // Memory statistics
+            append(terminal.render(bold("Memory Operations")))
+            append("\n")
+            append("  Items recalled: ")
+            append(terminal.render(TextColors.cyan(memoryState.itemsRecalled.toString())))
+            append("\n")
+            append("  Items stored: ")
+            append(terminal.render(TextColors.green(memoryState.itemsStored.toString())))
+            append("\n\n")
+
+            // Progress details from jazz pane
+            append(terminal.render(bold("Cognitive Cycle Progress")))
+            append("\n")
+            val progress = jazzPane.render(width - 4, 12)
+            progress.forEach { line ->
+                append("  $line\n")
+            }
+            append("\n")
+
+            // Recent events from this agent
+            append(terminal.render(bold("Recent Activity")))
+            append("\n")
+            val agentEvents = watchState.recentSignificantEvents
+                .filter { it.sourceAgentName == memoryState.agentName }
+                .take(8)
+
+            if (agentEvents.isEmpty()) {
+                append(terminal.render(dim("  No recent events")))
+                append("\n")
+            } else {
+                agentEvents.forEach { event ->
+                    val eventColor = when (event.significance) {
+                        EventSignificance.CRITICAL -> TextColors.red
+                        EventSignificance.SIGNIFICANT -> TextColors.white
+                        EventSignificance.ROUTINE -> TextColors.gray
+                    }
+                    append("  • ")
+                    append(terminal.render(eventColor(event.summaryText.take(width - 6))))
+                    append("\n")
+                }
+            }
+
+            // Pad to fill screen
+            val linesUsed = toString().count { it == '\n' }
+            repeat((height - linesUsed - 2).coerceAtLeast(0)) {
+                append("\n")
+            }
+
+            // Status bar at bottom
+            append("\u001B[${height};1H")
+            append(statusBarStr)
         }
     }
 
