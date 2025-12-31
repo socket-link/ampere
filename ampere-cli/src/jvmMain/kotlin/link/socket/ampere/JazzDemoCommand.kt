@@ -253,7 +253,7 @@ class JazzDemoCommand(
      */
     private fun updateMemoryState(
         current: AgentMemoryPane.AgentMemoryState,
-        watchState: link.socket.ampere.cli.watch.presentation.WatchViewState,
+        watchState: WatchViewState,
         jazzPane: JazzProgressPane
     ): AgentMemoryPane.AgentMemoryState {
         // Count memory events from summaries

@@ -19,7 +19,7 @@ import org.jline.utils.NonBlockingReader
 class DemoInputHandler(
     private val terminal: Terminal
 ) {
-    private val jlineTerminal = org.jline.terminal.TerminalBuilder.terminal()
+    private val jlineTerminal = TerminalBuilder.terminal()
     private val reader: NonBlockingReader = jlineTerminal.reader()
 
     init {
