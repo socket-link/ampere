@@ -86,6 +86,9 @@ fun main(args: Array<String>) {
                 IssuesCommand(),
                 RespondCommand(),
                 TestCommand(),
+                DemoCommand().subcommands(
+                    JazzDemoCommand { context }
+                ),
             )
             .main(effectiveArgs)
     } finally {

@@ -1,6 +1,7 @@
 package link.socket.ampere.cli.coordination
 
 import com.github.ajalt.mordant.rendering.TextColors
+import link.socket.ampere.cli.layout.CharBuffer
 
 /**
  * Renders topology layouts as ASCII art network graphs.
@@ -131,71 +132,3 @@ class TopologyRenderer {
     }
 }
 
-/**
- * A 2D character buffer for composing ASCII art.
- *
- * This buffer allows writing text at specific coordinates and
- * handles overlapping writes by keeping the last written character.
- *
- * @property width Width of the buffer in characters
- * @property height Height of the buffer in lines
- */
-class CharBuffer(
-    private val width: Int,
-    private val height: Int,
-) {
-    private data class Cell(
-        val char: Char,
-        val color: TextColors? = null,
-    )
-
-    private val buffer: Array<Array<Cell?>> = Array(height) { arrayOfNulls(width) }
-
-    /**
-     * Write text at the specified position.
-     *
-     * @param x Horizontal position (column)
-     * @param y Vertical position (row)
-     * @param text Text to write
-     * @param color Optional color for the text
-     */
-    fun write(x: Int, y: Int, text: String, color: TextColors? = null) {
-        if (y < 0 || y >= height) return
-
-        text.forEachIndexed { index, char ->
-            val writeX = x + index
-            if (writeX >= 0 && writeX < width) {
-                buffer[y][writeX] = Cell(char, color)
-            }
-        }
-    }
-
-    /**
-     * Convert the buffer to a string representation.
-     *
-     * @return Multi-line string with the buffer contents
-     */
-    override fun toString(): String {
-        return buffer.joinToString("\n") { row ->
-            buildString {
-                var currentColor: TextColors? = null
-
-                row.forEach { cell ->
-                    if (cell != null) {
-                        // Apply color if it changed
-                        if (cell.color != currentColor) {
-                            currentColor = cell.color
-                            if (cell.color != null) {
-                                // Note: In real usage, you'd apply ANSI color codes here
-                                // For now, just append the character
-                            }
-                        }
-                        append(cell.char)
-                    } else {
-                        append(' ')
-                    }
-                }
-            }.trimEnd()
-        }.trimEnd()
-    }
-}
