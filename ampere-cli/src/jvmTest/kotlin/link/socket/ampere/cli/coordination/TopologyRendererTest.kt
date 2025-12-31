@@ -2,6 +2,7 @@ package link.socket.ampere.cli.coordination
 
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import link.socket.ampere.cli.coordination.CharBuffer
 import link.socket.ampere.coordination.InteractionType
 
 class TopologyRendererTest {
