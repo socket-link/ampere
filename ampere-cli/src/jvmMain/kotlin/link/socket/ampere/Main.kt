@@ -73,7 +73,7 @@ fun main(args: Array<String>) {
             else -> args
         }
 
-        // Run the CLI with injected dependencies
+        // Run the CLI with injected dependenciesIt
         AmpereCommand()
             .subcommands(
                 StartCommand { context },

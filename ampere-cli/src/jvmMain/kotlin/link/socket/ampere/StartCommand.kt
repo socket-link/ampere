@@ -173,15 +173,36 @@ class StartCommand(
                         // Goal mode: use demo input handler
                         val key = demoInputHandler.readKey()
                         if (key != null) {
-                            when (val result = demoInputHandler.processKey(key, demoConfig)) {
-                                is DemoInputHandler.KeyResult.Exit -> {
-                                    throw CancellationException("User requested exit")
+                            // If showing command result, any key clears it
+                            if (lastCommandResult != null) {
+                                lastCommandResult = null
+                                lastRenderedOutput = null
+                            } else {
+                                when (val result = demoInputHandler.processKey(key, demoConfig)) {
+                                    is DemoInputHandler.KeyResult.Exit -> {
+                                        throw CancellationException("User requested exit")
+                                    }
+                                    is DemoInputHandler.KeyResult.ConfigChange -> {
+                                        demoConfig = result.newConfig
+                                        eventPane.verboseMode = demoConfig.verboseMode
+                                        lastRenderedOutput = null  // Force re-render
+                                    }
+                                    is DemoInputHandler.KeyResult.ExecuteCommand -> {
+                                        demoConfig = result.newConfig
+                                        // Execute the command
+                                        val cmdResult = commandExecutor.execute(result.command)
+                                        when (cmdResult) {
+                                            is CommandResult.Quit -> {
+                                                throw CancellationException("User requested quit")
+                                            }
+                                            else -> {
+                                                lastCommandResult = cmdResult
+                                                lastRenderedOutput = null  // Force re-render
+                                            }
+                                        }
+                                    }
+                                    is DemoInputHandler.KeyResult.NoChange -> {}
                                 }
-                                is DemoInputHandler.KeyResult.ConfigChange -> {
-                                    demoConfig = result.newConfig
-                                    eventPane.verboseMode = demoConfig.verboseMode
-                                }
-                                is DemoInputHandler.KeyResult.NoChange -> {}
                             }
                         }
                     } else {
@@ -251,50 +272,60 @@ class StartCommand(
             val renderJob = launch(Dispatchers.IO) {
                 while (isActive) {
                     val output = if (isGoalMode) {
-                        // Goal mode: render triple-pane layout
-                        val watchState = presenter.getViewState()
-                        eventPane.updateEvents(watchState.recentSignificantEvents)
+                        // Goal mode: check for overlays first
+                        val commandResult = lastCommandResult
+                        if (commandResult != null) {
+                            // Show command result overlay
+                            renderCommandResult(commandResult, terminal)
+                        } else if (demoConfig.showHelp) {
+                            // Show help overlay
+                            helpRenderer.render()
+                        } else {
+                            // Normal goal mode rendering
+                            val watchState = presenter.getViewState()
+                            eventPane.updateEvents(watchState.recentSignificantEvents)
 
-                        // Update memory state
-                        memoryState = updateMemoryState(memoryState, watchState, jazzPane)
-                        memoryPane.updateState(memoryState)
+                            // Update memory state
+                            memoryState = updateMemoryState(memoryState, watchState, jazzPane)
+                            memoryPane.updateState(memoryState)
 
-                        // Update event pane expanded index
-                        demoConfig.expandedEventIndex?.let { eventPane.expandEvent(it) }
-                            ?: eventPane.collapseEvent()
+                            // Update event pane expanded index
+                            demoConfig.expandedEventIndex?.let { eventPane.expandEvent(it) }
+                                ?: eventPane.collapseEvent()
 
-                        // Update system status based on phase
-                        systemStatus = when (jazzPane.currentPhase) {
-                            JazzProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.IDLE
-                            JazzProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
-                            else -> StatusBar.SystemStatus.WORKING
-                        }
-
-                        // Render status bar
-                        val activeMode = when (demoConfig.mode) {
-                            DemoInputHandler.DemoMode.DASHBOARD -> "dashboard"
-                            DemoInputHandler.DemoMode.EVENTS -> "events"
-                            DemoInputHandler.DemoMode.MEMORY -> "memory"
-                            DemoInputHandler.DemoMode.AGENT_FOCUS -> "agent_focus"
-                        }
-                        val shortcuts = StatusBar.defaultShortcuts(activeMode)
-                        val statusBarStr = statusBar.render(
-                            width = terminal.info.width,
-                            shortcuts = shortcuts,
-                            status = systemStatus,
-                            focusedAgent = demoConfig.focusedAgentIndex,
-                            inputHint = demoConfig.inputHint
-                        )
-
-                        // Render based on mode
-                        when (demoConfig.mode) {
-                            DemoInputHandler.DemoMode.AGENT_FOCUS -> {
-                                renderAgentFocusView(
-                                    terminal, memoryState, watchState, jazzPane, statusBarStr
-                                )
+                            // Update system status based on phase
+                            systemStatus = when (jazzPane.currentPhase) {
+                                JazzProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.IDLE
+                                JazzProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
+                                else -> StatusBar.SystemStatus.WORKING
                             }
-                            else -> {
-                                layout.render(eventPane, jazzPane, memoryPane, statusBarStr)
+
+                            // Render status bar
+                            val activeMode = when (demoConfig.mode) {
+                                DemoInputHandler.DemoMode.DASHBOARD -> "dashboard"
+                                DemoInputHandler.DemoMode.EVENTS -> "events"
+                                DemoInputHandler.DemoMode.MEMORY -> "memory"
+                                DemoInputHandler.DemoMode.AGENT_FOCUS -> "agent_focus"
+                            }
+                            val shortcuts = StatusBar.defaultShortcuts(activeMode)
+                            val statusBarStr = statusBar.render(
+                                width = terminal.info.width,
+                                shortcuts = shortcuts,
+                                status = systemStatus,
+                                focusedAgent = demoConfig.focusedAgentIndex,
+                                inputHint = demoConfig.inputHint
+                            )
+
+                            // Render based on mode
+                            when (demoConfig.mode) {
+                                DemoInputHandler.DemoMode.AGENT_FOCUS -> {
+                                    renderAgentFocusView(
+                                        terminal, memoryState, watchState, jazzPane, statusBarStr
+                                    )
+                                }
+                                else -> {
+                                    layout.render(eventPane, jazzPane, memoryPane, statusBarStr)
+                                }
                             }
                         }
                     } else {

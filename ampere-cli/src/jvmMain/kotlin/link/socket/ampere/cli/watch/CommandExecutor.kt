@@ -1,7 +1,13 @@
 package link.socket.ampere.cli.watch
 
+import link.socket.ampere.agents.execution.tools.issue.BatchIssueCreateRequest
 import link.socket.ampere.cli.goal.GoalHandler
+import link.socket.ampere.cli.help.CommandRegistry
 import link.socket.ampere.cli.watch.presentation.WatchPresenter
+import link.socket.ampere.data.DEFAULT_JSON
+import link.socket.ampere.integrations.issues.BatchIssueCreator
+import link.socket.ampere.integrations.issues.github.GitHubCliProvider
+import java.io.File
 
 /**
  * Executes commands entered in command mode.
@@ -35,6 +41,7 @@ class CommandExecutor(
             "help", "h", "?" -> executeHelp()
             "agents" -> executeAgents()
             "goal" -> executeGoal(arg)
+            "issues" -> executeIssues(arg)
             "ticket" -> executeTicket(arg)
             "thread" -> executeThread(arg)
             "quit", "q", "exit" -> CommandResult.Quit
@@ -46,12 +53,10 @@ class CommandExecutor(
         val helpText = buildString {
             appendLine("Available commands:")
             appendLine()
-            appendLine("  :help, :h, :?       Show this help")
-            appendLine("  :agents             List all active agents")
-            appendLine("  :goal <description> Set an autonomous goal for the agent")
-            appendLine("  :ticket <id>        Show ticket details (coming soon)")
-            appendLine("  :thread <id>        Show thread details (coming soon)")
-            appendLine("  :quit, :q, :exit    Exit dashboard")
+            CommandRegistry.commands.forEach { cmd ->
+                val formatted = cmd.formatForHelp().padEnd(26)
+                appendLine("  $formatted ${cmd.description}")
+            }
             appendLine()
             appendLine("Press ESC to cancel command mode")
         }
@@ -87,6 +92,131 @@ class CommandExecutor(
             }
         } catch (e: Exception) {
             CommandResult.Error("Error activating goal: ${e.message}")
+        }
+    }
+
+    private suspend fun executeIssues(arg: String?): CommandResult {
+        if (arg.isNullOrBlank()) {
+            return CommandResult.Error(
+                "Usage: :issues create <filename>\n\n" +
+                "Creates GitHub issues from a JSON file in .ampere/issues/\n\n" +
+                "Example: :issues create cli-epic.json"
+            )
+        }
+
+        val parts = arg.trim().split(" ", limit = 2)
+        val subcommand = parts[0].lowercase()
+        val filename = parts.getOrNull(1)
+
+        return when (subcommand) {
+            "create" -> executeIssuesCreate(filename)
+            else -> CommandResult.Error(
+                "Unknown issues subcommand: $subcommand\n\n" +
+                "Available subcommands:\n" +
+                "  create <filename>  Create issues from JSON file"
+            )
+        }
+    }
+
+    private suspend fun executeIssuesCreate(filename: String?): CommandResult {
+        if (filename.isNullOrBlank()) {
+            return CommandResult.Error(
+                "Usage: :issues create <filename>\n\n" +
+                "Example: :issues create cli-epic.json\n\n" +
+                "The file should be in .ampere/issues/"
+            )
+        }
+
+        // Resolve file path from .ampere/issues/
+        val issuesDir = File(".ampere/issues")
+        val file = File(issuesDir, filename)
+
+        if (!file.exists()) {
+            // List available files
+            val availableFiles = if (issuesDir.exists()) {
+                issuesDir.listFiles { f -> f.extension == "json" }
+                    ?.map { it.name }
+                    ?.sorted()
+                    ?: emptyList()
+            } else {
+                emptyList()
+            }
+
+            return CommandResult.Error(buildString {
+                appendLine("File not found: ${file.path}")
+                appendLine()
+                if (availableFiles.isNotEmpty()) {
+                    appendLine("Available files in .ampere/issues/:")
+                    availableFiles.forEach { appendLine("  $it") }
+                } else {
+                    appendLine("No JSON files found in .ampere/issues/")
+                    appendLine("Create issue files in .ampere/issues/ first.")
+                }
+            })
+        }
+
+        // Parse JSON
+        val json = try {
+            file.readText()
+        } catch (e: Exception) {
+            return CommandResult.Error("Error reading file: ${e.message}")
+        }
+
+        val request = try {
+            DEFAULT_JSON.decodeFromString<BatchIssueCreateRequest>(json)
+        } catch (e: Exception) {
+            return CommandResult.Error("Error parsing JSON: ${e.message}")
+        }
+
+        // Validate GitHub CLI connection
+        val provider = GitHubCliProvider()
+        val connectionResult = provider.validateConnection()
+        if (connectionResult.isFailure) {
+            return CommandResult.Error(buildString {
+                appendLine("GitHub CLI not authenticated")
+                appendLine()
+                appendLine("Run: gh auth login")
+                appendLine()
+                appendLine("Error: ${connectionResult.exceptionOrNull()?.message}")
+            })
+        }
+
+        // Create issues
+        return try {
+            val batchCreator = BatchIssueCreator(provider)
+            val response = batchCreator.createBatch(request)
+
+            if (response.success) {
+                CommandResult.Success(buildString {
+                    appendLine("Successfully created ${response.created.size} issues:")
+                    appendLine()
+                    response.created.forEach { created ->
+                        appendLine("  #${created.issueNumber}: ${created.url}")
+                    }
+                })
+            } else {
+                CommandResult.Success(buildString {
+                    appendLine("Partial success:")
+                    appendLine("  Created: ${response.created.size}")
+                    appendLine("  Failed: ${response.errors.size}")
+                    appendLine()
+                    if (response.created.isNotEmpty()) {
+                        appendLine("Successfully created:")
+                        response.created.forEach { created ->
+                            appendLine("  #${created.issueNumber}: ${created.url}")
+                        }
+                        appendLine()
+                    }
+                    if (response.errors.isNotEmpty()) {
+                        appendLine("Errors:")
+                        response.errors.forEach { error ->
+                            appendLine("  ${error.localId}: ${error.message}")
+                        }
+                    }
+                })
+            }
+        } catch (e: Exception) {
+            CommandResult.Error("Failed to create issues: ${e.message}")
         }
     }
 

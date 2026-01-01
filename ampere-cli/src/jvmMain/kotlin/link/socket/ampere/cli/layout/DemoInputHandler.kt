@@ -35,7 +35,8 @@ class DemoInputHandler(
     enum class InputMode {
         NORMAL,              // Waiting for first key
         AWAITING_AGENT,      // Pressed 'a', waiting for 1-9
-        AWAITING_EVENT       // Pressed 'e' in events mode, waiting for 1-9
+        AWAITING_EVENT,      // Pressed 'e' in events mode, waiting for 1-9
+        COMMAND              // In command mode, typing a command
     }
 
     /**
@@ -48,7 +49,8 @@ class DemoInputHandler(
         val verboseMode: Boolean = false,
         val showHelp: Boolean = false,
         val inputMode: InputMode = InputMode.NORMAL,
-        val inputHint: String? = null  // Shown in status bar
+        val inputHint: String? = null,  // Shown in status bar
+        val commandInput: String = ""   // Current command being typed
     )
 
     /**
@@ -66,6 +68,7 @@ class DemoInputHandler(
      */
     sealed class KeyResult {
         data class ConfigChange(val newConfig: DemoViewConfig) : KeyResult()
+        data class ExecuteCommand(val command: String, val newConfig: DemoViewConfig) : KeyResult()
         object Exit : KeyResult()
         object NoChange : KeyResult()
     }
@@ -98,7 +101,11 @@ class DemoInputHandler(
         // Handle ESC
         if (key.code == 27) {
             return when {
-                // Cancel pending input mode first
+                // Cancel command mode
+                current.inputMode == InputMode.COMMAND -> KeyResult.ConfigChange(
+                    current.copy(inputMode = InputMode.NORMAL, inputHint = null, commandInput = "")
+                )
+                // Cancel other pending input modes
                 current.inputMode != InputMode.NORMAL -> KeyResult.ConfigChange(
                     current.copy(inputMode = InputMode.NORMAL, inputHint = null)
                 )
@@ -120,6 +127,9 @@ class DemoInputHandler(
 
         // Handle pending input modes
         when (current.inputMode) {
+            InputMode.COMMAND -> {
+                return processCommandKey(key, current)
+            }
             InputMode.AWAITING_AGENT -> {
                 return when (key) {
                     in '1'..'9' -> {
@@ -165,10 +175,69 @@ class DemoInputHandler(
         }
     }
 
+    /**
+     * Process a key in command mode.
+     */
+    private fun processCommandKey(key: Char, current: DemoViewConfig): KeyResult {
+        return when {
+            // Enter: execute command
+            key == '\n' || key == '\r' -> {
+                if (current.commandInput.isNotEmpty()) {
+                    KeyResult.ExecuteCommand(
+                        command = current.commandInput,
+                        newConfig = current.copy(
+                            inputMode = InputMode.NORMAL,
+                            inputHint = null,
+                            commandInput = ""
+                        )
+                    )
+                } else {
+                    // Empty command - just exit command mode
+                    KeyResult.ConfigChange(
+                        current.copy(
+                            inputMode = InputMode.NORMAL,
+                            inputHint = null,
+                            commandInput = ""
+                        )
+                    )
+                }
+            }
+            // Backspace: delete last character
+            key.code == 127 || key.code == 8 -> {
+                KeyResult.ConfigChange(
+                    current.copy(
+                        commandInput = current.commandInput.dropLast(1),
+                        inputHint = ":${current.commandInput.dropLast(1)}"
+                    )
+                )
+            }
+            // Printable character: append to command
+            key.code >= 32 -> {
+                val newCommand = current.commandInput + key
+                KeyResult.ConfigChange(
+                    current.copy(
+                        commandInput = newCommand,
+                        inputHint = ":$newCommand"
+                    )
+                )
+            }
+            else -> KeyResult.NoChange
+        }
+    }
+
     private fun processNormalKey(key: Char, current: DemoViewConfig): KeyResult {
-        return when (key.lowercaseChar()) {
+        return when (key) {
+            // ':' enters command mode
+            ':' -> KeyResult.ConfigChange(
+                current.copy(
+                    inputMode = InputMode.COMMAND,
+                    inputHint = ":",
+                    commandInput = ""
+                )
+            )
+
             // 'a' enters agent selection mode
-            'a' -> KeyResult.ConfigChange(
+            'a', 'A' -> KeyResult.ConfigChange(
                 current.copy(
                     inputMode = InputMode.AWAITING_AGENT,
                     inputHint = "agent [1-9]"

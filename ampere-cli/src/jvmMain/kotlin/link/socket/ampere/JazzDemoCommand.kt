@@ -152,6 +152,10 @@ class JazzDemoCommand(
                                 // Update event pane verbose mode
                                 eventPane.verboseMode = viewConfig.verboseMode
                             }
+                            is DemoInputHandler.KeyResult.ExecuteCommand -> {
+                                // Commands not supported in jazz demo mode
+                                viewConfig = result.newConfig
+                            }
                             is DemoInputHandler.KeyResult.NoChange -> {}
                         }
                     }
