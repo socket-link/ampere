@@ -4,6 +4,7 @@ import com.github.ajalt.mordant.rendering.TextColors
 import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
+import link.socket.ampere.cli.help.CommandRegistry
 
 /**
  * Status bar component for the bottom of the demo layout.
@@ -118,15 +119,19 @@ class StatusBar(private val terminal: Terminal) {
     companion object {
         /**
          * Default shortcuts for the Jazz demo.
+         * Pulls from CommandRegistry for consistency.
          */
-        fun defaultShortcuts(activeMode: String? = null): List<Shortcut> = listOf(
-            Shortcut('a', "agent", activeMode == "agent_focus"),
-            Shortcut('d', "dashboard", activeMode == "dashboard"),
-            Shortcut('e', "events", activeMode == "events"),
-            Shortcut('m', "memory", activeMode == "memory"),
-            Shortcut('v', "verbose"),
-            Shortcut('h', "help"),
-            Shortcut('q', "quit")
-        )
+        fun defaultShortcuts(activeMode: String? = null): List<Shortcut> {
+            return CommandRegistry.statusBarShortcuts().map { def ->
+                val isActive = when (def.key) {
+                    'a' -> activeMode == "agent_focus"
+                    'd' -> activeMode == "dashboard"
+                    'e' -> activeMode == "events"
+                    'm' -> activeMode == "memory"
+                    else -> false
+                }
+                Shortcut(def.key, def.label, isActive)
+            }
+        }
     }
 }

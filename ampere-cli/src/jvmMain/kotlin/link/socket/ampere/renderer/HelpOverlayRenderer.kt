@@ -4,6 +4,7 @@ import com.github.ajalt.mordant.rendering.TextColors
 import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
+import link.socket.ampere.cli.help.CommandRegistry
 
 /**
  * Renders help overlay showing keyboard shortcuts and available commands.
@@ -90,28 +91,29 @@ class HelpOverlayRenderer(
                 append("\n")
             }
 
-            addSection("Viewing Modes", listOf(
-                "d" to "Dashboard - System vitals, agent status, recent events",
-                "e" to "Event Stream - Filtered stream of significant events",
-                "m" to "Memory Ops - Knowledge recall/storage patterns",
-                "1-9" to "Agent Focus - Detailed view of specific agent"
-            ))
+            // Viewing Modes section - from registry
+            val viewingModes = CommandRegistry.shortcutsByCategory(CommandRegistry.ShortcutCategory.VIEWING_MODES)
+                .map { it.formatKeyForHelp() to it.description }
+            addSection("Viewing Modes", viewingModes)
 
-            addSection("Options & Commands", listOf(
-                "v" to "Toggle verbose mode (show/hide routine events)",
-                ":" to "Command mode - Issue commands to the system",
-                "h  or  ?" to "Toggle this help screen",
-                "ESC" to "Close help / Cancel command mode",
-                "q  or  Ctrl+C" to "Exit AMPERE dashboard"
-            ))
+            // Options & Commands section - from registry + ESC hint
+            val options = CommandRegistry.shortcutsByCategory(CommandRegistry.ShortcutCategory.OPTIONS)
+                .filter { it.key != '1' } // Already in viewing modes
+                .map { it.formatKeyForHelp() to it.description }
+                .toMutableList()
+            options.add("ESC" to "Close help / Cancel command mode")
+            addSection("Options & Commands", options)
 
-            addSection("Command Mode", listOf(
-                ":help" to "Show available commands",
-                ":agents" to "List all active agents",
-                ":ticket <id>" to "Show ticket details",
-                ":thread <id>" to "Show conversation thread",
-                ":quit" to "Exit dashboard"
-            ))
+            // Command Mode section - from registry
+            val commands = CommandRegistry.commands.map { cmd ->
+                val keyPart = if (cmd.usage != null) {
+                    ":${cmd.name} ${cmd.usage}"
+                } else {
+                    ":${cmd.name}"
+                }
+                keyPart to cmd.description
+            }
+            addSection("Command Mode", commands)
 
             // Bottom border
             append("  ")
