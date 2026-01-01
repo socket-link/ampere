@@ -35,9 +35,22 @@ class AgentMemoryPane(
         val agentState: AgentDisplayState = AgentDisplayState.IDLE,
         val itemsRecalled: Int = 0,
         val itemsStored: Int = 0,
+        val totalMemoryItems: Int = 0,  // Total items in memory
+        val memoryCapacity: Int = 100,  // Max capacity for visualization
         val recentTags: List<String> = emptyList(),
-        val currentPhase: String? = null
+        val currentPhase: String? = null,
+        val recentActivity: List<MemoryActivity> = emptyList()  // Recent ops for sparkline
     )
+
+    /**
+     * Memory activity for sparkline visualization.
+     */
+    data class MemoryActivity(
+        val type: MemoryOpType,
+        val count: Int = 1
+    )
+
+    enum class MemoryOpType { RECALL, STORE }
 
     private var state = AgentMemoryState()
     private var frameCounter: Long = 0
@@ -70,29 +83,43 @@ class AgentMemoryPane(
         lines.add("$indicator ${terminal.render(stateColor(state.agentState.name.lowercase()))}")
         lines.add("")
 
-        // Current phase if active
-        val phase = state.currentPhase
-        if (phase != null) {
-            lines.add(terminal.render(dim("Phase:")))
-            lines.add(phase.take(width - 1))
-            lines.add("")
-        }
+        // Current phase (always 3 lines for stability)
+        lines.add(terminal.render(dim("Phase:")))
+        lines.add(state.currentPhase?.take(width - 1) ?: terminal.render(dim("...")))
+        lines.add("")
 
         // Memory section
         lines.add(terminal.render(bold("MEMORY")))
         lines.add("")
 
-        // Recalled/stored counts
-        val recalledStr = "${state.itemsRecalled} recalled"
-        val storedStr = "${state.itemsStored} stored"
-        lines.add(terminal.render(TextColors.cyan(recalledStr.take(width - 1))))
-        lines.add(terminal.render(TextColors.green(storedStr.take(width - 1))))
+        // Memory usage bar
+        val barWidth = (width - 2).coerceAtLeast(5)
+        val usagePercent = if (state.memoryCapacity > 0) {
+            (state.totalMemoryItems.toFloat() / state.memoryCapacity).coerceIn(0f, 1f)
+        } else 0f
+        lines.add(renderProgressBar(usagePercent, barWidth, "usage"))
         lines.add("")
+
+        // Recalled with mini bar
+        val recallBar = renderMiniBar(state.itemsRecalled, 10, barWidth - 10, TextColors.cyan)
+        lines.add("${terminal.render(TextColors.cyan("< ${state.itemsRecalled.toString().padStart(2)}"))} $recallBar")
+
+        // Stored with mini bar
+        val storeBar = renderMiniBar(state.itemsStored, 10, barWidth - 10, TextColors.green)
+        lines.add("${terminal.render(TextColors.green("> ${state.itemsStored.toString().padStart(2)}"))} $storeBar")
+        lines.add("")
+
+        // Activity sparkline
+        if (state.recentActivity.isNotEmpty()) {
+            lines.add(terminal.render(dim("Activity:")))
+            lines.add(renderSparkline(state.recentActivity, width - 1))
+            lines.add("")
+        }
 
         // Recent tags
         if (state.recentTags.isNotEmpty()) {
             lines.add(terminal.render(dim("Tags:")))
-            state.recentTags.take(5).forEach { tag ->
+            state.recentTags.take(3).forEach { tag ->
                 lines.add(" ${tag.take(width - 2)}")
             }
         }
@@ -103,6 +130,53 @@ class AgentMemoryPane(
         }
 
         return lines.take(height).map { it.fitToWidth(width) }
+    }
+
+    /**
+     * Render a progress bar with percentage.
+     */
+    private fun renderProgressBar(percent: Float, width: Int, label: String): String {
+        val barInnerWidth = (width - 7).coerceAtLeast(3) // Leave room for [, ], and percent
+        val filledWidth = (barInnerWidth * percent).toInt()
+        val emptyWidth = barInnerWidth - filledWidth
+
+        val filled = terminal.render(TextColors.blue("=".repeat(filledWidth)))
+        val empty = terminal.render(dim("-".repeat(emptyWidth)))
+        val pctStr = "${(percent * 100).toInt()}%".padStart(4)
+
+        return "[$filled$empty]$pctStr"
+    }
+
+    /**
+     * Render a mini horizontal bar.
+     */
+    private fun renderMiniBar(value: Int, maxValue: Int, width: Int, color: TextColors): String {
+        val barWidth = width.coerceAtLeast(3)
+        val percent = if (maxValue > 0) (value.toFloat() / maxValue).coerceIn(0f, 1f) else 0f
+        val filledWidth = (barWidth * percent).toInt()
+        val emptyWidth = barWidth - filledWidth
+
+        val filled = terminal.render(color("|".repeat(filledWidth)))
+        val empty = terminal.render(dim(".".repeat(emptyWidth)))
+
+        return "$filled$empty"
+    }
+
+    /**
+     * Render a sparkline showing recent memory activity.
+     */
+    private fun renderSparkline(activity: List<MemoryActivity>, width: Int): String {
+        val sparkChars = listOf(' ', '.', ':', '|')
+        val recentOps = activity.takeLast(width)
+
+        return recentOps.map { op ->
+            val level = op.count.coerceIn(0, 3)
+            val char = sparkChars[level]
+            when (op.type) {
+                MemoryOpType.RECALL -> terminal.render(TextColors.cyan(char.toString()))
+                MemoryOpType.STORE -> terminal.render(TextColors.green(char.toString()))
+            }
+        }.joinToString("")
     }
 
     private fun getStateIndicator(state: AgentDisplayState): String {

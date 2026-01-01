@@ -40,20 +40,36 @@ class StatusBar(private val terminal: Terminal) {
      * @param shortcuts List of keyboard shortcuts to display
      * @param status Current system status
      * @param focusedAgent Currently focused agent index (null if none)
+     * @param inputHint Pending input hint (e.g., "agent [1-9]")
      * @return Formatted status bar string
      */
     fun render(
         width: Int,
         shortcuts: List<Shortcut>,
         status: SystemStatus,
-        focusedAgent: Int? = null
+        focusedAgent: Int? = null,
+        inputHint: String? = null
     ): String {
+        // If there's a pending input hint, show it prominently
+        if (inputHint != null) {
+            val hintStr = terminal.render(bold(TextColors.yellow(": $inputHint")))
+            val escHint = terminal.render(dim(" [ESC cancel]"))
+            val statusStr = renderStatus(status)
+
+            val hintVisible = hintStr.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
+            val escVisible = escHint.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
+            val statusVisible = statusStr.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
+
+            val padding = (width - hintVisible - escVisible - statusVisible).coerceAtLeast(1)
+            return "$hintStr$escHint${" ".repeat(padding)}$statusStr"
+        }
+
         val shortcutsStr = renderShortcuts(shortcuts)
         val statusStr = renderStatus(status)
 
         // If an agent is focused, show hint to return
         val focusHint = if (focusedAgent != null) {
-            terminal.render(dim(" [ESC/d] return"))
+            terminal.render(dim(" [ESC] return"))
         } else {
             ""
         }
@@ -104,10 +120,10 @@ class StatusBar(private val terminal: Terminal) {
          * Default shortcuts for the Jazz demo.
          */
         fun defaultShortcuts(activeMode: String? = null): List<Shortcut> = listOf(
+            Shortcut('a', "agent", activeMode == "agent_focus"),
             Shortcut('d', "dashboard", activeMode == "dashboard"),
             Shortcut('e', "events", activeMode == "events"),
             Shortcut('m', "memory", activeMode == "memory"),
-            Shortcut('1', "agent", activeMode == "agent_focus"),
             Shortcut('v', "verbose"),
             Shortcut('h', "help"),
             Shortcut('q', "quit")
