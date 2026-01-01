@@ -1,20 +1,35 @@
 package link.socket.ampere
 
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.mordant.rendering.TextColors
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
+import com.github.ajalt.mordant.terminal.Terminal
+import java.io.File
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import link.socket.ampere.agents.events.relay.EventRelayService
+import link.socket.ampere.cli.goal.GoalHandler
+import link.socket.ampere.cli.layout.AgentMemoryPane
+import link.socket.ampere.cli.layout.DemoInputHandler
+import link.socket.ampere.cli.layout.JazzProgressPane
+import link.socket.ampere.cli.layout.RichEventPane
+import link.socket.ampere.cli.layout.StatusBar
+import link.socket.ampere.cli.layout.ThreeColumnLayout
 import link.socket.ampere.cli.watch.AgentIndexMap
 import link.socket.ampere.cli.watch.CommandExecutor
 import link.socket.ampere.cli.watch.CommandResult
 import link.socket.ampere.cli.watch.KeyboardInputHandler
 import link.socket.ampere.cli.watch.WatchMode
 import link.socket.ampere.cli.watch.WatchViewConfig
+import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.WatchPresenter
 import link.socket.ampere.cli.watch.presentation.WatchViewState
 import link.socket.ampere.renderer.AgentFocusRenderer
@@ -23,8 +38,6 @@ import link.socket.ampere.renderer.EventStreamRenderer
 import link.socket.ampere.renderer.HelpOverlayRenderer
 import link.socket.ampere.renderer.MemoryOpsRenderer
 import link.socket.ampere.repl.TerminalFactory
-import java.io.PrintWriter
-import java.io.StringWriter
 
 /**
  * Start the AMPERE environment with an interactive multi-modal dashboard.
@@ -46,7 +59,7 @@ import java.io.StringWriter
  *   Ctrl+C - Exit
  */
 class StartCommand(
-    private val eventRelayService: EventRelayService,
+    private val contextProvider: () -> AmpereContext,
 ) : CliktCommand(
     name = "start",
     help = """
@@ -64,33 +77,73 @@ class StartCommand(
 
         Options:
           v - Toggle verbose mode (show/hide routine events)
+          : - Enter command mode (type :help for commands)
           Ctrl+C - Exit
 
-        The interface updates automatically every second.
+        Goal Mode:
+          Use --goal to start with an autonomous agent working on a task.
+          This switches to a 3-column layout showing progress.
 
         Examples:
-          ampere start           # Start interactive dashboard (default command)
-          ampere                 # Same as 'ampere start'
+          ampere start                           # Start interactive dashboard
+          ampere                                 # Same as 'ampere start'
+          ampere --goal "Implement FizzBuzz"     # Start with a goal
     """.trimIndent()
 ) {
 
+    private val goal: String? by option("--goal", "-g", help = "Set an autonomous goal for the agent to work on")
+
     override fun run() = runBlocking {
+        val context = contextProvider()
+        val agentScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         val terminal = TerminalFactory.createTerminal()
-        val presenter = WatchPresenter(eventRelayService)
+        val presenter = WatchPresenter(context.eventRelayService)
+
+        // Track if we're in goal mode (can change dynamically via :goal command)
+        var isGoalMode = goal != null
+
+        // Always create goal-mode components (needed for dynamic :goal activation)
+        val layout = ThreeColumnLayout(terminal)
+        val eventPane = RichEventPane(terminal)
+        val jazzPane = JazzProgressPane(terminal)
+        val memoryPane = AgentMemoryPane(terminal)
+        val statusBar = StatusBar(terminal)
+        val demoInputHandler = DemoInputHandler(terminal)
+
+        // Always create goal handler (needed for :goal command)
+        val goalHandler = GoalHandler(
+            context = context,
+            agentScope = agentScope,
+            progressPane = jazzPane,
+            memoryPane = memoryPane,
+        )
+
+        // Dashboard-mode components
         val renderer = DashboardRenderer(terminal)
         val eventStreamRenderer = EventStreamRenderer(terminal)
         val memoryOpsRenderer = MemoryOpsRenderer(terminal)
         val agentFocusRenderer = AgentFocusRenderer(terminal)
         val helpRenderer = HelpOverlayRenderer(terminal)
         val inputHandler = KeyboardInputHandler(terminal)
-        val commandExecutor = CommandExecutor(presenter)
         val agentIndexMap = AgentIndexMap()
 
         var config = WatchViewConfig(mode = WatchMode.DASHBOARD, verboseMode = false)
+        var demoConfig = DemoInputHandler.DemoViewConfig()
+        var memoryState = AgentMemoryPane.AgentMemoryState()
+        var systemStatus = StatusBar.SystemStatus.IDLE
         var lastRenderedOutput: String? = null
-        var lastViewState: WatchViewState? = null
         var lastCommandResult: CommandResult? = null
+        @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
         var previousMode = WatchMode.DASHBOARD
+
+        // Create command executor with callback to switch to goal mode
+        val commandExecutor = CommandExecutor(presenter, goalHandler) {
+            // Callback when goal is activated via :goal command
+            isGoalMode = true
+            jazzPane.startDemo()
+            systemStatus = StatusBar.SystemStatus.WORKING
+            lastRenderedOutput = null  // Force re-render with new layout
+        }
 
         try {
             // Initialize terminal for full-screen rendering
@@ -99,67 +152,94 @@ class StartCommand(
             // Start the presenter
             presenter.start()
 
+            // If starting with --goal, activate it immediately
+            val goalText = goal  // Store in local var for smart cast
+            if (goalText != null) {
+                jazzPane.startDemo()
+                systemStatus = StatusBar.SystemStatus.WORKING
+                val activationResult = goalHandler.activateGoal(goalText)
+                if (activationResult.isFailure) {
+                    jazzPane.setFailed("Failed to activate goal: ${activationResult.exceptionOrNull()?.message}")
+                }
+            }
+
             // Wait a moment for initial events to be processed
             delay(500)
 
             // Launch input handling in background
             val inputJob = launch {
                 while (isActive) {
-                    val key = inputHandler.readKey()
-                    if (key != null) {
-                        // If showing command result, any key clears it
-                        if (lastCommandResult != null) {
-                            lastCommandResult = null
-                            lastRenderedOutput = null
-                        } else {
-                            // Update agent index map before processing keys
-                            val viewState = presenter.getViewState()
-                            agentIndexMap.update(viewState.agentStates)
-
-                            val newConfig = inputHandler.processKey(key, config, agentIndexMap)
-
-                            // Check for exit signals (Ctrl+C or 'q')
-                            if (newConfig == null && (key.code == 3 || key.lowercaseChar() == 'q')) {
-                                throw CancellationException("User requested exit")
+                    if (isGoalMode) {
+                        // Goal mode: use demo input handler
+                        val key = demoInputHandler.readKey()
+                        if (key != null) {
+                            when (val result = demoInputHandler.processKey(key, demoConfig)) {
+                                is DemoInputHandler.KeyResult.Exit -> {
+                                    throw CancellationException("User requested exit")
+                                }
+                                is DemoInputHandler.KeyResult.ConfigChange -> {
+                                    demoConfig = result.newConfig
+                                    eventPane.verboseMode = demoConfig.verboseMode
+                                }
+                                is DemoInputHandler.KeyResult.NoChange -> {}
                             }
+                        }
+                    } else {
+                        // Dashboard mode: use regular input handler
+                        val key = inputHandler.readKey()
+                        if (key != null) {
+                            // If showing command result, any key clears it
+                            if (lastCommandResult != null) {
+                                lastCommandResult = null
+                                lastRenderedOutput = null
+                            } else {
+                                // Update agent index map before processing keys
+                                val viewState = presenter.getViewState()
+                                agentIndexMap.update(viewState.agentStates)
 
-                            if (newConfig != null) {
-                                // Check if we just submitted a command
-                                if (config.mode == WatchMode.COMMAND &&
-                                    newConfig.mode == WatchMode.DASHBOARD &&
-                                    config.commandInput.isNotEmpty()
-                                ) {
-                                    // Execute the command
-                                    val result = commandExecutor.execute(config.commandInput)
-                                    when (result) {
-                                        is CommandResult.Quit -> {
-                                            // Exit the dashboard by throwing cancellation
-                                            throw CancellationException("User requested quit")
-                                        }
-                                        else -> {
-                                            lastCommandResult = result
+                                val newConfig = inputHandler.processKey(key, config, agentIndexMap)
+
+                                // Check for exit signals (Ctrl+C or 'q')
+                                if (newConfig == null && (key.code == 3 || key.lowercaseChar() == 'q')) {
+                                    throw CancellationException("User requested exit")
+                                }
+
+                                if (newConfig != null) {
+                                    // Check if we just submitted a command
+                                    if (config.mode == WatchMode.COMMAND &&
+                                        newConfig.mode == WatchMode.DASHBOARD &&
+                                        config.commandInput.isNotEmpty()
+                                    ) {
+                                        // Execute the command
+                                        val result = commandExecutor.execute(config.commandInput)
+                                        when (result) {
+                                            is CommandResult.Quit -> {
+                                                throw CancellationException("User requested quit")
+                                            }
+                                            else -> {
+                                                lastCommandResult = result
+                                            }
                                         }
                                     }
-                                }
 
-                                // Track previous mode when entering command mode
-                                if (newConfig.mode == WatchMode.COMMAND && config.mode != WatchMode.COMMAND) {
-                                    previousMode = config.mode
-                                }
+                                    // Track previous mode when entering command mode
+                                    if (newConfig.mode == WatchMode.COMMAND && config.mode != WatchMode.COMMAND) {
+                                        previousMode = config.mode
+                                    }
 
-                                // Check if focused agent is still active
-                                if (newConfig.mode == WatchMode.AGENT_FOCUS &&
-                                    newConfig.focusedAgentId != null &&
-                                    !agentIndexMap.isAgentActive(newConfig.focusedAgentId)
-                                ) {
-                                    // Agent is no longer active, return to dashboard
-                                    config = newConfig.copy(mode = WatchMode.DASHBOARD, focusedAgentId = null)
-                                } else {
-                                    config = newConfig
-                                }
+                                    // Check if focused agent is still active
+                                    if (newConfig.mode == WatchMode.AGENT_FOCUS &&
+                                        newConfig.focusedAgentId != null &&
+                                        !agentIndexMap.isAgentActive(newConfig.focusedAgentId)
+                                    ) {
+                                        config = newConfig.copy(mode = WatchMode.DASHBOARD, focusedAgentId = null)
+                                    } else {
+                                        config = newConfig
+                                    }
 
-                                // Force re-render on config change
-                                lastRenderedOutput = null
+                                    // Force re-render on config change
+                                    lastRenderedOutput = null
+                                }
                             }
                         }
                     }
@@ -170,9 +250,60 @@ class StartCommand(
             // Launch rendering in background
             val renderJob = launch(Dispatchers.IO) {
                 while (isActive) {
-                    val output = generateOutput(
-                        config, presenter, renderer, eventStreamRenderer, memoryOpsRenderer, agentFocusRenderer, helpRenderer, terminal, agentIndexMap, lastViewState, lastCommandResult
-                    )
+                    val output = if (isGoalMode) {
+                        // Goal mode: render triple-pane layout
+                        val watchState = presenter.getViewState()
+                        eventPane.updateEvents(watchState.recentSignificantEvents)
+
+                        // Update memory state
+                        memoryState = updateMemoryState(memoryState, watchState, jazzPane)
+                        memoryPane.updateState(memoryState)
+
+                        // Update event pane expanded index
+                        demoConfig.expandedEventIndex?.let { eventPane.expandEvent(it) }
+                            ?: eventPane.collapseEvent()
+
+                        // Update system status based on phase
+                        systemStatus = when (jazzPane.currentPhase) {
+                            JazzProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.IDLE
+                            JazzProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
+                            else -> StatusBar.SystemStatus.WORKING
+                        }
+
+                        // Render status bar
+                        val activeMode = when (demoConfig.mode) {
+                            DemoInputHandler.DemoMode.DASHBOARD -> "dashboard"
+                            DemoInputHandler.DemoMode.EVENTS -> "events"
+                            DemoInputHandler.DemoMode.MEMORY -> "memory"
+                            DemoInputHandler.DemoMode.AGENT_FOCUS -> "agent_focus"
+                        }
+                        val shortcuts = StatusBar.defaultShortcuts(activeMode)
+                        val statusBarStr = statusBar.render(
+                            width = terminal.info.width,
+                            shortcuts = shortcuts,
+                            status = systemStatus,
+                            focusedAgent = demoConfig.focusedAgentIndex,
+                            inputHint = demoConfig.inputHint
+                        )
+
+                        // Render based on mode
+                        when (demoConfig.mode) {
+                            DemoInputHandler.DemoMode.AGENT_FOCUS -> {
+                                renderAgentFocusView(
+                                    terminal, memoryState, watchState, jazzPane, statusBarStr
+                                )
+                            }
+                            else -> {
+                                layout.render(eventPane, jazzPane, memoryPane, statusBarStr)
+                            }
+                        }
+                    } else {
+                        // Dashboard mode: use original rendering
+                        generateOutput(
+                            config, presenter, renderer, eventStreamRenderer, memoryOpsRenderer,
+                            agentFocusRenderer, helpRenderer, terminal, agentIndexMap, null, lastCommandResult
+                        )
+                    }
 
                     // Only flush to terminal if output changed
                     if (output != lastRenderedOutput) {
@@ -181,7 +312,7 @@ class StartCommand(
                         lastRenderedOutput = output
                     }
 
-                    delay(250) // Render at 4 FPS instead of 1 FPS for better responsiveness
+                    delay(250) // Render at 4 FPS
                 }
             }
 
@@ -201,7 +332,13 @@ class StartCommand(
             throw e
         } finally {
             presenter.stop()
-            inputHandler.close()  // Restore terminal to normal mode
+            // Close whichever input handler was active
+            if (isGoalMode) {
+                demoInputHandler.close()
+            } else {
+                inputHandler.close()
+            }
+            agentScope.cancel()
             restoreTerminal()
             println("\nAMPERE dashboard stopped")
         }
@@ -231,7 +368,7 @@ class StartCommand(
         memoryOpsRenderer: MemoryOpsRenderer,
         agentFocusRenderer: AgentFocusRenderer,
         helpRenderer: HelpOverlayRenderer,
-        terminal: com.github.ajalt.mordant.terminal.Terminal,
+        terminal: Terminal,
         agentIndexMap: AgentIndexMap,
         lastViewState: WatchViewState?,
         commandResult: CommandResult?
@@ -279,19 +416,19 @@ class StartCommand(
         }
     }
 
-    private fun renderCommandResult(result: CommandResult, terminal: com.github.ajalt.mordant.terminal.Terminal): String {
+    private fun renderCommandResult(result: CommandResult, terminal: Terminal): String {
         return buildString {
             append("\u001B[2J") // Clear screen
             append("\u001B[H")  // Move cursor to home
 
             when (result) {
                 is CommandResult.Success -> {
-                    append(terminal.render(com.github.ajalt.mordant.rendering.TextStyles.bold(com.github.ajalt.mordant.rendering.TextColors.cyan("Command Result"))))
+                    append(terminal.render(bold(TextColors.cyan("Command Result"))))
                     append("\n\n")
                     append(result.output)
                 }
                 is CommandResult.Error -> {
-                    append(terminal.render(com.github.ajalt.mordant.rendering.TextStyles.bold(com.github.ajalt.mordant.rendering.TextColors.red("Command Error"))))
+                    append(terminal.render(bold(TextColors.red("Command Error"))))
                     append("\n\n")
                     append(result.message)
                 }
@@ -302,7 +439,171 @@ class StartCommand(
             }
 
             append("\n\n")
-            append(terminal.render(com.github.ajalt.mordant.rendering.TextStyles.dim("Press any key to return")))
+            append(terminal.render(dim("Press any key to return")))
+        }
+    }
+
+    /**
+     * Update memory pane state based on watch state (for goal mode).
+     */
+    private fun updateMemoryState(
+        current: AgentMemoryPane.AgentMemoryState,
+        watchState: WatchViewState,
+        jazzPane: JazzProgressPane
+    ): AgentMemoryPane.AgentMemoryState {
+        // Count memory events from summaries
+        var recalled = 0
+        var stored = 0
+        val tags = mutableListOf<String>()
+
+        watchState.recentSignificantEvents.forEach { event ->
+            when {
+                event.eventType.contains("KnowledgeRecalled", ignoreCase = true) -> {
+                    recalled++
+                    if (event.summaryText.contains("relevance")) {
+                        tags.add("recall: ${event.summaryText.take(20)}")
+                    }
+                }
+                event.eventType.contains("KnowledgeStored", ignoreCase = true) -> {
+                    stored++
+                    if (event.summaryText.startsWith("Stored")) {
+                        tags.add(event.summaryText.take(25))
+                    }
+                }
+            }
+        }
+
+        // Determine agent state from jazz pane phase
+        val phase = jazzPane.currentPhase
+        val agentState = when (phase) {
+            JazzProgressPane.Phase.INITIALIZING -> AgentMemoryPane.AgentDisplayState.IDLE
+            JazzProgressPane.Phase.PERCEIVE -> AgentMemoryPane.AgentDisplayState.THINKING
+            JazzProgressPane.Phase.PLAN -> AgentMemoryPane.AgentDisplayState.THINKING
+            JazzProgressPane.Phase.EXECUTE -> AgentMemoryPane.AgentDisplayState.WORKING
+            JazzProgressPane.Phase.LEARN -> AgentMemoryPane.AgentDisplayState.THINKING
+            JazzProgressPane.Phase.COMPLETED -> AgentMemoryPane.AgentDisplayState.IDLE
+            JazzProgressPane.Phase.FAILED -> AgentMemoryPane.AgentDisplayState.IDLE
+        }
+
+        // Build activity history
+        val newActivity = current.recentActivity.toMutableList()
+        if (recalled > current.itemsRecalled) {
+            newActivity.add(AgentMemoryPane.MemoryActivity(
+                AgentMemoryPane.MemoryOpType.RECALL,
+                recalled - current.itemsRecalled
+            ))
+        }
+        if (stored > current.itemsStored) {
+            newActivity.add(AgentMemoryPane.MemoryActivity(
+                AgentMemoryPane.MemoryOpType.STORE,
+                stored - current.itemsStored
+            ))
+        }
+        val trimmedActivity = newActivity.takeLast(20)
+
+        val totalMemory = recalled + stored
+
+        return AgentMemoryPane.AgentMemoryState(
+            agentName = "CodeWriter",
+            agentState = agentState,
+            itemsRecalled = recalled,
+            itemsStored = stored,
+            totalMemoryItems = totalMemory,
+            memoryCapacity = 20,
+            recentTags = tags.take(5),
+            currentPhase = phase.name.lowercase().replaceFirstChar { it.uppercase() },
+            recentActivity = trimmedActivity
+        )
+    }
+
+    /**
+     * Render a full-screen agent focus view (for goal mode).
+     */
+    private fun renderAgentFocusView(
+        terminal: Terminal,
+        memoryState: AgentMemoryPane.AgentMemoryState,
+        watchState: WatchViewState,
+        jazzPane: JazzProgressPane,
+        statusBarStr: String
+    ): String {
+        val width = terminal.info.width
+        val height = terminal.info.height
+
+        val lines = mutableListOf<String>()
+
+        // Header
+        lines.add(terminal.render(bold(TextColors.cyan("AGENT FOCUS: ${memoryState.agentName}"))))
+        lines.add("")
+
+        // Agent state section
+        lines.add(terminal.render(bold("Current State")))
+
+        val stateColor = when (memoryState.agentState) {
+            AgentMemoryPane.AgentDisplayState.WORKING -> TextColors.green
+            AgentMemoryPane.AgentDisplayState.THINKING -> TextColors.yellow
+            AgentMemoryPane.AgentDisplayState.IDLE -> TextColors.gray
+            AgentMemoryPane.AgentDisplayState.WAITING -> TextColors.yellow
+            AgentMemoryPane.AgentDisplayState.IN_MEETING -> TextColors.blue
+        }
+
+        lines.add("  Status: ${terminal.render(stateColor(memoryState.agentState.name.lowercase()))}")
+
+        memoryState.currentPhase?.let { phase ->
+            lines.add("  Phase: ${terminal.render(TextColors.cyan(phase))}")
+        }
+        lines.add("")
+
+        // Memory statistics
+        lines.add(terminal.render(bold("Memory Operations")))
+        lines.add("  Items recalled: ${terminal.render(TextColors.cyan(memoryState.itemsRecalled.toString()))}")
+        lines.add("  Items stored: ${terminal.render(TextColors.green(memoryState.itemsStored.toString()))}")
+        lines.add("")
+
+        // Progress details from jazz pane
+        lines.add(terminal.render(bold("Cognitive Cycle Progress")))
+        val progress = jazzPane.render(width - 4, 12)
+        progress.forEach { line ->
+            lines.add("  $line")
+        }
+        lines.add("")
+
+        // Recent events from this agent
+        lines.add(terminal.render(bold("Recent Activity")))
+        val agentEvents = watchState.recentSignificantEvents
+            .filter { it.sourceAgentName == memoryState.agentName }
+            .take(8)
+
+        if (agentEvents.isEmpty()) {
+            lines.add(terminal.render(dim("  No recent events")))
+        } else {
+            agentEvents.forEach { event ->
+                val eventColor = when (event.significance) {
+                    EventSignificance.CRITICAL -> TextColors.red
+                    EventSignificance.SIGNIFICANT -> TextColors.white
+                    EventSignificance.ROUTINE -> TextColors.gray
+                }
+                lines.add("  • ${terminal.render(eventColor(event.summaryText.take(width - 6)))}")
+            }
+        }
+
+        // Pad to fill screen
+        val contentHeight = height - 1
+        while (lines.size < contentHeight) {
+            lines.add("")
+        }
+
+        return buildString {
+            for (i in 0 until contentHeight) {
+                val row = i + 1
+                append("\u001B[${row};1H")
+                append(lines.getOrElse(i) { "" })
+                append("\u001B[K")
+            }
+
+            // Status bar at bottom
+            append("\u001B[${height};1H")
+            append(statusBarStr)
+            append("\u001B[K")
         }
     }
 }
