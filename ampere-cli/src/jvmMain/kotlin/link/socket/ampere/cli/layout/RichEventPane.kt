@@ -116,18 +116,30 @@ class RichEventPane(
             EventSignificance.ROUTINE -> TextColors.gray
         }
 
-        // First line: index + icon + type
+        // First line: index + icon + type + timestamp
         val indexStr = terminal.render(indexColor("${event.index}."))
-        lines.add("$indexStr ${event.icon} ${event.eventType}")
+        val timeStr = formatShortTime(event.timestamp)
+        lines.add("$indexStr ${event.icon} ${event.eventType} ${terminal.render(dim(timeStr))}")
 
         // Second line: headline (indented)
         val headlineMax = width - 4
         val headline = event.headline.take(headlineMax)
         lines.add("   ${terminal.render(dim(headline))}")
 
+        // Third line: source agent (if not too wide)
+        if (event.sourceAgent.isNotBlank() && width > 20) {
+            val agentLabel = "   ${terminal.render(TextColors.cyan(event.sourceAgent))}"
+            lines.add(agentLabel)
+        }
+
         lines.add("")
 
         return lines
+    }
+
+    private fun formatShortTime(timestamp: Instant): String {
+        val local = timestamp.toLocalDateTime(timeZone)
+        return "${local.hour.toString().padStart(2, '0')}:${local.minute.toString().padStart(2, '0')}"
     }
 
     private fun renderExpandedEvent(event: RichEvent, width: Int): List<String> {
@@ -223,20 +235,21 @@ class RichEventPane(
      * Get an appropriate icon for each event type.
      */
     private fun getEventIcon(eventType: String): String {
+        // Use single-width Unicode symbols to prevent column shifting
         return when {
-            eventType.contains("Ticket", ignoreCase = true) && eventType.contains("Created", ignoreCase = true) -> "🎫"
+            eventType.contains("Ticket", ignoreCase = true) && eventType.contains("Created", ignoreCase = true) -> "+"
             eventType.contains("Ticket", ignoreCase = true) && eventType.contains("Assigned", ignoreCase = true) -> "→"
             eventType.contains("Ticket", ignoreCase = true) && eventType.contains("Status", ignoreCase = true) -> "◉"
-            eventType.contains("Ticket", ignoreCase = true) && eventType.contains("Blocked", ignoreCase = true) -> "⚠"
-            eventType.contains("Message", ignoreCase = true) -> "💬"
-            eventType.contains("Thread", ignoreCase = true) -> "📋"
-            eventType.contains("Escalation", ignoreCase = true) -> "🚨"
-            eventType.contains("Knowledge", ignoreCase = true) && eventType.contains("Recalled", ignoreCase = true) -> "🧠"
-            eventType.contains("Knowledge", ignoreCase = true) && eventType.contains("Stored", ignoreCase = true) -> "💾"
-            eventType.contains("Meeting", ignoreCase = true) -> "📅"
-            eventType.contains("Feature", ignoreCase = true) -> "✨"
-            eventType.contains("Task", ignoreCase = true) -> "📋"
-            eventType.contains("Question", ignoreCase = true) -> "❓"
+            eventType.contains("Ticket", ignoreCase = true) && eventType.contains("Blocked", ignoreCase = true) -> "!"
+            eventType.contains("Message", ignoreCase = true) -> ">"
+            eventType.contains("Thread", ignoreCase = true) -> "#"
+            eventType.contains("Escalation", ignoreCase = true) -> "!"
+            eventType.contains("Knowledge", ignoreCase = true) && eventType.contains("Recalled", ignoreCase = true) -> "<"
+            eventType.contains("Knowledge", ignoreCase = true) && eventType.contains("Stored", ignoreCase = true) -> ">"
+            eventType.contains("Meeting", ignoreCase = true) -> "@"
+            eventType.contains("Feature", ignoreCase = true) -> "*"
+            eventType.contains("Task", ignoreCase = true) -> "#"
+            eventType.contains("Question", ignoreCase = true) -> "?"
             else -> "•"
         }
     }

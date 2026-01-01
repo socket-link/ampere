@@ -254,9 +254,28 @@ class WatchPresenter(
             is Event.TaskCreated -> "Task created: ${event.description.take(50)}"
             is TicketEvent.TicketStatusChanged -> "Ticket status: ${event.newStatus}"
             is TicketEvent.TicketCreated -> "Ticket: ${event.title.take(50)}"
+            is TicketEvent.TicketAssigned -> {
+                val assignee = event.assignedTo?.let { extractAgentName(it) } ?: "unassigned"
+                "Assigned to $assignee"
+            }
+            is MessageEvent.MessagePosted -> {
+                val content = event.message.content.take(50).replace("\n", " ")
+                "\"$content\""
+            }
             is MessageEvent.EscalationRequested -> "⚠️ Escalation: ${event.reason.take(50)}"
+            is MemoryEvent.KnowledgeRecalled -> {
+                val count = event.resultsFound
+                if (count > 0) "Recalled $count items (relevance: ${String.format("%.0f%%", event.averageRelevance * 100)})"
+                else "No relevant knowledge found"
+            }
+            is MemoryEvent.KnowledgeStored -> {
+                val type = event.knowledgeType.name.lowercase()
+                val tags = event.tags.take(3).joinToString(", ")
+                if (tags.isNotEmpty()) "Stored $type: $tags" else "Stored $type knowledge"
+            }
             is Event.QuestionRaised -> "Question: ${event.questionText.take(50)}"
             is MeetingEvent.MeetingScheduled -> "Meeting: ${event.meeting.invitation.title.take(50)}"
+            is MeetingEvent.MeetingStarted -> "Meeting started (${event.meetingId.takeLast(8)})"
             is ProductEvent.FeatureRequested -> "Feature: ${event.featureTitle.take(50)}"
             is ProductEvent.EpicDefined -> "Epic: ${event.epicTitle.take(50)}"
             else -> event.eventType

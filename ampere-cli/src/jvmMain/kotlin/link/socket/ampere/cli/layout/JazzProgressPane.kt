@@ -104,64 +104,72 @@ class JazzProgressPane(
         frameCounter++
         val lines = mutableListOf<String>()
 
-        // Header with title
+        // Header with title (3 lines)
         lines.add(renderHeader(width))
         lines.add("─".repeat(width))
         lines.add("")
 
-        // Elapsed time
+        // Elapsed time (2 lines)
         val elapsed = state.startTime?.let { formatElapsed(it) } ?: "0s"
         lines.add("${terminal.render(dim("Elapsed:"))} $elapsed")
         lines.add("")
 
-        // Ticket info
-        if (state.ticketId != null) {
-            lines.add("${terminal.render(dim("Ticket:"))} ${state.ticketId?.take(20) ?: "pending"}")
-            lines.add("${terminal.render(dim("Agent:"))} ${state.agentId?.takeLast(15) ?: "pending"}")
-            lines.add("")
-        }
+        // Ticket info - ALWAYS 3 lines (show placeholder if not set)
+        lines.add("${terminal.render(dim("Ticket:"))} ${state.ticketId?.take(20) ?: "..."}")
+        lines.add("${terminal.render(dim("Agent:"))} ${state.agentId?.takeLast(15) ?: "..."}")
+        lines.add("")
 
-        // Cognitive cycle phases
+        // Cognitive cycle header (2 lines)
         lines.add(terminal.render(bold("Cognitive Cycle")))
         lines.add("")
 
+        // PERCEIVE phase - ALWAYS 3 lines
         lines.addAll(renderPhaseRow(Phase.PERCEIVE, "PERCEIVE", "Analyzing state", width))
-        if (state.phase.ordinal > Phase.PERCEIVE.ordinal && state.ideasGenerated > 0) {
-            lines.add("   ${terminal.render(dim("Ideas generated: ${state.ideasGenerated}"))}")
+        val perceiveDetail = if (state.phase.ordinal > Phase.PERCEIVE.ordinal && state.ideasGenerated > 0) {
+            "   ${terminal.render(dim("Ideas generated: ${state.ideasGenerated}"))}"
+        } else {
+            ""
         }
+        lines.add(perceiveDetail)
         lines.add("")
 
+        // PLAN phase - ALWAYS 3 lines
         lines.addAll(renderPhaseRow(Phase.PLAN, "PLAN", "Creating plan", width))
-        if (state.phase.ordinal > Phase.PLAN.ordinal && state.planSteps > 0) {
-            lines.add("   ${terminal.render(dim("Steps: ${state.planSteps}  Complexity: ${state.estimatedComplexity}"))}")
+        val planDetail = if (state.phase.ordinal > Phase.PLAN.ordinal && state.planSteps > 0) {
+            "   ${terminal.render(dim("Steps: ${state.planSteps}  Complexity: ${state.estimatedComplexity}"))}"
+        } else {
+            ""
         }
+        lines.add(planDetail)
         lines.add("")
 
+        // EXECUTE phase - ALWAYS 5 lines (phase + up to 3 files + blank)
         lines.addAll(renderPhaseRow(Phase.EXECUTE, "EXECUTE", "Writing code", width))
-        if (state.filesWritten.isNotEmpty()) {
-            state.filesWritten.take(3).forEach { file ->
-                lines.add("   ${terminal.render(dim("→ $file"))}")
-            }
-            if (state.filesWritten.size > 3) {
-                lines.add("   ${terminal.render(dim("... and ${state.filesWritten.size - 3} more"))}")
-            }
+        val files = state.filesWritten.take(3)
+        for (i in 0 until 3) {
+            val fileLine = files.getOrNull(i)?.let { "   ${terminal.render(dim("→ $it"))}" } ?: ""
+            lines.add(fileLine)
         }
         lines.add("")
 
+        // LEARN phase - ALWAYS 2 lines
         lines.addAll(renderPhaseRow(Phase.LEARN, "LEARN", "Extracting knowledge", width))
         lines.add("")
 
-        // Status/error section
-        if (state.phase == Phase.COMPLETED) {
-            lines.add("")
-            lines.add(terminal.render(TextColors.green("✅ COMPLETED")))
-        } else if (state.phase == Phase.FAILED) {
-            lines.add("")
-            lines.add(terminal.render(TextColors.red("❌ FAILED")))
-            state.errorMessage?.let { error ->
-                lines.add(terminal.render(dim(error.take(width - 4))))
-            }
+        // Status section - ALWAYS 3 lines
+        lines.add("")
+        val statusLine = when (state.phase) {
+            Phase.COMPLETED -> terminal.render(TextColors.green("[COMPLETED]"))
+            Phase.FAILED -> terminal.render(TextColors.red("[FAILED]"))
+            else -> ""
         }
+        lines.add(statusLine)
+        val errorLine = if (state.phase == Phase.FAILED) {
+            state.errorMessage?.let { terminal.render(dim(it.take(width - 4))) } ?: ""
+        } else {
+            ""
+        }
+        lines.add(errorLine)
 
         // Pad to height
         while (lines.size < height - 2) {
@@ -176,7 +184,7 @@ class JazzProgressPane(
     }
 
     private fun renderHeader(width: Int): String {
-        val title = terminal.render(bold(TextColors.yellow("⚡ THE JAZZ TEST")))
+        val title = terminal.render(bold(TextColors.yellow("THE JAZZ TEST")))
         return title
     }
 

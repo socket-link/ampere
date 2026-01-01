@@ -53,9 +53,9 @@ import link.socket.ampere.repl.TerminalFactory
  *
  * This demo runs the Jazz Test (autonomous agent writing Fibonacci code)
  * with a 3-column layout showing:
- * - Left pane (30%): Event stream
- * - Middle pane (50%): Cognitive cycle progress
- * - Right pane (20%): Agent status and memory stats
+ * - Left pane (35%): Event stream
+ * - Middle pane (40%): Cognitive cycle progress
+ * - Right pane (25%): Agent status and memory stats
  *
  * Keyboard controls:
  * - d/e/m: Switch view modes (dashboard/events/memory)
@@ -170,6 +170,10 @@ class JazzDemoCommand(
                     memoryState = updateMemoryState(memoryState, watchState, jazzPane)
                     memoryPane.updateState(memoryState)
 
+                    // Update event pane expanded index
+                    viewConfig.expandedEventIndex?.let { eventPane.expandEvent(it) }
+                        ?: eventPane.collapseEvent()
+
                     // Render status bar
                     val activeMode = when (viewConfig.mode) {
                         DemoInputHandler.DemoMode.DASHBOARD -> "dashboard"
@@ -182,7 +186,8 @@ class JazzDemoCommand(
                         width = terminal.info.width,
                         shortcuts = shortcuts,
                         status = systemStatus,
-                        focusedAgent = viewConfig.focusedAgentIndex
+                        focusedAgent = viewConfig.focusedAgentIndex,
+                        inputHint = viewConfig.inputHint
                     )
 
                     // Render based on mode
@@ -259,11 +264,24 @@ class JazzDemoCommand(
         // Count memory events from summaries
         var recalled = 0
         var stored = 0
+        val tags = mutableListOf<String>()
 
         watchState.recentSignificantEvents.forEach { event ->
             when {
-                event.eventType.contains("KnowledgeRecalled", ignoreCase = true) -> recalled++
-                event.eventType.contains("KnowledgeStored", ignoreCase = true) -> stored++
+                event.eventType.contains("KnowledgeRecalled", ignoreCase = true) -> {
+                    recalled++
+                    // Extract tags from summary if present
+                    if (event.summaryText.contains("relevance")) {
+                        tags.add("recall: ${event.summaryText.take(20)}")
+                    }
+                }
+                event.eventType.contains("KnowledgeStored", ignoreCase = true) -> {
+                    stored++
+                    // Extract type from summary
+                    if (event.summaryText.startsWith("Stored")) {
+                        tags.add(event.summaryText.take(25))
+                    }
+                }
             }
         }
 
@@ -279,13 +297,36 @@ class JazzDemoCommand(
             JazzProgressPane.Phase.FAILED -> AgentMemoryPane.AgentDisplayState.IDLE
         }
 
+        // Build activity history - append new activity if counts changed
+        val newActivity = current.recentActivity.toMutableList()
+        if (recalled > current.itemsRecalled) {
+            newActivity.add(AgentMemoryPane.MemoryActivity(
+                AgentMemoryPane.MemoryOpType.RECALL,
+                recalled - current.itemsRecalled
+            ))
+        }
+        if (stored > current.itemsStored) {
+            newActivity.add(AgentMemoryPane.MemoryActivity(
+                AgentMemoryPane.MemoryOpType.STORE,
+                stored - current.itemsStored
+            ))
+        }
+        // Keep only last 20 activities
+        val trimmedActivity = newActivity.takeLast(20)
+
+        // Total memory is recalled + stored (simplified model)
+        val totalMemory = recalled + stored
+
         return AgentMemoryPane.AgentMemoryState(
             agentName = "CodeWriter",
             agentState = agentState,
             itemsRecalled = recalled,
             itemsStored = stored,
-            recentTags = emptyList(),
-            currentPhase = phase.name.lowercase().replaceFirstChar { it.uppercase() }
+            totalMemoryItems = totalMemory,
+            memoryCapacity = 20,  // Reasonable max for visualization
+            recentTags = tags.take(5),
+            currentPhase = phase.name.lowercase().replaceFirstChar { it.uppercase() },
+            recentActivity = trimmedActivity
         )
     }
 
@@ -469,92 +510,86 @@ class JazzDemoCommand(
         jazzPane: JazzProgressPane,
         statusBarStr: String
     ): String {
-        return buildString {
-            // Clear screen and move cursor to home
-            append("\u001B[2J")
-            append("\u001B[H")
+        val width = terminal.info.width
+        val height = terminal.info.height
 
-            val width = terminal.info.width
-            val height = terminal.info.height
+        // Build all lines first
+        val lines = mutableListOf<String>()
 
-            // Header
-            append(terminal.render(bold(TextColors.cyan("AGENT FOCUS: ${memoryState.agentName}"))))
-            append("\n\n")
+        // Header
+        lines.add(terminal.render(bold(TextColors.cyan("AGENT FOCUS: ${memoryState.agentName}"))))
+        lines.add("")
 
-            // Agent state section
-            append(terminal.render(bold("Current State")))
-            append("\n")
+        // Agent state section
+        lines.add(terminal.render(bold("Current State")))
 
-            val stateColor = when (memoryState.agentState) {
-                AgentMemoryPane.AgentDisplayState.WORKING -> TextColors.green
-                AgentMemoryPane.AgentDisplayState.THINKING -> TextColors.yellow
-                AgentMemoryPane.AgentDisplayState.IDLE -> TextColors.gray
-                AgentMemoryPane.AgentDisplayState.WAITING -> TextColors.yellow
-                AgentMemoryPane.AgentDisplayState.IN_MEETING -> TextColors.blue
-            }
+        val stateColor = when (memoryState.agentState) {
+            AgentMemoryPane.AgentDisplayState.WORKING -> TextColors.green
+            AgentMemoryPane.AgentDisplayState.THINKING -> TextColors.yellow
+            AgentMemoryPane.AgentDisplayState.IDLE -> TextColors.gray
+            AgentMemoryPane.AgentDisplayState.WAITING -> TextColors.yellow
+            AgentMemoryPane.AgentDisplayState.IN_MEETING -> TextColors.blue
+        }
 
-            append("  Status: ")
-            append(terminal.render(stateColor(memoryState.agentState.name.lowercase())))
-            append("\n")
+        lines.add("  Status: ${terminal.render(stateColor(memoryState.agentState.name.lowercase()))}")
 
-            memoryState.currentPhase?.let { phase ->
-                append("  Phase: ")
-                append(terminal.render(TextColors.cyan(phase)))
-                append("\n")
-            }
-            append("\n")
+        memoryState.currentPhase?.let { phase ->
+            lines.add("  Phase: ${terminal.render(TextColors.cyan(phase))}")
+        }
+        lines.add("")
 
-            // Memory statistics
-            append(terminal.render(bold("Memory Operations")))
-            append("\n")
-            append("  Items recalled: ")
-            append(terminal.render(TextColors.cyan(memoryState.itemsRecalled.toString())))
-            append("\n")
-            append("  Items stored: ")
-            append(terminal.render(TextColors.green(memoryState.itemsStored.toString())))
-            append("\n\n")
+        // Memory statistics
+        lines.add(terminal.render(bold("Memory Operations")))
+        lines.add("  Items recalled: ${terminal.render(TextColors.cyan(memoryState.itemsRecalled.toString()))}")
+        lines.add("  Items stored: ${terminal.render(TextColors.green(memoryState.itemsStored.toString()))}")
+        lines.add("")
 
-            // Progress details from jazz pane
-            append(terminal.render(bold("Cognitive Cycle Progress")))
-            append("\n")
-            val progress = jazzPane.render(width - 4, 12)
-            progress.forEach { line ->
-                append("  $line\n")
-            }
-            append("\n")
+        // Progress details from jazz pane
+        lines.add(terminal.render(bold("Cognitive Cycle Progress")))
+        val progress = jazzPane.render(width - 4, 12)
+        progress.forEach { line ->
+            lines.add("  $line")
+        }
+        lines.add("")
 
-            // Recent events from this agent
-            append(terminal.render(bold("Recent Activity")))
-            append("\n")
-            val agentEvents = watchState.recentSignificantEvents
-                .filter { it.sourceAgentName == memoryState.agentName }
-                .take(8)
+        // Recent events from this agent
+        lines.add(terminal.render(bold("Recent Activity")))
+        val agentEvents = watchState.recentSignificantEvents
+            .filter { it.sourceAgentName == memoryState.agentName }
+            .take(8)
 
-            if (agentEvents.isEmpty()) {
-                append(terminal.render(dim("  No recent events")))
-                append("\n")
-            } else {
-                agentEvents.forEach { event ->
-                    val eventColor = when (event.significance) {
-                        EventSignificance.CRITICAL -> TextColors.red
-                        EventSignificance.SIGNIFICANT -> TextColors.white
-                        EventSignificance.ROUTINE -> TextColors.gray
-                    }
-                    append("  • ")
-                    append(terminal.render(eventColor(event.summaryText.take(width - 6))))
-                    append("\n")
+        if (agentEvents.isEmpty()) {
+            lines.add(terminal.render(dim("  No recent events")))
+        } else {
+            agentEvents.forEach { event ->
+                val eventColor = when (event.significance) {
+                    EventSignificance.CRITICAL -> TextColors.red
+                    EventSignificance.SIGNIFICANT -> TextColors.white
+                    EventSignificance.ROUTINE -> TextColors.gray
                 }
+                lines.add("  • ${terminal.render(eventColor(event.summaryText.take(width - 6)))}")
             }
+        }
 
-            // Pad to fill screen
-            val linesUsed = toString().count { it == '\n' }
-            repeat((height - linesUsed - 2).coerceAtLeast(0)) {
-                append("\n")
+        // Pad to fill screen (minus status bar)
+        val contentHeight = height - 1
+        while (lines.size < contentHeight) {
+            lines.add("")
+        }
+
+        // Build output with explicit cursor positioning
+        return buildString {
+            for (i in 0 until contentHeight) {
+                val row = i + 1
+                append("\u001B[${row};1H")
+                append(lines.getOrElse(i) { "" })
+                append("\u001B[K")
             }
 
             // Status bar at bottom
             append("\u001B[${height};1H")
             append(statusBarStr)
+            append("\u001B[K")
         }
     }
 

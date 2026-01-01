@@ -77,7 +77,7 @@ object LightningAnimator {
         DischargeFrame("⁞", Glow.BRIGHT, 60),
         DischargeFrame("│", Glow.BRIGHT, 50),
         DischargeFrame("╽", Glow.BRIGHT, 40),
-        DischargeFrame("⚡", Glow.FLASH, 120),
+        DischargeFrame("ϟ", Glow.FLASH, 120),
         DischargeFrame("✦", Glow.BRIGHT, 100),
         DischargeFrame("✧", Glow.NORMAL, 100),
         DischargeFrame("·", Glow.DIM, 200)
@@ -90,7 +90,7 @@ object LightningAnimator {
         DischargeFrame("·", Glow.DIM, 120),
         DischargeFrame(":", Glow.NORMAL, 80),
         DischargeFrame("⁞", Glow.BRIGHT, 60),
-        DischargeFrame("⚡", Glow.FLASH, 100),
+        DischargeFrame("ϟ", Glow.FLASH, 100),
         DischargeFrame("✧", Glow.NORMAL, 100),
         DischargeFrame("·", Glow.DIM, 150)
     )
