@@ -18,6 +18,7 @@ import link.socket.ampere.agents.events.relay.EventRelayFilters
 import link.socket.ampere.agents.events.tickets.TicketSummary
 import link.socket.ampere.cli.watch.presentation.CognitiveCluster
 import link.socket.ampere.cli.watch.presentation.CognitiveClusterType
+import link.socket.ampere.renderer.AmpereColors
 
 /**
  * Central renderer for all CLI output.
@@ -244,7 +245,7 @@ class CLIRenderer(
         when (cluster.cycleType) {
             CognitiveClusterType.KNOWLEDGE_RECALL_STORE -> {
                 // Header line with timestamp and cluster type
-                terminal.println(dim(timestamp) + "  🧠  " + cyan("Cognitive Cycle") + " " + dim("($agentName)"))
+                terminal.println(dim(timestamp) + "  🧠  " + cyan("Cognitive Cycle") + " " + AmpereColors.accent("($agentName)"))
 
                 // Render each event in the cluster with tree characters
                 cluster.events.forEachIndexed { index, event ->
@@ -271,7 +272,7 @@ class CLIRenderer(
             }
             else -> {
                 // Other cluster types (future extension)
-                terminal.println(dim("$timestamp  📦  ${cluster.cycleType} from $agentName"))
+                terminal.println(dim("$timestamp  📦  ${cluster.cycleType} from ") + AmpereColors.accent(agentName))
             }
         }
     }

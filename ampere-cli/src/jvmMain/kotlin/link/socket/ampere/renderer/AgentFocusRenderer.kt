@@ -12,6 +12,7 @@ import link.socket.ampere.cli.watch.presentation.AgentState
 import link.socket.ampere.cli.watch.presentation.CognitiveCluster
 import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.WatchViewState
+import link.socket.ampere.renderer.AmpereColors
 
 /**
  * Renders a focused view of a specific agent.
@@ -77,7 +78,7 @@ class AgentFocusRenderer(
     }
 
     private fun StringBuilder.appendHeader(agentState: AgentActivityState, agentIndex: Int?) {
-        append(terminal.render(bold(TextColors.cyan("Agent Focus: ${agentState.displayName}"))))
+        append(terminal.render(bold(AmpereColors.accent("Agent Focus: ${agentState.displayName}"))))
         if (agentIndex != null) {
             append(terminal.render(dim(" (press $agentIndex to return here)")))
         }

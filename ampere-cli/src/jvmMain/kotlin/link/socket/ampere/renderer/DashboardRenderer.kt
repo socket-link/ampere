@@ -12,6 +12,7 @@ import link.socket.ampere.cli.watch.presentation.AgentState
 import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.SystemState
 import link.socket.ampere.cli.watch.presentation.WatchViewState
+import link.socket.ampere.renderer.AmpereColors
 
 /**
  * Renders the dashboard view using Mordant's terminal control.
@@ -99,7 +100,9 @@ class DashboardRenderer(
                 " (${state.consecutiveCognitiveCycles} cycles)"
             } else ""
 
-            append("$spinner ${state.displayName.padEnd(25)} ")
+            append("$spinner ")
+            append(terminal.render(AmpereColors.accent(state.displayName.padEnd(25))))
+            append(" ")
             append(terminal.render(stateColor(state.currentState.displayText)))
             append(terminal.render(dim(cycleInfo)))
             append("\n")
@@ -128,7 +131,8 @@ class DashboardRenderer(
             append(" ")
             append(terminal.render(eventColor(event.summaryText)))
             append(" ")
-            append(terminal.render(dim("from ${event.sourceAgentName}")))
+            append(terminal.render(dim("from ")))
+            append(terminal.render(AmpereColors.accent(event.sourceAgentName)))
             append("\n")
         }
     }

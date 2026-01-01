@@ -85,7 +85,6 @@ fun main(args: Array<String>) {
                 StatusCommand(context.threadViewService, context.ticketViewService),
                 OutcomesCommand(context.outcomeMemoryRepository),
                 IssuesCommand(),
-                RespondCommand(),
                 TestCommand(),
                 DemoCommand().subcommands(
                     JazzDemoCommand { context }

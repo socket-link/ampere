@@ -24,6 +24,10 @@ object TerminalColors {
     private const val GRAY = "\u001B[37m"
     private const val BOLD = "\u001B[1m"
 
+    // Ampere accent color: #24A6DF (RGB: 36, 166, 223)
+    // Uses 24-bit true color ANSI escape sequence
+    const val ACCENT = "\u001B[38;2;36;166;223m"
+
     /**
      * Enable/disable colors (can be toggled for testing or non-color terminals).
      */
@@ -36,4 +40,5 @@ object TerminalColors {
     fun dim(message: String) = if (enabled) "$GRAY$message$RESET" else message
     fun emphasis(message: String) = if (enabled) "$BOLD$message$RESET" else message
     fun highlight(message: String) = if (enabled) "$BLUE$BOLD$message$RESET" else message
+    fun accent(message: String) = if (enabled) "$ACCENT$message$RESET" else message
 }

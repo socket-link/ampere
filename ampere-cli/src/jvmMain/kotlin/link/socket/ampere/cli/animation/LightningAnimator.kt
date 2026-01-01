@@ -30,25 +30,36 @@ object LightningAnimator {
         const val MOVE_TO_START = "\u001b[0G"
 
         fun fg256(code: Int): String = "\u001b[38;5;${code}m"
+
+        /**
+         * 24-bit true color foreground.
+         */
+        fun fgRgb(r: Int, g: Int, b: Int): String = "\u001b[38;2;$r;$g;${b}m"
+
+        // Ampere accent color: #24A6DF (RGB: 36, 166, 223)
+        val ACCENT = fgRgb(36, 166, 223)
+        val ACCENT_DIM = fgRgb(18, 83, 112)      // 50% brightness
+        val ACCENT_DARK = fgRgb(7, 33, 45)       // 20% brightness
+        val ACCENT_BRIGHT = fgRgb(54, 199, 255)  // Slightly brighter than accent
     }
 
     /**
      * Glow intensity levels for lightning effects.
-     * Maps to ANSI 256-color palette for electrical luminosity.
+     * Uses Ampere accent color (#24A6DF) at varying intensities.
      */
     enum class Glow {
         DARK,    // Nearly invisible
         DIM,     // Faint
         NORMAL,  // Visible
-        BRIGHT,  // Intense
+        BRIGHT,  // Intense (full accent color)
         FLASH;   // Maximum luminosity
 
         fun toAnsi(): String = when (this) {
-            DARK -> Ansi.fg256(236)
-            DIM -> Ansi.fg256(240)
-            NORMAL -> Ansi.fg256(250)
-            BRIGHT -> Ansi.fg256(226)
-            FLASH -> "${Ansi.fg256(231)}${Ansi.BOLD}"
+            DARK -> Ansi.ACCENT_DARK
+            DIM -> Ansi.ACCENT_DIM
+            NORMAL -> Ansi.ACCENT
+            BRIGHT -> Ansi.ACCENT_BRIGHT
+            FLASH -> "${Ansi.fg256(231)}${Ansi.BOLD}"  // White flash for strike
         }
     }
 

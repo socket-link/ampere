@@ -1,10 +1,13 @@
 package link.socket.ampere.cli.layout
 
 import com.github.ajalt.mordant.rendering.TextColors
+import com.github.ajalt.mordant.rendering.TextStyle
 import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
 import link.socket.ampere.cli.animation.LightningAnimator
+import link.socket.ampere.renderer.AmpereColors
+import link.socket.ampere.repl.TerminalColors
 
 /**
  * Narrow pane showing agent status and memory statistics.
@@ -75,7 +78,7 @@ class AgentMemoryPane(
             AgentDisplayState.THINKING -> TextColors.yellow
             AgentDisplayState.IDLE -> TextColors.gray
             AgentDisplayState.WAITING -> TextColors.yellow
-            AgentDisplayState.IN_MEETING -> TextColors.blue
+            AgentDisplayState.IN_MEETING -> AmpereColors.accent
         }
 
         val agentNameTrunc = state.agentName.take(width - 4)
@@ -101,8 +104,8 @@ class AgentMemoryPane(
         lines.add("")
 
         // Recalled with mini bar
-        val recallBar = renderMiniBar(state.itemsRecalled, 10, barWidth - 10, TextColors.cyan)
-        lines.add("${terminal.render(TextColors.cyan("< ${state.itemsRecalled.toString().padStart(2)}"))} $recallBar")
+        val recallBar = renderMiniBar(state.itemsRecalled, 10, barWidth - 10, AmpereColors.accent)
+        lines.add("${terminal.render(AmpereColors.accent("< ${state.itemsRecalled.toString().padStart(2)}"))} $recallBar")
 
         // Stored with mini bar
         val storeBar = renderMiniBar(state.itemsStored, 10, barWidth - 10, TextColors.green)
@@ -140,7 +143,7 @@ class AgentMemoryPane(
         val filledWidth = (barInnerWidth * percent).toInt()
         val emptyWidth = barInnerWidth - filledWidth
 
-        val filled = terminal.render(TextColors.blue("=".repeat(filledWidth)))
+        val filled = terminal.render(AmpereColors.accent("=".repeat(filledWidth)))
         val empty = terminal.render(dim("-".repeat(emptyWidth)))
         val pctStr = "${(percent * 100).toInt()}%".padStart(4)
 
@@ -150,7 +153,7 @@ class AgentMemoryPane(
     /**
      * Render a mini horizontal bar.
      */
-    private fun renderMiniBar(value: Int, maxValue: Int, width: Int, color: TextColors): String {
+    private fun renderMiniBar(value: Int, maxValue: Int, width: Int, color: TextStyle): String {
         val barWidth = width.coerceAtLeast(3)
         val percent = if (maxValue > 0) (value.toFloat() / maxValue).coerceIn(0f, 1f) else 0f
         val filledWidth = (barWidth * percent).toInt()
@@ -173,7 +176,7 @@ class AgentMemoryPane(
             val level = op.count.coerceIn(0, 3)
             val char = sparkChars[level]
             when (op.type) {
-                MemoryOpType.RECALL -> terminal.render(TextColors.cyan(char.toString()))
+                MemoryOpType.RECALL -> terminal.render(AmpereColors.accent(char.toString()))
                 MemoryOpType.STORE -> terminal.render(TextColors.green(char.toString()))
             }
         }.joinToString("")
@@ -186,7 +189,7 @@ class AgentMemoryPane(
                 "${frame.glow.toAnsi()}${frame.symbol}\u001B[0m"
             }
             AgentDisplayState.IDLE -> "\u001B[38;5;240m·\u001B[0m"
-            AgentDisplayState.IN_MEETING -> "\u001B[38;5;33m◆\u001B[0m"
+            AgentDisplayState.IN_MEETING -> "${TerminalColors.ACCENT}◆\u001B[0m"
             AgentDisplayState.WAITING -> "\u001B[38;5;226m◌\u001B[0m"
         }
     }

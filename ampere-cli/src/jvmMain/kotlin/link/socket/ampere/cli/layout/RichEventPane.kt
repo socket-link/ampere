@@ -9,6 +9,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.SignificantEventSummary
+import link.socket.ampere.renderer.AmpereColors
 
 /**
  * Event pane with rich content display and expandable details.
@@ -128,7 +129,7 @@ class RichEventPane(
 
         // Third line: source agent (if not too wide)
         if (event.sourceAgent.isNotBlank() && width > 20) {
-            val agentLabel = "   ${terminal.render(TextColors.cyan(event.sourceAgent))}"
+            val agentLabel = "   ${terminal.render(AmpereColors.accent(event.sourceAgent))}"
             lines.add(agentLabel)
         }
 

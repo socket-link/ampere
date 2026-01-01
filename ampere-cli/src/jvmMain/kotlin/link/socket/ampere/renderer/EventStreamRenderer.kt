@@ -10,6 +10,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.WatchViewState
+import link.socket.ampere.renderer.AmpereColors
 
 /**
  * Renders the event stream view - a scrolling feed of events.
@@ -101,7 +102,9 @@ class EventStreamRenderer(
         append(" ")
         append(terminal.render(eventColor(event.summaryText)))
         append(" ")
-        append(terminal.render(dim("from ${event.sourceAgentName} ($timeSinceStr)")))
+        append(terminal.render(dim("from ")))
+        append(terminal.render(AmpereColors.accent(event.sourceAgentName)))
+        append(terminal.render(dim(" ($timeSinceStr)")))
         append("\n")
     }
 

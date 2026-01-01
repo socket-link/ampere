@@ -5,6 +5,7 @@ import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
 import link.socket.ampere.cli.help.CommandRegistry
+import link.socket.ampere.renderer.AmpereColors
 
 /**
  * Status bar component for the bottom of the demo layout.
@@ -89,14 +90,14 @@ class StatusBar(private val terminal: Terminal) {
         return shortcuts.joinToString(" ") { shortcut ->
             val keyPart = terminal.render(
                 if (shortcut.isActive) {
-                    bold(TextColors.cyan("[${shortcut.key}]"))
+                    bold(AmpereColors.accent("[${shortcut.key}]"))
                 } else {
                     TextColors.white("[${shortcut.key}]")
                 }
             )
             val labelPart = terminal.render(
                 if (shortcut.isActive) {
-                    TextColors.cyan(shortcut.label)
+                    AmpereColors.accent(shortcut.label)
                 } else {
                     dim(shortcut.label)
                 }
@@ -108,7 +109,7 @@ class StatusBar(private val terminal: Terminal) {
     private fun renderStatus(status: SystemStatus): String {
         val statusColor = when (status) {
             SystemStatus.IDLE -> TextColors.green
-            SystemStatus.WORKING -> TextColors.blue
+            SystemStatus.WORKING -> AmpereColors.accent
             SystemStatus.ATTENTION_NEEDED -> TextColors.red
         }
 

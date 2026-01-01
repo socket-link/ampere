@@ -11,6 +11,7 @@ import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.cli.watch.presentation.CognitiveCluster
 import link.socket.ampere.cli.watch.presentation.CognitiveClusterType
 import link.socket.ampere.cli.watch.presentation.WatchViewState
+import link.socket.ampere.renderer.AmpereColors
 
 /**
  * Renders the memory operations view - showing cognitive cycles,
@@ -114,7 +115,9 @@ class MemoryOpsRenderer(
         append(" ")
         append(terminal.render(clusterColor(cluster.cycleType.name.lowercase().replace('_', ' '))))
         append(" ")
-        append(terminal.render(dim("by ${cluster.agentId} ($durationStr, ${cluster.events.size} ops)")))
+        append(terminal.render(dim("by ")))
+        append(terminal.render(AmpereColors.accent(cluster.agentId)))
+        append(terminal.render(dim(" ($durationStr, ${cluster.events.size} ops)")))
         append("\n")
 
         // Show memory event details
