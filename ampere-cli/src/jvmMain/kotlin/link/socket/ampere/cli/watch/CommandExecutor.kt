@@ -1,5 +1,6 @@
 package link.socket.ampere.cli.watch
 
+import link.socket.ampere.cli.goal.GoalHandler
 import link.socket.ampere.cli.watch.presentation.WatchPresenter
 
 /**
@@ -9,7 +10,9 @@ import link.socket.ampere.cli.watch.presentation.WatchPresenter
  * allowing users to perform actions and queries via text commands.
  */
 class CommandExecutor(
-    private val presenter: WatchPresenter
+    private val presenter: WatchPresenter,
+    private val goalHandler: GoalHandler? = null,
+    private val onGoalActivated: (() -> Unit)? = null,
 ) {
 
     /**
@@ -18,7 +21,7 @@ class CommandExecutor(
      * @param commandInput The full command string (without the leading ':')
      * @return The result of executing the command
      */
-    fun execute(commandInput: String): CommandResult {
+    suspend fun execute(commandInput: String): CommandResult {
         val trimmed = commandInput.trim()
         if (trimmed.isEmpty()) {
             return CommandResult.Error("Empty command")
@@ -31,6 +34,7 @@ class CommandExecutor(
         return when (command) {
             "help", "h", "?" -> executeHelp()
             "agents" -> executeAgents()
+            "goal" -> executeGoal(arg)
             "ticket" -> executeTicket(arg)
             "thread" -> executeThread(arg)
             "quit", "q", "exit" -> CommandResult.Quit
@@ -44,6 +48,7 @@ class CommandExecutor(
             appendLine()
             appendLine("  :help, :h, :?       Show this help")
             appendLine("  :agents             List all active agents")
+            appendLine("  :goal <description> Set an autonomous goal for the agent")
             appendLine("  :ticket <id>        Show ticket details (coming soon)")
             appendLine("  :thread <id>        Show thread details (coming soon)")
             appendLine("  :quit, :q, :exit    Exit dashboard")
@@ -51,6 +56,38 @@ class CommandExecutor(
             appendLine("Press ESC to cancel command mode")
         }
         return CommandResult.Success(helpText)
+    }
+
+    private suspend fun executeGoal(goalText: String?): CommandResult {
+        if (goalText.isNullOrBlank()) {
+            return CommandResult.Error("Usage: :goal <description>\n\nExample: :goal Implement FizzBuzz in Kotlin")
+        }
+
+        if (goalHandler == null) {
+            return CommandResult.Error("Goal handler not available.\nTry starting with: ampere --goal \"$goalText\"")
+        }
+
+        return try {
+            val result = goalHandler.activateGoal(goalText)
+            if (result.isSuccess) {
+                val activation = result.getOrNull()!!
+                onGoalActivated?.invoke()
+                CommandResult.Success(buildString {
+                    appendLine("Goal activated!")
+                    appendLine()
+                    appendLine("  Title:  ${activation.title}")
+                    appendLine("  Ticket: ${activation.ticketId}")
+                    appendLine("  Agent:  ${activation.agentId}")
+                    appendLine()
+                    appendLine("The agent is now working on your goal.")
+                    appendLine("Watch the progress pane to see the PROPEL cycle.")
+                })
+            } else {
+                CommandResult.Error("Failed to activate goal: ${result.exceptionOrNull()?.message}")
+            }
+        } catch (e: Exception) {
+            CommandResult.Error("Error activating goal: ${e.message}")
+        }
     }
 
     private fun executeAgents(): CommandResult {

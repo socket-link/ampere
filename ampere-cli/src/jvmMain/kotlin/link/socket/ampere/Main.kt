@@ -65,17 +65,18 @@ fun main(args: Array<String>) {
         // Start all orchestrator services
         context.start()
 
-        // If no arguments provided, launch start (dashboard) mode
-        val effectiveArgs = if (args.isEmpty()) {
-            arrayOf("start")
-        } else {
-            args
+        // If no arguments provided, or if --goal is first arg, launch start mode
+        val effectiveArgs = when {
+            args.isEmpty() -> arrayOf("start")
+            args.firstOrNull()?.startsWith("--goal") == true ||
+            args.firstOrNull()?.startsWith("-g") == true -> arrayOf("start") + args
+            else -> args
         }
 
         // Run the CLI with injected dependencies
         AmpereCommand()
             .subcommands(
-                StartCommand(context.eventRelayService),
+                StartCommand { context },
                 HelpCommand(),
                 InteractiveCommand(context),
                 WatchCommand(context.eventRelayService),
