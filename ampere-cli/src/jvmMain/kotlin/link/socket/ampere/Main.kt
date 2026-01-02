@@ -73,7 +73,7 @@ fun main(args: Array<String>) {
             else -> args
         }
 
-        // Run the CLI with injected dependenciesIt
+        // Run the CLI with injected dependencies
         AmpereCommand()
             .subcommands(
                 StartCommand { context },
@@ -86,6 +86,7 @@ fun main(args: Array<String>) {
                 OutcomesCommand(context.outcomeMemoryRepository),
                 IssuesCommand(),
                 RespondCommand(),
+                WorkCommand { context },
                 TestCommand(),
                 DemoCommand().subcommands(
                     JazzDemoCommand { context }

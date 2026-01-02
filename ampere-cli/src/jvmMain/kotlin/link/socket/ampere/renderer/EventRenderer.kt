@@ -15,6 +15,7 @@ import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.FileSystemEvent
+import link.socket.ampere.agents.domain.event.GitEvent
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
@@ -119,6 +120,7 @@ class EventRenderer(
             is Event.QuestionRaised -> "❓" to magenta
             is Event.TaskCreated -> "📋" to green
             is FileSystemEvent -> "📄" to cyan
+            is GitEvent -> "🌿" to green
             is HumanInteractionEvent -> "🙋" to red
             is MeetingEvent -> "📅" to magenta
             is MemoryEvent -> "🧠" to cyan
