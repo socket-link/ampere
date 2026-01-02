@@ -22,6 +22,7 @@ import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.reasoning.StepContext
 import link.socket.ampere.agents.domain.reasoning.StepResult
 import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.domain.task.MeetingTask
@@ -894,21 +895,99 @@ open class CodeAgent(
      * This method orchestrates the complete issue-to-PR pipeline:
      * 1. Update status to IN_PROGRESS
      * 2. Create implementation plan
-     * 3. Create feature branch
-     * 4. Write code
-     * 5. Commit changes
-     * 6. Push to remote
-     * 7. Create pull request
-     * 8. Update status to IN_REVIEW
+     * 3. Execute plan steps (code, branch, commit, push, PR)
+     * 4. Update status to IN_REVIEW (if PR created)
+     * 5. Mark as BLOCKED on errors
      *
-     * @param issue The issue to work on
-     * TODO: Implement the full workflow orchestration
+     * The implementation uses the AgentReasoning infrastructure to generate
+     * and execute a multi-step plan. Each step can be:
+     * - Code writing
+     * - Git operations (branch, stage, commit, push)
+     * - PR creation
+     *
+     * Status updates are handled safely - failures to update status do not
+     * block the workflow.
+     *
+     * @param issue The issue to work on (must already be claimed)
+     * @return Success with message if PR created, Failure with error otherwise
      */
-    suspend fun workOnIssue(issue: ExistingIssue) {
-        // TODO: Implement full workflow
-        // For now, this is a placeholder that will be implemented
-        // as part of the complete autonomous workflow
-        println("Working on issue #${issue.number}: ${issue.title}")
+    suspend fun workOnIssue(issue: ExistingIssue): Result<String> {
+        try {
+            // 1. Update to IN_PROGRESS
+            updateIssueStatusSafely(
+                issueNumber = issue.number,
+                status = IssueWorkflowStatus.IN_PROGRESS,
+                comment = "Starting implementation",
+            )
+
+            // 2. Create task from issue
+            val task = Task.CodeChange(
+                id = "issue-${issue.number}",
+                status = TaskStatus.Pending,
+                description = buildString {
+                    appendLine("# ${issue.title}")
+                    appendLine()
+                    appendLine(issue.body)
+                    appendLine()
+                    appendLine("Issue: ${issue.url}")
+                    appendLine()
+                    appendLine("**Requirements:**")
+                    appendLine("- Implement the feature/fix described above")
+                    appendLine("- Create a feature branch")
+                    appendLine("- Write tests if applicable")
+                    appendLine("- Commit with conventional commit message")
+                    appendLine("- Push to remote")
+                    appendLine("- Create PR with 'Closes #${issue.number}'")
+                },
+            )
+
+            // 3. Execute task with reasoning (plan generation + execution)
+            val outcome = executeTaskWithReasoning(task)
+
+            // 4. Check if execution succeeded
+            when (outcome) {
+                is Outcome.Success -> {
+                    // Execution succeeded - PR should have been created
+                    // Status should already be updated to IN_REVIEW by executeGitCreatePRStep
+                    return Result.success(
+                        "Issue #${issue.number} completed successfully. " +
+                            "PR created and ready for review.",
+                    )
+                }
+
+                is Outcome.Failure -> {
+                    // Execution failed
+                    updateIssueStatusSafely(
+                        issueNumber = issue.number,
+                        status = IssueWorkflowStatus.BLOCKED,
+                        comment = "Execution failed: ${outcome.id}",
+                    )
+                    return Result.failure(
+                        Exception("Execution failed: ${outcome.id}"),
+                    )
+                }
+
+                else -> {
+                    // Other outcome (e.g., Blank)
+                    updateIssueStatusSafely(
+                        issueNumber = issue.number,
+                        status = IssueWorkflowStatus.BLOCKED,
+                        comment = "Unexpected outcome: ${outcome::class.simpleName}",
+                    )
+                    return Result.failure(
+                        Exception("Unexpected outcome: ${outcome::class.simpleName}"),
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            // Mark as blocked on any error
+            updateIssueStatusSafely(
+                issueNumber = issue.number,
+                status = IssueWorkflowStatus.BLOCKED,
+                comment = "Error: ${e.message}",
+            )
+            return Result.failure(e)
+        }
     }
 
     private fun createTicketForTask(task: Task.CodeChange): Ticket {
