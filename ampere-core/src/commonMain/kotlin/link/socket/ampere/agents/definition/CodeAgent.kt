@@ -1057,7 +1057,7 @@ open class CodeAgent(
      *
      * @return List of available issues, or empty list if provider is unavailable
      */
-    internal suspend fun queryAvailableIssues(): List<ExistingIssue> {
+    suspend fun queryAvailableIssues(): List<ExistingIssue> {
         val provider = issueTrackerProvider ?: return emptyList()
         val repo = repository ?: return emptyList()
 
