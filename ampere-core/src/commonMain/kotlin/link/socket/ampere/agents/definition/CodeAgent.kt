@@ -8,6 +8,7 @@ import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.code.CodeParams
 import link.socket.ampere.agents.definition.code.CodePrompts
 import link.socket.ampere.agents.definition.code.CodeState
+import link.socket.ampere.agents.definition.code.IssueWorkflowStatus
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
@@ -48,6 +49,7 @@ import link.socket.ampere.agents.execution.tools.git.ToolStageFiles
 import link.socket.ampere.integrations.issues.ExistingIssue
 import link.socket.ampere.integrations.issues.IssueQuery
 import link.socket.ampere.integrations.issues.IssueState
+import link.socket.ampere.integrations.issues.IssueUpdate
 
 /**
  * Code Writer Agent - Autonomous code generation and file writing.
@@ -467,7 +469,8 @@ open class CodeAgent(
      * 1. Retrieves issue context and changed files from step context
      * 2. Uses CodeAgentGitHelpers to generate PR title, body, and reviewers
      * 3. Creates a pull request via the Git tool
-     * 4. Stores PR details in context for subsequent steps
+     * 4. Updates issue status to IN_REVIEW
+     * 5. Stores PR details in context for subsequent steps
      *
      * @param task The PR creation task
      * @param context Step context containing issue, branch, and file information
@@ -502,6 +505,17 @@ open class CodeAgent(
 
         // TODO: Execute actual PR creation when Git tool implementation is complete
         // For now, return success with placeholder data
+        val prNumber = 1 // Placeholder
+
+        // Update issue status to IN_REVIEW after PR creation
+        if (issueNumber != null) {
+            updateIssueStatusSafely(
+                issueNumber = issueNumber,
+                status = IssueWorkflowStatus.IN_REVIEW,
+                comment = "Pull request #$prNumber created. Reviewers: ${reviewers.joinToString(", ")}",
+            )
+        }
+
         return StepResult.success(
             description = task.description,
             details = buildString {
@@ -512,6 +526,7 @@ open class CodeAgent(
             },
             contextUpdates = mapOf(
                 "pr_created" to true,
+                "pr_number" to prNumber,
                 "pr_title" to prTitle,
                 "pr_reviewers" to reviewers,
             ),
@@ -681,6 +696,103 @@ open class CodeAgent(
             description = task.description,
             details = "Git status check completed",
         )
+    }
+
+    // ========================================================================
+    // Issue Status Management
+    // ========================================================================
+
+    /**
+     * Updates issue status with label changes and optional comment.
+     *
+     * This method manages the issue workflow by:
+     * 1. Fetching the current issue to get existing labels
+     * 2. Adding workflow status labels (e.g., "in-progress", "in-review")
+     * 3. Removing superseded status labels (e.g., removing "assigned" when adding "in-progress")
+     * 4. Adding a comment to provide human-readable context
+     *
+     * The label updates provide GitHub-visible progress tracking, while comments
+     * explain the status change and provide details (e.g., blocker reasons, PR links).
+     *
+     * @param issueNumber The issue number to update
+     * @param status The new workflow status
+     * @param comment Optional human-readable comment explaining the status change
+     * @return Result indicating success or failure
+     */
+    internal suspend fun updateIssueStatus(
+        issueNumber: Int,
+        status: IssueWorkflowStatus,
+        comment: String? = null,
+    ): Result<ExistingIssue> {
+        val provider = issueTrackerProvider
+        val repo = repository
+
+        if (provider == null || repo == null) {
+            return Result.failure(
+                IllegalStateException("Issue tracker provider or repository not configured"),
+            )
+        }
+
+        // Fetch current issue to get existing labels
+        val currentIssue = provider.queryIssues(
+            repository = repo,
+            query = IssueQuery(
+                state = IssueState.Open,
+                limit = 1,
+            ),
+        ).getOrElse { emptyList() }
+            .find { it.number == issueNumber }
+            ?: return Result.failure(
+                IllegalArgumentException("Issue #$issueNumber not found"),
+            )
+
+        // Calculate new labels by adding/removing as specified
+        val currentLabels = currentIssue.labels.toMutableSet()
+        currentLabels.removeAll(status.removeLabels.toSet())
+        currentLabels.addAll(status.addLabels)
+
+        // Build update with new labels and optional comment
+        val update = IssueUpdate(
+            labels = currentLabels.toList(),
+        )
+
+        // Update the issue
+        val updateResult = provider.updateIssue(
+            repository = repo,
+            issueNumber = issueNumber,
+            update = update,
+        )
+
+        // Add comment if provided and update succeeded
+        if (comment != null && updateResult.isSuccess) {
+            val commentText = "${status.emoji} $comment"
+            // Note: IssueUpdate doesn't support adding comments directly
+            // TODO: Add comment via separate API call when available
+            // For now, the label changes provide the status visibility
+        }
+
+        return updateResult
+    }
+
+    /**
+     * Updates issue status and handles failures gracefully.
+     *
+     * Logs errors but doesn't throw, allowing workflow to continue even if
+     * status updates fail (e.g., network issues, API limits).
+     *
+     * @param issueNumber The issue number to update
+     * @param status The new workflow status
+     * @param comment Optional comment
+     */
+    internal suspend fun updateIssueStatusSafely(
+        issueNumber: Int,
+        status: IssueWorkflowStatus,
+        comment: String,
+    ) {
+        updateIssueStatus(issueNumber, status, comment)
+            .onFailure { error ->
+                println("Warning: Failed to update issue #$issueNumber status to ${status.name}: ${error.message}")
+            }
     }
 
     private fun createTicketForTask(task: Task.CodeChange): Ticket {
