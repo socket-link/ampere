@@ -38,6 +38,9 @@ import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.integrations.issues.ExistingIssue
+import link.socket.ampere.integrations.issues.IssueQuery
+import link.socket.ampere.integrations.issues.IssueState
 
 /**
  * Code Writer Agent - Autonomous code generation and file writing.
@@ -59,6 +62,8 @@ open class CodeAgent(
     private val executor: Executor = FunctionExecutor.create(),
     memoryServiceFactory: ((AgentId) -> link.socket.ampere.agents.domain.memory.AgentMemoryService)? = null,
     reasoningOverride: AgentReasoning? = null,
+    private val issueTrackerProvider: link.socket.ampere.integrations.issues.IssueTrackerProvider? = null,
+    private val repository: String? = null,
 ) : AutonomousAgent<CodeState>() {
 
     override val id: AgentId = generateUUID("CodeWriterAgent")
@@ -81,7 +86,9 @@ open class CodeAgent(
         this.executor = this@CodeAgent.executor
 
         perception {
-            contextBuilder = { state -> buildPerceptionContext(state) }
+            contextBuilder = { state ->
+                runBlocking { buildPerceptionContext(state) }
+            }
         }
 
         planning {
@@ -282,15 +289,69 @@ open class CodeAgent(
     }
 
     // ========================================================================
+    // Issue Discovery for Perception
+    // ========================================================================
+
+    /**
+     * Query GitHub for issues assigned to this agent.
+     *
+     * Uses the IssueTrackerProvider to find open issues that are assigned
+     * to this agent (or its associated GitHub username).
+     *
+     * @return List of assigned issues, or empty list if provider is unavailable
+     */
+    internal suspend fun queryAssignedIssues(): List<ExistingIssue> {
+        val provider = issueTrackerProvider ?: return emptyList()
+        val repo = repository ?: return emptyList()
+
+        return provider.queryIssues(
+            repository = repo,
+            query = IssueQuery(
+                state = IssueState.Open,
+                assignee = "CodeWriterAgent", // TODO: Map to actual GitHub username
+                labels = emptyList(),
+                limit = 20,
+            ),
+        ).getOrElse { emptyList() }
+    }
+
+    /**
+     * Query GitHub for unassigned issues matching this agent's capabilities.
+     *
+     * Finds open issues labeled with "code" or "task" that are not yet
+     * assigned, making them available for this agent to claim.
+     *
+     * @return List of available issues, or empty list if provider is unavailable
+     */
+    internal suspend fun queryAvailableIssues(): List<ExistingIssue> {
+        val provider = issueTrackerProvider ?: return emptyList()
+        val repo = repository ?: return emptyList()
+
+        return provider.queryIssues(
+            repository = repo,
+            query = IssueQuery(
+                state = IssueState.Open,
+                assignee = null, // Unassigned issues only
+                labels = listOf("code", "task"), // Issues matching our skills
+                limit = 10,
+            ),
+        ).getOrElse { emptyList() }
+    }
+
+    // ========================================================================
     // Context Builders - Agent-specific customizations
     // ========================================================================
 
-    private fun buildPerceptionContext(state: AgentState): String {
+    internal suspend fun buildPerceptionContext(state: AgentState): String {
         val codeState = state as? CodeState
         val currentMemory = state.getCurrentMemory()
         val pastMemory = state.getPastMemory()
         val currentTask = currentMemory.task
         val currentOutcome = currentMemory.outcome
+
+        // Query issues from GitHub (if provider is available)
+        val assignedIssues = queryAssignedIssues()
+        val availableIssues = queryAvailableIssues()
 
         return PerceptionContextBuilder()
             .header("CodeWriterAgent State Analysis")
@@ -343,6 +404,27 @@ open class CodeAgent(
                 pastMemory.knowledgeFromOutcomes.takeLast(3).forEach { knowledge ->
                     line("- Approach: ${knowledge.approach}")
                     line("  Learnings: ${knowledge.learnings}")
+                }
+            }
+            .sectionIf(assignedIssues.isNotEmpty(), "Assigned Issues") {
+                assignedIssues.forEach { issue ->
+                    line("- #${issue.number}: ${issue.title}")
+                    line("  URL: ${issue.url}")
+                    line("  Labels: ${issue.labels.joinToString(", ")}")
+                    if (issue.body.isNotBlank()) {
+                        val preview = issue.body.take(100).replace("\n", " ")
+                        line("  Description: $preview${if (issue.body.length > 100) "..." else ""}")
+                    }
+                }
+            }
+            .sectionIf(availableIssues.isNotEmpty(), "Available Issues (Unassigned)") {
+                availableIssues.take(5).forEach { issue ->
+                    line("- #${issue.number}: ${issue.title}")
+                    line("  URL: ${issue.url}")
+                    line("  Labels: ${issue.labels.joinToString(", ")}")
+                }
+                if (availableIssues.size > 5) {
+                    line("... and ${availableIssues.size - 5} more available")
                 }
             }
             .section("Available Tools") {
