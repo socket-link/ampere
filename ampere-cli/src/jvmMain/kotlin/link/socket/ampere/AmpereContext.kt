@@ -8,11 +8,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.definition.CodeAgent
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
+import link.socket.ampere.agents.execution.AutonomousWorkLoop
+import link.socket.ampere.agents.execution.WorkLoopConfig
 import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.environment.workspace.defaultWorkspace
@@ -184,6 +187,19 @@ class AmpereContext(
     }
 
     /**
+     * Autonomous work loop for CodeAgent.
+     * Manages continuous polling and processing of GitHub issues.
+     */
+    private var _autonomousWorkLoop: AutonomousWorkLoop? = null
+
+    /**
+     * Access the autonomous work loop.
+     * Throws an error if not initialized via createAutonomousWorkLoop().
+     */
+    val autonomousWorkLoop: AutonomousWorkLoop
+        get() = _autonomousWorkLoop ?: error("Autonomous work loop not initialized. Call createAutonomousWorkLoop() first.")
+
+    /**
      * Workspace event mapper that transforms FileSystemEvents into ProductEvents.
      * Null if workspace monitoring is disabled.
      */
@@ -249,12 +265,60 @@ class AmpereContext(
     }
 
     /**
+     * Create and initialize the autonomous work loop for a CodeAgent.
+     *
+     * This must be called before attempting to start autonomous work.
+     *
+     * @param codeAgent The CodeAgent instance that will process issues
+     * @param config Optional configuration for work loop behavior
+     * @return The created AutonomousWorkLoop instance
+     */
+    fun createAutonomousWorkLoop(
+        codeAgent: CodeAgent,
+        config: WorkLoopConfig = WorkLoopConfig(),
+    ): AutonomousWorkLoop {
+        _autonomousWorkLoop = AutonomousWorkLoop(
+            agent = codeAgent,
+            config = config,
+            scope = scope,
+        )
+        return autonomousWorkLoop
+    }
+
+    /**
+     * Start the autonomous work loop.
+     *
+     * The loop will begin polling for available issues and processing them
+     * according to the configured strategy.
+     *
+     * @throws IllegalStateException if the work loop has not been initialized
+     */
+    fun startAutonomousWork() {
+        autonomousWorkLoop.start()
+        logger.logInfo("Autonomous work loop started")
+    }
+
+    /**
+     * Stop the autonomous work loop.
+     *
+     * Gracefully stops the polling loop. Any in-progress issue will complete,
+     * but no new issues will be claimed.
+     */
+    fun stopAutonomousWork() {
+        _autonomousWorkLoop?.stop()
+        logger.logInfo("Autonomous work loop stopped")
+    }
+
+    /**
      * Close all resources and stop background operations.
      *
      * This should be called when the CLI is shutting down to ensure
      * clean resource cleanup.
      */
     fun close() {
+        // Stop autonomous work if running
+        stopAutonomousWork()
+
         // Stop the workspace monitoring system if enabled
         fileSystemReceptor?.stop()
 

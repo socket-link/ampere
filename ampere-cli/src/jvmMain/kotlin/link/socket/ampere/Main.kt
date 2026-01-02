@@ -70,6 +70,9 @@ fun main(args: Array<String>) {
     productAgent.initialize(ioScope)
     qualityAgent.initialize(ioScope)
 
+    // Initialize autonomous work loop for CodeAgent
+    context.createAutonomousWorkLoop(codeAgent)
+
     try {
         // Start all orchestrator services
         context.start()
