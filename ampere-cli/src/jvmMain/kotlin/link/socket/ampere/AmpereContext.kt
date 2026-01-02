@@ -187,6 +187,19 @@ class AmpereContext(
     }
 
     /**
+     * CodeAgent instance for autonomous work.
+     * Set when createAutonomousWorkLoop() is called.
+     */
+    private var _codeAgent: CodeAgent? = null
+
+    /**
+     * Access the CodeAgent instance.
+     * Throws an error if not initialized via createAutonomousWorkLoop().
+     */
+    val codeAgent: CodeAgent
+        get() = _codeAgent ?: error("CodeAgent not initialized. Call createAutonomousWorkLoop() first.")
+
+    /**
      * Autonomous work loop for CodeAgent.
      * Manages continuous polling and processing of GitHub issues.
      */
@@ -277,6 +290,7 @@ class AmpereContext(
         codeAgent: CodeAgent,
         config: WorkLoopConfig = WorkLoopConfig(),
     ): AutonomousWorkLoop {
+        _codeAgent = codeAgent
         _autonomousWorkLoop = AutonomousWorkLoop(
             agent = codeAgent,
             config = config,

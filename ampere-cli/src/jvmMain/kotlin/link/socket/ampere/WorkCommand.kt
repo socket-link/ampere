@@ -13,6 +13,7 @@ import com.github.ajalt.mordant.rendering.TextColors.red
 import com.github.ajalt.mordant.rendering.TextColors.yellow
 import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.repl.TerminalFactory
 
@@ -105,89 +106,59 @@ class WorkCommand(
         if (dryRun) {
             terminal.println(yellow("⚠ Dry run mode - no changes will be made"))
             terminal.println()
+
+            // Show what would happen
+            val issues = context.codeAgent.queryAvailableIssues()
+            terminal.println("Would work on ${issues.size} available issue(s)")
+            issues.take(5).forEach { issue ->
+                terminal.println("  #${issue.number}: ${issue.title}")
+            }
+            return@runBlocking
         }
 
-        // TODO: Implement actual work logic
-        // 1. Get CodeAgent from context
-        // 2. Configure IssueTrackerProvider (GitHub)
-        // 3. If issueNumber specified, work on that issue
-        // 4. Otherwise, discover available issues
-        // 5. For each issue:
-        //    - Claim issue (update status to CLAIMED)
-        //    - Create implementation plan
-        //    - Execute plan (with dry-run support)
-        //    - Create PR
-        //    - Update status to IN_REVIEW
-        // 6. In continuous mode, repeat until no issues or max reached
+        if (continuous) {
+            // Start work loop
+            context.startAutonomousWork()
 
-        terminal.println(bold(red("🚧 Not Yet Implemented")))
-        terminal.println()
-        terminal.println("This command skeleton is ready for implementation.")
-        terminal.println("Next steps:")
-        terminal.println("  1. Wire up CodeAgent from AmpereContext")
-        terminal.println("  2. Implement GitHub IssueTrackerProvider")
-        terminal.println("  3. Add issue discovery logic")
-        terminal.println("  4. Implement work loop with status updates")
-        terminal.println("  5. Add error handling and progress reporting")
-        terminal.println()
-        terminal.println(dim("See CodeAgentIntegrationTest.kt for workflow details"))
-    }
+            terminal.println(green("Autonomous work mode started"))
+            terminal.println("Press Ctrl+C to stop")
 
-    /**
-     * Discover available issues to work on.
-     *
-     * Priority order:
-     * 1. Specific issue if --issue provided
-     * 2. Issues assigned to CodeAgent
-     * 3. Unassigned issues with 'code' label
-     */
-    private suspend fun discoverIssues(
-        repo: String,
-        // agent: CodeAgent
-    ): List<Int> {
-        // TODO: Implement issue discovery
-        // - If issueNumber is set, return that
-        // - Otherwise query assigned issues
-        // - If none assigned, query available issues with 'code' label
-        // - Filter by labels if provided
-        // - Return list of issue numbers
-        return emptyList()
-    }
+            // Wait for user interrupt
+            Runtime.getRuntime().addShutdownHook(Thread {
+                runBlocking { context.stopAutonomousWork() }
+            })
 
-    /**
-     * Work on a single issue autonomously.
-     *
-     * Returns true if successful, false if failed or blocked.
-     */
-    private suspend fun workOnIssue(
-        repo: String,
-        issue: Int,
-        // agent: CodeAgent
-    ): Boolean {
-        terminal.println(bold(cyan("Working on issue #$issue")))
-        terminal.println()
+            // Block until interrupted
+            while (context.autonomousWorkLoop.isRunning.value) {
+                kotlinx.coroutines.delay(1000)
+            }
+        } else {
+            // Work on single issue
+            val issues = context.codeAgent.queryAvailableIssues()
 
-        // TODO: Implement single issue workflow
-        // 1. Fetch issue details
-        // 2. Update status to CLAIMED
-        // 3. Create implementation plan
-        // 4. Update status to IN_PROGRESS
-        // 5. Execute plan steps
-        // 6. Create PR
-        // 7. Update status to IN_REVIEW
-        // 8. Return true if successful
+            if (issues.isEmpty()) {
+                terminal.println(yellow("No available issues found"))
+                return@runBlocking
+            }
 
-        return false
-    }
+            val issue = issueNumber?.let { num ->
+                issues.find { it.number == num }
+            } ?: issues.first()
 
-    /**
-     * Display progress for the current issue.
-     */
-    private fun showProgress(
-        currentIssue: Int,
-        totalIssues: Int,
-        status: String
-    ) {
-        terminal.println(gray("[$currentIssue/$totalIssues] $status"))
+            terminal.println("Working on issue #${issue.number}: ${issue.title}")
+
+            val claimed = context.codeAgent.claimIssue(issue.number)
+            if (claimed.isFailure) {
+                terminal.println(red("Failed to claim issue: ${claimed.exceptionOrNull()?.message}"))
+                return@runBlocking
+            }
+
+            val result = context.codeAgent.workOnIssue(issue)
+            if (result.isSuccess) {
+                terminal.println(green("✓ Successfully completed issue #${issue.number}"))
+            } else {
+                terminal.println(red("✗ Failed: ${result.exceptionOrNull()?.message}"))
+            }
+        }
     }
 }
