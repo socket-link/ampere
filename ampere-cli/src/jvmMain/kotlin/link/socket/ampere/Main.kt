@@ -13,8 +13,49 @@ import link.socket.ampere.data.RepositoryFactory
 import link.socket.ampere.data.createJvmDriver
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.koog.KoogAgentFactory
+import link.socket.ampere.integrations.issues.github.GitHubCliProvider
 import link.socket.ampere.util.LoggingConfiguration
 import link.socket.ampere.util.configureLogging
+import java.io.File
+
+/**
+ * Detects the GitHub repository from the git remote origin URL.
+ *
+ * Parses the remote URL to extract the owner/repo format.
+ * Supports both HTTPS and SSH URLs:
+ * - https://github.com/owner/repo.git -> owner/repo
+ * - git@github.com:owner/repo.git -> owner/repo
+ *
+ * @return Repository in "owner/repo" format, or null if not found or not a GitHub repository
+ */
+fun detectGitHubRepository(): String? {
+    return try {
+        val process = ProcessBuilder("git", "remote", "get-url", "origin")
+            .directory(File("."))
+            .redirectErrorStream(false)
+            .start()
+
+        val url = process.inputStream.bufferedReader().readText().trim()
+        process.waitFor()
+
+        // Parse GitHub URL to extract owner/repo
+        when {
+            // HTTPS: https://github.com/owner/repo.git
+            url.startsWith("https://github.com/") -> {
+                url.removePrefix("https://github.com/")
+                    .removeSuffix(".git")
+            }
+            // SSH: git@github.com:owner/repo.git
+            url.startsWith("git@github.com:") -> {
+                url.removePrefix("git@github.com:")
+                    .removeSuffix(".git")
+            }
+            else -> null
+        }
+    } catch (e: Exception) {
+        null
+    }
+}
 
 /**
  * Main entry point for the Ampere CLI.
@@ -46,11 +87,17 @@ fun main(args: Array<String>) {
     val context = AmpereContext(logger = eventLogger)
     val environmentService = context.environmentService
 
+    // Initialize GitHub integration
+    val issueTrackerProvider = GitHubCliProvider()
+    val repository = detectGitHubRepository()
+
     val agentFactory = AgentFactory(
         scope = ioScope,
         ticketOrchestrator = environmentService.ticketOrchestrator,
         aiConfigurationFactory = aiConfigurationFactory,
-        memoryServiceFactory = { agentId -> context.createMemoryService(agentId) }
+        memoryServiceFactory = { agentId -> context.createMemoryService(agentId) },
+        issueTrackerProvider = issueTrackerProvider,
+        repository = repository,
     )
 
     val codeAgent = agentFactory.create<CodeAgent>(AgentType.CODE)
