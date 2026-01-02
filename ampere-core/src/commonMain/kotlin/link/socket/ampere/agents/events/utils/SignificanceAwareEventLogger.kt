@@ -5,6 +5,7 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.domain.event.FileSystemEvent
+import link.socket.ampere.agents.domain.event.GitEvent
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
@@ -114,6 +115,12 @@ class SignificanceAwareEventLogger(
         is PlanEvent.PlanStepCompleted -> EventSignificance.SIGNIFICANT
         is PlanEvent.TaskAssigned -> EventSignificance.SIGNIFICANT
         is PlanEvent.MonitoringStarted -> EventSignificance.SIGNIFICANT
+        is GitEvent.BranchCreated -> EventSignificance.SIGNIFICANT
+        is GitEvent.Committed -> EventSignificance.SIGNIFICANT
+        is GitEvent.Pushed -> EventSignificance.SIGNIFICANT
+        is GitEvent.PullRequestCreated -> EventSignificance.SIGNIFICANT
+        is GitEvent.FilesStaged -> EventSignificance.ROUTINE
+        is GitEvent.OperationFailed -> EventSignificance.CRITICAL
 
         // Routine cognitive operations - maintenance work
         is MemoryEvent.KnowledgeRecalled -> EventSignificance.ROUTINE
