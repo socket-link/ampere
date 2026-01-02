@@ -795,6 +795,99 @@ open class CodeAgent(
             }
     }
 
+    /**
+     * Attempt to claim an unassigned issue using optimistic locking.
+     *
+     * This method implements race condition protection when multiple CodeAgent instances
+     * attempt to claim the same issue simultaneously. It:
+     * 1. Reads the current issue state
+     * 2. Checks if already claimed or in another workflow status
+     * 3. Updates to CLAIMED status
+     * 4. Verifies the claim succeeded (detects if another agent claimed it first)
+     *
+     * The verification step is critical: if two agents update simultaneously, both will
+     * succeed at step 3, but only one will see CLAIMED status at step 4. The other will
+     * see a different status and know it lost the race.
+     *
+     * @param issueNumber The issue number to claim
+     * @return Success if claimed, Failure if:
+     *   - Provider or repository not configured
+     *   - Issue not found
+     *   - Issue already claimed or in progress
+     *   - Another agent won the race condition
+     *   - Any error during the claim process
+     */
+    suspend fun claimIssue(issueNumber: Int): Result<Unit> {
+        val provider = issueTrackerProvider
+            ?: return Result.failure(IllegalStateException("IssueTrackerProvider not configured"))
+        val repo = repository
+            ?: return Result.failure(IllegalStateException("Repository not configured"))
+
+        try {
+            // 1. Read current issue state
+            val currentIssue = provider.queryIssues(
+                repository = repo,
+                query = IssueQuery(
+                    state = IssueState.Open,
+                    limit = 100,
+                ),
+            ).getOrNull()?.find { it.number == issueNumber }
+                ?: return Result.failure(IllegalArgumentException("Issue #$issueNumber not found"))
+
+            // 2. Check if already claimed
+            val currentStatus = IssueWorkflowStatus.fromLabels(currentIssue.labels)
+            if (currentStatus != null && currentStatus != IssueWorkflowStatus.CLAIMED) {
+                return Result.failure(
+                    IllegalStateException("Issue already in ${currentStatus.name} status"),
+                )
+            }
+
+            // If already CLAIMED by someone (has 'assigned' label), don't re-claim
+            if (currentStatus == IssueWorkflowStatus.CLAIMED) {
+                return Result.failure(
+                    IllegalStateException("Issue already claimed"),
+                )
+            }
+
+            // 3. Update to CLAIMED status
+            val updateResult = updateIssueStatus(
+                issueNumber = issueNumber,
+                status = IssueWorkflowStatus.CLAIMED,
+                comment = "CodeAgent claiming this issue",
+            )
+
+            if (updateResult.isFailure) {
+                return Result.failure(
+                    updateResult.exceptionOrNull() ?: Exception("Failed to claim issue"),
+                )
+            }
+
+            // 4. Verify we got it (check for race condition)
+            // Small delay to let GitHub propagate the update
+            kotlinx.coroutines.delay(500)
+
+            val verifiedIssue = provider.queryIssues(
+                repository = repo,
+                query = IssueQuery(
+                    state = IssueState.Open,
+                    limit = 100,
+                ),
+            ).getOrNull()?.find { it.number == issueNumber }
+
+            val finalStatus = IssueWorkflowStatus.fromLabels(verifiedIssue?.labels ?: emptyList())
+
+            if (finalStatus != IssueWorkflowStatus.CLAIMED) {
+                return Result.failure(
+                    IllegalStateException("Race condition: another agent claimed the issue"),
+                )
+            }
+
+            return Result.success(Unit)
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+    }
+
     private fun createTicketForTask(task: Task.CodeChange): Ticket {
         val now = Clock.System.now()
         return Ticket(

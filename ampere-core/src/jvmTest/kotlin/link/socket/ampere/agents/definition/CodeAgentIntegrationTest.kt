@@ -100,6 +100,10 @@ class CodeAgentIntegrationTest {
         val issues = mutableMapOf<Int, ExistingIssue>()
         var nextIssueNumber = 1
 
+        // Race condition simulation
+        var simulateRaceCondition = false
+        var raceConditionIssueNumber: Int? = null
+
         override suspend fun validateConnection(): Result<Unit> = Result.success(Unit)
 
         override suspend fun createIssue(
@@ -136,6 +140,21 @@ class CodeAgentIntegrationTest {
             repository: String,
             query: IssueQuery,
         ): Result<List<ExistingIssue>> {
+            // Simulate race condition: change issue labels to IN_PROGRESS
+            // This simulates another agent claiming and starting work
+            if (simulateRaceCondition && raceConditionIssueNumber != null) {
+                issues[raceConditionIssueNumber]?.let { issue ->
+                    // Only modify if it has "assigned" label (was just claimed)
+                    if (issue.labels.contains("assigned")) {
+                        issues[raceConditionIssueNumber!!] = issue.copy(
+                            labels = issue.labels
+                                .filter { it != "assigned" }
+                                .plus("in-progress"),
+                        )
+                    }
+                }
+            }
+
             var filtered = issues.values.toList()
 
             query.state?.let { state ->
@@ -372,6 +391,154 @@ class CodeAgentIntegrationTest {
         val status = IssueWorkflowStatus.fromLabels(labels)
 
         assertEquals(IssueWorkflowStatus.IN_REVIEW, status)
+    }
+
+    // ========================================================================
+    // Issue Claiming Tests (Optimistic Locking)
+    // ========================================================================
+
+    @Test
+    fun `claimIssue successfully claims unassigned issue`() = runTest {
+        val issueProvider = TestIssueTrackerProvider()
+        val agent = createTestAgent(issueProvider)
+
+        // Create an unassigned issue (no workflow labels)
+        val issue = issueProvider.createTestIssue(
+            title = "Fix bug in authentication",
+            body = "The login flow has a race condition",
+            labels = listOf("bug", "backend"),
+        )
+
+        // Claim the issue
+        val result = agent.claimIssue(issue.number)
+
+        // Verify claim succeeded
+        assertTrue(result.isSuccess)
+
+        // Verify issue is now marked as CLAIMED
+        val updatedIssue = issueProvider.issues[issue.number]
+        assertNotNull(updatedIssue)
+        assertTrue(updatedIssue.labels.contains("assigned"))
+        assertFalse(updatedIssue.labels.contains("available"))
+        assertFalse(updatedIssue.labels.contains("help-wanted"))
+    }
+
+    @Test
+    fun `claimIssue fails when issue already claimed`() = runTest {
+        val issueProvider = TestIssueTrackerProvider()
+        val agent = createTestAgent(issueProvider)
+
+        // Create an already-claimed issue
+        val issue = issueProvider.createTestIssue(
+            title = "Add feature X",
+            body = "Implement feature X",
+            labels = listOf("assigned", "feature"),
+        )
+
+        // Try to claim the already-claimed issue
+        val result = agent.claimIssue(issue.number)
+
+        // Verify claim failed
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("already claimed") == true)
+    }
+
+    @Test
+    fun `claimIssue fails when issue is in progress`() = runTest {
+        val issueProvider = TestIssueTrackerProvider()
+        val agent = createTestAgent(issueProvider)
+
+        // Create an issue that's already in progress
+        val issue = issueProvider.createTestIssue(
+            title = "Refactor authentication module",
+            body = "Clean up the auth code",
+            labels = listOf("in-progress", "refactor"),
+        )
+
+        // Try to claim the in-progress issue
+        val result = agent.claimIssue(issue.number)
+
+        // Verify claim failed
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("IN_PROGRESS") == true)
+    }
+
+    @Test
+    fun `claimIssue fails when issue is blocked`() = runTest {
+        val issueProvider = TestIssueTrackerProvider()
+        val agent = createTestAgent(issueProvider)
+
+        // Create a blocked issue
+        val issue = issueProvider.createTestIssue(
+            title = "Implement payment integration",
+            body = "Blocked by missing API credentials",
+            labels = listOf("blocked", "feature"),
+        )
+
+        // Try to claim the blocked issue
+        val result = agent.claimIssue(issue.number)
+
+        // Verify claim failed
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("BLOCKED") == true)
+    }
+
+    @Test
+    fun `claimIssue fails when issue is in review`() = runTest {
+        val issueProvider = TestIssueTrackerProvider()
+        val agent = createTestAgent(issueProvider)
+
+        // Create an issue in review
+        val issue = issueProvider.createTestIssue(
+            title = "Optimize database queries",
+            body = "Make queries faster",
+            labels = listOf("in-review", "performance"),
+        )
+
+        // Try to claim the in-review issue
+        val result = agent.claimIssue(issue.number)
+
+        // Verify claim failed
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("IN_REVIEW") == true)
+    }
+
+    @Test
+    fun `claimIssue fails when issue not found`() = runTest {
+        val issueProvider = TestIssueTrackerProvider()
+        val agent = createTestAgent(issueProvider)
+
+        // Try to claim non-existent issue
+        val result = agent.claimIssue(999)
+
+        // Verify claim failed
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("not found") == true)
+    }
+
+    @Test
+    fun `claimIssue detects race condition when another agent claims simultaneously`() = runTest {
+        val issueProvider = TestIssueTrackerProvider()
+        val agent = createTestAgent(issueProvider)
+
+        // Create unassigned issue
+        val issue = issueProvider.createTestIssue(
+            title = "Add caching layer",
+            body = "Implement Redis caching",
+            labels = listOf("feature", "performance"),
+        )
+
+        // Simulate race condition by having the provider change labels after update but before verification
+        // We'll modify the test provider to inject a "concurrent claim" during the delay
+        issueProvider.simulateRaceCondition = true
+        issueProvider.raceConditionIssueNumber = issue.number
+
+        // Try to claim - should detect the race condition
+        val result = agent.claimIssue(issue.number)
+
+        // Verify claim failed due to race condition
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("Race condition") == true)
     }
 
     // ========================================================================
