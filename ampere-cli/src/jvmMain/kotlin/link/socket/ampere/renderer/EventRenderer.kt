@@ -120,7 +120,7 @@ class EventRenderer(
             is Event.QuestionRaised -> "❓" to magenta
             is Event.TaskCreated -> "📋" to green
             is FileSystemEvent -> "📄" to cyan
-            is GitEvent -> "🌿" to green
+            is GitEvent -> "🪾" to cyan
             is HumanInteractionEvent -> "🙋" to red
             is MeetingEvent -> "📅" to magenta
             is MemoryEvent -> "🧠" to cyan
