@@ -155,7 +155,7 @@ class CodeAgentAutonomousWorkflowTest {
         fun clear() = issues.clear()
     }
 
-    private fun createTestIssue(
+    private suspend fun createTestIssue(
         provider: TestIssueProvider,
         title: String,
         body: String,

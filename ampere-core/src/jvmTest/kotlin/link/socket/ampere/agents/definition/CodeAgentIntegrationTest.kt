@@ -8,9 +8,14 @@ import link.socket.ampere.agents.definition.code.IssueWorkflowStatus
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.FunctionTool
-import link.socket.ampere.agents.stubAgentConfiguration
+import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
+import link.socket.ampere.domain.ai.configuration.AIConfiguration
+import link.socket.ampere.domain.ai.model.AIModel
+import link.socket.ampere.domain.ai.model.AIModel_OpenAI
+import link.socket.ampere.domain.ai.provider.AIProvider
 import link.socket.ampere.integrations.issues.ExistingIssue
 import link.socket.ampere.integrations.issues.IssueQuery
 import link.socket.ampere.integrations.issues.IssueState
@@ -91,6 +96,18 @@ import kotlin.test.assertTrue
 class CodeAgentIntegrationTest {
 
     /**
+     * Fake AI configuration for testing that doesn't make real API calls.
+     */
+    private class FakeAIConfiguration : AIConfiguration {
+        override val provider: AIProvider<*, *>
+            get() = throw NotImplementedError("Provider not needed for these tests")
+        override val model: AIModel
+            get() = AIModel_OpenAI.GPT_4_1
+
+        override fun getAvailableModels(): List<Pair<AIProvider<*, *>, AIModel>> = emptyList()
+    }
+
+    /**
      * Mock issue tracker for testing issue discovery and updates.
      */
     private class TestIssueTrackerProvider : IssueTrackerProvider {
@@ -115,7 +132,7 @@ class CodeAgentIntegrationTest {
             val issue = ExistingIssue(
                 number = number,
                 title = request.title,
-                body = request.description,
+                body = request.body,
                 state = IssueState.Open,
                 labels = request.labels,
                 url = "https://github.com/test/repo/issues/$number",
@@ -123,9 +140,9 @@ class CodeAgentIntegrationTest {
             issues[number] = issue
             return Result.success(
                 CreatedIssue(
-                    number = number,
+                    localId = request.localId,
+                    issueNumber = number,
                     url = issue.url,
-                    localId = null,
                 ),
             )
         }
@@ -232,12 +249,21 @@ class CodeAgentIntegrationTest {
                     changedFiles = listOf("src/StringUtils.kt"),
                     executionStartTimestamp = Clock.System.now(),
                     executionEndTimestamp = Clock.System.now(),
+                    validation = link.socket.ampere.agents.execution.results.ExecutionResult(
+                        codeChanges = null,
+                        compilation = null,
+                        linting = null,
+                        tests = null,
+                    ),
                 )
             },
         )
 
         return CodeAgent(
-            agentConfiguration = stubAgentConfiguration(),
+            agentConfiguration = AgentConfiguration(
+                agentDefinition = WriteCodeAgent,
+                aiConfiguration = FakeAIConfiguration(),
+            ),
             toolWriteCodeFile = mockWriteTool,
             coroutineScope = CoroutineScope(Dispatchers.Default),
             issueTrackerProvider = issueProvider,
