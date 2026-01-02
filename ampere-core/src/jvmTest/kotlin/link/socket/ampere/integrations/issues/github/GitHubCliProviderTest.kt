@@ -282,4 +282,63 @@ class GitHubCliProviderIntegrationTest {
         assertTrue(created.issueNumber > 0)
         assertTrue(created.url.contains("github.com"))
     }
+
+    // Manual test - uncomment to run against real repository
+    // WARNING: This modifies real issues!
+    // @Test
+    fun `updateIssue updates labels on real issue`() = runBlocking {
+        // First create a test issue
+        val createRequest = IssueCreateRequest(
+            localId = "test-label-update",
+            type = IssueType.Task,
+            title = "Test Label Update",
+            body = "Testing label update functionality",
+            labels = listOf("test"),
+            assignees = emptyList(),
+            parent = null,
+            dependsOn = emptyList(),
+        )
+
+        val createResult = provider.createIssue(
+            repository = "socket-link/ampere",
+            request = createRequest,
+            resolvedDependencies = emptyMap(),
+        )
+
+        assertTrue(createResult.isSuccess, "Expected issue creation to succeed")
+        val created = createResult.getOrThrow()
+
+        // Update labels
+        val update = IssueUpdate(
+            labels = listOf("test", "automation", "updated"),
+        )
+
+        val updateResult = provider.updateIssue(
+            repository = "socket-link/ampere",
+            issueNumber = created.issueNumber,
+            update = update,
+        )
+
+        assertTrue(updateResult.isSuccess, "Expected label update to succeed")
+        val updated = updateResult.getOrThrow()
+        assertEquals(3, updated.labels.size)
+        assertTrue(updated.labels.contains("test"))
+        assertTrue(updated.labels.contains("automation"))
+        assertTrue(updated.labels.contains("updated"))
+
+        // Clear all labels
+        val clearUpdate = IssueUpdate(
+            labels = emptyList(),
+        )
+
+        val clearResult = provider.updateIssue(
+            repository = "socket-link/ampere",
+            issueNumber = created.issueNumber,
+            update = clearUpdate,
+        )
+
+        assertTrue(clearResult.isSuccess, "Expected label clear to succeed")
+        val cleared = clearResult.getOrThrow()
+        assertEquals(0, cleared.labels.size)
+    }
 }

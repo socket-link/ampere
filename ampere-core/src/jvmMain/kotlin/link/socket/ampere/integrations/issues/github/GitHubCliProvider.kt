@@ -289,9 +289,39 @@ class GitHubCliProvider : IssueTrackerProvider {
             }
         }
 
-        // Labels and assignees require separate API calls
-        // For now, we skip these in the update implementation
-        // Future: Use gh api to update labels and assignees
+        // Update labels using GitHub API
+        update.labels?.let { newLabels ->
+            // Use gh api to atomically replace labels via PUT /repos/{owner}/{repo}/issues/{number}/labels
+            // The gh CLI accepts array values via repeated -f labels[]=value flags
+            val args = mutableListOf(
+                "api",
+                "repos/$repository/issues/$issueNumber/labels",
+                "-X", "PUT",
+            )
+
+            // Add each label as an array element
+            // gh api expects: -f labels[]=bug -f labels[]=critical
+            newLabels.forEach { label ->
+                args.add("-f")
+                args.add("labels[]=$label")
+            }
+
+            // If newLabels is empty, we still need to make the request to clear all labels
+            if (newLabels.isEmpty()) {
+                // For empty array, send empty JSON body via field
+                args.add("-f")
+                args.add("labels=[]")
+            }
+
+            val result = executeGh(*args.toTypedArray())
+            if (result.exitCode != 0) {
+                error("Failed to update labels: ${result.stderr}")
+            }
+        }
+
+        // TODO: Implement assignee updates
+        // Assignees can be updated similarly via:
+        // POST /repos/{owner}/{repo}/issues/{number}/assignees
 
         // Fetch and return the updated issue
         val fetchResult = executeGh(
