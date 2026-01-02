@@ -2,6 +2,7 @@ package link.socket.ampere.cli.watch.presentation
 
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.FileSystemEvent
+import link.socket.ampere.agents.domain.event.GitEvent
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
@@ -43,47 +44,53 @@ object EventCategorizer {
 
     private fun categorizeInternal(event: Event): EventSignificance = when (event) {
         // Critical events require immediate human awareness
-        is Event.QuestionRaised -> EventSignificance.CRITICAL
-        is TicketEvent.TicketBlocked -> EventSignificance.CRITICAL
-        is MessageEvent.EscalationRequested -> EventSignificance.CRITICAL
+        is Event.QuestionRaised,
+        is TicketEvent.TicketBlocked,
+        is MessageEvent.EscalationRequested,
         is HumanInteractionEvent.InputRequested -> EventSignificance.CRITICAL
 
         // Significant events represent state changes worth noting
-        is Event.TaskCreated -> EventSignificance.SIGNIFICANT
-        is Event.CodeSubmitted -> EventSignificance.SIGNIFICANT
-        is TicketEvent.TicketCreated -> EventSignificance.SIGNIFICANT
-        is TicketEvent.TicketStatusChanged -> EventSignificance.SIGNIFICANT
-        is TicketEvent.TicketAssigned -> EventSignificance.SIGNIFICANT
-        is TicketEvent.TicketCompleted -> EventSignificance.SIGNIFICANT
+        is Event.TaskCreated,
+        is Event.CodeSubmitted,
+        is FileSystemEvent,
+        is GitEvent.PullRequestCreated,
+        is GitEvent.OperationFailed,
+        is HumanInteractionEvent.InputProvided,
+        is HumanInteractionEvent.RequestTimedOut,
+        is MeetingEvent.MeetingScheduled,
+        is MeetingEvent.MeetingStarted,
+        is MeetingEvent.MeetingCompleted,
+        is MeetingEvent.MeetingCanceled,
+        is MeetingEvent.AgendaItemStarted,
+        is MeetingEvent.AgendaItemCompleted,
+        is MessageEvent.ThreadCreated,
+        is MessageEvent.ThreadStatusChanged,
+        is MessageEvent.MessagePosted,
+        is PlanEvent.PlanStepStarted,
+        is PlanEvent.PlanStepCompleted,
+        is PlanEvent.TaskAssigned,
+        is PlanEvent.MonitoringStarted,
+        is ProductEvent.FeatureRequested,
+        is ProductEvent.EpicDefined,
+        is ProductEvent.PhaseDefined,
+        is TicketEvent.TicketCreated,
+        is TicketEvent.TicketStatusChanged,
+        is TicketEvent.TicketAssigned,
+        is TicketEvent.TicketCompleted,
         is TicketEvent.TicketMeetingScheduled -> EventSignificance.SIGNIFICANT
-        is MeetingEvent.MeetingScheduled -> EventSignificance.SIGNIFICANT
-        is MeetingEvent.MeetingStarted -> EventSignificance.SIGNIFICANT
-        is MeetingEvent.MeetingCompleted -> EventSignificance.SIGNIFICANT
-        is MeetingEvent.MeetingCanceled -> EventSignificance.SIGNIFICANT
-        is MeetingEvent.AgendaItemStarted -> EventSignificance.SIGNIFICANT
-        is MeetingEvent.AgendaItemCompleted -> EventSignificance.SIGNIFICANT
-        is MessageEvent.ThreadCreated -> EventSignificance.SIGNIFICANT
-        is MessageEvent.ThreadStatusChanged -> EventSignificance.SIGNIFICANT
-        is MessageEvent.MessagePosted -> EventSignificance.SIGNIFICANT
-        is ProductEvent.FeatureRequested -> EventSignificance.SIGNIFICANT
-        is ProductEvent.EpicDefined -> EventSignificance.SIGNIFICANT
-        is ProductEvent.PhaseDefined -> EventSignificance.SIGNIFICANT
-        is FileSystemEvent -> EventSignificance.SIGNIFICANT
-        is HumanInteractionEvent.InputProvided -> EventSignificance.SIGNIFICANT
-        is HumanInteractionEvent.RequestTimedOut -> EventSignificance.SIGNIFICANT
-        is PlanEvent.PlanStepStarted -> EventSignificance.SIGNIFICANT
-        is PlanEvent.PlanStepCompleted -> EventSignificance.SIGNIFICANT
-        is PlanEvent.TaskAssigned -> EventSignificance.SIGNIFICANT
-        is PlanEvent.MonitoringStarted -> EventSignificance.SIGNIFICANT
 
         // Routine cognitive operations - maintenance work
-        is MemoryEvent.KnowledgeRecalled -> EventSignificance.ROUTINE
-        is MemoryEvent.KnowledgeStored -> EventSignificance.ROUTINE
-        is NotificationEvent<*> -> EventSignificance.ROUTINE
-        is ToolEvent.ToolRegistered -> EventSignificance.ROUTINE
-        is ToolEvent.ToolUnregistered -> EventSignificance.ROUTINE
-        is ToolEvent.ToolDiscoveryComplete -> EventSignificance.ROUTINE
-        is ToolEvent.ToolExecutionStarted -> EventSignificance.ROUTINE
+        is GitEvent.BranchCreated,
+        is GitEvent.Committed,
+        is GitEvent.Pushed,
+        is GitEvent.FilesStaged,
+        is MemoryEvent.KnowledgeRecalled,
+        is MemoryEvent.KnowledgeStored,
+        is NotificationEvent<*>,
+        is ToolEvent.ToolRegistered,
+        is ToolEvent.ToolUnregistered,
+        is ToolEvent.ToolDiscoveryComplete,
+        is ToolEvent.ToolExecutionStarted,
         is ToolEvent.ToolExecutionCompleted -> EventSignificance.ROUTINE
     }
 }

@@ -5,7 +5,6 @@ import kotlinx.coroutines.sync.withLock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.AutonomousAgent
 import link.socket.ampere.agents.domain.event.MeetingEvent
-import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.status.MeetingStatus
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.AssignedTo

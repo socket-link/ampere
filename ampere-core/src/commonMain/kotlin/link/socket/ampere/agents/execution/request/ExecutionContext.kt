@@ -6,6 +6,7 @@ import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.execution.executor.ExecutorId
+import link.socket.ampere.agents.execution.tools.git.GitOperationRequest
 import link.socket.ampere.agents.execution.tools.issue.BatchIssueCreateRequest
 
 /** Additional context used to help the executor perform a task */
@@ -71,6 +72,21 @@ sealed interface ExecutionContext {
         override val task: Task,
         override val instructions: String,
         val issueRequest: BatchIssueCreateRequest,
+        override val knowledgeFromPastMemory: List<Knowledge> = emptyList(),
+    ) : ExecutionContext
+
+    /**
+     * Context for Git operations: branching, committing, pushing, and PR creation.
+     *
+     * @property gitRequest The Git operation to perform
+     */
+    @Serializable
+    data class GitOperation(
+        override val executorId: ExecutorId,
+        override val ticket: Ticket,
+        override val task: Task,
+        override val instructions: String,
+        val gitRequest: GitOperationRequest,
         override val knowledgeFromPastMemory: List<Knowledge> = emptyList(),
     ) : ExecutionContext
 }

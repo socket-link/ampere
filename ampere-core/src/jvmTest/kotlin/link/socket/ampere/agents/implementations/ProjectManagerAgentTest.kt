@@ -20,7 +20,6 @@ import link.socket.ampere.agents.domain.reasoning.AgentReasoning
 import link.socket.ampere.agents.domain.reasoning.EvaluationResult
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Plan
-import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.execution.request.ExecutionContext

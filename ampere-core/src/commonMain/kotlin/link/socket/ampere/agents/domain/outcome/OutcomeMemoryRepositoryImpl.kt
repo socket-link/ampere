@@ -63,6 +63,19 @@ class OutcomeMemoryRepositoryImpl(
                 is ExecutionOutcome.IssueManagement.Failure -> {
                     (outcome.partialResponse?.created?.size ?: 0) to outcome.error.message
                 }
+                is ExecutionOutcome.GitOperation.Success -> {
+                    // Count: 1 for branch/commit/push/PR creation, 0 for status
+                    val operationCount = listOfNotNull(
+                        outcome.response.createdBranch,
+                        outcome.response.createdCommit,
+                        outcome.response.pushResult,
+                        outcome.response.createdPullRequest,
+                    ).size
+                    operationCount to null
+                }
+                is ExecutionOutcome.GitOperation.Failure -> {
+                    0 to outcome.error.message
+                }
                 is ExecutionOutcome.Blank -> {
                     0 to null
                 }

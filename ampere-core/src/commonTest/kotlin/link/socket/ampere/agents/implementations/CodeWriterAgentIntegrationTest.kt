@@ -9,18 +9,15 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentActionAutonomy
-import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.CodeAgent
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
-import link.socket.ampere.agents.domain.outcome.TaskOutcome
 import link.socket.ampere.agents.domain.reasoning.AgentReasoning
 import link.socket.ampere.agents.domain.reasoning.EvaluationResult
 import link.socket.ampere.agents.domain.reasoning.Idea
@@ -29,7 +26,6 @@ import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
-import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.executor.InstrumentedExecutor
 import link.socket.ampere.agents.execution.request.ExecutionContext
