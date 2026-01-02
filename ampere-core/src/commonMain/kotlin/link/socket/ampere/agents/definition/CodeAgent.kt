@@ -453,9 +453,38 @@ open class CodeAgent(
             appendLine("- ${tool.id}: ${tool.description}")
         }
         appendLine()
+
+        // Check if we're working on a GitHub issue
+        val hasAssignedIssues = ideas.any { idea ->
+            idea.description.contains("Assigned Issues") ||
+                idea.name.contains("issue", ignoreCase = true)
+        }
+
+        if (hasAssignedIssues) {
+            appendLine("IMPORTANT: This task is related to a GitHub issue.")
+            appendLine()
+            appendLine("Your plan should follow the complete issue-to-PR workflow:")
+            appendLine("1. Analyze the issue requirements")
+            appendLine("2. Break down the implementation into concrete code changes")
+            appendLine("3. Implement each code change (write/modify files)")
+            appendLine("4. Ensure code quality and testing")
+            appendLine()
+            appendLine("Git operations (branch creation, commits, PRs) will be handled automatically.")
+            appendLine("Focus your plan on the CODE CHANGES needed to implement the issue.")
+            appendLine()
+        }
+
         appendLine("Create a step-by-step plan where each step is a concrete task that can be executed.")
         appendLine("For simple tasks, create a 1-2 step plan.")
         appendLine("For complex tasks, break down into logical phases (3-5 steps typically).")
+
+        if (hasAssignedIssues) {
+            appendLine("For issue-based tasks, include:")
+            appendLine("- Analysis/research steps if requirements are unclear")
+            appendLine("- Specific code changes (create/modify specific files)")
+            appendLine("- Testing steps to verify the implementation")
+        }
+
         appendLine()
         appendLine("Format your response as a JSON object:")
         appendLine("""{"steps": [{"description": "...",""")
