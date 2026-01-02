@@ -888,6 +888,29 @@ open class CodeAgent(
         }
     }
 
+    /**
+     * Execute the full workflow on a claimed issue.
+     *
+     * This method orchestrates the complete issue-to-PR pipeline:
+     * 1. Update status to IN_PROGRESS
+     * 2. Create implementation plan
+     * 3. Create feature branch
+     * 4. Write code
+     * 5. Commit changes
+     * 6. Push to remote
+     * 7. Create pull request
+     * 8. Update status to IN_REVIEW
+     *
+     * @param issue The issue to work on
+     * TODO: Implement the full workflow orchestration
+     */
+    suspend fun workOnIssue(issue: ExistingIssue) {
+        // TODO: Implement full workflow
+        // For now, this is a placeholder that will be implemented
+        // as part of the complete autonomous workflow
+        println("Working on issue #${issue.number}: ${issue.title}")
+    }
+
     private fun createTicketForTask(task: Task.CodeChange): Ticket {
         val now = Clock.System.now()
         return Ticket(
