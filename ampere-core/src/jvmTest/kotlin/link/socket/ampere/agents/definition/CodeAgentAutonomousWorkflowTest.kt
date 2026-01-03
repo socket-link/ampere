@@ -41,6 +41,7 @@ class CodeAgentAutonomousWorkflowTest {
         // Flags for simulating various scenarios
         var simulateRaceCondition = false
         var raceConditionIssueNumber: Int? = null
+        private var queryCount = 0
 
         override suspend fun validateConnection(): Result<Unit> {
             return Result.success(Unit)
@@ -86,8 +87,8 @@ class CodeAgentAutonomousWorkflowTest {
             repository: String,
             query: IssueQuery
         ): Result<List<ExistingIssue>> {
-            // Simulate race condition by updating issue state between query and claim
-            if (simulateRaceCondition && raceConditionIssueNumber != null) {
+            // Simulate race condition: after first query, another agent claims the issue
+            if (simulateRaceCondition && raceConditionIssueNumber != null && queryCount > 0) {
                 issues[raceConditionIssueNumber]?.let { issue ->
                     if (issue.labels.contains("code") && !issue.labels.contains("assigned")) {
                         // Another agent just claimed it
@@ -97,6 +98,7 @@ class CodeAgentAutonomousWorkflowTest {
                     }
                 }
             }
+            queryCount++
 
             var filtered = issues.values.toList()
 

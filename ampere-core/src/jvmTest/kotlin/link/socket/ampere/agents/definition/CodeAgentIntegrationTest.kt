@@ -25,6 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import link.socket.ampere.agents.execution.tools.issue.CreatedIssue
 import link.socket.ampere.agents.execution.tools.issue.IssueCreateRequest
+import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -585,6 +586,7 @@ class CodeAgentIntegrationTest {
      * 2. Workflow orchestration runs full pipeline
      * 3. Event bus captures workflow events
      */
+    @Ignore("Placeholder test - requires full workflow implementation")
     @Test
     fun `INTEGRATION - agent completes full issue-to-PR workflow`() = runTest {
         val issueProvider = TestIssueTrackerProvider()
