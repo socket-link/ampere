@@ -177,7 +177,7 @@ class GoalHandler(
             // PHASE 1: PERCEIVE
             progressPane.setPhase(JazzProgressPane.Phase.PERCEIVE, "Analyzing task...")
             val perception = agent.perceiveState(agent.getCurrentState())
-            progressPane.setPerceiveResult(perception.ideas.size)
+            progressPane.setPerceiveResult(perception.ideas)
 
             if (perception.ideas.isEmpty()) {
                 progressPane.setFailed("No ideas generated")
@@ -191,28 +191,26 @@ class GoalHandler(
                 ideas = arrayOf(perception.ideas.first()),
                 relevantKnowledge = emptyList()
             )
-            progressPane.setPlanResult(plan.tasks.size, plan.estimatedComplexity)
+            progressPane.setPlanResult(plan)
 
             // PHASE 3: EXECUTE
             progressPane.setPhase(JazzProgressPane.Phase.EXECUTE, "Calling LLM...")
             val outcome = agent.executePlan(plan)
 
             when (outcome) {
-                is ExecutionOutcome.CodeChanged.Success -> {
-                    outcome.changedFiles.forEach { file ->
-                        progressPane.addFileWritten(file)
-                    }
-                }
                 is ExecutionOutcome.CodeChanged.Failure -> {
                     progressPane.setFailed(outcome.error.message)
                     return
                 }
-                else -> {}
+                else -> {
+                    // Files are already tracked in the write_code_file tool
+                }
             }
 
             // PHASE 4: LEARN
             progressPane.setPhase(JazzProgressPane.Phase.LEARN, "Extracting knowledge...")
-            agent.extractKnowledgeFromOutcome(outcome, task, plan)
+            val knowledge = agent.extractKnowledgeFromOutcome(outcome, task, plan)
+            progressPane.addKnowledgeStored(knowledge.approach)
 
             // Complete!
             progressPane.setPhase(JazzProgressPane.Phase.COMPLETED)
@@ -239,7 +237,7 @@ class GoalHandler(
                     file.parentFile?.mkdirs()
                     file.writeText(content)
 
-                    progressPane.addFileWritten(path)
+                    progressPane.addFileWritten(path, content)
                     path
                 }
 
