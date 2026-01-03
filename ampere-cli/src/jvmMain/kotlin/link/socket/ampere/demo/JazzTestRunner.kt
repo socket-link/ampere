@@ -10,6 +10,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import link.socket.ampere.AmpereContext
 import link.socket.ampere.agents.definition.CodeAgent
@@ -116,8 +117,8 @@ fun main() {
                             println("   Ticket ID: ${event.ticketId}")
                             println()
 
-                            // Launch cognitive cycle in the background
-                            agentScope.launch {
+                            // Launch cognitive cycle in the background on IO dispatcher
+                            agentScope.launch(Dispatchers.IO) {
                                 try {
                                     handleTicketAssignment(agent, event.ticketId, context)
                                     cognitiveCycleComplete.complete(Unit)
@@ -424,14 +425,16 @@ private fun createWriteCodeFileTool(
         executionFunction = { request ->
             val now = Clock.System.now()
 
-            val changedFiles = request.context.instructionsPerFilePath.map { (path, content) ->
-                val file = File(outputDir, path)
-                file.parentFile?.mkdirs()
-                file.writeText(content)
+            val changedFiles = withContext(Dispatchers.IO) {
+                request.context.instructionsPerFilePath.map { (path, content) ->
+                    val file = File(outputDir, path)
+                    file.parentFile?.mkdirs()
+                    file.writeText(content)
 
-                println("      📝 Wrote file: $path (${content.length} chars)")
+                    println("      📝 Wrote file: $path (${content.length} chars)")
 
-                path
+                    path
+                }
             }
 
             val endTime = Clock.System.now()

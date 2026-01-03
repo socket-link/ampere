@@ -1,7 +1,9 @@
 package link.socket.ampere.agents.definition
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.product.PlanningInsights
@@ -95,27 +97,47 @@ class ProductAgent(
 
     override val runLLMToEvaluatePerception: (perception: Perception<ProductAgentState>) -> Idea =
         { perception ->
-            runBlocking { reasoning.evaluatePerception(perception) }
+            runBlocking(Dispatchers.IO) {
+                withTimeout(60000) {
+                    reasoning.evaluatePerception(perception)
+                }
+            }
         }
 
     override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan =
         { task, ideas ->
-            runBlocking { reasoning.generatePlan(task, ideas) }
+            runBlocking(Dispatchers.IO) {
+                withTimeout(60000) {
+                    reasoning.generatePlan(task, ideas)
+                }
+            }
         }
 
     override val runLLMToExecuteTask: (task: Task) -> Outcome =
         { task ->
-            runBlocking { executeTaskWithReasoning(task) }
+            runBlocking(Dispatchers.IO) {
+                withTimeout(60000) {
+                    executeTaskWithReasoning(task)
+                }
+            }
         }
 
     override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome =
         { tool, request ->
-            runBlocking { reasoning.executeTool(tool, request) }
+            runBlocking(Dispatchers.IO) {
+                withTimeout(60000) {
+                    reasoning.executeTool(tool, request)
+                }
+            }
         }
 
     override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea =
         { outcomes ->
-            runBlocking { reasoning.evaluateOutcomes(outcomes, memoryService).summaryIdea }
+            runBlocking(Dispatchers.IO) {
+                withTimeout(60000) {
+                    reasoning.evaluateOutcomes(outcomes, memoryService).summaryIdea
+                }
+            }
         }
 
     override fun extractKnowledgeFromOutcome(
@@ -125,7 +147,11 @@ class ProductAgent(
     ): Knowledge.FromOutcome = extractProductKnowledge(outcome, task, plan)
 
     override fun callLLM(prompt: String): String =
-        runBlocking { reasoning.callLLM(prompt) }
+        runBlocking(Dispatchers.IO) {
+            withTimeout(60000) {
+                reasoning.callLLM(prompt)
+            }
+        }
 
     // ========================================================================
     // State Management - Fresh state from TicketOrchestrator

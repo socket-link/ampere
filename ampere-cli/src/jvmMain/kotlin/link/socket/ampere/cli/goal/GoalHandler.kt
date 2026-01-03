@@ -2,7 +2,9 @@ package link.socket.ampere.cli.goal
 
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import link.socket.ampere.AmpereContext
 import link.socket.ampere.agents.config.AgentActionAutonomy
@@ -116,7 +118,7 @@ class GoalHandler(
             when (event) {
                 is TicketEvent.TicketAssigned -> {
                     if (event.assignedTo == agent.id) {
-                        agentScope.launch {
+                        agentScope.launch(Dispatchers.IO) {
                             handleTicketAssignment(agent, event.ticketId)
                         }
                     }
@@ -232,13 +234,15 @@ class GoalHandler(
             executionFunction = { request ->
                 val now = Clock.System.now()
 
-                val changedFiles = request.context.instructionsPerFilePath.map { (path, content) ->
-                    val file = File(outputDir, path)
-                    file.parentFile?.mkdirs()
-                    file.writeText(content)
+                val changedFiles = withContext(Dispatchers.IO) {
+                    request.context.instructionsPerFilePath.map { (path, content) ->
+                        val file = File(outputDir, path)
+                        file.parentFile?.mkdirs()
+                        file.writeText(content)
 
-                    progressPane.addFileWritten(path, content)
-                    path
+                        progressPane.addFileWritten(path, content)
+                        path
+                    }
                 }
 
                 val endTime = Clock.System.now()
