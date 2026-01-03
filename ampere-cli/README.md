@@ -1,6 +1,10 @@
 # Ampere CLI Documentation
 
-**Ampere CLI** provides command-line tools for observing and managing the Ampere agent substrate, including real-time event streaming, thread management, system status monitoring, and execution outcome analysis.
+**Ampere CLI** provides command-line tools for running and observing AI agents in the Ampere substrate. The CLI features:
+- **Interactive TUI**: Beautiful 3-column terminal UI for real-time visualization
+- **Active Work Modes**: Run agents on custom goals, demos, or GitHub issues
+- **Observation Tools**: Event streaming, thread management, system monitoring
+- **Headless Testing**: Automated validation for CI/CD pipelines
 
 ## Prerequisites
 
@@ -44,34 +48,80 @@ Or inline:
 JAVA_HOME=$(/usr/libexec/java_home -v 21) ampere-cli/build/install/ampere-cli-jvm/bin/ampere-cli <command>
 ```
 
-## Commands
-
-### Interactive Dashboard (Default)
-
-Start the interactive multi-modal dashboard:
+## Quick Start
 
 ```bash
-./ampere-cli/ampere              # Same as 'ampere start'
-./ampere-cli/ampere start        # Interactive multi-modal dashboard
+# Start the interactive TUI dashboard
+./ampere-cli/ampere              # or 'ampere start'
+
+# Run an agent with a custom goal (with TUI)
+./ampere-cli/ampere run --goal "Implement FizzBuzz"
+
+# Run the Jazz demo (with TUI)
+./ampere-cli/ampere run --demo jazz
+
+# Work on GitHub issues (with TUI)
+./ampere-cli/ampere run --issues
+
+# Run headless tests (CI/validation)
+./ampere-cli/ampere test jazz
 ```
 
-**Keyboard controls while dashboard is running:**
-- `d` - Dashboard mode (system vitals, agent status, recent events)
-- `e` - Event stream mode (filtered event stream)
-- `m` - Memory operations mode (knowledge recall/storage patterns)
-- `v` - Toggle verbose mode (show/hide routine events)
+## Commands
+
+### Start: Interactive TUI Dashboard
+
+Start the interactive 3-column TUI for observing the AMPERE system:
+
+```bash
+./ampere-cli/ampere              # Default: starts TUI dashboard
+./ampere-cli/ampere start        # Explicit: same as above
+./ampere-cli/ampere start --auto-work   # Start with background issue work
+```
+
+The TUI shows:
+- **Left pane (35%)**: Event stream (filtered by significance)
+- **Middle pane (40%)**: Cognitive cycle progress / system vitals
+- **Right pane (25%)**: Agent memory stats (or logs in verbose mode)
+
+**Keyboard controls:**
+- `d` - Dashboard mode (system vitals, agent status)
+- `e` - Event stream mode (filtered events)
+- `m` - Memory operations mode (knowledge patterns)
+- `v` - Toggle verbose mode (show/hide logs in right pane)
 - `h` or `?` - Toggle help screen
-- `:` - Command mode (issue commands to the system)
+- `:` - Command mode (issue commands)
 - `ESC` - Close help / Cancel command mode
-- `1-9` - Agent focus mode (detailed view of specific agent)
+- `1-9` - Agent focus mode (detailed agent view)
 - `q` or `Ctrl+C` - Exit
 
-**Command mode (press `:` while in dashboard):**
+**Command mode (press `:`):**
+- `:goal <description>` - Start agent with goal
 - `:help` - Show available commands
 - `:agents` - List all active agents
 - `:ticket <id>` - Show ticket details
 - `:thread <id>` - Show conversation thread
-- `:quit` - Exit dashboard
+- `:quit` - Exit TUI
+
+### Run: Active Work with TUI Visualization
+
+Run agents with active work while visualizing progress in real-time:
+
+```bash
+# Run agent with custom goal
+./ampere-cli/ampere run --goal "Implement FizzBuzz function"
+./ampere-cli/ampere run -g "Add authentication to API"
+
+# Run preset demos
+./ampere-cli/ampere run --demo jazz          # Fibonacci demo
+
+# Work on GitHub issues
+./ampere-cli/ampere run --issues             # Continuous issue work
+./ampere-cli/ampere run --issue 42           # Specific issue
+```
+
+The `run` command uses the same TUI as `start` but activates an agent to work
+on the specified task. You can watch the agent's cognitive cycle in real-time.
 
 ### Watch Command
 
@@ -197,15 +247,17 @@ Launch an interactive REPL session:
 ./ampere-cli/ampere interactive
 ```
 
-### Test Commands
+### Test: Headless Validation
 
-Run tests and demonstrations:
+Run headless tests for automated validation (CI/CD):
 
 ```bash
-./ampere-cli/ampere test jazz                          # Autonomous agent demo (Fibonacci)
-./ampere-cli/ampere test ticket                        # GitHub issue creation demo
-./ampere-cli/ampere jazz-test                          # Legacy command (same as test jazz)
+./ampere-cli/ampere test jazz                          # Headless Jazz test (Fibonacci)
+./ampere-cli/ampere test ticket                        # Headless issue creation test
 ```
+
+**Note:** These run without interactive UI, suitable for CI pipelines. For
+interactive demos with visual feedback, use `ampere run --demo <name>` instead.
 
 ### Respond Command
 

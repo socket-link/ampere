@@ -6,23 +6,22 @@ import com.github.ajalt.clikt.core.CliktCommand
  * Root command for the Ampere CLI.
  *
  * This is the entry point for all CLI operations. It doesn't perform any
- * actions itself, but serves as a container for subcommands like watch,
- * thread, and status.
+ * actions itself, but serves as a container for subcommands.
  *
  * Command hierarchy:
+ * - ampere / ampere start: Interactive TUI dashboard
+ * - ampere run: Run agents with active work (TUI visualization)
+ *   - ampere run --goal <text>: Run agent with custom goal
+ *   - ampere run --demo <name>: Run preset demo (jazz, etc.)
+ *   - ampere run --issues: Work on GitHub issues
+ *   - ampere run --issue <number>: Work on specific issue
  * - ampere watch: Watch live event stream
+ * - ampere test: Headless automated tests (CI/validation)
+ *   - ampere test jazz: Headless Jazz test
+ *   - ampere test ticket: Headless issue test
  * - ampere thread: Manage conversation threads
- *   - ampere thread list: List all threads
- *   - ampere thread show: Show thread details
- * - ampere status: View system-wide dashboard
- * - ampere outcomes: View execution outcomes and accumulated experience
- *   - ampere outcomes ticket: Show execution history for a specific ticket
- *   - ampere outcomes search: Find outcomes similar to a description
- *   - ampere outcomes executor: Show outcomes for a specific executor
- *   - ampere outcomes stats: Show aggregate outcome statistics
- * - ampere test: Run tests and demonstrations
- *   - ampere test jazz: Autonomous agent demonstration
- *   - ampere test ticket: Issue creation demonstration
+ * - ampere outcomes: View execution outcomes
+ * - ampere issues: Manage GitHub issues
  *
  * Global flags:
  * - --verbose / -v: Show detailed system logs during startup
@@ -33,26 +32,33 @@ class AmpereCommand : CliktCommand(
         AMPERE - Animated Multi-Agent Prompting Environment
 
         Usage:
-          ampere                    # Start interactive dashboard (default)
-          ampere start              # Start interactive dashboard (explicit)
+          ampere                    # Start interactive TUI dashboard
+          ampere start              # Same as above (explicit)
+          ampere run <flags>        # Run agents with active work
           ampere <command>          # Run specific command
 
         Main Commands:
-          start        Interactive multi-modal dashboard (default)
-          help         Show comprehensive help message
+          start        Interactive TUI dashboard (default)
+          run          Run agents with active work (with TUI visualization)
           watch        Stream events in real-time with filtering
+          test         Headless automated tests (CI/validation)
+
+        Observation & Management:
           dashboard    Static live-updating dashboard
-          interactive  REPL session for direct interaction
           thread       View and manage conversation threads
           status       System-wide status overview
           outcomes     View execution outcomes and learnings
-          issues       Manage GitHub issues (create from JSON)
-          respond      Respond to agent human input requests
-          work         Autonomously work on GitHub issues (CodeAgent)
-          test         Run tests and demonstrations (jazz, ticket)
-          jazz-test    Run end-to-end autonomous agent demo (legacy)
 
-        Interactive Dashboard Controls:
+        GitHub Integration:
+          issues       Manage GitHub issues (create from JSON)
+          work         Autonomously work on GitHub issues (headless)
+          respond      Respond to agent human input requests
+
+        Other:
+          interactive  REPL session for direct interaction
+          help         Show comprehensive help message
+
+        Interactive TUI Controls (start/run commands):
           Viewing Modes:
             d          Dashboard - System vitals, agent status, recent events
             e          Event Stream - Filtered stream of significant events
@@ -60,33 +66,47 @@ class AmpereCommand : CliktCommand(
             1-9        Agent Focus - Detailed view of specific agent
 
           Options:
-            v          Toggle verbose mode (show/hide routine events)
+            v          Toggle verbose mode (show/hide logs)
             h  or  ?   Toggle help screen
             :          Command mode - Issue commands to the system
             ESC        Close help / Cancel command mode
-            q  or Ctrl+C   Exit dashboard
+            q  or Ctrl+C   Exit
 
-        Command Mode (press ':' in dashboard):
+        Command Mode (press ':' in TUI):
+            :goal <text>  Start agent with goal
             :help         Show available commands
             :agents       List all active agents
             :ticket <id>  Show ticket details
             :thread <id>  Show conversation thread
-            :quit         Exit dashboard
+            :quit         Exit TUI
 
         Examples:
-          ampere                              # Start dashboard
-          ampere help                         # Show this help
-          ampere test jazz                    # Run autonomous agent demo
-          ampere test ticket                  # Run issue creation demo
+          # Interactive TUI
+          ampere                              # Start TUI dashboard
+          ampere start                        # Same as above
+
+          # Run agents with TUI visualization
+          ampere run --goal "Implement FizzBuzz"
+          ampere run --demo jazz              # Interactive Jazz demo
+          ampere run --issues                 # Work on GitHub issues
+          ampere run --issue 42               # Work on specific issue
+
+          # Headless tests (CI/validation)
+          ampere test jazz                    # Headless Jazz test
+          ampere test ticket                  # Headless issue test
+
+          # Observation
           ampere watch --verbose              # Watch all events
-          ampere watch --filter TaskCreated   # Watch task events only
+          ampere watch --filter TaskCreated   # Watch specific events
+
+          # Management
           ampere thread list                  # List conversation threads
           ampere outcomes stats               # View learning statistics
           ampere issues create -f epic.json   # Create issues from file
-          ampere respond abc-123 "Approved"   # Respond to human input request
-          ampere work                         # Work on next available issue
-          ampere work --continuous            # Keep working on issues
-          ampere work --repo owner/repo       # Work on issues in specific repo
+
+          # Legacy headless work mode
+          ampere work                         # Work on issues (headless)
+          ampere work --continuous            # Keep working (headless)
 
         For more information on specific commands:
           ampere <command> --help
