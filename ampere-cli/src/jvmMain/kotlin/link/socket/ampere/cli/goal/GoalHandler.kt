@@ -119,7 +119,12 @@ class GoalHandler(
                 is TicketEvent.TicketAssigned -> {
                     if (event.assignedTo == agent.id) {
                         agentScope.launch(Dispatchers.IO) {
-                            handleTicketAssignment(agent, event.ticketId)
+                            try {
+                                handleTicketAssignment(agent, event.ticketId)
+                            } catch (e: Exception) {
+                                progressPane.setFailed("Exception during cognitive cycle: ${e.message}")
+                                e.printStackTrace()
+                            }
                         }
                     }
                 }

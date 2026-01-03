@@ -36,6 +36,8 @@ import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.cli.layout.AgentMemoryPane
 import link.socket.ampere.cli.layout.DemoInputHandler
 import link.socket.ampere.cli.layout.JazzProgressPane
+import link.socket.ampere.cli.layout.LogCapture
+import link.socket.ampere.cli.layout.LogPane
 import link.socket.ampere.cli.layout.RichEventPane
 import link.socket.ampere.cli.layout.StatusBar
 import link.socket.ampere.cli.layout.ThreeColumnLayout
@@ -61,7 +63,7 @@ import link.socket.ampere.repl.TerminalFactory
  * - d/e/m: Switch view modes (dashboard/events/memory)
  * - 1-9: Focus on agent (detailed view)
  * - ESC: Return from agent focus
- * - v: Toggle verbose mode (show/hide routine events)
+ * - v: Toggle verbose mode (shows log panel with stdout/stderr)
  * - h/?: Show help
  * - q/Ctrl+C: Exit
  *
@@ -87,7 +89,7 @@ class JazzDemoCommand(
           d/e/m    - Switch view modes
           1-9      - Focus on agent (detailed view)
           ESC      - Return from agent focus
-          v        - Toggle verbose mode (show/hide routine events)
+          v        - Toggle verbose mode (shows log panel with stdout/stderr)
           h/?      - Show help
           q/Ctrl+C - Exit
 
@@ -113,6 +115,7 @@ class JazzDemoCommand(
         val eventPane = RichEventPane(terminal)
         val jazzPane = JazzProgressPane(terminal)
         val memoryPane = AgentMemoryPane(terminal)
+        val logPane = LogPane(terminal)
         val statusBar = StatusBar(terminal)
         val inputHandler = DemoInputHandler(terminal)
 
@@ -148,9 +151,27 @@ class JazzDemoCommand(
                                 throw CancellationException("User requested exit")
                             }
                             is DemoInputHandler.KeyResult.ConfigChange -> {
+                                val wasVerbose = viewConfig.verboseMode
                                 viewConfig = result.newConfig
+
                                 // Update event pane verbose mode
                                 eventPane.verboseMode = viewConfig.verboseMode
+
+                                // Toggle log capture
+                                if (viewConfig.verboseMode && !wasVerbose) {
+                                    LogCapture.start(logPane)
+                                    // Clear screen to prevent artifacts
+                                    print("\u001B[2J\u001B[H")
+                                    System.out.flush()
+                                    // Test log entry
+                                    println("Verbose mode enabled - log capture active")
+                                } else if (!viewConfig.verboseMode && wasVerbose) {
+                                    println("Verbose mode disabled - stopping log capture")
+                                    LogCapture.stop()
+                                    // Clear screen to prevent artifacts
+                                    print("\u001B[2J\u001B[H")
+                                    System.out.flush()
+                                }
                             }
                             is DemoInputHandler.KeyResult.ExecuteCommand -> {
                                 // Commands not supported in jazz demo mode
@@ -203,7 +224,9 @@ class JazzDemoCommand(
                         }
                         else -> {
                             // Render the 3-column layout
-                            layout.render(eventPane, jazzPane, memoryPane, statusBarStr)
+                            // Show logs in right pane when verbose mode is active
+                            val rightPane = if (viewConfig.verboseMode) logPane else memoryPane
+                            layout.render(eventPane, jazzPane, rightPane, statusBarStr)
                         }
                     }
                     print(output)
@@ -214,7 +237,7 @@ class JazzDemoCommand(
             }
 
             // Run the jazz test in foreground
-            runJazzTest(context, agentScope, jazzPane, memoryPane, outputDir)
+            runJazzTest(context, agentScope, jazzPane, memoryPane, logPane, outputDir)
 
             // Update status when complete
             systemStatus = StatusBar.SystemStatus.IDLE
@@ -232,6 +255,7 @@ class JazzDemoCommand(
             systemStatus = StatusBar.SystemStatus.ATTENTION_NEEDED
             delay(3000)
         } finally {
+            LogCapture.stop() // Stop capturing logs
             inputHandler.close()
             presenter.stop()
             agentScope.cancel()
@@ -339,6 +363,7 @@ class JazzDemoCommand(
         agentScope: CoroutineScope,
         jazzPane: JazzProgressPane,
         memoryPane: AgentMemoryPane,
+        logPane: LogPane,
         outputDir: File
     ) {
         // Create the write_code_file tool
@@ -369,7 +394,7 @@ class JazzDemoCommand(
                 is TicketEvent.TicketAssigned -> {
                     if (event.assignedTo == agent.id) {
                         agentScope.launch {
-                            handleTicketAssignment(agent, event.ticketId, context, jazzPane)
+                            handleTicketAssignment(agent, event.ticketId, context, jazzPane, logPane)
                         }
                     }
                 }
@@ -441,11 +466,16 @@ class JazzDemoCommand(
         agent: CodeAgent,
         ticketId: String,
         context: AmpereContext,
-        jazzPane: JazzProgressPane
+        jazzPane: JazzProgressPane,
+        logPane: LogPane
     ) {
         try {
+            logPane.info("Ticket assigned: $ticketId")
+            logPane.info("Starting cognitive cycle...")
+
             val ticketResult = context.environmentService.ticketRepository.getTicket(ticketId)
             val ticket = ticketResult.getOrNull() ?: run {
+                logPane.error("Could not fetch ticket")
                 jazzPane.setFailed("Could not fetch ticket")
                 return
             }
@@ -455,18 +485,23 @@ class JazzDemoCommand(
                 status = TaskStatus.Pending,
                 description = ticket.description
             )
+            logPane.info("Task created: ${task.id}")
 
             // PHASE 1: PERCEIVE
+            logPane.info("Starting PERCEIVE phase")
             jazzPane.setPhase(JazzProgressPane.Phase.PERCEIVE, "Analyzing task...")
             val perception = agent.perceiveState(agent.getCurrentState())
             jazzPane.setPerceiveResult(perception.ideas)
+            logPane.info("PERCEIVE complete - generated ${perception.ideas.size} ideas")
 
             if (perception.ideas.isEmpty()) {
+                logPane.error("No ideas generated")
                 jazzPane.setFailed("No ideas generated")
                 return
             }
 
             // PHASE 2: PLAN
+            logPane.info("Starting PLAN phase")
             jazzPane.setPhase(JazzProgressPane.Phase.PLAN, "Creating plan...")
             val plan = agent.determinePlanForTask(
                 task = task,
@@ -474,30 +509,45 @@ class JazzDemoCommand(
                 relevantKnowledge = emptyList()
             )
             jazzPane.setPlanResult(plan)
+            logPane.info("PLAN complete - ${plan.tasks.size} tasks, complexity: ${plan.estimatedComplexity}")
 
             // PHASE 3: EXECUTE
+            logPane.info("Starting EXECUTE phase - calling LLM...")
             jazzPane.setPhase(JazzProgressPane.Phase.EXECUTE, "Calling LLM...")
             val outcome = agent.executePlan(plan)
+            logPane.info("EXECUTE complete - outcome: ${outcome::class.simpleName}")
 
             when (outcome) {
+                is ExecutionOutcome.CodeChanged.Success -> {
+                    logPane.info("Code changed successfully - ${outcome.changedFiles.size} file(s)")
+                    outcome.changedFiles.forEach { file ->
+                        logPane.info("  - $file")
+                    }
+                }
                 is ExecutionOutcome.CodeChanged.Failure -> {
+                    logPane.error("Code change FAILED: ${outcome.error.message}")
                     jazzPane.setFailed(outcome.error.message)
                     return
                 }
                 else -> {
-                    // Files are already tracked in the write_code_file tool
+                    logPane.info("Outcome: ${outcome::class.simpleName}")
                 }
             }
 
             // PHASE 4: LEARN
+            logPane.info("Starting LEARN phase")
             jazzPane.setPhase(JazzProgressPane.Phase.LEARN, "Extracting knowledge...")
             val knowledge = agent.extractKnowledgeFromOutcome(outcome, task, plan)
             jazzPane.addKnowledgeStored(knowledge.approach)
+            logPane.info("LEARN complete - knowledge stored: ${knowledge.approach}")
 
             // Complete!
+            logPane.info("Cognitive cycle COMPLETED")
             jazzPane.setPhase(JazzProgressPane.Phase.COMPLETED)
 
         } catch (e: Exception) {
+            logPane.error("Exception: ${e.message}")
+            logPane.error("Stack trace: ${e.stackTraceToString()}")
             jazzPane.setFailed(e.message ?: "Unknown error")
         }
     }

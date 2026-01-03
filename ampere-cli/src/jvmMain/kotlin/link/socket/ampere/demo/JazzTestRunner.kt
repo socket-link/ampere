@@ -123,6 +123,8 @@ fun main() {
                                     handleTicketAssignment(agent, event.ticketId, context)
                                     cognitiveCycleComplete.complete(Unit)
                                 } catch (e: Exception) {
+                                    println("   ❌ [ERROR] Exception during cognitive cycle:")
+                                    e.printStackTrace()
                                     cognitiveCycleComplete.completeExceptionally(e)
                                 }
                             }
