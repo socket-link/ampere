@@ -274,7 +274,7 @@ AMPERE is built on the thesis that biological patterns provide superior agent co
 ## License
 
 ```
-Copyright 2025 Miley Chandonnet, Stedfast Softworks LLC
+Copyright 2026 Miley Chandonnet, Stedfast Softworks LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
