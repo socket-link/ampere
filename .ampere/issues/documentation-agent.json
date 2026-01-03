@@ -1,0 +1,14 @@
+{
+    "repository": "socket-link/ampere",
+    "issues": [
+        {
+            "localId": "doc-agent-epic",
+            "type": "Feature",
+            "title": "DocumentationAgent: Self-Documenting System Implementation",
+            "body": "## Context\n\nAMPERE needs comprehensive documentation for launch. Rather than writing docs manually, we should dogfood the framework by having an agent generate and maintain documentation. This creates a recursive demonstration: the system documents itself.\n\nThe biological metaphor: DocumentationAgent functions as the autobiographical memory system—encoding the organism's own structure into retrievable, communicable form.\n\n## Objective\n\nCreate an agent specialized in generating, updating, and maintaining documentation files. The agent should:\n1. Understand AMPERE's architecture through code analysis\n2. Generate markdown documentation following project conventions\n3. Maintain consistency across multiple doc files\n4. Update docs when architecture changes\n\n## Expected Outcomes\n\n- DocumentationAgent exists in the agent registry\n- Agent can generate README sections from architecture analysis\n- Agent can create GETTING_STARTED guides from CLI usage patterns\n- Agent produces markdown that matches project style conventions\n- QualityAgent can review doc outputs for accuracy\n\n## System Prompt Core\n\nYou are DocumentationAgent, responsible for encoding AMPERE's architecture into clear, accurate documentation.\n\nYour cognitive approach:\n- PERCEIVE: Analyze codebase structure, existing docs, CLI commands\n- RECALL: Reference documentation patterns that worked well\n- OPTIMIZE: Find the clearest explanation for complex concepts\n- PLAN: Structure docs for progressive disclosure (overview → details)\n- EXECUTE: Generate markdown following project conventions\n- LOOP: Verify generated docs against actual behavior\n\nDocumentation principles:\n- Lead with what the reader needs, not what you want to say\n- Prefer working code examples over abstract descriptions\n- Every concept should have a concrete example\n- Use the biological metaphors consistently\n- Minimum viable documentation: what's the smallest doc that enables someone to succeed?\n\n## Tools Required\n\n- File read (analyze existing code and docs)\n- File write (generate documentation files)\n- Knowledge retrieval (access architecture decisions and conventions)\n- CLI execution (verify commands work as documented)\n\n## Subtasks\n\n1. Define DocumentationAgent system prompt and personality\n2. Configure tool access for file operations\n3. Create documentation templates for common doc types\n4. Integration test: generate README section from codebase analysis\n5. Integration test: verify generated docs against actual CLI behavior",
+            "labels": ["feature", "agent", "documentation", "dogfooding"],
+            "parent": null,
+            "dependsOn": []
+        }
+    ]
+}
