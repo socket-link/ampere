@@ -48,6 +48,11 @@ class GitHubCliProvider : IssueTrackerProvider {
         request: IssueCreateRequest,
         resolvedDependencies: Map<String, Int>,
     ): Result<CreatedIssue> = runCatching {
+        // Ensure all required labels exist before creating the issue
+        request.labels.forEach { label ->
+            ensureLabelExists(repository, label).getOrThrow()
+        }
+
         // Build body with dependency references and parent relationship
         val bodyWithDeps = buildString {
             append(request.body)
@@ -340,6 +345,76 @@ class GitHubCliProvider : IssueTrackerProvider {
 
         json.decodeFromString<GitHubIssueJson>(fetchResult.stdout)
             .toExistingIssue()
+    }
+
+    /**
+     * Ensure a label exists in the repository, creating it if necessary.
+     *
+     * This method checks if a label exists and creates it with a default color
+     * if it doesn't. This prevents issues from failing due to missing labels.
+     *
+     * @param repository Repository identifier in "owner/repo" format
+     * @param labelName Name of the label to ensure exists
+     * @return Success if label exists or was created, Failure if creation failed
+     */
+    private suspend fun ensureLabelExists(repository: String, labelName: String): Result<Unit> = runCatching {
+        // Check if label exists by listing all labels and checking for this one
+        val listResult = executeGh(
+            "label",
+            "list",
+            "--repo",
+            repository,
+            "--json",
+            "name",
+        )
+
+        if (listResult.exitCode != 0) {
+            error("Failed to list labels: ${listResult.stderr}")
+        }
+
+        // Parse existing labels
+        @Serializable
+        data class LabelInfo(val name: String)
+
+        val existingLabels = if (listResult.stdout.isBlank() || listResult.stdout.trim() == "[]") {
+            emptyList()
+        } else {
+            json.decodeFromString<List<LabelInfo>>(listResult.stdout)
+        }
+
+        // Check if our label exists (case-sensitive comparison)
+        val labelExists = existingLabels.any { it.name == labelName }
+
+        if (!labelExists) {
+            // Create the label with a default color
+            // Color mapping based on common label patterns
+            val color = when {
+                labelName.startsWith("p0") || labelName == "critical" -> "b60205" // red
+                labelName.startsWith("p1") || labelName == "high" -> "d93f0b" // orange
+                labelName == "bug" -> "d73a4a" // red
+                labelName == "feature" || labelName == "enhancement" -> "a2eeef" // cyan
+                labelName == "task" -> "0075ca" // blue
+                labelName == "documentation" || labelName == "docs" -> "0075ca" // blue
+                labelName.contains("blocker") -> "d73a4a" // red
+                labelName.contains("testing") || labelName == "test" -> "d4c5f9" // purple
+                labelName == "cli" -> "fbca04" // yellow
+                else -> "ededed" // gray for unknown labels
+            }
+
+            val createResult = executeGh(
+                "label",
+                "create",
+                labelName,
+                "--color",
+                color,
+                "--repo",
+                repository,
+            )
+
+            if (createResult.exitCode != 0) {
+                error("Failed to create label '$labelName': ${createResult.stderr}")
+            }
+        }
     }
 
     /**
