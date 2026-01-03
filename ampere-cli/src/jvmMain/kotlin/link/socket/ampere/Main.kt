@@ -89,6 +89,7 @@ fun main(args: Array<String>) {
         AmpereCommand()
             .subcommands(
                 StartCommand { context },
+                RunCommand { context },
                 HelpCommand(),
                 InteractiveCommand(context),
                 WatchCommand(context.eventRelayService),
@@ -100,9 +101,6 @@ fun main(args: Array<String>) {
                 RespondCommand(),
                 WorkCommand { context },
                 TestCommand(),
-                DemoCommand().subcommands(
-                    JazzDemoCommand { context }
-                ),
             )
             .main(effectiveArgs)
     } finally {

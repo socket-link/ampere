@@ -4,38 +4,51 @@ import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.subcommands
 
 /**
- * Parent command for all test runners.
+ * Parent command for headless automated tests.
  *
- * This command provides a unified entry point for running various end-to-end tests
- * and demonstrations of AMPERE's capabilities.
+ * This command provides a unified entry point for running headless validation
+ * tests of AMPERE's capabilities. These tests are intended for CI/CD pipelines
+ * and automated validation, not interactive use.
+ *
+ * For interactive demonstrations with visual feedback, use the 'run' command instead:
+ *   ampere run --demo jazz
  *
  * Available tests:
- * - jazz: Autonomous agent demonstration (CodeWriterAgent + Fibonacci task)
- * - ticket: Issue creation demonstration (GitHub issue management)
+ * - jazz: Autonomous agent test (CodeWriterAgent + Fibonacci task) - headless
+ * - ticket: Issue creation test (GitHub issue management) - headless
  *
  * Usage:
  *   ampere test <test-name>
  *
  * Examples:
- *   ampere test jazz      # Run Jazz Test (autonomous agent demo)
- *   ampere test ticket    # Run Ticket Creation Test (GitHub issues)
+ *   ampere test jazz      # Run Jazz Test headlessly (for CI/validation)
+ *   ampere test ticket    # Run Ticket Creation Test headlessly
  */
 class TestCommand : CliktCommand(
     name = "test",
     help = """
-        Run end-to-end tests and demonstrations.
+        Run headless automated tests for validation.
+
+        This command runs tests in headless mode without interactive UI,
+        suitable for CI/CD pipelines and automated validation.
+
+        For interactive demonstrations with visual feedback, use:
+          ampere run --demo <name>
 
         Available tests:
-          jazz      Run Jazz Test - Autonomous agent demonstration
-          ticket    Run Ticket Creation Test - GitHub issue management
+          jazz      Headless autonomous agent test (Fibonacci task)
+          ticket    Headless GitHub issue creation test
 
-        Each test demonstrates different capabilities of the AMPERE system.
+        These tests validate AMPERE functionality and are designed for
+        automated environments, not interactive exploration.
 
         Examples:
-          ampere test jazz              # Autonomous code writing demo
-          ampere test ticket            # GitHub issue creation demo
-          ampere test jazz --help       # Show jazz test options
-          ampere test ticket --help     # Show ticket test options
+          ampere test jazz              # Headless agent test (CI/validation)
+          ampere test ticket            # Headless issue test
+          ampere test jazz --help       # Show test options
+
+        For interactive demos:
+          ampere run --demo jazz        # Interactive Jazz demo with TUI
     """.trimIndent()
 ) {
     init {

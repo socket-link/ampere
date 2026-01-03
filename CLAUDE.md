@@ -56,29 +56,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Build the CLI
 ./gradlew :ampere-cli:installJvmDist
 
-# Start the interactive dashboard (DEFAULT - runs when you just execute ./ampere-cli/ampere)
-./ampere-cli/ampere              # Same as 'ampere start'
-./ampere-cli/ampere start        # Interactive multi-modal dashboard
+# Start the interactive TUI dashboard
+./ampere-cli/ampere              # Default: starts TUI
+./ampere-cli/ampere start        # Explicit: same as above
+./ampere-cli/ampere start --auto-work   # Start with background issue work
 
-# Dashboard keyboard controls (while dashboard is running):
+# TUI keyboard controls (while dashboard is running):
 #   d - Dashboard mode (system vitals, agent status, recent events)
 #   e - Event stream mode (filtered event stream)
 #   m - Memory operations mode (knowledge recall/storage patterns)
-#   v - Toggle verbose mode (show/hide routine events)
+#   v - Toggle verbose mode (show/hide logs in right pane)
 #   h or ? - Toggle help screen
 #   : - Command mode (issue commands to the system)
 #   ESC - Close help / Cancel command mode
 #   1-9 - Agent focus mode (detailed view of specific agent)
 #   q or Ctrl+C - Exit
 
-# Command mode (press ':' while in dashboard):
+# Command mode (press ':' while in TUI):
+#   :goal <description> - Start agent with goal
 #   :help - Show available commands
 #   :agents - List all active agents
 #   :ticket <id> - Show ticket details
 #   :thread <id> - Show conversation thread
-#   :quit - Exit dashboard
+#   :quit - Exit TUI
 
-# Watch events in real-time (alternative to dashboard, streaming mode)
+# Run agents with active work (with TUI visualization)
+./ampere-cli/ampere run --goal "Implement FizzBuzz"    # Custom goal
+./ampere-cli/ampere run --demo jazz                    # Jazz demo (Fibonacci)
+./ampere-cli/ampere run --issues                       # Work on GitHub issues
+./ampere-cli/ampere run --issue 42                     # Work on specific issue
+
+# Watch events in real-time (streaming mode, no TUI)
 ./ampere-cli/ampere watch
 ./ampere-cli/ampere watch --verbose                    # Show all events including routine
 ./ampere-cli/ampere watch --group-cognitive-cycles     # Group knowledge operations
@@ -109,9 +117,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Interactive REPL session
 ./ampere-cli/ampere interactive
 
-# Run tests and demonstrations
-./ampere-cli/ampere test jazz                          # Autonomous agent demo (Fibonacci)
-./ampere-cli/ampere test ticket                        # GitHub issue creation demo
+# Headless tests (CI/validation - no interactive UI)
+./ampere-cli/ampere test jazz                          # Headless Jazz test (Fibonacci)
+./ampere-cli/ampere test ticket                        # Headless issue creation test
+
+# Legacy headless work mode (prefer 'run --issues' for TUI version)
+./ampere-cli/ampere work                               # Work on issues (headless)
+./ampere-cli/ampere work --continuous                  # Keep working (headless)
 ```
 
 See [ampere-cli/README.md](ampere-cli/README.md) for complete CLI documentation.
