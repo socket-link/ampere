@@ -3,6 +3,8 @@ package link.socket.ampere.agents.domain.reasoning
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.agents.config.AgentConfiguration
@@ -66,7 +68,9 @@ class AgentLLMService(
             maxTokens = maxTokens,
         )
 
-        val completion = client.chatCompletion(request)
+        val completion = withContext(Dispatchers.IO) {
+            client.chatCompletion(request)
+        }
 
         // Log token usage for monitoring
         completion.usage?.let { usage ->
