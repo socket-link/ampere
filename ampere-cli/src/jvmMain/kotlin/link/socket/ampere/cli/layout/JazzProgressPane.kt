@@ -6,6 +6,9 @@ import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.reasoning.Idea
+import link.socket.ampere.agents.domain.reasoning.Plan
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.cli.animation.LightningAnimator
 
 /**
@@ -36,6 +39,15 @@ class JazzProgressPane(
     }
 
     /**
+     * Information about a file written during execution.
+     */
+    data class FileWriteInfo(
+        val path: String,
+        val lineCount: Int = 0,
+        val operationType: String = "created"
+    )
+
+    /**
      * Current state of the Jazz demo execution.
      */
     data class JazzState(
@@ -44,10 +56,22 @@ class JazzProgressPane(
         val phaseStartTime: Instant? = null,
         val ticketId: String? = null,
         val agentId: String? = null,
+
+        // PERCEIVE outputs
         val ideasGenerated: Int = 0,
+        val ideaNames: List<String> = emptyList(),
+
+        // PLAN outputs
         val planSteps: Int = 0,
         val estimatedComplexity: Int = 0,
-        val filesWritten: List<String> = emptyList(),
+        val planApproach: String = "",
+
+        // EXECUTE outputs
+        val filesWritten: List<FileWriteInfo> = emptyList(),
+
+        // LEARN outputs
+        val knowledgeStored: List<String> = emptyList(),
+
         val errorMessage: String? = null,
         val phaseDetails: String = ""
     )
@@ -84,16 +108,44 @@ class JazzProgressPane(
         state = state.copy(ticketId = ticketId, agentId = agentId)
     }
 
-    fun setPerceiveResult(ideasGenerated: Int) {
-        state = state.copy(ideasGenerated = ideasGenerated)
+    fun setPerceiveResult(ideas: List<Idea>) {
+        state = state.copy(
+            ideasGenerated = ideas.size,
+            ideaNames = ideas.map { it.name }
+        )
     }
 
-    fun setPlanResult(planSteps: Int, complexity: Int) {
-        state = state.copy(planSteps = planSteps, estimatedComplexity = complexity)
+    fun setPlanResult(plan: Plan) {
+        state = state.copy(
+            planSteps = plan.tasks.size,
+            estimatedComplexity = plan.estimatedComplexity,
+            planApproach = summarizePlan(plan)
+        )
     }
 
-    fun addFileWritten(filePath: String) {
-        state = state.copy(filesWritten = state.filesWritten + filePath)
+    private fun summarizePlan(plan: Plan): String {
+        return plan.tasks.take(3).joinToString(" → ") { task ->
+            when (task) {
+                is Task.CodeChange -> "write code"
+                is Task.Blank -> "initialize"
+                else -> "task"
+            }
+        }
+    }
+
+    fun addFileWritten(filePath: String, content: String) {
+        val fileInfo = FileWriteInfo(
+            path = filePath,
+            lineCount = content.lines().size,
+            operationType = "created"
+        )
+        state = state.copy(filesWritten = state.filesWritten + fileInfo)
+    }
+
+    fun addKnowledgeStored(knowledge: String) {
+        state = state.copy(
+            knowledgeStored = state.knowledgeStored + knowledge.take(60)
+        )
     }
 
     fun setFailed(error: String) {
@@ -126,34 +178,49 @@ class JazzProgressPane(
         // PERCEIVE phase - ALWAYS 3 lines
         lines.addAll(renderPhaseRow(Phase.PERCEIVE, "PERCEIVE", "Analyzing state", width))
         val perceiveDetail = if (state.phase.ordinal > Phase.PERCEIVE.ordinal && state.ideasGenerated > 0) {
-            "   ${terminal.render(dim("Ideas generated: ${state.ideasGenerated}"))}"
+            val ideaName = state.ideaNames.firstOrNull()?.take(40) ?: ""
+            "   ${terminal.render(dim("Ideas: ${state.ideasGenerated}${if (ideaName.isNotEmpty()) " - $ideaName" else ""}"))}"
         } else {
             ""
         }
         lines.add(perceiveDetail)
         lines.add("")
 
-        // PLAN phase - ALWAYS 3 lines
+        // PLAN phase - ALWAYS 4 lines (or 5 if approach shown)
         lines.addAll(renderPhaseRow(Phase.PLAN, "PLAN", "Creating plan", width))
-        val planDetail = if (state.phase.ordinal > Phase.PLAN.ordinal && state.planSteps > 0) {
-            "   ${terminal.render(dim("Steps: ${state.planSteps}  Complexity: ${state.estimatedComplexity}"))}"
+        if (state.phase.ordinal > Phase.PLAN.ordinal && state.planSteps > 0) {
+            lines.add("   ${terminal.render(dim("Steps: ${state.planSteps}  Complexity: ${state.estimatedComplexity}"))}")
+            if (state.planApproach.isNotEmpty()) {
+                lines.add("   ${terminal.render(dim(state.planApproach.take(width - 6)))}")
+            } else {
+                lines.add("")
+            }
         } else {
-            ""
+            lines.add("")
+            lines.add("")
         }
-        lines.add(planDetail)
         lines.add("")
 
         // EXECUTE phase - ALWAYS 5 lines (phase + up to 3 files + blank)
         lines.addAll(renderPhaseRow(Phase.EXECUTE, "EXECUTE", "Writing code", width))
         val files = state.filesWritten.take(3)
         for (i in 0 until 3) {
-            val fileLine = files.getOrNull(i)?.let { "   ${terminal.render(dim("→ $it"))}" } ?: ""
+            val fileLine = files.getOrNull(i)?.let { fileInfo ->
+                val fileName = fileInfo.path.substringAfterLast('/')
+                "   ${terminal.render(dim("→ $fileName (${fileInfo.lineCount} lines)"))}"
+            } ?: ""
             lines.add(fileLine)
         }
         lines.add("")
 
-        // LEARN phase - ALWAYS 2 lines
+        // LEARN phase - ALWAYS 3 lines
         lines.addAll(renderPhaseRow(Phase.LEARN, "LEARN", "Extracting knowledge", width))
+        val learnDetail = if (state.phase.ordinal > Phase.LEARN.ordinal && state.knowledgeStored.isNotEmpty()) {
+            "   ${terminal.render(dim("Stored: \"${state.knowledgeStored.firstOrNull()?.take(50) ?: ""}\""))}"
+        } else {
+            ""
+        }
+        lines.add(learnDetail)
         lines.add("")
 
         // Status section - ALWAYS 3 lines

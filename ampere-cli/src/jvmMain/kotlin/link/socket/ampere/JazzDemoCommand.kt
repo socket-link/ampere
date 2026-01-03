@@ -459,7 +459,7 @@ class JazzDemoCommand(
             // PHASE 1: PERCEIVE
             jazzPane.setPhase(JazzProgressPane.Phase.PERCEIVE, "Analyzing task...")
             val perception = agent.perceiveState(agent.getCurrentState())
-            jazzPane.setPerceiveResult(perception.ideas.size)
+            jazzPane.setPerceiveResult(perception.ideas)
 
             if (perception.ideas.isEmpty()) {
                 jazzPane.setFailed("No ideas generated")
@@ -473,28 +473,26 @@ class JazzDemoCommand(
                 ideas = arrayOf(perception.ideas.first()),
                 relevantKnowledge = emptyList()
             )
-            jazzPane.setPlanResult(plan.tasks.size, plan.estimatedComplexity)
+            jazzPane.setPlanResult(plan)
 
             // PHASE 3: EXECUTE
             jazzPane.setPhase(JazzProgressPane.Phase.EXECUTE, "Calling LLM...")
             val outcome = agent.executePlan(plan)
 
             when (outcome) {
-                is ExecutionOutcome.CodeChanged.Success -> {
-                    outcome.changedFiles.forEach { file ->
-                        jazzPane.addFileWritten(file)
-                    }
-                }
                 is ExecutionOutcome.CodeChanged.Failure -> {
                     jazzPane.setFailed(outcome.error.message)
                     return
                 }
-                else -> {}
+                else -> {
+                    // Files are already tracked in the write_code_file tool
+                }
             }
 
             // PHASE 4: LEARN
             jazzPane.setPhase(JazzProgressPane.Phase.LEARN, "Extracting knowledge...")
-            agent.extractKnowledgeFromOutcome(outcome, task, plan)
+            val knowledge = agent.extractKnowledgeFromOutcome(outcome, task, plan)
+            jazzPane.addKnowledgeStored(knowledge.approach)
 
             // Complete!
             jazzPane.setPhase(JazzProgressPane.Phase.COMPLETED)
@@ -614,7 +612,7 @@ class JazzDemoCommand(
                     file.parentFile?.mkdirs()
                     file.writeText(content)
 
-                    jazzPane.addFileWritten(path)
+                    jazzPane.addFileWritten(path, content)
                     path
                 }
 
