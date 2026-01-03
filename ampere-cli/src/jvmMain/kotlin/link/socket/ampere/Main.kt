@@ -13,8 +13,11 @@ import link.socket.ampere.data.RepositoryFactory
 import link.socket.ampere.data.createJvmDriver
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.koog.KoogAgentFactory
+import link.socket.ampere.integrations.git.RepositoryDetector
+import link.socket.ampere.integrations.issues.github.GitHubCliProvider
 import link.socket.ampere.util.LoggingConfiguration
 import link.socket.ampere.util.configureLogging
+import kotlinx.coroutines.runBlocking
 
 /**
  * Main entry point for the Ampere CLI.
@@ -46,11 +49,17 @@ fun main(args: Array<String>) {
     val context = AmpereContext(logger = eventLogger)
     val environmentService = context.environmentService
 
+    // Initialize GitHub integration
+    val issueTrackerProvider = GitHubCliProvider()
+    val repository = runBlocking { RepositoryDetector.detectRepository() }
+
     val agentFactory = AgentFactory(
         scope = ioScope,
         ticketOrchestrator = environmentService.ticketOrchestrator,
         aiConfigurationFactory = aiConfigurationFactory,
-        memoryServiceFactory = { agentId -> context.createMemoryService(agentId) }
+        memoryServiceFactory = { agentId -> context.createMemoryService(agentId) },
+        issueTrackerProvider = issueTrackerProvider,
+        repository = repository,
     )
 
     val codeAgent = agentFactory.create<CodeAgent>(AgentType.CODE)
@@ -60,6 +69,9 @@ fun main(args: Array<String>) {
     codeAgent.initialize(ioScope)
     productAgent.initialize(ioScope)
     qualityAgent.initialize(ioScope)
+
+    // Initialize autonomous work loop for CodeAgent
+    context.createAutonomousWorkLoop(codeAgent)
 
     try {
         // Start all orchestrator services
@@ -73,7 +85,7 @@ fun main(args: Array<String>) {
             else -> args
         }
 
-        // Run the CLI with injected dependenciesIt
+        // Run the CLI with injected dependencies
         AmpereCommand()
             .subcommands(
                 StartCommand { context },
@@ -86,6 +98,7 @@ fun main(args: Array<String>) {
                 OutcomesCommand(context.outcomeMemoryRepository),
                 IssuesCommand(),
                 RespondCommand(),
+                WorkCommand { context },
                 TestCommand(),
                 DemoCommand().subcommands(
                     JazzDemoCommand { context }

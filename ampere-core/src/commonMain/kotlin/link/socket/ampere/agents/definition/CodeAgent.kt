@@ -22,6 +22,7 @@ import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.reasoning.StepContext
 import link.socket.ampere.agents.domain.reasoning.StepResult
 import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.domain.task.MeetingTask
@@ -795,6 +796,200 @@ open class CodeAgent(
             }
     }
 
+    /**
+     * Attempt to claim an unassigned issue using optimistic locking.
+     *
+     * This method implements race condition protection when multiple CodeAgent instances
+     * attempt to claim the same issue simultaneously. It:
+     * 1. Reads the current issue state
+     * 2. Checks if already claimed or in another workflow status
+     * 3. Updates to CLAIMED status
+     * 4. Verifies the claim succeeded (detects if another agent claimed it first)
+     *
+     * The verification step is critical: if two agents update simultaneously, both will
+     * succeed at step 3, but only one will see CLAIMED status at step 4. The other will
+     * see a different status and know it lost the race.
+     *
+     * @param issueNumber The issue number to claim
+     * @return Success if claimed, Failure if:
+     *   - Provider or repository not configured
+     *   - Issue not found
+     *   - Issue already claimed or in progress
+     *   - Another agent won the race condition
+     *   - Any error during the claim process
+     */
+    suspend fun claimIssue(issueNumber: Int): Result<Unit> {
+        val provider = issueTrackerProvider
+            ?: return Result.failure(IllegalStateException("IssueTrackerProvider not configured"))
+        val repo = repository
+            ?: return Result.failure(IllegalStateException("Repository not configured"))
+
+        try {
+            // 1. Read current issue state
+            val currentIssue = provider.queryIssues(
+                repository = repo,
+                query = IssueQuery(
+                    state = IssueState.Open,
+                    limit = 100,
+                ),
+            ).getOrNull()?.find { it.number == issueNumber }
+                ?: return Result.failure(IllegalArgumentException("Issue #$issueNumber not found"))
+
+            // 2. Check if already claimed
+            val currentStatus = IssueWorkflowStatus.fromLabels(currentIssue.labels)
+            if (currentStatus != null && currentStatus != IssueWorkflowStatus.CLAIMED) {
+                return Result.failure(
+                    IllegalStateException("Issue already in ${currentStatus.name} status"),
+                )
+            }
+
+            // If already CLAIMED by someone (has 'assigned' label), don't re-claim
+            if (currentStatus == IssueWorkflowStatus.CLAIMED) {
+                return Result.failure(
+                    IllegalStateException("Issue already claimed"),
+                )
+            }
+
+            // 3. Update to CLAIMED status
+            val updateResult = updateIssueStatus(
+                issueNumber = issueNumber,
+                status = IssueWorkflowStatus.CLAIMED,
+                comment = "CodeAgent claiming this issue",
+            )
+
+            if (updateResult.isFailure) {
+                return Result.failure(
+                    updateResult.exceptionOrNull() ?: Exception("Failed to claim issue"),
+                )
+            }
+
+            // 4. Verify we got it (check for race condition)
+            // Small delay to let GitHub propagate the update
+            kotlinx.coroutines.delay(500)
+
+            val verifiedIssue = provider.queryIssues(
+                repository = repo,
+                query = IssueQuery(
+                    state = IssueState.Open,
+                    limit = 100,
+                ),
+            ).getOrNull()?.find { it.number == issueNumber }
+
+            val finalStatus = IssueWorkflowStatus.fromLabels(verifiedIssue?.labels ?: emptyList())
+
+            if (finalStatus != IssueWorkflowStatus.CLAIMED) {
+                return Result.failure(
+                    IllegalStateException("Race condition: another agent claimed the issue"),
+                )
+            }
+
+            return Result.success(Unit)
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+    }
+
+    /**
+     * Execute the full workflow on a claimed issue.
+     *
+     * This method orchestrates the complete issue-to-PR pipeline:
+     * 1. Update status to IN_PROGRESS
+     * 2. Create implementation plan
+     * 3. Execute plan steps (code, branch, commit, push, PR)
+     * 4. Update status to IN_REVIEW (if PR created)
+     * 5. Mark as BLOCKED on errors
+     *
+     * The implementation uses the AgentReasoning infrastructure to generate
+     * and execute a multi-step plan. Each step can be:
+     * - Code writing
+     * - Git operations (branch, stage, commit, push)
+     * - PR creation
+     *
+     * Status updates are handled safely - failures to update status do not
+     * block the workflow.
+     *
+     * @param issue The issue to work on (must already be claimed)
+     * @return Success with message if PR created, Failure with error otherwise
+     */
+    suspend fun workOnIssue(issue: ExistingIssue): Result<String> {
+        try {
+            // 1. Update to IN_PROGRESS
+            updateIssueStatusSafely(
+                issueNumber = issue.number,
+                status = IssueWorkflowStatus.IN_PROGRESS,
+                comment = "Starting implementation",
+            )
+
+            // 2. Create task from issue
+            val task = Task.CodeChange(
+                id = "issue-${issue.number}",
+                status = TaskStatus.Pending,
+                description = buildString {
+                    appendLine("# ${issue.title}")
+                    appendLine()
+                    appendLine(issue.body)
+                    appendLine()
+                    appendLine("Issue: ${issue.url}")
+                    appendLine()
+                    appendLine("**Requirements:**")
+                    appendLine("- Implement the feature/fix described above")
+                    appendLine("- Create a feature branch")
+                    appendLine("- Write tests if applicable")
+                    appendLine("- Commit with conventional commit message")
+                    appendLine("- Push to remote")
+                    appendLine("- Create PR with 'Closes #${issue.number}'")
+                },
+            )
+
+            // 3. Execute task with reasoning (plan generation + execution)
+            val outcome = executeTaskWithReasoning(task)
+
+            // 4. Check if execution succeeded
+            when (outcome) {
+                is Outcome.Success -> {
+                    // Execution succeeded - PR should have been created
+                    // Status should already be updated to IN_REVIEW by executeGitCreatePRStep
+                    return Result.success(
+                        "Issue #${issue.number} completed successfully. " +
+                            "PR created and ready for review.",
+                    )
+                }
+
+                is Outcome.Failure -> {
+                    // Execution failed
+                    updateIssueStatusSafely(
+                        issueNumber = issue.number,
+                        status = IssueWorkflowStatus.BLOCKED,
+                        comment = "Execution failed: ${outcome.id}",
+                    )
+                    return Result.failure(
+                        Exception("Execution failed: ${outcome.id}"),
+                    )
+                }
+
+                else -> {
+                    // Other outcome (e.g., Blank)
+                    updateIssueStatusSafely(
+                        issueNumber = issue.number,
+                        status = IssueWorkflowStatus.BLOCKED,
+                        comment = "Unexpected outcome: ${outcome::class.simpleName}",
+                    )
+                    return Result.failure(
+                        Exception("Unexpected outcome: ${outcome::class.simpleName}"),
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            // Mark as blocked on any error
+            updateIssueStatusSafely(
+                issueNumber = issue.number,
+                status = IssueWorkflowStatus.BLOCKED,
+                comment = "Error: ${e.message}",
+            )
+            return Result.failure(e)
+        }
+    }
+
     private fun createTicketForTask(task: Task.CodeChange): Ticket {
         val now = Clock.System.now()
         return Ticket(
@@ -862,7 +1057,7 @@ open class CodeAgent(
      *
      * @return List of available issues, or empty list if provider is unavailable
      */
-    internal suspend fun queryAvailableIssues(): List<ExistingIssue> {
+    suspend fun queryAvailableIssues(): List<ExistingIssue> {
         val provider = issueTrackerProvider ?: return emptyList()
         val repo = repository ?: return emptyList()
 

@@ -48,6 +48,7 @@ class AmpereCommand : CliktCommand(
           outcomes     View execution outcomes and learnings
           issues       Manage GitHub issues (create from JSON)
           respond      Respond to agent human input requests
+          work         Autonomously work on GitHub issues (CodeAgent)
           test         Run tests and demonstrations (jazz, ticket)
           jazz-test    Run end-to-end autonomous agent demo (legacy)
 
@@ -83,6 +84,9 @@ class AmpereCommand : CliktCommand(
           ampere outcomes stats               # View learning statistics
           ampere issues create -f epic.json   # Create issues from file
           ampere respond abc-123 "Approved"   # Respond to human input request
+          ampere work                         # Work on next available issue
+          ampere work --continuous            # Keep working on issues
+          ampere work --repo owner/repo       # Work on issues in specific repo
 
         For more information on specific commands:
           ampere <command> --help

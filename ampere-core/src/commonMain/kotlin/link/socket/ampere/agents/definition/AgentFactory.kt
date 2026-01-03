@@ -13,6 +13,7 @@ import link.socket.ampere.agents.execution.tools.ToolWriteCodeFile
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
+import link.socket.ampere.integrations.issues.IssueTrackerProvider
 
 enum class AgentType {
     CODE,
@@ -26,6 +27,8 @@ class AgentFactory(
     private val ticketOrchestrator: TicketOrchestrator,
     private val aiConfigurationFactory: AIConfigurationFactory,
     private val memoryServiceFactory: ((AgentId) -> AgentMemoryService)? = null,
+    private val issueTrackerProvider: IssueTrackerProvider? = null,
+    private val repository: String? = null,
 ) {
     private val toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode> =
         ToolWriteCodeFile(AgentActionAutonomy.ASK_BEFORE_ACTION)
@@ -53,6 +56,8 @@ class AgentFactory(
             toolWriteCodeFile = toolWriteCodeFile,
             coroutineScope = scope,
             memoryServiceFactory = memoryServiceFactory,
+            issueTrackerProvider = issueTrackerProvider,
+            repository = repository,
         ) as A
         AgentType.PRODUCT -> ProductAgent(
             agentConfiguration = agentConfiguration,

@@ -1,6 +1,7 @@
 package link.socket.ampere
 
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.mordant.rendering.TextColors
 import com.github.ajalt.mordant.rendering.TextStyles.bold
@@ -93,6 +94,11 @@ class StartCommand(
 
     private val goal: String? by option("--goal", "-g", help = "Set an autonomous goal for the agent to work on")
 
+    private val autoWork by option(
+        "--auto-work",
+        help = "Start autonomous work mode in background"
+    ).flag(default = false)
+
     override fun run() = runBlocking {
         val context = contextProvider()
         val agentScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -161,6 +167,12 @@ class StartCommand(
                 if (activationResult.isFailure) {
                     jazzPane.setFailed("Failed to activate goal: ${activationResult.exceptionOrNull()?.message}")
                 }
+            }
+
+            // If --auto-work flag is set, start autonomous work mode
+            if (autoWork) {
+                context.startAutonomousWork()
+                // Dashboard will show work happening in background
             }
 
             // Wait a moment for initial events to be processed
