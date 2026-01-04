@@ -11,7 +11,7 @@ class HelpCommand : CliktCommand(
 ) {
     override fun run() {
         println("""
-            AMPERE - Animated Multi-Agent Prompting Environment
+            AMPERE - ((Animated Multi-Agent (AniMA)) Protocol (AMP)) Example Runtime Environment
 
             Usage:
               ampere                    # Start interactive dashboard (default)
@@ -20,12 +20,14 @@ class HelpCommand : CliktCommand(
 
             Main Commands:
               start        Interactive multi-modal dashboard (default)
+              run          Run agents with active work (with TUI visualization)
               watch        Stream events in real-time with filtering
               dashboard    Static live-updating dashboard
               interactive  REPL session for direct interaction
               thread       View and manage conversation threads
               status       System-wide status overview
               outcomes     View execution outcomes and learnings
+              test         Headless automated tests (CI/validation)
               help         Show this help message
 
             Interactive Dashboard Controls:
@@ -51,6 +53,10 @@ class HelpCommand : CliktCommand(
 
             Examples:
               ampere                              # Start dashboard
+              ampere run --goal "Implement FizzBuzz"  # Run agent with custom goal
+              ampere run --demo jazz              # Run Jazz demo (interactive)
+              ampere run --issues                 # Work on GitHub issues
+              ampere test jazz                    # Headless Jazz test (CI)
               ampere watch --verbose              # Watch all events
               ampere watch --filter TaskCreated   # Watch task events only
               ampere thread list                  # List conversation threads

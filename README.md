@@ -194,13 +194,13 @@ Use the CLI to watch agents work together in real-time:
 ./gradlew :ampere-cli:installJvmDist
 
 # Watch event stream
-./ampere watch
+./ampere-cli/ampere watch
 
-# Query execution history  
-./ampere outcomes search "authentication"
+# Query execution history
+./ampere-cli/ampere outcomes search "authentication"
 
 # View agent status
-./ampere status
+./ampere-cli/ampere status
 ```
 ```
 📋 TicketCreated    [pm-agent]        14:23:01  FEAT-123: Add user authentication

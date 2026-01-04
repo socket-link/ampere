@@ -15,24 +15,36 @@ object LogCapture {
     private var originalErr: PrintStream? = null
     private var logPane: LogPane? = null
     private var isCapturing = false
+    private var silentMode = false
 
     /**
      * Start capturing stdout/stderr and routing to the provided LogPane.
+     *
+     * @param pane The LogPane to write captured logs to
+     * @param silent If true, logs are ONLY sent to LogPane and not echoed to terminal.
+     *               Use this in TUI mode to prevent logs from interfering with rendering.
+     * @param captureStdout If false, only capture stderr (useful when TUI renders to stdout)
      */
-    fun start(pane: LogPane) {
+    fun start(pane: LogPane, silent: Boolean = false, captureStdout: Boolean = true) {
         if (isCapturing) {
             stop() // Stop previous capture
         }
 
         logPane = pane
+        silentMode = silent
         originalOut = System.out
         originalErr = System.err
 
         // Create capturing print streams
-        val outStream = CapturingPrintStream(originalOut!!, pane, LogPane.LogLevel.INFO)
-        val errStream = CapturingPrintStream(originalErr!!, pane, LogPane.LogLevel.ERROR)
+        // Only redirect stdout if requested (TUI needs stdout for rendering)
+        if (captureStdout) {
+            val outStream = CapturingPrintStream(originalOut!!, pane, LogPane.LogLevel.INFO, silent)
+            System.setOut(outStream)
+        }
 
-        System.setOut(outStream)
+        // Always redirect stderr (where Kermit and EventBus logs go)
+        // Use INFO level since logs already have their own severity markers ([🟢 EVENT], [🔴 CRITICAL], etc.)
+        val errStream = CapturingPrintStream(originalErr!!, pane, LogPane.LogLevel.INFO, silent)
         System.setErr(errStream)
 
         isCapturing = true
@@ -44,7 +56,12 @@ object LogCapture {
     fun stop() {
         if (!isCapturing) return
 
-        originalOut?.let { System.setOut(it) }
+        // Restore stdout if it was redirected
+        if (System.out != originalOut) {
+            originalOut?.let { System.setOut(it) }
+        }
+
+        // Restore stderr (always redirected)
         originalErr?.let { System.setErr(it) }
 
         isCapturing = false
@@ -60,11 +77,14 @@ object LogCapture {
 
     /**
      * PrintStream that captures output and sends to LogPane.
+     *
+     * @param silent If true, only send to LogPane and don't echo to terminal
      */
     private class CapturingPrintStream(
         private val original: PrintStream,
         private val logPane: LogPane,
-        private val level: LogPane.LogLevel
+        private val level: LogPane.LogLevel,
+        private val silent: Boolean
     ) : PrintStream(TeeOutputStream(original, logPane, level)) {
 
         private val lineBuffer = StringBuilder()
@@ -77,8 +97,10 @@ object LogCapture {
                 logPane.log(level, message)
             }
 
-            // Also write to original stream
-            original.println(x)
+            // Only write to original stream if not in silent mode
+            if (!silent) {
+                original.println(x)
+            }
         }
 
         override fun println() {
@@ -87,12 +109,20 @@ object LogCapture {
                 logPane.log(level, lineBuffer.toString())
                 lineBuffer.clear()
             }
-            original.println()
+
+            // Only write to original stream if not in silent mode
+            if (!silent) {
+                original.println()
+            }
         }
 
         override fun print(x: String?) {
             x?.let { lineBuffer.append(it) }
-            original.print(x)
+
+            // Only write to original stream if not in silent mode
+            if (!silent) {
+                original.print(x)
+            }
         }
     }
 
