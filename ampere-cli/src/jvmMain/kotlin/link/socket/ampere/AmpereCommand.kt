@@ -29,7 +29,7 @@ import com.github.ajalt.clikt.core.CliktCommand
 class AmpereCommand : CliktCommand(
     name = "ampere",
     help = """
-        AMPERE - Animated Multi-Agent Prompting Environment
+        AMPERE - ((Animated Multi-Agent (AniMA)) Protocol (AMP)) Example Runtime Environment
 
         Usage:
           ampere                    # Start interactive TUI dashboard

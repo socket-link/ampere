@@ -34,6 +34,8 @@ import link.socket.ampere.cli.watch.presentation.WatchPresenter
 import link.socket.ampere.cli.watch.presentation.WatchViewState
 import link.socket.ampere.renderer.HelpOverlayRenderer
 import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.util.LoggingConfiguration
+import link.socket.ampere.util.configureLogging
 
 /**
  * Run agents with active work using the interactive TUI.
@@ -49,9 +51,14 @@ import link.socket.ampere.repl.TerminalFactory
  * - Middle pane: Cognitive cycle progress
  * - Right pane: Agent memory stats (or logs in verbose mode)
  *
+ * Logging behavior:
+ * - DEBUG logging is enabled automatically for this command
+ * - All logs are captured from the start (buffered up to 500 entries)
+ * - Pressing 'v' toggles log visibility without losing history
+ *
  * Controls:
  *   d/e/m - Switch view modes (dashboard/events/memory)
- *   v - Toggle verbose mode (shows logs)
+ *   v - Toggle verbose mode (shows/hides log panel)
  *   h/? - Show help
  *   1-9 - Focus on specific agent
  *   q or Ctrl+C - Exit
@@ -76,8 +83,13 @@ class RunCommand(
           d - Dashboard: System vitals, agent status
           e - Event Stream: Filtered events
           m - Memory Operations: Knowledge patterns
-          v - Toggle verbose mode (show logs)
+          v - Toggle verbose mode (show/hide logs)
           1-9 - Agent Focus: Detailed agent view
+
+        Logging:
+          DEBUG logging is enabled automatically for this command.
+          All logs are captured from startup and buffered (500 entries).
+          Press 'v' to show/hide logs without losing history.
 
         Examples:
           ampere run --goal "Implement FizzBuzz"
@@ -118,17 +130,45 @@ class RunCommand(
             return@runBlocking
         }
 
-        val context = contextProvider()
-        val agentScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         val terminal = TerminalFactory.createTerminal()
+
+        // Save original stdout BEFORE redirecting for TUI rendering
+        // This allows TUI to render directly to terminal, bypassing log capture
+        val originalStdout = System.out
+
+        // Create LogPane FIRST before any other initialization
+        val logPane = LogPane(terminal)
+
+        // Start log capture IMMEDIATELY in SILENT mode for BOTH stdout and stderr
+        // This must happen before configureLogging() to catch all logs
+        // - captureStdout = true: Capture OpenAI/ktor logs that go to stdout
+        // - silent = true: Don't echo logs to terminal (only to LogPane)
+        // TUI will render using originalStdout directly
+        LogCapture.start(logPane, silent = true, captureStdout = true)
+
+        // NOW enable DEBUG logging - all logs from here go to LogPane
+        val debugConfig = LoggingConfiguration.Debug
+        configureLogging(debugConfig)
+
+        // Add test logs to verify LogCapture is working
+        System.err.println("TEST ERROR LOG: LogCapture started")
+        logPane.info("DIRECT LOG: LogPane test message")
+
+        // Get context but note: it was created in Main.kt with SilentEventLogger
+        // EventBus logs won't appear unless we reconfigure the environment
+        val context = contextProvider()
+
+        // Replace the silent EventLogger with a verbose one for run mode
+        // This ensures EventBus logs (which are most of the activity) are captured
+        context.environmentService.eventBus.setLogger(debugConfig.createEventLogger())
+        val agentScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         val presenter = WatchPresenter(context.eventRelayService)
 
-        // Create TUI components
+        // Create remaining TUI components
         val layout = ThreeColumnLayout(terminal)
         val eventPane = RichEventPane(terminal)
         val jazzPane = JazzProgressPane(terminal)
         val memoryPane = AgentMemoryPane(terminal)
-        val logPane = LogPane(terminal)
         val statusBar = StatusBar(terminal)
         val inputHandler = DemoInputHandler(terminal)
         val helpRenderer = HelpOverlayRenderer(terminal)
@@ -157,7 +197,7 @@ class RunCommand(
 
         try {
             // Initialize terminal for full-screen rendering
-            initializeTerminal()
+            initializeTerminal(originalStdout)
 
             // Start the presenter
             presenter.start()
@@ -229,22 +269,11 @@ class RunCommand(
                                     throw CancellationException("User requested exit")
                                 }
                                 is DemoInputHandler.KeyResult.ConfigChange -> {
-                                    val wasVerbose = viewConfig.verboseMode
                                     viewConfig = result.newConfig
                                     eventPane.verboseMode = viewConfig.verboseMode
 
-                                    if (viewConfig.verboseMode && !wasVerbose) {
-                                        LogCapture.start(logPane)
-                                        print("\u001B[2J\u001B[H")
-                                        System.out.flush()
-                                        println("Verbose mode enabled")
-                                    } else if (!viewConfig.verboseMode && wasVerbose) {
-                                        println("Verbose mode disabled")
-                                        LogCapture.stop()
-                                        print("\u001B[2J\u001B[H")
-                                        System.out.flush()
-                                    }
-
+                                    // Just update the view - LogCapture is always running
+                                    // to ensure we don't lose any historical logs
                                     lastRenderedOutput = null
                                 }
                                 is DemoInputHandler.KeyResult.ExecuteCommand -> {
@@ -318,8 +347,10 @@ class RunCommand(
                     }
 
                     if (output != lastRenderedOutput) {
-                        print(output)
-                        System.out.flush()
+                        // Use original stdout to render TUI, bypassing LogCapture
+                        // This prevents TUI rendering from being captured as logs
+                        originalStdout.print(output)
+                        originalStdout.flush()
                         lastRenderedOutput = output
                     }
 
@@ -335,35 +366,35 @@ class RunCommand(
             // Clean shutdown
             throw e
         } catch (e: Exception) {
-            print("\u001B[2J\u001B[H")
-            println("Error: ${e.message}")
+            originalStdout.print("\u001B[2J\u001B[H")
+            originalStdout.println("Error: ${e.message}")
             e.printStackTrace()
-            System.out.flush()
+            originalStdout.flush()
             throw e
         } finally {
             LogCapture.stop()
             presenter.stop()
             inputHandler.close()
             agentScope.cancel()
-            restoreTerminal()
-            println("\nAMPERE run completed")
+            restoreTerminal(originalStdout)
+            originalStdout.println("\nAMPERE run completed")
         }
     }
 
-    private fun initializeTerminal() {
-        print("\u001B[?1049h")
-        print("\u001B[?25l")
-        print("\u001B[2J")
-        print("\u001B[H")
-        System.out.flush()
+    private fun initializeTerminal(out: java.io.PrintStream) {
+        out.print("\u001B[?1049h")
+        out.print("\u001B[?25l")
+        out.print("\u001B[2J")
+        out.print("\u001B[H")
+        out.flush()
     }
 
-    private fun restoreTerminal() {
-        print("\u001B[2J")
-        print("\u001B[H")
-        print("\u001B[?25h")
-        print("\u001B[?1049l")
-        System.out.flush()
+    private fun restoreTerminal(out: java.io.PrintStream) {
+        out.print("\u001B[2J")
+        out.print("\u001B[H")
+        out.print("\u001B[?25h")
+        out.print("\u001B[?1049l")
+        out.flush()
     }
 
     private fun renderCommandResult(result: CommandResult, terminal: Terminal): String {

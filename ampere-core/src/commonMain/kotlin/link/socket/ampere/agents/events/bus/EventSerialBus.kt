@@ -29,7 +29,7 @@ typealias SubscriptionMap = MutableMap<EventType, Subscription>
  */
 class EventSerialBus(
     private val scope: CoroutineScope,
-    private val logger: EventLogger = ConsoleEventLogger(),
+    private var logger: EventLogger = ConsoleEventLogger(),
 ) {
     /** Map event from EventClassType -> (subscriptionId, eventHandler) */
     private val handlerMap: HandlerMap = mutableMapOf()
@@ -38,6 +38,14 @@ class EventSerialBus(
     private val subscriptionMap: SubscriptionMap = mutableMapOf()
 
     private val mutex = Mutex()
+
+    /**
+     * Replace the EventLogger at runtime.
+     * Useful for switching between silent and verbose logging modes in TUI.
+     */
+    fun setLogger(newLogger: EventLogger) {
+        logger = newLogger
+    }
 
     /**
      * Publish an [event] to all subscribers of its exact KClass.
