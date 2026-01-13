@@ -55,3 +55,23 @@ UPDATE MessageThreadStore SET status = ?, updatedAt = ? WHERE id = ?;
 
 deleteMessageThread:
 DELETE FROM MessageThreadStore WHERE id = ?;
+
+-- Cleanup queries
+
+countMessages:
+SELECT COUNT(*) FROM MessageStore;
+
+countThreads:
+SELECT COUNT(*) FROM MessageThreadStore;
+
+-- Delete messages older than the specified timestamp
+deleteMessagesOlderThan:
+DELETE FROM MessageStore WHERE timestamp < ?;
+
+-- Delete threads older than the specified timestamp (cascade deletes messages and participants)
+deleteThreadsOlderThan:
+DELETE FROM MessageThreadStore WHERE updatedAt < ?;
+
+-- Get oldest message timestamp
+getOldestMessageTimestamp:
+SELECT MIN(timestamp) FROM MessageStore;

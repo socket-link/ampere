@@ -93,3 +93,26 @@ LIMIT ?;
 
 deleteOutcome:
 DELETE FROM OutcomeMemoryStore WHERE id = ?;
+
+-- Cleanup queries
+
+countOutcomes:
+SELECT COUNT(*) FROM OutcomeMemoryStore;
+
+-- Delete outcomes older than the specified timestamp
+deleteOutcomesOlderThan:
+DELETE FROM OutcomeMemoryStore WHERE timestamp < ?;
+
+-- Delete all but the N most recent outcomes
+deleteOldOutcomesKeepingLast:
+DELETE FROM OutcomeMemoryStore
+WHERE id NOT IN (
+  SELECT id
+  FROM OutcomeMemoryStore
+  ORDER BY timestamp DESC
+  LIMIT :keepCount
+);
+
+-- Get oldest outcome timestamp
+getOldestOutcomeTimestamp:
+SELECT MIN(timestamp) FROM OutcomeMemoryStore;

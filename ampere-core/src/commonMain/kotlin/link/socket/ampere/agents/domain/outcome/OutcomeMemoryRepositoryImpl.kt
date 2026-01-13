@@ -174,4 +174,33 @@ class OutcomeMemoryRepositoryImpl(
             timestamp = Instant.fromEpochMilliseconds(row.timestamp),
         )
     }
+
+    // Cleanup operations
+
+    override suspend fun countOutcomes(): Result<Long> = withContext(Dispatchers.IO) {
+        runCatching {
+            queries.countOutcomes().executeAsOne()
+        }
+    }
+
+    override suspend fun deleteOutcomesOlderThan(timestamp: Instant): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                queries.deleteOutcomesOlderThan(timestamp.toEpochMilliseconds())
+            }.map { }
+        }
+
+    override suspend fun deleteOldOutcomesKeepingLast(keepCount: Long): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                queries.deleteOldOutcomesKeepingLast(keepCount)
+            }.map { }
+        }
+
+    override suspend fun getOldestOutcomeTimestamp(): Result<Long?> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                queries.getOldestOutcomeTimestamp().executeAsOneOrNull() as Long?
+            }
+        }
 }

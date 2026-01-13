@@ -86,6 +86,31 @@ interface OutcomeMemoryRepository {
         executorId: ExecutorId,
         limit: Int = 20,
     ): Result<List<OutcomeMemory>>
+
+    // Cleanup operations
+
+    /**
+     * Count total outcomes in the store.
+     */
+    suspend fun countOutcomes(): Result<Long>
+
+    /**
+     * Delete outcomes older than the specified timestamp.
+     * @param timestamp Outcomes older than this will be deleted
+     */
+    suspend fun deleteOutcomesOlderThan(timestamp: Instant): Result<Unit>
+
+    /**
+     * Delete all but the N most recent outcomes.
+     * @param keepCount Number of most recent outcomes to keep
+     */
+    suspend fun deleteOldOutcomesKeepingLast(keepCount: Long): Result<Unit>
+
+    /**
+     * Get the timestamp of the oldest outcome in the store.
+     * @return Result containing the timestamp in epoch milliseconds, or null if no outcomes exist
+     */
+    suspend fun getOldestOutcomeTimestamp(): Result<Long?>
 }
 
 /**

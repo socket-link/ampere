@@ -34,6 +34,8 @@ import link.socket.ampere.agents.service.AgentActionService
 import link.socket.ampere.agents.service.MessageActionService
 import link.socket.ampere.agents.service.TicketActionService
 import link.socket.ampere.data.DEFAULT_JSON
+import link.socket.ampere.data.DatabaseMaintenanceConfig
+import link.socket.ampere.data.DatabaseMaintenanceService
 import link.socket.ampere.db.Database
 
 /**
@@ -127,6 +129,28 @@ class AmpereContext(
      */
     val outcomeMemoryRepository: OutcomeMemoryRepository
         get() = environmentService.outcomeMemoryRepository
+
+    /**
+     * Database maintenance service for cleanup operations.
+     * Handles retention policies and disk space reclamation.
+     */
+    val databaseMaintenanceService: DatabaseMaintenanceService by lazy {
+        DatabaseMaintenanceService(
+            eventRepository = environmentService.eventRepository,
+            messageRepository = environmentService.messageRepository,
+            outcomeMemoryRepository = environmentService.outcomeMemoryRepository,
+            config = DatabaseMaintenanceConfig(
+                eventRetentionDays = 30,
+                messageRetentionDays = 90,
+                outcomeRetentionDays = 180,
+                maxEventsToKeep = 50000,
+                maxOutcomesToKeep = 10000,
+                runVacuum = false, // Disabled by default due to performance cost
+            ),
+            scope = scope,
+            logger = logger,
+        )
+    }
 
     /**
      * Knowledge repository for persistent agent memory.
@@ -275,6 +299,10 @@ class AmpereContext(
         if (fileSystemReceptor != null) {
             logger.logInfo("Workspace receptor system started, monitoring: ${workspace?.baseDirectory ?: "disabled"}")
         }
+
+        // Run database cleanup in background on startup
+        logger.logInfo("Starting database maintenance...")
+        databaseMaintenanceService.runCleanupAsync()
     }
 
     /**
@@ -330,14 +358,22 @@ class AmpereContext(
      * clean resource cleanup.
      */
     fun close() {
+        logger.logInfo("Shutting down Ampere context...")
+
         // Stop autonomous work if running
         stopAutonomousWork()
 
         // Stop the workspace monitoring system if enabled
         fileSystemReceptor?.stop()
 
+        // Cancel the coroutine scope (this will cancel the cleanup job if still running)
         scope.cancel()
+
+        // Close the database driver
+        logger.logInfo("Closing database connection...")
         driver.close()
+
+        logger.logInfo("Ampere context shutdown complete")
     }
 
     companion object {
@@ -358,7 +394,15 @@ class AmpereContext(
             val dbFile = File(databasePath)
             dbFile.parentFile?.mkdirs()
 
-            return JdbcSqliteDriver("jdbc:sqlite:$databasePath")
+            val driver = JdbcSqliteDriver("jdbc:sqlite:$databasePath")
+
+            // Configure SQLite for better concurrency and performance
+            driver.execute(null, "PRAGMA journal_mode=WAL", 0) // Enable Write-Ahead Logging
+            driver.execute(null, "PRAGMA synchronous=NORMAL", 0) // Balanced durability/performance
+            driver.execute(null, "PRAGMA busy_timeout=5000", 0) // Wait up to 5s on locks
+            driver.execute(null, "PRAGMA cache_size=-64000", 0) // 64MB cache
+
+            return driver
         }
 
         /**

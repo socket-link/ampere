@@ -71,3 +71,28 @@ WHERE timestamp >= :fromTime
   AND event_type IN :eventTypes
   AND source_id IN :sourceIds
 ORDER BY timestamp ASC;
+
+-- Cleanup queries
+
+-- Count total events
+countEvents:
+SELECT COUNT(*) FROM EventStore;
+
+-- Delete events older than the specified timestamp
+deleteEventsOlderThan:
+DELETE FROM EventStore
+WHERE timestamp < ?;
+
+-- Delete all but the N most recent events (keeps last N events)
+deleteOldEventsKeepingLast:
+DELETE FROM EventStore
+WHERE event_id NOT IN (
+  SELECT event_id
+  FROM EventStore
+  ORDER BY timestamp DESC
+  LIMIT :keepCount
+);
+
+-- Get oldest event timestamp (for diagnostics)
+getOldestEventTimestamp:
+SELECT MIN(timestamp) FROM EventStore;

@@ -239,4 +239,51 @@ class EventRepository(
             cause = throwable,
         )
     }
+
+    // Cleanup operations
+
+    /**
+     * Count total events in the store.
+     */
+    suspend fun countEvents(): Result<Long> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                queries.countEvents().executeAsOne()
+            }
+        }
+
+    /**
+     * Delete events older than the specified timestamp.
+     * @param timestamp Epoch milliseconds - events older than this will be deleted
+     * @return Result containing the number of rows deleted
+     */
+    suspend fun deleteEventsOlderThan(timestamp: Instant): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                queries.deleteEventsOlderThan(timestamp.toEpochMilliseconds())
+            }.map { }
+        }
+
+    /**
+     * Delete all but the N most recent events.
+     * @param keepCount Number of most recent events to keep
+     * @return Result containing unit on success
+     */
+    suspend fun deleteOldEventsKeepingLast(keepCount: Long): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                queries.deleteOldEventsKeepingLast(keepCount)
+            }.map { }
+        }
+
+    /**
+     * Get the timestamp of the oldest event in the store.
+     * @return Result containing the timestamp in epoch milliseconds, or null if no events exist
+     */
+    suspend fun getOldestEventTimestamp(): Result<Long?> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                queries.getOldestEventTimestamp().executeAsOneOrNull() as Long?
+            }
+        }
 }

@@ -199,4 +199,61 @@ class MessageRepository(
                 queries.deleteMessageThread(threadId)
             }.map { }
         }
+
+    // Cleanup operations
+
+    /**
+     * Count total messages in the store.
+     */
+    suspend fun countMessages(): Result<Long> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                queries.countMessages().executeAsOne()
+            }
+        }
+
+    /**
+     * Count total threads in the store.
+     */
+    suspend fun countThreads(): Result<Long> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                queries.countThreads().executeAsOne()
+            }
+        }
+
+    /**
+     * Delete messages older than the specified timestamp.
+     * @param timestamp Messages older than this will be deleted
+     * @return Result containing unit on success
+     */
+    suspend fun deleteMessagesOlderThan(timestamp: Instant): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                queries.deleteMessagesOlderThan(timestamp.toEpochMilliseconds())
+            }.map { }
+        }
+
+    /**
+     * Delete threads (and their messages) older than the specified timestamp.
+     * @param timestamp Threads with updatedAt older than this will be deleted
+     * @return Result containing unit on success
+     */
+    suspend fun deleteThreadsOlderThan(timestamp: Instant): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                queries.deleteThreadsOlderThan(timestamp.toEpochMilliseconds())
+            }.map { }
+        }
+
+    /**
+     * Get the timestamp of the oldest message in the store.
+     * @return Result containing the timestamp in epoch milliseconds, or null if no messages exist
+     */
+    suspend fun getOldestMessageTimestamp(): Result<Long?> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                queries.getOldestMessageTimestamp().executeAsOneOrNull() as Long?
+            }
+        }
 }

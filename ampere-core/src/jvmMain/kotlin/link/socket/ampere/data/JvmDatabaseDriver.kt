@@ -28,3 +28,54 @@ fun createJvmDriver(
 
     return driver
 }
+
+/**
+ * Run VACUUM on the database to reclaim disk space after deletions.
+ * This is a blocking operation that can take several seconds for large databases.
+ */
+fun JdbcSqliteDriver.vacuum() {
+    execute(null, "VACUUM", 0)
+}
+
+/**
+ * Get the current database page count and size information.
+ */
+fun JdbcSqliteDriver.getDatabaseSize(): DatabaseSizeInfo {
+    val pageCount = executeQuery(
+        identifier = null,
+        sql = "PRAGMA page_count",
+        mapper = { cursor ->
+            app.cash.sqldelight.db.QueryResult.Value(
+                if (cursor.next().value) cursor.getLong(0) ?: 0L else 0L
+            )
+        },
+        parameters = 0,
+        binders = null
+    ).value
+
+    val pageSize = executeQuery(
+        identifier = null,
+        sql = "PRAGMA page_size",
+        mapper = { cursor ->
+            app.cash.sqldelight.db.QueryResult.Value(
+                if (cursor.next().value) cursor.getLong(0) ?: 0L else 0L
+            )
+        },
+        parameters = 0,
+        binders = null
+    ).value
+
+    return DatabaseSizeInfo(
+        pageCount = pageCount,
+        pageSize = pageSize,
+        totalBytes = pageCount * pageSize
+    )
+}
+
+data class DatabaseSizeInfo(
+    val pageCount: Long,
+    val pageSize: Long,
+    val totalBytes: Long,
+) {
+    val totalMB: Double get() = totalBytes / (1024.0 * 1024.0)
+}
