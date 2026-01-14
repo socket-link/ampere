@@ -144,6 +144,38 @@ AMPERE applies these principles:
 >
 > **[We're looking for collaborators →](https://github.com/socket-link/ampere/issues)**
 
+**Option 1: YAML Configuration (Recommended)**
+
+Create an `ampere.yaml` file in your project:
+
+```yaml
+ai:
+  provider: anthropic
+  model: sonnet-4
+  backups:
+    - provider: openai
+      model: gpt-4.1
+
+team:
+  - role: product-manager
+    personality:
+      directness: 0.8
+  - role: engineer
+    personality:
+      creativity: 0.7
+  - role: qa-tester
+
+goal: "Build a user authentication system"
+```
+
+Then run with the CLI:
+
+```bash
+./ampere-cli/ampere run --goal "Build a user authentication system"
+```
+
+**Option 2: Kotlin DSL**
+
 ```kotlin
 // 1. Configure your AI provider
 val aiConfig = AnthropicConfig(
@@ -171,6 +203,8 @@ team.events.collect { event ->
     }
 }
 ```
+
+**[→ Complete Configuration Guide](ampere-cli/README.md#configuration)**
 
 ---
 

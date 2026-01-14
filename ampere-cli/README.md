@@ -269,7 +269,271 @@ Respond to agent human input requests:
 
 ## Configuration
 
-The CLI uses the Ampere database located at `~/ampere.db` by default. Logging can be configured via the `AMPERE_LOG_LEVEL` environment variable.
+AMPERE uses YAML configuration files to define your AI provider, team composition, and agent personalities. This is the primary method for configuring your agent environment.
+
+### Quick Start
+
+1. Copy the example configuration:
+   ```bash
+   cp ampere.example.yaml ampere.yaml
+   ```
+
+2. Edit `ampere.yaml` with your settings
+
+3. Run the CLI:
+   ```bash
+   ./ampere-cli/ampere run --goal "Your task description"
+   ```
+
+### Configuration File Locations
+
+The CLI automatically loads configuration from these locations (in order of precedence):
+
+1. `--config <path>` — Explicit path via command-line flag
+2. `ampere.yaml` — Current directory
+3. `ampere.yml` — Current directory
+4. `.ampere/config.yaml` — Hidden config directory
+5. `.ampere/config.yml` — Hidden config directory
+
+### Configuration Format
+
+```yaml
+# AI Provider Configuration
+ai:
+  provider: anthropic           # anthropic, openai, or gemini
+  model: sonnet-4               # Model name (see list below)
+
+  # Optional: Fallback providers (tried in order if primary fails)
+  backups:
+    - provider: openai
+      model: gpt-4.1
+    - provider: gemini
+      model: flash-2.5
+
+# Team Composition
+team:
+  - role: product-manager
+    personality:
+      directness: 0.8           # 0=diplomatic, 1=very direct
+      thoroughness: 0.7
+      formality: 0.6
+
+  - role: engineer
+    personality:
+      creativity: 0.7           # 0=conventional, 1=creative
+      risk-tolerance: 0.4       # 0=conservative, 1=risk-taking
+
+  - role: qa-tester
+    # Uses default personality
+
+# Optional: Default goal (can also pass via --goal flag)
+goal: "Build a user authentication system"
+```
+
+### AI Providers and Models
+
+#### Anthropic (Claude)
+
+```yaml
+ai:
+  provider: anthropic
+  model: sonnet-4    # Recommended for most tasks
+```
+
+**Available models:**
+| Model | Best For |
+|-------|----------|
+| `opus-4.5` | Complex reasoning, research |
+| `opus-4.1` | Complex tasks |
+| `opus-4` | Complex tasks |
+| `sonnet-4.5` | Balanced performance |
+| `sonnet-4` | General purpose (recommended) |
+| `sonnet-3.7` | Cost-effective |
+| `haiku-4.5` | Fast, simple tasks |
+| `haiku-3.5` | Fast, simple tasks |
+| `haiku-3` | Fastest, basic tasks |
+
+#### OpenAI (GPT)
+
+```yaml
+ai:
+  provider: openai
+  model: gpt-4.1    # Recommended
+```
+
+**Available models:**
+| Model | Best For |
+|-------|----------|
+| `gpt-5.1` | Most capable |
+| `gpt-5` | High capability |
+| `gpt-5-mini` | Balanced |
+| `gpt-5-nano` | Fast, efficient |
+| `gpt-4.1` | Reliable (recommended) |
+| `gpt-4.1-mini` | Cost-effective |
+| `gpt-4o` | Optimized |
+| `gpt-4o-mini` | Fast |
+| `o4-mini` | Reasoning |
+| `o3` | Advanced reasoning |
+| `o3-mini` | Fast reasoning |
+
+#### Google (Gemini)
+
+```yaml
+ai:
+  provider: gemini
+  model: flash-2.5    # Recommended for speed
+```
+
+**Available models:**
+| Model | Best For |
+|-------|----------|
+| `pro-3` | Most capable |
+| `pro-2.5` | High capability |
+| `flash-2.5` | Fast (recommended) |
+| `flash-2.5-lite` | Fastest |
+| `flash-2` | Balanced |
+| `flash-2-lite` | Efficient |
+
+### Agent Roles
+
+Configure your team by selecting from these specialized roles:
+
+| Role | Description | Capabilities |
+|------|-------------|--------------|
+| `product-manager` | Coordinates work, breaks down tasks, makes product decisions | Planning, Delegation |
+| `engineer` | Writes production-quality code and implements features | Code Writing, Code Review |
+| `qa-tester` | Creates test suites and identifies edge cases | Testing, Code Review |
+| `architect` | Designs system architecture and APIs | API Design, Planning |
+| `security-reviewer` | Reviews code for security vulnerabilities | Security Review, Code Review |
+| `technical-writer` | Creates comprehensive documentation | Documentation |
+
+### Personality Traits
+
+Customize agent behavior with personality traits (all values 0.0 to 1.0):
+
+```yaml
+personality:
+  directness: 0.5       # 0=diplomatic, 1=very direct
+  creativity: 0.5       # 0=conventional, 1=creative
+  thoroughness: 0.5     # 0=concise, 1=thorough
+  formality: 0.5        # 0=casual, 1=formal
+  risk-tolerance: 0.3   # 0=conservative, 1=risk-taking
+```
+
+**Trait Guidelines:**
+
+| Trait | Low (0.0-0.3) | Medium (0.4-0.6) | High (0.7-1.0) |
+|-------|---------------|------------------|----------------|
+| `directness` | Diplomatic, softens feedback | Balanced tact | Very direct, straightforward |
+| `creativity` | Conventional patterns | Mix of proven/new | Novel solutions, experimental |
+| `thoroughness` | Concise, essentials only | Balanced detail | Comprehensive, exhaustive |
+| `formality` | Casual, conversational | Professional | Formal, structured |
+| `risk-tolerance` | Safe, proven approaches | Calculated risks | Embraces uncertainty |
+
+### Provider Fallbacks
+
+Configure automatic failover when the primary provider fails:
+
+```yaml
+ai:
+  provider: anthropic
+  model: sonnet-4
+  backups:
+    - provider: openai
+      model: gpt-4.1
+    - provider: gemini
+      model: flash-2.5
+```
+
+When Anthropic fails, OpenAI is tried. If OpenAI fails, Gemini is tried.
+
+### Example Configurations
+
+**Minimal configuration:**
+```yaml
+ai:
+  provider: anthropic
+  model: sonnet-4
+
+team:
+  - role: engineer
+```
+
+**Full team with personalities:**
+```yaml
+ai:
+  provider: anthropic
+  model: sonnet-4
+  backups:
+    - provider: openai
+      model: gpt-4.1
+
+team:
+  - role: product-manager
+    personality:
+      directness: 0.8
+      thoroughness: 0.7
+
+  - role: engineer
+    personality:
+      creativity: 0.7
+      risk-tolerance: 0.4
+
+  - role: qa-tester
+
+  - role: security-reviewer
+    personality:
+      thoroughness: 0.9
+      risk-tolerance: 0.1
+
+goal: "Build a secure user authentication system with OAuth2 support"
+```
+
+**Fast iteration setup:**
+```yaml
+ai:
+  provider: gemini
+  model: flash-2.5
+
+team:
+  - role: engineer
+    personality:
+      creativity: 0.8
+      thoroughness: 0.4
+
+goal: "Quick prototype of the feature"
+```
+
+### Using Configuration with Commands
+
+```bash
+# Load from default location (ampere.yaml)
+./ampere-cli/ampere run --goal "Implement feature X"
+
+# Load from specific file
+./ampere-cli/ampere --config path/to/config.yaml run --goal "Implement feature X"
+
+# Override goal from config file
+./ampere-cli/ampere run --goal "Different goal"
+
+# Start TUI with config
+./ampere-cli/ampere --config team-config.yaml start
+```
+
+### Environment Variables
+
+Additional configuration via environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AMPERE_LOG_LEVEL` | Logging verbosity (DEBUG, INFO, WARN, ERROR) | INFO |
+| `ANTHROPIC_API_KEY` | Anthropic API key | — |
+| `OPENAI_API_KEY` | OpenAI API key | — |
+| `GOOGLE_API_KEY` | Google/Gemini API key | — |
+
+### Database
+
+The CLI uses a SQLite database located at `~/ampere.db` by default for storing events, knowledge, and outcomes.
 
 ## GitHub Authentication
 
