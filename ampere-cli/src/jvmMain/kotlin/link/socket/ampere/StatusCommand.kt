@@ -3,6 +3,7 @@ package link.socket.ampere
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.mordant.rendering.TextStyles.underline
 import com.github.ajalt.mordant.rendering.TextColors.cyan
 import com.github.ajalt.mordant.rendering.TextColors.gray
 import com.github.ajalt.mordant.rendering.TextColors.green
@@ -32,6 +33,11 @@ class StatusCommand(
     name = "status",
     help = "Show system-wide status dashboard"
 ) {
+    private val verbose by option(
+        "--verbose", "-v",
+        help = "Show detailed information including recent events and ticket descriptions"
+    ).flag()
+
     private val terminal = TerminalFactory.createTerminal()
 
     override fun run() = runBlocking {
@@ -43,7 +49,7 @@ class StatusCommand(
         val ticketsResult = ticketsDeferred.await()
 
         // Human-readable dashboard
-        outputDashboard(threadsResult, ticketsResult)
+        outputDashboard(threadsResult, ticketsResult, verbose)
     }
 
     /**
@@ -51,7 +57,8 @@ class StatusCommand(
      */
     private fun outputDashboard(
         threadsResult: Result<List<link.socket.ampere.agents.events.messages.ThreadSummary>>,
-        ticketsResult: Result<List<link.socket.ampere.agents.events.tickets.TicketSummary>>
+        ticketsResult: Result<List<link.socket.ampere.agents.events.tickets.TicketSummary>>,
+        verbose: Boolean
     ) {
         terminal.println(bold(cyan("⚡ AMPERE System Status")))
         terminal.println()
@@ -83,6 +90,17 @@ class StatusCommand(
 
                     if (stale > 0) {
                         terminal.println("  ${yellow("⏰ $stale")} stale (>24h since activity)")
+                    }
+
+                    // Verbose: show thread details
+                    if (verbose && threads.isNotEmpty()) {
+                        terminal.println()
+                        terminal.println("  ${underline("Active threads:")}")
+                        threads.take(5).forEach { thread ->
+                            val indicator = if (thread.hasUnreadEscalations) red("⚠") else gray("●")
+                            terminal.println("    $indicator ${thread.threadId.take(8)}: ${thread.title.take(40)}${if (thread.title.length > 40) "..." else ""}")
+                            terminal.println("      ${gray("${thread.messageCount} messages, ${thread.participantIds.size} participants")}")
+                        }
                     }
                 }
             },
@@ -122,6 +140,24 @@ class StatusCommand(
 
                     if (highPriority > 0) {
                         terminal.println("  ${red("🔥 $highPriority")} high priority")
+                    }
+
+                    // Verbose: show ticket details
+                    if (verbose && tickets.isNotEmpty()) {
+                        terminal.println()
+                        terminal.println("  ${underline("Recent tickets:")}")
+                        tickets.take(5).forEach { ticket ->
+                            val statusColor = when (ticket.status) {
+                                "InProgress" -> green
+                                "Todo" -> cyan
+                                "Blocked" -> red
+                                else -> gray
+                            }
+                            terminal.println("    ${statusColor("●")} ${ticket.ticketId}: ${ticket.title.take(50)}${if (ticket.title.length > 50) "..." else ""}")
+                            ticket.assigneeId?.let { assignee ->
+                                terminal.println("      ${gray("Assigned to: $assignee")}")
+                            }
+                        }
                     }
                 }
             },

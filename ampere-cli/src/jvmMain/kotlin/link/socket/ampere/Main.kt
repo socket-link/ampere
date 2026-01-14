@@ -97,6 +97,8 @@ fun main(args: Array<String>) {
                 ThreadCommand(context.threadViewService),
                 StatusCommand(context.threadViewService, context.ticketViewService),
                 OutcomesCommand(context.outcomeMemoryRepository),
+                KnowledgeCommand(context.knowledgeRepository),
+                TraceCommand(context.eventRepository),
                 IssuesCommand(),
                 RespondCommand(),
                 WorkCommand { context },

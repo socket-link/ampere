@@ -129,10 +129,18 @@ class AmpereContext(
         get() = environmentService.outcomeMemoryRepository
 
     /**
+     * Event repository for querying persisted events.
+     * Used by trace command to show event context.
+     */
+    val eventRepository: link.socket.ampere.agents.events.EventRepository
+        get() = environmentService.eventRepository
+
+    /**
      * Knowledge repository for persistent agent memory.
      * Shared across all agents to enable learning from each other's experiences.
+     * Exposed for CLI commands that query agent knowledge.
      */
-    private val knowledgeRepository: KnowledgeRepository by lazy {
+    val knowledgeRepository: KnowledgeRepository by lazy {
         KnowledgeRepositoryImpl(database)
     }
 

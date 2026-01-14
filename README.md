@@ -182,16 +182,16 @@ The CLI provides real-time visibility into agent operations:
 # Install
 ./gradlew :ampere-cli:installJvmDist
 
-# Watch thought happen in real-time
+# Watch events in real-time
 ./ampere-cli/ampere watch
 
-# Search what agents have learned
-./ampere-cli/ampere knowledge search "authentication patterns"
+# Search agent knowledge
+./ampere-cli/ampere knowledge search "authentication"
 
-# See why a decision was made
-./ampere-cli/ampere trace <decision-id>
+# View event context
+./ampere-cli/ampere trace <event-id>
 
-# View agent cognitive state
+# Detailed system status
 ./ampere-cli/ampere status --verbose
 ```
 
@@ -244,43 +244,10 @@ val config = MultiProviderConfig(
 )
 ```
 
-<<<<<<< Updated upstream
-**Currently supported LLM providers:** 
+**Currently supported LLM providers:**
 - Anthropic (Claude 4.x, 3.x)
 - Google (Gemini 3, 2.x)
 - OpenAI (GPT-5.x, 4.x, o3/o4)
-
----
-
-## Observability
-
-Use the CLI to watch agents work together in real-time:
-```bash
-# Install CLI
-./gradlew :ampere-cli:installJvmDist
-
-# Watch event stream
-./ampere watch
-
-# Query execution history  
-./ampere outcomes search "authentication"
-
-# View agent status
-./ampere status
-```
-```
-📋 TicketCreated    [pm-agent]        14:23:01  FEAT-123: Add user authentication
-✅ TicketAssigned   [pm-agent]        14:23:15  FEAT-123 → engineer-agent  
-🔨 StatusChanged    [engineer-agent]  14:23:45  FEAT-123: Ready → InProgress
-💭 MeetingStarted   [engineer-agent]  14:25:00  Clarifying OAuth2 requirements
-✅ TaskCompleted    [engineer-agent]  14:27:33  Create User model - SUCCESS
-🧠 KnowledgeStored  [engineer-agent]  14:27:35  "OAuth2 requires PKCE for mobile"
-```
-
-**[→ Complete CLI Guide](ampere-cli/README.md)**
-=======
-**Supported:** Anthropic (Claude), Google (Gemini), OpenAI (GPT)
->>>>>>> Stashed changes
 
 ---
 
