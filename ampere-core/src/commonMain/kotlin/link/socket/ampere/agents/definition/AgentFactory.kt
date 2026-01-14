@@ -25,7 +25,6 @@ enum class AgentType {
 class AgentFactory(
     private val scope: CoroutineScope,
     private val ticketOrchestrator: TicketOrchestrator,
-    private val aiConfigurationFactory: AIConfigurationFactory,
     private val memoryServiceFactory: ((AgentId) -> AgentMemoryService)? = null,
     private val issueTrackerProvider: IssueTrackerProvider? = null,
     private val repository: String? = null,
@@ -40,7 +39,7 @@ class AgentFactory(
         ToolAskHuman(AgentActionAutonomy.ASK_BEFORE_ACTION)
 
     private val aiConfiguration: AIConfiguration
-        get() = aiConfigurationFactory.getDefaultConfiguration()
+        get() = AIConfigurationFactory.getDefaultConfiguration()
 
     private val agentConfiguration: AgentConfiguration
         get() = AgentConfiguration(
