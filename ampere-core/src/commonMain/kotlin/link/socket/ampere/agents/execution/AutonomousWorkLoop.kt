@@ -7,7 +7,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.CodeAgent
+import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.integrations.issues.ExistingIssue
 import kotlin.math.pow
 import kotlin.time.Duration
@@ -79,12 +82,21 @@ data class WorkLoopConfig(
  * @param agent The CodeAgent instance to execute workflows
  * @param config Configuration for loop behavior
  * @param scope CoroutineScope for launching the polling loop
+ * @param eventApiFactory Optional factory for creating event APIs to publish work events
  */
 class AutonomousWorkLoop(
     private val agent: CodeAgent,
     private val config: WorkLoopConfig = WorkLoopConfig(),
     private val scope: CoroutineScope,
+    private val eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
 ) {
+    /**
+     * Event API for publishing work events to the event bus.
+     * Lazily created using the agent's ID.
+     */
+    private val eventApi: AgentEventApi? by lazy {
+        eventApiFactory?.invoke(agent.id)
+    }
     private val _isRunning = MutableStateFlow(false)
 
     /**
@@ -147,9 +159,28 @@ class AutonomousWorkLoop(
                         continue
                     }
 
+                    // Publish task created event so dashboard sees the work
+                    eventApi?.publishTaskCreated(
+                        taskId = "issue-${issue.number}",
+                        urgency = Urgency.MEDIUM,
+                        description = "Working on issue #${issue.number}: ${issue.title}",
+                        assignedTo = agent.id
+                    )
+
                     // Work on the issue
-                    agent.workOnIssue(issue)
+                    val result = agent.workOnIssue(issue)
                     issuesProcessedThisHour++
+
+                    // Publish completion event
+                    if (result.isSuccess) {
+                        eventApi?.publishCodeSubmitted(
+                            urgency = Urgency.LOW,
+                            filePath = "issue-${issue.number}",
+                            changeDescription = "Completed issue #${issue.number}: ${result.getOrNull()}",
+                            reviewRequired = true,
+                            assignedTo = null
+                        )
+                    }
 
                     delay(config.pollingInterval)
                 } catch (e: Exception) {

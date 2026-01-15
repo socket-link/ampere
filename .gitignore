@@ -9,6 +9,7 @@ build/
 /captures
 .externalNativeBuild
 .cxx
+ampere.yaml
 ampere-ios/Podfile.lock
 ampere-ios/Pods/*
 ampere-ios/ampere-ios.xcworkspace/*

@@ -16,6 +16,7 @@ import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.tickets.create
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
@@ -25,9 +26,11 @@ import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.cli.layout.AgentMemoryPane
 import link.socket.ampere.cli.layout.JazzProgressPane
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
+import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
+import link.socket.ampere.agents.domain.Urgency
 
 /**
  * Orchestrates goal activation, agent creation, and task execution.
@@ -46,9 +49,11 @@ class GoalHandler(
     private val progressPane: JazzProgressPane,
     private val memoryPane: AgentMemoryPane,
     private val outputDir: File = File(System.getProperty("user.home"), ".ampere/goal-output"),
+    private val aiConfiguration: AIConfiguration? = null,
 ) {
     private var currentActivation: GoalActivation? = null
     private var currentAgent: CodeAgent? = null
+    private var eventApi: AgentEventApi? = null
 
     /**
      * Check if there's an active goal being worked on.
@@ -86,13 +91,16 @@ class GoalHandler(
         // Create the write_code_file tool
         val writeCodeTool = createWriteCodeFileTool()
 
+        // Use provided AI configuration or fall back to default
+        val effectiveAiConfig = aiConfiguration ?: AIConfiguration_Default(
+            provider = AIProvider_Anthropic,
+            model = AIModel_Claude.Sonnet_4
+        )
+
         // Configure the agent
         val agentConfig = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
-            aiConfiguration = AIConfiguration_Default(
-                provider = AIProvider_Anthropic,
-                model = AIModel_Claude.Sonnet_4
-            )
+            aiConfiguration = effectiveAiConfig
         )
 
         // Create CodeAgent
@@ -105,6 +113,9 @@ class GoalHandler(
             memoryServiceFactory = { agentId -> context.createMemoryService(agentId) }
         )
         currentAgent = agent
+
+        // Create event API for this agent to publish events
+        eventApi = context.environmentService.createEventApi(agent.id)
 
         // Parse the goal into a ticket specification
         val ticketSpec = GoalParser.parse(
@@ -168,6 +179,7 @@ class GoalHandler(
         agent: CodeAgent,
         ticketId: String,
     ) {
+        val api = eventApi
         try {
             val ticketResult = context.environmentService.ticketRepository.getTicket(ticketId)
             val ticket = ticketResult.getOrNull() ?: run {
@@ -179,6 +191,14 @@ class GoalHandler(
                 id = "task-$ticketId",
                 status = TaskStatus.Pending,
                 description = ticket.description
+            )
+
+            // Publish task created event
+            api?.publishTaskCreated(
+                taskId = task.id,
+                urgency = Urgency.MEDIUM,
+                description = ticket.title,
+                assignedTo = agent.id
             )
 
             // PHASE 1: PERCEIVE
@@ -208,6 +228,18 @@ class GoalHandler(
                 is ExecutionOutcome.CodeChanged.Failure -> {
                     progressPane.setFailed(outcome.error.message)
                     return
+                }
+                is ExecutionOutcome.CodeChanged.Success -> {
+                    // Publish code submitted events for each file
+                    outcome.changedFiles.forEach { filePath ->
+                        api?.publishCodeSubmitted(
+                            urgency = Urgency.LOW,
+                            filePath = filePath,
+                            changeDescription = "Written by CodeAgent",
+                            reviewRequired = false,
+                            assignedTo = null
+                        )
+                    }
                 }
                 else -> {
                     // Files are already tracked in the write_code_file tool

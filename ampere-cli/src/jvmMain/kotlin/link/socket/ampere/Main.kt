@@ -2,8 +2,6 @@ package link.socket.ampere
 
 import com.github.ajalt.clikt.core.subcommands
 import java.io.File
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.definition.AgentFactory
 import link.socket.ampere.agents.definition.AgentType
@@ -14,7 +12,6 @@ import link.socket.ampere.config.AmpereConfig
 import link.socket.ampere.config.ConfigConverter
 import link.socket.ampere.config.ConfigParser
 import link.socket.ampere.data.DEFAULT_JSON
-import link.socket.ampere.data.RepositoryFactory
 import link.socket.ampere.data.createJvmDriver
 import link.socket.ampere.domain.koog.KoogAgentFactory
 import link.socket.ampere.integrations.git.RepositoryDetector
@@ -42,6 +39,16 @@ fun main(args: Array<String>) {
     val loggingConfig = LoggingConfiguration.fromEnvironment()
     configureLogging(loggingConfig)
 
+    // Convert config to AIConfiguration if present
+    val aiConfiguration = config?.let {
+        try {
+            ConfigConverter.toAIConfiguration(it.ai)
+        } catch (e: Exception) {
+            System.err.println("Warning: Could not convert AI config: ${e.message}")
+            null
+        }
+    }
+
     // Log config info if loaded
     if (config != null) {
         println("Loaded configuration:")
@@ -52,16 +59,18 @@ fun main(args: Array<String>) {
     }
 
     val databaseDriver = createJvmDriver()
-    val ioScope = CoroutineScope(Dispatchers.IO)
     val jsonConfig = DEFAULT_JSON
 
     val koogAgentFactory = KoogAgentFactory()
-    val repositoryFactory = RepositoryFactory(ioScope, databaseDriver, jsonConfig)
 
     // Create EventLogger based on logging configuration
     val eventLogger = loggingConfig.createEventLogger()
 
-    val context = AmpereContext(logger = eventLogger)
+    val context = AmpereContext(
+        logger = eventLogger,
+        userConfig = config,
+        aiConfiguration = aiConfiguration,
+    )
     val environmentService = context.environmentService
 
     // Initialize GitHub integration
@@ -69,23 +78,32 @@ fun main(args: Array<String>) {
     val repository = runBlocking { RepositoryDetector.detectRepository() }
 
     val agentFactory = AgentFactory(
-        scope = ioScope,
+        scope = context.scope,
         ticketOrchestrator = environmentService.ticketOrchestrator,
         memoryServiceFactory = { agentId -> context.createMemoryService(agentId) },
+        eventApiFactory = { agentId -> environmentService.createEventApi(agentId) },
         issueTrackerProvider = issueTrackerProvider,
         repository = repository,
+        aiConfiguration = aiConfiguration,
     )
 
-    val codeAgent = agentFactory.create<CodeAgent>(AgentType.CODE)
-    val productAgent = agentFactory.create<ProductAgent>(AgentType.PRODUCT)
-    val qualityAgent = agentFactory.create<QualityAgent>(AgentType.QUALITY)
+    // Create agents based on team configuration (or defaults if no config)
+    val teamRoles = config?.team?.map { it.role } ?: listOf("engineer", "product-manager", "qa-tester")
 
-    codeAgent.initialize(ioScope)
-    productAgent.initialize(ioScope)
-    qualityAgent.initialize(ioScope)
+    val codeAgent: CodeAgent? = if (teamRoles.any { it == "engineer" || it == "code" }) {
+        agentFactory.create<CodeAgent>(AgentType.CODE).also { it.initialize(context.scope) }
+    } else null
 
-    // Initialize autonomous work loop for CodeAgent
-    context.createAutonomousWorkLoop(codeAgent)
+    val productAgent: ProductAgent? = if (teamRoles.any { it == "product-manager" || it == "product" }) {
+        agentFactory.create<ProductAgent>(AgentType.PRODUCT).also { it.initialize(context.scope) }
+    } else null
+
+    val qualityAgent: QualityAgent? = if (teamRoles.any { it == "qa-tester" || it == "quality" }) {
+        agentFactory.create<QualityAgent>(AgentType.QUALITY).also { it.initialize(context.scope) }
+    } else null
+
+    // Initialize autonomous work loop for CodeAgent (if present in team)
+    codeAgent?.let { context.createAutonomousWorkLoop(it) }
 
     try {
         // Start all orchestrator services
