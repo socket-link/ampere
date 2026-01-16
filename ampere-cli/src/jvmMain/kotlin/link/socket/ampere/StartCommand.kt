@@ -18,11 +18,13 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.cli.goal.GoalHandler
+import link.socket.ampere.cli.layout.AgentFocusPane
 import link.socket.ampere.cli.layout.AgentMemoryPane
 import link.socket.ampere.cli.layout.DemoInputHandler
 import link.socket.ampere.cli.layout.JazzProgressPane
 import link.socket.ampere.cli.layout.LogCapture
 import link.socket.ampere.cli.layout.LogPane
+import link.socket.ampere.cli.layout.PaneRenderer
 import link.socket.ampere.cli.layout.RichEventPane
 import link.socket.ampere.cli.layout.StatusBar
 import link.socket.ampere.cli.layout.ThreeColumnLayout
@@ -112,6 +114,7 @@ class StartCommand(
         val jazzPane = JazzProgressPane(terminal)
         val memoryPane = AgentMemoryPane(terminal)
         val logPane = LogPane(terminal)
+        val agentFocusPane = AgentFocusPane(terminal)
         val statusBar = StatusBar(terminal)
         val inputHandler = DemoInputHandler(terminal)
         val helpRenderer = HelpOverlayRenderer(terminal)
@@ -142,6 +145,10 @@ class StartCommand(
         try {
             // Initialize terminal for full-screen rendering
             initializeTerminal()
+
+            // Start log capture immediately to prevent any output leaking below TUI
+            // Output will only be visible when verbose mode is enabled
+            LogCapture.start(logPane)
 
             // Start the presenter
             presenter.start()
@@ -177,15 +184,10 @@ class StartCommand(
                                     // Update event pane verbose mode
                                     eventPane.verboseMode = viewConfig.verboseMode
 
-                                    // Toggle log capture
-                                    if (viewConfig.verboseMode && !wasVerbose) {
-                                        LogCapture.start(logPane)
-                                        print("\u001B[2J\u001B[H")
-                                        System.out.flush()
-                                        println("Verbose mode enabled - log capture active")
-                                    } else if (!viewConfig.verboseMode && wasVerbose) {
-                                        println("Verbose mode disabled - stopping log capture")
-                                        LogCapture.stop()
+                                    // Log capture is always active to prevent leaks
+                                    // Verbose mode just controls LogPane visibility
+                                    if (viewConfig.verboseMode != wasVerbose) {
+                                        // Clear screen to prevent artifacts when toggling
                                         print("\u001B[2J\u001B[H")
                                         System.out.flush()
                                     }
@@ -237,15 +239,17 @@ class StartCommand(
                         viewConfig.expandedEventIndex?.let { eventPane.expandEvent(it) }
                             ?: eventPane.collapseEvent()
 
-                        // Update system status based on phase
+                        // Update system status based on current phase
                         systemStatus = when (jazzPane.currentPhase) {
-                            JazzProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.IDLE
-                            JazzProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
-                            else -> if (autoWork || jazzPane.currentPhase != JazzProgressPane.Phase.INITIALIZING) {
-                                StatusBar.SystemStatus.WORKING
-                            } else {
-                                StatusBar.SystemStatus.IDLE
+                            JazzProgressPane.Phase.INITIALIZING -> {
+                                if (autoWork) StatusBar.SystemStatus.WORKING else StatusBar.SystemStatus.IDLE
                             }
+                            JazzProgressPane.Phase.PERCEIVE -> StatusBar.SystemStatus.THINKING
+                            JazzProgressPane.Phase.PLAN -> StatusBar.SystemStatus.THINKING
+                            JazzProgressPane.Phase.EXECUTE -> StatusBar.SystemStatus.WORKING
+                            JazzProgressPane.Phase.LEARN -> StatusBar.SystemStatus.THINKING
+                            JazzProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.COMPLETED
+                            JazzProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
                         }
 
                         // Render status bar
@@ -264,19 +268,30 @@ class StartCommand(
                             inputHint = viewConfig.inputHint
                         )
 
-                        // Render based on mode
-                        when (viewConfig.mode) {
-                            DemoInputHandler.DemoMode.AGENT_FOCUS -> {
-                                renderAgentFocusView(
-                                    terminal, memoryState, watchState, jazzPane, statusBarStr
+                        // Determine right pane based on mode
+                        val rightPane: PaneRenderer = when {
+                            viewConfig.mode == DemoInputHandler.DemoMode.AGENT_FOCUS -> {
+                                // Update agent focus pane with current state
+                                val focusedAgentId = viewConfig.focusedAgentIndex?.let { idx ->
+                                    watchState.agentStates.keys.elementAtOrNull(idx - 1)
+                                }
+                                agentFocusPane.updateState(
+                                    AgentFocusPane.FocusState(
+                                        agentId = focusedAgentId,
+                                        agentIndex = viewConfig.focusedAgentIndex,
+                                        agentState = focusedAgentId?.let { watchState.agentStates[it] },
+                                        recentEvents = watchState.recentSignificantEvents,
+                                        cognitiveClusters = emptyList()
+                                    )
                                 )
+                                agentFocusPane
                             }
-                            else -> {
-                                // Show logs in right pane when verbose mode is active
-                                val rightPane = if (viewConfig.verboseMode) logPane else memoryPane
-                                layout.render(eventPane, jazzPane, rightPane, statusBarStr)
-                            }
+                            viewConfig.verboseMode -> logPane
+                            else -> memoryPane
                         }
+
+                        // Render the 3-column layout
+                        layout.render(eventPane, jazzPane, rightPane, statusBarStr)
                     }
 
                     // Only flush to terminal if output changed

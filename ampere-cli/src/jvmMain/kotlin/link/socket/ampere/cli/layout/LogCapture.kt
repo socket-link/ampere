@@ -8,6 +8,10 @@ import java.io.PrintStream
  *
  * This allows println() and printStackTrace() calls to appear in the
  * interactive TUI logging panel when verbose mode is enabled.
+ *
+ * When suppressOriginalOutput is true (default during TUI mode), output is
+ * captured to the LogPane only and NOT written to the original stdout/stderr.
+ * This prevents token counts and other debug output from leaking below the TUI.
  */
 object LogCapture {
 
@@ -15,11 +19,17 @@ object LogCapture {
     private var originalErr: PrintStream? = null
     private var logPane: LogPane? = null
     private var isCapturing = false
+    private var suppressOriginal = true
 
     /**
      * Start capturing stdout/stderr and routing to the provided LogPane.
+     *
+     * @param pane The LogPane to route output to
+     * @param suppressOriginalOutput If true (default), output is NOT written to the
+     *        original stdout/stderr, only to the LogPane. This prevents output from
+     *        leaking below the TUI.
      */
-    fun start(pane: LogPane) {
+    fun start(pane: LogPane, suppressOriginalOutput: Boolean = true) {
         if (isCapturing) {
             stop() // Stop previous capture
         }
@@ -27,10 +37,11 @@ object LogCapture {
         logPane = pane
         originalOut = System.out
         originalErr = System.err
+        suppressOriginal = suppressOriginalOutput
 
         // Create capturing print streams
-        val outStream = CapturingPrintStream(originalOut!!, pane, LogPane.LogLevel.INFO)
-        val errStream = CapturingPrintStream(originalErr!!, pane, LogPane.LogLevel.ERROR)
+        val outStream = CapturingPrintStream(originalOut!!, pane, LogPane.LogLevel.INFO, suppressOriginal)
+        val errStream = CapturingPrintStream(originalErr!!, pane, LogPane.LogLevel.ERROR, suppressOriginal)
 
         System.setOut(outStream)
         System.setErr(errStream)
@@ -60,12 +71,18 @@ object LogCapture {
 
     /**
      * PrintStream that captures output and sends to LogPane.
+     *
+     * @param original The original PrintStream to optionally forward to
+     * @param logPane The LogPane to send captured output to
+     * @param level The log level to use for captured output
+     * @param suppressOriginal If true, don't write to the original stream (TUI mode)
      */
     private class CapturingPrintStream(
         private val original: PrintStream,
         private val logPane: LogPane,
-        private val level: LogPane.LogLevel
-    ) : PrintStream(TeeOutputStream(original, logPane, level)) {
+        private val level: LogPane.LogLevel,
+        private val suppressOriginal: Boolean
+    ) : PrintStream(SuppressibleOutputStream(original, suppressOriginal)) {
 
         private val lineBuffer = StringBuilder()
 
@@ -77,8 +94,10 @@ object LogCapture {
                 logPane.log(level, message)
             }
 
-            // Also write to original stream
-            original.println(x)
+            // Only write to original if not suppressed
+            if (!suppressOriginal) {
+                original.println(x)
+            }
         }
 
         override fun println() {
@@ -87,35 +106,44 @@ object LogCapture {
                 logPane.log(level, lineBuffer.toString())
                 lineBuffer.clear()
             }
-            original.println()
+            if (!suppressOriginal) {
+                original.println()
+            }
         }
 
         override fun print(x: String?) {
             x?.let { lineBuffer.append(it) }
-            original.print(x)
+            if (!suppressOriginal) {
+                original.print(x)
+            }
         }
     }
 
     /**
-     * OutputStream that just delegates to the original stream.
-     * Actual logging is handled in CapturingPrintStream.
+     * OutputStream that optionally suppresses output to the original stream.
+     * When suppressed, write operations are no-ops (output only goes to LogPane via println/print).
      */
-    private class TeeOutputStream(
+    private class SuppressibleOutputStream(
         private val original: PrintStream,
-        @Suppress("UNUSED_PARAMETER") private val logPane: LogPane,
-        @Suppress("UNUSED_PARAMETER") private val level: LogPane.LogLevel
+        private val suppress: Boolean
     ) : OutputStream() {
 
         override fun write(b: Int) {
-            original.write(b)
+            if (!suppress) {
+                original.write(b)
+            }
         }
 
         override fun write(b: ByteArray, off: Int, len: Int) {
-            original.write(b, off, len)
+            if (!suppress) {
+                original.write(b, off, len)
+            }
         }
 
         override fun flush() {
-            original.flush()
+            if (!suppress) {
+                original.flush()
+            }
         }
     }
 }

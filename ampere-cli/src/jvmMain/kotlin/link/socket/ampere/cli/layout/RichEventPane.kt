@@ -63,10 +63,9 @@ class RichEventPane(
     override fun render(width: Int, height: Int): List<String> {
         val lines = mutableListOf<String>()
 
-        // Header
-        val headerText = if (verboseMode) "EVENT STREAM (verbose)" else "EVENT STREAM"
-        lines.add(terminal.render(bold(TextColors.cyan(headerText))))
-        lines.add("")
+        // Header with separator and spacing
+        val headerText = if (verboseMode) "Event Stream (verbose)" else "Event Stream"
+        lines.addAll(renderSectionHeader(headerText, width, terminal))
 
         // Filter events based on verbose mode
         val visibleEvents = if (verboseMode) {
@@ -76,13 +75,28 @@ class RichEventPane(
         }
 
         if (visibleEvents.isEmpty()) {
-            lines.add(terminal.render(dim("No events yet")))
+            // Enhanced empty state with visual indicator
             lines.add("")
-            lines.add(terminal.render(dim("Events will appear")))
-            lines.add(terminal.render(dim("as the agent works")))
+            lines.add(terminal.render(dim("  ○ ○ ○")))
+            lines.add("")
+            lines.add(terminal.render(dim("  Waiting for events...")))
+            lines.add("")
+            lines.add(terminal.render(dim("  Events will stream here")))
+            lines.add(terminal.render(dim("  as the agent works on")))
+            lines.add(terminal.render(dim("  the assigned task.")))
+            lines.add("")
+
             if (!verboseMode && events.isNotEmpty()) {
-                lines.add("")
-                lines.add(terminal.render(dim("Press 'v' for verbose")))
+                // There are routine events hidden
+                lines.add(terminal.render(dim("  ─────────────────")))
+                lines.add(terminal.render(dim("  ${events.size} routine event(s)")))
+                lines.add(terminal.render(dim("  hidden. Press [v] to")))
+                lines.add(terminal.render(dim("  enable verbose mode.")))
+            } else if (!verboseMode) {
+                lines.add(terminal.render(dim("  ─────────────────")))
+                lines.add(terminal.render(dim("  Tip: Press [v] for")))
+                lines.add(terminal.render(dim("  verbose mode to see")))
+                lines.add(terminal.render(dim("  all event types.")))
             }
         } else {
             val expanded = expandedIndex?.let { idx -> visibleEvents.find { it.index == idx } }
@@ -110,36 +124,64 @@ class RichEventPane(
     private fun renderEventSummary(event: RichEvent, width: Int): List<String> {
         val lines = mutableListOf<String>()
 
+        // Significance indicator dot
+        val sigIndicator = getSignificanceIndicator(event.significance)
+
         val indexColor = when (event.significance) {
             EventSignificance.CRITICAL -> TextColors.red
             EventSignificance.SIGNIFICANT -> TextColors.yellow
             EventSignificance.ROUTINE -> TextColors.gray
         }
 
-        // First line: index + icon + type + timestamp
+        // First line: significance dot + index + icon + type + timestamp
         val indexStr = terminal.render(indexColor("${event.index}."))
-        val timeStr = formatShortTime(event.timestamp)
-        lines.add("$indexStr ${event.icon} ${event.eventType} ${terminal.render(dim(timeStr))}")
+        val timeStr = formatRelativeTime(event.timestamp)
+        lines.add("$sigIndicator $indexStr ${event.icon} ${event.eventType} ${terminal.render(dim(timeStr))}")
 
         // Second line: headline (indented)
-        val headlineMax = width - 4
+        val headlineMax = width - 5
         val headline = event.headline.take(headlineMax)
-        lines.add("   ${terminal.render(dim(headline))}")
+        lines.add("    ${terminal.render(dim(headline))}")
 
         // Third line: source agent (if not too wide)
         if (event.sourceAgent.isNotBlank() && width > 20) {
-            val agentLabel = "   ${terminal.render(TextColors.cyan(event.sourceAgent))}"
+            val agentLabel = "    ${terminal.render(TextColors.cyan(event.sourceAgent))}"
             lines.add(agentLabel)
         }
 
-        lines.add("")
+        // Separator line (subtle dashed line)
+        lines.add(terminal.render(dim("  ${"┄".repeat((width - 4).coerceAtLeast(3))}")))
 
         return lines
+    }
+
+    private fun getSignificanceIndicator(significance: EventSignificance): String {
+        return when (significance) {
+            EventSignificance.CRITICAL -> terminal.render(TextColors.red("●"))
+            EventSignificance.SIGNIFICANT -> terminal.render(TextColors.yellow("●"))
+            EventSignificance.ROUTINE -> terminal.render(dim("○"))
+        }
     }
 
     private fun formatShortTime(timestamp: Instant): String {
         val local = timestamp.toLocalDateTime(timeZone)
         return "${local.hour.toString().padStart(2, '0')}:${local.minute.toString().padStart(2, '0')}"
+    }
+
+    /**
+     * Format timestamp as relative time for recent events, absolute for older.
+     * Examples: "just now", "2m ago", "15:42"
+     */
+    private fun formatRelativeTime(timestamp: Instant): String {
+        val now = kotlinx.datetime.Clock.System.now()
+        val elapsed = now.toEpochMilliseconds() - timestamp.toEpochMilliseconds()
+
+        return when {
+            elapsed < 5_000 -> "now"
+            elapsed < 60_000 -> "${elapsed / 1000}s"
+            elapsed < 3600_000 -> "${elapsed / 60_000}m"
+            else -> formatShortTime(timestamp)
+        }
     }
 
     private fun renderExpandedEvent(event: RichEvent, width: Int): List<String> {
@@ -218,16 +260,18 @@ class RichEventPane(
      */
     private fun SignificantEventSummary.toRichEvent(index: Int): RichEvent {
         val icon = getEventIcon(eventType)
+        // Truncate any UUIDs in the summary text for better readability
+        val formattedSummary = IdFormatter.truncateUuidsInText(summaryText)
 
         return RichEvent(
             index = index,
             timestamp = timestamp,
             eventType = eventType,
             icon = icon,
-            headline = summaryText.take(40),
-            details = listOf(summaryText),
+            headline = formattedSummary.take(40),
+            details = listOf(formattedSummary),
             significance = significance,
-            sourceAgent = sourceAgentName
+            sourceAgent = IdFormatter.formatAgentId(sourceAgentName)
         )
     }
 

@@ -19,11 +19,13 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.cli.goal.GoalHandler
+import link.socket.ampere.cli.layout.AgentFocusPane
 import link.socket.ampere.cli.layout.AgentMemoryPane
 import link.socket.ampere.cli.layout.DemoInputHandler
 import link.socket.ampere.cli.layout.JazzProgressPane
 import link.socket.ampere.cli.layout.LogCapture
 import link.socket.ampere.cli.layout.LogPane
+import link.socket.ampere.cli.layout.PaneRenderer
 import link.socket.ampere.cli.layout.RichEventPane
 import link.socket.ampere.cli.layout.StatusBar
 import link.socket.ampere.cli.layout.ThreeColumnLayout
@@ -129,6 +131,7 @@ class RunCommand(
         val jazzPane = JazzProgressPane(terminal)
         val memoryPane = AgentMemoryPane(terminal)
         val logPane = LogPane(terminal)
+        val agentFocusPane = AgentFocusPane(terminal)
         val statusBar = StatusBar(terminal)
         val inputHandler = DemoInputHandler(terminal)
         val helpRenderer = HelpOverlayRenderer(terminal)
@@ -159,6 +162,10 @@ class RunCommand(
         try {
             // Initialize terminal for full-screen rendering
             initializeTerminal()
+
+            // Start log capture immediately to prevent any output leaking below TUI
+            // Output will only be visible when verbose mode is enabled
+            LogCapture.start(logPane)
 
             // Start the presenter
             presenter.start()
@@ -234,14 +241,10 @@ class RunCommand(
                                     viewConfig = result.newConfig
                                     eventPane.verboseMode = viewConfig.verboseMode
 
-                                    if (viewConfig.verboseMode && !wasVerbose) {
-                                        LogCapture.start(logPane)
-                                        print("\u001B[2J\u001B[H")
-                                        System.out.flush()
-                                        println("Verbose mode enabled")
-                                    } else if (!viewConfig.verboseMode && wasVerbose) {
-                                        println("Verbose mode disabled")
-                                        LogCapture.stop()
+                                    // Log capture is always active to prevent leaks
+                                    // Verbose mode just controls LogPane visibility
+                                    if (viewConfig.verboseMode != wasVerbose) {
+                                        // Clear screen to prevent artifacts when toggling
                                         print("\u001B[2J\u001B[H")
                                         System.out.flush()
                                     }
@@ -286,10 +289,15 @@ class RunCommand(
                         viewConfig.expandedEventIndex?.let { eventPane.expandEvent(it) }
                             ?: eventPane.collapseEvent()
 
+                        // Update system status based on current phase
                         systemStatus = when (jazzPane.currentPhase) {
-                            JazzProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.IDLE
+                            JazzProgressPane.Phase.INITIALIZING -> StatusBar.SystemStatus.IDLE
+                            JazzProgressPane.Phase.PERCEIVE -> StatusBar.SystemStatus.THINKING
+                            JazzProgressPane.Phase.PLAN -> StatusBar.SystemStatus.THINKING
+                            JazzProgressPane.Phase.EXECUTE -> StatusBar.SystemStatus.WORKING
+                            JazzProgressPane.Phase.LEARN -> StatusBar.SystemStatus.THINKING
+                            JazzProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.COMPLETED
                             JazzProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
-                            else -> StatusBar.SystemStatus.WORKING
                         }
 
                         val activeMode = when (viewConfig.mode) {
@@ -307,15 +315,30 @@ class RunCommand(
                             inputHint = viewConfig.inputHint
                         )
 
-                        when (viewConfig.mode) {
-                            DemoInputHandler.DemoMode.AGENT_FOCUS -> {
-                                renderAgentFocusView(terminal, memoryState, watchState, jazzPane, statusBarStr)
+                        // Determine right pane based on mode
+                        val rightPane: PaneRenderer = when {
+                            viewConfig.mode == DemoInputHandler.DemoMode.AGENT_FOCUS -> {
+                                // Update agent focus pane with current state
+                                val focusedAgentId = viewConfig.focusedAgentIndex?.let { idx ->
+                                    watchState.agentStates.keys.elementAtOrNull(idx - 1)
+                                }
+                                agentFocusPane.updateState(
+                                    AgentFocusPane.FocusState(
+                                        agentId = focusedAgentId,
+                                        agentIndex = viewConfig.focusedAgentIndex,
+                                        agentState = focusedAgentId?.let { watchState.agentStates[it] },
+                                        recentEvents = watchState.recentSignificantEvents,
+                                        cognitiveClusters = emptyList()
+                                    )
+                                )
+                                agentFocusPane
                             }
-                            else -> {
-                                val rightPane = if (viewConfig.verboseMode) logPane else memoryPane
-                                layout.render(eventPane, jazzPane, rightPane, statusBarStr)
-                            }
+                            viewConfig.verboseMode -> logPane
+                            else -> memoryPane
                         }
+
+                        // Render the 3-column layout
+                        layout.render(eventPane, jazzPane, rightPane, statusBarStr)
                     }
 
                     if (output != lastRenderedOutput) {
