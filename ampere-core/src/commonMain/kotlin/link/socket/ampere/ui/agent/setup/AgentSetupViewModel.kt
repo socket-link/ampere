@@ -25,11 +25,10 @@ data class AgentSetupState(
 
 @Immutable
 class AgentSetupViewModel(
-    aiConfigurationFactory: AIConfigurationFactory,
     selectedAgentDefinition: AgentDefinition,
 ) {
     private val suggestedAIConfig =
-        selectedAgentDefinition.suggestedAIConfigurationBuilder(aiConfigurationFactory)
+        selectedAgentDefinition.suggestedAIConfigurationBuilder(AIConfigurationFactory)
 
     private val suggestedModel: AIModel =
         suggestedAIConfig.model

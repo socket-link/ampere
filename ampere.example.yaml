@@ -1,0 +1,91 @@
+# Ampere Team Configuration
+# ==========================
+# Copy this file to ampere.yaml and customize for your project.
+#
+# The CLI will automatically load configuration from:
+#   - ampere.yaml (current directory)
+#   - ampere.yml (current directory)
+#   - .ampere/config.yaml
+#   - .ampere/config.yml
+#
+# Or specify explicitly: ampere --config path/to/config.yaml
+
+# AI Provider Configuration
+# -------------------------
+# Choose your AI provider and model. Backups are used if the primary fails.
+ai:
+  provider: anthropic           # Options: anthropic, openai, gemini
+  model: sonnet-4               # See model list below
+
+  # Optional: Fallback providers (tried in order if primary fails)
+  backups:
+    - provider: openai
+      model: gpt-4.1
+    - provider: gemini
+      model: flash-2.5
+
+# Available Models:
+# -----------------
+# Anthropic (Claude):
+#   opus-4.5, opus-4.1, opus-4
+#   sonnet-4.5, sonnet-4, sonnet-3.7
+#   haiku-4.5, haiku-3.5, haiku-3
+#
+# OpenAI (GPT):
+#   gpt-5.1, gpt-5.1-instant, gpt-5.1-codex-max
+#   gpt-5, gpt-5-mini, gpt-5-nano
+#   gpt-4.1, gpt-4.1-mini
+#   gpt-4o, gpt-4o-mini
+#   o4-mini, o3, o3-mini
+#
+# Google (Gemini):
+#   pro-3, pro-2.5
+#   flash-2.5, flash-2.5-lite
+#   flash-2, flash-2-lite
+
+# Team Composition
+# ----------------
+# Define the agents that will work together on your goals.
+# Each agent has a role and optional personality traits.
+team:
+  # Product Manager: Coordinates work, breaks down tasks, makes decisions
+  - role: product-manager
+    personality:
+      directness: 0.8           # 0=diplomatic, 1=very direct
+      thoroughness: 0.7         # 0=concise, 1=thorough
+      formality: 0.6            # 0=casual, 1=formal
+
+  # Engineer: Writes production-quality code
+  - role: engineer
+    personality:
+      creativity: 0.7           # 0=conventional, 1=creative
+      risk-tolerance: 0.4       # 0=conservative, 1=risk-taking
+      thoroughness: 0.8
+
+  # QA Tester: Tests code and finds edge cases
+  - role: qa-tester
+    # Uses default personality
+
+# Available Roles:
+# ----------------
+# - product-manager: Coordinates work and makes product decisions
+# - engineer: Writes production-quality code
+# - qa-tester: Tests code and finds bugs
+# - architect: Designs system architecture and APIs
+# - security-reviewer: Reviews code for security issues
+# - technical-writer: Creates documentation
+
+# Personality Traits:
+# -------------------
+# All values range from 0.0 to 1.0
+# - directness: How direct vs diplomatic (0=diplomatic, 1=very direct)
+# - creativity: How creative vs conventional (0=conventional, 1=creative)
+# - thoroughness: How thorough vs concise (0=concise, 1=thorough)
+# - formality: How formal vs casual (0=casual, 1=formal)
+# - risk-tolerance: How risk-tolerant vs conservative (0=conservative, 1=risk-taking)
+
+# Initial Goal (optional)
+# -----------------------
+# Set a default goal for the team. Can also be passed via CLI:
+#   ampere run --goal "Build a user authentication system"
+goal: "Build a user authentication system"

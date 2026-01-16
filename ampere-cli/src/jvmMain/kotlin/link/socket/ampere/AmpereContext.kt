@@ -33,8 +33,10 @@ import link.socket.ampere.agents.receptors.WorkspaceEventMapper
 import link.socket.ampere.agents.service.AgentActionService
 import link.socket.ampere.agents.service.MessageActionService
 import link.socket.ampere.agents.service.TicketActionService
+import link.socket.ampere.config.AmpereConfig
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
+import link.socket.ampere.domain.ai.configuration.AIConfiguration
 
 /**
  * Context that provides dependencies for CLI commands.
@@ -70,6 +72,10 @@ class AmpereContext(
     private val logger: EventLogger = ConsoleEventLogger(),
     /** The workspace to monitor for file changes, can be set to null to disable workspace monitoring */
     private val workspace: ExecutionWorkspace? = defaultWorkspace(),
+    /** User configuration loaded from YAML file, if present */
+    val userConfig: AmpereConfig? = null,
+    /** AI configuration derived from user config or default */
+    val aiConfiguration: AIConfiguration? = null,
 ) {
     /**
      * Database driver for SQLite operations.
@@ -84,8 +90,11 @@ class AmpereContext(
     /**
      * Coroutine scope for async operations.
      * Uses Dispatchers.Default with a SupervisorJob for fault tolerance.
+     *
+     * This scope is shared with AgentFactory and all agents to ensure
+     * consistent event handling across the application.
      */
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     /**
      * The environment service that provides access to all repositories,
@@ -129,10 +138,18 @@ class AmpereContext(
         get() = environmentService.outcomeMemoryRepository
 
     /**
+     * Event repository for querying persisted events.
+     * Used by trace command to show event context.
+     */
+    val eventRepository: link.socket.ampere.agents.events.EventRepository
+        get() = environmentService.eventRepository
+
+    /**
      * Knowledge repository for persistent agent memory.
      * Shared across all agents to enable learning from each other's experiences.
+     * Exposed for CLI commands that query agent knowledge.
      */
-    private val knowledgeRepository: KnowledgeRepository by lazy {
+    val knowledgeRepository: KnowledgeRepository by lazy {
         KnowledgeRepositoryImpl(database)
     }
 
@@ -281,6 +298,8 @@ class AmpereContext(
      * Create and initialize the autonomous work loop for a CodeAgent.
      *
      * This must be called before attempting to start autonomous work.
+     * The work loop is connected to the shared event bus so that work
+     * events are visible in the dashboard.
      *
      * @param codeAgent The CodeAgent instance that will process issues
      * @param config Optional configuration for work loop behavior
@@ -295,6 +314,7 @@ class AmpereContext(
             agent = codeAgent,
             config = config,
             scope = scope,
+            eventApiFactory = { agentId -> environmentService.createEventApi(agentId) },
         )
         return autonomousWorkLoop
     }

@@ -47,6 +47,9 @@ kotlin {
                 // Serialization
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
 
+                // YAML parsing for config files
+                implementation("com.charleskorn.kaml:kaml:0.72.0")
+
                 // DateTime
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
 

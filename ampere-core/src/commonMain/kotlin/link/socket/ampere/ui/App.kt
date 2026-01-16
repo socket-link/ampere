@@ -25,7 +25,6 @@ import link.socket.ampere.data.UserConversationRepository
 import link.socket.ampere.domain.agent.KoreAgent
 import link.socket.ampere.domain.agent.KoreAgentFactory
 import link.socket.ampere.domain.agent.bundled.AgentDefinition
-import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.chat.Conversation
 import link.socket.ampere.domain.chat.ConversationId
 import link.socket.ampere.domain.koog.KoogAgentFactory
@@ -46,10 +45,6 @@ fun App(
 
     val json = remember {
         DEFAULT_JSON
-    }
-
-    val aiConfigurationFactory = remember {
-        AIConfigurationFactory()
     }
 
     val koogAgentFactory = remember {
@@ -194,7 +189,6 @@ fun App(
                             modifier = Modifier
                                 .fillMaxSize(),
                             agentDefinition = agentDefinition,
-                            aiConfigurationFactory = aiConfigurationFactory,
                             agentFactory = agentFactory,
                             onAgentCreated = { agent ->
                                 selectedScreen.value = Screen.CONVERSATION

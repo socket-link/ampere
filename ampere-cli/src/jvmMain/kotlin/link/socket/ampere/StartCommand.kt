@@ -116,12 +116,13 @@ class StartCommand(
         val inputHandler = DemoInputHandler(terminal)
         val helpRenderer = HelpOverlayRenderer(terminal)
 
-        // Create goal handler (for :goal command)
+        // Create goal handler with AI configuration from user config (if available)
         val goalHandler = GoalHandler(
             context = context,
             agentScope = agentScope,
             progressPane = jazzPane,
             memoryPane = memoryPane,
+            aiConfiguration = context.aiConfiguration,
         )
 
         var viewConfig = DemoInputHandler.DemoViewConfig()

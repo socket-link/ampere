@@ -21,7 +21,6 @@ import link.socket.ampere.domain.agent.AgentInput
 import link.socket.ampere.domain.agent.KoreAgent
 import link.socket.ampere.domain.agent.KoreAgentFactory
 import link.socket.ampere.domain.agent.bundled.AgentDefinition
-import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.ui.model.selection.ModelRecommendationSection
 import link.socket.ampere.ui.model.selection.ModelSelectionBottomSheet
 import link.socket.ampere.ui.model.selection.ModelSelectionViewModel
@@ -30,7 +29,6 @@ import link.socket.ampere.ui.widget.header.Header
 @Composable
 fun AgentSetupScreen(
     agentDefinition: AgentDefinition,
-    aiConfigurationFactory: AIConfigurationFactory,
     agentFactory: KoreAgentFactory,
     onAgentCreated: (KoreAgent) -> Unit,
     onBackClicked: () -> Unit,
@@ -41,7 +39,6 @@ fun AgentSetupScreen(
 
     val agentSetupViewModel = remember {
         AgentSetupViewModel(
-            aiConfigurationFactory = aiConfigurationFactory,
             selectedAgentDefinition = agentDefinition,
         )
     }
