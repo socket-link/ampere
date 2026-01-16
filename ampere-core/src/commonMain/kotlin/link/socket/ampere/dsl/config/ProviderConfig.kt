@@ -57,7 +57,7 @@ data class AnthropicConfig(
      * Add a backup configuration that will be used if the primary fails.
      */
     fun withBackup(config: ProviderConfig): AnthropicConfig = copy(
-        backups = backups + config.toAIConfiguration()
+        backups = backups + config.toAIConfiguration(),
     )
 }
 
@@ -98,7 +98,7 @@ data class OpenAIConfig(
      * Add a backup configuration that will be used if the primary fails.
      */
     fun withBackup(config: ProviderConfig): OpenAIConfig = copy(
-        backups = backups + config.toAIConfiguration()
+        backups = backups + config.toAIConfiguration(),
     )
 }
 
@@ -139,6 +139,6 @@ data class GeminiConfig(
      * Add a backup configuration that will be used if the primary fails.
      */
     fun withBackup(config: ProviderConfig): GeminiConfig = copy(
-        backups = backups + config.toAIConfiguration()
+        backups = backups + config.toAIConfiguration(),
     )
 }

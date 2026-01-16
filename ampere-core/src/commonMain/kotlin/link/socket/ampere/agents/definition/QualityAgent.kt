@@ -9,6 +9,7 @@ import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.qa.QualityPrompts
 import link.socket.ampere.agents.definition.qa.QualityState
 import link.socket.ampere.agents.definition.qa.ValidationInsights
+import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
@@ -50,6 +51,15 @@ class QualityAgent(
     override val memoryService: AgentMemoryService? = memoryServiceFactory?.invoke(id)
 
     override val requiredTools: Set<Tool<*>> = emptySet()
+
+    /**
+     * QualityAgent uses ANALYTICAL cognitive affinity.
+     *
+     * This shapes the agent to break down problems systematically,
+     * verify correctness, and trace logic - ideal for quality assurance,
+     * testing, and code review.
+     */
+    override val affinity: CognitiveAffinity = CognitiveAffinity.ANALYTICAL
 
     // ========================================================================
     // Unified Reasoning - All cognitive logic in one place

@@ -7,6 +7,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
+import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
+import link.socket.ampere.agents.domain.cognition.FileAccessScope
+import link.socket.ampere.agents.domain.cognition.Spark
+import link.socket.ampere.agents.domain.cognition.SparkStack
+import link.socket.ampere.agents.domain.cognition.ToolId
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.memory.MemoryContext
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
@@ -22,6 +28,14 @@ import link.socket.ampere.agents.execution.tools.Tool
 
 /**
  * Contract for autonomous agents.
+ *
+ * AutonomousAgent now supports dynamic cognitive context through the Spark system.
+ * Each agent has a [CognitiveAffinity] that shapes how it approaches problems,
+ * and a [SparkStack] that accumulates specialization layers.
+ *
+ * The system prompt is dynamically built from the SparkStack before each LLM
+ * interaction, allowing agents to specialize their behavior without requiring
+ * separate class implementations.
  */
 @Serializable
 abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
@@ -33,6 +47,176 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
 
     /** Set of tools that this agent requires to execute its actions */
     open val requiredTools: Set<Tool<*>> = emptySet()
+
+    // ==================== Cognitive Context (Spark System) ====================
+
+    /**
+     * The cognitive affinity for this agent.
+     *
+     * Affinity shapes HOW the agent thinks about problems - it's the "elemental type"
+     * chosen at agent creation. Subclasses should override this to specify their
+     * default affinity.
+     *
+     * Default is INTEGRATIVE as it provides balanced problem-solving approach.
+     */
+    @Transient
+    open val affinity: CognitiveAffinity = CognitiveAffinity.INTEGRATIVE
+
+    /**
+     * The cognitive context stack for this agent.
+     *
+     * Sparks are pushed onto this stack to specialize the agent's context.
+     * The stack is initialized lazily from the affinity (to handle subclass overrides)
+     * and can be modified through [spark] and [unspark] methods.
+     */
+    @Transient
+    protected var sparkStack: SparkStack = uninitializedSparkStack
+        private set
+
+    // Lazy initialization backing field - will be properly initialized on first access
+    @Transient
+    private var sparkStackInitialized: Boolean = false
+
+    /**
+     * Ensures the spark stack is properly initialized with the (possibly overridden) affinity.
+     * This is called lazily on first access to handle Kotlin's initialization order.
+     */
+    protected fun ensureSparkStackInitialized() {
+        if (!sparkStackInitialized) {
+            sparkStack = SparkStack.withAffinity(affinity)
+            sparkStackInitialized = true
+        }
+    }
+
+    companion object {
+        // Placeholder for uninitialized state - will be replaced on first access
+        private val uninitializedSparkStack = SparkStack.withAffinity(CognitiveAffinity.INTEGRATIVE)
+    }
+
+    /**
+     * Pushes a Spark onto the cognitive context stack.
+     *
+     * This specializes the agent's context by adding a new layer. The system
+     * prompt will include this Spark's contribution, and tool/file access may
+     * be narrowed.
+     *
+     * @param spark The Spark to push onto the stack
+     * @return This agent for fluent chaining
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun <T : AutonomousAgent<S>> spark(spark: Spark): T {
+        ensureSparkStackInitialized()
+        sparkStack = sparkStack.push(spark)
+        onSparkApplied(spark)
+        return this as T
+    }
+
+    /**
+     * Pops the top Spark from the cognitive context stack.
+     *
+     * This returns the agent to a broader context by removing the most recent
+     * specialization layer.
+     *
+     * @return true if a Spark was removed, false if the stack was empty
+     */
+    fun unspark(): Boolean {
+        ensureSparkStackInitialized()
+        val previousSpark = sparkStack.peek()
+        val newStack = sparkStack.pop()
+        return if (newStack != null) {
+            sparkStack = newStack
+            onSparkRemoved(previousSpark)
+            true
+        } else {
+            false
+        }
+    }
+
+    /**
+     * Reinitializes the spark stack from the current affinity.
+     *
+     * Call this after changing the affinity to reset the stack.
+     */
+    protected fun reinitializeSparkStack() {
+        sparkStack = SparkStack.withAffinity(affinity)
+    }
+
+    /**
+     * The current system prompt, dynamically built from the SparkStack.
+     *
+     * This should be used when making LLM calls to provide the agent with
+     * its full cognitive context.
+     */
+    val currentSystemPrompt: String
+        get() {
+            ensureSparkStackInitialized()
+            return sparkStack.buildSystemPrompt()
+        }
+
+    /**
+     * The effective set of allowed tools given current Spark constraints.
+     *
+     * Returns null if no Sparks constrain tools (all tools available).
+     * When filtering tools for LLM calls, intersect with [requiredTools].
+     */
+    val availableTools: Set<ToolId>?
+        get() {
+            ensureSparkStackInitialized()
+            return sparkStack.effectiveAllowedTools()
+        }
+
+    /**
+     * The effective file access scope given current Spark constraints.
+     */
+    val effectiveFileAccess: FileAccessScope
+        get() {
+            ensureSparkStackInitialized()
+            return sparkStack.effectiveFileAccess()
+        }
+
+    /**
+     * Human-readable description of the current cognitive state.
+     *
+     * Format: [AFFINITY] → [Spark1] → [Spark2] → ...
+     */
+    val cognitiveState: String
+        get() {
+            ensureSparkStackInitialized()
+            return sparkStack.describe()
+        }
+
+    /**
+     * The depth of the current Spark stack.
+     */
+    val sparkDepth: Int
+        get() {
+            ensureSparkStackInitialized()
+            return sparkStack.depth
+        }
+
+    /**
+     * Hook called after a Spark is pushed onto the stack.
+     *
+     * Subclasses can override this to emit events or perform other actions
+     * when the cognitive context changes.
+     *
+     * @param spark The Spark that was just applied
+     */
+    protected open fun onSparkApplied(spark: Spark) {
+        // Default: no-op. Override in subclasses for event emission.
+    }
+
+    /**
+     * Hook called after a Spark is popped from the stack.
+     *
+     * Subclasses can override this to emit events or perform other actions
+     * when the cognitive context changes.
+     *
+     * @param previousSpark The Spark that was just removed, or null if unknown
+     */
+    protected open fun onSparkRemoved(previousSpark: Spark?) {
+        // Default: no-op. Override in subclasses for event emission.
+    }
 
     // ==================== Agent State ====================
 

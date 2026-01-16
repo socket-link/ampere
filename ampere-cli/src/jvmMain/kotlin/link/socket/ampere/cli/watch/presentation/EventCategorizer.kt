@@ -10,6 +10,7 @@ import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
+import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 
@@ -91,6 +92,7 @@ object EventCategorizer {
         is ToolEvent.ToolUnregistered,
         is ToolEvent.ToolDiscoveryComplete,
         is ToolEvent.ToolExecutionStarted,
-        is ToolEvent.ToolExecutionCompleted -> EventSignificance.ROUTINE
+        is ToolEvent.ToolExecutionCompleted,
+        is SparkEvent -> EventSignificance.ROUTINE
     }
 }

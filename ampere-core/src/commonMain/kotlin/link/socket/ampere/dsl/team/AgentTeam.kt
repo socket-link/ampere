@@ -83,7 +83,7 @@ class AgentTeam private constructor(
                 GoalSet(
                     goal = goal,
                     timestamp = Clock.System.now(),
-                )
+                ),
             )
 
             // Initialize agents and emit initialization events
@@ -137,7 +137,7 @@ class AgentTeam private constructor(
                     agent = member.role.name,
                     capabilities = member.role.capabilities.map { it.name },
                     timestamp = Clock.System.now(),
-                )
+                ),
             )
         }
     }
@@ -154,7 +154,7 @@ class AgentTeam private constructor(
                     agent = coordinator.role.name,
                     plan = "Analyzing goal and creating task breakdown: $goal",
                     timestamp = Clock.System.now(),
-                )
+                ),
             )
 
             // TODO: Wire up to actual agent infrastructure

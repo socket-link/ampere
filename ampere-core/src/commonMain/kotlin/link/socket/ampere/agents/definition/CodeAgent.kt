@@ -11,6 +11,7 @@ import link.socket.ampere.agents.definition.code.CodeParams
 import link.socket.ampere.agents.definition.code.CodePrompts
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.definition.code.IssueWorkflowStatus
+import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
@@ -42,7 +43,6 @@ import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
-import link.socket.ampere.agents.execution.tools.git.ToolCheckout
 import link.socket.ampere.agents.execution.tools.git.ToolCommit
 import link.socket.ampere.agents.execution.tools.git.ToolCreateBranch
 import link.socket.ampere.agents.execution.tools.git.ToolCreatePullRequest
@@ -99,6 +99,15 @@ open class CodeAgent(
         toolCreatePR?.let { add(it) }
         toolGitStatus?.let { add(it) }
     }
+
+    /**
+     * CodeAgent uses ANALYTICAL cognitive affinity.
+     *
+     * This shapes the agent to break problems into verifiable steps,
+     * prioritize correctness, and trace logic chains - ideal for
+     * code generation, review, and debugging.
+     */
+    override val affinity: CognitiveAffinity = CognitiveAffinity.ANALYTICAL
 
     // ========================================================================
     // Unified Reasoning - All cognitive logic in one place
@@ -234,7 +243,7 @@ open class CodeAgent(
         GIT_PUSH,
         GIT_CREATE_PR,
         GIT_STATUS,
-        UNKNOWN
+        UNKNOWN,
     }
 
     /**

@@ -1,5 +1,11 @@
 package link.socket.ampere.agents.definition
 
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.execution.WorkLoopConfig
@@ -11,12 +17,6 @@ import link.socket.ampere.integrations.issues.IssueQuery
 import link.socket.ampere.integrations.issues.IssueState
 import link.socket.ampere.integrations.issues.IssueTrackerProvider
 import link.socket.ampere.integrations.issues.IssueUpdate
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * End-to-end integration tests for autonomous work functionality.
@@ -50,7 +50,7 @@ class CodeAgentAutonomousWorkflowTest {
         override suspend fun createIssue(
             repository: String,
             request: IssueCreateRequest,
-            resolvedDependencies: Map<String, Int>
+            resolvedDependencies: Map<String, Int>,
         ): Result<CreatedIssue> {
             val issueNumber = nextIssueNumber++
             val created = ExistingIssue(
@@ -60,22 +60,22 @@ class CodeAgentAutonomousWorkflowTest {
                 labels = request.labels,
                 url = "https://github.com/$repository/issues/$issueNumber",
                 state = IssueState.Open,
-                parentNumber = null
+                parentNumber = null,
             )
             issues[issueNumber] = created
             return Result.success(
                 CreatedIssue(
                     localId = request.localId,
                     issueNumber = issueNumber,
-                    url = created.url
-                )
+                    url = created.url,
+                ),
             )
         }
 
         override suspend fun setParentRelationship(
             repository: String,
             childIssueNumber: Int,
-            parentIssueNumber: Int
+            parentIssueNumber: Int,
         ): Result<Unit> {
             val child = issues[childIssueNumber]
                 ?: return Result.failure(IllegalArgumentException("Child issue not found"))
@@ -85,7 +85,7 @@ class CodeAgentAutonomousWorkflowTest {
 
         override suspend fun queryIssues(
             repository: String,
-            query: IssueQuery
+            query: IssueQuery,
         ): Result<List<ExistingIssue>> {
             // Simulate race condition: after first query, another agent claims the issue
             if (simulateRaceCondition && raceConditionIssueNumber != null && queryCount > 0) {
@@ -93,7 +93,7 @@ class CodeAgentAutonomousWorkflowTest {
                     if (issue.labels.contains("code") && !issue.labels.contains("assigned")) {
                         // Another agent just claimed it
                         issues[raceConditionIssueNumber!!] = issue.copy(
-                            labels = issue.labels.filter { it != "code" }.plus("assigned")
+                            labels = issue.labels.filter { it != "code" }.plus("assigned"),
                         )
                     }
                 }
@@ -137,7 +137,7 @@ class CodeAgentAutonomousWorkflowTest {
         override suspend fun updateIssue(
             repository: String,
             issueNumber: Int,
-            update: IssueUpdate
+            update: IssueUpdate,
         ): Result<ExistingIssue> {
             val issue = issues[issueNumber]
                 ?: return Result.failure(IllegalArgumentException("Issue #$issueNumber not found"))
@@ -146,7 +146,7 @@ class CodeAgentAutonomousWorkflowTest {
                 title = update.title ?: issue.title,
                 body = update.body ?: issue.body,
                 labels = update.labels ?: issue.labels,
-                state = update.state ?: issue.state
+                state = update.state ?: issue.state,
             )
 
             issues[issueNumber] = updated
@@ -161,7 +161,7 @@ class CodeAgentAutonomousWorkflowTest {
         provider: TestIssueProvider,
         title: String,
         body: String,
-        labels: List<String>
+        labels: List<String>,
     ): ExistingIssue {
         val created = provider.createIssue(
             repository = "test/repo",
@@ -170,9 +170,9 @@ class CodeAgentAutonomousWorkflowTest {
                 type = IssueType.Task,
                 title = title,
                 body = body,
-                labels = labels
+                labels = labels,
             ),
-            resolvedDependencies = emptyMap()
+            resolvedDependencies = emptyMap(),
         ).getOrThrow()
         return provider.getIssue(created.issueNumber)!!
     }
@@ -186,7 +186,7 @@ class CodeAgentAutonomousWorkflowTest {
             provider = provider,
             title = "Implement feature X",
             body = "Description of feature X",
-            labels = listOf("code", "enhancement")
+            labels = listOf("code", "enhancement"),
         )
 
         assertEquals(1, issue.number)
@@ -197,8 +197,8 @@ class CodeAgentAutonomousWorkflowTest {
             repository = "test/repo",
             query = IssueQuery(
                 state = IssueState.Open,
-                labels = listOf("code")
-            )
+                labels = listOf("code"),
+            ),
         ).getOrThrow()
 
         assertEquals(1, available.size)
@@ -209,8 +209,8 @@ class CodeAgentAutonomousWorkflowTest {
             repository = "test/repo",
             issueNumber = issue.number,
             update = IssueUpdate(
-                labels = listOf("assigned")
-            )
+                labels = listOf("assigned"),
+            ),
         ).getOrThrow()
 
         assertTrue(claimed.labels.contains("assigned"))
@@ -220,8 +220,8 @@ class CodeAgentAutonomousWorkflowTest {
             repository = "test/repo",
             query = IssueQuery(
                 state = IssueState.Open,
-                labels = listOf("code")
-            )
+                labels = listOf("code"),
+            ),
         ).getOrThrow()
 
         // Should be 0 since we replaced labels with "assigned" only
@@ -232,8 +232,8 @@ class CodeAgentAutonomousWorkflowTest {
             repository = "test/repo",
             issueNumber = issue.number,
             update = IssueUpdate(
-                labels = listOf("in-progress")
-            )
+                labels = listOf("in-progress"),
+            ),
         ).getOrThrow()
 
         assertTrue(inProgress.labels.contains("in-progress"))
@@ -243,8 +243,8 @@ class CodeAgentAutonomousWorkflowTest {
             repository = "test/repo",
             issueNumber = issue.number,
             update = IssueUpdate(
-                labels = listOf("in-review")
-            )
+                labels = listOf("in-review"),
+            ),
         ).getOrThrow()
 
         assertTrue(completed.labels.contains("in-review"))
@@ -259,28 +259,28 @@ class CodeAgentAutonomousWorkflowTest {
             provider = provider,
             title = "Invalid task",
             body = "This will fail",
-            labels = listOf("code")
+            labels = listOf("code"),
         )
 
         // 2. Simulate claiming
         provider.updateIssue(
             repository = "test/repo",
             issueNumber = issue.number,
-            update = IssueUpdate(labels = listOf("assigned"))
+            update = IssueUpdate(labels = listOf("assigned")),
         )
 
         // 3. Simulate execution starting
         provider.updateIssue(
             repository = "test/repo",
             issueNumber = issue.number,
-            update = IssueUpdate(labels = listOf("in-progress"))
+            update = IssueUpdate(labels = listOf("in-progress")),
         )
 
         // 4. Simulate execution failure → BLOCKED
         val blocked = provider.updateIssue(
             repository = "test/repo",
             issueNumber = issue.number,
-            update = IssueUpdate(labels = listOf("blocked"))
+            update = IssueUpdate(labels = listOf("blocked")),
         ).getOrThrow()
 
         assertTrue(blocked.labels.contains("blocked"))
@@ -290,8 +290,8 @@ class CodeAgentAutonomousWorkflowTest {
             repository = "test/repo",
             query = IssueQuery(
                 state = IssueState.Open,
-                labels = listOf("code")
-            )
+                labels = listOf("code"),
+            ),
         ).getOrThrow()
 
         // Blocked issue shouldn't have 'code' label anymore
@@ -307,7 +307,7 @@ class CodeAgentAutonomousWorkflowTest {
             provider = provider,
             title = "Contested issue",
             body = "Two agents will try to claim this",
-            labels = listOf("code")
+            labels = listOf("code"),
         )
 
         // 2. Simulate race condition scenario
@@ -319,8 +319,8 @@ class CodeAgentAutonomousWorkflowTest {
             repository = "test/repo",
             query = IssueQuery(
                 state = IssueState.Open,
-                labels = listOf("code")
-            )
+                labels = listOf("code"),
+            ),
         ).getOrThrow()
 
         assertEquals(1, query1.size)
@@ -333,8 +333,8 @@ class CodeAgentAutonomousWorkflowTest {
             repository = "test/repo",
             query = IssueQuery(
                 state = IssueState.Open,
-                labels = listOf("code")
-            )
+                labels = listOf("code"),
+            ),
         ).getOrThrow()
 
         // Issue should be filtered out because it no longer has 'code' label
@@ -353,7 +353,7 @@ class CodeAgentAutonomousWorkflowTest {
             maxExecutionTimePerIssue = 5.minutes,
             maxIssuesPerHour = 10,
             pollingInterval = 5.seconds,
-            backoffInterval = 10.seconds
+            backoffInterval = 10.seconds,
         )
 
         assertEquals(1, config.maxConcurrentIssues)
@@ -433,14 +433,14 @@ class CodeAgentAutonomousWorkflowTest {
             provider = provider,
             title = "Test status transitions",
             body = "Validate state machine",
-            labels = listOf("code")
+            labels = listOf("code"),
         )
 
         // Valid transition: code → assigned (CLAIMED)
         var updated = provider.updateIssue(
             repository = "test/repo",
             issueNumber = issue.number,
-            update = IssueUpdate(labels = listOf("assigned"))
+            update = IssueUpdate(labels = listOf("assigned")),
         ).getOrThrow()
         assertTrue(updated.labels.contains("assigned"))
 
@@ -448,7 +448,7 @@ class CodeAgentAutonomousWorkflowTest {
         updated = provider.updateIssue(
             repository = "test/repo",
             issueNumber = issue.number,
-            update = IssueUpdate(labels = listOf("in-progress"))
+            update = IssueUpdate(labels = listOf("in-progress")),
         ).getOrThrow()
         assertTrue(updated.labels.contains("in-progress"))
 
@@ -456,7 +456,7 @@ class CodeAgentAutonomousWorkflowTest {
         updated = provider.updateIssue(
             repository = "test/repo",
             issueNumber = issue.number,
-            update = IssueUpdate(labels = listOf("in-review"))
+            update = IssueUpdate(labels = listOf("in-review")),
         ).getOrThrow()
         assertTrue(updated.labels.contains("in-review"))
     }
@@ -469,28 +469,28 @@ class CodeAgentAutonomousWorkflowTest {
             provider = provider,
             title = "Task that will fail",
             body = "Simulate error during execution",
-            labels = listOf("code")
+            labels = listOf("code"),
         )
 
         // Claim issue
         provider.updateIssue(
             repository = "test/repo",
             issueNumber = issue.number,
-            update = IssueUpdate(labels = listOf("assigned"))
+            update = IssueUpdate(labels = listOf("assigned")),
         )
 
         // Start work
         provider.updateIssue(
             repository = "test/repo",
             issueNumber = issue.number,
-            update = IssueUpdate(labels = listOf("in-progress"))
+            update = IssueUpdate(labels = listOf("in-progress")),
         )
 
         // Error occurs → blocked
         val blocked = provider.updateIssue(
             repository = "test/repo",
             issueNumber = issue.number,
-            update = IssueUpdate(labels = listOf("blocked"))
+            update = IssueUpdate(labels = listOf("blocked")),
         ).getOrThrow()
 
         assertTrue(blocked.labels.contains("blocked"))
@@ -500,8 +500,8 @@ class CodeAgentAutonomousWorkflowTest {
             repository = "test/repo",
             query = IssueQuery(
                 state = IssueState.Open,
-                labels = listOf("code")
-            )
+                labels = listOf("code"),
+            ),
         ).getOrThrow()
 
         assertFalse(available.any { it.number == issue.number })

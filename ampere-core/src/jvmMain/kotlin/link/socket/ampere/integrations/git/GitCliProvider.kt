@@ -1,5 +1,6 @@
 package link.socket.ampere.integrations.git
 
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import link.socket.ampere.agents.execution.tools.git.BranchCreateRequest
@@ -10,7 +11,6 @@ import link.socket.ampere.agents.execution.tools.git.CreatedPullRequest
 import link.socket.ampere.agents.execution.tools.git.GitStatusResult
 import link.socket.ampere.agents.execution.tools.git.PullRequestCreateRequest
 import link.socket.ampere.agents.execution.tools.git.PushRequest
-import java.io.File
 
 /**
  * Git repository provider that uses the git and gh CLI tools.

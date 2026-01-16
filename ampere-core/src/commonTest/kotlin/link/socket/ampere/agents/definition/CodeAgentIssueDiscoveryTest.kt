@@ -1,5 +1,8 @@
 package link.socket.ampere.agents.definition
 
+import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
@@ -13,9 +16,6 @@ import link.socket.ampere.integrations.issues.IssueState
 import link.socket.ampere.integrations.issues.IssueTrackerProvider
 import link.socket.ampere.integrations.issues.IssueUpdate
 import link.socket.ampere.stubAgentConfiguration
-import kotlin.test.Test
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 /**
  * Tests for CodeAgent issue discovery functionality.

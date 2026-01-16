@@ -9,6 +9,7 @@ import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.product.PlanningInsights
 import link.socket.ampere.agents.definition.product.ProductAgentState
 import link.socket.ampere.agents.definition.product.ProductPrompts
+import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
@@ -54,6 +55,15 @@ class ProductAgent(
     override val memoryService: AgentMemoryService? = memoryServiceFactory?.invoke(id)
 
     override val requiredTools: Set<Tool<*>> = emptySet()
+
+    /**
+     * ProductAgent uses INTEGRATIVE cognitive affinity.
+     *
+     * This shapes the agent to understand how features fit into the product,
+     * connect user needs to implementation - ideal for product planning
+     * and feature decomposition.
+     */
+    override val affinity: CognitiveAffinity = CognitiveAffinity.INTEGRATIVE
 
     // ========================================================================
     // Unified Reasoning - All cognitive logic in one place

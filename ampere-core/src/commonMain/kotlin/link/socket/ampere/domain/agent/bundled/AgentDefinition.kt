@@ -37,4 +37,31 @@ sealed interface AgentDefinition {
         override val requiredInputs: List<AgentInput> = emptyList(),
         override val optionalInputs: List<AgentInput> = emptyList(),
     ) : AgentDefinition
+
+    /**
+     * A simple custom agent definition for Spark-based agents.
+     *
+     * This allows creating agent definitions without subclassing,
+     * useful for dynamically configured agents like SparkBasedAgent.
+     */
+    companion object {
+        /**
+         * Creates a custom agent definition with minimal configuration.
+         */
+        fun Custom(
+            name: String,
+            description: String,
+            prompt: String,
+            requiredInputs: List<AgentInput> = emptyList(),
+            optionalInputs: List<AgentInput> = emptyList(),
+            aiConfigurationBuilder: (AIConfigurationFactory) -> AIConfiguration = { it.getDefaultConfiguration() },
+        ): AgentDefinition = object : Custom(
+            name = name,
+            description = description,
+            suggestedAIConfigurationBuilder = aiConfigurationBuilder,
+            prompt = prompt,
+            requiredInputs = requiredInputs,
+            optionalInputs = optionalInputs,
+        ) {}
+    }
 }

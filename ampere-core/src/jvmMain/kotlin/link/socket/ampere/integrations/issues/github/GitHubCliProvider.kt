@@ -301,7 +301,8 @@ class GitHubCliProvider : IssueTrackerProvider {
             val args = mutableListOf(
                 "api",
                 "repos/$repository/issues/$issueNumber/labels",
-                "-X", "PUT",
+                "-X",
+                "PUT",
             )
 
             // Add each label as an array element

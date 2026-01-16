@@ -8,6 +8,7 @@ import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.project.ProjectAgentState
 import link.socket.ampere.agents.definition.project.ProjectParams
 import link.socket.ampere.agents.definition.project.ProjectPrompts
+import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
@@ -62,6 +63,15 @@ open class ProjectAgent(
         memoryServiceFactory?.invoke(id)
 
     override val requiredTools: Set<Tool<*>> = setOf(toolCreateIssues, toolAskHuman)
+
+    /**
+     * ProjectAgent uses INTEGRATIVE cognitive affinity.
+     *
+     * This shapes the agent to understand the whole system, connect parts,
+     * and bridge perspectives - ideal for project management, coordination,
+     * and planning.
+     */
+    override val affinity: CognitiveAffinity = CognitiveAffinity.INTEGRATIVE
 
     // ========================================================================
     // Unified Reasoning - All cognitive logic in one place

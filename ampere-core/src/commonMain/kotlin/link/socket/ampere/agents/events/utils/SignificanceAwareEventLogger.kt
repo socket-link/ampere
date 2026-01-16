@@ -13,6 +13,7 @@ import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
+import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.events.subscription.Subscription
@@ -134,6 +135,9 @@ class SignificanceAwareEventLogger(
         is HumanInteractionEvent.InputRequested -> EventSignificance.CRITICAL
         is HumanInteractionEvent.InputProvided -> EventSignificance.SIGNIFICANT
         is HumanInteractionEvent.RequestTimedOut -> EventSignificance.SIGNIFICANT
+
+        // Spark cognitive state events - routine cognitive operations
+        is SparkEvent -> EventSignificance.ROUTINE
     }
 
     private fun formatUrgency(urgency: Urgency): String = when (urgency) {
