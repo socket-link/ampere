@@ -18,10 +18,21 @@ class StatusBar(private val terminal: Terminal) {
 
     /**
      * System status indicator.
+     *
+     * Status lifecycle:
+     * - IDLE: No active tasks, system ready
+     * - THINKING: Agent in planning/perceive phase
+     * - WORKING: Agent actively executing
+     * - WAITING: Blocked on human input
+     * - COMPLETED: Task just finished successfully
+     * - ATTENTION_NEEDED: Error or exception occurred
      */
     enum class SystemStatus {
         IDLE,
+        THINKING,
         WORKING,
+        WAITING,
+        COMPLETED,
         ATTENTION_NEEDED
     }
 
@@ -86,6 +97,44 @@ class StatusBar(private val terminal: Terminal) {
     }
 
     private fun renderShortcuts(shortcuts: List<Shortcut>): String {
+        // Group shortcuts by category:
+        // - View modes: d, e, m (dashboard, events, memory)
+        // - Toggles: v (verbose)
+        // - Help: h (help)
+        // - Exit: q (quit)
+        val viewModes = shortcuts.filter { it.key in listOf('d', 'e', 'm') }
+        val toggles = shortcuts.filter { it.key == 'v' }
+        val help = shortcuts.filter { it.key == 'h' }
+        val exit = shortcuts.filter { it.key == 'q' }
+
+        val parts = mutableListOf<String>()
+
+        // View modes group
+        if (viewModes.isNotEmpty()) {
+            parts.add(renderShortcutGroup(viewModes))
+        }
+
+        // Toggles group
+        if (toggles.isNotEmpty()) {
+            parts.add(renderShortcutGroup(toggles))
+        }
+
+        // Help group
+        if (help.isNotEmpty()) {
+            parts.add(renderShortcutGroup(help))
+        }
+
+        // Exit group
+        if (exit.isNotEmpty()) {
+            parts.add(renderShortcutGroup(exit))
+        }
+
+        // Join groups with separator
+        val separator = terminal.render(dim(" │ "))
+        return parts.joinToString(separator)
+    }
+
+    private fun renderShortcutGroup(shortcuts: List<Shortcut>): String {
         return shortcuts.joinToString(" ") { shortcut ->
             val keyPart = terminal.render(
                 if (shortcut.isActive) {
@@ -107,13 +156,26 @@ class StatusBar(private val terminal: Terminal) {
 
     private fun renderStatus(status: SystemStatus): String {
         val statusColor = when (status) {
-            SystemStatus.IDLE -> TextColors.green
+            SystemStatus.IDLE -> TextColors.gray
+            SystemStatus.THINKING -> TextColors.yellow
             SystemStatus.WORKING -> TextColors.blue
+            SystemStatus.WAITING -> TextColors.magenta
+            SystemStatus.COMPLETED -> TextColors.green
             SystemStatus.ATTENTION_NEEDED -> TextColors.red
         }
 
+        // Status indicator (pulsing for active states)
+        val indicator = when (status) {
+            SystemStatus.WORKING -> terminal.render(TextColors.blue("●"))
+            SystemStatus.THINKING -> terminal.render(TextColors.yellow("◐"))
+            SystemStatus.WAITING -> terminal.render(TextColors.magenta("◌"))
+            SystemStatus.COMPLETED -> terminal.render(TextColors.green("✓"))
+            SystemStatus.ATTENTION_NEEDED -> terminal.render(TextColors.red("!"))
+            SystemStatus.IDLE -> terminal.render(dim("○"))
+        }
+
         val statusText = status.name.replace("_", " ")
-        return terminal.render(dim("Status: ")) + terminal.render(statusColor(statusText))
+        return "$indicator ${terminal.render(statusColor(statusText))}"
     }
 
     companion object {

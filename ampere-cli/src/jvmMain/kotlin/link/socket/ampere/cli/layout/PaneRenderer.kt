@@ -1,5 +1,10 @@
 package link.socket.ampere.cli.layout
 
+import com.github.ajalt.mordant.rendering.TextColors
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
+import com.github.ajalt.mordant.terminal.Terminal
+
 /**
  * Interface for renderers that can work within constrained dimensions.
  *
@@ -76,4 +81,47 @@ fun List<String>.fitToHeight(height: Int, width: Int): List<String> {
         this.size > height -> this.take(height)
         else -> this
     }
+}
+
+/**
+ * Renders a section header with separator and spacing.
+ *
+ * Format:
+ * ```
+ * SECTION TITLE
+ * ────────────────────────
+ *
+ * ```
+ *
+ * @param title The section title (rendered in uppercase with cyan color)
+ * @param width Available width in characters
+ * @param terminal Terminal instance for rendering styled text
+ * @return List of 3 lines: title, separator, blank line
+ */
+fun renderSectionHeader(title: String, width: Int, terminal: Terminal): List<String> {
+    val header = terminal.render(bold(TextColors.cyan(title.uppercase())))
+    val separator = terminal.render(dim("─".repeat(width)))
+    return listOf(header, separator, "")
+}
+
+/**
+ * Renders a sub-section header with lighter styling.
+ *
+ * Format:
+ * ```
+ * ─── Sub Title ───────
+ *
+ * ```
+ *
+ * @param title The sub-section title
+ * @param width Available width in characters
+ * @param terminal Terminal instance for rendering styled text
+ * @return List of 2 lines: styled title, blank line
+ */
+fun renderSubHeader(title: String, width: Int, terminal: Terminal): List<String> {
+    val prefix = "─── "
+    val suffix = " "
+    val remainingDashes = (width - prefix.length - suffix.length - title.length).coerceAtLeast(3)
+    val line = terminal.render(dim("$prefix$title$suffix${"─".repeat(remainingDashes)}"))
+    return listOf(line, "")
 }

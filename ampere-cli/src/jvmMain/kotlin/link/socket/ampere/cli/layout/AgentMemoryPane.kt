@@ -64,9 +64,8 @@ class AgentMemoryPane(
         frameCounter++
         val lines = mutableListOf<String>()
 
-        // Header
-        lines.add(terminal.render(bold("AGENT")))
-        lines.add("")
+        // Header with separator and spacing
+        lines.addAll(renderSectionHeader("Agent", width, terminal))
 
         // Agent name and state
         val indicator = getStateIndicator(state.agentState)
@@ -88,9 +87,8 @@ class AgentMemoryPane(
         lines.add(state.currentPhase?.take(width - 1) ?: terminal.render(dim("...")))
         lines.add("")
 
-        // Memory section
-        lines.add(terminal.render(bold("MEMORY")))
-        lines.add("")
+        // Memory sub-section
+        lines.addAll(renderSubHeader("Memory", width, terminal))
 
         // Memory usage bar
         val barWidth = (width - 2).coerceAtLeast(5)
@@ -110,18 +108,26 @@ class AgentMemoryPane(
         lines.add("")
 
         // Activity sparkline
+        lines.add(terminal.render(dim("Activity:")))
         if (state.recentActivity.isNotEmpty()) {
-            lines.add(terminal.render(dim("Activity:")))
             lines.add(renderSparkline(state.recentActivity, width - 1))
-            lines.add("")
+        } else {
+            // Empty state for activity
+            lines.add(terminal.render(dim("  ┄ no activity yet ┄")))
         }
+        lines.add("")
 
         // Recent tags
+        lines.add(terminal.render(dim("Tags:")))
         if (state.recentTags.isNotEmpty()) {
-            lines.add(terminal.render(dim("Tags:")))
             state.recentTags.take(3).forEach { tag ->
                 lines.add(" ${tag.take(width - 2)}")
             }
+        } else {
+            // Empty state for tags
+            lines.add(terminal.render(dim("  Knowledge tags will")))
+            lines.add(terminal.render(dim("  appear here as the")))
+            lines.add(terminal.render(dim("  agent learns")))
         }
 
         // Pad to height
