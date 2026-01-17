@@ -2,6 +2,7 @@
 *.db
 .gradle
 .kotlin/
+.ampere
 /local.properties
 /.idea
 .DS_Store

@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.domain.reasoning
 
+import co.touchlab.kermit.Logger
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
@@ -9,6 +10,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.domain.util.toClientModelId
+import link.socket.ampere.util.logWith
 
 /**
  * Centralized service for LLM interactions used by autonomous agents.
@@ -31,6 +33,8 @@ import link.socket.ampere.domain.util.toClientModelId
 class AgentLLMService(
     private val agentConfiguration: AgentConfiguration,
 ) {
+
+    private val logger: Logger = logWith("AgentLLMService")
 
     /**
      * Calls the LLM with a prompt and returns the raw response text.
@@ -74,11 +78,11 @@ class AgentLLMService(
 
         // Log token usage for monitoring
         completion.usage?.let { usage ->
-            println(
+            logger.d {
                 "[LLM] Tokens - Prompt: ${usage.promptTokens}, " +
                     "Completion: ${usage.completionTokens}, " +
-                    "Total: ${usage.totalTokens} (limit: $maxTokens)",
-            )
+                    "Total: ${usage.totalTokens} (limit: $maxTokens)"
+            }
         }
 
         return completion.choices.firstOrNull()?.message?.content
