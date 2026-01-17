@@ -1,23 +1,19 @@
 package link.socket.ampere.agents.domain.event
 
-import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.Urgency
-import link.socket.ampere.agents.domain.error.ExecutionError
-import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.task.Task
-import link.socket.ampere.agents.events.tickets.Ticket
-import link.socket.ampere.agents.events.tickets.TicketType
-import link.socket.ampere.agents.events.utils.generateUUID
-import link.socket.ampere.agents.execution.tools.git.CreatedBranch
-import link.socket.ampere.agents.execution.tools.git.CreatedCommit
-import link.socket.ampere.agents.execution.tools.git.CreatedPullRequest
-import link.socket.ampere.agents.execution.tools.git.GitOperationResponse
-import link.socket.ampere.agents.execution.tools.git.PushResult
-import link.socket.ampere.agents.execution.tools.git.StagedFilesResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.error.ExecutionError
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.agents.execution.tools.git.CreatedBranch
+import link.socket.ampere.agents.execution.tools.git.CreatedCommit
+import link.socket.ampere.agents.execution.tools.git.GitOperationResponse
+import link.socket.ampere.agents.execution.tools.git.PushResult
+import link.socket.ampere.agents.execution.tools.git.StagedFilesResult
 
 class GitEventTest {
 

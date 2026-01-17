@@ -1,16 +1,23 @@
 package link.socket.ampere.agents.definition
 
+import kotlin.test.Ignore
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentActionAutonomy
-import link.socket.ampere.agents.definition.code.CodeState
+import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.code.IssueWorkflowStatus
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
-import link.socket.ampere.agents.domain.status.TaskStatus
-import link.socket.ampere.agents.domain.task.Task
-import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.FunctionTool
+import link.socket.ampere.agents.execution.tools.issue.CreatedIssue
+import link.socket.ampere.agents.execution.tools.issue.IssueCreateRequest
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModel
@@ -21,16 +28,6 @@ import link.socket.ampere.integrations.issues.IssueQuery
 import link.socket.ampere.integrations.issues.IssueState
 import link.socket.ampere.integrations.issues.IssueTrackerProvider
 import link.socket.ampere.integrations.issues.IssueUpdate
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import link.socket.ampere.agents.execution.tools.issue.CreatedIssue
-import link.socket.ampere.agents.execution.tools.issue.IssueCreateRequest
-import kotlin.test.Ignore
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
  * Integration tests for CodeAgent's full issue-to-PR workflow.
@@ -622,7 +619,7 @@ class CodeAgentIntegrationTest {
         if (result.isSuccess) {
             assertTrue(
                 updated.labels.contains("in-review"),
-                "Successful workflow should result in IN_REVIEW status"
+                "Successful workflow should result in IN_REVIEW status",
             )
         }
     }

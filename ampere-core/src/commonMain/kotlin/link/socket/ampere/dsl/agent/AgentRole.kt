@@ -1,7 +1,7 @@
 package link.socket.ampere.dsl.agent
 
-import link.socket.ampere.domain.agent.bundled.AgentDefinition
 import link.socket.ampere.domain.agent.bundled.APIDesignAgent
+import link.socket.ampere.domain.agent.bundled.AgentDefinition
 import link.socket.ampere.domain.agent.bundled.DelegateTasksAgent
 import link.socket.ampere.domain.agent.bundled.DocumentationAgent
 import link.socket.ampere.domain.agent.bundled.QATestingAgent
@@ -75,8 +75,12 @@ data object ProductManager : AgentRole(
         appendLine(basePrompt)
         appendLine()
         appendLine("## Communication Style")
-        appendLine("- Directness: ${formatTrait(personality.directness)} - ${directnessGuidance(personality.directness)}")
-        appendLine("- Thoroughness: ${formatTrait(personality.thoroughness)} - ${thoroughnessGuidance(personality.thoroughness)}")
+        appendLine(
+            "- Directness: ${formatTrait(personality.directness)} - ${directnessGuidance(personality.directness)}",
+        )
+        appendLine(
+            "- Thoroughness: ${formatTrait(personality.thoroughness)} - ${thoroughnessGuidance(personality.thoroughness)}",
+        )
         appendLine("- Formality: ${formatTrait(personality.formality)} - ${formalityGuidance(personality.formality)}")
     }
 }
@@ -107,9 +111,15 @@ data object Engineer : AgentRole(
         appendLine(basePrompt)
         appendLine()
         appendLine("## Coding Style")
-        appendLine("- Creativity: ${formatTrait(personality.creativity)} - ${creativityGuidance(personality.creativity)}")
-        appendLine("- Thoroughness: ${formatTrait(personality.thoroughness)} - ${thoroughnessGuidance(personality.thoroughness)}")
-        appendLine("- Risk Tolerance: ${formatTrait(personality.riskTolerance)} - ${riskGuidance(personality.riskTolerance)}")
+        appendLine(
+            "- Creativity: ${formatTrait(personality.creativity)} - ${creativityGuidance(personality.creativity)}",
+        )
+        appendLine(
+            "- Thoroughness: ${formatTrait(personality.thoroughness)} - ${thoroughnessGuidance(personality.thoroughness)}",
+        )
+        appendLine(
+            "- Risk Tolerance: ${formatTrait(personality.riskTolerance)} - ${riskGuidance(personality.riskTolerance)}",
+        )
     }
 }
 

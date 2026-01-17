@@ -1,10 +1,10 @@
 package link.socket.ampere.agents.definition.code
 
-import link.socket.ampere.integrations.issues.ExistingIssue
-import link.socket.ampere.integrations.issues.IssueState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import link.socket.ampere.integrations.issues.ExistingIssue
+import link.socket.ampere.integrations.issues.IssueState
 
 /**
  * Tests for CodeAgentGitHelpers - Git workflow helper functions.

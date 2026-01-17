@@ -1,5 +1,9 @@
 package link.socket.ampere.agents.execution
 
+import kotlin.math.pow
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -11,11 +15,6 @@ import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.CodeAgent
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.api.AgentEventApi
-import link.socket.ampere.integrations.issues.ExistingIssue
-import kotlin.math.pow
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * Configuration for autonomous work loop behavior.
@@ -164,7 +163,7 @@ class AutonomousWorkLoop(
                         taskId = "issue-${issue.number}",
                         urgency = Urgency.MEDIUM,
                         description = "Working on issue #${issue.number}: ${issue.title}",
-                        assignedTo = agent.id
+                        assignedTo = agent.id,
                     )
 
                     // Work on the issue
@@ -178,7 +177,7 @@ class AutonomousWorkLoop(
                             filePath = "issue-${issue.number}",
                             changeDescription = "Completed issue #${issue.number}: ${result.getOrNull()}",
                             reviewRequired = true,
-                            assignedTo = null
+                            assignedTo = null,
                         )
                     }
 
