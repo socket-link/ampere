@@ -149,7 +149,7 @@ class AgentFactory(
                 memoryServiceFactory = memoryServiceFactory,
                 issueTrackerProvider = issueTrackerProvider,
                 repository = repository,
-                eventApi = eventApi,
+                eventApiOverride = eventApi,
                 observabilityScope = scope,
                 agentId = agentId,
             )
@@ -161,7 +161,7 @@ class AgentFactory(
                 agentConfiguration = agentConfiguration,
                 ticketOrchestrator = ticketOrchestrator,
                 memoryServiceFactory = memoryServiceFactory,
-                eventApi = eventApi,
+                eventApiOverride = eventApi,
                 observabilityScope = scope,
                 agentId = agentId,
             )
@@ -175,7 +175,7 @@ class AgentFactory(
                 toolAskHuman = toolAskHuman,
                 coroutineScope = scope,
                 memoryServiceFactory = memoryServiceFactory,
-                eventApi = eventApi,
+                eventApiOverride = eventApi,
                 observabilityScope = scope,
                 agentId = agentId,
             )
@@ -186,7 +186,7 @@ class AgentFactory(
             QualityAgent(
                 agentConfiguration = agentConfiguration,
                 memoryServiceFactory = memoryServiceFactory,
-                eventApi = eventApi,
+                eventApiOverride = eventApi,
                 observabilityScope = scope,
                 agentId = agentId,
             )

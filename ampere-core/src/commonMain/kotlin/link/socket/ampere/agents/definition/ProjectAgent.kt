@@ -56,10 +56,10 @@ open class ProjectAgent(
     private val executor: Executor = FunctionExecutor.create(),
     memoryServiceFactory: ((AgentId) -> link.socket.ampere.agents.domain.memory.AgentMemoryService)? = null,
     reasoningOverride: AgentReasoning? = null,
-    private val eventApi: AgentEventApi? = null,
+    private val eventApiOverride: AgentEventApi? = null,
     private val observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
     private val agentId: AgentId = generateUUID("ProjectManagerAgent"),
-) : ObservableAgent<AgentState>(eventApi, observabilityScope) {
+) : ObservableAgent<AgentState>(eventApiOverride, observabilityScope) {
 
     override val id: AgentId = agentId
 

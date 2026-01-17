@@ -84,10 +84,10 @@ open class CodeAgent(
     private val toolPush: Tool<ExecutionContext.GitOperation>? = ToolPush(),
     private val toolCreatePR: Tool<ExecutionContext.GitOperation>? = ToolCreatePullRequest(),
     private val toolGitStatus: Tool<ExecutionContext.GitOperation>? = ToolGitStatus(),
-    private val eventApi: AgentEventApi? = null,
+    private val eventApiOverride: AgentEventApi? = null,
     private val observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
     private val agentId: AgentId = generateUUID("CodeWriterAgent"),
-) : ObservableAgent<CodeState>(eventApi, observabilityScope) {
+) : ObservableAgent<CodeState>(eventApiOverride, observabilityScope) {
 
     override val id: AgentId = agentId
 

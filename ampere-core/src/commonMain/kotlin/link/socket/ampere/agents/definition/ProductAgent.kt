@@ -49,10 +49,10 @@ class ProductAgent(
     override val initialState: ProductAgentState = ProductAgentState.blank,
     private val executor: Executor = FunctionExecutor.create(),
     memoryServiceFactory: ((AgentId) -> AgentMemoryService)? = null,
-    private val eventApi: AgentEventApi? = null,
+    private val eventApiOverride: AgentEventApi? = null,
     private val observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
     private val agentId: AgentId = generateUUID("ProductManagerAgent"),
-) : ObservableAgent<ProductAgentState>(eventApi, observabilityScope) {
+) : ObservableAgent<ProductAgentState>(eventApiOverride, observabilityScope) {
 
     override val id: AgentId = agentId
 
