@@ -7,6 +7,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.AmpereProjectSpark
 import link.socket.ampere.agents.domain.cognition.sparks.LanguageSpark
 import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
 import link.socket.ampere.agents.domain.cognition.sparks.RoleSpark
+import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.events.api.AgentEventApi
@@ -168,23 +169,28 @@ class AgentFactory(
      */
     private fun applySparkStack(agent: AutonomousAgent<*>, agentType: AgentType) {
         // Apply ProjectSpark first
-        agent.spark(effectiveProjectSpark)
+        applySpark(agent, effectiveProjectSpark)
 
         // Apply appropriate RoleSpark based on agent type
         when (agentType) {
             AgentType.CODE -> {
-                agent.spark(RoleSpark.Code)
-                agent.spark(LanguageSpark.Kotlin)
+                applySpark(agent, RoleSpark.Code)
+                applySpark(agent, LanguageSpark.Kotlin)
             }
             AgentType.PRODUCT -> {
-                agent.spark(RoleSpark.Planning)
+                applySpark(agent, RoleSpark.Planning)
             }
             AgentType.PROJECT -> {
-                agent.spark(RoleSpark.Planning)
+                applySpark(agent, RoleSpark.Planning)
             }
             AgentType.QUALITY -> {
-                agent.spark(RoleSpark.Code)
+                applySpark(agent, RoleSpark.Code)
             }
         }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun applySpark(agent: AutonomousAgent<*>, spark: Spark) {
+        (agent as AutonomousAgent<AgentState>).spark<AutonomousAgent<AgentState>>(spark)
     }
 }
