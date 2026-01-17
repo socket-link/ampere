@@ -44,7 +44,10 @@ class EventStreamRenderer(
             }
 
             // Event stream
-            appendEventStream(eventsToShow)
+            val affinityByAgentName = viewState.agentStates.values.associate { state ->
+                state.displayName to state.affinityName
+            }
+            appendEventStream(eventsToShow, affinityByAgentName)
             append("\n")
 
             // Footer with shortcuts
@@ -63,7 +66,10 @@ class EventStreamRenderer(
         }
     }
 
-    private fun StringBuilder.appendEventStream(events: List<link.socket.ampere.cli.watch.presentation.SignificantEventSummary>) {
+    private fun StringBuilder.appendEventStream(
+        events: List<link.socket.ampere.cli.watch.presentation.SignificantEventSummary>,
+        affinityByAgentName: Map<String, String?>
+    ) {
         if (events.isEmpty()) {
             append(terminal.render(dim("No events yet")))
             append("\n")
@@ -75,11 +81,14 @@ class EventStreamRenderer(
         val availableHeight = (terminal.info.height - 5).coerceAtLeast(10)
 
         events.take(availableHeight).forEach { event ->
-            appendEventLine(event)
+            appendEventLine(event, affinityByAgentName)
         }
     }
 
-    private fun StringBuilder.appendEventLine(event: link.socket.ampere.cli.watch.presentation.SignificantEventSummary) {
+    private fun StringBuilder.appendEventLine(
+        event: link.socket.ampere.cli.watch.presentation.SignificantEventSummary,
+        affinityByAgentName: Map<String, String?>
+    ) {
         val eventColor = when (event.significance) {
             EventSignificance.CRITICAL -> TextColors.red
             EventSignificance.SIGNIFICANT -> TextColors.white
@@ -101,7 +110,11 @@ class EventStreamRenderer(
         append(" ")
         append(terminal.render(eventColor(event.summaryText)))
         append(" ")
-        append(terminal.render(dim("from ${event.sourceAgentName} ($timeSinceStr)")))
+        append(terminal.render(dim("from ")))
+        val affinityName = affinityByAgentName[event.sourceAgentName]
+        val agentColor = affinityName?.let { SparkColors.forAffinityName(it) } ?: TextColors.gray
+        append(terminal.render(agentColor(event.sourceAgentName)))
+        append(terminal.render(dim(" ($timeSinceStr)")))
         append("\n")
     }
 

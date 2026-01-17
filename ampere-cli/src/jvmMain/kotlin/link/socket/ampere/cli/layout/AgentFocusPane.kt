@@ -13,6 +13,9 @@ import link.socket.ampere.cli.watch.presentation.AgentState
 import link.socket.ampere.cli.watch.presentation.CognitiveCluster
 import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.SignificantEventSummary
+import link.socket.ampere.cli.watch.presentation.SparkTransition
+import link.socket.ampere.cli.watch.presentation.SparkTransitionDirection
+import link.socket.ampere.renderer.SparkColors
 
 /**
  * Agent focus as a drawer-style pane that can be rendered within the layout.
@@ -45,7 +48,9 @@ class AgentFocusPane(
         val agentIndex: Int? = null,
         val agentState: AgentActivityState? = null,
         val recentEvents: List<SignificantEventSummary> = emptyList(),
-        val cognitiveClusters: List<CognitiveCluster> = emptyList()
+        val cognitiveClusters: List<CognitiveCluster> = emptyList(),
+        /** History of Spark transitions for this agent. */
+        val sparkHistory: List<SparkTransition> = emptyList()
     )
 
     private var state = FocusState()
@@ -73,6 +78,18 @@ class AgentFocusPane(
         // Separator
         lines.add("")
 
+        // Cognitive Context (Spark stack) section - only if there's cognitive state
+        if (agentState.affinityName != null || agentState.sparkNames.isNotEmpty()) {
+            lines.addAll(renderCognitiveContext(agentState, width))
+            lines.add("")
+        }
+
+        // Spark History section - only if there's history
+        if (state.sparkHistory.isNotEmpty()) {
+            lines.addAll(renderSparkHistory(width, (height - lines.size - 10).coerceAtLeast(3)))
+            lines.add("")
+        }
+
         // Recent activity sub-header
         lines.addAll(renderSubHeader("Activity", width, terminal))
 
@@ -85,7 +102,7 @@ class AgentFocusPane(
         }
 
         // Footer hint
-        lines.add(terminal.render(dim("[ESC] close")))
+        lines.add(terminal.render(dim("[ESC] close  :sparks for details")))
 
         return lines.take(height).map { it.fitToWidth(width) }
     }
@@ -97,10 +114,16 @@ class AgentFocusPane(
     ): List<String> {
         val lines = mutableListOf<String>()
 
-        // Drawer title with close button hint
-        val stateIndicator = getStateIndicator(agentState.currentState)
+        // Drawer title with affinity-based color
+        val affinityColor = agentState.affinityName?.let { SparkColors.forAffinityName(it) } ?: TextColors.cyan
         val title = "Agent: ${agentState.displayName.take(width - 12)}"
-        lines.add(terminal.render(bold(TextColors.cyan(title))))
+
+        // Add cognitive depth indicator if available
+        val depthIndicator = if (agentState.sparkDepth > 0) {
+            " ${SparkColors.renderDepthIndicator(agentState.sparkDepth, SparkColors.DepthDisplayStyle.ARROWS)}"
+        } else ""
+
+        lines.add(terminal.render(bold(affinityColor(title))) + terminal.render(dim(depthIndicator)))
 
         // Separator
         lines.add(terminal.render(dim("─".repeat(width))))
@@ -134,6 +157,79 @@ class AgentFocusPane(
 
         val timeSince = formatTimeSince(agentState.lastActivityTimestamp)
         lines.add("${terminal.render(dim("Last:"))} $timeSince")
+
+        return lines
+    }
+
+    /**
+     * Render the cognitive context (Spark stack) section.
+     */
+    private fun renderCognitiveContext(agentState: AgentActivityState, width: Int): List<String> {
+        val lines = mutableListOf<String>()
+
+        // Sub-header
+        lines.addAll(renderSubHeader("Cognitive Context", width, terminal))
+
+        // Affinity as root element
+        val affinityName = agentState.affinityName ?: "UNKNOWN"
+        val affinityColor = SparkColors.forAffinityName(affinityName)
+        lines.add(terminal.render(affinityColor("${SparkColors.SparkIcons.STACK_ROOT} $affinityName")))
+
+        // Spark layers with tree characters
+        agentState.sparkNames.forEachIndexed { index, sparkName ->
+            val isLast = index == agentState.sparkNames.lastIndex
+            val prefix = if (isLast) SparkColors.SparkIcons.STACK_LAST else SparkColors.SparkIcons.STACK_BRANCH
+            val activeMarker = if (isLast) " ${terminal.render(TextColors.cyan("← active"))}" else ""
+
+            // Truncate spark name to fit width
+            val maxSparkNameLength = width - prefix.length - 12
+            val displayName = sparkName.take(maxSparkNameLength)
+
+            lines.add("$prefix $displayName$activeMarker")
+        }
+
+        // Show message if no sparks
+        if (agentState.sparkNames.isEmpty()) {
+            lines.add(terminal.render(dim("   (no specialization)")))
+        }
+
+        return lines
+    }
+
+    /**
+     * Render the Spark transition history section.
+     */
+    private fun renderSparkHistory(width: Int, maxLines: Int): List<String> {
+        val lines = mutableListOf<String>()
+
+        // Sub-header
+        lines.addAll(renderSubHeader("Spark History", width, terminal))
+
+        if (state.sparkHistory.isEmpty()) {
+            lines.add(terminal.render(dim("No transitions recorded")))
+            return lines
+        }
+
+        // Show recent transitions (most recent first)
+        state.sparkHistory.reversed().take(maxLines).forEach { transition ->
+            val time = formatTime(transition.timestamp)
+            val icon = when (transition.direction) {
+                SparkTransitionDirection.APPLIED -> SparkColors.SparkIcons.APPLIED
+                SparkTransitionDirection.REMOVED -> SparkColors.SparkIcons.REMOVED
+            }
+            val prefix = when (transition.direction) {
+                SparkTransitionDirection.APPLIED -> "+"
+                SparkTransitionDirection.REMOVED -> "-"
+            }
+            val color = when (transition.direction) {
+                SparkTransitionDirection.APPLIED -> TextColors.cyan
+                SparkTransitionDirection.REMOVED -> TextColors.gray
+            }
+
+            val maxNameLength = width - 12
+            val name = transition.sparkName.take(maxNameLength)
+            lines.add("${terminal.render(dim(time))} $icon ${terminal.render(color("$prefix$name"))}")
+        }
 
         return lines
     }

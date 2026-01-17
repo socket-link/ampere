@@ -13,6 +13,7 @@ import link.socket.ampere.cli.watch.presentation.AgentState
 import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.SystemState
 import link.socket.ampere.cli.watch.presentation.WatchViewState
+import link.socket.ampere.renderer.SparkColors
 
 /**
  * Adapter that renders dashboard content as a pane.
@@ -109,10 +110,15 @@ class DashboardPaneAdapter(
             AgentState.WAITING -> TextColors.yellow
         }
 
-        val maxNameLen = (width - 20).coerceAtLeast(10)
+        val depthIndicator = if (state.sparkDepth > 0) {
+            " ${SparkColors.renderDepthIndicator(state.sparkDepth, SparkColors.DepthDisplayStyle.DOTS)}"
+        } else ""
+        val maxNameLen = (width - 20 - depthIndicator.length).coerceAtLeast(10)
         val name = state.displayName.take(maxNameLen).padEnd(maxNameLen)
+        val nameStyle = state.affinityName?.let { SparkColors.forAffinityName(it) } ?: TextColors.white
+        val depthRendered = if (depthIndicator.isNotEmpty()) terminal.render(dim(depthIndicator)) else ""
 
-        return "$indicator $name ${terminal.render(stateColor(state.currentState.displayText))}"
+        return "$indicator ${terminal.render(nameStyle(name))}$depthRendered ${terminal.render(stateColor(state.currentState.displayText))}"
     }
 
     private fun getAgentIndicator(state: AgentState, agentIndex: Int): String {

@@ -11,7 +11,15 @@ data class AgentActivityState(
     val currentState: AgentState,
     val lastActivityTimestamp: Instant,
     val consecutiveCognitiveCycles: Int,
-    val isIdle: Boolean
+    val isIdle: Boolean,
+    /** The cognitive affinity name (e.g., "ANALYTICAL", "EXPLORATORY"). */
+    val affinityName: String? = null,
+    /** Names of Sparks currently on the stack, in order of application. */
+    val sparkNames: List<String> = emptyList(),
+    /** The current Spark stack depth. */
+    val sparkDepth: Int = 0,
+    /** Human-readable description of the current cognitive state. */
+    val cognitiveStateDescription: String? = null
 )
 
 /**

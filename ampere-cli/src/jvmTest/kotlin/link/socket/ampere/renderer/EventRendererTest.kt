@@ -7,11 +7,15 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.CognitiveStateSnapshot
+import link.socket.ampere.agents.domain.event.SparkAppliedEvent
+import link.socket.ampere.agents.domain.event.SparkRemovedEvent
 import link.socket.ampere.agents.domain.Urgency
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class EventRendererTest {
@@ -34,6 +38,16 @@ class EventRendererTest {
         } finally {
             System.setOut(originalOut)
         }
+    }
+
+    private fun stripAnsi(text: String): String {
+        return text.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "")
+    }
+
+    private fun extractRenderedIcon(output: String): String {
+        val line = stripAnsi(output).lineSequence().firstOrNull()?.trim() ?: ""
+        val parts = line.split(Regex("\\s+"))
+        return parts.getOrNull(1) ?: ""
     }
 
     /**
@@ -97,6 +111,74 @@ class EventRendererTest {
         changeDescription = changeDescription,
         reviewRequired = reviewRequired,
         assignedTo = assignedTo
+    )
+
+    private fun sparkAppliedEvent(
+        eventId: String = "evt-spark-applied-1",
+        timestamp: Instant = Clock.System.now(),
+        source: EventSource = EventSource.Agent("agent-test"),
+        urgency: Urgency = Urgency.LOW,
+        agentId: String = "agent-test",
+        stackDepth: Int = 2,
+        stackDescription: String = "[ANALYTICAL] → [Project:ampere]",
+        sparkName: String = "Project:ampere",
+        sparkType: String = "ProjectSpark"
+    ): SparkAppliedEvent = SparkAppliedEvent(
+        eventId = eventId,
+        timestamp = timestamp,
+        eventSource = source,
+        urgency = urgency,
+        agentId = agentId,
+        stackDepth = stackDepth,
+        stackDescription = stackDescription,
+        sparkName = sparkName,
+        sparkType = sparkType
+    )
+
+    private fun sparkRemovedEvent(
+        eventId: String = "evt-spark-removed-1",
+        timestamp: Instant = Clock.System.now(),
+        source: EventSource = EventSource.Agent("agent-test"),
+        urgency: Urgency = Urgency.LOW,
+        agentId: String = "agent-test",
+        stackDepth: Int = 1,
+        stackDescription: String = "[ANALYTICAL]",
+        previousSparkName: String = "Project:ampere"
+    ): SparkRemovedEvent = SparkRemovedEvent(
+        eventId = eventId,
+        timestamp = timestamp,
+        eventSource = source,
+        urgency = urgency,
+        agentId = agentId,
+        stackDepth = stackDepth,
+        stackDescription = stackDescription,
+        previousSparkName = previousSparkName
+    )
+
+    private fun snapshotEvent(
+        eventId: String = "evt-spark-snapshot-1",
+        timestamp: Instant = Clock.System.now(),
+        source: EventSource = EventSource.Agent("agent-test"),
+        urgency: Urgency = Urgency.LOW,
+        agentId: String = "agent-test",
+        stackDepth: Int = 3,
+        stackDescription: String = "[INTEGRATIVE] → [Project:ampere] → [Role:Planning]",
+        affinity: String = "INTEGRATIVE",
+        sparkNames: List<String> = listOf("Project:ampere", "Role:Planning"),
+        effectivePromptLength: Int = 1200,
+        availableToolCount: Int? = 7
+    ): CognitiveStateSnapshot = CognitiveStateSnapshot(
+        eventId = eventId,
+        timestamp = timestamp,
+        eventSource = source,
+        urgency = urgency,
+        agentId = agentId,
+        stackDepth = stackDepth,
+        stackDescription = stackDescription,
+        affinity = affinity,
+        sparkNames = sparkNames,
+        effectivePromptLength = effectivePromptLength,
+        availableToolCount = availableToolCount
     )
 
     @Test
@@ -260,6 +342,33 @@ class EventRendererTest {
             renderer.render(codeEvent())
         }
         assertContains(codeOutput, "💻")
+    }
+
+    @Test
+    fun `render SparkAppliedEvent uses applied icon in prefix`() {
+        val output = captureTerminalOutput { _, renderer ->
+            renderer.render(sparkAppliedEvent())
+        }
+
+        assertEquals(SparkColors.SparkIcons.APPLIED, extractRenderedIcon(output))
+    }
+
+    @Test
+    fun `render SparkRemovedEvent uses removed icon in prefix`() {
+        val output = captureTerminalOutput { _, renderer ->
+            renderer.render(sparkRemovedEvent())
+        }
+
+        assertEquals(SparkColors.SparkIcons.REMOVED, extractRenderedIcon(output))
+    }
+
+    @Test
+    fun `render CognitiveStateSnapshot uses snapshot icon in prefix`() {
+        val output = captureTerminalOutput { _, renderer ->
+            renderer.render(snapshotEvent())
+        }
+
+        assertEquals(SparkColors.SparkIcons.SNAPSHOT, extractRenderedIcon(output))
     }
 
     @Test

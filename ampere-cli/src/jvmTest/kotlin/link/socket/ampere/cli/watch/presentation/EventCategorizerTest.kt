@@ -8,6 +8,7 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
+import link.socket.ampere.agents.domain.event.SparkAppliedEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.memory.MemoryContext
 import link.socket.ampere.agents.events.tickets.TicketPriority
@@ -192,6 +193,24 @@ class EventCategorizerTest {
         val significance = EventCategorizer.categorize(routineEvent)
         assertEquals(EventSignificance.ROUTINE, significance)
         assertEquals(false, significance.shouldDisplayByDefault)
+    }
+
+    @Test
+    fun `ROUTINE - SparkApplied events are routine`() {
+        val event = SparkAppliedEvent(
+            eventId = "evt-spark-1",
+            timestamp = Clock.System.now(),
+            eventSource = EventSource.Agent("agent-test"),
+            urgency = Urgency.LOW,
+            agentId = "agent-test",
+            stackDepth = 2,
+            stackDescription = "[ANALYTICAL] → [Project:ampere]",
+            sparkName = "Project:ampere",
+            sparkType = "ProjectSpark"
+        )
+
+        val significance = EventCategorizer.categorize(event)
+        assertEquals(EventSignificance.ROUTINE, significance)
     }
 
     @Test

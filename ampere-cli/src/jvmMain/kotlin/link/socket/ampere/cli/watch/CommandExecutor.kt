@@ -3,10 +3,12 @@ package link.socket.ampere.cli.watch
 import link.socket.ampere.agents.execution.tools.issue.BatchIssueCreateRequest
 import link.socket.ampere.cli.goal.GoalHandler
 import link.socket.ampere.cli.help.CommandRegistry
+import link.socket.ampere.cli.watch.presentation.SparkTransitionDirection
 import link.socket.ampere.cli.watch.presentation.WatchPresenter
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.integrations.issues.BatchIssueCreator
 import link.socket.ampere.integrations.issues.github.GitHubCliProvider
+import link.socket.ampere.renderer.SparkColors
 import java.io.File
 
 /**
@@ -44,6 +46,7 @@ class CommandExecutor(
             "issues" -> executeIssues(arg)
             "ticket" -> executeTicket(arg)
             "thread" -> executeThread(arg)
+            "sparks", "spark", "cognitive" -> executeSparks(arg)
             "quit", "q", "exit" -> CommandResult.Quit
             else -> CommandResult.Error("Unknown command: $command\nType :help for available commands")
         }
@@ -276,6 +279,146 @@ class CommandExecutor(
                 }
             )
         }
+    }
+
+    /**
+     * Execute the :sparks command to inspect an agent's cognitive context.
+     */
+    private fun executeSparks(agentNameOrId: String?): CommandResult {
+        val viewState = presenter.getViewState()
+
+        // If no agent specified, show summary of all agents' cognitive states
+        if (agentNameOrId.isNullOrBlank()) {
+            if (viewState.agentStates.isEmpty()) {
+                return CommandResult.Success("No active agents with cognitive state to display.")
+            }
+
+            val output = buildString {
+                appendLine("╔══════════════════════════════════════════════════════════════╗")
+                appendLine("║ COGNITIVE STATE SUMMARY                                       ║")
+                appendLine("╠══════════════════════════════════════════════════════════════╣")
+
+                viewState.agentStates.values.sortedBy { it.displayName }.forEach { agent ->
+                    val affinityDisplay = agent.affinityName ?: "UNKNOWN"
+                    val depthIndicator = SparkColors.renderDepthIndicator(agent.sparkDepth, SparkColors.DepthDisplayStyle.DOTS)
+                    appendLine("║                                                               ║")
+                    appendLine("║ ${agent.displayName.padEnd(30)} $depthIndicator".padEnd(64) + "║")
+
+                    if (agent.affinityName != null) {
+                        appendLine("║   Affinity: $affinityDisplay".padEnd(64) + "║")
+                    }
+
+                    if (agent.sparkNames.isNotEmpty()) {
+                        val stackPreview = agent.sparkNames.joinToString(" → ").take(50)
+                        appendLine("║   Stack: $stackPreview".padEnd(64) + "║")
+                    } else {
+                        appendLine("║   Stack: (no specialization)".padEnd(64) + "║")
+                    }
+                }
+
+                appendLine("║                                                               ║")
+                appendLine("╚══════════════════════════════════════════════════════════════╝")
+                appendLine()
+                appendLine("Use :sparks <agent-name> for detailed view of a specific agent.")
+            }
+
+            return CommandResult.Success(output)
+        }
+
+        // Find the agent by name (case-insensitive partial match)
+        val agent = viewState.agentStates.values.find { agentState ->
+            agentState.displayName.equals(agentNameOrId, ignoreCase = true) ||
+            agentState.displayName.contains(agentNameOrId, ignoreCase = true) ||
+            agentState.agentId.contains(agentNameOrId, ignoreCase = true)
+        }
+
+        if (agent == null) {
+            val availableAgents = viewState.agentStates.values.map { it.displayName }.sorted()
+            return CommandResult.Error(buildString {
+                appendLine("Agent not found: $agentNameOrId")
+                appendLine()
+                if (availableAgents.isNotEmpty()) {
+                    appendLine("Available agents:")
+                    availableAgents.forEach { appendLine("  $it") }
+                } else {
+                    appendLine("No active agents.")
+                }
+            })
+        }
+
+        // Get cognitive state and history for this agent
+        val cognitiveState = presenter.getCognitiveState(agent.agentId)
+        val history = presenter.getSparkHistory(agent.agentId, 10)
+
+        val output = buildString {
+            appendLine("╔══════════════════════════════════════════════════════════════╗")
+            appendLine("║ COGNITIVE CONTEXT: ${agent.displayName}".padEnd(64) + "║")
+            appendLine("╠══════════════════════════════════════════════════════════════╣")
+            appendLine("║                                                               ║")
+
+            // Affinity section
+            val affinityName = agent.affinityName ?: cognitiveState?.affinityName ?: "UNKNOWN"
+            appendLine("║ Affinity: $affinityName".padEnd(64) + "║")
+            appendLine("║                                                               ║")
+
+            // Spark stack section
+            appendLine("╠══════════════════════════════════════════════════════════════╣")
+            appendLine("║ SPARK STACK                                                   ║")
+            appendLine("║                                                               ║")
+
+            val sparkNames = agent.sparkNames.ifEmpty { cognitiveState?.sparkNames ?: emptyList() }
+            if (sparkNames.isEmpty()) {
+                appendLine("║   (no specialization - operating at base affinity level)     ║")
+            } else {
+                sparkNames.forEachIndexed { index, sparkName ->
+                    val isActive = index == sparkNames.lastIndex
+                    val marker = if (isActive) " (ACTIVE)" else ""
+                    val line = "║ [${index + 1}] $sparkName$marker"
+                    appendLine(line.padEnd(64) + "║")
+                }
+            }
+
+            appendLine("║                                                               ║")
+
+            // History section
+            if (history.isNotEmpty()) {
+                appendLine("╠══════════════════════════════════════════════════════════════╣")
+                appendLine("║ RECENT TRANSITIONS                                            ║")
+                appendLine("║                                                               ║")
+
+                history.reversed().forEach { transition ->
+                    val time = formatTimeSince(transition.timestamp)
+                    val icon = when (transition.direction) {
+                        SparkTransitionDirection.APPLIED -> "+"
+                        SparkTransitionDirection.REMOVED -> "-"
+                    }
+                    val line = "║   $time  $icon ${transition.sparkName.take(40)}"
+                    appendLine(line.padEnd(64) + "║")
+                }
+
+                appendLine("║                                                               ║")
+            }
+
+            // Effective constraints section
+            appendLine("╠══════════════════════════════════════════════════════════════╣")
+            appendLine("║ EFFECTIVE STATE                                               ║")
+            appendLine("║                                                               ║")
+            appendLine("║ Depth: ${agent.sparkDepth}".padEnd(64) + "║")
+
+            if (cognitiveState != null) {
+                cognitiveState.effectivePromptLength?.let { length ->
+                    appendLine("║ Prompt length: $length chars".padEnd(64) + "║")
+                }
+                cognitiveState.availableToolCount?.let { count ->
+                    appendLine("║ Available tools: $count".padEnd(64) + "║")
+                }
+            }
+
+            appendLine("║                                                               ║")
+            appendLine("╚══════════════════════════════════════════════════════════════╝")
+        }
+
+        return CommandResult.Success(output)
     }
 
     private fun formatTimeSince(timestamp: kotlinx.datetime.Instant): String {

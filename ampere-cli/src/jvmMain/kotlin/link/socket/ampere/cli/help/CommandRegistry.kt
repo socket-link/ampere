@@ -116,6 +116,12 @@ object CommandRegistry {
             usage = "<id>",
         ),
         CommandDefinition(
+            name = "sparks",
+            aliases = listOf("spark", "cognitive"),
+            description = "Inspect agent's Spark stack and cognitive context",
+            usage = "[agent-name]",
+        ),
+        CommandDefinition(
             name = "quit",
             aliases = listOf("q", "exit"),
             description = "Exit dashboard",
