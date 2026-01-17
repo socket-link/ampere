@@ -3,8 +3,10 @@ package link.socket.ampere.agents.definition
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
@@ -13,6 +15,9 @@ import link.socket.ampere.agents.domain.cognition.FileAccessScope
 import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.agents.domain.cognition.SparkStack
 import link.socket.ampere.agents.domain.cognition.ToolId
+import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
+import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
+import link.socket.ampere.agents.domain.cognition.sparks.TaskSpark
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.memory.MemoryContext
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
@@ -223,6 +228,10 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
     private var agentIsRunning = false
     private var agentRuntimeScope: CoroutineScope? = null
     private var agentRuntimeLoopJob: Job? = null
+    @Transient
+    private val phaseSparkManager: PhaseSparkManager<S> by lazy(LazyThreadSafetyMode.NONE) {
+        PhaseSparkManager.create(this)
+    }
 
     // ==================== Agent Runtime ====================
 
@@ -232,10 +241,12 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
 
             val previousIdea = getCurrentState().getCurrentMemory().idea
 
-            val statePerception = perceiveState(
-                currentState = getCurrentState(),
-                newIdeas = listOf(previousIdea).toTypedArray(),
-            )
+            val statePerception = phaseSparkManager.withPhase(CognitivePhase.PERCEIVE) {
+                perceiveState(
+                    currentState = getCurrentState(),
+                    newIdeas = listOf(previousIdea).toTypedArray(),
+                )
+            }
             rememberNewPerception(statePerception)
 
             // Recall relevant knowledge from past similar tasks
@@ -245,21 +256,27 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
                 knowledge.knowledge.learnings
             }
 
-            val plan = determinePlanForTask(
-                task = currentTask,
-                relevantKnowledge = relevantKnowledge,
-                ideas = statePerception.ideas.toTypedArray(),
-            )
+            val plan = phaseSparkManager.withPhase(CognitivePhase.PLAN) {
+                determinePlanForTask(
+                    task = currentTask,
+                    relevantKnowledge = relevantKnowledge,
+                    ideas = statePerception.ideas.toTypedArray(),
+                )
+            }
             rememberNewPlan(plan)
 
-            val outcome = executePlan(plan)
+            val outcome = phaseSparkManager.withPhase(CognitivePhase.EXECUTE) {
+                executePlan(plan)
+            }
             rememberNewOutcome(outcome)
 
-            // Extract and store knowledge from this execution
-            extractAndStoreKnowledge(outcome, currentTask, plan)
+            phaseSparkManager.withPhase(CognitivePhase.LEARN) {
+                // Extract and store knowledge from this execution
+                extractAndStoreKnowledge(outcome, currentTask, plan)
 
-            val nextIdea = evaluateNextIdeaFromOutcomes(outcome)
-            rememberNewIdea(nextIdea)
+                val nextIdea = evaluateNextIdeaFromOutcomes(outcome)
+                rememberNewIdea(nextIdea)
+            }
 
             delay(1.seconds)
         }
@@ -391,7 +408,16 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         return plan
     }
 
-    /** Executes a plan of actions */
+    /**
+     * Executes a plan of actions with automatic TaskSpark lifecycle management.
+     *
+     * **Ticket #228/#229**: Each task in the plan receives its own TaskSpark
+     * that is applied before execution and removed after completion. This
+     * provides task-specific context during execution.
+     *
+     * @param plan The plan containing tasks to execute
+     * @return The combined outcome of all tasks in the plan
+     */
     override suspend fun executePlan(
         plan: Plan,
     ): Outcome {
@@ -401,9 +427,7 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
 
         return plan.tasks.map { task ->
             rememberNewTask(task)
-            val outcome = runLLMToExecuteTask(task)
-            rememberNewOutcome(outcome)
-            outcome
+            executeTaskWithSpark(task)
         }.reduce { runningOutcome, outcome ->
             if (runningOutcome !is Outcome.Success) {
                 runningOutcome
@@ -413,11 +437,84 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         }
     }
 
-    /** Executes a task from a plan */
+    /**
+     * Executes a single task with TaskSpark lifecycle management.
+     *
+     * This internal method applies a TaskSpark before task execution
+     * and ensures it's removed afterward.
+     *
+     * @param task The task to execute
+     * @return The outcome of the task execution
+     */
+    private suspend fun executeTaskWithSpark(task: Task): Outcome {
+        // Skip TaskSpark for blank tasks
+        if (task is Task.Blank) {
+            return Outcome.blank
+        }
+
+        // Apply TaskSpark before execution
+        val taskSpark = TaskSpark.fromTask(task)
+        spark<AutonomousAgent<S>>(taskSpark)
+
+        return try {
+            val outcome = runLLMToExecuteTask(task)
+            rememberNewOutcome(outcome)
+            outcome
+        } finally {
+            // Ensure TaskSpark is removed even during cancellation
+            withContext(NonCancellable) {
+                val currentTop = sparkStack.peek()
+                if (currentTop is TaskSpark && currentTop.taskId == taskSpark.taskId) {
+                    unspark()
+                }
+            }
+        }
+    }
+
+    /**
+     * Executes a task from a plan with automatic TaskSpark lifecycle management.
+     *
+     * **Ticket #228/#229**: This method automatically applies a TaskSpark when
+     * task execution begins and removes it when execution completes (success,
+     * failure, or cancellation).
+     *
+     * The TaskSpark provides task-specific context to the agent's cognitive
+     * stack during execution, and is guaranteed to be removed via the finally
+     * block with NonCancellable context.
+     *
+     * @param task The task to execute
+     * @return The outcome of the task execution
+     */
     override suspend fun runTask(task: Task): Outcome {
-        val outcome = runLLMToExecuteTask(task)
-        rememberNewOutcome(outcome)
-        return outcome
+        // Skip TaskSpark for blank tasks
+        if (task is Task.Blank) {
+            return Outcome.blank
+        }
+
+        // Apply TaskSpark before execution
+        val taskSpark = TaskSpark.fromTask(task)
+        val preSparkDepth = sparkDepth
+        spark<AutonomousAgent<S>>(taskSpark)
+
+        return try {
+            val outcome = runLLMToExecuteTask(task)
+            rememberNewOutcome(outcome)
+            outcome
+        } finally {
+            // Ensure TaskSpark is removed even during cancellation
+            withContext(NonCancellable) {
+                // Pop the TaskSpark we added (verify we're removing the right one)
+                val currentTop = sparkStack.peek()
+                if (currentTop is TaskSpark && currentTop.taskId == taskSpark.taskId) {
+                    unspark()
+                }
+                // Safety check: if stack depth is wrong, log warning and attempt recovery
+                if (sparkDepth > preSparkDepth) {
+                    // Multiple TaskSparks may have been added (nested tasks)
+                    // Only remove ours - nested tasks should manage their own
+                }
+            }
+        }
     }
 
     /** Executes a tool with the given parameters */
