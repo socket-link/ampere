@@ -36,6 +36,8 @@ class GitHubCliProvider : IssueTrackerProvider {
         prettyPrint = false
     }
 
+    private val labelCache = mutableMapOf<String, MutableSet<String>>()
+
     override suspend fun validateConnection(): Result<Unit> = runCatching {
         val result = executeGh("auth", "status")
         if (result.exitCode != 0) {
@@ -359,7 +361,56 @@ class GitHubCliProvider : IssueTrackerProvider {
      * @return Success if label exists or was created, Failure if creation failed
      */
     private suspend fun ensureLabelExists(repository: String, labelName: String): Result<Unit> = runCatching {
-        // Check if label exists by listing all labels and checking for this one
+        val trimmedLabel = labelName.trim()
+        if (trimmedLabel.isEmpty()) return@runCatching
+
+        val normalizedLabel = normalizeLabelName(trimmedLabel)
+        val existingLabels = labelCache.getOrPut(repository) {
+            fetchLabelNames(repository).toMutableSet()
+        }
+
+        // Check if our label exists (case-insensitive comparison)
+        if (existingLabels.contains(normalizedLabel)) return@runCatching
+
+        // Create the label with a default color
+        // Color mapping based on common label patterns
+        val color = when {
+            normalizedLabel.startsWith("p0") || normalizedLabel == "critical" -> "b60205" // red
+            normalizedLabel.startsWith("p1") || normalizedLabel == "high" -> "d93f0b" // orange
+            normalizedLabel == "bug" -> "d73a4a" // red
+            normalizedLabel == "feature" || normalizedLabel == "enhancement" -> "a2eeef" // cyan
+            normalizedLabel == "task" -> "0075ca" // blue
+            normalizedLabel == "documentation" || normalizedLabel == "docs" -> "0075ca" // blue
+            normalizedLabel.contains("blocker") -> "d73a4a" // red
+            normalizedLabel.contains("testing") || normalizedLabel == "test" -> "d4c5f9" // purple
+            normalizedLabel == "cli" -> "fbca04" // yellow
+            else -> "ededed" // gray for unknown labels
+        }
+
+        val createResult = executeGh(
+            "label",
+            "create",
+            trimmedLabel,
+            "--color",
+            color,
+            "--repo",
+            repository,
+        )
+
+        if (createResult.exitCode != 0) {
+            if (isLabelAlreadyExistsError(createResult)) {
+                // Another label with the same name already exists; refresh cache and continue.
+                labelCache[repository] = fetchLabelNames(repository).toMutableSet()
+                return@runCatching
+            }
+            val message = createResult.stderr.ifBlank { createResult.stdout }
+            error("Failed to create label '$trimmedLabel': $message")
+        }
+
+        existingLabels.add(normalizedLabel)
+    }
+
+    private suspend fun fetchLabelNames(repository: String): Set<String> {
         val listResult = executeGh(
             "label",
             "list",
@@ -367,55 +418,28 @@ class GitHubCliProvider : IssueTrackerProvider {
             repository,
             "--json",
             "name",
+            "--limit",
+            "1000",
         )
 
         if (listResult.exitCode != 0) {
             error("Failed to list labels: ${listResult.stderr}")
         }
 
-        // Parse existing labels
-        @Serializable
-        data class LabelInfo(val name: String)
-
-        val existingLabels = if (listResult.stdout.isBlank() || listResult.stdout.trim() == "[]") {
-            emptyList()
+        return if (listResult.stdout.isBlank() || listResult.stdout.trim() == "[]") {
+            emptySet()
         } else {
-            json.decodeFromString<List<LabelInfo>>(listResult.stdout)
+            json.decodeFromString<List<GitHubLabelJson>>(listResult.stdout)
+                .map { normalizeLabelName(it.name) }
+                .toSet()
         }
+    }
 
-        // Check if our label exists (case-sensitive comparison)
-        val labelExists = existingLabels.any { it.name == labelName }
+    private fun normalizeLabelName(labelName: String): String = labelName.trim().lowercase()
 
-        if (!labelExists) {
-            // Create the label with a default color
-            // Color mapping based on common label patterns
-            val color = when {
-                labelName.startsWith("p0") || labelName == "critical" -> "b60205" // red
-                labelName.startsWith("p1") || labelName == "high" -> "d93f0b" // orange
-                labelName == "bug" -> "d73a4a" // red
-                labelName == "feature" || labelName == "enhancement" -> "a2eeef" // cyan
-                labelName == "task" -> "0075ca" // blue
-                labelName == "documentation" || labelName == "docs" -> "0075ca" // blue
-                labelName.contains("blocker") -> "d73a4a" // red
-                labelName.contains("testing") || labelName == "test" -> "d4c5f9" // purple
-                labelName == "cli" -> "fbca04" // yellow
-                else -> "ededed" // gray for unknown labels
-            }
-
-            val createResult = executeGh(
-                "label",
-                "create",
-                labelName,
-                "--color",
-                color,
-                "--repo",
-                repository,
-            )
-
-            if (createResult.exitCode != 0) {
-                error("Failed to create label '$labelName': ${createResult.stderr}")
-            }
-        }
+    private fun isLabelAlreadyExistsError(result: CommandResult): Boolean {
+        val message = (result.stderr + "\n" + result.stdout).lowercase()
+        return message.contains("already exists") || message.contains("name already exists")
     }
 
     /**
