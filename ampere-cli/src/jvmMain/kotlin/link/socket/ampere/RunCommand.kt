@@ -245,8 +245,10 @@ class RunCommand(
                                     // Verbose mode just controls LogPane visibility
                                     if (viewConfig.verboseMode != wasVerbose) {
                                         // Clear screen to prevent artifacts when toggling
-                                        print("\u001B[2J\u001B[H")
-                                        System.out.flush()
+                                        // Use original stdout to bypass LogCapture
+                                        val out = LogCapture.getOriginalOut() ?: System.out
+                                        out.print("\u001B[2J\u001B[H")
+                                        out.flush()
                                     }
 
                                     lastRenderedOutput = null
@@ -342,8 +344,10 @@ class RunCommand(
                     }
 
                     if (output != lastRenderedOutput) {
-                        print(output)
-                        System.out.flush()
+                        // Use original stdout to bypass LogCapture suppression
+                        val out = LogCapture.getOriginalOut() ?: System.out
+                        out.print(output)
+                        out.flush()
                         lastRenderedOutput = output
                     }
 
@@ -359,10 +363,12 @@ class RunCommand(
             // Clean shutdown
             throw e
         } catch (e: Exception) {
-            print("\u001B[2J\u001B[H")
-            println("Error: ${e.message}")
-            e.printStackTrace()
-            System.out.flush()
+            // Use original stdout to bypass LogCapture
+            val out = LogCapture.getOriginalOut() ?: System.out
+            out.print("\u001B[2J\u001B[H")
+            out.println("Error: ${e.message}")
+            e.printStackTrace(out)
+            out.flush()
             throw e
         } finally {
             LogCapture.stop()

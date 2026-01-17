@@ -188,8 +188,10 @@ class StartCommand(
                                     // Verbose mode just controls LogPane visibility
                                     if (viewConfig.verboseMode != wasVerbose) {
                                         // Clear screen to prevent artifacts when toggling
-                                        print("\u001B[2J\u001B[H")
-                                        System.out.flush()
+                                        // Use original stdout to bypass LogCapture
+                                        val out = LogCapture.getOriginalOut() ?: System.out
+                                        out.print("\u001B[2J\u001B[H")
+                                        out.flush()
                                     }
 
                                     lastRenderedOutput = null  // Force re-render
@@ -296,8 +298,10 @@ class StartCommand(
 
                     // Only flush to terminal if output changed
                     if (output != lastRenderedOutput) {
-                        print(output)
-                        System.out.flush()
+                        // Use original stdout to bypass LogCapture suppression
+                        val out = LogCapture.getOriginalOut() ?: System.out
+                        out.print(output)
+                        out.flush()
                         lastRenderedOutput = output
                     }
 
@@ -313,11 +317,12 @@ class StartCommand(
             // Clean shutdown
             throw e
         } catch (e: Exception) {
-            // Show error on screen
-            print("\u001B[2J\u001B[H")  // Clear screen
-            println("Error: ${e.message}")
-            e.printStackTrace()
-            System.out.flush()
+            // Show error on screen - use original stdout to bypass LogCapture
+            val out = LogCapture.getOriginalOut() ?: System.out
+            out.print("\u001B[2J\u001B[H")  // Clear screen
+            out.println("Error: ${e.message}")
+            e.printStackTrace(out)
+            out.flush()
             throw e
         } finally {
             LogCapture.stop() // Stop capturing logs
