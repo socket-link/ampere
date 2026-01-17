@@ -190,7 +190,7 @@ class JazzDemoCommand(
                 while (isActive) {
                     // Update panes with current state
                     val watchState = presenter.getViewState()
-                    eventPane.updateEvents(watchState.recentSignificantEvents)
+                    eventPane.updateEvents(watchState.recentSignificantEvents, watchState.agentStates)
 
                     // Update memory pane with stats from agent state
                     memoryState = updateMemoryState(memoryState, watchState, jazzPane)
@@ -234,15 +234,17 @@ class JazzDemoCommand(
                             val focusedAgentId = viewConfig.focusedAgentIndex?.let { idx ->
                                 watchState.agentStates.keys.elementAtOrNull(idx - 1)
                             }
-                            agentFocusPane.updateState(
-                                AgentFocusPane.FocusState(
-                                    agentId = focusedAgentId,
-                                    agentIndex = viewConfig.focusedAgentIndex,
-                                    agentState = focusedAgentId?.let { watchState.agentStates[it] },
-                                    recentEvents = watchState.recentSignificantEvents,
-                                    cognitiveClusters = emptyList()
+                                agentFocusPane.updateState(
+                                    AgentFocusPane.FocusState(
+                                        agentId = focusedAgentId,
+                                        agentIndex = viewConfig.focusedAgentIndex,
+                                        agentState = focusedAgentId?.let { watchState.agentStates[it] },
+                                        recentEvents = watchState.recentSignificantEvents,
+                                        cognitiveClusters = emptyList(),
+                                        sparkHistory = focusedAgentId?.let { presenter.getSparkHistory(it, 20) }
+                                            ?: emptyList()
+                                    )
                                 )
-                            )
                             agentFocusPane
                         }
                         viewConfig.verboseMode -> logPane

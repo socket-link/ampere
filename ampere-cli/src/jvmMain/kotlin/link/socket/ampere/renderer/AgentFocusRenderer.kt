@@ -77,7 +77,13 @@ class AgentFocusRenderer(
     }
 
     private fun StringBuilder.appendHeader(agentState: AgentActivityState, agentIndex: Int?) {
-        append(terminal.render(bold(TextColors.cyan("Agent Focus: ${agentState.displayName}"))))
+        val title = "Agent Focus: ${agentState.displayName}"
+        val affinityStyle = agentState.affinityName?.let { SparkColors.forAffinityName(it) } ?: TextColors.cyan
+        append(terminal.render(bold(affinityStyle(title))))
+        if (agentState.sparkDepth > 0) {
+            val depthIndicator = SparkColors.renderDepthIndicator(agentState.sparkDepth, SparkColors.DepthDisplayStyle.DOTS)
+            append(terminal.render(dim(" $depthIndicator")))
+        }
         if (agentIndex != null) {
             append(terminal.render(dim(" (press $agentIndex to return here)")))
         }

@@ -10,12 +10,16 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.event.CognitiveStateSnapshot
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
+import link.socket.ampere.agents.domain.event.SparkAppliedEvent
+import link.socket.ampere.agents.domain.event.SparkEvent
+import link.socket.ampere.agents.domain.event.SparkRemovedEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.events.relay.EventRelayFilters
 import link.socket.ampere.agents.events.relay.EventRelayService
@@ -35,6 +39,7 @@ class WatchPresenter(
 
     private val categorizer = EventCategorizer
     private val clusterer = CognitiveClusterer(clock = clock)
+    private val sparkHistory = SparkHistoryCollector()
 
     // Mutable state - only modified by event handler
     private val agentStates = mutableMapOf<String, AgentActivityState>()
@@ -81,6 +86,9 @@ class WatchPresenter(
             // Try to cluster the event
             val cluster = clusterer.processEvent(event)
 
+            // Handle Spark events specially - track cognitive state
+            handleSparkEvent(event)
+
             // Update agent state
             updateAgentState(agentId, event, cluster)
 
@@ -95,6 +103,45 @@ class WatchPresenter(
         } catch (e: Exception) {
             // Log error but don't crash the watch system
             println("Error processing event in watch presenter: ${e.message}")
+        }
+    }
+
+    /**
+     * Process SparkEvents to track cognitive state changes.
+     */
+    private fun handleSparkEvent(event: Event) {
+        when (event) {
+            is SparkAppliedEvent -> {
+                sparkHistory.recordApplied(
+                    agentId = event.agentId,
+                    timestamp = event.timestamp,
+                    sparkName = event.sparkName,
+                    sparkType = event.sparkType,
+                    stackDepth = event.stackDepth,
+                    stackDescription = event.stackDescription
+                )
+            }
+            is SparkRemovedEvent -> {
+                sparkHistory.recordRemoved(
+                    agentId = event.agentId,
+                    timestamp = event.timestamp,
+                    previousSparkName = event.previousSparkName,
+                    stackDepth = event.stackDepth,
+                    stackDescription = event.stackDescription
+                )
+            }
+            is CognitiveStateSnapshot -> {
+                sparkHistory.recordSnapshot(
+                    agentId = event.agentId,
+                    affinity = event.affinity,
+                    sparkNames = event.sparkNames,
+                    stackDepth = event.stackDepth,
+                    effectivePromptLength = event.effectivePromptLength,
+                    availableToolCount = event.availableToolCount,
+                    stackDescription = event.stackDescription
+                )
+            }
+            else -> { /* Not a Spark event */ }
         }
     }
 
@@ -122,11 +169,18 @@ class WatchPresenter(
         // Determine new state based on event type and cycle count
         val newState = determineAgentState(event, newCycleCount)
 
+        // Get cognitive state from Spark tracking
+        val cognitiveState = sparkHistory.getCognitiveState(agentId)
+
         agentStates[agentId] = current.copy(
             currentState = newState,
             lastActivityTimestamp = event.timestamp,
             consecutiveCognitiveCycles = newCycleCount,
-            isIdle = newState == AgentState.IDLE
+            isIdle = newState == AgentState.IDLE,
+            affinityName = cognitiveState?.affinityName ?: current.affinityName,
+            sparkNames = cognitiveState?.sparkNames ?: current.sparkNames,
+            sparkDepth = cognitiveState?.depth ?: current.sparkDepth,
+            cognitiveStateDescription = cognitiveState?.description ?: current.cognitiveStateDescription
         )
 
         invalidateCache()
@@ -224,6 +278,7 @@ class WatchPresenter(
         // Remove stale agents to prevent unbounded memory growth
         agentsToRemove.forEach { agentId ->
             agentStates.remove(agentId)
+            sparkHistory.clearAgent(agentId)
         }
 
         // Only invalidate cache if state actually changed
@@ -309,5 +364,26 @@ class WatchPresenter(
 
     fun getRecentClusters(): List<CognitiveCluster> {
         return clusterer.getRecentClusters()
+    }
+
+    /**
+     * Get Spark transition history for a specific agent.
+     */
+    fun getSparkHistory(agentId: String, limit: Int = 20): List<SparkTransition> {
+        return sparkHistory.getHistory(agentId, limit)
+    }
+
+    /**
+     * Get all recent Spark transitions across all agents.
+     */
+    fun getAllRecentSparkTransitions(limit: Int = 50): List<SparkTransition> {
+        return sparkHistory.getAllRecentTransitions(limit)
+    }
+
+    /**
+     * Get current cognitive state for an agent.
+     */
+    fun getCognitiveState(agentId: String): CognitiveDisplayState? {
+        return sparkHistory.getCognitiveState(agentId)
     }
 }

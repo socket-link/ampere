@@ -283,7 +283,7 @@ class RunCommand(
                         helpRenderer.render()
                     } else {
                         val watchState = presenter.getViewState()
-                        eventPane.updateEvents(watchState.recentSignificantEvents)
+                        eventPane.updateEvents(watchState.recentSignificantEvents, watchState.agentStates)
 
                         memoryState = updateMemoryState(memoryState, watchState, jazzPane)
                         memoryPane.updateState(memoryState)
@@ -330,7 +330,9 @@ class RunCommand(
                                         agentIndex = viewConfig.focusedAgentIndex,
                                         agentState = focusedAgentId?.let { watchState.agentStates[it] },
                                         recentEvents = watchState.recentSignificantEvents,
-                                        cognitiveClusters = emptyList()
+                                        cognitiveClusters = emptyList(),
+                                        sparkHistory = focusedAgentId?.let { presenter.getSparkHistory(it, 20) }
+                                            ?: emptyList()
                                     )
                                 )
                                 agentFocusPane

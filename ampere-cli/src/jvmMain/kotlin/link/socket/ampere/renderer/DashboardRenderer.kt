@@ -42,7 +42,10 @@ class DashboardRenderer(
             append("\n")
 
             // Recent significant events
-            appendRecentEvents(viewState.recentSignificantEvents)
+            val affinityByAgentName = viewState.agentStates.values.associate { state ->
+                state.displayName to state.affinityName
+            }
+            appendRecentEvents(viewState.recentSignificantEvents, affinityByAgentName)
             append("\n")
 
             // Footer with keyboard shortcuts
@@ -99,14 +102,23 @@ class DashboardRenderer(
                 " (${state.consecutiveCognitiveCycles} cycles)"
             } else ""
 
-            append("$spinner ${state.displayName.padEnd(25)} ")
+            val name = state.displayName.take(25).padEnd(25)
+            val nameStyle = state.affinityName?.let { SparkColors.forAffinityName(it) } ?: TextColors.white
+            val depthIndicator = if (state.sparkDepth > 0) {
+                " ${SparkColors.renderDepthIndicator(state.sparkDepth, SparkColors.DepthDisplayStyle.DOTS)}"
+            } else ""
+
+            append("$spinner ${terminal.render(nameStyle(name))} ")
             append(terminal.render(stateColor(state.currentState.displayText)))
-            append(terminal.render(dim(cycleInfo)))
+            append(terminal.render(dim(cycleInfo + depthIndicator)))
             append("\n")
         }
     }
 
-    private fun StringBuilder.appendRecentEvents(events: List<link.socket.ampere.cli.watch.presentation.SignificantEventSummary>) {
+    private fun StringBuilder.appendRecentEvents(
+        events: List<link.socket.ampere.cli.watch.presentation.SignificantEventSummary>,
+        affinityByAgentName: Map<String, String?>
+    ) {
         append(terminal.render(bold("Recent Events")))
         append("\n")
 
@@ -128,7 +140,10 @@ class DashboardRenderer(
             append(" ")
             append(terminal.render(eventColor(event.summaryText)))
             append(" ")
-            append(terminal.render(dim("from ${event.sourceAgentName}")))
+            append(terminal.render(dim("from ")))
+            val affinityName = affinityByAgentName[event.sourceAgentName]
+            val agentColor = affinityName?.let { SparkColors.forAffinityName(it) } ?: TextColors.gray
+            append(terminal.render(agentColor(event.sourceAgentName)))
             append("\n")
         }
     }

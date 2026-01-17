@@ -23,7 +23,10 @@ import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
+import link.socket.ampere.agents.domain.event.CognitiveStateSnapshot
+import link.socket.ampere.agents.domain.event.SparkAppliedEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
+import link.socket.ampere.agents.domain.event.SparkRemovedEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 
@@ -131,7 +134,11 @@ class EventRenderer(
             is ProductEvent -> "💡" to green
             is TicketEvent -> "🎫" to green
             is ToolEvent -> "🔧" to yellow
-            is SparkEvent -> "⚡" to magenta
+            // Spark events have distinct icons based on type
+            is SparkAppliedEvent -> SparkColors.SparkIcons.APPLIED to cyan
+            is SparkRemovedEvent -> SparkColors.SparkIcons.REMOVED to gray
+            is CognitiveStateSnapshot -> SparkColors.SparkIcons.SNAPSHOT to magenta
+            is SparkEvent -> SparkColors.SparkIcons.APPLIED to magenta // fallback
         }
     }
 

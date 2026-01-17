@@ -231,7 +231,7 @@ class StartCommand(
                     } else {
                         // Normal TUI rendering
                         val watchState = presenter.getViewState()
-                        eventPane.updateEvents(watchState.recentSignificantEvents)
+                        eventPane.updateEvents(watchState.recentSignificantEvents, watchState.agentStates)
 
                         // Update memory state
                         memoryState = updateMemoryState(memoryState, watchState, jazzPane)
@@ -283,7 +283,9 @@ class StartCommand(
                                         agentIndex = viewConfig.focusedAgentIndex,
                                         agentState = focusedAgentId?.let { watchState.agentStates[it] },
                                         recentEvents = watchState.recentSignificantEvents,
-                                        cognitiveClusters = emptyList()
+                                        cognitiveClusters = emptyList(),
+                                        sparkHistory = focusedAgentId?.let { presenter.getSparkHistory(it, 20) }
+                                            ?: emptyList()
                                     )
                                 )
                                 agentFocusPane

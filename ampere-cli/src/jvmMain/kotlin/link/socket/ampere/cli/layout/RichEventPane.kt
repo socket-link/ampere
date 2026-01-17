@@ -7,8 +7,10 @@ import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import link.socket.ampere.cli.watch.presentation.AgentActivityState
 import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.SignificantEventSummary
+import link.socket.ampere.renderer.SparkColors
 
 /**
  * Event pane with rich content display and expandable details.
@@ -32,17 +34,24 @@ class RichEventPane(
         val headline: String,
         val details: List<String>,
         val significance: EventSignificance,
-        val sourceAgent: String
+        val sourceAgentName: String
     )
 
     private var events: List<RichEvent> = emptyList()
+    private var affinityByAgentName: Map<String, String?> = emptyMap()
     var expandedIndex: Int? = null
     var verboseMode: Boolean = false
 
     /**
      * Update with event summaries from the presenter.
      */
-    fun updateEvents(summaries: List<SignificantEventSummary>) {
+    fun updateEvents(
+        summaries: List<SignificantEventSummary>,
+        agentStates: Map<String, AgentActivityState> = emptyMap()
+    ) {
+        affinityByAgentName = agentStates.values.associate { state ->
+            state.displayName to state.affinityName
+        }
         events = summaries
             .take(9)
             .mapIndexed { index, summary ->
@@ -144,8 +153,11 @@ class RichEventPane(
         lines.add("    ${terminal.render(dim(headline))}")
 
         // Third line: source agent (if not too wide)
-        if (event.sourceAgent.isNotBlank() && width > 20) {
-            val agentLabel = "    ${terminal.render(TextColors.cyan(event.sourceAgent))}"
+        val agentName = IdFormatter.formatAgentId(event.sourceAgentName)
+        if (event.sourceAgentName.isNotBlank() && width > 20) {
+            val affinityName = affinityByAgentName[event.sourceAgentName]
+            val agentColor = affinityName?.let { SparkColors.forAffinityName(it) } ?: TextColors.cyan
+            val agentLabel = "    ${terminal.render(agentColor(agentName))}"
             lines.add(agentLabel)
         }
 
@@ -201,7 +213,10 @@ class RichEventPane(
 
         // Timestamp and source
         lines.add(terminal.render(dim("Time: ${formatFullTime(event.timestamp)}")))
-        lines.add(terminal.render(dim("From: ${event.sourceAgent}")))
+        val agentName = IdFormatter.formatAgentId(event.sourceAgentName)
+        val affinityName = affinityByAgentName[event.sourceAgentName]
+        val agentColor = affinityName?.let { SparkColors.forAffinityName(it) } ?: TextColors.cyan
+        lines.add(terminal.render(dim("From: ")) + terminal.render(agentColor(agentName)))
         lines.add("")
 
         // Headline
@@ -271,7 +286,7 @@ class RichEventPane(
             headline = formattedSummary.take(40),
             details = listOf(formattedSummary),
             significance = significance,
-            sourceAgent = IdFormatter.formatAgentId(sourceAgentName)
+            sourceAgentName = sourceAgentName
         )
     }
 
