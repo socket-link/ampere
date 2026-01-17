@@ -168,22 +168,22 @@ class AgentFactory(
      */
     private fun applySparkStack(agent: AutonomousAgent<*>, agentType: AgentType) {
         // Apply ProjectSpark first
-        agent.spark<AutonomousAgent<*>>(effectiveProjectSpark)
+        agent.spark(effectiveProjectSpark)
 
         // Apply appropriate RoleSpark based on agent type
         when (agentType) {
             AgentType.CODE -> {
-                agent.spark<AutonomousAgent<*>>(RoleSpark.Code)
-                agent.spark<AutonomousAgent<*>>(LanguageSpark.Kotlin)
+                agent.spark(RoleSpark.Code)
+                agent.spark(LanguageSpark.Kotlin)
             }
             AgentType.PRODUCT -> {
-                agent.spark<AutonomousAgent<*>>(RoleSpark.Planning)
+                agent.spark(RoleSpark.Planning)
             }
             AgentType.PROJECT -> {
-                agent.spark<AutonomousAgent<*>>(RoleSpark.Planning)
+                agent.spark(RoleSpark.Planning)
             }
             AgentType.QUALITY -> {
-                agent.spark<AutonomousAgent<*>>(RoleSpark.Code)
+                agent.spark(RoleSpark.Code)
             }
         }
     }
