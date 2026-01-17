@@ -168,8 +168,10 @@ class JazzDemoCommand(
                                 // Verbose mode just controls LogPane visibility
                                 if (viewConfig.verboseMode != wasVerbose) {
                                     // Clear screen to prevent artifacts when toggling
-                                    print("\u001B[2J\u001B[H")
-                                    System.out.flush()
+                                    // Use original stdout to bypass LogCapture
+                                    val out = LogCapture.getOriginalOut() ?: System.out
+                                    out.print("\u001B[2J\u001B[H")
+                                    out.flush()
                                 }
                             }
                             is DemoInputHandler.KeyResult.ExecuteCommand -> {
@@ -249,8 +251,10 @@ class JazzDemoCommand(
 
                     // Render the 3-column layout
                     val output = layout.render(eventPane, jazzPane, rightPane, statusBarStr)
-                    print(output)
-                    System.out.flush()
+                    // Use original stdout to bypass LogCapture suppression
+                    val out = LogCapture.getOriginalOut() ?: System.out
+                    out.print(output)
+                    out.flush()
 
                     delay(250) // 4 FPS
                 }

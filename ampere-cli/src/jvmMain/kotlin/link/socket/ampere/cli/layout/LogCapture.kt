@@ -70,6 +70,16 @@ object LogCapture {
     fun isCapturing(): Boolean = isCapturing
 
     /**
+     * Get the original stdout stream for direct TUI rendering.
+     * Returns null if not currently capturing.
+     *
+     * Use this for TUI rendering output that should bypass log capture
+     * and go directly to the terminal. This prevents the TUI from
+     * being suppressed while still capturing other stdout/stderr.
+     */
+    fun getOriginalOut(): PrintStream? = originalOut
+
+    /**
      * PrintStream that captures output and sends to LogPane.
      *
      * @param original The original PrintStream to optionally forward to
