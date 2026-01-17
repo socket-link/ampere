@@ -17,6 +17,11 @@ import link.socket.ampere.agents.definition.CodeAgent
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.domain.cognition.sparks.AmpereProjectSpark
+import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
+import link.socket.ampere.agents.domain.cognition.sparks.LanguageSpark
+import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
+import link.socket.ampere.agents.domain.cognition.sparks.RoleSpark
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.TicketEvent
@@ -103,6 +108,14 @@ fun main() {
 
             println("🤖 CodeWriterAgent created")
             println("   Agent ID: ${agent.id}")
+            println()
+
+            // Apply baseline Sparks (Project + Role + Language)
+            agent.spark<CodeAgent>(AmpereProjectSpark.spark)
+            agent.spark<CodeAgent>(RoleSpark.Code)
+            agent.spark<CodeAgent>(LanguageSpark.Kotlin)
+
+            println("✨ Spark stack initialized: ${agent.cognitiveState}")
             println()
 
             // Track cognitive cycle completion
@@ -325,7 +338,10 @@ private suspend fun handleTicketAssignment(
     ticketId: String,
     context: AmpereContext
 ) {
+    val phaseSparkManager = PhaseSparkManager(agent, enabled = true)
+
     try {
+
         // Fetch ticket details
         val ticketResult = context.environmentService.ticketRepository.getTicket(ticketId)
         val ticket = ticketResult.getOrNull()
@@ -346,7 +362,10 @@ private suspend fun handleTicketAssignment(
 
         // PHASE 1: PERCEIVE
         println("   🧠 [PHASE 1: PERCEIVE] Analyzing current state...")
-        val perception = agent.perceiveState(agent.getCurrentState())
+        val perception = phaseSparkManager.withPhase(CognitivePhase.PERCEIVE) {
+            println("      🔥 Spark stack: ${agent.cognitiveState}")
+            agent.perceiveState(agent.getCurrentState())
+        }
         println("      Generated ${perception.ideas.size} idea(s)")
         println()
 
@@ -357,11 +376,14 @@ private suspend fun handleTicketAssignment(
 
         // PHASE 2: PLAN
         println("   📋 [PHASE 2: PLAN] Creating execution plan...")
-        val plan = agent.determinePlanForTask(
-            task = task,
-            ideas = arrayOf(perception.ideas.first()),
-            relevantKnowledge = emptyList()
-        )
+        val plan = phaseSparkManager.withPhase(CognitivePhase.PLAN) {
+            println("      🔥 Spark stack: ${agent.cognitiveState}")
+            agent.determinePlanForTask(
+                task = task,
+                ideas = arrayOf(perception.ideas.first()),
+                relevantKnowledge = emptyList()
+            )
+        }
         println("      Created plan with ${plan.tasks.size} step(s)")
         println("      Estimated complexity: ${plan.estimatedComplexity}")
         println()
@@ -369,7 +391,10 @@ private suspend fun handleTicketAssignment(
         // PHASE 3: EXECUTE
         println("   ⚡ [PHASE 3: EXECUTE] Executing plan...")
         println("      📤 Calling LLM to generate code...")
-        val outcome = agent.executePlan(plan)
+        val outcome = phaseSparkManager.withPhase(CognitivePhase.EXECUTE) {
+            println("      🔥 Spark stack: ${agent.cognitiveState}")
+            agent.executePlan(plan)
+        }
         println("      ✅ Execution completed: ${outcome::class.simpleName}")
         when (outcome) {
             is ExecutionOutcome.CodeChanged.Success -> {
@@ -390,7 +415,10 @@ private suspend fun handleTicketAssignment(
         // PHASE 4: LEARN
         println("   📚 [PHASE 4: LEARN] Extracting knowledge...")
         println("      🧠 Analyzing outcome and generating learnings...")
-        val knowledge = agent.extractKnowledgeFromOutcome(outcome, task, plan)
+        val knowledge = phaseSparkManager.withPhase(CognitivePhase.LEARN) {
+            println("      🔥 Spark stack: ${agent.cognitiveState}")
+            agent.extractKnowledgeFromOutcome(outcome, task, plan)
+        }
         println("      ✅ Knowledge extraction complete")
         println("      Approach: ${knowledge.approach}")
         println("      Learnings:")
@@ -410,6 +438,8 @@ private suspend fun handleTicketAssignment(
     } catch (e: Exception) {
         println("   ❌ [ERROR] Cognitive cycle failed: ${e.message}")
         e.printStackTrace()
+    } finally {
+        phaseSparkManager.cleanup()
     }
 }
 
