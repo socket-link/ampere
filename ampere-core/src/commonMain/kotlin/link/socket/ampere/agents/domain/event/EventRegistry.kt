@@ -74,6 +74,11 @@ object EventRegistry {
         ProductEvent.FeatureRequested.EVENT_TYPE,
         ProductEvent.EpicDefined.EVENT_TYPE,
         ProductEvent.PhaseDefined.EVENT_TYPE,
+
+        // SparkEvent types
+        SparkAppliedEvent.EVENT_TYPE,
+        SparkRemovedEvent.EVENT_TYPE,
+        CognitiveStateSnapshot.EVENT_TYPE,
     )
 
     /**

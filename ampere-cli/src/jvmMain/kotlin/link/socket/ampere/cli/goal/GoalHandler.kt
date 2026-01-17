@@ -8,9 +8,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import link.socket.ampere.AmpereContext
 import link.socket.ampere.agents.config.AgentActionAutonomy
-import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.CodeAgent
-import link.socket.ampere.agents.definition.code.CodeState
+import link.socket.ampere.agents.definition.AgentFactory
+import link.socket.ampere.agents.definition.AgentType
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
@@ -19,13 +19,11 @@ import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.tickets.create
-import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.cli.layout.AgentMemoryPane
 import link.socket.ampere.cli.layout.JazzProgressPane
-import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
@@ -97,21 +95,17 @@ class GoalHandler(
             model = AIModel_Claude.Sonnet_4
         )
 
-        // Configure the agent
-        val agentConfig = AgentConfiguration(
-            agentDefinition = WriteCodeAgent,
-            aiConfiguration = effectiveAiConfig
+        val agentFactory = AgentFactory(
+            scope = agentScope,
+            ticketOrchestrator = context.environmentService.ticketOrchestrator,
+            memoryServiceFactory = { agentId -> context.createMemoryService(agentId) },
+            eventApiFactory = { agentId -> context.environmentService.createEventApi(agentId) },
+            aiConfiguration = effectiveAiConfig,
+            toolWriteCodeFileOverride = writeCodeTool,
         )
 
         // Create CodeAgent
-        val agent = CodeAgent(
-            initialState = CodeState.blank,
-            agentConfiguration = agentConfig,
-            toolWriteCodeFile = writeCodeTool,
-            coroutineScope = agentScope,
-            executor = FunctionExecutor.create(),
-            memoryServiceFactory = { agentId -> context.createMemoryService(agentId) }
-        )
+        val agent = agentFactory.create<CodeAgent>(AgentType.CODE)
         currentAgent = agent
 
         // Create event API for this agent to publish events

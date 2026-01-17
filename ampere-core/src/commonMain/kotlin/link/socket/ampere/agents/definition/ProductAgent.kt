@@ -26,6 +26,7 @@ import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.tickets.AgentWorkload
 import link.socket.ampere.agents.events.tickets.BacklogSummary
 import link.socket.ampere.agents.events.tickets.TicketOrchestrator
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
@@ -48,9 +49,12 @@ class ProductAgent(
     override val initialState: ProductAgentState = ProductAgentState.blank,
     private val executor: Executor = FunctionExecutor.create(),
     memoryServiceFactory: ((AgentId) -> AgentMemoryService)? = null,
-) : AutonomousAgent<ProductAgentState>() {
+    private val eventApi: AgentEventApi? = null,
+    private val observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
+    private val agentId: AgentId = generateUUID("ProductManagerAgent"),
+) : ObservableAgent<ProductAgentState>(eventApi, observabilityScope) {
 
-    override val id: AgentId = generateUUID("ProductManagerAgent")
+    override val id: AgentId = agentId
 
     override val memoryService: AgentMemoryService? = memoryServiceFactory?.invoke(id)
 

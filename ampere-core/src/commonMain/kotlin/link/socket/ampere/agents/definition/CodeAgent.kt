@@ -34,6 +34,7 @@ import link.socket.ampere.agents.domain.task.PMTask
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.domain.task.TicketTask
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
@@ -83,9 +84,12 @@ open class CodeAgent(
     private val toolPush: Tool<ExecutionContext.GitOperation>? = ToolPush(),
     private val toolCreatePR: Tool<ExecutionContext.GitOperation>? = ToolCreatePullRequest(),
     private val toolGitStatus: Tool<ExecutionContext.GitOperation>? = ToolGitStatus(),
-) : AutonomousAgent<CodeState>() {
+    private val eventApi: AgentEventApi? = null,
+    private val observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
+    private val agentId: AgentId = generateUUID("CodeWriterAgent"),
+) : ObservableAgent<CodeState>(eventApi, observabilityScope) {
 
-    override val id: AgentId = generateUUID("CodeWriterAgent")
+    override val id: AgentId = agentId
 
     override val memoryService: link.socket.ampere.agents.domain.memory.AgentMemoryService? =
         memoryServiceFactory?.invoke(id)
