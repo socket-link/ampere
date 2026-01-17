@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.definition
 
 import co.touchlab.kermit.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -158,6 +159,9 @@ sealed interface Agent<S : AgentState> {
                     )
                 },
             )
+        } catch (e: CancellationException) {
+            // Rethrow cancellation to allow proper coroutine cancellation propagation
+            throw e
         } catch (e: Exception) {
             logger.e(e) { "Exception during knowledge recall" }
             Result.failure(
@@ -237,6 +241,9 @@ sealed interface Agent<S : AgentState> {
                     )
                 },
             )
+        } catch (e: CancellationException) {
+            // Rethrow cancellation to allow proper coroutine cancellation propagation
+            throw e
         } catch (e: Exception) {
             logger.e(e) { "Exception during knowledge storage" }
             Result.failure(

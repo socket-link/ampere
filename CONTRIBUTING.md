@@ -36,11 +36,11 @@ kdoctor will identify any missing dependencies or configuration issues.
 
 AMPERE supports multiple AI providers. You'll need at least one API key:
 
-| Provider | Get Key | Required |
-|----------|---------|----------|
+| Provider  | Get Key                                                              | Required    |
+|-----------|----------------------------------------------------------------------|-------------|
 | Anthropic | [console.anthropic.com](https://console.anthropic.com/settings/keys) | Recommended |
-| Google | [aistudio.google.com](https://aistudio.google.com/app/apikey) | Optional |
-| OpenAI | [platform.openai.com](https://platform.openai.com/account/api-keys) | Optional |
+| Google    | [aistudio.google.com](https://aistudio.google.com/app/apikey)        | Optional    |
+| OpenAI    | [platform.openai.com](https://platform.openai.com/account/api-keys)  | Optional    |
 
 ### Configuration
 
@@ -270,5 +270,5 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 
 ## See Also
 
-- [CLAUDE.md](CLAUDE.md) — AI-assisted development guide
+- [AGENTS.md](AGENTS.md) — AI-assisted development guide
 - [CLI Reference](ampere-cli/README.md) — Using the CLI tools
