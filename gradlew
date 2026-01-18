@@ -114,6 +114,20 @@ case "$( uname )" in                #(
   NONSTOP* )        nonstop=true ;;
 esac
 
+if [ "$darwin" = "true" ] ; then
+    if [ -z "$JAVA_HOME" ] ; then
+        JAVA_HOME=$( /usr/libexec/java_home -v 21 2>/dev/null ) || true
+    else
+        java_major=$( "$JAVA_HOME/bin/java" -version 2>&1 | awk -F'[\".]' 'NR==1 {print $2}' )
+        if [ -n "$java_major" ] && [ "$java_major" -ge 23 ] ; then
+            java21_home=$( /usr/libexec/java_home -v 21 2>/dev/null ) || true
+            if [ -n "$java21_home" ] ; then
+                JAVA_HOME=$java21_home
+            fi
+        fi
+    fi
+fi
+
 CLASSPATH="\\\"\\\""
 
 
