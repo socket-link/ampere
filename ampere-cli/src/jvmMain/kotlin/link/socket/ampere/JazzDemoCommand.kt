@@ -55,7 +55,7 @@ import link.socket.ampere.repl.TerminalFactory
 /**
  * Jazz Test Demo with 3-column interactive visualization.
  *
- * This demo runs the Jazz Test (autonomous agent writing Fibonacci code)
+ * This demo runs the Jazz Test (autonomous agent adding a new Spark type)
  * with a 3-column layout showing:
  * - Left pane (35%): Event stream
  * - Middle pane (40%): Cognitive cycle progress
@@ -80,7 +80,7 @@ class JazzDemoCommand(
         Run the Jazz Test demo with 3-column interactive visualization.
 
         The Jazz Test demonstrates autonomous agent behavior by having
-        an agent write a Fibonacci function in Kotlin. This command
+        an agent add a new CoordinationSpark type to the AMPERE framework. This command
         shows the execution with a 3-column layout:
 
         Left pane:   Event stream (filtered by significance)
@@ -434,20 +434,25 @@ class JazzDemoCommand(
         jazzPane.setPhase(JazzProgressPane.Phase.INITIALIZING, "Creating ticket...")
 
         val ticketSpec = TicketBuilder()
-            .withTitle("Implement Fibonacci function")
+            .withTitle("Add CoordinationSpark.Handoff")
             .withDescription("""
-                Create a SINGLE Kotlin file with a Fibonacci function.
+                Add a new Spark type that improves agent handoffs and coordination.
 
                 Requirements:
-                - Function name: fibonacci
-                - Input: n (Int) - the position in the Fibonacci sequence
-                - Output: Long - the Fibonacci number at position n
-                - Use an efficient iterative approach
-                - Handle edge cases (n = 0, n = 1)
+                - Create a new Kotlin file at:
+                  ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/cognition/sparks/CoordinationSpark.kt
+                - Define a sealed class CoordinationSpark : Spark
+                - Include a data object Handoff with:
+                  - @Serializable + @SerialName("CoordinationSpark.Handoff")
+                  - name = "Coordination:Handoff"
+                  - promptContribution: markdown guidance for explicit ownership,
+                    handoff summaries, and event-driven coordination
+                  - allowedTools = null, fileAccessScope = null
+                - Update AmpereProjectSpark's Spark list to include CoordinationSpark
 
                 IMPORTANT:
-                - Create ONLY ONE file named Fibonacci.kt
-                - Do NOT create additional utility files
+                - Keep scope tight and changes minimal
+                - Do NOT add unrelated files
             """.trimIndent())
             .ofType(TicketType.TASK)
             .withPriority(TicketPriority.HIGH)

@@ -183,7 +183,7 @@ class RunCommand(
                     }
                 }
                 demo == "jazz" -> {
-                    // Run the Jazz demo (Fibonacci task)
+                    // Run the Jazz demo (CoordinationSpark task)
                     runJazzDemo(context, agentScope, jazzPane, memoryPane, logPane)
                 }
                 demo != null -> {
@@ -587,7 +587,7 @@ class RunCommand(
         // TODO: Implement full Jazz demo logic here
         // For now, just show a placeholder
         delay(1000)
-        jazzPane.setPhase(JazzProgressPane.Phase.PERCEIVE, "Analyzing Fibonacci task...")
+        jazzPane.setPhase(JazzProgressPane.Phase.PERCEIVE, "Analyzing CoordinationSpark task...")
         delay(2000)
         jazzPane.setPhase(JazzProgressPane.Phase.PLAN, "Creating implementation plan...")
         delay(2000)
