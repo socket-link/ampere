@@ -8,4 +8,5 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
 data class AgentConfiguration(
     val agentDefinition: AgentDefinition,
     val aiConfiguration: AIConfiguration,
+    val cognitiveConfig: CognitiveConfig = CognitiveConfig(),
 )

@@ -9,6 +9,7 @@ import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.integrations.issues.BatchIssueCreator
 import link.socket.ampere.integrations.issues.github.GitHubCliProvider
 import link.socket.ampere.renderer.SparkColors
+import link.socket.ampere.renderer.SparkNameFormatter
 import java.io.File
 
 /**
@@ -309,7 +310,9 @@ class CommandExecutor(
                     }
 
                     if (agent.sparkNames.isNotEmpty()) {
-                        val stackPreview = agent.sparkNames.joinToString(" → ").take(50)
+                        val stackPreview = agent.sparkNames
+                            .joinToString(" → ") { SparkNameFormatter.format(it) }
+                            .take(50)
                         appendLine("║   Stack: $stackPreview".padEnd(64) + "║")
                     } else {
                         appendLine("║   Stack: (no specialization)".padEnd(64) + "║")
@@ -373,7 +376,8 @@ class CommandExecutor(
                 sparkNames.forEachIndexed { index, sparkName ->
                     val isActive = index == sparkNames.lastIndex
                     val marker = if (isActive) " (ACTIVE)" else ""
-                    val line = "║ [${index + 1}] $sparkName$marker"
+                    val displayName = SparkNameFormatter.format(sparkName)
+                    val line = "║ [${index + 1}] $displayName$marker"
                     appendLine(line.padEnd(64) + "║")
                 }
             }
@@ -392,7 +396,7 @@ class CommandExecutor(
                         SparkTransitionDirection.APPLIED -> "+"
                         SparkTransitionDirection.REMOVED -> "-"
                     }
-                    val line = "║   $time  $icon ${transition.sparkName.take(40)}"
+                    val line = "║   $time  $icon ${SparkNameFormatter.format(transition.sparkName).take(40)}"
                     appendLine(line.padEnd(64) + "║")
                 }
 

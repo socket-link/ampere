@@ -3,6 +3,7 @@ package link.socket.ampere.agents.definition
 import kotlinx.coroutines.CoroutineScope
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.config.CognitiveConfig
 import link.socket.ampere.agents.domain.cognition.sparks.AmpereProjectSpark
 import link.socket.ampere.agents.domain.cognition.sparks.LanguageSpark
 import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
@@ -64,6 +65,7 @@ class AgentFactory(
     private val aiConfiguration: AIConfiguration? = null,
     private val projectSpark: ProjectSpark? = null,
     private val toolWriteCodeFileOverride: Tool<ExecutionContext.Code.WriteCode>? = null,
+    private val cognitiveConfig: CognitiveConfig = CognitiveConfig(),
 ) {
     private val toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode> =
         toolWriteCodeFileOverride ?: ToolWriteCodeFile(AgentActionAutonomy.ASK_BEFORE_ACTION)
@@ -81,6 +83,7 @@ class AgentFactory(
         get() = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
             aiConfiguration = effectiveAiConfiguration,
+            cognitiveConfig = cognitiveConfig,
         )
 
     /**

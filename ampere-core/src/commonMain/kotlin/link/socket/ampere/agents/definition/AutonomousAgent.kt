@@ -249,7 +249,7 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
     private var agentRuntimeLoopJob: Job? = null
     @Transient
     private val phaseSparkManager: PhaseSparkManager<S> by lazy(LazyThreadSafetyMode.NONE) {
-        PhaseSparkManager.create(this)
+        PhaseSparkManager.create(this, agentConfiguration.cognitiveConfig.phaseSparks)
     }
 
     // ==================== Agent Runtime ====================
