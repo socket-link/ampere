@@ -70,15 +70,9 @@ class ReplSession(
     }
 
     private fun displayWelcomeBanner() {
-        val banner = """
+        val banner = BannerRenderer.selectBanner()
 
-                  ⚡──○──⚡
-               ⚡──○──⚡──○──⚡          AMPERE Interactive Shell v0.1.0
-            ⚡──○──⚡──○──⚡──○──⚡     Autonomous multi-agent coordination
-               ⚡──○──⚡──○──⚡
-                  ⚡──○──⚡
-        """.trimIndent()
-
+        terminalOps.println()
         terminalOps.println(banner)
         terminalOps.println()
 
