@@ -4,6 +4,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -296,6 +297,26 @@ class MinimalAutonomousAgentTest {
         assertEquals(listOf(stubPerception.id), outputPastMemory.perceptions)
         assertEquals(listOf(stubPlan.id), outputPastMemory.plans)
         assertEquals(listOf(stubTask.id), outputPastMemory.tasks)
+    }
+
+    @Test
+    fun `task spark removed after task completes`() = runBlocking {
+        val initialDepth = agent.sparkDepth
+
+        agent.testRememberTask(stubTask)
+        assertTrue(agent.sparkDepth > initialDepth, "TaskSpark should be applied on assignment")
+        assertTrue(
+            agent.cognitiveState.contains("Task:${stubTask.id}"),
+            "TaskSpark should be visible in cognitive state after assignment",
+        )
+
+        agent.runTask(stubTask)
+
+        assertEquals(initialDepth, agent.sparkDepth, "TaskSpark should be removed after completion")
+        assertFalse(
+            agent.cognitiveState.contains("Task:${stubTask.id}"),
+            "TaskSpark should be removed from cognitive state after completion",
+        )
     }
 
     @Test
