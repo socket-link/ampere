@@ -6,6 +6,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.coordination.AgentInteraction
 import link.socket.ampere.coordination.InteractionType
+import link.socket.ampere.repl.TerminalSymbols
 
 /**
  * Renders the interaction feed showing recent inter-agent coordination events.
@@ -21,8 +22,12 @@ class InteractionFeedRenderer {
     companion object {
         private const val EMPTY_MESSAGE = "No recent interactions"
         private const val SUMMARY_TRUNCATE_LENGTH = 30
-        private const val FORWARD_ARROW = "──▶"
-        private const val BACKWARD_ARROW = "◀──"
+
+        /** Get forward arrow based on terminal capabilities. */
+        private fun forwardArrow(): String = TerminalSymbols.Arrow.forward
+
+        /** Get backward arrow based on terminal capabilities. */
+        private fun backwardArrow(): String = TerminalSymbols.Arrow.backward
 
         // Response types that use backward arrow
         private val RESPONSE_TYPES = setOf(
@@ -131,15 +136,16 @@ class InteractionFeedRenderer {
 
     /**
      * Get the arrow direction based on interaction type.
+     * Respects terminal Unicode capabilities.
      *
      * @param type The interaction type
      * @return Arrow string (forward or backward)
      */
     private fun getArrow(type: InteractionType): String {
         return if (type in RESPONSE_TYPES) {
-            BACKWARD_ARROW
+            backwardArrow()
         } else {
-            FORWARD_ARROW
+            forwardArrow()
         }
     }
 

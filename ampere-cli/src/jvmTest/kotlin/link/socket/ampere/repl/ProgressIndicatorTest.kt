@@ -84,7 +84,7 @@ class ProgressIndicatorTest {
             supportsUnicode = false,
             supportsColors = false,
             colorLevel = AnsiLevel.NONE,
-            isInteractive = false,
+            isInteractive = true,
             width = 80,
             height = 24
         )
@@ -104,6 +104,31 @@ class ProgressIndicatorTest {
             output.contains("|") || output.contains("/") || output.contains("-") || output.contains("\\"),
             "Should use ASCII spinner characters when Unicode is disabled"
         )
+    }
+
+    @Test
+    fun `spinner uses static indicator when non-interactive`() {
+        val capabilities = TerminalFactory.TerminalCapabilities(
+            supportsUnicode = false,
+            supportsColors = false,
+            colorLevel = AnsiLevel.NONE,
+            isInteractive = false,
+            width = 80,
+            height = 24
+        )
+
+        val indicator = ProgressIndicatorBuilder(terminal)
+            .withCapabilities(capabilities)
+            .mode(IndicatorMode.SPINNER)
+            .message("Loading")
+            .build()
+
+        indicator.start()
+        indicator.stop()
+
+        val output = outputStream.toString()
+        assertTrue(output.contains(TerminalSymbols.Spinner.staticIndicator), "Should show static indicator")
+        assertTrue(output.contains("Loading"), "Should include the message")
     }
 
     @Test

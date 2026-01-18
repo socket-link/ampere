@@ -1,6 +1,11 @@
 package link.socket.ampere.repl
 
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.jline.terminal.Terminal
 import java.io.PrintWriter
 
@@ -99,11 +104,13 @@ class ProgressIndicatorBuilder(private val terminal: Terminal) {
     private var message: String = ""
     private var useColors: Boolean = true
     private var useUnicode: Boolean = true
+    private var isInteractive: Boolean = true
 
     fun mode(mode: IndicatorMode) = apply { this.mode = mode }
     fun message(message: String) = apply { this.message = message }
     fun useColors(enabled: Boolean) = apply { this.useColors = enabled }
     fun useUnicode(enabled: Boolean) = apply { this.useUnicode = enabled }
+    fun isInteractive(enabled: Boolean) = apply { this.isInteractive = enabled }
 
     /**
      * Configure from detected terminal capabilities.
@@ -111,12 +118,13 @@ class ProgressIndicatorBuilder(private val terminal: Terminal) {
     fun withCapabilities(capabilities: TerminalFactory.TerminalCapabilities) = apply {
         this.useColors = capabilities.supportsColors
         this.useUnicode = capabilities.supportsUnicode
+        this.isInteractive = capabilities.isInteractive
     }
 
     fun build(): ProgressIndicator = when (mode) {
-        IndicatorMode.SPINNER -> SpinnerIndicator(terminal, message, useColors, useUnicode)
-        IndicatorMode.PROGRESS_BAR -> ProgressBarIndicator(terminal, message, useColors, useUnicode)
-        IndicatorMode.STATE -> StateIndicator(terminal, message, useColors, useUnicode)
+        IndicatorMode.SPINNER -> SpinnerIndicator(terminal, message, useColors, useUnicode, isInteractive)
+        IndicatorMode.PROGRESS_BAR -> ProgressBarIndicator(terminal, message, useColors, useUnicode, isInteractive)
+        IndicatorMode.STATE -> StateIndicator(terminal, message, useColors, useUnicode, isInteractive)
     }
 }
 
@@ -127,7 +135,8 @@ abstract class BaseProgressIndicator(
     protected val terminal: Terminal,
     protected var message: String,
     protected val useColors: Boolean,
-    protected val useUnicode: Boolean
+    protected val useUnicode: Boolean,
+    protected val isInteractive: Boolean
 ) : ProgressIndicator {
 
     protected var job: Job? = null
@@ -139,16 +148,19 @@ abstract class BaseProgressIndicator(
     }
 
     protected fun hideCursor() {
+        if (!isInteractive) return
         writer.print(TerminalCodes.HIDE_CURSOR)
         writer.flush()
     }
 
     protected fun showCursor() {
+        if (!isInteractive) return
         writer.print(TerminalCodes.SHOW_CURSOR)
         writer.flush()
     }
 
     protected fun clearLine() {
+        if (!isInteractive) return
         writer.print("${TerminalCodes.MOVE_TO_START}${TerminalCodes.CLEAR_LINE}")
     }
 
@@ -178,14 +190,20 @@ class SpinnerIndicator(
     terminal: Terminal,
     message: String,
     useColors: Boolean,
-    useUnicode: Boolean
-) : BaseProgressIndicator(terminal, message, useColors, useUnicode) {
+    useUnicode: Boolean,
+    isInteractive: Boolean
+) : BaseProgressIndicator(terminal, message, useColors, useUnicode, isInteractive) {
 
-    private val unicodeFrames = listOf("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
-    private val asciiFrames = listOf("|", "/", "-", "\\")
-    private val frames: List<String> get() = if (useUnicode) unicodeFrames else asciiFrames
+    private val frames: List<String>
+        get() = if (useUnicode) TerminalSymbols.Spinner.unicodeFrames else TerminalSymbols.Spinner.asciiFrames
 
     override fun start() {
+        if (!isInteractive) {
+            writer.println("${TerminalSymbols.Spinner.staticIndicator} $message")
+            flush()
+            return
+        }
+
         hideCursor()
         job = CoroutineScope(Dispatchers.Default).launch {
             var frameIndex = 0
@@ -234,8 +252,9 @@ class ProgressBarIndicator(
     terminal: Terminal,
     message: String,
     useColors: Boolean,
-    useUnicode: Boolean
-) : BaseProgressIndicator(terminal, message, useColors, useUnicode) {
+    useUnicode: Boolean,
+    isInteractive: Boolean
+) : BaseProgressIndicator(terminal, message, useColors, useUnicode, isInteractive) {
 
     private var currentProgress: Float? = null
     private var indeterminatePosition = 0
@@ -250,6 +269,12 @@ class ProgressBarIndicator(
     private val bounceChar: String get() = if (useUnicode) "▓" else "="
 
     override fun start() {
+        if (!isInteractive) {
+            writer.println("${TerminalSymbols.Spinner.staticIndicator} $message")
+            flush()
+            return
+        }
+
         hideCursor()
         job = CoroutineScope(Dispatchers.Default).launch {
             while (isActive) {
@@ -343,8 +368,9 @@ class StateIndicator(
     terminal: Terminal,
     message: String,
     useColors: Boolean,
-    useUnicode: Boolean
-) : BaseProgressIndicator(terminal, message, useColors, useUnicode) {
+    useUnicode: Boolean,
+    isInteractive: Boolean
+) : BaseProgressIndicator(terminal, message, useColors, useUnicode, isInteractive) {
 
     private var state: IndicatorState = IndicatorState.WAITING
     private var animateWaiting: Boolean = true
@@ -359,6 +385,12 @@ class StateIndicator(
         get() = if (useUnicode) waitingSymbolUnicode else waitingSymbolAscii
 
     override fun start() {
+        if (!isInteractive) {
+            writer.println("${TerminalSymbols.Spinner.staticIndicator} $message")
+            flush()
+            return
+        }
+
         hideCursor()
         state = IndicatorState.WAITING
         job = CoroutineScope(Dispatchers.Default).launch {
@@ -462,6 +494,9 @@ class SimpleSpinner(private val terminal: Terminal) {
 
     /**
      * Start showing the spinner with a message.
+     *
+     * In non-interactive mode (piped output), displays a static message
+     * without animation to avoid cluttering output with cursor control codes.
      */
     fun start(message: String) {
         val capabilities = TerminalFactory.getCapabilities()

@@ -5,6 +5,7 @@ import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
 import link.socket.ampere.cli.help.CommandRegistry
+import link.socket.ampere.repl.TerminalSymbols
 
 /**
  * Status bar component for the bottom of the demo layout.
@@ -129,8 +130,8 @@ class StatusBar(private val terminal: Terminal) {
             parts.add(renderShortcutGroup(exit))
         }
 
-        // Join groups with separator
-        val separator = terminal.render(dim(" │ "))
+        // Join groups with separator (respects Unicode capabilities)
+        val separator = terminal.render(dim(" ${TerminalSymbols.Separator.vertical} "))
         return parts.joinToString(separator)
     }
 
@@ -164,14 +165,14 @@ class StatusBar(private val terminal: Terminal) {
             SystemStatus.ATTENTION_NEEDED -> TextColors.red
         }
 
-        // Status indicator (pulsing for active states)
+        // Status indicator (pulsing for active states, respects Unicode capabilities)
         val indicator = when (status) {
-            SystemStatus.WORKING -> terminal.render(TextColors.blue("●"))
-            SystemStatus.THINKING -> terminal.render(TextColors.yellow("◐"))
-            SystemStatus.WAITING -> terminal.render(TextColors.magenta("◌"))
-            SystemStatus.COMPLETED -> terminal.render(TextColors.green("✓"))
+            SystemStatus.WORKING -> terminal.render(TextColors.blue(TerminalSymbols.Status.filledCircle))
+            SystemStatus.THINKING -> terminal.render(TextColors.yellow(TerminalSymbols.Status.halfCircle))
+            SystemStatus.WAITING -> terminal.render(TextColors.magenta(TerminalSymbols.Status.dotCircle))
+            SystemStatus.COMPLETED -> terminal.render(TextColors.green(TerminalSymbols.Status.check))
             SystemStatus.ATTENTION_NEEDED -> terminal.render(TextColors.red("!"))
-            SystemStatus.IDLE -> terminal.render(dim("○"))
+            SystemStatus.IDLE -> terminal.render(dim(TerminalSymbols.Status.emptyCircle))
         }
 
         val statusText = status.name.replace("_", " ")

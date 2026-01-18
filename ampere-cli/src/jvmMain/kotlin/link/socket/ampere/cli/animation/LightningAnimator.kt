@@ -3,6 +3,7 @@ package link.socket.ampere.cli.animation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import link.socket.ampere.repl.TerminalSymbols
 import kotlin.math.abs
 
 /**
@@ -12,6 +13,11 @@ import kotlin.math.abs
  * - Discharge cycle sequences (charge → strike → afterglow)
  * - Corona glow effect for text (brightness radiating from center)
  * - ANSI color management for consistent terminal rendering
+ *
+ * Adapts to terminal capabilities:
+ * - Unicode terminals: Uses decorative symbols (ϟ, ✦, ✧, etc.)
+ * - ASCII terminals: Uses simple characters (#, *, |, etc.)
+ * - Non-interactive mode: Shows static indicator without animation
  *
  * This is a standalone animation library - integration with CLI components
  * will come in future tickets.
@@ -68,32 +74,42 @@ object LightningAnimator {
     /**
      * Full discharge sequence - models lightning formation:
      * ground state → charge → stepped leader → strike → afterglow → rest
+     *
+     * Uses Unicode symbols when available, falls back to ASCII otherwise.
      */
-    val DISCHARGE_SEQUENCE = listOf(
-        DischargeFrame("·", Glow.DIM, 150),
-        DischargeFrame("˙", Glow.DIM, 80),
-        DischargeFrame(":", Glow.NORMAL, 80),
-        DischargeFrame("⁝", Glow.NORMAL, 70),
-        DischargeFrame("⁞", Glow.BRIGHT, 60),
-        DischargeFrame("│", Glow.BRIGHT, 50),
-        DischargeFrame("╽", Glow.BRIGHT, 40),
-        DischargeFrame("ϟ", Glow.FLASH, 120),
-        DischargeFrame("✦", Glow.BRIGHT, 100),
-        DischargeFrame("✧", Glow.NORMAL, 100),
-        DischargeFrame("·", Glow.DIM, 200)
-    )
+    val DISCHARGE_SEQUENCE: List<DischargeFrame>
+        get() {
+            val symbols = TerminalSymbols.Lightning.discharge
+            return listOf(
+                DischargeFrame(symbols[0], Glow.DIM, 150),
+                DischargeFrame(symbols[1], Glow.DIM, 80),
+                DischargeFrame(symbols[2], Glow.NORMAL, 80),
+                DischargeFrame(symbols[3], Glow.NORMAL, 70),
+                DischargeFrame(symbols[4], Glow.BRIGHT, 60),
+                DischargeFrame(symbols[5], Glow.BRIGHT, 50),
+                DischargeFrame(symbols[6], Glow.BRIGHT, 40),
+                DischargeFrame(symbols[7], Glow.FLASH, 120),
+                DischargeFrame(symbols[8], Glow.BRIGHT, 100),
+                DischargeFrame(symbols[9], Glow.NORMAL, 100),
+                DischargeFrame(symbols[10], Glow.DIM, 200)
+            )
+        }
 
     /**
      * Compact sequence for tighter loops.
      */
-    val COMPACT_SEQUENCE = listOf(
-        DischargeFrame("·", Glow.DIM, 120),
-        DischargeFrame(":", Glow.NORMAL, 80),
-        DischargeFrame("⁞", Glow.BRIGHT, 60),
-        DischargeFrame("ϟ", Glow.FLASH, 100),
-        DischargeFrame("✧", Glow.NORMAL, 100),
-        DischargeFrame("·", Glow.DIM, 150)
-    )
+    val COMPACT_SEQUENCE: List<DischargeFrame>
+        get() {
+            val symbols = TerminalSymbols.Lightning.compact
+            return listOf(
+                DischargeFrame(symbols[0], Glow.DIM, 120),
+                DischargeFrame(symbols[1], Glow.NORMAL, 80),
+                DischargeFrame(symbols[2], Glow.BRIGHT, 60),
+                DischargeFrame(symbols[3], Glow.FLASH, 100),
+                DischargeFrame(symbols[4], Glow.NORMAL, 100),
+                DischargeFrame(symbols[5], Glow.DIM, 150)
+            )
+        }
 
     /**
      * Generates glow levels for each character position.
@@ -150,12 +166,20 @@ object LightningAnimator {
     /**
      * Emits discharge frames continuously with proper timing.
      *
+     * In non-interactive mode, emits a single static frame and stops.
+     *
      * @param sequence The frame sequence to loop through
-     * @return Flow that emits frames indefinitely
+     * @return Flow that emits frames indefinitely (or once in non-interactive mode)
      */
     fun dischargeFlow(
         sequence: List<DischargeFrame> = DISCHARGE_SEQUENCE
     ): Flow<DischargeFrame> = flow {
+        if (!TerminalSymbols.isInteractive) {
+            // Non-interactive mode: emit single static frame
+            emit(DischargeFrame(TerminalSymbols.Lightning.staticSymbol, Glow.NORMAL, 0))
+            return@flow
+        }
+
         var index = 0
         while (true) {
             val frame = sequence[index % sequence.size]
@@ -168,10 +192,21 @@ object LightningAnimator {
     /**
      * Renders a single frame to the terminal (in-place update).
      *
+     * In non-interactive mode, prints without cursor control codes.
+     *
      * @param frame The frame to render
      * @param message Optional message to display after the symbol
      */
     fun renderFrame(frame: DischargeFrame, message: String = "") {
+        if (!TerminalSymbols.isInteractive) {
+            // Non-interactive mode: simple print without cursor control
+            val suffix = if (message.isNotEmpty()) " $message" else ""
+            print("${frame.symbol}$suffix")
+            println()
+            System.out.flush()
+            return
+        }
+
         print("${Ansi.MOVE_TO_START}${Ansi.CLEAR_LINE}")
         print("${frame.glow.toAnsi()}${frame.symbol}${Ansi.RESET}")
         if (message.isNotEmpty()) {
