@@ -17,9 +17,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentActionAutonomy
-import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.definition.AgentFactory
+import link.socket.ampere.agents.definition.AgentType
 import link.socket.ampere.agents.definition.CodeAgent
-import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
@@ -29,7 +29,6 @@ import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.tickets.TicketBuilder
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
-import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
@@ -46,7 +45,6 @@ import link.socket.ampere.cli.layout.ThreeColumnLayout
 import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.WatchPresenter
 import link.socket.ampere.cli.watch.presentation.WatchViewState
-import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
@@ -395,24 +393,20 @@ class JazzDemoCommand(
         // Create the write_code_file tool
         val writeCodeTool = createWriteCodeFileTool(outputDir, jazzPane)
 
-        // Configure the agent
-        val agentConfig = AgentConfiguration(
-            agentDefinition = WriteCodeAgent,
+        val agentFactory = AgentFactory(
+            scope = agentScope,
+            ticketOrchestrator = context.environmentService.ticketOrchestrator,
+            memoryServiceFactory = { agentId -> context.createMemoryService(agentId) },
+            eventApiFactory = { agentId -> context.environmentService.createEventApi(agentId) },
             aiConfiguration = AIConfiguration_Default(
                 provider = AIProvider_Anthropic,
                 model = AIModel_Claude.Sonnet_4
-            )
+            ),
+            toolWriteCodeFileOverride = writeCodeTool,
         )
 
         // Create CodeAgent
-        val agent = CodeAgent(
-            initialState = CodeState.blank,
-            agentConfiguration = agentConfig,
-            toolWriteCodeFile = writeCodeTool,
-            coroutineScope = agentScope,
-            executor = FunctionExecutor.create(),
-            memoryServiceFactory = { agentId -> context.createMemoryService(agentId) }
-        )
+        val agent = agentFactory.create<CodeAgent>(AgentType.CODE)
 
         // Subscribe agent to events
         val eventHandler = EventHandler<Event, link.socket.ampere.agents.events.subscription.Subscription> { event, _ ->

@@ -11,6 +11,7 @@ import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.events.tickets.TicketOrchestrator
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.Tool
@@ -51,6 +52,7 @@ enum class AgentType {
  * @param repository Optional repository name for issue tracking
  * @param aiConfiguration Optional AI configuration for model selection
  * @param projectSpark Optional project spark (defaults to AmpereProjectSpark)
+ * @param toolWriteCodeFileOverride Optional override for write_code_file tool
  */
 class AgentFactory(
     private val scope: CoroutineScope,
@@ -61,9 +63,10 @@ class AgentFactory(
     private val repository: String? = null,
     private val aiConfiguration: AIConfiguration? = null,
     private val projectSpark: ProjectSpark? = null,
+    private val toolWriteCodeFileOverride: Tool<ExecutionContext.Code.WriteCode>? = null,
 ) {
     private val toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode> =
-        ToolWriteCodeFile(AgentActionAutonomy.ASK_BEFORE_ACTION)
+        toolWriteCodeFileOverride ?: ToolWriteCodeFile(AgentActionAutonomy.ASK_BEFORE_ACTION)
 
     private val toolCreateIssues: Tool<ExecutionContext.IssueManagement> =
         ToolCreateIssues(AgentActionAutonomy.ACT_WITH_NOTIFICATION)
@@ -114,6 +117,9 @@ class AgentFactory(
     ): A {
         val agent = createAgent(agentType)
         applySparkStack(agent, agentType)
+        if (agent is ObservableAgent<*>) {
+            agent.emitCognitiveSnapshot()
+        }
         @Suppress("UNCHECKED_CAST")
         return agent as A
     }
@@ -133,30 +139,58 @@ class AgentFactory(
     }
 
     private fun createAgent(agentType: AgentType): AutonomousAgent<out AgentState> = when (agentType) {
-        AgentType.CODE -> CodeAgent(
-            agentConfiguration = agentConfiguration,
-            toolWriteCodeFile = toolWriteCodeFile,
-            coroutineScope = scope,
-            memoryServiceFactory = memoryServiceFactory,
-            issueTrackerProvider = issueTrackerProvider,
-            repository = repository,
-        )
-        AgentType.PRODUCT -> ProductAgent(
-            agentConfiguration = agentConfiguration,
-            ticketOrchestrator = ticketOrchestrator,
-            memoryServiceFactory = memoryServiceFactory,
-        )
-        AgentType.PROJECT -> ProjectAgent(
-            agentConfiguration = agentConfiguration,
-            toolCreateIssues = toolCreateIssues,
-            toolAskHuman = toolAskHuman,
-            coroutineScope = scope,
-            memoryServiceFactory = memoryServiceFactory,
-        )
-        AgentType.QUALITY -> QualityAgent(
-            agentConfiguration = agentConfiguration,
-            memoryServiceFactory = memoryServiceFactory,
-        )
+        AgentType.CODE -> {
+            val agentId = generateUUID("CodeWriterAgent")
+            val eventApi = eventApiFactory?.invoke(agentId)
+            CodeAgent(
+                agentConfiguration = agentConfiguration,
+                toolWriteCodeFile = toolWriteCodeFile,
+                coroutineScope = scope,
+                memoryServiceFactory = memoryServiceFactory,
+                issueTrackerProvider = issueTrackerProvider,
+                repository = repository,
+                eventApiOverride = eventApi,
+                observabilityScope = scope,
+                agentId = agentId,
+            )
+        }
+        AgentType.PRODUCT -> {
+            val agentId = generateUUID("ProductManagerAgent")
+            val eventApi = eventApiFactory?.invoke(agentId)
+            ProductAgent(
+                agentConfiguration = agentConfiguration,
+                ticketOrchestrator = ticketOrchestrator,
+                memoryServiceFactory = memoryServiceFactory,
+                eventApiOverride = eventApi,
+                observabilityScope = scope,
+                agentId = agentId,
+            )
+        }
+        AgentType.PROJECT -> {
+            val agentId = generateUUID("ProjectManagerAgent")
+            val eventApi = eventApiFactory?.invoke(agentId)
+            ProjectAgent(
+                agentConfiguration = agentConfiguration,
+                toolCreateIssues = toolCreateIssues,
+                toolAskHuman = toolAskHuman,
+                coroutineScope = scope,
+                memoryServiceFactory = memoryServiceFactory,
+                eventApiOverride = eventApi,
+                observabilityScope = scope,
+                agentId = agentId,
+            )
+        }
+        AgentType.QUALITY -> {
+            val agentId = generateUUID("QualityAssuranceAgent")
+            val eventApi = eventApiFactory?.invoke(agentId)
+            QualityAgent(
+                agentConfiguration = agentConfiguration,
+                memoryServiceFactory = memoryServiceFactory,
+                eventApiOverride = eventApi,
+                observabilityScope = scope,
+                agentId = agentId,
+            )
+        }
     }
 
     /**
