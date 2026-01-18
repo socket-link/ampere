@@ -19,6 +19,7 @@ import com.github.ajalt.clikt.core.CliktCommand
  * - ampere test: Headless automated tests (CI/validation)
  *   - ampere test jazz: Headless Jazz test
  *   - ampere test ticket: Headless issue test
+ * - ampere task: Publish task events
  * - ampere thread: Manage conversation threads
  * - ampere outcomes: View execution outcomes
  * - ampere issues: Manage GitHub issues
@@ -48,6 +49,7 @@ class AmpereCommand : CliktCommand(
           thread       View and manage conversation threads
           status       System-wide status overview
           outcomes     View execution outcomes and learnings
+          task         Publish TaskCreated events
 
         GitHub Integration:
           issues       Manage GitHub issues (create from JSON)
@@ -103,6 +105,7 @@ class AmpereCommand : CliktCommand(
           ampere thread list                  # List conversation threads
           ampere outcomes stats               # View learning statistics
           ampere issues create -f epic.json   # Create issues from file
+          ampere task create "Fix bug"        # Publish a TaskCreated event
 
           # Legacy headless work mode
           ampere work                         # Work on issues (headless)

@@ -25,7 +25,9 @@ import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.api.EventHandler
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.tickets.TicketBuilder
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
@@ -53,7 +55,7 @@ import link.socket.ampere.repl.TerminalFactory
 /**
  * Jazz Test Demo with 3-column interactive visualization.
  *
- * This demo runs the Jazz Test (autonomous agent adding a new Spark type)
+ * This demo runs the Jazz Test (autonomous agent adding a new CLI task-create command)
  * with a 3-column layout showing:
  * - Left pane (35%): Event stream
  * - Middle pane (40%): Cognitive cycle progress
@@ -78,7 +80,7 @@ class JazzDemoCommand(
         Run the Jazz Test demo with 3-column interactive visualization.
 
         The Jazz Test demonstrates autonomous agent behavior by having
-        an agent add a new CoordinationSpark type to the AMPERE framework. This command
+        an agent add a new CLI task-create command to the AMPERE framework. This command
         shows the execution with a 3-column layout:
 
         Left pane:   Event stream (filtered by significance)
@@ -408,13 +410,16 @@ class JazzDemoCommand(
         // Create CodeAgent
         val agent = agentFactory.create<CodeAgent>(AgentType.CODE)
 
+        // Create event API for publishing task/code events
+        val eventApi = context.environmentService.createEventApi(agent.id)
+
         // Subscribe agent to events
         val eventHandler = EventHandler<Event, link.socket.ampere.agents.events.subscription.Subscription> { event, _ ->
             when (event) {
                 is TicketEvent.TicketAssigned -> {
                     if (event.assignedTo == agent.id) {
                         agentScope.launch {
-                            handleTicketAssignment(agent, event.ticketId, context, jazzPane, logPane)
+                            handleTicketAssignment(agent, event.ticketId, context, jazzPane, logPane, eventApi)
                         }
                     }
                 }
@@ -428,21 +433,25 @@ class JazzDemoCommand(
         jazzPane.setPhase(JazzProgressPane.Phase.INITIALIZING, "Creating ticket...")
 
         val ticketSpec = TicketBuilder()
-            .withTitle("Add CoordinationSpark.Handoff")
+            .withTitle("Add ampere task create CLI command")
             .withDescription("""
-                Add a new Spark type that improves agent handoffs and coordination.
+                Create a new CLI command that lets a human publish a TaskCreated event.
 
                 Requirements:
-                - Create a new Kotlin file at:
-                  ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/cognition/sparks/CoordinationSpark.kt
-                - Define a sealed class CoordinationSpark : Spark
-                - Include a data object Handoff with:
-                  - @Serializable + @SerialName("CoordinationSpark.Handoff")
-                  - name = "Coordination:Handoff"
-                  - promptContribution: markdown guidance for explicit ownership,
-                    handoff summaries, and event-driven coordination
-                  - allowedTools = null, fileAccessScope = null
-                - Update AmpereProjectSpark's Spark list to include CoordinationSpark
+                - Create `ampere-cli/src/jvmMain/kotlin/link/socket/ampere/TaskCommand.kt`
+                  with a `task` command and a `create` subcommand.
+                - `ampere task create "<description>"` accepts:
+                  - `--id <taskId>` (optional; generate if omitted)
+                  - `--urgency <low|medium|high>` (default: medium)
+                  - `--assign <agentId>` (optional)
+                - On execution, publish TaskCreated via AgentEventApi
+                  (use AmpereContext.environmentService.createEventApi("human-cli"))
+                  and print a one-line confirmation.
+                - Register the new command in AmpereCommand.
+
+                Uncertainty moment:
+                - Add a short code comment noting any assumption (e.g., ID generation
+                  or default urgency) before proceeding.
 
                 IMPORTANT:
                 - Keep scope tight and changes minimal
@@ -492,7 +501,8 @@ class JazzDemoCommand(
         ticketId: String,
         context: AmpereContext,
         jazzPane: JazzProgressPane,
-        logPane: LogPane
+        logPane: LogPane,
+        eventApi: AgentEventApi,
     ) {
         try {
             logPane.info("Ticket assigned: $ticketId")
@@ -511,6 +521,14 @@ class JazzDemoCommand(
                 description = ticket.description
             )
             logPane.info("Task created: ${task.id}")
+
+            // Publish TaskCreated for visibility in the event stream
+            eventApi.publishTaskCreated(
+                taskId = task.id,
+                urgency = Urgency.MEDIUM,
+                description = ticket.title,
+                assignedTo = agent.id,
+            )
 
             // PHASE 1: PERCEIVE
             logPane.info("Starting PERCEIVE phase")
@@ -547,6 +565,13 @@ class JazzDemoCommand(
                     logPane.info("Code changed successfully - ${outcome.changedFiles.size} file(s)")
                     outcome.changedFiles.forEach { file ->
                         logPane.info("  - $file")
+                        eventApi.publishCodeSubmitted(
+                            urgency = Urgency.LOW,
+                            filePath = file,
+                            changeDescription = "Written by CodeAgent",
+                            reviewRequired = false,
+                            assignedTo = null,
+                        )
                     }
                 }
                 is ExecutionOutcome.CodeChanged.Failure -> {

@@ -24,7 +24,9 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.api.EventHandler
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.tickets.TicketBuilder
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
@@ -41,7 +43,7 @@ import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
  * This program:
  * 1. Starts the AMPERE environment
  * 2. Creates a CodeWriterAgent that listens for ticket events
- * 3. Creates a ticket: "Add CoordinationSpark.Handoff"
+ * 3. Creates a ticket: "Add ampere task create CLI command"
  * 4. Assigns the ticket to the agent
  * 5. The agent autonomously runs through the PROPEL cognitive cycle
  * 6. All events are emitted and observable via the CLI dashboard
@@ -107,6 +109,9 @@ fun main() {
             // Track cognitive cycle completion
             val cognitiveCycleComplete = CompletableDeferred<Unit>()
 
+            // Create event API for publishing task/code events
+            val eventApi = context.environmentService.createEventApi(agent.id)
+
             // Subscribe the agent to ticket events
             val eventHandler = EventHandler<Event, link.socket.ampere.agents.events.subscription.Subscription> { event, _ ->
                 when (event) {
@@ -119,7 +124,7 @@ fun main() {
                             // Launch cognitive cycle in the background on IO dispatcher
                             agentScope.launch(Dispatchers.IO) {
                                 try {
-                                    handleTicketAssignment(agent, event.ticketId, context)
+                                    handleTicketAssignment(agent, event.ticketId, context, eventApi)
                                     cognitiveCycleComplete.complete(Unit)
                                 } catch (e: Exception) {
                                     println("   ❌ [ERROR] Exception during cognitive cycle:")
@@ -144,27 +149,31 @@ fun main() {
             delay(500)
 
             println("─".repeat(80))
-            println("CREATING SPARK TICKET")
+            println("CREATING DEMO TICKET")
             println("─".repeat(80))
             println()
 
             // Build the ticket specification
             val ticketSpec = TicketBuilder()
-                .withTitle("Add CoordinationSpark.Handoff")
+                .withTitle("Add ampere task create CLI command")
                 .withDescription("""
-                    Add a new Spark type that improves agent handoffs and coordination.
+                    Create a new CLI command that lets a human publish a TaskCreated event.
 
                     Requirements:
-                    - Create a new Kotlin file at:
-                      ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/cognition/sparks/CoordinationSpark.kt
-                    - Define a sealed class CoordinationSpark : Spark
-                    - Include a data object Handoff with:
-                      - @Serializable + @SerialName("CoordinationSpark.Handoff")
-                      - name = "Coordination:Handoff"
-                      - promptContribution: markdown guidance for explicit ownership,
-                        handoff summaries, and event-driven coordination
-                      - allowedTools = null, fileAccessScope = null
-                    - Update AmpereProjectSpark's Spark list to include CoordinationSpark
+                    - Create `ampere-cli/src/jvmMain/kotlin/link/socket/ampere/TaskCommand.kt`
+                      with a `task` command and a `create` subcommand.
+                    - `ampere task create "<description>"` accepts:
+                      - `--id <taskId>` (optional; generate if omitted)
+                      - `--urgency <low|medium|high>` (default: medium)
+                      - `--assign <agentId>` (optional)
+                    - On execution, publish TaskCreated via AgentEventApi
+                      (use AmpereContext.environmentService.createEventApi("human-cli"))
+                      and print a one-line confirmation.
+                    - Register the new command in AmpereCommand.
+
+                    Uncertainty moment:
+                    - Add a short code comment noting any assumption (e.g., ID generation
+                      or default urgency) before proceeding.
 
                     IMPORTANT:
                     - Keep scope tight and changes minimal
@@ -232,40 +241,41 @@ fun main() {
                 delay(1.seconds)
                 elapsedSeconds++
 
-                // Check if code was generated (search recursively for CoordinationSpark.kt)
-                val sparkFile = outputDir.walkTopDown()
-                    .firstOrNull { it.name == "CoordinationSpark.kt" && it.isFile }
+                // Check if code was generated (search recursively for TaskCommand.kt)
+                val taskCommandFile = outputDir.walkTopDown()
+                    .firstOrNull { it.name == "TaskCommand.kt" && it.isFile }
 
-                if (sparkFile != null && sparkFile.exists()) {
+                if (taskCommandFile != null && taskCommandFile.exists()) {
                     println()
                     println("═".repeat(80))
                     println("✅ SUCCESS! Agent completed the task in ${elapsedSeconds} seconds")
                     println("═".repeat(80))
                     println()
-                    println("📄 Generated file: ${sparkFile.absolutePath}")
+                    println("📄 Generated file: ${taskCommandFile.absolutePath}")
                     println()
                     println("File contents:")
                     println("─".repeat(80))
-                    println(sparkFile.readText())
+                    println(taskCommandFile.readText())
                     println("─".repeat(80))
                     println()
 
                     // Basic validation
-                    val content = sparkFile.readText()
-                    val hasSpark = content.contains("CoordinationSpark")
-                    val hasHandoff = content.contains("Handoff")
-                    val hasSerialName = content.contains("CoordinationSpark.Handoff")
+                    val content = taskCommandFile.readText()
+                    val hasCommand = content.contains("TaskCommand")
+                    val hasPublisher = content.contains("publishTaskCreated")
+                    val hasCreateSubcommand = content.contains("name = \"create\"") ||
+                        content.contains("name=\"create\"")
 
-                    if (hasSpark && hasHandoff && hasSerialName) {
+                    if (hasCommand && hasPublisher && hasCreateSubcommand) {
                         println("✅ Code validation passed")
-                        println("   ✓ Contains CoordinationSpark")
-                        println("   ✓ Defines Handoff spark")
-                        println("   ✓ Serial name present")
+                        println("   ✓ Contains TaskCommand")
+                        println("   ✓ Publishes TaskCreated")
+                        println("   ✓ Has create subcommand")
                     } else {
                         println("⚠️  Code validation warnings:")
-                        if (!hasSpark) println("   - Missing CoordinationSpark")
-                        if (!hasHandoff) println("   - Missing Handoff spark")
-                        if (!hasSerialName) println("   - Missing serial name annotation")
+                        if (!hasCommand) println("   - Missing TaskCommand")
+                        if (!hasPublisher) println("   - Missing publishTaskCreated usage")
+                        if (!hasCreateSubcommand) println("   - Missing create subcommand")
                     }
 
                     println()
@@ -329,7 +339,8 @@ fun main() {
 private suspend fun handleTicketAssignment(
     agent: CodeAgent,
     ticketId: String,
-    context: AmpereContext
+    context: AmpereContext,
+    eventApi: AgentEventApi,
 ) {
     val phaseSparkManager = PhaseSparkManager(agent, enabled = true)
 
@@ -351,6 +362,14 @@ private suspend fun handleTicketAssignment(
             id = "task-$ticketId",
             status = TaskStatus.Pending,
             description = ticket.description
+        )
+
+        // Publish TaskCreated for visibility in the event stream
+        eventApi.publishTaskCreated(
+            taskId = task.id,
+            urgency = Urgency.MEDIUM,
+            description = ticket.title,
+            assignedTo = agent.id,
         )
 
         // PHASE 1: PERCEIVE
@@ -394,6 +413,13 @@ private suspend fun handleTicketAssignment(
                 println("      ✅ Success! Changed ${outcome.changedFiles.size} file(s)")
                 outcome.changedFiles.forEach { file ->
                     println("         - $file")
+                    eventApi.publishCodeSubmitted(
+                        urgency = Urgency.LOW,
+                        filePath = file,
+                        changeDescription = "Written by CodeAgent",
+                        reviewRequired = false,
+                        assignedTo = null,
+                    )
                 }
             }
             is ExecutionOutcome.CodeChanged.Failure -> {

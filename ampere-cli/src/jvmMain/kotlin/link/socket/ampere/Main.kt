@@ -134,6 +134,7 @@ fun main(args: Array<String>) {
                 OutcomesCommand(context.outcomeMemoryRepository),
                 KnowledgeCommand(context.knowledgeRepository),
                 TraceCommand(context.eventRepository),
+                TaskCommand { context },
                 IssuesCommand(),
                 RespondCommand(),
                 WorkCommand { context },
