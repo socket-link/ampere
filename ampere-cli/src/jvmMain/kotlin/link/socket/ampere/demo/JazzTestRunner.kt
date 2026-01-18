@@ -43,7 +43,7 @@ import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
  * This program:
  * 1. Starts the AMPERE environment
  * 2. Creates a CodeWriterAgent that listens for ticket events
- * 3. Creates a ticket: "Add ampere task create CLI command"
+ * 3. Creates a ticket: "Add `ampere task create` CLI command"
  * 4. Assigns the ticket to the agent
  * 5. The agent autonomously runs through the PROPEL cognitive cycle
  * 6. All events are emitted and observable via the CLI dashboard
@@ -66,6 +66,7 @@ fun main() {
     outputDir.mkdirs()
 
     println("📁 Output directory: ${outputDir.absolutePath}")
+    println("📄 Expected output: ${outputDir.absolutePath}/ampere-cli/src/jvmMain/kotlin/link/socket/ampere/TaskCommand.kt")
     println()
 
     // Initialize AMPERE context (this creates the database, event bus, etc.)
@@ -155,29 +156,27 @@ fun main() {
 
             // Build the ticket specification
             val ticketSpec = TicketBuilder()
-                .withTitle("Add ampere task create CLI command")
+                .withTitle("Add `ampere task create` CLI command")
                 .withDescription("""
-                    Create a new CLI command that lets a human publish a TaskCreated event.
+                    Create a new CLI command that lets a human publish a TaskCreated event from the terminal.
 
                     Requirements:
-                    - Create `ampere-cli/src/jvmMain/kotlin/link/socket/ampere/TaskCommand.kt`
-                      with a `task` command and a `create` subcommand.
-                    - `ampere task create "<description>"` accepts:
-                      - `--id <taskId>` (optional; generate if omitted)
-                      - `--urgency <low|medium|high>` (default: medium)
-                      - `--assign <agentId>` (optional)
-                    - On execution, publish TaskCreated via AgentEventApi
-                      (use AmpereContext.environmentService.createEventApi("human-cli"))
-                      and print a one-line confirmation.
-                    - Register the new command in AmpereCommand.
+                    * Create `ampere-cli/src/jvmMain/kotlin/link/socket/ampere/TaskCommand.kt` with a `task` command and a `create` subcommand.
+                    * `ampere task create "<description>"` accepts:
+                      * `--id <taskId>` (optional; generate if omitted)
+                      * `--urgency <low|medium|high>` (default: medium)
+                      * `--assign <agentId>` (optional)
+                    * On execution, publish `TaskCreated` via `AgentEventApi` (use `AmpereContext.environmentService.createEventApi("human-cli")`) and print a one-line confirmation.
+                    * Register the new command in `AmpereCommand`.
 
                     Uncertainty moment:
-                    - Add a short code comment noting any assumption (e.g., ID generation
-                      or default urgency) before proceeding.
 
-                    IMPORTANT:
-                    - Keep scope tight and changes minimal
-                    - Do NOT add unrelated files
+                    * Add a short code comment noting any assumption (e.g., ID generation or default urgency) before proceeding.
+
+                    Constraints:
+
+                    * Keep scope tight, Kotlin only, no new dependencies or tests.
+                    * Follow the context-provider pattern used by other CLI commands (e.g., `WorkCommand`).
                 """.trimIndent())
                 .ofType(TicketType.TASK)
                 .withPriority(TicketPriority.HIGH)
@@ -241,17 +240,19 @@ fun main() {
                 delay(1.seconds)
                 elapsedSeconds++
 
-                // Check if code was generated (search recursively for TaskCommand.kt)
-                val taskCommandFile = outputDir.walkTopDown()
-                    .firstOrNull { it.name == "TaskCommand.kt" && it.isFile }
-
-                if (taskCommandFile != null && taskCommandFile.exists()) {
+                // Check if code was generated in the expected output directory
+                val generatedFiles = findGeneratedJazzFiles(outputDir)
+                if (generatedFiles != null) {
+                    val taskCommandFile = generatedFiles.taskCommand
                     println()
                     println("═".repeat(80))
                     println("✅ SUCCESS! Agent completed the task in ${elapsedSeconds} seconds")
                     println("═".repeat(80))
                     println()
                     println("📄 Generated file: ${taskCommandFile.absolutePath}")
+                    generatedFiles.ampereCommand?.let { file ->
+                        println("📄 Updated file: ${file.absolutePath}")
+                    }
                     println()
                     println("File contents:")
                     println("─".repeat(80))
@@ -261,7 +262,7 @@ fun main() {
 
                     // Basic validation
                     val content = taskCommandFile.readText()
-                    val hasCommand = content.contains("TaskCommand")
+                    val hasCommand = content.contains("class TaskCommand") || content.contains("TaskCommand")
                     val hasPublisher = content.contains("publishTaskCreated")
                     val hasCreateSubcommand = content.contains("name = \"create\"") ||
                         content.contains("name=\"create\"")
@@ -331,6 +332,29 @@ fun main() {
         context.close()
         println("👋 Environment stopped cleanly")
     }
+}
+
+internal data class JazzGeneratedFiles(
+    val taskCommand: File,
+    val ampereCommand: File?,
+)
+
+internal fun findGeneratedJazzFiles(outputDir: File): JazzGeneratedFiles? {
+    val generatedSourceDir = File(
+        outputDir,
+        "ampere-cli/src/jvmMain/kotlin/link/socket/ampere"
+    )
+    val taskCommandFile = File(generatedSourceDir, "TaskCommand.kt")
+    if (!taskCommandFile.exists()) {
+        return null
+    }
+
+    val ampereCommandFile = File(generatedSourceDir, "AmpereCommand.kt")
+
+    return JazzGeneratedFiles(
+        taskCommand = taskCommandFile,
+        ampereCommand = ampereCommandFile.takeIf { it.exists() },
+    )
 }
 
 /**
