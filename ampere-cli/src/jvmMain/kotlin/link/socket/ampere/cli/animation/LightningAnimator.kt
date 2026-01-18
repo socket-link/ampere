@@ -96,6 +96,28 @@ object LightningAnimator {
     )
 
     /**
+     * Standard spinner sequence for general async operations.
+     */
+    val STANDARD_SPINNER = listOf(
+        DischargeFrame("◐", Glow.NORMAL, 150),
+        DischargeFrame("◓", Glow.NORMAL, 150),
+        DischargeFrame("◑", Glow.NORMAL, 150),
+        DischargeFrame("◒", Glow.NORMAL, 150)
+    )
+
+    /**
+     * Lightning pulse sequence for high-intensity operations.
+     */
+    val LIGHTNING_PULSE = listOf(
+        DischargeFrame("·", Glow.DIM, 120),
+        DischargeFrame("˙", Glow.DIM, 80),
+        DischargeFrame("⁝", Glow.NORMAL, 70),
+        DischargeFrame("⚡", Glow.FLASH, 100),
+        DischargeFrame("✧", Glow.NORMAL, 80),
+        DischargeFrame("·", Glow.DIM, 150)
+    )
+
+    /**
      * Generates glow levels for each character position.
      * Brightness falls off with distance from center.
      *
