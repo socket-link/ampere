@@ -11,7 +11,7 @@ import com.github.ajalt.clikt.core.CliktCommand
  * The Jazz Test demonstrates:
  * 1. Starting the AMPERE environment
  * 2. Creating a CodeWriterAgent
- * 3. Assigning a ticket (CoordinationSpark implementation)
+ * 3. Assigning a ticket (task-create command implementation)
  * 4. Agent autonomously running through PROPEL cognitive cycle
  * 5. Generating working Kotlin code
  *
@@ -32,8 +32,8 @@ class JazzSubcommand : CliktCommand(
         - Agent executes code writing
         - Agent learns from the outcome
 
-        The agent will generate a new CoordinationSpark and save it to:
-          ~/.ampere/jazz-test-output/ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/cognition/sparks/CoordinationSpark.kt
+        The agent will generate a new TaskCommand and save it to:
+          ~/.ampere/jazz-test-output/ampere-cli/src/jvmMain/kotlin/link/socket/ampere/TaskCommand.kt
 
         To observe the agent's cognitive cycle in real-time, run the dashboard
         in another terminal:

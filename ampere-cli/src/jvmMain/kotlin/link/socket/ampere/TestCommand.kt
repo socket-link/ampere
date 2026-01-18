@@ -14,7 +14,7 @@ import com.github.ajalt.clikt.core.subcommands
  *   ampere run --demo jazz
  *
  * Available tests:
- * - jazz: Autonomous agent test (CodeWriterAgent + CoordinationSpark task) - headless
+ * - jazz: Autonomous agent test (CodeWriterAgent + task-create CLI command) - headless
  * - ticket: Issue creation test (GitHub issue management) - headless
  *
  * Usage:
@@ -36,7 +36,7 @@ class TestCommand : CliktCommand(
           ampere run --demo <name>
 
         Available tests:
-          jazz      Headless autonomous agent test (CoordinationSpark task)
+          jazz      Headless autonomous agent test (task-create CLI command)
           ticket    Headless GitHub issue creation test
 
         These tests validate AMPERE functionality and are designed for

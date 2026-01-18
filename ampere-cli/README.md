@@ -113,7 +113,7 @@ Run agents with active work while visualizing progress in real-time:
 ./ampere-cli/ampere run -g "Add authentication to API"
 
 # Run preset demos
-./ampere-cli/ampere run --demo jazz          # CoordinationSpark demo
+./ampere-cli/ampere run --demo jazz          # Task-create command demo
 
 # Work on GitHub issues
 ./ampere-cli/ampere run --issues             # Continuous issue work
@@ -252,7 +252,7 @@ Launch an interactive REPL session:
 Run headless tests for automated validation (CI/CD):
 
 ```bash
-./ampere-cli/ampere test jazz                          # Headless Jazz test (CoordinationSpark)
+./ampere-cli/ampere test jazz                          # Headless Jazz test (task-create command)
 ./ampere-cli/ampere test ticket                        # Headless issue creation test
 ```
 
