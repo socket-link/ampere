@@ -269,8 +269,9 @@ object TerminalFactory {
     fun createTerminal(): Terminal {
         val capabilities = getCapabilities()
 
-        // Update TerminalColors based on detected capabilities
+        // Update TerminalColors and TerminalSymbols based on detected capabilities
         TerminalColors.initializeFromCapabilities(capabilities)
+        TerminalSymbols.initializeFromCapabilities(capabilities)
 
         return Terminal(
             ansiLevel = capabilities.colorLevel
