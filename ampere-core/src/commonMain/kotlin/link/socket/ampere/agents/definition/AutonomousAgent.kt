@@ -559,7 +559,7 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
 
         val currentTop = sparkStack.peek()
         if (currentTop is TaskSpark && currentTop.taskId == taskId) {
-            unspark<AutonomousAgent<S>>()
+            unspark()
             return currentTop
         }
 
