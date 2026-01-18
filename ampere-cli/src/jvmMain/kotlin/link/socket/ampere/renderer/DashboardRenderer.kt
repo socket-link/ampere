@@ -8,6 +8,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import link.socket.ampere.cli.animation.LightningAnimator
 import link.socket.ampere.cli.watch.presentation.AgentState
 import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.SystemState
@@ -24,11 +25,13 @@ class DashboardRenderer(
     private val clock: Clock = Clock.System,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault()
 ) {
-    // Spinner characters cycle
-    private val spinners = arrayOf("◐", "◓", "◑", "◒")
+    private val spinnerFrames = LightningAnimator.STANDARD_SPINNER
+    private val stateWidth = AgentState.values().maxOf { it.displayText.length }
+    private var frameCounter: Long = 0
 
     fun render(viewState: WatchViewState, verboseMode: Boolean = false): String {
         return buildString {
+            val frameTick = frameCounter++
             // Clear screen and move cursor to home
             append("\u001B[2J") // Clear screen
             append("\u001B[H")  // Move cursor to home
@@ -38,7 +41,7 @@ class DashboardRenderer(
             append("\n\n")
 
             // Agent activity panel
-            appendAgentActivity(viewState.agentStates)
+            appendAgentActivity(viewState.agentStates, frameTick)
             append("\n")
 
             // Recent significant events
@@ -78,7 +81,10 @@ class DashboardRenderer(
         append("last event: $lastEventText")
     }
 
-    private fun StringBuilder.appendAgentActivity(states: Map<String, link.socket.ampere.cli.watch.presentation.AgentActivityState>) {
+    private fun StringBuilder.appendAgentActivity(
+        states: Map<String, link.socket.ampere.cli.watch.presentation.AgentActivityState>,
+        frameTick: Long
+    ) {
         append(terminal.render(bold("Agent Activity")))
         append("\n")
 
@@ -88,8 +94,12 @@ class DashboardRenderer(
             return
         }
 
-        states.values.sortedBy { it.displayName }.forEach { state ->
-            val spinner = spinners[state.consecutiveCognitiveCycles % 4]
+        val nameWidth = 20
+        val spinnerCount = spinnerFrames.size.coerceAtLeast(1)
+
+        states.values.sortedBy { it.displayName }.forEachIndexed { index, state ->
+            val spinnerIndex = ((frameTick + index) % spinnerCount).toInt()
+            val spinnerSymbol = spinnerFrames[spinnerIndex].symbol
             val stateColor = when (state.currentState) {
                 AgentState.WORKING -> TextColors.green
                 AgentState.THINKING -> TextColors.yellow
@@ -97,20 +107,21 @@ class DashboardRenderer(
                 AgentState.IN_MEETING -> TextColors.blue
                 AgentState.WAITING -> TextColors.yellow
             }
-
-            val cycleInfo = if (state.consecutiveCognitiveCycles > 0) {
-                " (${state.consecutiveCognitiveCycles} cycles)"
-            } else ""
-
-            val name = state.displayName.take(25).padEnd(25)
+            val name = state.displayName.take(nameWidth).padEnd(nameWidth)
             val nameStyle = state.affinityName?.let { SparkColors.forAffinityName(it) } ?: TextColors.white
-            val depthIndicator = if (state.sparkDepth > 0) {
-                " ${SparkColors.renderDepthIndicator(state.sparkDepth, SparkColors.DepthDisplayStyle.DOTS)}"
-            } else ""
+            val stateText = state.currentState.displayText.uppercase().padEnd(stateWidth)
+            val depthIndicator = SparkColors.renderDepthIndicator(
+                state.sparkDepth.coerceAtLeast(0),
+                SparkColors.DepthDisplayStyle.DOTS
+            )
 
-            append("$spinner ${terminal.render(nameStyle(name))} ")
-            append(terminal.render(stateColor(state.currentState.displayText)))
-            append(terminal.render(dim(cycleInfo + depthIndicator)))
+            append(terminal.render(nameStyle(spinnerSymbol)))
+            append(" ")
+            append(terminal.render(nameStyle(name)))
+            append(" ")
+            append(terminal.render(stateColor(stateText)))
+            append("  ")
+            append(terminal.render(dim(depthIndicator)))
             append("\n")
         }
     }
