@@ -57,7 +57,7 @@ JAVA_HOME=$(/usr/libexec/java_home -v 21) ampere-cli/build/install/ampere-cli-jv
 # Run an agent with a custom goal (with TUI)
 ./ampere-cli/ampere run --goal "Implement FizzBuzz"
 
-# Run the Jazz demo (with TUI)
+# Run the Jazz demo (task create command, with TUI)
 ./ampere-cli/ampere run --demo jazz
 
 # Work on GitHub issues (with TUI)
@@ -113,7 +113,7 @@ Run agents with active work while visualizing progress in real-time:
 ./ampere-cli/ampere run -g "Add authentication to API"
 
 # Run preset demos
-./ampere-cli/ampere run --demo jazz          # Task-create command demo
+./ampere-cli/ampere run --demo jazz          # Task create command demo (`ampere task create`)
 
 # Work on GitHub issues
 ./ampere-cli/ampere run --issues             # Continuous issue work
@@ -252,7 +252,7 @@ Launch an interactive REPL session:
 Run headless tests for automated validation (CI/CD):
 
 ```bash
-./ampere-cli/ampere test jazz                          # Headless Jazz test (task-create command)
+./ampere-cli/ampere test jazz                          # Headless Jazz test (task create command)
 ./ampere-cli/ampere test ticket                        # Headless issue creation test
 ```
 
