@@ -19,10 +19,13 @@ private object TerminalCodes {
     const val MOVE_TO_START = "\u001b[0G"
     const val RESET = "\u001b[0m"
     const val BOLD = "\u001b[1m"
+    const val DIM = "\u001b[2m"
     const val GREEN = "\u001b[32m"
     const val RED = "\u001b[31m"
     const val YELLOW = "\u001b[33m"
     const val CYAN = "\u001b[36m"
+    const val WHITE = "\u001b[37m"
+    const val GRAY = "\u001b[90m"
 }
 
 /**
@@ -80,7 +83,10 @@ enum class IndicatorMode {
  * State for state indicator mode.
  */
 enum class IndicatorState {
+    THINKING,
+    CONNECTING,
     WAITING,
+    PROCESSING,
     SUCCESS,
     ERROR
 }
@@ -382,10 +388,8 @@ class ProgressBarIndicator(
 }
 
 /**
- * State indicator for showing success, error, or waiting states.
- *
- * Unlike spinner and progress bar, this doesn't animate by default
- * but shows a static indicator that can be updated.
+ * State indicator for showing semantic states like thinking, connecting,
+ * waiting, processing, success, and error with distinct animations.
  */
 class StateIndicator(
     terminal: Terminal,
@@ -395,17 +399,72 @@ class StateIndicator(
     isInteractive: Boolean
 ) : BaseProgressIndicator(terminal, message, useColors, useUnicode, isInteractive) {
 
+    @Volatile
     private var state: IndicatorState = IndicatorState.WAITING
-    private var animateWaiting: Boolean = true
+    @Volatile
+    private var stateVersion: Long = 0
 
-    // State symbols
-    private val waitingSymbolUnicode = listOf("◐", "◓", "◑", "◒")
-    private val waitingSymbolAscii = listOf("(o)", "(O)", "(o)", "(O)")
+    private data class StateAnimation(
+        val frames: List<String>,
+        val colors: List<String>,
+        val frameIntervalMs: Long,
+        val loop: Boolean = true
+    ) {
+        fun colorFor(index: Int): String = colors.getOrElse(index) { colors.last() }
+    }
+
     private val successSymbol: String get() = if (useUnicode) "✓" else "[OK]"
     private val errorSymbol: String get() = if (useUnicode) "✗" else "[X]"
 
-    private val waitingSymbols: List<String>
-        get() = if (useUnicode) waitingSymbolUnicode else waitingSymbolAscii
+    private fun animationFor(state: IndicatorState): StateAnimation {
+        val arrow = if (useUnicode) "→" else "->"
+        val emptyCircle = if (useUnicode) "○" else "o"
+        val halfCircle = if (useUnicode) "◐" else "0"
+        val filledCircle = if (useUnicode) "●" else "O"
+        val sparkle = if (useUnicode) "✧" else "+"
+        val lightning = if (useUnicode) "⚡" else "*"
+
+        return when (state) {
+            IndicatorState.THINKING -> StateAnimation(
+                frames = listOf("$arrow$arrow", "$arrow $arrow"),
+                colors = listOf(TerminalCodes.CYAN, TerminalCodes.CYAN),
+                frameIntervalMs = 500L
+            )
+            IndicatorState.CONNECTING -> StateAnimation(
+                frames = listOf(emptyCircle, halfCircle, filledCircle, halfCircle),
+                colors = listOf(TerminalCodes.YELLOW, TerminalCodes.YELLOW, TerminalCodes.YELLOW, TerminalCodes.YELLOW),
+                frameIntervalMs = 200L
+            )
+            IndicatorState.WAITING -> StateAnimation(
+                frames = listOf(".", "..", "..."),
+                colors = listOf(TerminalCodes.GRAY, TerminalCodes.GRAY, TerminalCodes.GRAY),
+                frameIntervalMs = 300L
+            )
+            IndicatorState.PROCESSING -> StateAnimation(
+                frames = listOf(lightning, sparkle, lightning),
+                colors = listOf(TerminalCodes.YELLOW, TerminalCodes.WHITE, TerminalCodes.YELLOW),
+                frameIntervalMs = 100L
+            )
+            IndicatorState.SUCCESS -> StateAnimation(
+                frames = listOf(successSymbol, successSymbol),
+                colors = listOf("${TerminalCodes.DIM}${TerminalCodes.GREEN}", TerminalCodes.GREEN),
+                frameIntervalMs = 50L,
+                loop = false
+            )
+            IndicatorState.ERROR -> StateAnimation(
+                frames = listOf(errorSymbol, " ", errorSymbol, " ", errorSymbol),
+                colors = listOf(
+                    TerminalCodes.RED,
+                    TerminalCodes.RED,
+                    TerminalCodes.RED,
+                    TerminalCodes.RED,
+                    TerminalCodes.RED
+                ),
+                frameIntervalMs = 100L,
+                loop = false
+            )
+        }
+    }
 
     override fun start() {
         if (!isInteractive) {
@@ -415,26 +474,31 @@ class StateIndicator(
         }
 
         hideCursor()
-        state = IndicatorState.WAITING
         job = CoroutineScope(Dispatchers.Default).launch {
             var frameIndex = 0
+            var lastVersion = stateVersion
             while (isActive) {
-                renderState(frameIndex)
-                if (state == IndicatorState.WAITING && animateWaiting) {
-                    frameIndex = (frameIndex + 1) % waitingSymbols.size
+                val currentState = state
+                if (stateVersion != lastVersion) {
+                    frameIndex = 0
+                    lastVersion = stateVersion
                 }
-                delay(FRAME_INTERVAL_MS)
+                val animation = animationFor(currentState)
+                renderState(animation, frameIndex)
+                if (animation.loop) {
+                    frameIndex = (frameIndex + 1) % animation.frames.size
+                } else if (frameIndex < animation.frames.lastIndex) {
+                    frameIndex += 1
+                }
+                delay(animation.frameIntervalMs)
             }
         }
     }
 
-    private fun renderState(frameIndex: Int) {
+    private fun renderState(animation: StateAnimation, frameIndex: Int) {
         clearLine()
-        val (symbol, color) = when (state) {
-            IndicatorState.WAITING -> waitingSymbols[frameIndex] to TerminalCodes.YELLOW
-            IndicatorState.SUCCESS -> successSymbol to TerminalCodes.GREEN
-            IndicatorState.ERROR -> errorSymbol to TerminalCodes.RED
-        }
+        val symbol = animation.frames[frameIndex]
+        val color = animation.colorFor(frameIndex)
         writer.print("${colored(symbol, color)} $message")
         flush()
     }
@@ -444,6 +508,7 @@ class StateIndicator(
      */
     fun setState(newState: IndicatorState) {
         this.state = newState
+        stateVersion += 1
     }
 
     override fun update(progress: Float?, message: String?) {
@@ -453,12 +518,26 @@ class StateIndicator(
 
     override fun complete(success: Boolean) {
         state = if (success) IndicatorState.SUCCESS else IndicatorState.ERROR
+        stateVersion += 1
         job?.cancel()
         job = null
         clearLine()
-        val symbol = if (success) successSymbol else errorSymbol
-        val color = if (success) TerminalCodes.GREEN else TerminalCodes.RED
-        writer.println("${colored(symbol, color)} $message")
+        val animation = animationFor(state)
+        if (isInteractive && animation.frames.isNotEmpty()) {
+            for (index in animation.frames.indices) {
+                clearLine()
+                val symbol = animation.frames[index]
+                val color = animation.colorFor(index)
+                writer.print("${colored(symbol, color)} $message")
+                flush()
+                Thread.sleep(animation.frameIntervalMs)
+            }
+            writer.println()
+        } else {
+            val symbol = if (success) successSymbol else errorSymbol
+            val color = if (success) TerminalCodes.GREEN else TerminalCodes.RED
+            writer.println("${colored(symbol, color)} $message")
+        }
         showCursor()
         flush()
     }

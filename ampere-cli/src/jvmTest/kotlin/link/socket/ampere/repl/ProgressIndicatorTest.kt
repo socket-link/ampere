@@ -387,10 +387,31 @@ class ProgressIndicatorTest {
     @Test
     fun `indicator states enum has all expected values`() {
         val states = IndicatorState.entries
-        assertEquals(3, states.size)
+        assertEquals(6, states.size)
+        assertTrue(states.contains(IndicatorState.THINKING))
+        assertTrue(states.contains(IndicatorState.CONNECTING))
         assertTrue(states.contains(IndicatorState.WAITING))
+        assertTrue(states.contains(IndicatorState.PROCESSING))
         assertTrue(states.contains(IndicatorState.SUCCESS))
         assertTrue(states.contains(IndicatorState.ERROR))
+    }
+
+    @Test
+    fun `state indicator can start in a semantic state`() {
+        val indicator = ProgressIndicatorBuilder(terminal)
+            .mode(IndicatorMode.STATE)
+            .message("Thinking")
+            .useColors(false)
+            .useUnicode(false)
+            .build() as StateIndicator
+
+        indicator.setState(IndicatorState.THINKING)
+        indicator.start()
+        Thread.sleep(60)
+        indicator.stop()
+
+        val output = outputStream.toString()
+        assertTrue(output.contains("->"), "Should show thinking arrow symbols")
     }
 
     @Test
