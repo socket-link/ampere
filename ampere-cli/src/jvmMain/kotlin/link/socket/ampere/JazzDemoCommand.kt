@@ -55,7 +55,7 @@ import link.socket.ampere.repl.TerminalFactory
 /**
  * Jazz Test Demo with 3-column interactive visualization.
  *
- * This demo runs the Jazz Test (autonomous agent adding a new CLI task-create command)
+ * This demo runs the Jazz Test (autonomous agent adding the `ampere task create` CLI command)
  * with a 3-column layout showing:
  * - Left pane (35%): Event stream
  * - Middle pane (40%): Cognitive cycle progress
@@ -80,7 +80,7 @@ class JazzDemoCommand(
         Run the Jazz Test demo with 3-column interactive visualization.
 
         The Jazz Test demonstrates autonomous agent behavior by having
-        an agent add a new CLI task-create command to the AMPERE framework. This command
+        an agent add the `ampere task create` CLI command to the AMPERE framework. This command
         shows the execution with a 3-column layout:
 
         Left pane:   Event stream (filtered by significance)
@@ -433,29 +433,27 @@ class JazzDemoCommand(
         jazzPane.setPhase(JazzProgressPane.Phase.INITIALIZING, "Creating ticket...")
 
         val ticketSpec = TicketBuilder()
-            .withTitle("Add ampere task create CLI command")
+            .withTitle("Add `ampere task create` CLI command")
             .withDescription("""
-                Create a new CLI command that lets a human publish a TaskCreated event.
+                Create a new CLI command that lets a human publish a TaskCreated event from the terminal.
 
                 Requirements:
-                - Create `ampere-cli/src/jvmMain/kotlin/link/socket/ampere/TaskCommand.kt`
-                  with a `task` command and a `create` subcommand.
-                - `ampere task create "<description>"` accepts:
-                  - `--id <taskId>` (optional; generate if omitted)
-                  - `--urgency <low|medium|high>` (default: medium)
-                  - `--assign <agentId>` (optional)
-                - On execution, publish TaskCreated via AgentEventApi
-                  (use AmpereContext.environmentService.createEventApi("human-cli"))
-                  and print a one-line confirmation.
-                - Register the new command in AmpereCommand.
+                * Create `ampere-cli/src/jvmMain/kotlin/link/socket/ampere/TaskCommand.kt` with a `task` command and a `create` subcommand.
+                * `ampere task create "<description>"` accepts:
+                  * `--id <taskId>` (optional; generate if omitted)
+                  * `--urgency <low|medium|high>` (default: medium)
+                  * `--assign <agentId>` (optional)
+                * On execution, publish `TaskCreated` via `AgentEventApi` (use `AmpereContext.environmentService.createEventApi("human-cli")`) and print a one-line confirmation.
+                * Register the new command in `AmpereCommand`.
 
                 Uncertainty moment:
-                - Add a short code comment noting any assumption (e.g., ID generation
-                  or default urgency) before proceeding.
 
-                IMPORTANT:
-                - Keep scope tight and changes minimal
-                - Do NOT add unrelated files
+                * Add a short code comment noting any assumption (e.g., ID generation or default urgency) before proceeding.
+
+                Constraints:
+
+                * Keep scope tight, Kotlin only, no new dependencies or tests.
+                * Follow the context-provider pattern used by other CLI commands (e.g., `WorkCommand`).
             """.trimIndent())
             .ofType(TicketType.TASK)
             .withPriority(TicketPriority.HIGH)
