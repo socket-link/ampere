@@ -239,9 +239,12 @@ class ProgressBarIndicator(
 
     private var currentProgress: Float? = null
     private var indeterminatePosition = 0
+    private var lastBarWidth = DEFAULT_BAR_WIDTH
 
     companion object {
-        private const val BAR_WIDTH = 20
+        private const val DEFAULT_BAR_WIDTH = 20
+        private const val MAX_BAR_WIDTH = 40
+        private const val PERCENT_WIDTH = 4
     }
 
     // Progress bar characters
@@ -253,31 +256,34 @@ class ProgressBarIndicator(
         hideCursor()
         job = CoroutineScope(Dispatchers.Default).launch {
             while (isActive) {
-                renderBar()
+                val barWidth = computeBarWidth()
+                renderBar(barWidth)
                 if (currentProgress == null) {
                     // Indeterminate mode: animate
-                    indeterminatePosition = (indeterminatePosition + 1) % (BAR_WIDTH * 2)
+                    val travel = ((barWidth - 1) * 2).coerceAtLeast(1)
+                    indeterminatePosition = (indeterminatePosition + 1) % travel
                 }
                 delay(FRAME_INTERVAL_MS)
             }
         }
     }
 
-    private fun renderBar() {
+    private fun renderBar(barWidth: Int) {
         clearLine()
+        lastBarWidth = barWidth
         val bar = if (currentProgress != null) {
-            renderDeterminateBar(currentProgress!!)
+            renderDeterminateBar(currentProgress!!, barWidth)
         } else {
-            renderIndeterminateBar()
+            renderIndeterminateBar(barWidth)
         }
         writer.print("$bar $message")
         flush()
     }
 
-    private fun renderDeterminateBar(progress: Float): String {
+    private fun renderDeterminateBar(progress: Float, barWidth: Int): String {
         val clampedProgress = progress.coerceIn(0f, 1f)
-        val filled = (clampedProgress * BAR_WIDTH).toInt()
-        val empty = BAR_WIDTH - filled
+        val filled = (clampedProgress * barWidth).toInt()
+        val empty = (barWidth - filled).coerceAtLeast(0)
         val percentage = (clampedProgress * 100).toInt()
 
         val filledPart = colored(filledChar.repeat(filled), TerminalCodes.CYAN)
@@ -285,23 +291,40 @@ class ProgressBarIndicator(
         return "[$filledPart$emptyPart] $percentage%"
     }
 
-    private fun renderIndeterminateBar(): String {
-        val pos = if (indeterminatePosition < BAR_WIDTH) {
-            indeterminatePosition
+    private fun renderIndeterminateBar(barWidth: Int): String {
+        val travel = ((barWidth - 1) * 2).coerceAtLeast(1)
+        val normalizedPosition = indeterminatePosition % travel
+        val pos = if (barWidth <= 1) {
+            0
+        } else if (normalizedPosition < barWidth) {
+            normalizedPosition
         } else {
-            (BAR_WIDTH * 2) - indeterminatePosition - 1
+            ((barWidth - 1) * 2) - normalizedPosition
         }
 
         val bar = buildString {
-            for (i in 0 until BAR_WIDTH) {
-                when {
-                    i == pos -> append(colored(bounceChar, TerminalCodes.CYAN))
-                    i == pos - 1 || i == pos + 1 -> append(colored(filledChar, TerminalCodes.CYAN))
-                    else -> append(emptyChar)
+            for (i in 0 until barWidth) {
+                if (i == pos) {
+                    append(colored(bounceChar, TerminalCodes.CYAN))
+                } else {
+                    append(emptyChar)
                 }
             }
         }
         return "[$bar]"
+    }
+
+    private fun computeBarWidth(): Int {
+        val terminalWidth = terminal.width
+        if (terminalWidth <= 0) {
+            return DEFAULT_BAR_WIDTH
+        }
+
+        val reservedForMessage = 1 + message.length
+        val reservedForPercent = if (currentProgress == null) 0 else 1 + PERCENT_WIDTH
+        val reserved = 2 + reservedForPercent + reservedForMessage
+        val available = terminalWidth - reserved
+        return available.coerceAtLeast(1).coerceAtMost(MAX_BAR_WIDTH)
     }
 
     override fun update(progress: Float?, message: String?) {
@@ -323,9 +346,9 @@ class ProgressBarIndicator(
 
         // Show completed bar
         val completedBar = if (success) {
-            colored(filledChar.repeat(BAR_WIDTH), TerminalCodes.GREEN)
+            colored(filledChar.repeat(lastBarWidth), TerminalCodes.GREEN)
         } else {
-            colored(filledChar.repeat(BAR_WIDTH), TerminalCodes.RED)
+            colored(filledChar.repeat(lastBarWidth), TerminalCodes.RED)
         }
         writer.println("[$completedBar] ${colored(symbol, color)} $message")
         showCursor()

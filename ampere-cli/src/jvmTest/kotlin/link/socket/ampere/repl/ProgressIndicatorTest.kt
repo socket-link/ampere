@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.jline.terminal.Terminal
 import org.jline.terminal.TerminalBuilder
+import org.jline.terminal.Size
 import java.io.ByteArrayOutputStream
 import java.io.PrintWriter
 import kotlin.test.assertEquals
@@ -17,6 +18,18 @@ class ProgressIndicatorTest {
     private lateinit var outputStream: ByteArrayOutputStream
     private lateinit var terminal: Terminal
     private lateinit var writer: PrintWriter
+
+    private fun stripAnsiSequences(output: String): String {
+        return output.replace(Regex("\\u001B\\[[0-9;?]*[A-Za-z]"), "")
+    }
+
+    private fun lastProgressBar(output: String): String {
+        val stripped = stripAnsiSequences(output)
+        val start = stripped.lastIndexOf('[')
+        val end = stripped.indexOf(']', start + 1)
+        assertTrue(start >= 0 && end > start, "Expected to find progress bar brackets in output")
+        return stripped.substring(start + 1, end)
+    }
 
     @BeforeEach
     fun setup() {
@@ -397,5 +410,53 @@ class ProgressIndicatorTest {
             output.contains("#") || output.contains("-"),
             "Should use ASCII characters for progress bar"
         )
+    }
+
+    @Test
+    fun `progress bar width scales with terminal size and caps at 40`() {
+        terminal.setSize(Size(120, 24))
+        val indicator = ProgressIndicatorBuilder(terminal)
+            .mode(IndicatorMode.PROGRESS_BAR)
+            .message("")
+            .useColors(false)
+            .useUnicode(false)
+            .build()
+
+        indicator.start()
+        indicator.update(progress = 0.25f)
+        Thread.sleep(60)
+        indicator.stop()
+
+        val wideOutput = outputStream.toString()
+        val wideBar = lastProgressBar(wideOutput)
+        assertEquals(40, wideBar.length, "Bar width should cap at 40 characters")
+
+        outputStream.reset()
+        terminal.setSize(Size(30, 24))
+        indicator.start()
+        indicator.update(progress = 0.25f)
+        Thread.sleep(60)
+        indicator.stop()
+
+        val narrowOutput = outputStream.toString()
+        val narrowBar = lastProgressBar(narrowOutput)
+        assertEquals(22, narrowBar.length, "Bar width should scale down for small terminals")
+    }
+
+    @Test
+    fun `progress bar indeterminate mode uses scanning block character`() {
+        val indicator = ProgressIndicatorBuilder(terminal)
+            .mode(IndicatorMode.PROGRESS_BAR)
+            .message("")
+            .useColors(false)
+            .useUnicode(true)
+            .build()
+
+        indicator.start()
+        Thread.sleep(60)
+        indicator.stop()
+
+        val output = outputStream.toString()
+        assertTrue(output.contains("▓"), "Indeterminate bar should use scanning block character")
     }
 }
