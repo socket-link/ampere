@@ -6,7 +6,6 @@ import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.help
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
-import com.github.ajalt.clikt.parameters.options.choice
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.events.utils.generateUUID
@@ -46,7 +45,6 @@ class TaskCreateCommand(
     private val taskId by option("--id", help = "Optional task ID (auto-generated if omitted)")
 
     private val urgencyInput by option("--urgency", help = "Urgency level: low|medium|high")
-        .choice("low", "medium", "high")
         .default("medium")
 
     private val assignedTo by option("--assign", help = "Agent ID to assign the task to")
@@ -62,8 +60,9 @@ class TaskCreateCommand(
 
         val urgency = when (urgencyInput.lowercase()) {
             "low" -> Urgency.LOW
+            "medium" -> Urgency.MEDIUM
             "high" -> Urgency.HIGH
-            else -> Urgency.MEDIUM
+            else -> fail("Invalid --urgency value: $urgencyInput (expected low|medium|high)")
         }
 
         try {
