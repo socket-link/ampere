@@ -2,6 +2,7 @@ package link.socket.ampere.agents.domain.cognition.sparks
 
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import link.socket.ampere.agents.config.PhaseSparkConfig
 import link.socket.ampere.agents.definition.AutonomousAgent
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.util.getEnvironmentVariable
@@ -16,7 +17,7 @@ import link.socket.ampere.util.getEnvironmentVariable
  * - Ensures cleanup even during failures or cancellations
  *
  * Phase Sparks are disabled by default to maintain backward compatibility.
- * Enable via the `enabled` property or environment variable `AMPERE_PHASE_SPARKS`.
+ * Enable via [PhaseSparkConfig], the `enabled` property, or environment variable `AMPERE_PHASE_SPARKS`.
  *
  * Usage:
  * ```kotlin
@@ -39,10 +40,12 @@ import link.socket.ampere.util.getEnvironmentVariable
  *
  * @param agent The agent whose Spark stack to manage
  * @param enabled Whether phase Sparks are active (default: false)
+ * @param activePhases Which phases should receive PhaseSparks when enabled
  */
 class PhaseSparkManager<S : AgentState>(
     private val agent: AutonomousAgent<S>,
     val enabled: Boolean = isPhaseSparkEnabled(),
+    private val activePhases: Set<CognitivePhase> = DEFAULT_PHASES,
 ) {
     /**
      * The currently active PhaseSpark, or null if none is active.
@@ -67,12 +70,15 @@ class PhaseSparkManager<S : AgentState>(
 
         // Remove previous phase Spark if present
         if (hasActivePhase && currentPhase != phase) {
-            agent.unspark()
-            hasActivePhase = false
+            removeActivePhaseSpark()
+        }
+
+        if (!isPhaseEnabled(phase)) {
+            return
         }
 
         // Apply new phase Spark
-        if (currentPhase != phase) {
+        if (currentPhase != phase || !hasActivePhase) {
             val phaseSpark = PhaseSpark.forPhase(phase)
             agent.spark<AutonomousAgent<S>>(phaseSpark)
             currentPhase = phase
@@ -102,14 +108,10 @@ class PhaseSparkManager<S : AgentState>(
         } finally {
             withContext(NonCancellable) {
                 // Remove current phase Spark
-                if (hasActivePhase) {
-                    agent.unspark()
-                    hasActivePhase = false
-                    currentPhase = null
-                }
+                removeActivePhaseSpark()
 
                 // Restore previous phase if there was one
-                if (previousPhase != null && hadActivePhase) {
+                if (previousPhase != null && hadActivePhase && isPhaseEnabled(previousPhase)) {
                     val previousSpark = PhaseSpark.forPhase(previousPhase)
                     agent.spark<AutonomousAgent<S>>(previousSpark)
                     currentPhase = previousPhase
@@ -128,11 +130,7 @@ class PhaseSparkManager<S : AgentState>(
     fun cleanup() {
         if (!enabled) return
 
-        if (hasActivePhase) {
-            agent.unspark()
-            hasActivePhase = false
-            currentPhase = null
-        }
+        removeActivePhaseSpark()
     }
 
     /**
@@ -145,7 +143,19 @@ class PhaseSparkManager<S : AgentState>(
      */
     fun isPhaseActive(): Boolean = enabled && hasActivePhase
 
+    private fun isPhaseEnabled(phase: CognitivePhase): Boolean = activePhases.contains(phase)
+
+    private fun removeActivePhaseSpark() {
+        if (hasActivePhase) {
+            agent.unspark()
+            hasActivePhase = false
+            currentPhase = null
+        }
+    }
+
     companion object {
+        private val DEFAULT_PHASES: Set<CognitivePhase> = enumValues<CognitivePhase>().toSet()
+
         /**
          * Checks if phase Sparks should be enabled.
          *
@@ -167,12 +177,21 @@ class PhaseSparkManager<S : AgentState>(
          * Creates a PhaseSparkManager for the given agent.
          *
          * @param agent The agent to manage
-         * @param enabled Override the default enabled state
+         * @param phaseConfig Configuration for phase Sparks (optional)
          * @return A new PhaseSparkManager
          */
         fun <S : AgentState> create(
             agent: AutonomousAgent<S>,
-            enabled: Boolean = isPhaseSparkEnabled(),
-        ): PhaseSparkManager<S> = PhaseSparkManager(agent, enabled)
+            phaseConfig: PhaseSparkConfig? = null,
+        ): PhaseSparkManager<S> {
+            val enabledFromConfig = phaseConfig?.enabled ?: false
+            val enabled = enabledFromConfig || isPhaseSparkEnabled()
+            val phases = phaseConfig?.phases ?: DEFAULT_PHASES
+            return PhaseSparkManager(
+                agent = agent,
+                enabled = enabled,
+                activePhases = phases,
+            )
+        }
     }
 }

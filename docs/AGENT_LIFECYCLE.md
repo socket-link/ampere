@@ -72,6 +72,23 @@ Agents in Ampere follow a continuous cycle:
 
 ---
 
+## Phase Sparks (Optional)
+
+PhaseSparks add lightweight, phase-specific guidance to the system prompt during
+PERCEIVE, PLAN, EXECUTE, and LEARN. They are transient: applied at phase entry and
+removed at phase exit.
+
+Enable PhaseSparks in one of two ways:
+- Set `AgentConfiguration.cognitiveConfig.phaseSparks.enabled = true`
+  - Optionally restrict to a subset with `phaseSparks.phases`
+- Or set `AMPERE_PHASE_SPARKS=true` to enable globally (all phases)
+
+Trade-offs:
+- Pros: clearer phase focus, more consistent reasoning at each step
+- Cons: larger prompts (more tokens/latency) and more context to review in logs
+
+---
+
 ## Complete Example: Authentication Feature
 
 > **Note:** Some of the code examples below show the planned high-level API that is currently in development. For accurate details of the current API implementation, see the [CLI Guide](ampere-cli/README.md) and [CLAUDE.md](CLAUDE.md).

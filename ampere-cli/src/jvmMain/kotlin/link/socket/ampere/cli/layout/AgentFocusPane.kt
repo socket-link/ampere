@@ -16,6 +16,7 @@ import link.socket.ampere.cli.watch.presentation.SignificantEventSummary
 import link.socket.ampere.cli.watch.presentation.SparkTransition
 import link.socket.ampere.cli.watch.presentation.SparkTransitionDirection
 import link.socket.ampere.renderer.SparkColors
+import link.socket.ampere.renderer.SparkNameFormatter
 
 /**
  * Agent focus as a drawer-style pane that can be rendered within the layout.
@@ -183,7 +184,7 @@ class AgentFocusPane(
 
             // Truncate spark name to fit width
             val maxSparkNameLength = width - prefix.length - 12
-            val displayName = sparkName.take(maxSparkNameLength)
+            val displayName = SparkNameFormatter.format(sparkName).take(maxSparkNameLength)
 
             lines.add("$prefix $displayName$activeMarker")
         }
@@ -227,7 +228,7 @@ class AgentFocusPane(
             }
 
             val maxNameLength = width - 12
-            val name = transition.sparkName.take(maxNameLength)
+            val name = SparkNameFormatter.format(transition.sparkName).take(maxNameLength)
             lines.add("${terminal.render(dim(time))} $icon ${terminal.render(color("$prefix$name"))}")
         }
 

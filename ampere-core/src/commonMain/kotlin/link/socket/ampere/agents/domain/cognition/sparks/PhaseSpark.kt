@@ -198,6 +198,7 @@ Produce insights and knowledge that improve future performance.
 /**
  * Enum representing the four cognitive phases in the PROPEL cycle.
  */
+@Serializable
 enum class CognitivePhase {
     PERCEIVE,
     PLAN,
