@@ -62,7 +62,9 @@ class TaskCreateCommand(
             "low" -> Urgency.LOW
             "medium" -> Urgency.MEDIUM
             "high" -> Urgency.HIGH
-            else -> fail("Invalid --urgency value: $urgencyInput (expected low|medium|high)")
+            else -> this@TaskCreateCommand.fail(
+                "Invalid --urgency value: $urgencyInput (expected low|medium|high)"
+            )
         }
 
         try {
