@@ -47,7 +47,7 @@ class CommandExecutor(
             "issues" -> executeIssues(arg)
             "ticket" -> executeTicket(arg)
             "thread" -> executeThread(arg)
-            "sparks", "spark", "cognitive" -> executeSparks(arg)
+            "stack", "sparks", "spark", "cognitive" -> executeSparks(arg)
             "quit", "q", "exit" -> CommandResult.Quit
             else -> CommandResult.Error("Unknown command: $command\nType :help for available commands")
         }
@@ -283,7 +283,7 @@ class CommandExecutor(
     }
 
     /**
-     * Execute the :sparks command to inspect an agent's cognitive context.
+     * Execute the :stack command to inspect an agent's context stack.
      */
     private fun executeSparks(agentNameOrId: String?): CommandResult {
         val viewState = presenter.getViewState()
@@ -322,7 +322,7 @@ class CommandExecutor(
                 appendLine("║                                                               ║")
                 appendLine("╚══════════════════════════════════════════════════════════════╝")
                 appendLine()
-                appendLine("Use :sparks <agent-name> for detailed view of a specific agent.")
+                appendLine("Use :stack <agent-name> for detailed view of a specific agent.")
             }
 
             return CommandResult.Success(output)
@@ -355,7 +355,7 @@ class CommandExecutor(
 
         val output = buildString {
             appendLine("╔══════════════════════════════════════════════════════════════╗")
-            appendLine("║ COGNITIVE CONTEXT: ${agent.displayName}".padEnd(64) + "║")
+            appendLine("║ CONTEXT STACK: ${agent.displayName}".padEnd(64) + "║")
             appendLine("╠══════════════════════════════════════════════════════════════╣")
             appendLine("║                                                               ║")
 
@@ -364,9 +364,9 @@ class CommandExecutor(
             appendLine("║ Affinity: $affinityName".padEnd(64) + "║")
             appendLine("║                                                               ║")
 
-            // Spark stack section
+            // Context stack section
             appendLine("╠══════════════════════════════════════════════════════════════╣")
-            appendLine("║ SPARK STACK                                                   ║")
+            appendLine("║ STACK                                                        ║")
             appendLine("║                                                               ║")
 
             val sparkNames = agent.sparkNames.ifEmpty { cognitiveState?.sparkNames ?: emptyList() }
@@ -377,7 +377,7 @@ class CommandExecutor(
                     val isActive = index == sparkNames.lastIndex
                     val marker = if (isActive) " (ACTIVE)" else ""
                     val displayName = SparkNameFormatter.format(sparkName)
-                    val line = "║ [${index + 1}] $displayName$marker"
+                    val line = "║  → $displayName$marker"
                     appendLine(line.padEnd(64) + "║")
                 }
             }
@@ -387,7 +387,7 @@ class CommandExecutor(
             // History section
             if (history.isNotEmpty()) {
                 appendLine("╠══════════════════════════════════════════════════════════════╣")
-                appendLine("║ RECENT TRANSITIONS                                            ║")
+                appendLine("║ STACK HISTORY                                                 ║")
                 appendLine("║                                                               ║")
 
                 history.reversed().forEach { transition ->

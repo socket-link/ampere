@@ -404,4 +404,95 @@ class EventRendererTest {
             System.setOut(originalOut)
         }
     }
+
+    @Test
+    fun `render SparkAppliedEvent shows StackApplied type name`() {
+        val output = captureTerminalOutput { _, renderer ->
+            renderer.render(sparkAppliedEvent())
+        }
+
+        assertContains(output, "StackApplied")
+    }
+
+    @Test
+    fun `render SparkRemovedEvent shows StackRemoved type name`() {
+        val output = captureTerminalOutput { _, renderer ->
+            renderer.render(sparkRemovedEvent())
+        }
+
+        assertContains(output, "StackRemoved")
+    }
+
+    @Test
+    fun `render CognitiveStateSnapshot shows StackSnapshot type name`() {
+        val output = captureTerminalOutput { _, renderer ->
+            renderer.render(snapshotEvent())
+        }
+
+        assertContains(output, "StackSnapshot")
+    }
+
+    @Test
+    fun `render SparkAppliedEvent summary shows Stack push with name and depth`() {
+        val output = captureTerminalOutput { _, renderer ->
+            renderer.render(
+                sparkAppliedEvent(
+                    sparkName = "Role:Developer",
+                    stackDepth = 3
+                )
+            )
+        }
+
+        assertContains(output, "Stack push: Role:Developer")
+        assertContains(output, "(depth: 3)")
+    }
+
+    @Test
+    fun `render SparkRemovedEvent summary shows Stack pop with name and depth`() {
+        val output = captureTerminalOutput { _, renderer ->
+            renderer.render(
+                sparkRemovedEvent(
+                    previousSparkName = "Task:Implement",
+                    stackDepth = 2
+                )
+            )
+        }
+
+        assertContains(output, "Stack pop: Task:Implement")
+        assertContains(output, "(depth: 2)")
+    }
+
+    @Test
+    fun `render CognitiveStateSnapshot summary shows Stack snapshot with affinity and layers`() {
+        val output = captureTerminalOutput { _, renderer ->
+            renderer.render(
+                snapshotEvent(
+                    affinity = "ANALYTICAL",
+                    sparkNames = listOf("Project:ampere", "Role:Code"),
+                    effectivePromptLength = 1500
+                )
+            )
+        }
+
+        assertContains(output, "Stack snapshot: [ANALYTICAL]")
+        assertContains(output, "+ 2 layer(s)")
+        assertContains(output, "(prompt: 1500 chars)")
+    }
+
+    @Test
+    fun `render CognitiveStateSnapshot without layers omits layer count`() {
+        val output = captureTerminalOutput { _, renderer ->
+            renderer.render(
+                snapshotEvent(
+                    affinity = "OPERATIONAL",
+                    sparkNames = emptyList(),
+                    effectivePromptLength = 800
+                )
+            )
+        }
+
+        assertContains(output, "Stack snapshot: [OPERATIONAL]")
+        assertTrue(!output.contains("layer(s)"))
+        assertContains(output, "(prompt: 800 chars)")
+    }
 }

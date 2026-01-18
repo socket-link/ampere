@@ -102,4 +102,85 @@ class SparkPresentationTest {
         assertTrue(collector.getHistory(agentId).isEmpty())
         assertNull(collector.getCognitiveState(agentId))
     }
+
+    @Test
+    fun `recordSnapshot parses stackDescription when sparkNames is empty`() {
+        val collector = SparkHistoryCollector()
+        val agentId = "agent-5"
+
+        collector.recordSnapshot(
+            agentId = agentId,
+            affinity = "",
+            sparkNames = emptyList(),
+            stackDepth = 2,
+            effectivePromptLength = 800,
+            availableToolCount = 5,
+            stackDescription = "[ANALYTICAL] → [Project:test]"
+        )
+
+        val state = collector.getCognitiveState(agentId)
+        assertEquals("ANALYTICAL", state?.affinityName)
+        assertEquals(listOf("Project:test"), state?.sparkNames)
+    }
+
+    @Test
+    fun `recordSnapshot uses provided values when sparkNames is not empty`() {
+        val collector = SparkHistoryCollector()
+        val agentId = "agent-6"
+
+        collector.recordSnapshot(
+            agentId = agentId,
+            affinity = "INTEGRATIVE",
+            sparkNames = listOf("Role:Planning", "Task:Design"),
+            stackDepth = 3,
+            effectivePromptLength = 1000,
+            availableToolCount = 8,
+            stackDescription = "[ANALYTICAL] → [Project:other]"
+        )
+
+        val state = collector.getCognitiveState(agentId)
+        assertEquals("INTEGRATIVE", state?.affinityName)
+        assertEquals(listOf("Role:Planning", "Task:Design"), state?.sparkNames)
+    }
+
+    @Test
+    fun `recordSnapshot handles blank stackDescription gracefully`() {
+        val collector = SparkHistoryCollector()
+        val agentId = "agent-7"
+
+        collector.recordSnapshot(
+            agentId = agentId,
+            affinity = "OPERATIONAL",
+            sparkNames = emptyList(),
+            stackDepth = 1,
+            effectivePromptLength = 500,
+            availableToolCount = 3,
+            stackDescription = ""
+        )
+
+        val state = collector.getCognitiveState(agentId)
+        assertEquals("OPERATIONAL", state?.affinityName)
+        assertTrue(state?.sparkNames?.isEmpty() == true)
+    }
+
+    @Test
+    fun `recordApplied parses multiple sparks from description`() {
+        val collector = SparkHistoryCollector()
+        val agentId = "agent-8"
+        val timestamp = Instant.parse("2024-01-01T00:04:00Z")
+
+        collector.recordApplied(
+            agentId = agentId,
+            timestamp = timestamp,
+            sparkName = "Task:Implement",
+            sparkType = "TaskSpark",
+            stackDepth = 4,
+            stackDescription = "[ANALYTICAL] → [Project:ampere] → [Role:Code] → [Task:Implement]"
+        )
+
+        val state = collector.getCognitiveState(agentId)
+        assertEquals("ANALYTICAL", state?.affinityName)
+        assertEquals(listOf("Project:ampere", "Role:Code", "Task:Implement"), state?.sparkNames)
+        assertEquals(4, state?.depth)
+    }
 }

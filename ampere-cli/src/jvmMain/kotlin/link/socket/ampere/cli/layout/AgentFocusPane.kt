@@ -79,13 +79,13 @@ class AgentFocusPane(
         // Separator
         lines.add("")
 
-        // Cognitive Context (Spark stack) section - only if there's cognitive state
+        // Context stack section - only if there's cognitive state
         if (agentState.affinityName != null || agentState.sparkNames.isNotEmpty()) {
             lines.addAll(renderCognitiveContext(agentState, width))
             lines.add("")
         }
 
-        // Spark History section - only if there's history
+        // Stack History section - only if there's history
         if (state.sparkHistory.isNotEmpty()) {
             lines.addAll(renderSparkHistory(width, (height - lines.size - 10).coerceAtLeast(3)))
             lines.add("")
@@ -103,7 +103,7 @@ class AgentFocusPane(
         }
 
         // Footer hint
-        lines.add(terminal.render(dim("[ESC] close  :sparks for details")))
+        lines.add(terminal.render(dim("[ESC] close  :stack for details")))
 
         return lines.take(height).map { it.fitToWidth(width) }
     }
@@ -163,35 +163,38 @@ class AgentFocusPane(
     }
 
     /**
-     * Render the cognitive context (Spark stack) section.
+     * Render the cognitive context stack section.
      */
     private fun renderCognitiveContext(agentState: AgentActivityState, width: Int): List<String> {
         val lines = mutableListOf<String>()
 
         // Sub-header
-        lines.addAll(renderSubHeader("Cognitive Context", width, terminal))
+        lines.addAll(renderSubHeader("Context Stack", width, terminal))
 
         // Affinity as root element
         val affinityName = agentState.affinityName ?: "UNKNOWN"
         val affinityColor = SparkColors.forAffinityName(affinityName)
-        lines.add(terminal.render(affinityColor("${SparkColors.SparkIcons.STACK_ROOT} $affinityName")))
+        val affinityLine = buildString {
+            append(terminal.render(dim("Affinity: ")))
+            append(terminal.render(affinityColor(affinityName)))
+        }
+        lines.add(affinityLine)
 
-        // Spark layers with tree characters
+        // Stack layers with arrow prefix
         agentState.sparkNames.forEachIndexed { index, sparkName ->
             val isLast = index == agentState.sparkNames.lastIndex
-            val prefix = if (isLast) SparkColors.SparkIcons.STACK_LAST else SparkColors.SparkIcons.STACK_BRANCH
-            val activeMarker = if (isLast) " ${terminal.render(TextColors.cyan("← active"))}" else ""
+            val activeMarker = if (isLast) " ${terminal.render(TextColors.cyan("active"))}" else ""
 
             // Truncate spark name to fit width
-            val maxSparkNameLength = width - prefix.length - 12
+            val maxSparkNameLength = (width - 6).coerceAtLeast(10)
             val displayName = SparkNameFormatter.format(sparkName).take(maxSparkNameLength)
 
-            lines.add("$prefix $displayName$activeMarker")
+            lines.add("  → $displayName$activeMarker")
         }
 
         // Show message if no sparks
         if (agentState.sparkNames.isEmpty()) {
-            lines.add(terminal.render(dim("   (no specialization)")))
+            lines.add(terminal.render(dim("  (no specialization)")))
         }
 
         return lines
@@ -204,7 +207,7 @@ class AgentFocusPane(
         val lines = mutableListOf<String>()
 
         // Sub-header
-        lines.addAll(renderSubHeader("Spark History", width, terminal))
+        lines.addAll(renderSubHeader("Stack History", width, terminal))
 
         if (state.sparkHistory.isEmpty()) {
             lines.add(terminal.render(dim("No transitions recorded")))
