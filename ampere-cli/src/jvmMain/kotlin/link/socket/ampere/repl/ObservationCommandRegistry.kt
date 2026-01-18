@@ -38,7 +38,7 @@ class ObservationCommandRegistry(
     }
 
     private suspend fun executeWatch(args: Array<String>): CommandResult {
-        val indicator = ProgressIndicator(terminal)
+        val indicator = SimpleSpinner(terminal)
         var eventCount = 0
 
         return try {
