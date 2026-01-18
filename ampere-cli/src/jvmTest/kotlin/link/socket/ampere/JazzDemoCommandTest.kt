@@ -7,11 +7,11 @@ import kotlin.test.assertContains
 class JazzDemoCommandTest {
 
     @Test
-    fun `jazz demo help text mentions task create command`() {
+    fun `jazz demo help text mentions ObservabilitySpark task`() {
         val command = JazzDemoCommand { error("context should not be needed for help output") }
         val result = command.test("--help")
 
         assertContains(result.output, "Jazz Test demo")
-        assertContains(result.output, "ampere task create")
+        assertContains(result.output, "ObservabilitySpark")
     }
 }
