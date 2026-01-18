@@ -11,6 +11,8 @@ class LightningAnimatorTest {
     fun `test discharge sequences are non-empty`() {
         assertTrue(LightningAnimator.DISCHARGE_SEQUENCE.isNotEmpty())
         assertTrue(LightningAnimator.COMPACT_SEQUENCE.isNotEmpty())
+        assertTrue(LightningAnimator.STANDARD_SPINNER.isNotEmpty())
+        assertTrue(LightningAnimator.LIGHTNING_PULSE.isNotEmpty())
     }
 
     @Test
@@ -21,6 +23,32 @@ class LightningAnimatorTest {
         LightningAnimator.COMPACT_SEQUENCE.forEach { frame ->
             assertTrue(frame.durationMs > 0, "Frame ${frame.symbol} should have positive duration")
         }
+        LightningAnimator.STANDARD_SPINNER.forEach { frame ->
+            assertTrue(frame.durationMs > 0, "Frame ${frame.symbol} should have positive duration")
+        }
+        LightningAnimator.LIGHTNING_PULSE.forEach { frame ->
+            assertTrue(frame.durationMs > 0, "Frame ${frame.symbol} should have positive duration")
+        }
+    }
+
+    @Test
+    fun `test standard spinner sequence matches spec`() {
+        val expectedSymbols = listOf("◐", "◓", "◑", "◒")
+        val expectedDurations = listOf(150L, 150L, 150L, 150L)
+        val sequence = LightningAnimator.STANDARD_SPINNER
+        assertEquals(expectedSymbols, sequence.map { it.symbol })
+        assertEquals(expectedDurations, sequence.map { it.durationMs })
+        assertEquals(600L, sequence.sumOf { it.durationMs })
+    }
+
+    @Test
+    fun `test lightning pulse sequence matches spec`() {
+        val expectedSymbols = listOf("·", "˙", "⁝", "⚡", "✧", "·")
+        val expectedDurations = listOf(120L, 80L, 70L, 100L, 80L, 150L)
+        val sequence = LightningAnimator.LIGHTNING_PULSE
+        assertEquals(expectedSymbols, sequence.map { it.symbol })
+        assertEquals(expectedDurations, sequence.map { it.durationMs })
+        assertEquals(600L, sequence.sumOf { it.durationMs })
     }
 
     @Test
