@@ -24,6 +24,51 @@ import sun.misc.SignalHandler
  */
 object TerminalFactory {
     /**
+     * System access abstraction for testability.
+     */
+    internal interface SystemAccess {
+        fun getProperty(name: String): String?
+        fun getEnv(name: String): String?
+        fun hasConsole(): Boolean
+        fun sttySize(): Pair<Int?, Int?>
+    }
+
+    /**
+     * Default system access implementation.
+     */
+    internal object DefaultSystemAccess : SystemAccess {
+        override fun getProperty(name: String): String? = System.getProperty(name)
+
+        override fun getEnv(name: String): String? = System.getenv(name)
+
+        override fun hasConsole(): Boolean = System.console() != null
+
+        override fun sttySize(): Pair<Int?, Int?> {
+            return try {
+                val process = ProcessBuilder("stty", "size")
+                    .redirectInput(ProcessBuilder.Redirect.INHERIT)
+                    .start()
+                val output = process.inputStream.bufferedReader().readText().trim()
+                process.waitFor()
+
+                if (process.exitValue() == 0) {
+                    val parts = output.split(" ")
+                    val lines = parts.getOrNull(0)?.toIntOrNull()
+                    val columns = parts.getOrNull(1)?.toIntOrNull()
+                    lines to columns
+                } else {
+                    null to null
+                }
+            } catch (e: Exception) {
+                null to null
+            }
+        }
+    }
+
+    @Volatile
+    internal var systemAccess: SystemAccess = DefaultSystemAccess
+
+    /**
      * Cached terminal capabilities, detected at startup and refreshed on SIGWINCH.
      */
     data class TerminalCapabilities(
@@ -82,9 +127,9 @@ object TerminalFactory {
      */
     fun supportsUnicode(): Boolean {
         return try {
-            val encoding = System.getProperty("stdout.encoding")
-                ?: System.getProperty("file.encoding")
-                ?: System.getenv("LANG")
+            val encoding = systemAccess.getProperty("stdout.encoding")
+                ?: systemAccess.getProperty("file.encoding")
+                ?: systemAccess.getEnv("LANG")
                 ?: ""
             encoding.uppercase().let {
                 it.contains("UTF") || it.contains("UNICODE")
@@ -103,22 +148,22 @@ object TerminalFactory {
     fun detectColorSupport(): AnsiLevel {
         return try {
             // Check NO_COLOR environment variable (https://no-color.org/)
-            if (System.getenv("NO_COLOR") != null) {
+            if (systemAccess.getEnv("NO_COLOR") != null) {
                 return AnsiLevel.NONE
             }
 
             // Check if we have a console
-            if (System.console() == null) {
+            if (!systemAccess.hasConsole()) {
                 // No console - might be piped, check FORCE_COLOR
-                if (System.getenv("FORCE_COLOR") != null) {
+                if (systemAccess.getEnv("FORCE_COLOR") != null) {
                     return AnsiLevel.TRUECOLOR
                 }
                 return AnsiLevel.NONE
             }
 
             // Check TERM environment variable
-            val term = System.getenv("TERM") ?: ""
-            val colorTerm = System.getenv("COLORTERM") ?: ""
+            val term = systemAccess.getEnv("TERM") ?: ""
+            val colorTerm = systemAccess.getEnv("COLORTERM") ?: ""
 
             // Check for 24-bit color support
             if (colorTerm == "truecolor" || colorTerm == "24bit") {
@@ -156,7 +201,7 @@ object TerminalFactory {
      * Uses System.console() to check for a connected terminal.
      */
     fun isInteractive(): Boolean {
-        return System.console() != null
+        return systemAccess.hasConsole()
     }
 
     /**
@@ -165,20 +210,14 @@ object TerminalFactory {
      */
     fun getTerminalWidth(): Int {
         return try {
-            val columns = System.getenv("COLUMNS")?.toIntOrNull()
+            val columns = systemAccess.getEnv("COLUMNS")?.toIntOrNull()
             if (columns != null && columns > 0) {
                 return columns
             }
 
-            // Try to get from stty (Unix-like systems)
-            val process = ProcessBuilder("stty", "size")
-                .redirectInput(ProcessBuilder.Redirect.INHERIT)
-                .start()
-            val output = process.inputStream.bufferedReader().readText().trim()
-            process.waitFor()
-
-            if (process.exitValue() == 0) {
-                output.split(" ").getOrNull(1)?.toIntOrNull() ?: 80
+            val (_, sttyColumns) = systemAccess.sttySize()
+            if (sttyColumns != null && sttyColumns > 0) {
+                sttyColumns
             } else {
                 80
             }
@@ -193,20 +232,14 @@ object TerminalFactory {
      */
     fun getTerminalHeight(): Int {
         return try {
-            val lines = System.getenv("LINES")?.toIntOrNull()
+            val lines = systemAccess.getEnv("LINES")?.toIntOrNull()
             if (lines != null && lines > 0) {
                 return lines
             }
 
-            // Try to get from stty (Unix-like systems)
-            val process = ProcessBuilder("stty", "size")
-                .redirectInput(ProcessBuilder.Redirect.INHERIT)
-                .start()
-            val output = process.inputStream.bufferedReader().readText().trim()
-            process.waitFor()
-
-            if (process.exitValue() == 0) {
-                output.split(" ").getOrNull(0)?.toIntOrNull() ?: 24
+            val (sttyLines, _) = systemAccess.sttySize()
+            if (sttyLines != null && sttyLines > 0) {
+                sttyLines
             } else {
                 24
             }
@@ -297,5 +330,6 @@ object TerminalFactory {
         cachedCapabilities = null
         sigwinchHandler = null
         onCapabilitiesChanged = null
+        systemAccess = DefaultSystemAccess
     }
 }
