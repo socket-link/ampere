@@ -107,9 +107,16 @@ class SparkHistoryCollector {
         availableToolCount: Int?,
         stackDescription: String
     ) {
+        val parsed = if (sparkNames.isEmpty()) {
+            parseStackDescription(stackDescription)
+        } else {
+            null
+        }
+        val resolvedAffinity = if (affinity.isNotBlank()) affinity else parsed?.affinityName ?: affinity
+        val resolvedSparkNames = if (sparkNames.isNotEmpty()) sparkNames else parsed?.sparkNames ?: emptyList()
         cognitiveStateByAgent[agentId] = CognitiveDisplayState(
-            affinityName = affinity,
-            sparkNames = sparkNames,
+            affinityName = resolvedAffinity,
+            sparkNames = resolvedSparkNames,
             depth = stackDepth,
             effectivePromptLength = effectivePromptLength,
             availableToolCount = availableToolCount,
@@ -181,22 +188,38 @@ class SparkHistoryCollector {
     }
 
     private fun updateCognitiveStateFromDescription(agentId: String, description: String, depth: Int) {
-        // Description format: [AFFINITY] → [Spark1] → [Spark2] → ...
-        val parts = description.split(" → ")
-        if (parts.isEmpty()) return
-
-        val affinityName = parts[0].removeSurrounding("[", "]")
-        val sparkNames = parts.drop(1).map { it.removeSurrounding("[", "]") }
+        val parsed = parseStackDescription(description) ?: return
 
         // Update or create the cognitive state
         val existing = cognitiveStateByAgent[agentId]
         cognitiveStateByAgent[agentId] = CognitiveDisplayState(
-            affinityName = affinityName,
-            sparkNames = sparkNames,
+            affinityName = parsed.affinityName,
+            sparkNames = parsed.sparkNames,
             depth = depth,
             effectivePromptLength = existing?.effectivePromptLength,
             availableToolCount = existing?.availableToolCount,
             description = description
         )
     }
+
+    private fun parseStackDescription(description: String): ParsedStack? {
+        // Description format: [AFFINITY] → [Spark1] → [Spark2] → ...
+        if (description.isBlank()) return null
+        val parts = description.split(" → ")
+        if (parts.isEmpty()) return null
+
+        val affinityName = parts[0].removeSurrounding("[", "]").trim()
+        if (affinityName.isBlank()) return null
+
+        val sparkNames = parts.drop(1)
+            .map { it.removeSurrounding("[", "]").trim() }
+            .filter { it.isNotBlank() }
+
+        return ParsedStack(affinityName, sparkNames)
+    }
+
+    private data class ParsedStack(
+        val affinityName: String,
+        val sparkNames: List<String>
+    )
 }

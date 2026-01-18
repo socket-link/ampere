@@ -65,7 +65,12 @@ class EventRenderer(
         val (icon, color) = getIconAndColor(event)
 
         // Get the event type name
-        val eventTypeName = event.eventType
+        val eventTypeName = when (event) {
+            is SparkAppliedEvent -> "StackApplied"
+            is SparkRemovedEvent -> "StackRemoved"
+            is CognitiveStateSnapshot -> "StackSnapshot"
+            else -> event.eventType
+        }
 
         // Build the formatted line
         val line = buildString {
@@ -148,8 +153,32 @@ class EventRenderer(
      * Each event type is parsed to show the most relevant information using
      * extension functions for better maintainability and scalability.
      */
-    private fun extractSummary(event: Event): String =
-        event.getSummary(::formatUrgency, ::formatSource)
+    private fun extractSummary(event: Event): String {
+        return when (event) {
+            is SparkAppliedEvent -> buildString {
+                append("Stack push: ${event.sparkName}")
+                append(" (depth: ${event.stackDepth})")
+                append(" ${formatUrgency(event.urgency)}")
+                append(" from ${formatSource(event.eventSource)}")
+            }
+            is SparkRemovedEvent -> buildString {
+                append("Stack pop: ${event.previousSparkName}")
+                append(" (depth: ${event.stackDepth})")
+                append(" ${formatUrgency(event.urgency)}")
+                append(" from ${formatSource(event.eventSource)}")
+            }
+            is CognitiveStateSnapshot -> buildString {
+                append("Stack snapshot: [${event.affinity}]")
+                if (event.sparkNames.isNotEmpty()) {
+                    append(" + ${event.sparkNames.size} layer(s)")
+                }
+                append(" (prompt: ${event.effectivePromptLength} chars)")
+                append(" ${formatUrgency(event.urgency)}")
+                append(" from ${formatSource(event.eventSource)}")
+            }
+            else -> event.getSummary(::formatUrgency, ::formatSource)
+        }
+    }
 
     /**
      * Formats the event source for display.

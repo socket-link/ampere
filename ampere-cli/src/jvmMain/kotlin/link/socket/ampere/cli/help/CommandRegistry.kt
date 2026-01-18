@@ -116,9 +116,9 @@ object CommandRegistry {
             usage = "<id>",
         ),
         CommandDefinition(
-            name = "sparks",
-            aliases = listOf("spark", "cognitive"),
-            description = "Inspect agent's Spark stack and cognitive context",
+            name = "stack",
+            aliases = listOf("sparks", "spark", "cognitive"),
+            description = "Inspect agent's context stack and cognitive state",
             usage = "[agent-name]",
         ),
         CommandDefinition(
