@@ -66,7 +66,7 @@ fun main() {
     outputDir.mkdirs()
 
     println("📁 Output directory: ${outputDir.absolutePath}")
-    println("📄 Expected output: ${outputDir.absolutePath}/ampere-cli/src/jvmMain/kotlin/link/socket/ampere/TaskCommand.kt")
+    println("📄 Expected output: ${outputDir.absolutePath}/ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/cognition/sparks/ObservabilitySpark.kt")
     println()
 
     // Initialize AMPERE context (this creates the database, event bus, etc.)
@@ -156,27 +156,36 @@ fun main() {
 
             // Build the ticket specification
             val ticketSpec = TicketBuilder()
-                .withTitle("Add `ampere task create` CLI command")
+                .withTitle("Add ObservabilitySpark to AMPERE Spark system")
                 .withDescription("""
-                    Create a new CLI command that lets a human publish a TaskCreated event from the terminal.
+                    Create a new Spark type that provides guidance about visibility, monitoring, and progress reporting.
 
                     Requirements:
-                    * Create `ampere-cli/src/jvmMain/kotlin/link/socket/ampere/TaskCommand.kt` with a `task` command and a `create` subcommand.
-                    * `ampere task create "<description>"` accepts:
-                      * `--id <taskId>` (optional; generate if omitted)
-                      * `--urgency <low|medium|high>` (default: medium)
-                      * `--assign <agentId>` (optional)
-                    * On execution, publish `TaskCreated` via `AgentEventApi` (use `AmpereContext.environmentService.createEventApi("human-cli")`) and print a one-line confirmation.
-                    * Register the new command in `AmpereCommand`.
+                    * Create `ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/cognition/sparks/ObservabilitySpark.kt` with a sealed class hierarchy.
+                    * The Spark should guide agents on how to emit events, report progress, and make their work visible.
+                    * Include a `Verbose` data object variant that encourages detailed status updates and progress emission.
+                    * Use `@Serializable` and `@SerialName("ObservabilitySpark.Verbose")` for polymorphic serialization.
+                    * Set `allowedTools` and `fileAccessScope` to `null` (non-restrictive, inherits from parent Sparks).
+                    * The `promptContribution` should guide the agent to emit frequent status updates.
 
-                    Uncertainty moment:
+                    Reference pattern (from PhaseSpark.kt):
+                    ```kotlin
+                    @Serializable
+                    sealed class PhaseSpark : Spark {
+                        abstract val phase: CognitivePhase
+                        override val allowedTools: Set<ToolId>? = null
+                        override val fileAccessScope: FileAccessScope? = null
 
-                    * Add a short code comment noting any assumption (e.g., ID generation or default urgency) before proceeding.
+                        @Serializable
+                        @SerialName("PhaseSpark.Perceive")
+                        data object Perceive : PhaseSpark() { ... }
+                    }
+                    ```
 
                     Constraints:
-
-                    * Keep scope tight, Kotlin only, no new dependencies or tests.
-                    * Follow the context-provider pattern used by other CLI commands (e.g., `WorkCommand`).
+                    * Keep scope tight: one sealed class with one `Verbose` data object.
+                    * Kotlin only, no new dependencies.
+                    * Follow the existing Spark patterns in the sparks/ directory.
                 """.trimIndent())
                 .ofType(TicketType.TASK)
                 .withPriority(TicketPriority.HIGH)
@@ -243,40 +252,40 @@ fun main() {
                 // Check if code was generated in the expected output directory
                 val generatedFiles = findGeneratedJazzFiles(outputDir)
                 if (generatedFiles != null) {
-                    val taskCommandFile = generatedFiles.taskCommand
+                    val sparkFile = generatedFiles.observabilitySpark
                     println()
                     println("═".repeat(80))
                     println("✅ SUCCESS! Agent completed the task in ${elapsedSeconds} seconds")
                     println("═".repeat(80))
                     println()
-                    println("📄 Generated file: ${taskCommandFile.absolutePath}")
-                    generatedFiles.ampereCommand?.let { file ->
-                        println("📄 Updated file: ${file.absolutePath}")
-                    }
+                    println("📄 Generated file: ${sparkFile.absolutePath}")
                     println()
                     println("File contents:")
                     println("─".repeat(80))
-                    println(taskCommandFile.readText())
+                    println(sparkFile.readText())
                     println("─".repeat(80))
                     println()
 
                     // Basic validation
-                    val content = taskCommandFile.readText()
-                    val hasCommand = content.contains("class TaskCommand") || content.contains("TaskCommand")
-                    val hasPublisher = content.contains("publishTaskCreated")
-                    val hasCreateSubcommand = content.contains("name = \"create\"") ||
-                        content.contains("name=\"create\"")
+                    val content = sparkFile.readText()
+                    val hasSealedClass = content.contains("sealed class ObservabilitySpark")
+                    val hasSerializable = content.contains("@Serializable")
+                    val hasVerboseVariant = content.contains("Verbose") &&
+                        (content.contains("data object Verbose") || content.contains("object Verbose"))
+                    val implementsSpark = content.contains(": Spark") || content.contains(": ObservabilitySpark")
 
-                    if (hasCommand && hasPublisher && hasCreateSubcommand) {
+                    if (hasSealedClass && hasSerializable && hasVerboseVariant && implementsSpark) {
                         println("✅ Code validation passed")
-                        println("   ✓ Contains TaskCommand")
-                        println("   ✓ Publishes TaskCreated")
-                        println("   ✓ Has create subcommand")
+                        println("   ✓ Contains sealed class ObservabilitySpark")
+                        println("   ✓ Has @Serializable annotation")
+                        println("   ✓ Has Verbose variant")
+                        println("   ✓ Implements Spark interface")
                     } else {
                         println("⚠️  Code validation warnings:")
-                        if (!hasCommand) println("   - Missing TaskCommand")
-                        if (!hasPublisher) println("   - Missing publishTaskCreated usage")
-                        if (!hasCreateSubcommand) println("   - Missing create subcommand")
+                        if (!hasSealedClass) println("   - Missing sealed class ObservabilitySpark")
+                        if (!hasSerializable) println("   - Missing @Serializable annotation")
+                        if (!hasVerboseVariant) println("   - Missing Verbose variant")
+                        if (!implementsSpark) println("   - Does not implement Spark interface")
                     }
 
                     println()
@@ -335,25 +344,21 @@ fun main() {
 }
 
 internal data class JazzGeneratedFiles(
-    val taskCommand: File,
-    val ampereCommand: File?,
+    val observabilitySpark: File,
 )
 
 internal fun findGeneratedJazzFiles(outputDir: File): JazzGeneratedFiles? {
     val generatedSourceDir = File(
         outputDir,
-        "ampere-cli/src/jvmMain/kotlin/link/socket/ampere"
+        "ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/cognition/sparks"
     )
-    val taskCommandFile = File(generatedSourceDir, "TaskCommand.kt")
-    if (!taskCommandFile.exists()) {
+    val observabilitySparkFile = File(generatedSourceDir, "ObservabilitySpark.kt")
+    if (!observabilitySparkFile.exists()) {
         return null
     }
 
-    val ampereCommandFile = File(generatedSourceDir, "AmpereCommand.kt")
-
     return JazzGeneratedFiles(
-        taskCommand = taskCommandFile,
-        ampereCommand = ampereCommandFile.takeIf { it.exists() },
+        observabilitySpark = observabilitySparkFile,
     )
 }
 
