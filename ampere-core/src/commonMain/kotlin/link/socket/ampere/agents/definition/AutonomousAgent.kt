@@ -27,6 +27,7 @@ import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.domain.task.TaskId
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
@@ -224,6 +225,24 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
     }
 
     // ==================== Agent State ====================
+
+    override fun rememberNewTask(task: Task) {
+        super<Agent>.rememberNewTask(task)
+
+        if (task is Task.Blank) {
+            return
+        }
+
+        applyTaskSparkIfMissing(task)
+    }
+
+    override fun finishCurrentTask() {
+        val currentTask = getCurrentState().getCurrentMemory().task
+        if (currentTask !is Task.Blank) {
+            removeTaskSpark(currentTask.id)
+        }
+        super<Agent>.finishCurrentTask()
+    }
 
     private var agentIsRunning = false
     private var agentRuntimeScope: CoroutineScope? = null
@@ -452,9 +471,13 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
             return Outcome.blank
         }
 
-        // Apply TaskSpark before execution
+        // Apply TaskSpark before execution (if not already assigned)
         val taskSpark = TaskSpark.fromTask(task)
-        spark<AutonomousAgent<S>>(taskSpark)
+        val preSparkDepth = sparkDepth
+        val hadTaskSpark = findTaskSpark(taskSpark.taskId) != null
+        if (!hadTaskSpark) {
+            spark<AutonomousAgent<S>>(taskSpark)
+        }
 
         return try {
             val outcome = runLLMToExecuteTask(task)
@@ -463,9 +486,10 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         } finally {
             // Ensure TaskSpark is removed even during cancellation
             withContext(NonCancellable) {
-                val currentTop = sparkStack.peek()
-                if (currentTop is TaskSpark && currentTop.taskId == taskSpark.taskId) {
-                    unspark()
+                removeTaskSpark(taskSpark.taskId)
+                if (sparkDepth > preSparkDepth) {
+                    // Multiple TaskSparks may have been added (nested tasks)
+                    // Only remove ours - nested tasks should manage their own
                 }
             }
         }
@@ -491,30 +515,8 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
             return Outcome.blank
         }
 
-        // Apply TaskSpark before execution
-        val taskSpark = TaskSpark.fromTask(task)
-        val preSparkDepth = sparkDepth
-        spark<AutonomousAgent<S>>(taskSpark)
-
-        return try {
-            val outcome = runLLMToExecuteTask(task)
-            rememberNewOutcome(outcome)
-            outcome
-        } finally {
-            // Ensure TaskSpark is removed even during cancellation
-            withContext(NonCancellable) {
-                // Pop the TaskSpark we added (verify we're removing the right one)
-                val currentTop = sparkStack.peek()
-                if (currentTop is TaskSpark && currentTop.taskId == taskSpark.taskId) {
-                    unspark()
-                }
-                // Safety check: if stack depth is wrong, log warning and attempt recovery
-                if (sparkDepth > preSparkDepth) {
-                    // Multiple TaskSparks may have been added (nested tasks)
-                    // Only remove ours - nested tasks should manage their own
-                }
-            }
-        }
+        rememberNewTask(task)
+        return executeTaskWithSpark(task)
     }
 
     /** Executes a tool with the given parameters */
@@ -534,5 +536,45 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         val idea = runLLMToEvaluateOutcomes(outcomes.toList())
         rememberNewIdea(idea)
         return idea
+    }
+
+    private fun applyTaskSparkIfMissing(task: Task) {
+        val taskId = task.id
+        if (findTaskSpark(taskId) != null) {
+            return
+        }
+        val taskSpark = TaskSpark.fromTask(task)
+        spark<AutonomousAgent<S>>(taskSpark)
+    }
+
+    private fun findTaskSpark(taskId: TaskId): TaskSpark? {
+        ensureSparkStackInitialized()
+        return sparkStack.sparks
+            .filterIsInstance<TaskSpark>()
+            .lastOrNull { it.taskId == taskId }
+    }
+
+    private fun removeTaskSpark(taskId: TaskId): TaskSpark? {
+        ensureSparkStackInitialized()
+
+        val currentTop = sparkStack.peek()
+        if (currentTop is TaskSpark && currentTop.taskId == taskId) {
+            unspark<AutonomousAgent<S>>()
+            return currentTop
+        }
+
+        val sparks = sparkStack.sparks
+        val index = sparks.indexOfLast { it is TaskSpark && it.taskId == taskId }
+        if (index == -1) {
+            return null
+        }
+
+        val removed = sparks[index] as TaskSpark
+        val newSparks = sparks.toMutableList().also { it.removeAt(index) }
+        var newStack = SparkStack.withAffinity(affinity)
+        newSparks.forEach { spark -> newStack = newStack.push(spark) }
+        sparkStack = newStack
+        onSparkRemoved(removed)
+        return removed
     }
 }
