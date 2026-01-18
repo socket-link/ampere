@@ -209,7 +209,7 @@ class JazzProgressPane(
      *
      * Format:
      * ├─ PERCEIVE  ✓ Complete
-     * │    └─ Ideas: 3 - Fibonacci implementation
+     * │    └─ Ideas: 3 - CoordinationSpark implementation
      * ├─ PLAN      ◐ Creating plan... (5s)
      * │    └─ Steps: 4  Complexity: medium
      * ├─ EXECUTE   ○ Writing code

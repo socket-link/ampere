@@ -41,7 +41,7 @@ import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
  * This program:
  * 1. Starts the AMPERE environment
  * 2. Creates a CodeWriterAgent that listens for ticket events
- * 3. Creates a ticket: "Implement Fibonacci function in Kotlin"
+ * 3. Creates a ticket: "Add CoordinationSpark.Handoff"
  * 4. Assigns the ticket to the agent
  * 5. The agent autonomously runs through the PROPEL cognitive cycle
  * 6. All events are emitted and observable via the CLI dashboard
@@ -144,27 +144,31 @@ fun main() {
             delay(500)
 
             println("─".repeat(80))
-            println("CREATING FIBONACCI TICKET")
+            println("CREATING SPARK TICKET")
             println("─".repeat(80))
             println()
 
             // Build the ticket specification
             val ticketSpec = TicketBuilder()
-                .withTitle("Implement Fibonacci function")
+                .withTitle("Add CoordinationSpark.Handoff")
                 .withDescription("""
-                    Create a SINGLE Kotlin file with a Fibonacci function.
+                    Add a new Spark type that improves agent handoffs and coordination.
 
                     Requirements:
-                    - Function name: fibonacci
-                    - Input: n (Int) - the position in the Fibonacci sequence
-                    - Output: Long - the Fibonacci number at position n
-                    - Use an efficient iterative approach
-                    - Handle edge cases (n = 0, n = 1)
+                    - Create a new Kotlin file at:
+                      ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/cognition/sparks/CoordinationSpark.kt
+                    - Define a sealed class CoordinationSpark : Spark
+                    - Include a data object Handoff with:
+                      - @Serializable + @SerialName("CoordinationSpark.Handoff")
+                      - name = "Coordination:Handoff"
+                      - promptContribution: markdown guidance for explicit ownership,
+                        handoff summaries, and event-driven coordination
+                      - allowedTools = null, fileAccessScope = null
+                    - Update AmpereProjectSpark's Spark list to include CoordinationSpark
 
                     IMPORTANT:
-                    - Create ONLY ONE file named Fibonacci.kt
-                    - Do NOT create additional utility files, test files, or helper classes
-                    - Keep the implementation simple and self-contained
+                    - Keep scope tight and changes minimal
+                    - Do NOT add unrelated files
                 """.trimIndent())
                 .ofType(TicketType.TASK)
                 .withPriority(TicketPriority.HIGH)
@@ -228,37 +232,40 @@ fun main() {
                 delay(1.seconds)
                 elapsedSeconds++
 
-                // Check if code was generated (search recursively for Fibonacci.kt)
-                val fibonacciFile = outputDir.walkTopDown()
-                    .firstOrNull { it.name == "Fibonacci.kt" && it.isFile }
+                // Check if code was generated (search recursively for CoordinationSpark.kt)
+                val sparkFile = outputDir.walkTopDown()
+                    .firstOrNull { it.name == "CoordinationSpark.kt" && it.isFile }
 
-                if (fibonacciFile != null && fibonacciFile.exists()) {
+                if (sparkFile != null && sparkFile.exists()) {
                     println()
                     println("═".repeat(80))
                     println("✅ SUCCESS! Agent completed the task in ${elapsedSeconds} seconds")
                     println("═".repeat(80))
                     println()
-                    println("📄 Generated file: ${fibonacciFile.absolutePath}")
+                    println("📄 Generated file: ${sparkFile.absolutePath}")
                     println()
                     println("File contents:")
                     println("─".repeat(80))
-                    println(fibonacciFile.readText())
+                    println(sparkFile.readText())
                     println("─".repeat(80))
                     println()
 
                     // Basic validation
-                    val content = fibonacciFile.readText()
-                    val hasFunction = content.contains("fun fibonacci")
-                    val hasTypes = content.contains("Int") || content.contains("Long")
+                    val content = sparkFile.readText()
+                    val hasSpark = content.contains("CoordinationSpark")
+                    val hasHandoff = content.contains("Handoff")
+                    val hasSerialName = content.contains("CoordinationSpark.Handoff")
 
-                    if (hasFunction && hasTypes) {
+                    if (hasSpark && hasHandoff && hasSerialName) {
                         println("✅ Code validation passed")
-                        println("   ✓ Contains fibonacci function")
-                        println("   ✓ Uses appropriate types")
+                        println("   ✓ Contains CoordinationSpark")
+                        println("   ✓ Defines Handoff spark")
+                        println("   ✓ Serial name present")
                     } else {
                         println("⚠️  Code validation warnings:")
-                        if (!hasFunction) println("   - Missing 'fun fibonacci'")
-                        if (!hasTypes) println("   - Missing type annotations")
+                        if (!hasSpark) println("   - Missing CoordinationSpark")
+                        if (!hasHandoff) println("   - Missing Handoff spark")
+                        if (!hasSerialName) println("   - Missing serial name annotation")
                     }
 
                     println()

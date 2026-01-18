@@ -103,7 +103,8 @@ specializes through accumulated Spark layers:
 1. CognitiveAffinity: Base thinking approach (ANALYTICAL, EXPLORATORY, OPERATIONAL, INTEGRATIVE)
 2. ProjectSpark: Project context and conventions
 3. RoleSpark: Capability focus (Code, Research, Operations, Planning)
-4. TaskSpark: Current task context (applied/removed with task lifecycle)
+4. CoordinationSpark: Handoff and coordination focus (optional, when needed)
+5. TaskSpark: Current task context (applied/removed with task lifecycle)
 """
 
     private const val AMPERE_CONVENTIONS = """
