@@ -1,0 +1,16 @@
+# Startup SaaS Arc
+# ================
+# PM → Code → QA pipeline for completing product tickets.
+# The default arc for building SaaS products.
+
+name: startup-saas
+description: PM → Code → QA pipeline for product tickets
+
+agents:
+  - role: pm
+  - role: code
+  - role: qa
+
+orchestration:
+  type: sequential
+  order: [pm, code, qa]

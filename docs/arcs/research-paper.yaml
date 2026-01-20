@@ -1,0 +1,16 @@
+# Research Paper Arc
+# ==================
+# Scholar → Writer → Critic pipeline for academic and technical writing.
+# Use for literature reviews, technical reports, and documentation.
+
+name: research-paper
+description: Academic and technical writing pipeline
+
+agents:
+  - role: scholar
+  - role: writer
+  - role: critic
+
+orchestration:
+  type: sequential
+  order: [scholar, writer, critic]

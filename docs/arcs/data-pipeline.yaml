@@ -1,0 +1,16 @@
+# Data Pipeline Arc
+# =================
+# Analyst → Engineer → Validator pipeline for data processing.
+# Use for ETL jobs, analytics, and ML experiments.
+
+name: data-pipeline
+description: Data processing and validation pipeline
+
+agents:
+  - role: analyst
+  - role: engineer
+  - role: validator
+
+orchestration:
+  type: sequential
+  order: [analyst, engineer, validator]
