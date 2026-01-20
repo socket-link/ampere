@@ -89,6 +89,23 @@ class BatchIssueCreator(
             }
         }
 
+        // Link dependencies using provider-specific APIs (if supported).
+        for (issue in request.issues) {
+            if (issue.dependsOn.isNotEmpty()) {
+                val issueNumber = resolved[issue.localId] ?: continue
+                val dependencyNumbers = issue.dependsOn.mapNotNull { resolved[it] }
+
+                if (dependencyNumbers.isNotEmpty()) {
+                    // Best effort - dependency references already exist in the body.
+                    provider.linkDependencies(
+                        repository = request.repository,
+                        issueNumber = issueNumber,
+                        dependsOnIssueNumbers = dependencyNumbers,
+                    )
+                }
+            }
+        }
+
         // Add child summaries to parent issues
         // Find all unique parent issue numbers
         val parentNumbers = created
