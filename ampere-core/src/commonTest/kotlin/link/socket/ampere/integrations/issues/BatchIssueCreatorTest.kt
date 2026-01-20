@@ -380,6 +380,67 @@ class BatchIssueCreatorTest {
         assertTrue(mockProvider.summarizeCalls.contains(1)) // parent1 is issue #1
         assertTrue(mockProvider.summarizeCalls.contains(3)) // parent2 is issue #3
     }
+
+    @Test
+    fun `links dependencies using resolved issue numbers`() = runBlocking {
+        val mockProvider = MockIssueTrackerProvider()
+        val creator = BatchIssueCreator(mockProvider)
+
+        val request = BatchIssueCreateRequest(
+            repository = "owner/repo",
+            issues = listOf(
+                IssueCreateRequest(
+                    localId = "dependency",
+                    type = IssueType.Task,
+                    title = "Dependency",
+                    body = "Created first",
+                ),
+                IssueCreateRequest(
+                    localId = "dependent",
+                    type = IssueType.Task,
+                    title = "Dependent",
+                    body = "Depends on dependency",
+                    dependsOn = listOf("dependency"),
+                ),
+            ),
+        )
+
+        creator.createBatch(request)
+
+        val linkCalls = mockProvider.dependencyLinks
+        assertEquals(1, linkCalls.size)
+        assertEquals(2, linkCalls[0].issueNumber) // dependent is issue #2
+        assertEquals(listOf(1), linkCalls[0].dependsOnIssueNumbers) // dependency is issue #1
+    }
+
+    @Test
+    fun `does not link unresolved dependencies`() = runBlocking {
+        val mockProvider = MockIssueTrackerProvider(failOn = setOf("dependency"))
+        val creator = BatchIssueCreator(mockProvider)
+
+        val request = BatchIssueCreateRequest(
+            repository = "owner/repo",
+            issues = listOf(
+                IssueCreateRequest(
+                    localId = "dependency",
+                    type = IssueType.Task,
+                    title = "Dependency",
+                    body = "Fails to create",
+                ),
+                IssueCreateRequest(
+                    localId = "dependent",
+                    type = IssueType.Task,
+                    title = "Dependent",
+                    body = "Depends on dependency",
+                    dependsOn = listOf("dependency"),
+                ),
+            ),
+        )
+
+        creator.createBatch(request)
+
+        assertEquals(0, mockProvider.dependencyLinks.size)
+    }
 }
 
 /**
@@ -394,6 +455,7 @@ private class MockIssueTrackerProvider(
 
     val creationOrder = mutableListOf<String>()
     val summarizeCalls = mutableListOf<Int>() // Track which parent numbers got summarized
+    val dependencyLinks = mutableListOf<DependencyLinkCall>()
     private var nextIssueNumber = 1
 
     override suspend fun validateConnection(): Result<Unit> = Result.success(Unit)
@@ -426,6 +488,15 @@ private class MockIssueTrackerProvider(
         parentIssueNumber: Int,
     ): Result<Unit> = Result.success(Unit)
 
+    override suspend fun linkDependencies(
+        repository: String,
+        issueNumber: Int,
+        dependsOnIssueNumbers: List<Int>,
+    ): Result<Unit> {
+        dependencyLinks.add(DependencyLinkCall(issueNumber, dependsOnIssueNumbers))
+        return Result.success(Unit)
+    }
+
     override suspend fun queryIssues(
         repository: String,
         query: IssueQuery,
@@ -446,3 +517,8 @@ private class MockIssueTrackerProvider(
         return Result.success(Unit)
     }
 }
+
+private data class DependencyLinkCall(
+    val issueNumber: Int,
+    val dependsOnIssueNumbers: List<Int>,
+)

@@ -67,6 +67,24 @@ interface IssueTrackerProvider {
     ): Result<Unit>
 
     /**
+     * Link issue dependencies in the tracking system.
+     *
+     * For example, in GitHub this can establish "blocked by" relationships
+     * using the Issue Dependencies API. Providers that do not support
+     * formal dependency links can leave this as a no-op.
+     *
+     * @param repository Repository identifier
+     * @param issueNumber Issue number that is blocked by dependencies
+     * @param dependsOnIssueNumbers Issue numbers that block the issue
+     * @return Success if dependencies were linked (or not needed), Failure otherwise
+     */
+    suspend fun linkDependencies(
+        repository: String,
+        issueNumber: Int,
+        dependsOnIssueNumbers: List<Int>,
+    ): Result<Unit> = Result.success(Unit)
+
+    /**
      * Query existing issues.
      *
      * Useful for duplicate detection, finding related work, and

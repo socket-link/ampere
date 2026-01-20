@@ -23,6 +23,7 @@ Implementations must provide:
    - `updateIssue()`: Modify existing issues
    - `queryIssues()`: Search and retrieve issues
 4. **Relationships**: `setParentRelationship()` for hierarchical issues
+5. **Dependencies**: `linkDependencies()` for formal blocked-by links (if supported)
 
 ## Data Model
 
@@ -125,6 +126,18 @@ override suspend fun setParentRelationship(
 ): Result<Unit> {
     // Use Jira's parent field
     return jiraClient.setParent(childIssueNumber, parentIssueNumber)
+}
+```
+
+**GitHub**: Link dependencies with Issue Dependencies API
+```kotlin
+override suspend fun linkDependencies(
+    repository: String,
+    issueNumber: Int,
+    dependsOnIssueNumbers: List<Int>
+): Result<Unit> {
+    // Link "blocked by" relationships using the GitHub API
+    // No-op if the platform does not support formal dependency links
 }
 ```
 

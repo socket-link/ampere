@@ -37,6 +37,13 @@ class GitHubCliProvider : IssueTrackerProvider {
     }
 
     private val labelCache = mutableMapOf<String, MutableSet<String>>()
+    private val issueIdCache = mutableMapOf<String, MutableMap<Int, Long>>()
+    private val apiHeaders = listOf(
+        "-H",
+        "Accept: application/vnd.github+json",
+        "-H",
+        "X-GitHub-Api-Version: 2022-11-28",
+    )
 
     override suspend fun validateConnection(): Result<Unit> = runCatching {
         val result = executeGh("auth", "status")
@@ -128,15 +135,54 @@ class GitHubCliProvider : IssueTrackerProvider {
         childIssueNumber: Int,
         parentIssueNumber: Int,
     ): Result<Unit> = runCatching {
-        // GitHub's official sub-issues feature is in beta and requires project boards.
-        // For now, we document the relationship in the issue body (already done in createIssue).
-        //
-        // Future enhancement: Use GitHub Projects API to establish formal relationships
-        // via: gh api repos/{owner}/{repo}/issues/{number}/sub_issues
+        val childIssueId = resolveIssueId(repository, childIssueNumber)
 
-        // The relationship is already documented in the issue body from createIssue,
-        // so this is a no-op for the gh CLI implementation.
-        Unit
+        val result = executeGh(
+            "api",
+            "--method",
+            "POST",
+            "repos/$repository/issues/$parentIssueNumber/sub_issues",
+            "-f",
+            "sub_issue_id=$childIssueId",
+            *apiHeaders.toTypedArray(),
+        )
+
+        if (result.exitCode != 0) {
+            val message = result.stderr.ifBlank { result.stdout }
+            error("Failed to link sub-issue: $message")
+        }
+    }
+
+    override suspend fun linkDependencies(
+        repository: String,
+        issueNumber: Int,
+        dependsOnIssueNumbers: List<Int>,
+    ): Result<Unit> = runCatching {
+        val uniqueDependencies = dependsOnIssueNumbers.distinct()
+        if (uniqueDependencies.isEmpty()) return Result.success(Unit)
+
+        val failures = mutableListOf<String>()
+        uniqueDependencies.forEach { depNumber ->
+            val depIssueId = resolveIssueId(repository, depNumber)
+            val result = executeGh(
+                "api",
+                "--method",
+                "POST",
+                "repos/$repository/issues/$issueNumber/dependencies/blocked_by",
+                "-f",
+                "issue_id=$depIssueId",
+                *apiHeaders.toTypedArray(),
+            )
+
+            if (result.exitCode != 0) {
+                val message = result.stderr.ifBlank { result.stdout }
+                failures.add("#$depNumber: $message")
+            }
+        }
+
+        if (failures.isNotEmpty()) {
+            error("Failed to link dependencies: ${failures.joinToString("; ")}")
+        }
     }
 
     /**
@@ -433,6 +479,32 @@ class GitHubCliProvider : IssueTrackerProvider {
                 .map { normalizeLabelName(it.name) }
                 .toSet()
         }
+    }
+
+    private suspend fun resolveIssueId(
+        repository: String,
+        issueNumber: Int,
+    ): Long {
+        val cache = issueIdCache.getOrPut(repository) { mutableMapOf() }
+        cache[issueNumber]?.let { return it }
+
+        val result = executeGh(
+            "api",
+            "repos/$repository/issues/$issueNumber",
+            "--jq",
+            ".id",
+            *apiHeaders.toTypedArray(),
+        )
+
+        if (result.exitCode != 0) {
+            val message = result.stderr.ifBlank { result.stdout }
+            error("Failed to resolve issue id for #$issueNumber: $message")
+        }
+
+        val issueId = result.stdout.trim().toLongOrNull()
+            ?: error("Failed to parse issue id for #$issueNumber: ${result.stdout}")
+        cache[issueNumber] = issueId
+        return issueId
     }
 
     private fun normalizeLabelName(labelName: String): String = labelName.trim().lowercase()
