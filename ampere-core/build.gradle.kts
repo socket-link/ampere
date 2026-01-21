@@ -138,6 +138,7 @@ kotlin {
                 implementation("co.touchlab:kermit:2.0.6")
                 implementation("io.ktor:ktor-client-core:3.2.2")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+                implementation("com.charleskorn.kaml:kaml:0.72.0")
             }
         }
         val commonTest by getting {
