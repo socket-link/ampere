@@ -35,6 +35,7 @@ import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.WatchPresenter
 import link.socket.ampere.cli.watch.presentation.WatchViewState
 import link.socket.ampere.renderer.HelpOverlayRenderer
+import link.socket.ampere.domain.arc.ArcRegistry
 import link.socket.ampere.repl.TerminalFactory
 
 /**
@@ -74,6 +75,10 @@ class RunCommand(
           --issues           Work on available GitHub issues
           --issue <number>   Work on specific GitHub issue
 
+        Arc Configuration:
+          --arc <name>       Select arc workflow pattern (default: startup-saas)
+          --list-arcs        List available arc configurations
+
         Viewing Modes (same as 'start'):
           d - Dashboard: System vitals, agent status
           e - Event Stream: Filtered events
@@ -86,6 +91,8 @@ class RunCommand(
           ampere run --demo jazz
           ampere run --issues
           ampere run --issue 42
+          ampere run --arc devops-pipeline --goal "Deploy to staging"
+          ampere run --list-arcs
 
         Note: Only one work mode can be active at a time.
     """.trimIndent()
@@ -99,7 +106,38 @@ class RunCommand(
 
     private val issue: Int? by option("--issue", "-i", help = "Work on specific GitHub issue number").int()
 
+    private val arc: String? by option("--arc", "-a", help = "Select arc workflow pattern (e.g., startup-saas, devops-pipeline)")
+
+    private val listArcs: Boolean by option("--list-arcs", help = "List available arc configurations").flag(default = false)
+
     override fun run() = runBlocking {
+        // Handle --list-arcs flag
+        if (listArcs) {
+            echo("Available arc configurations:")
+            echo("")
+            ArcRegistry.list().forEach { arcConfig ->
+                echo("  ${arcConfig.name}")
+                arcConfig.description?.let { desc ->
+                    echo("    $desc")
+                }
+                echo("    Agents: ${arcConfig.agents.joinToString(" → ") { it.role }}")
+                echo("")
+            }
+            return@runBlocking
+        }
+
+        // Validate arc name if specified
+        val selectedArc = arc?.let { arcName ->
+            val arcConfig = ArcRegistry.get(arcName)
+            if (arcConfig == null) {
+                val availableArcs = ArcRegistry.list().joinToString(", ") { it.name }
+                echo("Error: Unknown arc '$arcName'", err = true)
+                echo("Available arcs: $availableArcs", err = true)
+                return@runBlocking
+            }
+            arcConfig
+        } ?: ArcRegistry.getDefault()
+
         // Validate that only one work mode is specified
         val modesSpecified = listOfNotNull(
             goal?.let { "goal" },
