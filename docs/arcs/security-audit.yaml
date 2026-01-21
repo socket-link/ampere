@@ -1,0 +1,16 @@
+# Security Audit Arc
+# ==================
+# Scanner → Analyst → Remediator pipeline for security review.
+# Use for vulnerability scanning, compliance checks, and penetration testing.
+
+name: security-audit
+description: Security vulnerability detection and remediation pipeline
+
+agents:
+  - role: scanner
+  - role: analyst
+  - role: remediator
+
+orchestration:
+  type: sequential
+  order: [scanner, analyst, remediator]

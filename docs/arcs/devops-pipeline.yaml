@@ -1,0 +1,16 @@
+# DevOps Pipeline Arc
+# ===================
+# Planner → Executor → Monitor pipeline for deployment and infrastructure.
+# Use for deployments, infrastructure changes, and incident response.
+
+name: devops-pipeline
+description: Infrastructure deployment and monitoring pipeline
+
+agents:
+  - role: planner
+  - role: executor
+  - role: monitor
+
+orchestration:
+  type: sequential
+  order: [planner, executor, monitor]

@@ -1,0 +1,16 @@
+# Content Creation Arc
+# ====================
+# Researcher → Writer → Editor pipeline for content production.
+# Use for marketing copy, blog posts, and documentation.
+
+name: content-creation
+description: Content research, writing, and editing pipeline
+
+agents:
+  - role: researcher
+  - role: writer
+  - role: editor
+
+orchestration:
+  type: sequential
+  order: [researcher, writer, editor]
