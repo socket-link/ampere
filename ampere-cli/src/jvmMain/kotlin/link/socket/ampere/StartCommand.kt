@@ -242,16 +242,19 @@ class StartCommand(
                             ?: eventPane.collapseEvent()
 
                         // Update system status based on current phase
-                        systemStatus = when (jazzPane.currentPhase) {
-                            JazzProgressPane.Phase.INITIALIZING -> {
-                                if (autoWork) StatusBar.SystemStatus.WORKING else StatusBar.SystemStatus.IDLE
+                        systemStatus = when {
+                            jazzPane.isAwaitingHuman -> StatusBar.SystemStatus.WAITING
+                            else -> when (jazzPane.currentPhase) {
+                                JazzProgressPane.Phase.INITIALIZING -> {
+                                    if (autoWork) StatusBar.SystemStatus.WORKING else StatusBar.SystemStatus.IDLE
+                                }
+                                JazzProgressPane.Phase.PERCEIVE -> StatusBar.SystemStatus.THINKING
+                                JazzProgressPane.Phase.PLAN -> StatusBar.SystemStatus.THINKING
+                                JazzProgressPane.Phase.EXECUTE -> StatusBar.SystemStatus.WORKING
+                                JazzProgressPane.Phase.LEARN -> StatusBar.SystemStatus.THINKING
+                                JazzProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.COMPLETED
+                                JazzProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
                             }
-                            JazzProgressPane.Phase.PERCEIVE -> StatusBar.SystemStatus.THINKING
-                            JazzProgressPane.Phase.PLAN -> StatusBar.SystemStatus.THINKING
-                            JazzProgressPane.Phase.EXECUTE -> StatusBar.SystemStatus.WORKING
-                            JazzProgressPane.Phase.LEARN -> StatusBar.SystemStatus.THINKING
-                            JazzProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.COMPLETED
-                            JazzProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
                         }
 
                         // Render status bar

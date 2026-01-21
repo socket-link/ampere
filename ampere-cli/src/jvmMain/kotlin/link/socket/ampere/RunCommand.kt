@@ -348,14 +348,17 @@ class RunCommand(
                             ?: eventPane.collapseEvent()
 
                         // Update system status based on current phase
-                        systemStatus = when (jazzPane.currentPhase) {
-                            JazzProgressPane.Phase.INITIALIZING -> StatusBar.SystemStatus.IDLE
-                            JazzProgressPane.Phase.PERCEIVE -> StatusBar.SystemStatus.THINKING
-                            JazzProgressPane.Phase.PLAN -> StatusBar.SystemStatus.THINKING
-                            JazzProgressPane.Phase.EXECUTE -> StatusBar.SystemStatus.WORKING
-                            JazzProgressPane.Phase.LEARN -> StatusBar.SystemStatus.THINKING
-                            JazzProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.COMPLETED
-                            JazzProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
+                        systemStatus = when {
+                            jazzPane.isAwaitingHuman -> StatusBar.SystemStatus.WAITING
+                            else -> when (jazzPane.currentPhase) {
+                                JazzProgressPane.Phase.INITIALIZING -> StatusBar.SystemStatus.IDLE
+                                JazzProgressPane.Phase.PERCEIVE -> StatusBar.SystemStatus.THINKING
+                                JazzProgressPane.Phase.PLAN -> StatusBar.SystemStatus.THINKING
+                                JazzProgressPane.Phase.EXECUTE -> StatusBar.SystemStatus.WORKING
+                                JazzProgressPane.Phase.LEARN -> StatusBar.SystemStatus.THINKING
+                                JazzProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.COMPLETED
+                                JazzProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
+                            }
                         }
 
                         val activeMode = when (viewConfig.mode) {
