@@ -48,6 +48,23 @@ class JazzProgressPane(
     )
 
     /**
+     * Escalation information for human-in-the-loop prompts.
+     */
+    data class EscalationInfo(
+        val question: String,
+        val options: List<EscalationOption>,
+        val startTime: Instant
+    )
+
+    /**
+     * A single escalation option that the human can select.
+     */
+    data class EscalationOption(
+        val key: String,
+        val label: String
+    )
+
+    /**
      * Current state of the Jazz demo execution.
      */
     data class JazzState(
@@ -73,8 +90,16 @@ class JazzProgressPane(
         val knowledgeStored: List<String> = emptyList(),
 
         val errorMessage: String? = null,
-        val phaseDetails: String = ""
-    )
+        val phaseDetails: String = "",
+
+        // Escalation state (human-in-the-loop)
+        val escalation: EscalationInfo? = null
+    ) {
+        /**
+         * Whether we're currently awaiting human input.
+         */
+        val isAwaitingHuman: Boolean get() = escalation != null
+    }
 
     private var state = JazzState()
 
@@ -151,6 +176,36 @@ class JazzProgressPane(
     fun setFailed(error: String) {
         state = state.copy(phase = Phase.FAILED, errorMessage = error)
     }
+
+    /**
+     * Set the awaiting human state with escalation details.
+     * This pauses the current phase (typically PLAN) to wait for human input.
+     *
+     * @param question The question to display to the human
+     * @param options List of options for the human to choose from (e.g., [("A", "keep minimal"), ("B", "add both")])
+     */
+    fun setAwaitingHuman(question: String, options: List<Pair<String, String>>) {
+        state = state.copy(
+            escalation = EscalationInfo(
+                question = question,
+                options = options.map { EscalationOption(it.first, it.second) },
+                startTime = clock.now()
+            )
+        )
+    }
+
+    /**
+     * Clear the awaiting human state after human has responded.
+     */
+    fun clearAwaitingHuman() {
+        state = state.copy(escalation = null)
+    }
+
+    /**
+     * Check if we're currently awaiting human input.
+     */
+    val isAwaitingHuman: Boolean
+        get() = state.isAwaitingHuman
 
     override fun render(width: Int, height: Int): List<String> {
         frameCounter++
@@ -231,8 +286,12 @@ class JazzProgressPane(
             val treeChar = if (isLast) "└─" else "├─"
             val continueChar = if (isLast) "   " else "│  "
 
+            // Check if this phase is awaiting human input
+            val isAwaitingHumanInPhase = state.phase == phase && state.isAwaitingHuman
+
             // Phase indicator
             val indicator = when {
+                isAwaitingHumanInPhase -> terminal.render(TextColors.magenta("⏳"))
                 state.phase == phase -> getAnimatedIndicator()
                 state.phase.ordinal > phase.ordinal -> terminal.render(TextColors.green("✓"))
                 else -> terminal.render(dim("○"))
@@ -240,6 +299,7 @@ class JazzProgressPane(
 
             // Phase name color
             val nameColor = when {
+                isAwaitingHumanInPhase -> TextColors.magenta
                 state.phase == phase -> TextColors.yellow
                 state.phase.ordinal > phase.ordinal -> TextColors.green
                 else -> TextColors.gray
@@ -247,6 +307,10 @@ class JazzProgressPane(
 
             // Phase status text
             val statusText = when {
+                isAwaitingHumanInPhase -> {
+                    val waitingElapsed = state.escalation?.startTime?.let { formatElapsed(it) } ?: ""
+                    "Awaiting human input ($waitingElapsed)"
+                }
                 state.phase == phase -> {
                     val phaseElapsed = state.phaseStartTime?.let { formatElapsed(it) } ?: ""
                     if (state.phaseDetails.isNotEmpty()) {
@@ -295,7 +359,18 @@ class JazzProgressPane(
                 }
             }
             Phase.PLAN -> {
-                if (state.phase.ordinal > Phase.PLAN.ordinal && state.planSteps > 0) {
+                if (state.phase == Phase.PLAN && state.isAwaitingHuman) {
+                    // Show escalation question and options when awaiting human input
+                    val escalation = state.escalation!!
+                    val details = mutableListOf(escalation.question.take(maxWidth))
+                    if (escalation.options.isNotEmpty()) {
+                        val optionsStr = escalation.options.joinToString("  ") { option ->
+                            "[${option.key}] ${option.label}"
+                        }
+                        details.add("Press $optionsStr".take(maxWidth))
+                    }
+                    details
+                } else if (state.phase.ordinal > Phase.PLAN.ordinal && state.planSteps > 0) {
                     val details = mutableListOf("Steps: ${state.planSteps}  Complexity: ${state.estimatedComplexity}")
                     if (state.planApproach.isNotEmpty()) {
                         details.add(state.planApproach.take(maxWidth))
