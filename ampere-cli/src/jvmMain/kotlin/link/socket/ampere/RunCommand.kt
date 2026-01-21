@@ -35,6 +35,8 @@ import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.WatchPresenter
 import link.socket.ampere.cli.watch.presentation.WatchViewState
 import link.socket.ampere.renderer.HelpOverlayRenderer
+import link.socket.ampere.domain.arc.AmpereRuntime
+import link.socket.ampere.domain.arc.ArcConfig
 import link.socket.ampere.domain.arc.ArcRegistry
 import link.socket.ampere.repl.TerminalFactory
 
@@ -109,6 +111,11 @@ class RunCommand(
     private val arc: String? by option("--arc", "-a", help = "Select arc workflow pattern (e.g., startup-saas, devops-pipeline)")
 
     private val listArcs: Boolean by option("--list-arcs", help = "List available arc configurations").flag(default = false)
+
+    private val useArcPhases: Boolean by option(
+        "--use-arc-phases",
+        help = "Execute goal using Arc phases (Charge → Flow → Pulse) instead of direct agent execution"
+    ).flag(default = false)
 
     override fun run() = runBlocking {
         // Handle --list-arcs flag
@@ -214,10 +221,21 @@ class RunCommand(
             // Activate the specified work mode
             when {
                 goal != null -> {
-                    val activationResult = goalHandler.activateGoal(goal!!)
-                    if (activationResult.isFailure) {
-                        jazzPane.setFailed("Failed to activate goal: ${activationResult.exceptionOrNull()?.message}")
-                        systemStatus = StatusBar.SystemStatus.ATTENTION_NEEDED
+                    if (useArcPhases) {
+                        // Use Arc phases (Charge → Flow → Pulse)
+                        executeWithArcPhases(
+                            goal = goal!!,
+                            arcConfig = selectedArc,
+                            agentScope = agentScope,
+                            jazzPane = jazzPane,
+                        ) { status -> systemStatus = status }
+                    } else {
+                        // Use traditional goal handler
+                        val activationResult = goalHandler.activateGoal(goal!!)
+                        if (activationResult.isFailure) {
+                            jazzPane.setFailed("Failed to activate goal: ${activationResult.exceptionOrNull()?.message}")
+                            systemStatus = StatusBar.SystemStatus.ATTENTION_NEEDED
+                        }
                     }
                 }
                 demo == "jazz" -> {
@@ -607,6 +625,57 @@ class RunCommand(
             append("\u001B[${height};1H")
             append(statusBarStr)
             append("\u001B[K")
+        }
+    }
+
+    private fun executeWithArcPhases(
+        goal: String,
+        arcConfig: ArcConfig,
+        agentScope: CoroutineScope,
+        jazzPane: JazzProgressPane,
+        updateStatus: (StatusBar.SystemStatus) -> Unit,
+    ) {
+        agentScope.launch {
+            try {
+                val projectDirPath = File(System.getProperty("user.dir")).absolutePath
+                val runtime = AmpereRuntime.create(
+                    arcConfig = arcConfig,
+                    projectDirPath = projectDirPath,
+                )
+
+                // Phase 1: Charge
+                jazzPane.setPhase(JazzProgressPane.Phase.INITIALIZING, "Charging: Analyzing project...")
+                updateStatus(StatusBar.SystemStatus.THINKING)
+
+                val chargeResult = runtime.executeChargeOnly(goal)
+                jazzPane.setPhase(
+                    JazzProgressPane.Phase.PERCEIVE,
+                    "Project: ${chargeResult.projectContext.projectId}, ${chargeResult.agents.size} agents"
+                )
+
+                // Phase 2: Flow (execute full lifecycle now)
+                jazzPane.setPhase(JazzProgressPane.Phase.PLAN, "Flow: Executing agent loop...")
+                updateStatus(StatusBar.SystemStatus.WORKING)
+
+                val result = runtime.execute(goal)
+
+                // Phase 3: Pulse results
+                jazzPane.setPhase(
+                    JazzProgressPane.Phase.LEARN,
+                    "Pulse: ${result.pulseResult.evaluationReport.goalsCompleted}/${result.pulseResult.evaluationReport.goalsTotal} goals"
+                )
+
+                if (result.success) {
+                    jazzPane.setPhase(JazzProgressPane.Phase.COMPLETED)
+                    updateStatus(StatusBar.SystemStatus.COMPLETED)
+                } else {
+                    jazzPane.setFailed("Arc completed with failures")
+                    updateStatus(StatusBar.SystemStatus.ATTENTION_NEEDED)
+                }
+            } catch (e: Exception) {
+                jazzPane.setFailed("Arc execution failed: ${e.message}")
+                updateStatus(StatusBar.SystemStatus.ATTENTION_NEEDED)
+            }
         }
     }
 
