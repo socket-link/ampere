@@ -18,6 +18,11 @@ import org.jline.utils.NonBlockingReader
  * - `h`/`?` -> Help
  * - `q`/Ctrl+C -> Exit
  * - ESC -> Cancel pending input or return from focus
+ *
+ * Escalation response (when awaiting human input):
+ * - `a`/`A`/`1` -> Select Option A
+ * - `b`/`B`/`2` -> Select Option B
+ * - ESC -> Skip with default response (A)
  */
 class DemoInputHandler(
     private val terminal: Terminal
@@ -36,7 +41,8 @@ class DemoInputHandler(
         NORMAL,              // Waiting for first key
         AWAITING_AGENT,      // Pressed 'a', waiting for 1-9
         AWAITING_EVENT,      // Pressed 'e' in events mode, waiting for 1-9
-        COMMAND              // In command mode, typing a command
+        COMMAND,             // In command mode, typing a command
+        AWAITING_ESCALATION  // Waiting for A/B response to escalation prompt
     }
 
     /**
@@ -50,7 +56,8 @@ class DemoInputHandler(
         val showHelp: Boolean = false,
         val inputMode: InputMode = InputMode.NORMAL,
         val inputHint: String? = null,  // Shown in status bar
-        val commandInput: String = ""   // Current command being typed
+        val commandInput: String = "",  // Current command being typed
+        val escalationRequestId: String? = null  // Active escalation request ID for human response
     )
 
     /**
@@ -69,6 +76,17 @@ class DemoInputHandler(
     sealed class KeyResult {
         data class ConfigChange(val newConfig: DemoViewConfig) : KeyResult()
         data class ExecuteCommand(val command: String, val newConfig: DemoViewConfig) : KeyResult()
+        /**
+         * Escalation response from human input (A/B selection).
+         * @param requestId The escalation request ID to respond to
+         * @param response The human's response (e.g., "A" or "B")
+         * @param newConfig Updated config with escalation cleared
+         */
+        data class EscalationResponse(
+            val requestId: String,
+            val response: String,
+            val newConfig: DemoViewConfig
+        ) : KeyResult()
         object Exit : KeyResult()
         object NoChange : KeyResult()
     }
@@ -101,6 +119,18 @@ class DemoInputHandler(
         // Handle ESC
         if (key.code == 27) {
             return when {
+                // Escalation mode: ESC provides default response "A"
+                current.inputMode == InputMode.AWAITING_ESCALATION && current.escalationRequestId != null -> {
+                    KeyResult.EscalationResponse(
+                        requestId = current.escalationRequestId,
+                        response = "A",
+                        newConfig = current.copy(
+                            inputMode = InputMode.NORMAL,
+                            inputHint = null,
+                            escalationRequestId = null
+                        )
+                    )
+                }
                 // Cancel command mode
                 current.inputMode == InputMode.COMMAND -> KeyResult.ConfigChange(
                     current.copy(inputMode = InputMode.NORMAL, inputHint = null, commandInput = "")
@@ -169,10 +199,41 @@ class DemoInputHandler(
                     }
                 }
             }
+            InputMode.AWAITING_ESCALATION -> {
+                return processEscalationKey(key, current)
+            }
             InputMode.NORMAL -> {
                 return processNormalKey(key, current)
             }
         }
+    }
+
+    /**
+     * Process a key when awaiting escalation response.
+     *
+     * Maps:
+     * - 'a'/'A' or '1' -> Option A response
+     * - 'b'/'B' or '2' -> Option B response
+     * - Other keys are ignored (escalation takes priority)
+     */
+    private fun processEscalationKey(key: Char, current: DemoViewConfig): KeyResult {
+        val requestId = current.escalationRequestId ?: return KeyResult.NoChange
+
+        val response = when (key) {
+            'a', 'A', '1' -> "A"
+            'b', 'B', '2' -> "B"
+            else -> return KeyResult.NoChange
+        }
+
+        return KeyResult.EscalationResponse(
+            requestId = requestId,
+            response = response,
+            newConfig = current.copy(
+                inputMode = InputMode.NORMAL,
+                inputHint = null,
+                escalationRequestId = null
+            )
+        )
     }
 
     /**

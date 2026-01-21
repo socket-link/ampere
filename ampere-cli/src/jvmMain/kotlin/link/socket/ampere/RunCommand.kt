@@ -322,6 +322,10 @@ class RunCommand(
                                         }
                                     }
                                 }
+                                is DemoInputHandler.KeyResult.EscalationResponse -> {
+                                    // Escalation not used in run command, just update config
+                                    viewConfig = result.newConfig
+                                }
                                 is DemoInputHandler.KeyResult.NoChange -> {}
                             }
                         }

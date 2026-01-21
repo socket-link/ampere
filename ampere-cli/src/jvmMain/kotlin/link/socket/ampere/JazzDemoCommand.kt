@@ -34,6 +34,7 @@ import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.agents.execution.tools.human.GlobalHumanResponseRegistry
 import link.socket.ampere.cli.layout.AgentFocusPane
 import link.socket.ampere.cli.layout.AgentMemoryPane
 import link.socket.ampere.cli.layout.DemoInputHandler
@@ -178,6 +179,16 @@ class JazzDemoCommand(
                                 // Commands not supported in jazz demo mode
                                 viewConfig = result.newConfig
                             }
+                            is DemoInputHandler.KeyResult.EscalationResponse -> {
+                                // Provide response to HumanResponseRegistry to unblock agent
+                                GlobalHumanResponseRegistry.instance.provideResponse(
+                                    result.requestId,
+                                    result.response
+                                )
+                                // Clear escalation in jazz pane
+                                jazzPane.clearAwaitingHuman()
+                                viewConfig = result.newConfig
+                            }
                             is DemoInputHandler.KeyResult.NoChange -> {}
                         }
                     }
@@ -199,6 +210,26 @@ class JazzDemoCommand(
                     // Update event pane expanded index
                     viewConfig.expandedEventIndex?.let { eventPane.expandEvent(it) }
                         ?: eventPane.collapseEvent()
+
+                    // Check for escalation state and set input mode if needed
+                    if (jazzPane.isAwaitingHuman && viewConfig.inputMode != DemoInputHandler.InputMode.AWAITING_ESCALATION) {
+                        // Get the pending request ID from the registry
+                        val pendingIds = GlobalHumanResponseRegistry.instance.getPendingRequestIds()
+                        if (pendingIds.isNotEmpty()) {
+                            viewConfig = viewConfig.copy(
+                                inputMode = DemoInputHandler.InputMode.AWAITING_ESCALATION,
+                                escalationRequestId = pendingIds.first(),
+                                inputHint = "Press [A]/[1] or [B]/[2] to respond"
+                            )
+                        }
+                    } else if (!jazzPane.isAwaitingHuman && viewConfig.inputMode == DemoInputHandler.InputMode.AWAITING_ESCALATION) {
+                        // Escalation was cleared externally, reset input mode
+                        viewConfig = viewConfig.copy(
+                            inputMode = DemoInputHandler.InputMode.NORMAL,
+                            escalationRequestId = null,
+                            inputHint = null
+                        )
+                    }
 
                     // Update system status based on current phase
                     systemStatus = when {
