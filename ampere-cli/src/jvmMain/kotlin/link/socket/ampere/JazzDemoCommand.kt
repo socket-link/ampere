@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -34,6 +35,7 @@ import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.tools.human.GlobalHumanResponseRegistry
 import link.socket.ampere.cli.layout.AgentFocusPane
 import link.socket.ampere.cli.layout.AgentMemoryPane
@@ -584,7 +586,37 @@ class JazzDemoCommand(
                 return
             }
 
-            // PHASE 2: PLAN
+            // ESCALATION POINT: After PERCEIVE, before finalizing PLAN
+            // Deterministically trigger escalation in demo mode to showcase human-in-the-loop
+            logPane.info("Triggering escalation - awaiting human input")
+            jazzPane.setPhase(JazzProgressPane.Phase.PLAN, "Awaiting human input...")
+            jazzPane.setAwaitingHuman(
+                question = "Scope: Keep 'Verbose' only or add 'Minimal'?",
+                options = listOf(
+                    "A" to "keep 'Verbose' only",
+                    "B" to "add both variants"
+                )
+            )
+
+            // Register escalation with the global registry and wait for response
+            val escalationRequestId = generateUUID()
+            logPane.info("Escalation request ID: $escalationRequestId")
+
+            // The render loop detects isAwaitingHuman and sets up AWAITING_ESCALATION input mode
+            // DemoInputHandler processes A/B keys and calls provideResponse()
+            val humanResponse = GlobalHumanResponseRegistry.instance.waitForResponse(
+                requestId = escalationRequestId,
+                timeout = 5.minutes
+            )
+
+            // Process the human's response
+            val userChoseVerboseOnly = humanResponse == null || humanResponse == "A"
+            logPane.info("Human responded: ${humanResponse ?: "timeout/default"} -> ${if (userChoseVerboseOnly) "Verbose only" else "Both variants"}")
+
+            // Clear escalation state (already cleared by input handler, but ensure cleanup)
+            jazzPane.clearAwaitingHuman()
+
+            // PHASE 2: PLAN (resume with human feedback incorporated)
             logPane.info("Starting PLAN phase")
             jazzPane.setPhase(JazzProgressPane.Phase.PLAN, "Creating plan...")
             val plan = agent.determinePlanForTask(
