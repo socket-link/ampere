@@ -210,6 +210,10 @@ class StartCommand(
                                         }
                                     }
                                 }
+                                is DemoInputHandler.KeyResult.EscalationResponse -> {
+                                    // Escalation not used in start command, just update config
+                                    viewConfig = result.newConfig
+                                }
                                 is DemoInputHandler.KeyResult.NoChange -> {}
                             }
                         }
