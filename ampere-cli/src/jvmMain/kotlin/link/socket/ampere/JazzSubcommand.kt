@@ -1,6 +1,8 @@
 package link.socket.ampere
 
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.parameters.options.flag
+import com.github.ajalt.clikt.parameters.options.option
 
 /**
  * Subcommand for running the Jazz Test.
@@ -45,19 +47,31 @@ class JazzSubcommand : CliktCommand(
           m - Memory operations mode (knowledge storage)
           1 - Agent focus mode (detailed agent view)
 
+        Options:
+          --escalation    Enable human-in-the-loop escalation (prompts for input)
+
         Examples:
           ampere test jazz              # Run the test
+          ampere test jazz --escalation # Run with human escalation prompts
           ampere test jazz --help       # Show this help
 
         Note: Requires Anthropic API key in local.properties
     """.trimIndent()
 ) {
 
+    private val escalation: Boolean by option(
+        "--escalation",
+        help = "Enable human-in-the-loop escalation prompts during cognitive cycle"
+    ).flag()
+
     override fun run() {
         echo("Starting Jazz Test...")
+        if (escalation) {
+            echo("Escalation mode enabled - will prompt for input during PLAN phase")
+        }
         echo()
 
-        // Call the JazzTestRunner main function
-        link.socket.ampere.demo.main()
+        // Call the JazzTestRunner main function with escalation setting
+        link.socket.ampere.demo.main(escalation = escalation)
     }
 }

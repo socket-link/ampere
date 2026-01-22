@@ -1,6 +1,8 @@
 package link.socket.ampere.demo
 
+import java.io.BufferedReader
 import java.io.File
+import java.io.InputStreamReader
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -11,6 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Clock
 import link.socket.ampere.AmpereContext
 import link.socket.ampere.agents.definition.AgentFactory
@@ -37,6 +40,9 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 
+/** Default timeout for escalation prompts */
+private const val ESCALATION_TIMEOUT_SECONDS = 30L
+
 /**
  * The Jazz Test Runner - Demonstrates end-to-end autonomous agent behavior.
  *
@@ -55,11 +61,15 @@ import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
  * In another terminal, observe with:
  *   ./ampere-cli/ampere start
  */
-fun main() {
+fun main(escalation: Boolean = false) {
     println("═".repeat(80))
     println("THE JAZZ TEST - Autonomous Agent End-to-End Demonstration")
     println("═".repeat(80))
     println()
+    if (escalation) {
+        println("🚨 ESCALATION MODE ENABLED - will prompt for human input during PLAN phase")
+        println()
+    }
 
     // Create output directory for generated code
     val outputDir = File(System.getProperty("user.home"), ".ampere/jazz-test-output")
@@ -125,7 +135,7 @@ fun main() {
                             // Launch cognitive cycle in the background on IO dispatcher
                             agentScope.launch(Dispatchers.IO) {
                                 try {
-                                    handleTicketAssignment(agent, event.ticketId, context, eventApi)
+                                    handleTicketAssignment(agent, event.ticketId, context, eventApi, escalation)
                                     cognitiveCycleComplete.complete(Unit)
                                 } catch (e: Exception) {
                                     println("   ❌ [ERROR] Exception during cognitive cycle:")
@@ -370,6 +380,7 @@ private suspend fun handleTicketAssignment(
     ticketId: String,
     context: AmpereContext,
     eventApi: AgentEventApi,
+    escalation: Boolean = false,
 ) {
     val phaseSparkManager = PhaseSparkManager(agent, enabled = true)
 
@@ -413,6 +424,30 @@ private suspend fun handleTicketAssignment(
         if (perception.ideas.isEmpty()) {
             println("   ❌ No ideas generated, aborting")
             return
+        }
+
+        // ESCALATION POINT: After PERCEIVE, before finalizing PLAN
+        // Only prompt if escalation mode is enabled
+        if (escalation) {
+            println("   🚨 [ESCALATION] Awaiting human input...")
+            println()
+            println("      ┌─────────────────────────────────────────────────────────────┐")
+            println("      │  SCOPE DECISION: How should the agent proceed?             │")
+            println("      │                                                             │")
+            println("      │  [A] Keep 'Verbose' only - simpler implementation          │")
+            println("      │  [B] Add both 'Verbose' and 'Minimal' variants             │")
+            println("      │                                                             │")
+            println("      │  Enter A or B (${ESCALATION_TIMEOUT_SECONDS}s timeout, defaults to A):              │")
+            println("      └─────────────────────────────────────────────────────────────┘")
+            print("      > ")
+            System.out.flush()
+
+            val humanResponse = promptForEscalationResponse()
+            val userChoseVerboseOnly = humanResponse == null || humanResponse.uppercase() == "A"
+
+            println()
+            println("      ✅ Human responded: ${humanResponse ?: "timeout/default"} -> ${if (userChoseVerboseOnly) "Verbose only" else "Both variants"}")
+            println()
         }
 
         // PHASE 2: PLAN
@@ -488,6 +523,40 @@ private suspend fun handleTicketAssignment(
         e.printStackTrace()
     } finally {
         phaseSparkManager.cleanup()
+    }
+}
+
+/**
+ * Prompts for escalation response via console with a timeout.
+ *
+ * @return The user's response ("A" or "B"), or null if timeout occurs.
+ */
+private suspend fun promptForEscalationResponse(): String? {
+    return withContext(Dispatchers.IO) {
+        withTimeoutOrNull(ESCALATION_TIMEOUT_SECONDS.seconds) {
+            try {
+                val reader = BufferedReader(InputStreamReader(System.`in`))
+                // Poll for input with small intervals to allow timeout to work
+                var input: String? = null
+                while (input == null) {
+                    if (reader.ready()) {
+                        input = reader.readLine()?.trim()?.uppercase()
+                        // Validate input - only accept A or B
+                        if (input != null && input !in listOf("A", "B")) {
+                            println("      ⚠️  Invalid input '$input'. Please enter A or B:")
+                            print("      > ")
+                            System.out.flush()
+                            input = null
+                        }
+                    } else {
+                        delay(100) // Check every 100ms
+                    }
+                }
+                input
+            } catch (e: Exception) {
+                null
+            }
+        }
     }
 }
 
