@@ -1,6 +1,8 @@
 package link.socket.ampere
 
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.parameters.options.flag
+import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.mordant.rendering.TextColors
 import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
@@ -106,8 +108,13 @@ class JazzDemoCommand(
 
         Examples:
           ampere demo jazz
+          ampere demo jazz --auto-respond
     """.trimIndent()
 ) {
+    private val autoRespond: Boolean by option(
+        "--auto-respond",
+        help = "Automatically respond to escalations with Option A after 3 seconds (for scripted demos)"
+    ).flag(default = false)
 
     override fun run() = runBlocking {
         val context = contextProvider()
@@ -455,7 +462,7 @@ class JazzDemoCommand(
                 is TicketEvent.TicketAssigned -> {
                     if (event.assignedTo == agent.id) {
                         agentScope.launch {
-                            handleTicketAssignment(agent, event.ticketId, context, jazzPane, logPane, eventApi)
+                            handleTicketAssignment(agent, event.ticketId, context, jazzPane, logPane, eventApi, autoRespond)
                         }
                     }
                 }
@@ -546,6 +553,7 @@ class JazzDemoCommand(
         jazzPane: JazzProgressPane,
         logPane: LogPane,
         eventApi: AgentEventApi,
+        autoRespond: Boolean,
     ) {
         try {
             logPane.info("Ticket assigned: $ticketId")
@@ -604,14 +612,27 @@ class JazzDemoCommand(
 
             // The render loop detects isAwaitingHuman and sets up AWAITING_ESCALATION input mode
             // DemoInputHandler processes A/B keys and calls provideResponse()
-            val humanResponse = GlobalHumanResponseRegistry.instance.waitForResponse(
-                requestId = escalationRequestId,
-                timeout = 5.minutes
-            )
+            val humanResponse: String? = if (autoRespond) {
+                // Auto-respond mode: show 3-second countdown then respond with A
+                logPane.info("Auto-respond enabled - will select [A] in 3 seconds")
+                for (secondsRemaining in 3 downTo 1) {
+                    jazzPane.setAutoRespondCountdown(secondsRemaining)
+                    delay(1000)
+                }
+                jazzPane.setAutoRespondCountdown(null)
+                logPane.info("Auto-responded with [A]")
+                "A"
+            } else {
+                GlobalHumanResponseRegistry.instance.waitForResponse(
+                    requestId = escalationRequestId,
+                    timeout = 5.minutes
+                )
+            }
 
             // Process the human's response
             val userChoseVerboseOnly = humanResponse == null || humanResponse == "A"
-            logPane.info("Human responded: ${humanResponse ?: "timeout/default"} -> ${if (userChoseVerboseOnly) "Verbose only" else "Both variants"}")
+            val responseSource = if (autoRespond) "auto-respond" else "human"
+            logPane.info("Response: ${humanResponse ?: "timeout/default"} [$responseSource] -> ${if (userChoseVerboseOnly) "Verbose only" else "Both variants"}")
 
             // Clear escalation state (already cleared by input handler, but ensure cleanup)
             jazzPane.clearAwaitingHuman()
