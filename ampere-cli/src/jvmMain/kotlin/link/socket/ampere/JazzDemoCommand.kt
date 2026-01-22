@@ -262,12 +262,24 @@ class JazzDemoCommand(
                         DemoInputHandler.DemoMode.AGENT_FOCUS -> "agent_focus"
                     }
                     val shortcuts = StatusBar.defaultShortcuts(activeMode)
+
+                    // Build escalation shortcuts when awaiting human input
+                    val escalationShortcuts = if (jazzPane.isAwaitingHuman && jazzPane.escalationOptions.isNotEmpty()) {
+                        StatusBar.escalationShortcuts(jazzPane.escalationOptions)
+                    } else {
+                        null
+                    }
+
+                    // Use inputHint only for non-escalation input modes (e.g., AWAITING_AGENT)
+                    val inputHintForStatusBar = if (escalationShortcuts != null) null else viewConfig.inputHint
+
                     val statusBarStr = statusBar.render(
                         width = terminal.info.width,
                         shortcuts = shortcuts,
                         status = systemStatus,
                         focusedAgent = viewConfig.focusedAgentIndex,
-                        inputHint = viewConfig.inputHint
+                        inputHint = inputHintForStatusBar,
+                        escalationShortcuts = escalationShortcuts
                     )
 
                     // Determine right pane based on mode

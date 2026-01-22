@@ -160,4 +160,45 @@ class JazzProgressPaneTest {
         assertTrue(plainOutput.contains("PLAN"), "Should show PLAN phase")
         assertTrue(plainOutput.contains("creating plan..."), "Should show creating plan details")
     }
+
+    @Test
+    fun `escalationOptions returns empty list when no escalation`() {
+        val terminal = Terminal()
+        val pane = JazzProgressPane(terminal)
+
+        assertTrue(pane.escalationOptions.isEmpty(), "Should return empty list when no escalation")
+    }
+
+    @Test
+    fun `escalationOptions returns options as key-label pairs`() {
+        val terminal = Terminal()
+        val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
+        val pane = JazzProgressPane(terminal, clock)
+
+        pane.setAwaitingHuman(
+            question = "Test question?",
+            options = listOf("A" to "option A", "B" to "option B")
+        )
+
+        val options = pane.escalationOptions
+        assertEquals(2, options.size)
+        assertEquals("A" to "option A", options[0])
+        assertEquals("B" to "option B", options[1])
+    }
+
+    @Test
+    fun `escalationOptions clears after clearAwaitingHuman`() {
+        val terminal = Terminal()
+        val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
+        val pane = JazzProgressPane(terminal, clock)
+
+        pane.setAwaitingHuman(
+            question = "Test?",
+            options = listOf("X" to "test")
+        )
+        assertEquals(1, pane.escalationOptions.size)
+
+        pane.clearAwaitingHuman()
+        assertTrue(pane.escalationOptions.isEmpty(), "Should be empty after clearing")
+    }
 }
