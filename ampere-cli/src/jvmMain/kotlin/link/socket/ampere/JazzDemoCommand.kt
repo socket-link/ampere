@@ -598,16 +598,32 @@ class JazzDemoCommand(
             // Deterministically trigger escalation in demo mode to showcase human-in-the-loop
             logPane.info("Triggering escalation - awaiting human input")
             jazzPane.setPhase(JazzProgressPane.Phase.PLAN, "Awaiting human input...")
+
+            val escalationQuestion = "Scope: Keep 'Verbose' only or add 'Minimal'?"
+            val escalationOptions = listOf(
+                "A" to "keep 'Verbose' only",
+                "B" to "add both variants"
+            )
+
             jazzPane.setAwaitingHuman(
-                question = "Scope: Keep 'Verbose' only or add 'Minimal'?",
-                options = listOf(
-                    "A" to "keep 'Verbose' only",
-                    "B" to "add both variants"
-                )
+                question = escalationQuestion,
+                options = escalationOptions
             )
 
             // Register escalation with the global registry and wait for response
             val escalationRequestId = generateUUID()
+
+            // Publish EscalationRequested event for visibility in the event pane
+            val optionsSummary = escalationOptions.joinToString(" | ") { "[${it.first}] ${it.second}" }
+            eventApi.publishEscalationRequested(
+                threadId = "escalation-$escalationRequestId",
+                reason = "$escalationQuestion ($optionsSummary)",
+                context = mapOf(
+                    "question" to escalationQuestion,
+                    "optionA" to escalationOptions[0].second,
+                    "optionB" to escalationOptions[1].second,
+                ),
+            )
             logPane.info("Escalation request ID: $escalationRequestId")
 
             // The render loop detects isAwaitingHuman and sets up AWAITING_ESCALATION input mode

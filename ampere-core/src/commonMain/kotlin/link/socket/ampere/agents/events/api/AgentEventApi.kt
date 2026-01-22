@@ -8,7 +8,9 @@ import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.EventType
+import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
+import link.socket.ampere.agents.events.messages.MessageThreadId
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.subscribe
@@ -119,6 +121,30 @@ class AgentEventApi(
             changeDescription = changeDescription,
             reviewRequired = reviewRequired,
             assignedTo = assignedTo,
+        )
+
+        publish(event)
+    }
+
+    /**
+     * Publish an EscalationRequested event with auto-generated ID and current timestamp.
+     *
+     * This event is visible in the event pane and marked as SIGNIFICANT/CRITICAL for visibility.
+     */
+    suspend fun publishEscalationRequested(
+        threadId: MessageThreadId,
+        reason: String,
+        context: Map<String, String> = emptyMap(),
+        urgency: Urgency = Urgency.HIGH,
+    ) {
+        val event = MessageEvent.EscalationRequested(
+            eventId = generateUUID(threadId, agentId),
+            timestamp = Clock.System.now(),
+            eventSource = EventSource.Agent(agentId),
+            threadId = threadId,
+            reason = reason,
+            context = context,
+            urgency = urgency,
         )
 
         publish(event)
