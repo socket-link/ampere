@@ -53,7 +53,8 @@ class JazzProgressPane(
     data class EscalationInfo(
         val question: String,
         val options: List<EscalationOption>,
-        val startTime: Instant
+        val startTime: Instant,
+        val autoRespondSecondsRemaining: Int? = null
     )
 
     /**
@@ -199,6 +200,17 @@ class JazzProgressPane(
      */
     fun clearAwaitingHuman() {
         state = state.copy(escalation = null)
+    }
+
+    /**
+     * Update the auto-respond countdown timer display.
+     * @param secondsRemaining Seconds until auto-respond, or null to clear countdown
+     */
+    fun setAutoRespondCountdown(secondsRemaining: Int?) {
+        val currentEscalation = state.escalation ?: return
+        state = state.copy(
+            escalation = currentEscalation.copy(autoRespondSecondsRemaining = secondsRemaining)
+        )
     }
 
     /**
@@ -368,6 +380,10 @@ class JazzProgressPane(
                             "[${option.key}] ${option.label}"
                         }
                         details.add("Press $optionsStr".take(maxWidth))
+                    }
+                    // Show auto-respond countdown if active
+                    escalation.autoRespondSecondsRemaining?.let { seconds ->
+                        details.add("Auto-responding with [A] in ${seconds}s...")
                     }
                     details
                 } else if (state.phase.ordinal > Phase.PLAN.ordinal && state.planSteps > 0) {
