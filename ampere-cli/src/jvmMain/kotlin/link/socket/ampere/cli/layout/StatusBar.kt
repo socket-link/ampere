@@ -47,13 +47,23 @@ class StatusBar(private val terminal: Terminal) {
     )
 
     /**
+     * An escalation-specific shortcut displayed during AWAITING_HUMAN state.
+     * These replace normal shortcuts when escalation is active.
+     */
+    data class EscalationShortcut(
+        val key: String,
+        val label: String
+    )
+
+    /**
      * Render the status bar.
      *
      * @param width Total width available
      * @param shortcuts List of keyboard shortcuts to display
      * @param status Current system status
      * @param focusedAgent Currently focused agent index (null if none)
-     * @param inputHint Pending input hint (e.g., "agent [1-9]")
+     * @param inputHint Pending input hint (e.g., "agent [1-9]") - deprecated, use escalationShortcuts instead
+     * @param escalationShortcuts Shortcuts to display during escalation (replaces normal shortcuts)
      * @return Formatted status bar string
      */
     fun render(
@@ -61,9 +71,22 @@ class StatusBar(private val terminal: Terminal) {
         shortcuts: List<Shortcut>,
         status: SystemStatus,
         focusedAgent: Int? = null,
-        inputHint: String? = null
+        inputHint: String? = null,
+        escalationShortcuts: List<EscalationShortcut>? = null
     ): String {
-        // If there's a pending input hint, show it prominently
+        // If escalation shortcuts are provided, render them instead of normal shortcuts
+        if (escalationShortcuts != null && escalationShortcuts.isNotEmpty()) {
+            val shortcutsStr = renderEscalationShortcuts(escalationShortcuts)
+            val statusStr = renderStatus(status)
+
+            val shortcutsVisible = shortcutsStr.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
+            val statusVisible = statusStr.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
+
+            val padding = (width - shortcutsVisible - statusVisible).coerceAtLeast(1)
+            return "$shortcutsStr${" ".repeat(padding)}$statusStr"
+        }
+
+        // Legacy input hint handling (for non-escalation input modes like AWAITING_AGENT)
         if (inputHint != null) {
             val hintStr = terminal.render(bold(TextColors.yellow(": $inputHint")))
             val escHint = terminal.render(dim(" [ESC cancel]"))
@@ -155,6 +178,18 @@ class StatusBar(private val terminal: Terminal) {
         }
     }
 
+    /**
+     * Render escalation-specific shortcuts.
+     * Uses magenta color scheme to match WAITING status.
+     */
+    private fun renderEscalationShortcuts(shortcuts: List<EscalationShortcut>): String {
+        return shortcuts.joinToString("  ") { shortcut ->
+            val keyPart = terminal.render(bold(TextColors.magenta("[${shortcut.key}]")))
+            val labelPart = terminal.render(TextColors.white(shortcut.label))
+            "$keyPart $labelPart"
+        }
+    }
+
     private fun renderStatus(status: SystemStatus): String {
         val statusColor = when (status) {
             SystemStatus.IDLE -> TextColors.gray
@@ -195,6 +230,22 @@ class StatusBar(private val terminal: Terminal) {
                 }
                 Shortcut(def.key, def.label, isActive)
             }
+        }
+
+        /**
+         * Create escalation shortcuts from options.
+         * Adds ESC/skip as the last option.
+         *
+         * @param options List of key-label pairs (e.g., "A" to "Option A")
+         * @return List of EscalationShortcut including ESC/skip
+         */
+        fun escalationShortcuts(options: List<Pair<String, String>>): List<EscalationShortcut> {
+            val shortcuts = options.map { (key, label) ->
+                EscalationShortcut(key, label)
+            }.toMutableList()
+            // Always add ESC/skip at the end
+            shortcuts.add(EscalationShortcut("ESC", "skip"))
+            return shortcuts
         }
     }
 }

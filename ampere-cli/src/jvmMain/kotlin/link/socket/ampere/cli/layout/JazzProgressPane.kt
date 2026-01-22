@@ -219,6 +219,13 @@ class JazzProgressPane(
     val isAwaitingHuman: Boolean
         get() = state.isAwaitingHuman
 
+    /**
+     * Get the current escalation options, if any.
+     * Returns key-label pairs suitable for status bar display.
+     */
+    val escalationOptions: List<Pair<String, String>>
+        get() = state.escalation?.options?.map { it.key to it.label } ?: emptyList()
+
     override fun render(width: Int, height: Int): List<String> {
         frameCounter++
         val lines = mutableListOf<String>()
