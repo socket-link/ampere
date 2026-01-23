@@ -85,6 +85,7 @@ fun main(args: Array<String>) {
         issueTrackerProvider = issueTrackerProvider,
         repository = repository,
         aiConfiguration = aiConfiguration,
+        llmProvider = context.llmProvider,
     )
 
     // Create agents based on team configuration (or defaults if no config)

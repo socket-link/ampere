@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.domain.util.toClientModelId
 import link.socket.ampere.util.logWith
 
@@ -17,9 +18,27 @@ import link.socket.ampere.util.logWith
  *
  * This service provides:
  * - Consistent LLM calling patterns across all agent types
+ * - Support for custom LLM providers for testing and integration
  * - Automatic response cleaning and JSON parsing
  * - Token usage logging for monitoring
  * - Configurable temperature and token limits
+ *
+ * ## Custom Provider Support
+ *
+ * When a custom [LlmProvider] is configured, all LLM calls are routed
+ * through it instead of the built-in OpenAI client. The system message
+ * and user prompt are combined into a single string:
+ *
+ * ```
+ * System: <system message>
+ *
+ * User: <user prompt>
+ * ```
+ *
+ * This enables:
+ * - Testing with mock responses
+ * - Integration with custom LLM backends
+ * - Prompt interception and transformation
  *
  * Usage:
  * ```kotlin
@@ -28,7 +47,7 @@ import link.socket.ampere.util.logWith
  * val jsonObj = response.asObject()
  * ```
  *
- * @property agentConfiguration The agent's configuration containing AI provider and model
+ * @property agentConfiguration The agent's configuration containing AI provider, model, and optional custom provider
  */
 class AgentLLMService(
     private val agentConfiguration: AgentConfiguration,
@@ -38,6 +57,9 @@ class AgentLLMService(
 
     /**
      * Calls the LLM with a prompt and returns the raw response text.
+     *
+     * If a custom [LlmProvider] is configured, the call is routed through it.
+     * Otherwise, the built-in OpenAI client is used.
      *
      * @param prompt The user prompt to send
      * @param systemMessage Optional system message to set context
@@ -51,6 +73,16 @@ class AgentLLMService(
         temperature: Double = DEFAULT_TEMPERATURE,
         maxTokens: Int = DEFAULT_MAX_TOKENS,
     ): String {
+        // Route through custom provider if configured
+        agentConfiguration.llmProvider?.let { provider ->
+            logger.d { "[LLM] Using custom provider" }
+            val combinedPrompt = buildCombinedPrompt(systemMessage, prompt)
+            return withContext(Dispatchers.IO) {
+                provider(combinedPrompt)
+            }
+        }
+
+        // Fall back to built-in provider
         val client = agentConfiguration.aiConfiguration.provider.client
         val model = agentConfiguration.aiConfiguration.model
 
@@ -164,6 +196,28 @@ class AgentLLMService(
 
         const val JSON_SYSTEM_MESSAGE =
             "You are an autonomous agent component. Respond only with valid JSON, no explanations or markdown."
+
+        /**
+         * Builds a combined prompt from system message and user prompt.
+         *
+         * Format:
+         * ```
+         * System: <system message>
+         *
+         * User: <user prompt>
+         * ```
+         *
+         * @param systemMessage The system context message
+         * @param prompt The user's prompt
+         * @return Combined prompt string
+         */
+        fun buildCombinedPrompt(systemMessage: String, prompt: String): String {
+            return """
+                |System: $systemMessage
+                |
+                |User: $prompt
+            """.trimMargin()
+        }
     }
 }
 

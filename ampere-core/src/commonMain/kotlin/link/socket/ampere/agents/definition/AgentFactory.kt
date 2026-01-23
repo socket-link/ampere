@@ -22,6 +22,7 @@ import link.socket.ampere.agents.execution.tools.ToolWriteCodeFile
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
+import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.integrations.issues.IssueTrackerProvider
 
 enum class AgentType {
@@ -66,6 +67,7 @@ class AgentFactory(
     private val projectSpark: ProjectSpark? = null,
     private val toolWriteCodeFileOverride: Tool<ExecutionContext.Code.WriteCode>? = null,
     private val cognitiveConfig: CognitiveConfig = CognitiveConfig(),
+    private val llmProvider: LlmProvider? = null,
 ) {
     private val toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode> =
         toolWriteCodeFileOverride ?: ToolWriteCodeFile(AgentActionAutonomy.ASK_BEFORE_ACTION)
@@ -84,6 +86,7 @@ class AgentFactory(
             agentDefinition = WriteCodeAgent,
             aiConfiguration = effectiveAiConfiguration,
             cognitiveConfig = cognitiveConfig,
+            llmProvider = llmProvider,
         )
 
     /**
