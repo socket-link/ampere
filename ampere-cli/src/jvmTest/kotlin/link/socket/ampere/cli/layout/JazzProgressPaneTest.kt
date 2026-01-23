@@ -201,4 +201,123 @@ class JazzProgressPaneTest {
         pane.clearAwaitingHuman()
         assertTrue(pane.escalationOptions.isEmpty(), "Should be empty after clearing")
     }
+
+    // ==================== Auto-Respond Countdown Tests ====================
+
+    @Test
+    fun `setAutoRespondCountdown sets countdown value`() {
+        val terminal = Terminal()
+        val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
+        val pane = JazzProgressPane(terminal, clock)
+
+        // Must start demo and set PLAN phase for countdown to display
+        pane.startDemo()
+        pane.setPhase(JazzProgressPane.Phase.PLAN)
+        pane.setAwaitingHuman(
+            question = "Test question?",
+            options = listOf("A" to "yes", "B" to "no")
+        )
+
+        pane.setAutoRespondCountdown(3)
+
+        // Render and verify countdown appears
+        val output = pane.render(80, 30)
+        val plainOutput = output.map { stripAnsi(it) }.joinToString("\n")
+
+        assertTrue(plainOutput.contains("Auto-responding with [A] in 3s"), "Should show countdown")
+    }
+
+    @Test
+    fun `setAutoRespondCountdown with null clears countdown`() {
+        val terminal = Terminal()
+        val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
+        val pane = JazzProgressPane(terminal, clock)
+
+        // Must start demo and set PLAN phase for countdown to display
+        pane.startDemo()
+        pane.setPhase(JazzProgressPane.Phase.PLAN)
+        pane.setAwaitingHuman(
+            question = "Test question?",
+            options = listOf("A" to "yes")
+        )
+        pane.setAutoRespondCountdown(3)
+
+        // Verify countdown is present
+        var output = pane.render(80, 30)
+        var plainOutput = output.map { stripAnsi(it) }.joinToString("\n")
+        assertTrue(plainOutput.contains("Auto-responding"), "Countdown should be present")
+
+        // Clear countdown
+        pane.setAutoRespondCountdown(null)
+
+        // Verify countdown is gone
+        output = pane.render(80, 30)
+        plainOutput = output.map { stripAnsi(it) }.joinToString("\n")
+        assertFalse(plainOutput.contains("Auto-responding"), "Countdown should be cleared")
+    }
+
+    @Test
+    fun `setAutoRespondCountdown does nothing when not awaiting human`() {
+        val terminal = Terminal()
+        val pane = JazzProgressPane(terminal)
+
+        // Try to set countdown without awaiting human state
+        pane.setAutoRespondCountdown(5)
+
+        // Should not crash, and since not awaiting human, no countdown visible
+        val output = pane.render(80, 30)
+        val plainOutput = output.map { stripAnsi(it) }.joinToString("\n")
+
+        assertFalse(plainOutput.contains("Auto-responding"), "Should not show countdown when not awaiting human")
+    }
+
+    @Test
+    fun `render shows countdown updates correctly`() {
+        val terminal = Terminal()
+        val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
+        val pane = JazzProgressPane(terminal, clock)
+
+        pane.startDemo()
+        pane.setPhase(JazzProgressPane.Phase.PLAN)
+        pane.setAwaitingHuman(
+            question = "Scope decision?",
+            options = listOf("A" to "minimal", "B" to "full")
+        )
+
+        // Test countdown progression
+        pane.setAutoRespondCountdown(3)
+        var output = pane.render(80, 30)
+        assertTrue(output.map { stripAnsi(it) }.joinToString("\n").contains("3s"))
+
+        pane.setAutoRespondCountdown(2)
+        output = pane.render(80, 30)
+        assertTrue(output.map { stripAnsi(it) }.joinToString("\n").contains("2s"))
+
+        pane.setAutoRespondCountdown(1)
+        output = pane.render(80, 30)
+        assertTrue(output.map { stripAnsi(it) }.joinToString("\n").contains("1s"))
+    }
+
+    @Test
+    fun `EscalationInfo autoRespondSecondsRemaining defaults to null`() {
+        val escalation = JazzProgressPane.EscalationInfo(
+            question = "Test?",
+            options = listOf(JazzProgressPane.EscalationOption("A", "test")),
+            startTime = Instant.parse("2024-01-01T00:00:00Z")
+        )
+
+        assertNull(escalation.autoRespondSecondsRemaining)
+    }
+
+    @Test
+    fun `EscalationInfo can store autoRespondSecondsRemaining`() {
+        val escalation = JazzProgressPane.EscalationInfo(
+            question = "Test?",
+            options = listOf(JazzProgressPane.EscalationOption("A", "test")),
+            startTime = Instant.parse("2024-01-01T00:00:00Z"),
+            autoRespondSecondsRemaining = 5
+        )
+
+        assertEquals(5, escalation.autoRespondSecondsRemaining)
+    }
 }
