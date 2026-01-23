@@ -287,11 +287,30 @@ val config = MultiProviderConfig(
 
 ## Installation
 
-> **Note:** Approaching initial release. Currently buildable via `./gradlew publishToMavenLocal`.
+Add AMPERE to your project:
 
 ```kotlin
-// Gradle (Kotlin DSL)
-implementation("link.socket.ampere:ampere-core:0.1.0")
+// build.gradle.kts
+dependencies {
+    implementation("link.socket:ampere:0.1.0")
+}
+```
+
+For Kotlin Multiplatform projects:
+
+```kotlin
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            implementation("link.socket:ampere:0.1.0")
+        }
+    }
+}
+```
+
+For local development builds:
+```bash
+./gradlew :ampere-core:publishToMavenLocal
 ```
 
 ---

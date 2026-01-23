@@ -19,35 +19,51 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint")
 }
 
+val ampereVersion: String by project
+
 group = "link.socket"
-version = "0.0.4"
+version = ampereVersion
 
+// === PUBLISHING CONFIGURATION ===
 publishing {
-    publications {
-        create<MavenPublication>("mavenLocal") {
-            from(components["kotlin"])
+    publications.withType<MavenPublication>().configureEach {
+        groupId = "link.socket"
+        artifactId = when (name) {
+            "kotlinMultiplatform" -> "ampere"
+            else -> "ampere-${name.lowercase()}"
+        }
 
-            groupId = group.toString()
-            artifactId = "ampere"
-            version = "0.0.4"
+        pom {
+            name.set("Ampere")
+            description.set("A Kotlin Multiplatform library for building AI agent systems with built-in observability and transparent cognition.")
+            url.set("https://github.com/socket-link/ampere")
+            inceptionYear.set("2024")
 
-            pom {
-                name.set("Ampere")
-                description.set("A Kotlin Multiplatform library for ...")
-                url.set("https://github.com/yourcompany/mylibrary")
-
-                licenses {
-                    license {
-                        name.set("The Apache License, Version 2.0")
-                        url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
-                    }
+            licenses {
+                license {
+                    name.set("The Apache License, Version 2.0")
+                    url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                    distribution.set("repo")
                 }
+            }
 
-                scm {
-                    connection.set("scm:git:https://github.com/yourcompany/mylibrary.git")
-                    developerConnection.set("scm:git:ssh://git@github.com:yourcompany/mylibrary.git")
-                    url.set("https://github.com/yourcompany/mylibrary")
+            developers {
+                developer {
+                    id.set("socket-link")
+                    name.set("Socket Link")
+                    url.set("https://github.com/socket-link")
                 }
+            }
+
+            scm {
+                connection.set("scm:git:git://github.com/socket-link/ampere.git")
+                developerConnection.set("scm:git:ssh://git@github.com:socket-link/ampere.git")
+                url.set("https://github.com/socket-link/ampere")
+            }
+
+            issueManagement {
+                system.set("GitHub Issues")
+                url.set("https://github.com/socket-link/ampere/issues")
             }
         }
     }
@@ -56,29 +72,66 @@ publishing {
         mavenLocal()
         maven {
             name = "ossrh"
-            url = uri("https://oss.sonatype.org/service/local/staging/deploy/maven2/")
+            url = if (version.toString().endsWith("-SNAPSHOT")) {
+                uri("https://s01.oss.sonatype.org/content/repositories/snapshots/")
+            } else {
+                uri("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
+            }
             credentials {
-                username = project.findProperty("ossrhUsername") as String? ?: ""
-                password = project.findProperty("ossrhPassword") as String? ?: ""
+                username = findProperty("ossrhUsername")?.toString() ?: System.getenv("OSSRH_USERNAME") ?: ""
+                password = findProperty("ossrhPassword")?.toString() ?: System.getenv("OSSRH_PASSWORD") ?: ""
             }
         }
     }
 }
 
-tasks {
-    register("generateJavadocs", DokkaTask::class) {
-        dokkaSourceSets {
-            named("commonMain") {
-                noAndroidSdkLink.set(true)
-            }
-        }
-    }
-}
-
-tasks.withType<DokkaTask>().configureEach {
+// === DOKKA CONFIGURATION ===
+val dokkaHtml by tasks.getting(DokkaTask::class) {
     dokkaSourceSets.configureEach {
         outputDirectory.set(file("$rootDir/docs/api"))
     }
+}
+
+val javadocJar by tasks.registering(Jar::class) {
+    dependsOn(dokkaHtml)
+    archiveClassifier.set("javadoc")
+    from(dokkaHtml.outputDirectory)
+}
+
+// Add javadoc JAR to all publications
+publishing.publications.withType<MavenPublication>().configureEach {
+    artifact(javadocJar)
+}
+
+// === SIGNING CONFIGURATION ===
+signing {
+    val signingKeyId = findProperty("signing.keyId")?.toString() ?: System.getenv("SIGNING_KEY_ID")
+    val signingKey = findProperty("signing.key")?.toString() ?: System.getenv("SIGNING_KEY")
+    val signingPassword = findProperty("signing.password")?.toString() ?: System.getenv("SIGNING_PASSWORD")
+
+    if (signingKey != null && signingPassword != null) {
+        // CI: Use in-memory key
+        if (signingKeyId != null) {
+            useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
+        } else {
+            useInMemoryPgpKeys(signingKey, signingPassword)
+        }
+    } else {
+        // Local: Use GPG agent
+        useGpgCmd()
+    }
+
+    // Only require signing when publishing to OSSRH
+    setRequired {
+        gradle.taskGraph.allTasks.any { it.name.contains("publishAllPublicationsToOssrhRepository") }
+    }
+
+    sign(publishing.publications)
+}
+
+// Ensure proper task ordering
+tasks.withType<Sign>().configureEach {
+    dependsOn(tasks.withType<Jar>())
 }
 
 sqldelight {
