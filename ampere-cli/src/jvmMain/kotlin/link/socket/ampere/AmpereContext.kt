@@ -37,6 +37,7 @@ import link.socket.ampere.config.AmpereConfig
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
+import link.socket.ampere.domain.llm.LlmProvider
 
 /**
  * Context that provides dependencies for CLI commands.
@@ -76,6 +77,8 @@ class AmpereContext(
     val userConfig: AmpereConfig? = null,
     /** AI configuration derived from user config or default */
     val aiConfiguration: AIConfiguration? = null,
+    /** Custom LLM provider for bypassing built-in providers, useful for testing and custom integrations */
+    val llmProvider: LlmProvider? = null,
 ) {
     /**
      * Database driver for SQLite operations.
