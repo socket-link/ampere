@@ -281,4 +281,129 @@ class DemoTimingTest {
             "DETAILED grace period should be at least 10 seconds"
         )
     }
+
+    // =========================================================================
+    // Multi-Agent Handoff Timing Tests
+    // =========================================================================
+
+    @Test
+    fun `coordinator perceive delay is present in all profiles`() {
+        assertTrue(
+            DemoTiming.FAST.coordinatorPerceiveDelay > 0.milliseconds,
+            "FAST should have coordinator perceive delay"
+        )
+        assertTrue(
+            DemoTiming.DEFAULT.coordinatorPerceiveDelay > 0.milliseconds,
+            "DEFAULT should have coordinator perceive delay"
+        )
+        assertTrue(
+            DemoTiming.DETAILED.coordinatorPerceiveDelay > 0.milliseconds,
+            "DETAILED should have coordinator perceive delay"
+        )
+    }
+
+    @Test
+    fun `coordinator plan delay is present in all profiles`() {
+        assertTrue(
+            DemoTiming.FAST.coordinatorPlanDelay > 0.milliseconds,
+            "FAST should have coordinator plan delay"
+        )
+        assertTrue(
+            DemoTiming.DEFAULT.coordinatorPlanDelay > 0.milliseconds,
+            "DEFAULT should have coordinator plan delay"
+        )
+        assertTrue(
+            DemoTiming.DETAILED.coordinatorPlanDelay > 0.milliseconds,
+            "DETAILED should have coordinator plan delay"
+        )
+    }
+
+    @Test
+    fun `delegation display delay is present in all profiles`() {
+        assertTrue(
+            DemoTiming.FAST.delegationDisplayDelay > 0.milliseconds,
+            "FAST should have delegation display delay"
+        )
+        assertTrue(
+            DemoTiming.DEFAULT.delegationDisplayDelay > 0.milliseconds,
+            "DEFAULT should have delegation display delay"
+        )
+        assertTrue(
+            DemoTiming.DETAILED.delegationDisplayDelay > 0.milliseconds,
+            "DETAILED should have delegation display delay"
+        )
+    }
+
+    @Test
+    fun `multi-agent timing scales correctly across profiles`() {
+        // FAST < DEFAULT < DETAILED for coordinator perceive delay
+        assertTrue(
+            DemoTiming.FAST.coordinatorPerceiveDelay < DemoTiming.DEFAULT.coordinatorPerceiveDelay,
+            "FAST coordinator perceive delay should be less than DEFAULT"
+        )
+        assertTrue(
+            DemoTiming.DEFAULT.coordinatorPerceiveDelay < DemoTiming.DETAILED.coordinatorPerceiveDelay,
+            "DEFAULT coordinator perceive delay should be less than DETAILED"
+        )
+
+        // FAST < DEFAULT < DETAILED for coordinator plan delay
+        assertTrue(
+            DemoTiming.FAST.coordinatorPlanDelay < DemoTiming.DEFAULT.coordinatorPlanDelay,
+            "FAST coordinator plan delay should be less than DEFAULT"
+        )
+        assertTrue(
+            DemoTiming.DEFAULT.coordinatorPlanDelay < DemoTiming.DETAILED.coordinatorPlanDelay,
+            "DEFAULT coordinator plan delay should be less than DETAILED"
+        )
+
+        // FAST < DEFAULT < DETAILED for delegation display delay
+        assertTrue(
+            DemoTiming.FAST.delegationDisplayDelay < DemoTiming.DEFAULT.delegationDisplayDelay,
+            "FAST delegation display delay should be less than DEFAULT"
+        )
+        assertTrue(
+            DemoTiming.DEFAULT.delegationDisplayDelay < DemoTiming.DETAILED.delegationDisplayDelay,
+            "DEFAULT delegation display delay should be less than DETAILED"
+        )
+    }
+
+    @Test
+    fun `FAST multi-agent timing values match specification`() {
+        assertEquals(1.seconds, DemoTiming.FAST.coordinatorPerceiveDelay)
+        assertEquals(1.seconds, DemoTiming.FAST.coordinatorPlanDelay)
+        assertEquals(2.seconds, DemoTiming.FAST.delegationDisplayDelay)
+    }
+
+    @Test
+    fun `DEFAULT multi-agent timing values match specification`() {
+        assertEquals(2.seconds, DemoTiming.DEFAULT.coordinatorPerceiveDelay)
+        assertEquals(3.seconds, DemoTiming.DEFAULT.coordinatorPlanDelay)
+        assertEquals(3.seconds, DemoTiming.DEFAULT.delegationDisplayDelay)
+    }
+
+    @Test
+    fun `DETAILED multi-agent timing values match specification`() {
+        assertEquals(4.seconds, DemoTiming.DETAILED.coordinatorPerceiveDelay)
+        assertEquals(5.seconds, DemoTiming.DETAILED.coordinatorPlanDelay)
+        assertEquals(5.seconds, DemoTiming.DETAILED.delegationDisplayDelay)
+    }
+
+    @Test
+    fun `multi-agent timing does not exceed maximum bounds`() {
+        val maxDelay = 10.seconds
+        listOf(DemoTiming.FAST, DemoTiming.DEFAULT, DemoTiming.DETAILED).forEach { profile ->
+            assertTrue(
+                profile.coordinatorPerceiveDelay <= maxDelay,
+                "${profile.name}: coordinatorPerceiveDelay exceeds $maxDelay"
+            )
+            assertTrue(
+                profile.coordinatorPlanDelay <= maxDelay,
+                "${profile.name}: coordinatorPlanDelay exceeds $maxDelay"
+            )
+            assertTrue(
+                profile.delegationDisplayDelay <= maxDelay,
+                "${profile.name}: delegationDisplayDelay exceeds $maxDelay"
+            )
+        }
+    }
 }

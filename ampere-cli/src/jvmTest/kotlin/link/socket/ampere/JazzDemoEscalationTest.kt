@@ -9,7 +9,7 @@ import kotlinx.datetime.Instant
 import link.socket.ampere.agents.execution.tools.human.GlobalHumanResponseRegistry
 import link.socket.ampere.agents.execution.tools.human.HumanResponseRegistry
 import link.socket.ampere.cli.layout.DemoInputHandler
-import link.socket.ampere.cli.layout.JazzProgressPane
+import link.socket.ampere.cli.layout.CognitiveProgressPane
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -25,7 +25,7 @@ import kotlin.time.Duration.Companion.seconds
  * Integration tests for the escalation flow in the Jazz demo.
  *
  * These tests verify that the components work together correctly:
- * - JazzProgressPane displays escalation UI
+ * - CognitiveProgressPane displays escalation UI
  * - DemoInputHandler captures A/B key responses
  * - HumanResponseRegistry coordinates request/response flow
  *
@@ -55,15 +55,15 @@ class JazzDemoEscalationTest {
     // ==================== Full Escalation Flow Integration Tests ====================
 
     @Test
-    fun `full escalation flow - JazzProgressPane and DemoInputHandler integration`() {
+    fun `full escalation flow - CognitiveProgressPane and DemoInputHandler integration`() {
         val terminal = Terminal()
         val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
-        val pane = JazzProgressPane(terminal, clock)
+        val pane = CognitiveProgressPane(terminal, clock)
         val inputHandler = DemoInputHandler(terminal)
 
         // Step 1: Set up escalation state (simulates DemoCommand behavior)
         pane.startDemo()
-        pane.setPhase(JazzProgressPane.Phase.PLAN, "Awaiting human input...")
+        pane.setPhase(CognitiveProgressPane.Phase.PLAN, "Awaiting human input...")
         pane.setAwaitingHuman(
             question = "Scope: Keep 'Verbose' only or add 'Minimal'?",
             options = listOf("A" to "keep 'Verbose' only", "B" to "add both variants")
@@ -100,7 +100,7 @@ class JazzDemoEscalationTest {
     fun `full escalation flow with option B selection`() {
         val terminal = Terminal()
         val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
-        val pane = JazzProgressPane(terminal, clock)
+        val pane = CognitiveProgressPane(terminal, clock)
         val inputHandler = DemoInputHandler(terminal)
 
         // Set up escalation
@@ -133,7 +133,7 @@ class JazzDemoEscalationTest {
     @Test
     fun `escalation flow with HumanResponseRegistry - response provided`() = runTest {
         val terminal = Terminal()
-        val pane = JazzProgressPane(terminal)
+        val pane = CognitiveProgressPane(terminal)
         val inputHandler = DemoInputHandler(terminal)
         val requestId = "test-registry-integration"
 
@@ -178,7 +178,7 @@ class JazzDemoEscalationTest {
     @Test
     fun `escalation flow with HumanResponseRegistry - timeout returns null`() = runTest {
         val terminal = Terminal()
-        val pane = JazzProgressPane(terminal)
+        val pane = CognitiveProgressPane(terminal)
         val requestId = "test-timeout"
 
         // Set up escalation
@@ -206,11 +206,11 @@ class JazzDemoEscalationTest {
     fun `auto-respond countdown flow`() {
         val terminal = Terminal()
         val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
-        val pane = JazzProgressPane(terminal, clock)
+        val pane = CognitiveProgressPane(terminal, clock)
 
         // Set up escalation
         pane.startDemo()
-        pane.setPhase(JazzProgressPane.Phase.PLAN)
+        pane.setPhase(CognitiveProgressPane.Phase.PLAN)
         pane.setAwaitingHuman(
             question = "Scope decision",
             options = listOf("A" to "minimal", "B" to "full")
@@ -239,7 +239,7 @@ class JazzDemoEscalationTest {
     @Test
     fun `auto-respond produces default A response`() {
         val terminal = Terminal()
-        val pane = JazzProgressPane(terminal)
+        val pane = CognitiveProgressPane(terminal)
 
         pane.setAwaitingHuman(
             question = "Test question",
@@ -260,7 +260,7 @@ class JazzDemoEscalationTest {
     @Test
     fun `escalation options available for status bar`() {
         val terminal = Terminal()
-        val pane = JazzProgressPane(terminal)
+        val pane = CognitiveProgressPane(terminal)
 
         pane.setAwaitingHuman(
             question = "Design choice",

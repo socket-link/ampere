@@ -10,7 +10,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class JazzProgressPaneTest {
+class CognitiveProgressPaneTest {
 
     private fun stripAnsi(text: String): String {
         return text.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "")
@@ -26,7 +26,7 @@ class JazzProgressPaneTest {
     @Test
     fun `isAwaitingHuman returns false when no escalation is set`() {
         val terminal = Terminal()
-        val pane = JazzProgressPane(terminal)
+        val pane = CognitiveProgressPane(terminal)
 
         assertFalse(pane.isAwaitingHuman)
     }
@@ -35,9 +35,9 @@ class JazzProgressPaneTest {
     fun `setAwaitingHuman sets escalation state`() {
         val terminal = Terminal()
         val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
-        val pane = JazzProgressPane(terminal, clock)
+        val pane = CognitiveProgressPane(terminal, clock)
 
-        pane.setPhase(JazzProgressPane.Phase.PLAN)
+        pane.setPhase(CognitiveProgressPane.Phase.PLAN)
         pane.setAwaitingHuman(
             question = "Keep 'Verbose' only or add 'Minimal'?",
             options = listOf("A" to "keep minimal", "B" to "add both")
@@ -50,9 +50,9 @@ class JazzProgressPaneTest {
     fun `clearAwaitingHuman clears escalation state`() {
         val terminal = Terminal()
         val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
-        val pane = JazzProgressPane(terminal, clock)
+        val pane = CognitiveProgressPane(terminal, clock)
 
-        pane.setPhase(JazzProgressPane.Phase.PLAN)
+        pane.setPhase(CognitiveProgressPane.Phase.PLAN)
         pane.setAwaitingHuman(
             question = "Keep 'Verbose' only or add 'Minimal'?",
             options = listOf("A" to "keep minimal", "B" to "add both")
@@ -67,10 +67,10 @@ class JazzProgressPaneTest {
     fun `render shows awaiting human status during PLAN phase`() {
         val terminal = Terminal()
         val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
-        val pane = JazzProgressPane(terminal, clock)
+        val pane = CognitiveProgressPane(terminal, clock)
 
         pane.startDemo()
-        pane.setPhase(JazzProgressPane.Phase.PLAN)
+        pane.setPhase(CognitiveProgressPane.Phase.PLAN)
         clock.advance(3000) // 3 seconds
         pane.setAwaitingHuman(
             question = "Keep 'Verbose' only or add 'Minimal'?",
@@ -90,10 +90,10 @@ class JazzProgressPaneTest {
     fun `render shows hourglass indicator when awaiting human`() {
         val terminal = Terminal()
         val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
-        val pane = JazzProgressPane(terminal, clock)
+        val pane = CognitiveProgressPane(terminal, clock)
 
         pane.startDemo()
-        pane.setPhase(JazzProgressPane.Phase.PLAN)
+        pane.setPhase(CognitiveProgressPane.Phase.PLAN)
         pane.setAwaitingHuman(
             question = "Test question?",
             options = listOf("A" to "option a")
@@ -107,17 +107,17 @@ class JazzProgressPaneTest {
     }
 
     @Test
-    fun `JazzState isAwaitingHuman property works correctly`() {
-        val stateWithoutEscalation = JazzProgressPane.JazzState(
-            phase = JazzProgressPane.Phase.PLAN
+    fun `CognitiveState isAwaitingHuman property works correctly`() {
+        val stateWithoutEscalation = CognitiveProgressPane.CognitiveState(
+            phase = CognitiveProgressPane.Phase.PLAN
         )
         assertFalse(stateWithoutEscalation.isAwaitingHuman)
 
-        val stateWithEscalation = JazzProgressPane.JazzState(
-            phase = JazzProgressPane.Phase.PLAN,
-            escalation = JazzProgressPane.EscalationInfo(
+        val stateWithEscalation = CognitiveProgressPane.CognitiveState(
+            phase = CognitiveProgressPane.Phase.PLAN,
+            escalation = CognitiveProgressPane.EscalationInfo(
                 question = "Test?",
-                options = listOf(JazzProgressPane.EscalationOption("A", "test")),
+                options = listOf(CognitiveProgressPane.EscalationOption("A", "test")),
                 startTime = Instant.parse("2024-01-01T00:00:00Z")
             )
         )
@@ -126,11 +126,11 @@ class JazzProgressPaneTest {
 
     @Test
     fun `EscalationInfo stores question and options correctly`() {
-        val escalation = JazzProgressPane.EscalationInfo(
+        val escalation = CognitiveProgressPane.EscalationInfo(
             question = "Should I proceed?",
             options = listOf(
-                JazzProgressPane.EscalationOption("A", "yes"),
-                JazzProgressPane.EscalationOption("B", "no")
+                CognitiveProgressPane.EscalationOption("A", "yes"),
+                CognitiveProgressPane.EscalationOption("B", "no")
             ),
             startTime = Instant.parse("2024-01-01T00:00:00Z")
         )
@@ -147,10 +147,10 @@ class JazzProgressPaneTest {
     fun `render shows normal PLAN phase when not awaiting human`() {
         val terminal = Terminal()
         val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
-        val pane = JazzProgressPane(terminal, clock)
+        val pane = CognitiveProgressPane(terminal, clock)
 
         pane.startDemo()
-        pane.setPhase(JazzProgressPane.Phase.PLAN, "Creating plan")
+        pane.setPhase(CognitiveProgressPane.Phase.PLAN, "Creating plan")
 
         val output = pane.render(80, 30)
         val plainOutput = output.map { stripAnsi(it) }.joinToString("\n")
@@ -164,7 +164,7 @@ class JazzProgressPaneTest {
     @Test
     fun `escalationOptions returns empty list when no escalation`() {
         val terminal = Terminal()
-        val pane = JazzProgressPane(terminal)
+        val pane = CognitiveProgressPane(terminal)
 
         assertTrue(pane.escalationOptions.isEmpty(), "Should return empty list when no escalation")
     }
@@ -173,7 +173,7 @@ class JazzProgressPaneTest {
     fun `escalationOptions returns options as key-label pairs`() {
         val terminal = Terminal()
         val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
-        val pane = JazzProgressPane(terminal, clock)
+        val pane = CognitiveProgressPane(terminal, clock)
 
         pane.setAwaitingHuman(
             question = "Test question?",
@@ -190,7 +190,7 @@ class JazzProgressPaneTest {
     fun `escalationOptions clears after clearAwaitingHuman`() {
         val terminal = Terminal()
         val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
-        val pane = JazzProgressPane(terminal, clock)
+        val pane = CognitiveProgressPane(terminal, clock)
 
         pane.setAwaitingHuman(
             question = "Test?",
@@ -208,11 +208,11 @@ class JazzProgressPaneTest {
     fun `setAutoRespondCountdown sets countdown value`() {
         val terminal = Terminal()
         val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
-        val pane = JazzProgressPane(terminal, clock)
+        val pane = CognitiveProgressPane(terminal, clock)
 
         // Must start demo and set PLAN phase for countdown to display
         pane.startDemo()
-        pane.setPhase(JazzProgressPane.Phase.PLAN)
+        pane.setPhase(CognitiveProgressPane.Phase.PLAN)
         pane.setAwaitingHuman(
             question = "Test question?",
             options = listOf("A" to "yes", "B" to "no")
@@ -231,11 +231,11 @@ class JazzProgressPaneTest {
     fun `setAutoRespondCountdown with null clears countdown`() {
         val terminal = Terminal()
         val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
-        val pane = JazzProgressPane(terminal, clock)
+        val pane = CognitiveProgressPane(terminal, clock)
 
         // Must start demo and set PLAN phase for countdown to display
         pane.startDemo()
-        pane.setPhase(JazzProgressPane.Phase.PLAN)
+        pane.setPhase(CognitiveProgressPane.Phase.PLAN)
         pane.setAwaitingHuman(
             question = "Test question?",
             options = listOf("A" to "yes")
@@ -259,7 +259,7 @@ class JazzProgressPaneTest {
     @Test
     fun `setAutoRespondCountdown does nothing when not awaiting human`() {
         val terminal = Terminal()
-        val pane = JazzProgressPane(terminal)
+        val pane = CognitiveProgressPane(terminal)
 
         // Try to set countdown without awaiting human state
         pane.setAutoRespondCountdown(5)
@@ -275,10 +275,10 @@ class JazzProgressPaneTest {
     fun `render shows countdown updates correctly`() {
         val terminal = Terminal()
         val clock = FakeClock(Instant.parse("2024-01-01T00:00:00Z"))
-        val pane = JazzProgressPane(terminal, clock)
+        val pane = CognitiveProgressPane(terminal, clock)
 
         pane.startDemo()
-        pane.setPhase(JazzProgressPane.Phase.PLAN)
+        pane.setPhase(CognitiveProgressPane.Phase.PLAN)
         pane.setAwaitingHuman(
             question = "Scope decision?",
             options = listOf("A" to "minimal", "B" to "full")
@@ -300,9 +300,9 @@ class JazzProgressPaneTest {
 
     @Test
     fun `EscalationInfo autoRespondSecondsRemaining defaults to null`() {
-        val escalation = JazzProgressPane.EscalationInfo(
+        val escalation = CognitiveProgressPane.EscalationInfo(
             question = "Test?",
-            options = listOf(JazzProgressPane.EscalationOption("A", "test")),
+            options = listOf(CognitiveProgressPane.EscalationOption("A", "test")),
             startTime = Instant.parse("2024-01-01T00:00:00Z")
         )
 
@@ -311,9 +311,9 @@ class JazzProgressPaneTest {
 
     @Test
     fun `EscalationInfo can store autoRespondSecondsRemaining`() {
-        val escalation = JazzProgressPane.EscalationInfo(
+        val escalation = CognitiveProgressPane.EscalationInfo(
             question = "Test?",
-            options = listOf(JazzProgressPane.EscalationOption("A", "test")),
+            options = listOf(CognitiveProgressPane.EscalationOption("A", "test")),
             startTime = Instant.parse("2024-01-01T00:00:00Z"),
             autoRespondSecondsRemaining = 5
         )

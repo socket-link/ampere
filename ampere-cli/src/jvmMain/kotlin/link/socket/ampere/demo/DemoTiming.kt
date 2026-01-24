@@ -28,6 +28,10 @@ data class DemoTiming(
     val completionGracePeriod: Duration,
     val renderInterval: Duration,
     val inputPollingInterval: Duration,
+    // Multi-agent handoff timing
+    val coordinatorPerceiveDelay: Duration,
+    val coordinatorPlanDelay: Duration,
+    val delegationDisplayDelay: Duration,
 ) {
     companion object {
         /**
@@ -52,6 +56,9 @@ data class DemoTiming(
             completionGracePeriod = 3.seconds,
             renderInterval = 200.milliseconds,
             inputPollingInterval = 50.milliseconds,
+            coordinatorPerceiveDelay = 1.seconds,
+            coordinatorPlanDelay = 1.seconds,
+            delegationDisplayDelay = 2.seconds,
         )
 
         /**
@@ -76,6 +83,9 @@ data class DemoTiming(
             completionGracePeriod = 10.seconds,
             renderInterval = 250.milliseconds,
             inputPollingInterval = 50.milliseconds,
+            coordinatorPerceiveDelay = 2.seconds,
+            coordinatorPlanDelay = 3.seconds,
+            delegationDisplayDelay = 3.seconds,
         )
 
         /**
@@ -100,6 +110,9 @@ data class DemoTiming(
             completionGracePeriod = 15.seconds,
             renderInterval = 250.milliseconds,
             inputPollingInterval = 50.milliseconds,
+            coordinatorPerceiveDelay = 4.seconds,
+            coordinatorPlanDelay = 5.seconds,
+            delegationDisplayDelay = 5.seconds,
         )
 
         /**

@@ -22,7 +22,7 @@ import link.socket.ampere.cli.goal.GoalHandler
 import link.socket.ampere.cli.layout.AgentFocusPane
 import link.socket.ampere.cli.layout.AgentMemoryPane
 import link.socket.ampere.cli.layout.DemoInputHandler
-import link.socket.ampere.cli.layout.JazzProgressPane
+import link.socket.ampere.cli.layout.CognitiveProgressPane
 import link.socket.ampere.cli.layout.LogCapture
 import link.socket.ampere.cli.layout.LogPane
 import link.socket.ampere.cli.layout.PaneRenderer
@@ -173,7 +173,7 @@ class RunCommand(
         // Create TUI components
         val layout = ThreeColumnLayout(terminal)
         val eventPane = RichEventPane(terminal)
-        val jazzPane = JazzProgressPane(terminal)
+        val jazzPane = CognitiveProgressPane(terminal)
         val memoryPane = AgentMemoryPane(terminal)
         val logPane = LogPane(terminal)
         val agentFocusPane = AgentFocusPane(terminal)
@@ -249,20 +249,20 @@ class RunCommand(
                 issues -> {
                     // Start continuous issue work
                     context.startAutonomousWork()
-                    jazzPane.setPhase(JazzProgressPane.Phase.INITIALIZING, "Starting autonomous issue work...")
+                    jazzPane.setPhase(CognitiveProgressPane.Phase.INITIALIZING, "Starting autonomous issue work...")
                 }
                 issue != null -> {
                     // Work on specific issue
-                    jazzPane.setPhase(JazzProgressPane.Phase.INITIALIZING, "Finding issue #$issue...")
+                    jazzPane.setPhase(CognitiveProgressPane.Phase.INITIALIZING, "Finding issue #$issue...")
                     agentScope.launch {
                         try {
                             val availableIssues = context.codeAgent.queryAvailableIssues()
                             val targetIssue = availableIssues.find { it.number == issue }
                             if (targetIssue != null) {
-                                jazzPane.setPhase(JazzProgressPane.Phase.PERCEIVE, "Working on issue #$issue...")
+                                jazzPane.setPhase(CognitiveProgressPane.Phase.PERCEIVE, "Working on issue #$issue...")
                                 val issueResult = context.codeAgent.workOnIssue(targetIssue)
                                 if (issueResult.isSuccess) {
-                                    jazzPane.setPhase(JazzProgressPane.Phase.COMPLETED)
+                                    jazzPane.setPhase(CognitiveProgressPane.Phase.COMPLETED)
                                 } else {
                                     jazzPane.setFailed("Failed: ${issueResult.exceptionOrNull()?.message}")
                                 }
@@ -355,13 +355,13 @@ class RunCommand(
                         systemStatus = when {
                             jazzPane.isAwaitingHuman -> StatusBar.SystemStatus.WAITING
                             else -> when (jazzPane.currentPhase) {
-                                JazzProgressPane.Phase.INITIALIZING -> StatusBar.SystemStatus.IDLE
-                                JazzProgressPane.Phase.PERCEIVE -> StatusBar.SystemStatus.THINKING
-                                JazzProgressPane.Phase.PLAN -> StatusBar.SystemStatus.THINKING
-                                JazzProgressPane.Phase.EXECUTE -> StatusBar.SystemStatus.WORKING
-                                JazzProgressPane.Phase.LEARN -> StatusBar.SystemStatus.THINKING
-                                JazzProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.COMPLETED
-                                JazzProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
+                                CognitiveProgressPane.Phase.INITIALIZING -> StatusBar.SystemStatus.IDLE
+                                CognitiveProgressPane.Phase.PERCEIVE -> StatusBar.SystemStatus.THINKING
+                                CognitiveProgressPane.Phase.PLAN -> StatusBar.SystemStatus.THINKING
+                                CognitiveProgressPane.Phase.EXECUTE -> StatusBar.SystemStatus.WORKING
+                                CognitiveProgressPane.Phase.LEARN -> StatusBar.SystemStatus.THINKING
+                                CognitiveProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.COMPLETED
+                                CognitiveProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
                             }
                         }
 
@@ -490,7 +490,7 @@ class RunCommand(
     private fun updateMemoryState(
         current: AgentMemoryPane.AgentMemoryState,
         watchState: WatchViewState,
-        jazzPane: JazzProgressPane
+        jazzPane: CognitiveProgressPane
     ): AgentMemoryPane.AgentMemoryState {
         var recalled = 0
         var stored = 0
@@ -515,13 +515,13 @@ class RunCommand(
 
         val phase = jazzPane.currentPhase
         val agentState = when (phase) {
-            JazzProgressPane.Phase.INITIALIZING -> AgentMemoryPane.AgentDisplayState.IDLE
-            JazzProgressPane.Phase.PERCEIVE -> AgentMemoryPane.AgentDisplayState.THINKING
-            JazzProgressPane.Phase.PLAN -> AgentMemoryPane.AgentDisplayState.THINKING
-            JazzProgressPane.Phase.EXECUTE -> AgentMemoryPane.AgentDisplayState.WORKING
-            JazzProgressPane.Phase.LEARN -> AgentMemoryPane.AgentDisplayState.THINKING
-            JazzProgressPane.Phase.COMPLETED -> AgentMemoryPane.AgentDisplayState.IDLE
-            JazzProgressPane.Phase.FAILED -> AgentMemoryPane.AgentDisplayState.IDLE
+            CognitiveProgressPane.Phase.INITIALIZING -> AgentMemoryPane.AgentDisplayState.IDLE
+            CognitiveProgressPane.Phase.PERCEIVE -> AgentMemoryPane.AgentDisplayState.THINKING
+            CognitiveProgressPane.Phase.PLAN -> AgentMemoryPane.AgentDisplayState.THINKING
+            CognitiveProgressPane.Phase.EXECUTE -> AgentMemoryPane.AgentDisplayState.WORKING
+            CognitiveProgressPane.Phase.LEARN -> AgentMemoryPane.AgentDisplayState.THINKING
+            CognitiveProgressPane.Phase.COMPLETED -> AgentMemoryPane.AgentDisplayState.IDLE
+            CognitiveProgressPane.Phase.FAILED -> AgentMemoryPane.AgentDisplayState.IDLE
         }
 
         val newActivity = current.recentActivity.toMutableList()
@@ -558,7 +558,7 @@ class RunCommand(
         terminal: Terminal,
         memoryState: AgentMemoryPane.AgentMemoryState,
         watchState: WatchViewState,
-        jazzPane: JazzProgressPane,
+        jazzPane: CognitiveProgressPane,
         statusBarStr: String
     ): String {
         val width = terminal.info.width
@@ -639,7 +639,7 @@ class RunCommand(
         goal: String,
         arcConfig: ArcConfig,
         agentScope: CoroutineScope,
-        jazzPane: JazzProgressPane,
+        jazzPane: CognitiveProgressPane,
         updateStatus: (StatusBar.SystemStatus) -> Unit,
     ) {
         agentScope.launch {
@@ -651,29 +651,29 @@ class RunCommand(
                 )
 
                 // Phase 1: Charge
-                jazzPane.setPhase(JazzProgressPane.Phase.INITIALIZING, "Charging: Analyzing project...")
+                jazzPane.setPhase(CognitiveProgressPane.Phase.INITIALIZING, "Charging: Analyzing project...")
                 updateStatus(StatusBar.SystemStatus.THINKING)
 
                 val chargeResult = runtime.executeChargeOnly(goal)
                 jazzPane.setPhase(
-                    JazzProgressPane.Phase.PERCEIVE,
+                    CognitiveProgressPane.Phase.PERCEIVE,
                     "Project: ${chargeResult.projectContext.projectId}, ${chargeResult.agents.size} agents"
                 )
 
                 // Phase 2: Flow (execute full lifecycle now)
-                jazzPane.setPhase(JazzProgressPane.Phase.PLAN, "Flow: Executing agent loop...")
+                jazzPane.setPhase(CognitiveProgressPane.Phase.PLAN, "Flow: Executing agent loop...")
                 updateStatus(StatusBar.SystemStatus.WORKING)
 
                 val result = runtime.execute(goal)
 
                 // Phase 3: Pulse results
                 jazzPane.setPhase(
-                    JazzProgressPane.Phase.LEARN,
+                    CognitiveProgressPane.Phase.LEARN,
                     "Pulse: ${result.pulseResult.evaluationReport.goalsCompleted}/${result.pulseResult.evaluationReport.goalsTotal} goals"
                 )
 
                 if (result.success) {
-                    jazzPane.setPhase(JazzProgressPane.Phase.COMPLETED)
+                    jazzPane.setPhase(CognitiveProgressPane.Phase.COMPLETED)
                     updateStatus(StatusBar.SystemStatus.COMPLETED)
                 } else {
                     jazzPane.setFailed("Arc completed with failures")
@@ -689,26 +689,26 @@ class RunCommand(
     private suspend fun runJazzDemo(
         context: AmpereContext,
         agentScope: CoroutineScope,
-        jazzPane: JazzProgressPane,
+        jazzPane: CognitiveProgressPane,
         memoryPane: AgentMemoryPane,
         logPane: LogPane
     ) {
         // Delegate to the existing demo runner logic
         // This is a simplified version - the full implementation would be
         // copied from DemoCommand.runDemo()
-        jazzPane.setPhase(JazzProgressPane.Phase.INITIALIZING, "Starting Jazz demo...")
+        jazzPane.setPhase(CognitiveProgressPane.Phase.INITIALIZING, "Starting Jazz demo...")
 
         // TODO: Implement full Jazz demo logic here
         // For now, just show a placeholder
         delay(1000)
-        jazzPane.setPhase(JazzProgressPane.Phase.PERCEIVE, "Analyzing task-create command...")
+        jazzPane.setPhase(CognitiveProgressPane.Phase.PERCEIVE, "Analyzing task-create command...")
         delay(2000)
-        jazzPane.setPhase(JazzProgressPane.Phase.PLAN, "Creating implementation plan...")
+        jazzPane.setPhase(CognitiveProgressPane.Phase.PLAN, "Creating implementation plan...")
         delay(2000)
-        jazzPane.setPhase(JazzProgressPane.Phase.EXECUTE, "Writing code...")
+        jazzPane.setPhase(CognitiveProgressPane.Phase.EXECUTE, "Writing code...")
         delay(3000)
-        jazzPane.setPhase(JazzProgressPane.Phase.LEARN, "Extracting knowledge...")
+        jazzPane.setPhase(CognitiveProgressPane.Phase.LEARN, "Extracting knowledge...")
         delay(1500)
-        jazzPane.setPhase(JazzProgressPane.Phase.COMPLETED)
+        jazzPane.setPhase(CognitiveProgressPane.Phase.COMPLETED)
     }
 }
