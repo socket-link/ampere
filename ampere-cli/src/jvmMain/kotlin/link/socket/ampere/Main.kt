@@ -126,6 +126,7 @@ fun main(args: Array<String>) {
             .subcommands(
                 StartCommand { context },
                 RunCommand { context },
+                DemoCommand { context },
                 HelpCommand(),
                 InteractiveCommand(context),
                 WatchCommand(context.eventRelayService),

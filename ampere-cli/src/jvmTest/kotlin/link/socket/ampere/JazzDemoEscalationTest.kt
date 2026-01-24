@@ -61,7 +61,7 @@ class JazzDemoEscalationTest {
         val pane = JazzProgressPane(terminal, clock)
         val inputHandler = DemoInputHandler(terminal)
 
-        // Step 1: Set up escalation state (simulates JazzDemoCommand behavior)
+        // Step 1: Set up escalation state (simulates DemoCommand behavior)
         pane.startDemo()
         pane.setPhase(JazzProgressPane.Phase.PLAN, "Awaiting human input...")
         pane.setAwaitingHuman(
@@ -89,7 +89,7 @@ class JazzDemoEscalationTest {
         assertEquals(DemoInputHandler.InputMode.NORMAL, result.newConfig.inputMode)
         assertNull(result.newConfig.escalationRequestId)
 
-        // Step 4: Clear escalation state (simulates JazzDemoCommand response handling)
+        // Step 4: Clear escalation state (simulates DemoCommand response handling)
         pane.clearAwaitingHuman()
 
         // Verify pane is no longer awaiting human
@@ -162,7 +162,7 @@ class JazzDemoEscalationTest {
         val keyResult = inputHandler.processKey('a', config)
         assertIs<DemoInputHandler.KeyResult.EscalationResponse>(keyResult)
 
-        // Provide response to registry (simulates JazzDemoCommand loop)
+        // Provide response to registry (simulates DemoCommand loop)
         testRegistry.provideResponse(keyResult.requestId, keyResult.response)
 
         // Wait for response
@@ -193,7 +193,7 @@ class JazzDemoEscalationTest {
         // Should timeout and return null
         assertNull(response, "Should return null on timeout")
 
-        // Default behavior: treat null as "A" (same as JazzDemoCommand)
+        // Default behavior: treat null as "A" (same as DemoCommand)
         val userChoice = response ?: "A"
         assertEquals("A", userChoice, "Default should be A")
 
@@ -218,7 +218,7 @@ class JazzDemoEscalationTest {
 
         assertTrue(pane.isAwaitingHuman)
 
-        // Simulate auto-respond countdown (as JazzDemoCommand does with autoRespond flag)
+        // Simulate auto-respond countdown (as DemoCommand does with autoRespond flag)
         for (secondsRemaining in 3 downTo 1) {
             pane.setAutoRespondCountdown(secondsRemaining)
 

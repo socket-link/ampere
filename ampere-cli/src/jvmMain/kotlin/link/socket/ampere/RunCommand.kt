@@ -693,9 +693,9 @@ class RunCommand(
         memoryPane: AgentMemoryPane,
         logPane: LogPane
     ) {
-        // Delegate to the existing Jazz demo runner logic
+        // Delegate to the existing demo runner logic
         // This is a simplified version - the full implementation would be
-        // copied from JazzDemoCommand.runJazzTest()
+        // copied from DemoCommand.runDemo()
         jazzPane.setPhase(JazzProgressPane.Phase.INITIALIZING, "Starting Jazz demo...")
 
         // TODO: Implement full Jazz demo logic here
