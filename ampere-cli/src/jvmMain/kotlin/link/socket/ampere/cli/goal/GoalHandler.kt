@@ -23,7 +23,7 @@ import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.cli.layout.AgentMemoryPane
-import link.socket.ampere.cli.layout.JazzProgressPane
+import link.socket.ampere.cli.layout.CognitiveProgressPane
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
@@ -44,7 +44,7 @@ import link.socket.ampere.agents.domain.Urgency
 class GoalHandler(
     private val context: AmpereContext,
     private val agentScope: CoroutineScope,
-    private val progressPane: JazzProgressPane,
+    private val progressPane: CognitiveProgressPane,
     private val memoryPane: AgentMemoryPane,
     private val outputDir: File = File(System.getProperty("user.home"), ".ampere/goal-output"),
     private val aiConfiguration: AIConfiguration? = null,
@@ -140,7 +140,7 @@ class GoalHandler(
 
         // Update progress pane
         progressPane.startDemo()
-        progressPane.setPhase(JazzProgressPane.Phase.INITIALIZING, "Creating ticket...")
+        progressPane.setPhase(CognitiveProgressPane.Phase.INITIALIZING, "Creating ticket...")
 
         // Create the ticket
         val ticketOrchestrator = context.environmentService.ticketOrchestrator
@@ -196,7 +196,7 @@ class GoalHandler(
             )
 
             // PHASE 1: PERCEIVE
-            progressPane.setPhase(JazzProgressPane.Phase.PERCEIVE, "Analyzing task...")
+            progressPane.setPhase(CognitiveProgressPane.Phase.PERCEIVE, "Analyzing task...")
             val perception = agent.perceiveState(agent.getCurrentState())
             progressPane.setPerceiveResult(perception.ideas)
 
@@ -206,7 +206,7 @@ class GoalHandler(
             }
 
             // PHASE 2: PLAN
-            progressPane.setPhase(JazzProgressPane.Phase.PLAN, "Creating plan...")
+            progressPane.setPhase(CognitiveProgressPane.Phase.PLAN, "Creating plan...")
             val plan = agent.determinePlanForTask(
                 task = task,
                 ideas = arrayOf(perception.ideas.first()),
@@ -215,7 +215,7 @@ class GoalHandler(
             progressPane.setPlanResult(plan)
 
             // PHASE 3: EXECUTE
-            progressPane.setPhase(JazzProgressPane.Phase.EXECUTE, "Calling LLM...")
+            progressPane.setPhase(CognitiveProgressPane.Phase.EXECUTE, "Calling LLM...")
             val outcome = agent.executePlan(plan)
 
             when (outcome) {
@@ -241,12 +241,12 @@ class GoalHandler(
             }
 
             // PHASE 4: LEARN
-            progressPane.setPhase(JazzProgressPane.Phase.LEARN, "Extracting knowledge...")
+            progressPane.setPhase(CognitiveProgressPane.Phase.LEARN, "Extracting knowledge...")
             val knowledge = agent.extractKnowledgeFromOutcome(outcome, task, plan)
             progressPane.addKnowledgeStored(knowledge.approach)
 
             // Complete!
-            progressPane.setPhase(JazzProgressPane.Phase.COMPLETED)
+            progressPane.setPhase(CognitiveProgressPane.Phase.COMPLETED)
 
         } catch (e: Exception) {
             progressPane.setFailed(e.message ?: "Unknown error")

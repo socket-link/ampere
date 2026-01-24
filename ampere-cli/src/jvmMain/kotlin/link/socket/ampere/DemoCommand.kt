@@ -42,7 +42,7 @@ import link.socket.ampere.agents.execution.tools.human.GlobalHumanResponseRegist
 import link.socket.ampere.cli.layout.AgentFocusPane
 import link.socket.ampere.cli.layout.AgentMemoryPane
 import link.socket.ampere.cli.layout.DemoInputHandler
-import link.socket.ampere.cli.layout.JazzProgressPane
+import link.socket.ampere.cli.layout.CognitiveProgressPane
 import link.socket.ampere.cli.layout.LogCapture
 import link.socket.ampere.cli.layout.LogPane
 import link.socket.ampere.cli.layout.PaneRenderer
@@ -54,6 +54,7 @@ import link.socket.ampere.cli.watch.presentation.WatchPresenter
 import link.socket.ampere.cli.watch.presentation.WatchViewState
 import link.socket.ampere.demo.DemoTiming
 import link.socket.ampere.demo.GoldenOutput
+import link.socket.ampere.demo.MultiAgentDemoRunner
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
@@ -163,6 +164,11 @@ class DemoCommand(
         help = "Skip escalation prompt entirely, use default choice (A) without prompting"
     ).flag(default = false)
 
+    private val multiAgent: Boolean by option(
+        "--multi-agent",
+        help = "Run multi-agent demo with coordinator and worker agents (shows handoff between agents)"
+    ).flag(default = false)
+
     override fun run() = runBlocking {
         // Determine timing profile (--fast takes precedence over --detailed)
         val timing = when {
@@ -183,10 +189,10 @@ class DemoCommand(
 
         if (quiet) {
             // Quiet mode: non-TUI, machine-parseable output
-            runQuietMode(context, agentScope, timing, outputDir, noEscalation)
+            runQuietMode(context, agentScope, timing, outputDir, noEscalation, multiAgent)
         } else {
             // Interactive mode: full TUI
-            runInteractiveMode(context, agentScope, timing, outputDir, effectiveAutoRespond)
+            runInteractiveMode(context, agentScope, timing, outputDir, effectiveAutoRespond, multiAgent)
         }
     }
 
@@ -200,6 +206,7 @@ class DemoCommand(
         timing: DemoTiming,
         outputDir: File,
         skipEscalation: Boolean,
+        multiAgent: Boolean,
     ) {
         val startTime = Clock.System.now()
         var exitCode = 0
@@ -211,6 +218,11 @@ class DemoCommand(
 
         try {
             println("AMPERE Demo")
+            if (multiAgent) {
+                println("Mode: Multi-agent (coordinator + worker)")
+            } else {
+                println("Mode: Single-agent")
+            }
             println("Task: Add ObservabilitySpark to AMPERE Spark system")
             if (skipEscalation) {
                 println("Escalation skipped (--no-escalation)")
@@ -218,6 +230,12 @@ class DemoCommand(
             println()
 
             context.start()
+
+            // Multi-agent quiet mode
+            if (multiAgent) {
+                runQuietMultiAgentMode(context, agentScope, timing, outputDir, startTime)
+                return
+            }
 
             // Create the write_code_file tool that tracks output
             val writeCodeTool = createQuietWriteCodeFileTool(outputDir) { filePath ->
@@ -397,6 +415,63 @@ class DemoCommand(
     }
 
     /**
+     * Run multi-agent demo in quiet mode.
+     */
+    private suspend fun runQuietMultiAgentMode(
+        context: AmpereContext,
+        agentScope: CoroutineScope,
+        timing: DemoTiming,
+        outputDir: File,
+        startTime: kotlinx.datetime.Instant,
+    ) {
+        var exitCode = 0
+
+        try {
+            // Create a simple progress pane for tracking (not displayed in quiet mode)
+            val progressPane = CognitiveProgressPane(com.github.ajalt.mordant.terminal.Terminal())
+
+            val runner = MultiAgentDemoRunner(
+                context = context,
+                agentScope = agentScope,
+                progressPane = progressPane,
+                timing = timing,
+                outputDir = outputDir,
+            )
+
+            println("[COORDINATOR] Starting multi-agent demo")
+            println()
+
+            // Run the demo
+            val result = runner.run()
+
+            if (result.success) {
+                val endTime = Clock.System.now()
+                val durationSeconds = (endTime - startTime).inWholeSeconds
+                println()
+                println("Demo completed in ${durationSeconds}s")
+                println("  Coordinator: ${result.coordinatorId}")
+                println("  Worker: ${result.workerId}")
+                result.outputFilePath?.let { println("  Output: $it") }
+            } else {
+                System.err.println("[ERROR] ${result.errorMessage}")
+                exitCode = 1
+            }
+
+        } catch (e: CancellationException) {
+            exitCode = 130 // Cancelled
+        } catch (e: Exception) {
+            System.err.println("[ERROR] ${e.message}")
+            exitCode = 1
+        } finally {
+            agentScope.cancel()
+            context.close()
+            if (exitCode != 0) {
+                exitProcess(exitCode)
+            }
+        }
+    }
+
+    /**
      * Run in interactive mode with full TUI.
      */
     private suspend fun runInteractiveMode(
@@ -405,13 +480,14 @@ class DemoCommand(
         timing: DemoTiming,
         outputDir: File,
         autoRespond: Boolean,
+        multiAgent: Boolean,
     ) {
         val terminal = TerminalFactory.createTerminal()
 
         // Create 3-column layout and panes
         val layout = ThreeColumnLayout(terminal)
         val eventPane = RichEventPane(terminal)
-        val jazzPane = JazzProgressPane(terminal)
+        val jazzPane = CognitiveProgressPane(terminal)
         val memoryPane = AgentMemoryPane(terminal)
         val logPane = LogPane(terminal)
         val agentFocusPane = AgentFocusPane(terminal)
@@ -526,13 +602,13 @@ class DemoCommand(
                     systemStatus = when {
                         jazzPane.isAwaitingHuman -> StatusBar.SystemStatus.WAITING
                         else -> when (jazzPane.currentPhase) {
-                            JazzProgressPane.Phase.INITIALIZING -> StatusBar.SystemStatus.IDLE
-                            JazzProgressPane.Phase.PERCEIVE -> StatusBar.SystemStatus.THINKING
-                            JazzProgressPane.Phase.PLAN -> StatusBar.SystemStatus.THINKING
-                            JazzProgressPane.Phase.EXECUTE -> StatusBar.SystemStatus.WORKING
-                            JazzProgressPane.Phase.LEARN -> StatusBar.SystemStatus.THINKING
-                            JazzProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.COMPLETED
-                            JazzProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
+                            CognitiveProgressPane.Phase.INITIALIZING -> StatusBar.SystemStatus.IDLE
+                            CognitiveProgressPane.Phase.PERCEIVE -> StatusBar.SystemStatus.THINKING
+                            CognitiveProgressPane.Phase.PLAN -> StatusBar.SystemStatus.THINKING
+                            CognitiveProgressPane.Phase.EXECUTE -> StatusBar.SystemStatus.WORKING
+                            CognitiveProgressPane.Phase.LEARN -> StatusBar.SystemStatus.THINKING
+                            CognitiveProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.COMPLETED
+                            CognitiveProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
                         }
                     }
 
@@ -600,7 +676,20 @@ class DemoCommand(
             }
 
             // Run the demo in foreground
-            runDemo(context, agentScope, jazzPane, memoryPane, logPane, outputDir, timing, autoRespond)
+            if (multiAgent) {
+                // Multi-agent demo with coordinator and worker agents
+                val multiAgentRunner = MultiAgentDemoRunner(
+                    context = context,
+                    agentScope = agentScope,
+                    progressPane = jazzPane,
+                    timing = timing,
+                    outputDir = outputDir,
+                )
+                multiAgentRunner.run()
+            } else {
+                // Single-agent demo
+                runDemo(context, agentScope, jazzPane, memoryPane, logPane, outputDir, timing, autoRespond)
+            }
 
             // Update status when complete
             systemStatus = StatusBar.SystemStatus.IDLE
@@ -650,7 +739,7 @@ class DemoCommand(
     private fun updateMemoryState(
         current: AgentMemoryPane.AgentMemoryState,
         watchState: WatchViewState,
-        jazzPane: JazzProgressPane
+        jazzPane: CognitiveProgressPane
     ): AgentMemoryPane.AgentMemoryState {
         // Count memory events from summaries
         var recalled = 0
@@ -679,13 +768,13 @@ class DemoCommand(
         // Determine agent state from jazz pane phase
         val phase = jazzPane.currentPhase
         val agentState = when (phase) {
-            JazzProgressPane.Phase.INITIALIZING -> AgentMemoryPane.AgentDisplayState.IDLE
-            JazzProgressPane.Phase.PERCEIVE -> AgentMemoryPane.AgentDisplayState.THINKING
-            JazzProgressPane.Phase.PLAN -> AgentMemoryPane.AgentDisplayState.THINKING
-            JazzProgressPane.Phase.EXECUTE -> AgentMemoryPane.AgentDisplayState.WORKING
-            JazzProgressPane.Phase.LEARN -> AgentMemoryPane.AgentDisplayState.THINKING
-            JazzProgressPane.Phase.COMPLETED -> AgentMemoryPane.AgentDisplayState.IDLE
-            JazzProgressPane.Phase.FAILED -> AgentMemoryPane.AgentDisplayState.IDLE
+            CognitiveProgressPane.Phase.INITIALIZING -> AgentMemoryPane.AgentDisplayState.IDLE
+            CognitiveProgressPane.Phase.PERCEIVE -> AgentMemoryPane.AgentDisplayState.THINKING
+            CognitiveProgressPane.Phase.PLAN -> AgentMemoryPane.AgentDisplayState.THINKING
+            CognitiveProgressPane.Phase.EXECUTE -> AgentMemoryPane.AgentDisplayState.WORKING
+            CognitiveProgressPane.Phase.LEARN -> AgentMemoryPane.AgentDisplayState.THINKING
+            CognitiveProgressPane.Phase.COMPLETED -> AgentMemoryPane.AgentDisplayState.IDLE
+            CognitiveProgressPane.Phase.FAILED -> AgentMemoryPane.AgentDisplayState.IDLE
         }
 
         // Build activity history - append new activity if counts changed
@@ -762,7 +851,7 @@ class DemoCommand(
     private suspend fun runDemo(
         context: AmpereContext,
         agentScope: CoroutineScope,
-        jazzPane: JazzProgressPane,
+        jazzPane: CognitiveProgressPane,
         memoryPane: AgentMemoryPane,
         logPane: LogPane,
         outputDir: File,
@@ -807,7 +896,7 @@ class DemoCommand(
         context.subscribeToAll(agent.id, eventHandler)
 
         // Create the ticket
-        jazzPane.setPhase(JazzProgressPane.Phase.INITIALIZING, "Creating ticket...")
+        jazzPane.setPhase(CognitiveProgressPane.Phase.INITIALIZING, "Creating ticket...")
         delay(timing.initializationDelay.inWholeMilliseconds)
 
         val ticketSpec = createTicketSpec(agent.id)
@@ -849,7 +938,7 @@ class DemoCommand(
         agent: CodeAgent,
         ticketId: String,
         context: AmpereContext,
-        jazzPane: JazzProgressPane,
+        jazzPane: CognitiveProgressPane,
         logPane: LogPane,
         eventApi: AgentEventApi,
         autoRespond: Boolean,
@@ -883,7 +972,7 @@ class DemoCommand(
 
             // PHASE 1: PERCEIVE
             logPane.info("Starting PERCEIVE phase")
-            jazzPane.setPhase(JazzProgressPane.Phase.PERCEIVE, "Analyzing task...")
+            jazzPane.setPhase(CognitiveProgressPane.Phase.PERCEIVE, "Analyzing task...")
             delay(timing.perceiveDelay.inWholeMilliseconds)
             val perception = agent.perceiveState(agent.getCurrentState())
             jazzPane.setPerceiveResult(perception.ideas)
@@ -901,7 +990,7 @@ class DemoCommand(
             // (Skip if noEscalation is set via autoRespond)
             if (!noEscalation) {
                 logPane.info("Triggering escalation - awaiting human input")
-                jazzPane.setPhase(JazzProgressPane.Phase.PLAN, "Awaiting human input...")
+                jazzPane.setPhase(CognitiveProgressPane.Phase.PLAN, "Awaiting human input...")
                 delay(timing.escalationDelay.inWholeMilliseconds)
 
                 val escalationQuestion = "Implementation scope:"
@@ -963,7 +1052,7 @@ class DemoCommand(
 
             // PHASE 2: PLAN (resume with human feedback incorporated)
             logPane.info("Starting PLAN phase")
-            jazzPane.setPhase(JazzProgressPane.Phase.PLAN, "Creating plan...")
+            jazzPane.setPhase(CognitiveProgressPane.Phase.PLAN, "Creating plan...")
             delay(timing.planDelay.inWholeMilliseconds)
             val plan = agent.determinePlanForTask(
                 task = task,
@@ -976,7 +1065,7 @@ class DemoCommand(
 
             // PHASE 3: EXECUTE
             logPane.info("Starting EXECUTE phase - calling LLM...")
-            jazzPane.setPhase(JazzProgressPane.Phase.EXECUTE, "Calling LLM...")
+            jazzPane.setPhase(CognitiveProgressPane.Phase.EXECUTE, "Calling LLM...")
             delay(timing.executeDelay.inWholeMilliseconds)
 
             var usedGoldenOutput = false
@@ -1043,7 +1132,7 @@ class DemoCommand(
 
             // PHASE 4: LEARN
             logPane.info("Starting LEARN phase")
-            jazzPane.setPhase(JazzProgressPane.Phase.LEARN, "Extracting knowledge...")
+            jazzPane.setPhase(CognitiveProgressPane.Phase.LEARN, "Extracting knowledge...")
             delay(timing.learnDelay.inWholeMilliseconds)
             // Skip knowledge extraction when using golden output fallback
             if (outcome != null && outcome is ExecutionOutcome.CodeChanged.Success) {
@@ -1057,7 +1146,7 @@ class DemoCommand(
 
             // Complete!
             logPane.info("Cognitive cycle COMPLETED")
-            jazzPane.setPhase(JazzProgressPane.Phase.COMPLETED)
+            jazzPane.setPhase(CognitiveProgressPane.Phase.COMPLETED)
 
         } catch (e: Exception) {
             logPane.error("Exception: ${e.message}")
@@ -1073,7 +1162,7 @@ class DemoCommand(
         terminal: Terminal,
         memoryState: AgentMemoryPane.AgentMemoryState,
         watchState: WatchViewState,
-        jazzPane: JazzProgressPane,
+        jazzPane: CognitiveProgressPane,
         statusBarStr: String
     ): String {
         val width = terminal.info.width
@@ -1161,7 +1250,7 @@ class DemoCommand(
 
     private fun createWriteCodeFileTool(
         outputDir: File,
-        jazzPane: JazzProgressPane
+        jazzPane: CognitiveProgressPane
     ): Tool<link.socket.ampere.agents.execution.request.ExecutionContext.Code.WriteCode> {
         return FunctionTool(
             id = "write_code_file",

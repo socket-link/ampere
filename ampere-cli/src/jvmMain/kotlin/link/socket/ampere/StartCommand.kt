@@ -21,7 +21,7 @@ import link.socket.ampere.cli.goal.GoalHandler
 import link.socket.ampere.cli.layout.AgentFocusPane
 import link.socket.ampere.cli.layout.AgentMemoryPane
 import link.socket.ampere.cli.layout.DemoInputHandler
-import link.socket.ampere.cli.layout.JazzProgressPane
+import link.socket.ampere.cli.layout.CognitiveProgressPane
 import link.socket.ampere.cli.layout.LogCapture
 import link.socket.ampere.cli.layout.LogPane
 import link.socket.ampere.cli.layout.PaneRenderer
@@ -111,7 +111,7 @@ class StartCommand(
         // Create TUI components
         val layout = ThreeColumnLayout(terminal)
         val eventPane = RichEventPane(terminal)
-        val jazzPane = JazzProgressPane(terminal)
+        val jazzPane = CognitiveProgressPane(terminal)
         val memoryPane = AgentMemoryPane(terminal)
         val logPane = LogPane(terminal)
         val agentFocusPane = AgentFocusPane(terminal)
@@ -249,15 +249,15 @@ class StartCommand(
                         systemStatus = when {
                             jazzPane.isAwaitingHuman -> StatusBar.SystemStatus.WAITING
                             else -> when (jazzPane.currentPhase) {
-                                JazzProgressPane.Phase.INITIALIZING -> {
+                                CognitiveProgressPane.Phase.INITIALIZING -> {
                                     if (autoWork) StatusBar.SystemStatus.WORKING else StatusBar.SystemStatus.IDLE
                                 }
-                                JazzProgressPane.Phase.PERCEIVE -> StatusBar.SystemStatus.THINKING
-                                JazzProgressPane.Phase.PLAN -> StatusBar.SystemStatus.THINKING
-                                JazzProgressPane.Phase.EXECUTE -> StatusBar.SystemStatus.WORKING
-                                JazzProgressPane.Phase.LEARN -> StatusBar.SystemStatus.THINKING
-                                JazzProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.COMPLETED
-                                JazzProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
+                                CognitiveProgressPane.Phase.PERCEIVE -> StatusBar.SystemStatus.THINKING
+                                CognitiveProgressPane.Phase.PLAN -> StatusBar.SystemStatus.THINKING
+                                CognitiveProgressPane.Phase.EXECUTE -> StatusBar.SystemStatus.WORKING
+                                CognitiveProgressPane.Phase.LEARN -> StatusBar.SystemStatus.THINKING
+                                CognitiveProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.COMPLETED
+                                CognitiveProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
                             }
                         }
 
@@ -392,7 +392,7 @@ class StartCommand(
     private fun updateMemoryState(
         current: AgentMemoryPane.AgentMemoryState,
         watchState: WatchViewState,
-        jazzPane: JazzProgressPane
+        jazzPane: CognitiveProgressPane
     ): AgentMemoryPane.AgentMemoryState {
         // Count memory events from summaries
         var recalled = 0
@@ -419,13 +419,13 @@ class StartCommand(
         // Determine agent state from jazz pane phase
         val phase = jazzPane.currentPhase
         val agentState = when (phase) {
-            JazzProgressPane.Phase.INITIALIZING -> AgentMemoryPane.AgentDisplayState.IDLE
-            JazzProgressPane.Phase.PERCEIVE -> AgentMemoryPane.AgentDisplayState.THINKING
-            JazzProgressPane.Phase.PLAN -> AgentMemoryPane.AgentDisplayState.THINKING
-            JazzProgressPane.Phase.EXECUTE -> AgentMemoryPane.AgentDisplayState.WORKING
-            JazzProgressPane.Phase.LEARN -> AgentMemoryPane.AgentDisplayState.THINKING
-            JazzProgressPane.Phase.COMPLETED -> AgentMemoryPane.AgentDisplayState.IDLE
-            JazzProgressPane.Phase.FAILED -> AgentMemoryPane.AgentDisplayState.IDLE
+            CognitiveProgressPane.Phase.INITIALIZING -> AgentMemoryPane.AgentDisplayState.IDLE
+            CognitiveProgressPane.Phase.PERCEIVE -> AgentMemoryPane.AgentDisplayState.THINKING
+            CognitiveProgressPane.Phase.PLAN -> AgentMemoryPane.AgentDisplayState.THINKING
+            CognitiveProgressPane.Phase.EXECUTE -> AgentMemoryPane.AgentDisplayState.WORKING
+            CognitiveProgressPane.Phase.LEARN -> AgentMemoryPane.AgentDisplayState.THINKING
+            CognitiveProgressPane.Phase.COMPLETED -> AgentMemoryPane.AgentDisplayState.IDLE
+            CognitiveProgressPane.Phase.FAILED -> AgentMemoryPane.AgentDisplayState.IDLE
         }
 
         // Build activity history
@@ -466,7 +466,7 @@ class StartCommand(
         terminal: Terminal,
         memoryState: AgentMemoryPane.AgentMemoryState,
         watchState: WatchViewState,
-        jazzPane: JazzProgressPane,
+        jazzPane: CognitiveProgressPane,
         statusBarStr: String
     ): String {
         val width = terminal.info.width

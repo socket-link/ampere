@@ -12,12 +12,12 @@ import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.cli.animation.LightningAnimator
 
 /**
- * Renders the Jazz Test execution progress as a pane.
+ * Renders the cognitive cycle execution progress as a pane.
  *
  * Displays the cognitive cycle phases (PERCEIVE, PLAN, EXECUTE, LEARN)
  * with progress indicators and real-time status updates.
  */
-class JazzProgressPane(
+class CognitiveProgressPane(
     private val terminal: Terminal,
     private val clock: Clock = Clock.System
 ) : PaneRenderer {
@@ -66,14 +66,19 @@ class JazzProgressPane(
     )
 
     /**
-     * Current state of the Jazz demo execution.
+     * Current state of the cognitive cycle execution.
      */
-    data class JazzState(
+    data class CognitiveState(
         val phase: Phase = Phase.INITIALIZING,
         val startTime: Instant? = null,
         val phaseStartTime: Instant? = null,
         val ticketId: String? = null,
         val agentId: String? = null,
+
+        // Multi-agent coordination
+        val coordinatorId: String? = null,
+        val workerId: String? = null,
+        val activeAgentId: String? = null,
 
         // PERCEIVE outputs
         val ideasGenerated: Int = 0,
@@ -100,9 +105,14 @@ class JazzProgressPane(
          * Whether we're currently awaiting human input.
          */
         val isAwaitingHuman: Boolean get() = escalation != null
+
+        /**
+         * Whether this is a multi-agent execution (has both coordinator and worker).
+         */
+        val isMultiAgent: Boolean get() = coordinatorId != null && workerId != null
     }
 
-    private var state = JazzState()
+    private var state = CognitiveState()
 
     /**
      * Get the current phase for external observation.
@@ -110,7 +120,7 @@ class JazzProgressPane(
     val currentPhase: Phase
         get() = state.phase
 
-    fun updateState(newState: JazzState) {
+    fun updateState(newState: CognitiveState) {
         state = newState
     }
 
@@ -123,7 +133,7 @@ class JazzProgressPane(
     }
 
     fun startDemo() {
-        state = JazzState(
+        state = CognitiveState(
             phase = Phase.INITIALIZING,
             startTime = clock.now(),
             phaseStartTime = clock.now()
@@ -132,6 +142,27 @@ class JazzProgressPane(
 
     fun setTicketInfo(ticketId: String, agentId: String) {
         state = state.copy(ticketId = ticketId, agentId = agentId)
+    }
+
+    /**
+     * Set the coordinator agent for multi-agent demos.
+     */
+    fun setCoordinatorInfo(coordinatorId: String) {
+        state = state.copy(coordinatorId = coordinatorId)
+    }
+
+    /**
+     * Set the worker agent for multi-agent demos.
+     */
+    fun setWorkerInfo(workerId: String) {
+        state = state.copy(workerId = workerId)
+    }
+
+    /**
+     * Set the currently active agent in multi-agent execution.
+     */
+    fun setActiveAgent(agentId: String) {
+        state = state.copy(activeAgentId = agentId)
     }
 
     fun setPerceiveResult(ideas: List<Idea>) {
@@ -231,7 +262,7 @@ class JazzProgressPane(
         val lines = mutableListOf<String>()
 
         // Header with separator and spacing
-        lines.addAll(renderSectionHeader("The Jazz Test", width, terminal))
+        lines.addAll(renderSectionHeader("Cognitive Cycle", width, terminal))
 
         // Elapsed time (2 lines)
         val elapsed = state.startTime?.let { formatElapsed(it) } ?: "0s"
@@ -240,10 +271,33 @@ class JazzProgressPane(
 
         // Ticket info - ALWAYS 3 lines (show placeholder if not set)
         val ticketDisplay = state.ticketId?.let { IdFormatter.formatTicketId(it) } ?: "..."
-        val agentDisplay = state.agentId?.let { IdFormatter.formatAgentId(it) } ?: "..."
         lines.add("${terminal.render(dim("Ticket:"))} $ticketDisplay")
-        lines.add("${terminal.render(dim("Agent:"))} $agentDisplay")
-        lines.add("")
+
+        // Agent info - show coordinator/worker labels if multi-agent
+        if (state.isMultiAgent) {
+            val coordinatorDisplay = state.coordinatorId?.let { IdFormatter.formatAgentId(it) } ?: "..."
+            val workerDisplay = state.workerId?.let { IdFormatter.formatAgentId(it) } ?: "..."
+            val coordinatorActive = state.activeAgentId == state.coordinatorId
+            val workerActive = state.activeAgentId == state.workerId
+
+            val coordinatorLabel = if (coordinatorActive) {
+                terminal.render(TextColors.cyan("▸ Coordinator:"))
+            } else {
+                terminal.render(dim("  Coordinator:"))
+            }
+            val workerLabel = if (workerActive) {
+                terminal.render(TextColors.cyan("▸ Worker:"))
+            } else {
+                terminal.render(dim("  Worker:"))
+            }
+
+            lines.add("$coordinatorLabel $coordinatorDisplay")
+            lines.add("$workerLabel $workerDisplay")
+        } else {
+            val agentDisplay = state.agentId?.let { IdFormatter.formatAgentId(it) } ?: "..."
+            lines.add("${terminal.render(dim("Agent:"))} $agentDisplay")
+            lines.add("")
+        }
 
         // Cognitive cycle sub-header
         lines.addAll(renderSubHeader("Cognitive Cycle", width, terminal))
@@ -273,7 +327,7 @@ class JazzProgressPane(
 
         // Footer
         lines.add("─".repeat(width))
-        lines.add(terminal.render(dim("Jazz Test Demo")))
+        lines.add(terminal.render(dim("AMPERE Cognitive Cycle")))
 
         return lines.take(height).map { it.fitToWidth(width) }
     }
