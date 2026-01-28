@@ -1,8 +1,7 @@
 package link.socket.ampere.agents.domain.knowledge
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
+import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.db.Database
@@ -31,7 +30,7 @@ class KnowledgeRepositoryImpl(
         tags: List<String>,
         taskType: String?,
         complexityLevel: String?,
-    ): Result<KnowledgeEntry> = withContext(Dispatchers.IO) {
+    ): Result<KnowledgeEntry> = withContext(ioDispatcher) {
         runCatching {
             // Generate ID based on knowledge type and source ID
             val id = when (knowledge) {
@@ -104,7 +103,7 @@ class KnowledgeRepositoryImpl(
     override suspend fun findSimilarKnowledge(
         description: String,
         limit: Int,
-    ): Result<List<KnowledgeEntry>> = withContext(Dispatchers.IO) {
+    ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
             // Try FTS search first, fall back to LIKE if FTS fails
             try {
@@ -134,7 +133,7 @@ class KnowledgeRepositoryImpl(
     override suspend fun findKnowledgeByType(
         knowledgeType: KnowledgeType,
         limit: Int,
-    ): Result<List<KnowledgeEntry>> = withContext(Dispatchers.IO) {
+    ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
             queries.findKnowledgeByType(knowledgeType.name, limit.toLong())
                 .executeAsList()
@@ -145,7 +144,7 @@ class KnowledgeRepositoryImpl(
     override suspend fun findKnowledgeByTaskType(
         taskType: String,
         limit: Int,
-    ): Result<List<KnowledgeEntry>> = withContext(Dispatchers.IO) {
+    ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
             queries.findKnowledgeByTaskType(taskType, limit.toLong())
                 .executeAsList()
@@ -156,7 +155,7 @@ class KnowledgeRepositoryImpl(
     override suspend fun findKnowledgeByTag(
         tag: String,
         limit: Int,
-    ): Result<List<KnowledgeEntry>> = withContext(Dispatchers.IO) {
+    ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
             queries.findKnowledgeByTag(tag, limit.toLong())
                 .executeAsList()
@@ -167,7 +166,7 @@ class KnowledgeRepositoryImpl(
     override suspend fun findKnowledgeByTags(
         tags: List<String>,
         limit: Int,
-    ): Result<List<KnowledgeEntry>> = withContext(Dispatchers.IO) {
+    ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
             queries.findKnowledgeByTags(tags, limit.toLong())
                 .executeAsList()
@@ -178,7 +177,7 @@ class KnowledgeRepositoryImpl(
     override suspend fun findKnowledgeByTimeRange(
         fromTimestamp: Instant,
         toTimestamp: Instant,
-    ): Result<List<KnowledgeEntry>> = withContext(Dispatchers.IO) {
+    ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
             queries.findKnowledgeByTimeRange(
                 fromTimestamp.toEpochMilliseconds(),
@@ -197,7 +196,7 @@ class KnowledgeRepositoryImpl(
         fromTimestamp: Instant?,
         toTimestamp: Instant?,
         limit: Int,
-    ): Result<List<KnowledgeEntry>> = withContext(Dispatchers.IO) {
+    ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
             // Use different query based on whether tags are provided
             if (!tags.isNullOrEmpty()) {
@@ -227,7 +226,7 @@ class KnowledgeRepositoryImpl(
         }
     }
 
-    override suspend fun getKnowledgeById(id: String): Result<KnowledgeEntry?> = withContext(Dispatchers.IO) {
+    override suspend fun getKnowledgeById(id: String): Result<KnowledgeEntry?> = withContext(ioDispatcher) {
         runCatching {
             queries.getKnowledgeById(id)
                 .executeAsOneOrNull()
@@ -235,7 +234,7 @@ class KnowledgeRepositoryImpl(
         }
     }
 
-    override suspend fun getTagsForKnowledge(knowledgeId: String): Result<List<String>> = withContext(Dispatchers.IO) {
+    override suspend fun getTagsForKnowledge(knowledgeId: String): Result<List<String>> = withContext(ioDispatcher) {
         runCatching {
             queries.getTagsForKnowledge(knowledgeId)
                 .executeAsList()

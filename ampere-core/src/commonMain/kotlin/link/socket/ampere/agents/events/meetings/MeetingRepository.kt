@@ -1,9 +1,8 @@
 package link.socket.ampere.agents.events.meetings
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
+import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerializationException
@@ -40,7 +39,7 @@ class MeetingRepository(
      * Create a new meeting with all its related data (participants, agenda items).
      */
     suspend fun saveMeeting(meeting: Meeting): Result<Meeting> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 val now = Clock.System.now().toEpochMilliseconds()
 
@@ -126,7 +125,7 @@ class MeetingRepository(
      * Retrieve a meeting by its ID, reconstructing the full domain model.
      */
     suspend fun getMeeting(meetingId: MeetingId): Result<Meeting?> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 val meetingRow = queries.getMeetingById(meetingId).executeAsOneOrNull()
                     ?: return@runCatching null
@@ -194,7 +193,7 @@ class MeetingRepository(
      * Update the status of a meeting.
      */
     suspend fun updateMeetingStatus(meetingId: MeetingId, status: MeetingStatus): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 val now = Clock.System.now().toEpochMilliseconds()
                 val messagingDetails = when (status) {
@@ -247,7 +246,7 @@ class MeetingRepository(
      * Add an outcome to a meeting.
      */
     suspend fun addOutcome(meetingId: MeetingId, outcome: MeetingOutcome): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.insertOutcome(
                     id = outcome.id,
@@ -264,7 +263,7 @@ class MeetingRepository(
      * Get all scheduled meetings before a given time.
      */
     suspend fun getScheduledMeetings(before: Instant): Result<List<Meeting>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.getMeetingsBeforeTime(before.toEpochMilliseconds())
                     .executeAsList()
@@ -279,7 +278,7 @@ class MeetingRepository(
      * Get all meetings for a participant.
      */
     suspend fun getMeetingsForParticipant(participantId: String): Result<List<Meeting>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.getMeetingsForParticipant(participantId)
                     .executeAsList()
@@ -293,7 +292,7 @@ class MeetingRepository(
      * Delete a meeting and all related records.
      */
     suspend fun deleteMeeting(meetingId: MeetingId): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.deleteParticipantsForMeeting(meetingId)
                 queries.deleteAgendaItemsForMeeting(meetingId)
@@ -307,7 +306,7 @@ class MeetingRepository(
      * Get all agenda items for a meeting.
      */
     suspend fun getAgendaItemsForMeeting(meetingId: MeetingId): Result<List<MeetingTask.AgendaItem>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.getAgendaItemsForMeeting(meetingId)
                     .executeAsList()
@@ -329,7 +328,7 @@ class MeetingRepository(
         agendaItemId: AgendaItemId,
         status: TaskStatus,
     ): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.updateAgendaItemStatus(
                     status = getTaskStatusName(status),

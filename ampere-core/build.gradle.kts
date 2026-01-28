@@ -29,8 +29,8 @@ publishing {
     publications.withType<MavenPublication>().configureEach {
         groupId = "link.socket"
         artifactId = when (name) {
-            "kotlinMultiplatform" -> "ampere"
-            else -> "ampere-${name.lowercase()}"
+            "kotlinMultiplatform" -> "ampere-core"
+            else -> "ampere-core-${name.lowercase()}"
         }
 
         pom {

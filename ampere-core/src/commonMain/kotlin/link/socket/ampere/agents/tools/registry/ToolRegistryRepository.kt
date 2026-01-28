@@ -1,9 +1,8 @@
 package link.socket.ampere.agents.tools.registry
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
+import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.config.AgentActionAutonomy
@@ -41,7 +40,7 @@ class ToolRegistryRepository(
      * If a tool with the same ID already exists, it will be replaced.
      */
     suspend fun saveTool(metadata: ToolMetadata): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.insertTool(
                     id = metadata.id,
@@ -62,7 +61,7 @@ class ToolRegistryRepository(
      * Retrieve tool metadata by ID.
      */
     suspend fun getToolById(id: ToolId): Result<ToolMetadata?> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries
                     .getToolById(id)
@@ -76,7 +75,7 @@ class ToolRegistryRepository(
      * Retrieve all registered tools.
      */
     suspend fun getAllTools(): Result<List<ToolMetadata>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries
                     .getAllTools()
@@ -90,7 +89,7 @@ class ToolRegistryRepository(
      * Retrieve tools by type ("function" or "mcp").
      */
     suspend fun getToolsByType(toolType: String): Result<List<ToolMetadata>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries
                     .getToolsByType(toolType)
@@ -106,7 +105,7 @@ class ToolRegistryRepository(
      * Filtering by "level and below" is handled in the ToolRegistry service layer.
      */
     suspend fun getToolsByAutonomy(autonomy: AgentActionAutonomy): Result<List<ToolMetadata>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries
                     .getToolsByAutonomy(autonomy.name)
@@ -120,7 +119,7 @@ class ToolRegistryRepository(
      * Retrieve all tools for a specific MCP server.
      */
     suspend fun getToolsByMcpServer(serverId: McpServerId): Result<List<ToolMetadata>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries
                     .getToolsByMcpServer(serverId)
@@ -134,7 +133,7 @@ class ToolRegistryRepository(
      * Search tools by name or description (case-insensitive partial match).
      */
     suspend fun searchTools(searchTerm: String): Result<List<ToolMetadata>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries
                     .searchTools(searchTerm, searchTerm)
@@ -148,7 +147,7 @@ class ToolRegistryRepository(
      * Delete a tool from the registry.
      */
     suspend fun deleteTool(id: ToolId): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.deleteTool(id)
             }.map { }
@@ -158,7 +157,7 @@ class ToolRegistryRepository(
      * Delete all tools for a specific MCP server (e.g., when server disconnects).
      */
     suspend fun deleteToolsByMcpServer(serverId: McpServerId): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.deleteToolsByMcpServer(serverId)
             }.map { }
@@ -168,7 +167,7 @@ class ToolRegistryRepository(
      * Update the last_seen_at timestamp for a tool.
      */
     suspend fun updateLastSeen(id: ToolId, timestamp: Instant): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.updateLastSeen(
                     last_seen_at = timestamp.toEpochMilliseconds(),
@@ -181,7 +180,7 @@ class ToolRegistryRepository(
      * Clear all tools from the registry (useful for testing).
      */
     suspend fun clearAllTools(): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.clearAllTools()
             }.map { }
@@ -191,7 +190,7 @@ class ToolRegistryRepository(
      * Get count of tools by type.
      */
     suspend fun countToolsByType(): Result<Map<String, Long>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries
                     .countToolsByType()

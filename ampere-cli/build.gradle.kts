@@ -7,6 +7,105 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
+    id("maven-publish")
+    id("signing")
+}
+
+val ampereVersion: String by project
+
+group = "link.socket"
+version = ampereVersion
+
+// === PUBLISHING CONFIGURATION ===
+publishing {
+    publications.withType<MavenPublication>().configureEach {
+        groupId = "link.socket"
+        artifactId = when (name) {
+            "kotlinMultiplatform" -> "ampere-cli"
+            else -> "ampere-cli-${name.lowercase()}"
+        }
+
+        pom {
+            name.set("Ampere CLI")
+            description.set("Command-line interface for Ampere, a Kotlin Multiplatform library for building AI agent systems.")
+            url.set("https://github.com/socket-link/ampere")
+            inceptionYear.set("2024")
+
+            licenses {
+                license {
+                    name.set("The Apache License, Version 2.0")
+                    url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                    distribution.set("repo")
+                }
+            }
+
+            developers {
+                developer {
+                    id.set("socket-link")
+                    name.set("Socket Link")
+                    url.set("https://github.com/socket-link")
+                }
+            }
+
+            scm {
+                connection.set("scm:git:git://github.com/socket-link/ampere.git")
+                developerConnection.set("scm:git:ssh://git@github.com:socket-link/ampere.git")
+                url.set("https://github.com/socket-link/ampere")
+            }
+
+            issueManagement {
+                system.set("GitHub Issues")
+                url.set("https://github.com/socket-link/ampere/issues")
+            }
+        }
+    }
+
+    repositories {
+        mavenLocal()
+        maven {
+            name = "ossrh"
+            url = if (version.toString().endsWith("-SNAPSHOT")) {
+                uri("https://s01.oss.sonatype.org/content/repositories/snapshots/")
+            } else {
+                uri("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
+            }
+            credentials {
+                username = findProperty("ossrhUsername")?.toString() ?: System.getenv("OSSRH_USERNAME") ?: ""
+                password = findProperty("ossrhPassword")?.toString() ?: System.getenv("OSSRH_PASSWORD") ?: ""
+            }
+        }
+    }
+}
+
+// === SIGNING CONFIGURATION ===
+signing {
+    val signingKeyId = findProperty("signing.keyId")?.toString() ?: System.getenv("SIGNING_KEY_ID")
+    val signingKey = findProperty("signing.key")?.toString() ?: System.getenv("SIGNING_KEY")
+    val signingPassword = findProperty("signing.password")?.toString() ?: System.getenv("SIGNING_PASSWORD")
+
+    if (signingKey != null && signingPassword != null) {
+        // CI: Use in-memory key
+        if (signingKeyId != null) {
+            useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
+        } else {
+            useInMemoryPgpKeys(signingKey, signingPassword)
+        }
+    } else {
+        // Local: Use GPG agent
+        useGpgCmd()
+    }
+
+    // Only require signing when publishing to OSSRH
+    setRequired {
+        gradle.taskGraph.allTasks.any { it.name.contains("publishAllPublicationsToOssrhRepository") }
+    }
+
+    sign(publishing.publications)
+}
+
+// Ensure proper task ordering
+tasks.withType<Sign>().configureEach {
+    dependsOn(tasks.withType<Jar>())
 }
 
 kotlin {

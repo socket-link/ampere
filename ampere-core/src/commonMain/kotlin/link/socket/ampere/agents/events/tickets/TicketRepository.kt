@@ -1,9 +1,8 @@
 package link.socket.ampere.agents.events.tickets
 
 import kotlin.time.Duration.Companion.days
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
+import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.definition.AgentId
@@ -77,7 +76,7 @@ class TicketRepository(
      * @return Result containing the created ticket or a TicketError.
      */
     suspend fun createTicket(ticket: Ticket): Result<Ticket> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 ticketQueries.insertTicket(
                     id = ticket.id,
@@ -106,7 +105,7 @@ class TicketRepository(
      * @return Result containing Unit on success or a TicketError.
      */
     suspend fun updateStatus(ticketId: TicketId, newStatus: TicketStatus): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 // First, get the current ticket to validate transition
                 val currentTicket = getTicketInternal(ticketId)
@@ -144,7 +143,7 @@ class TicketRepository(
      * @return Result containing Unit on success or a TicketError.
      */
     suspend fun assignTicket(ticketId: TicketId, agentId: AgentId?): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 // Verify ticket exists
                 val ticket = getTicketInternal(ticketId)
@@ -170,7 +169,7 @@ class TicketRepository(
      * @return Result containing the ticket (or null if not found) or a TicketError.
      */
     suspend fun getTicket(ticketId: TicketId): Result<Ticket?> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 val ticket = getTicketInternal(ticketId)
                 Result.success(ticket)
@@ -186,7 +185,7 @@ class TicketRepository(
      * @return Result containing the list of tickets or a TicketError.
      */
     suspend fun getTicketsByStatus(status: TicketStatus): Result<List<Ticket>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 val tickets = ticketQueries.getTicketsByStatus(status.name)
                     .executeAsList()
@@ -204,7 +203,7 @@ class TicketRepository(
      * @return Result containing the list of tickets or a TicketError.
      */
     suspend fun getTicketsByAgent(agentId: AgentId): Result<List<Ticket>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 val tickets = ticketQueries.getTicketsByAssignedAgent(agentId)
                     .executeAsList()
@@ -221,7 +220,7 @@ class TicketRepository(
      * @return Result containing the list of all tickets or a TicketError.
      */
     suspend fun getAllTickets(): Result<List<Ticket>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 val tickets = ticketQueries.getAllTickets()
                     .executeAsList()
@@ -239,7 +238,7 @@ class TicketRepository(
      * @return Result containing the list of tickets or a TicketError.
      */
     suspend fun getTicketsByPriority(priority: TicketPriority): Result<List<Ticket>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 val tickets = ticketQueries.getTicketsByPriority(priority.name)
                     .executeAsList()
@@ -257,7 +256,7 @@ class TicketRepository(
      * @return Result containing the list of tickets or a TicketError.
      */
     suspend fun getTicketsByType(type: TicketType): Result<List<Ticket>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 val tickets = ticketQueries.getTicketsByType(type.name)
                     .executeAsList()
@@ -275,7 +274,7 @@ class TicketRepository(
      * @return Result containing the list of tickets or a TicketError.
      */
     suspend fun getTicketsByCreator(agentId: AgentId): Result<List<Ticket>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 val tickets = ticketQueries.getTicketsByCreator(agentId)
                     .executeAsList()
@@ -303,7 +302,7 @@ class TicketRepository(
         priority: TicketPriority? = null,
         dueDate: Instant? = null,
     ): Result<Ticket> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 // Get current ticket
                 val currentTicket = getTicketInternal(ticketId)
@@ -335,7 +334,7 @@ class TicketRepository(
      * @return Result containing Unit on success or a TicketError.
      */
     suspend fun deleteTicket(ticketId: TicketId): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 ticketQueries.deleteTicket(ticketId)
                 Result.success(Unit)
@@ -352,7 +351,7 @@ class TicketRepository(
      * @return Result containing the BacklogSummary or a TicketError.
      */
     suspend fun getBacklogSummary(): Result<BacklogSummary> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 val allTickets = ticketQueries.getAllTickets()
                     .executeAsList()
@@ -402,7 +401,7 @@ class TicketRepository(
      * @return Result containing the AgentWorkload or a TicketError.
      */
     suspend fun getAgentWorkload(agentId: AgentId): Result<AgentWorkload> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 val assignedTickets = ticketQueries.getTicketsByAssignedAgent(agentId)
                     .executeAsList()
@@ -433,7 +432,7 @@ class TicketRepository(
      * @return Result containing the list of tickets sorted by due date ascending, or a TicketError.
      */
     suspend fun getUpcomingDeadlines(daysAhead: Int): Result<List<Ticket>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 val now = Clock.System.now()
                 val futureLimit = now + daysAhead.days
@@ -467,7 +466,7 @@ class TicketRepository(
      * @return Result containing the created TicketMeeting or a TicketError.
      */
     suspend fun addTicketMeeting(ticketId: TicketId, meetingId: MeetingId): Result<TicketMeeting> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 val now = Clock.System.now()
                 ticketMeetingQueries.insertTicketMeeting(
@@ -488,7 +487,7 @@ class TicketRepository(
      * @return Result containing the list of TicketMeetings or a TicketError.
      */
     suspend fun getMeetingsForTicket(ticketId: TicketId): Result<List<TicketMeeting>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 val meetings = ticketMeetingQueries.getMeetingsByTicket(ticketId)
                     .executeAsList()
@@ -512,7 +511,7 @@ class TicketRepository(
      * @return Result containing the list of TicketMeetings or a TicketError.
      */
     suspend fun getTicketsForMeeting(meetingId: MeetingId): Result<List<TicketMeeting>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 val tickets = ticketMeetingQueries.getTicketsByMeeting(meetingId)
                     .executeAsList()
@@ -537,7 +536,7 @@ class TicketRepository(
      * @return Result containing Unit on success or a TicketError.
      */
     suspend fun removeTicketMeeting(ticketId: TicketId, meetingId: MeetingId): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             try {
                 ticketMeetingQueries.deleteTicketMeeting(ticketId, meetingId)
                 Result.success(Unit)
