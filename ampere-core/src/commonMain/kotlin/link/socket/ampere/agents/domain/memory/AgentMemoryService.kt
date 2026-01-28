@@ -1,8 +1,7 @@
 package link.socket.ampere.agents.domain.memory
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
+import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.EventSource
@@ -49,7 +48,7 @@ class AgentMemoryService(
         tags: List<String> = emptyList(),
         taskType: String? = null,
         complexityLevel: ComplexityLevel? = null,
-    ): Result<KnowledgeEntry> = withContext(Dispatchers.IO) {
+    ): Result<KnowledgeEntry> = withContext(ioDispatcher) {
         // Store knowledge using the repository
         val result = knowledgeRepository.storeKnowledge(
             knowledge = knowledge,
@@ -106,7 +105,7 @@ class AgentMemoryService(
     suspend fun recallRelevantKnowledge(
         context: MemoryContext,
         limit: Int = 10,
-    ): Result<List<KnowledgeWithScore>> = withContext(Dispatchers.IO) {
+    ): Result<List<KnowledgeWithScore>> = withContext(ioDispatcher) {
         runCatching {
             val candidates = mutableListOf<KnowledgeEntry>()
 
@@ -215,7 +214,7 @@ class AgentMemoryService(
      * @param id The knowledge entry ID
      * @return Result containing the knowledge entry or null if not found
      */
-    suspend fun recallKnowledgeById(id: String): Result<KnowledgeEntry?> = withContext(Dispatchers.IO) {
+    suspend fun recallKnowledgeById(id: String): Result<KnowledgeEntry?> = withContext(ioDispatcher) {
         knowledgeRepository.getKnowledgeById(id)
     }
 
@@ -231,7 +230,7 @@ class AgentMemoryService(
     suspend fun findKnowledgeByType(
         knowledgeType: KnowledgeType,
         limit: Int = 10,
-    ): Result<List<KnowledgeEntry>> = withContext(Dispatchers.IO) {
+    ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         knowledgeRepository.findKnowledgeByType(knowledgeType, limit)
     }
 
@@ -247,7 +246,7 @@ class AgentMemoryService(
     suspend fun findKnowledgeByTaskType(
         taskType: String,
         limit: Int = 10,
-    ): Result<List<KnowledgeEntry>> = withContext(Dispatchers.IO) {
+    ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         knowledgeRepository.findKnowledgeByTaskType(taskType, limit)
     }
 
@@ -263,7 +262,7 @@ class AgentMemoryService(
     suspend fun findKnowledgeByTag(
         tag: String,
         limit: Int = 10,
-    ): Result<List<KnowledgeEntry>> = withContext(Dispatchers.IO) {
+    ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         knowledgeRepository.findKnowledgeByTag(tag, limit)
     }
 

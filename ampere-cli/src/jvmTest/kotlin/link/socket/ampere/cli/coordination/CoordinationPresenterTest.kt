@@ -239,7 +239,7 @@ class CoordinationPresenterTest {
         private val _state = MutableStateFlow(initialState)
         override val state: StateFlow<CoordinationState> = _state.asStateFlow()
 
-        override fun getStatistics(): CoordinationStatistics {
+        override suspend fun getStatistics(): CoordinationStatistics {
             return CoordinationStatistics(
                 totalInteractions = 10,
                 uniqueAgentPairs = 5,

@@ -1,9 +1,8 @@
 package link.socket.ampere.agents.events.messages
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
+import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
@@ -32,7 +31,7 @@ class MessageRepository(
         get() = database.messageStoreQueries
 
     suspend fun saveThread(thread: MessageThread): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.insertConversation(
                     id = thread.id,
@@ -64,7 +63,7 @@ class MessageRepository(
         }
 
     suspend fun findThreadById(threadId: String): Result<MessageThread> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 val messageThread = queries
                     .selectMessageThreadById(threadId)
@@ -110,7 +109,7 @@ class MessageRepository(
         }
 
     suspend fun findAllThreads(): Result<List<MessageThread>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries
                     .selectAllMessageThreads()
@@ -153,7 +152,7 @@ class MessageRepository(
         }
 
     suspend fun addMessageToThread(threadId: MessageThreadId, message: Message): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.insertMessage(
                     id = message.id,
@@ -183,7 +182,7 @@ class MessageRepository(
         }
 
     suspend fun updateStatus(threadId: MessageThreadId, newStatus: EventStatus): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.updateMessageThreadStatus(
                     id = threadId,
@@ -194,7 +193,7 @@ class MessageRepository(
         }
 
     suspend fun delete(threadId: MessageThreadId): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries.deleteMessageThread(threadId)
             }.map { }

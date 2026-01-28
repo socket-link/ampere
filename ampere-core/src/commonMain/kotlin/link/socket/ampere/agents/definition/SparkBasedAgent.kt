@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import link.socket.ampere.util.ioDispatcher
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import link.socket.ampere.agents.config.AgentConfiguration
@@ -120,7 +121,7 @@ class SparkBasedAgent(
 
     @Suppress("UNCHECKED_CAST")
     override val runLLMToEvaluatePerception: (Perception<CodeState>) -> Idea = { perception ->
-        runBlocking(Dispatchers.IO) {
+        runBlocking(ioDispatcher) {
             withTimeout(60000) {
                 reasoning.evaluatePerception(perception)
             }
@@ -128,7 +129,7 @@ class SparkBasedAgent(
     }
 
     override val runLLMToPlan: (Task, List<Idea>) -> Plan = { task, ideas ->
-        runBlocking(Dispatchers.IO) {
+        runBlocking(ioDispatcher) {
             withTimeout(60000) {
                 reasoning.generatePlan(task, ideas)
             }
@@ -136,7 +137,7 @@ class SparkBasedAgent(
     }
 
     override val runLLMToExecuteTask: (Task) -> Outcome = { task ->
-        runBlocking(Dispatchers.IO) {
+        runBlocking(ioDispatcher) {
             withTimeout(60000) {
                 val plan = reasoning.generatePlan(task, emptyList())
                 reasoning.executePlan(plan) { step, _ ->
@@ -150,7 +151,7 @@ class SparkBasedAgent(
     }
 
     override val runLLMToExecuteTool: (Tool<*>, ExecutionRequest<*>) -> ExecutionOutcome = { tool, request ->
-        runBlocking(Dispatchers.IO) {
+        runBlocking(ioDispatcher) {
             withTimeout(60000) {
                 reasoning.executeTool(tool, request)
             }
@@ -158,7 +159,7 @@ class SparkBasedAgent(
     }
 
     override val runLLMToEvaluateOutcomes: (List<Outcome>) -> Idea = { outcomes ->
-        runBlocking(Dispatchers.IO) {
+        runBlocking(ioDispatcher) {
             withTimeout(60000) {
                 reasoning.evaluateOutcomes(outcomes, memoryService).summaryIdea
             }
@@ -171,7 +172,7 @@ class SparkBasedAgent(
         plan: Plan,
     ): Knowledge = reasoning.extractKnowledge(outcome, task, plan)
 
-    override fun callLLM(prompt: String): String = runBlocking(Dispatchers.IO) {
+    override fun callLLM(prompt: String): String = runBlocking(ioDispatcher) {
         withTimeout(60000) {
             reasoning.callLLM(prompt)
         }

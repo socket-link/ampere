@@ -3,6 +3,7 @@ package link.socket.ampere.domain.arc
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
+import link.socket.ampere.util.systemFileSystem
 
 /**
  * Result of a complete Arc lifecycle execution.
@@ -35,7 +36,7 @@ data class ArcExecutionResult(
 class AmpereRuntime(
     private val arcConfig: ArcConfig,
     private val projectDir: Path,
-    private val fileSystem: FileSystem = FileSystem.SYSTEM,
+    private val fileSystem: FileSystem = systemFileSystem,
     private val maxFlowTicks: Int = 100,
 ) {
     private var chargeResult: ChargeResult? = null
@@ -182,7 +183,7 @@ class AmpereRuntime(
         fun fromTeamConfig(
             teamRoles: List<String>,
             projectDir: Path,
-            fileSystem: FileSystem = FileSystem.SYSTEM,
+            fileSystem: FileSystem = systemFileSystem,
         ): AmpereRuntime {
             val arcConfig = teamConfigToArcConfig(teamRoles)
             return AmpereRuntime(

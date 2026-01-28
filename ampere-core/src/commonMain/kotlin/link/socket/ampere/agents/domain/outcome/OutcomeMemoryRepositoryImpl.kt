@@ -1,8 +1,7 @@
 package link.socket.ampere.agents.domain.outcome
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
+import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.events.utils.generateUUID
@@ -30,7 +29,7 @@ class OutcomeMemoryRepositoryImpl(
         approach: String,
         outcome: ExecutionOutcome,
         timestamp: Instant,
-    ): Result<OutcomeMemory> = withContext(Dispatchers.IO) {
+    ): Result<OutcomeMemory> = withContext(ioDispatcher) {
         runCatching {
             val id = generateUUID(ticketId, executorId)
             val success = outcome is ExecutionOutcome.Success
@@ -110,7 +109,7 @@ class OutcomeMemoryRepositoryImpl(
     override suspend fun findSimilarOutcomes(
         description: String,
         limit: Int,
-    ): Result<List<OutcomeMemory>> = withContext(Dispatchers.IO) {
+    ): Result<List<OutcomeMemory>> = withContext(ioDispatcher) {
         runCatching {
             // Try FTS search first, fall back to LIKE if FTS fails
             try {
@@ -139,7 +138,7 @@ class OutcomeMemoryRepositoryImpl(
 
     override suspend fun getOutcomesByTicket(
         ticketId: TicketId,
-    ): Result<List<OutcomeMemory>> = withContext(Dispatchers.IO) {
+    ): Result<List<OutcomeMemory>> = withContext(ioDispatcher) {
         runCatching {
             queries.getOutcomesByTicket(ticketId)
                 .executeAsList()
@@ -150,7 +149,7 @@ class OutcomeMemoryRepositoryImpl(
     override suspend fun getOutcomesByExecutor(
         executorId: ExecutorId,
         limit: Int,
-    ): Result<List<OutcomeMemory>> = withContext(Dispatchers.IO) {
+    ): Result<List<OutcomeMemory>> = withContext(ioDispatcher) {
         runCatching {
             queries.getOutcomesByExecutor(executorId, limit.toLong())
                 .executeAsList()

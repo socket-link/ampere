@@ -2,6 +2,7 @@ package link.socket.ampere.domain.arc
 
 import okio.FileSystem
 import okio.Path
+import link.socket.ampere.util.systemFileSystem
 import link.socket.ampere.agents.definition.Agent
 import link.socket.ampere.agents.definition.SparkAgentFactory
 import link.socket.ampere.agents.definition.SparkBasedAgent
@@ -63,7 +64,7 @@ data class GoalNode(
 class ChargePhase(
     private val arcConfig: ArcConfig,
     private val projectDir: Path,
-    private val fileSystem: FileSystem = FileSystem.SYSTEM,
+    private val fileSystem: FileSystem = systemFileSystem,
 ) {
     suspend fun execute(userGoal: String): ChargeResult {
         require(userGoal.isNotBlank()) { "ChargePhase requires a non-empty user goal." }

@@ -1,9 +1,8 @@
 package link.socket.ampere.agents.events
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
+import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -38,7 +37,7 @@ class EventRepository(
      * Persist the given [event] by serializing it to JSON and inserting into the event_store table.
      */
     suspend fun saveEvent(event: Event): Result<Unit> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 val eventPayload: String = encode(event)
 
@@ -56,7 +55,7 @@ class EventRepository(
      * Retrieve all events in reverse chronological order (newest first).
      */
     suspend fun getAllEvents(): Result<List<Event>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries
                     .getAllEvents()
@@ -72,7 +71,7 @@ class EventRepository(
      * Retrieve all events since the given epoch millis [timestamp], ascending by time.
      */
     suspend fun getEventsSince(timestamp: Instant): Result<List<Event>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries
                     .getEventsSince(timestamp.toEpochMilliseconds())
@@ -88,7 +87,7 @@ class EventRepository(
      * Retrieve all events filtered by [eventType] (e.g., "TaskCreatedEvent"), newest first.
      */
     suspend fun getEventsByType(eventType: EventType): Result<List<Event>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries
                     .getEventsByType(
@@ -106,7 +105,7 @@ class EventRepository(
      * Retrieve an event by its [eventId], or null if not present.
      */
     suspend fun getEventById(eventId: EventId): Result<Event?> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries
                     .getEventById(eventId)
@@ -124,7 +123,7 @@ class EventRepository(
      * Retrieve events between [fromTime] and [toTime] (inclusive), ascending by time.
      */
     suspend fun getEventsBetween(fromTime: Instant, toTime: Instant): Result<List<Event>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 queries
                     .getEventsBetween(
@@ -157,7 +156,7 @@ class EventRepository(
         eventTypes: Set<String>? = null,
         sourceIds: Set<String>? = null,
     ): Result<List<Event>> =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             runCatching {
                 val fromMillis = fromTime.toEpochMilliseconds()
                 val toMillis = toTime.toEpochMilliseconds()

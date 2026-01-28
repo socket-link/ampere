@@ -1,7 +1,7 @@
 
 import java.io.FileInputStream
 import java.util.Properties
-import org.jetbrains.dokka.gradle.DokkaTask
+import org.jetbrains.dokka.gradle.tasks.DokkaGenerateTask
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
@@ -29,8 +29,8 @@ publishing {
     publications.withType<MavenPublication>().configureEach {
         groupId = "link.socket"
         artifactId = when (name) {
-            "kotlinMultiplatform" -> "ampere"
-            else -> "ampere-${name.lowercase()}"
+            "kotlinMultiplatform" -> "ampere-core"
+            else -> "ampere-core-${name.lowercase()}"
         }
 
         pom {
@@ -86,16 +86,11 @@ publishing {
 }
 
 // === DOKKA CONFIGURATION ===
-val dokkaHtml by tasks.getting(DokkaTask::class) {
-    dokkaSourceSets.configureEach {
-        outputDirectory.set(file("$rootDir/docs/api"))
-    }
-}
-
 val javadocJar by tasks.registering(Jar::class) {
+    val dokkaHtml = tasks.named<DokkaGenerateTask>("dokkaGeneratePublicationHtml")
     dependsOn(dokkaHtml)
     archiveClassifier.set("javadoc")
-    from(dokkaHtml.outputDirectory)
+    from(dokkaHtml.flatMap { it.outputDirectory })
 }
 
 // Add javadoc JAR to all publications

@@ -4,8 +4,8 @@ import co.touchlab.kermit.Logger
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import link.socket.ampere.util.ioDispatcher
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.agents.config.AgentConfiguration
@@ -77,7 +77,7 @@ class AgentLLMService(
         agentConfiguration.llmProvider?.let { provider ->
             logger.d { "[LLM] Using custom provider" }
             val combinedPrompt = buildCombinedPrompt(systemMessage, prompt)
-            return withContext(Dispatchers.IO) {
+            return withContext(ioDispatcher) {
                 provider(combinedPrompt)
             }
         }
@@ -104,7 +104,7 @@ class AgentLLMService(
             maxTokens = maxTokens,
         )
 
-        val completion = withContext(Dispatchers.IO) {
+        val completion = withContext(ioDispatcher) {
             client.chatCompletion(request)
         }
 
