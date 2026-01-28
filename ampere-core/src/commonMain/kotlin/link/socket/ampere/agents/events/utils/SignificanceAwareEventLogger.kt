@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.events.utils
 
+import co.touchlab.kermit.Logger
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
@@ -33,6 +34,8 @@ class SignificanceAwareEventLogger(
     private val showSubscriptions: Boolean = false,
 ) : EventLogger {
 
+    private val logger = Logger.withTag("EventBus")
+
     override fun logPublish(event: Event) {
         // Determine event significance
         val significance = categorizeEvent(event)
@@ -55,34 +58,32 @@ class SignificanceAwareEventLogger(
             formatSource = { source -> formatSource(source) },
         )
 
-        System.err.println("$severityTag $summary")
+        logger.i { "$severityTag $summary" }
     }
 
     override fun logSubscription(eventType: EventType, subscription: Subscription) {
         if (showSubscriptions) {
-            System.err.println("[EventBus][SUB] type=$eventType subscription=$subscription")
+            logger.d { "[SUB] type=$eventType subscription=$subscription" }
         }
     }
 
     override fun logUnsubscription(eventType: EventType, subscription: Subscription) {
         if (showSubscriptions) {
-            System.err.println("[EventBus][UNSUB] type=$eventType subscription=$subscription")
+            logger.d { "[UNSUB] type=$eventType subscription=$subscription" }
         }
     }
 
     override fun logError(message: String, throwable: Throwable?) {
-        System.err.println(
-            "[EventBus][ERROR] $message" + (
-                throwable?.let {
-                    ": ${it::class.simpleName} - ${it.message}"
-                } ?: ""
-                ),
+        val errorMessage = "$message" + (
+            throwable?.let {
+                ": ${it::class.simpleName} - ${it.message}"
+            } ?: ""
         )
-        throwable?.printStackTrace()
+        logger.e(throwable) { errorMessage }
     }
 
     override fun logInfo(message: String) {
-        System.err.println("[EventBus][INFO] $message")
+        logger.i { message }
     }
 
     private fun categorizeEvent(event: Event): EventSignificance = when (event) {

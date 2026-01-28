@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.events.utils
 
+import co.touchlab.kermit.Logger
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.events.subscription.Subscription
@@ -25,39 +26,36 @@ interface EventLogger {
 }
 
 /**
- * Basic console logger that prints structured messages to stderr.
- *
- * Uses stderr to avoid mixing with application output (stdout),
- * which is especially important for dashboard and watch commands.
+ * Basic console logger that prints structured messages using Kermit.
  */
 class ConsoleEventLogger : EventLogger {
 
+    private val logger = Logger.withTag("EventBus")
+
     override fun logPublish(event: Event) {
-        System.err.println(
-            "[EventBus][PUBLISH] type=${event.eventType} id=${event.eventId} ts=${event.timestamp} src=${event.eventSource.getIdentifier()}",
-        )
+        logger.d {
+            "[PUBLISH] type=${event.eventType} id=${event.eventId} ts=${event.timestamp} src=${event.eventSource.getIdentifier()}"
+        }
     }
 
     override fun logSubscription(eventType: EventType, subscription: Subscription) {
-        System.err.println("[EventBus][SUBSCRIPTION] type=$eventType subscription=$subscription")
+        logger.d { "[SUBSCRIPTION] type=$eventType subscription=$subscription" }
     }
 
     override fun logUnsubscription(eventType: EventType, subscription: Subscription) {
-        System.err.println("[EventBus][UNSUBSCRIPTION] type=$eventType subscription=$subscription")
+        logger.d { "[UNSUBSCRIPTION] type=$eventType subscription=$subscription" }
     }
 
     override fun logError(message: String, throwable: Throwable?) {
-        System.err.println(
-            "[EventBus][ERROR] $message" + (
-                throwable?.let {
-                    ": ${it::class.simpleName} - ${it.message}"
-                } ?: ""
-                ),
+        val errorMessage = "$message" + (
+            throwable?.let {
+                ": ${it::class.simpleName} - ${it.message}"
+            } ?: ""
         )
-        throwable?.printStackTrace()
+        logger.e(throwable) { errorMessage }
     }
 
     override fun logInfo(message: String) {
-        System.err.println("[EventBus][INFO] $message")
+        logger.i { message }
     }
 }

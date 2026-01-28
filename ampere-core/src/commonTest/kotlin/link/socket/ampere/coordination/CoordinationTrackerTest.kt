@@ -6,6 +6,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
@@ -31,7 +32,7 @@ class CoordinationTrackerTest {
     }
 
     @Test
-    fun `statistics returns zero counts initially`() {
+    fun `statistics returns zero counts initially`() = runTest {
         val tracker = CoordinationTracker(eventBus, scope)
         val stats = tracker.getStatistics()
 

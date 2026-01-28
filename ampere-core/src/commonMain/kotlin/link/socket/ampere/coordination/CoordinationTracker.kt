@@ -5,6 +5,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.event.Event
@@ -34,6 +36,7 @@ class CoordinationTracker(
 
     private val classifier = InteractionClassifier()
 
+    private val mutex = Mutex()
     private val interactionHistory = mutableListOf<AgentInteraction>()
     private val meetings = mutableMapOf<String, ActiveMeeting>()
     private val pendingHandoffs = mutableListOf<PendingHandoff>()
@@ -94,7 +97,7 @@ class CoordinationTracker(
     private suspend fun handleEvent(event: Event) {
         val interaction = classifier.classify(event) ?: return
 
-        synchronized(interactionHistory) {
+        mutex.withLock {
             interactionHistory.add(interaction)
 
             // Keep only the last MAX_INTERACTION_HISTORY interactions
@@ -113,7 +116,7 @@ class CoordinationTracker(
     private suspend fun updateState() {
         val now = Clock.System.now()
         val edges = buildCoordinationEdges(now)
-        val recentInteractions = synchronized(interactionHistory) {
+        val recentInteractions = mutex.withLock {
             interactionHistory.takeLast(100).toList()
         }
 
@@ -133,10 +136,10 @@ class CoordinationTracker(
      * Build coordination edges from interaction history.
      * Only includes interactions within the time window.
      */
-    private fun buildCoordinationEdges(now: Instant): List<CoordinationEdge> {
+    private suspend fun buildCoordinationEdges(now: Instant): List<CoordinationEdge> {
         val cutoffTime = now.minus(EDGE_TIME_WINDOW_SECONDS.seconds)
 
-        val recentInteractions = synchronized(interactionHistory) {
+        val recentInteractions = mutex.withLock {
             interactionHistory.filter { it.timestamp >= cutoffTime }
         }
 
@@ -165,8 +168,8 @@ class CoordinationTracker(
     /**
      * Get statistics about coordination patterns.
      */
-    fun getStatistics(): CoordinationStatistics {
-        val interactions = synchronized(interactionHistory) {
+    suspend fun getStatistics(): CoordinationStatistics {
+        val interactions = mutex.withLock {
             interactionHistory.toList()
         }
 
@@ -176,11 +179,10 @@ class CoordinationTracker(
 
         val agentInteractionCounts = mutableMapOf<String, Int>()
         for (interaction in interactions) {
-            agentInteractionCounts[interaction.sourceAgentId] =
-                agentInteractionCounts.getOrDefault(interaction.sourceAgentId, 0) + 1
+            val sourceId = interaction.sourceAgentId
+            agentInteractionCounts[sourceId] = (agentInteractionCounts[sourceId] ?: 0) + 1
             interaction.targetAgentId?.let { target ->
-                agentInteractionCounts[target] =
-                    agentInteractionCounts.getOrDefault(target, 0) + 1
+                agentInteractionCounts[target] = (agentInteractionCounts[target] ?: 0) + 1
             }
         }
 

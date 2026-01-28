@@ -262,7 +262,7 @@ class CoordinationViewTest {
 
         val coordinationStateProvider = object : CoordinationStateProvider {
             override val state: StateFlow<CoordinationState> = MutableStateFlow(initialCoordinationState)
-            override fun getStatistics(): CoordinationStatistics {
+            override suspend fun getStatistics(): CoordinationStatistics {
                 return CoordinationStatistics(
                     totalInteractions = 0,
                     uniqueAgentPairs = 0,

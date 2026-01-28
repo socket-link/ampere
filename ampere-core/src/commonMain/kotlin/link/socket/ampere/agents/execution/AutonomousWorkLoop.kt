@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.CodeAgent
 import link.socket.ampere.agents.domain.Urgency
@@ -105,7 +106,7 @@ class AutonomousWorkLoop(
 
     private var job: Job? = null
     private var issuesProcessedThisHour = 0
-    private var hourStartTime = System.currentTimeMillis()
+    private var hourStartTime = Clock.System.now().toEpochMilliseconds()
 
     /**
      * Start the autonomous work loop.
@@ -239,7 +240,7 @@ class AutonomousWorkLoop(
      * @return true if rate limit is exceeded, false otherwise
      */
     private fun shouldThrottleForRateLimit(): Boolean {
-        val now = System.currentTimeMillis()
+        val now = Clock.System.now().toEpochMilliseconds()
         val hourElapsed = (now - hourStartTime) > 3600_000
 
         if (hourElapsed) {

@@ -64,7 +64,7 @@ interface CoordinationStateProvider {
     /**
      * Get current coordination statistics.
      */
-    fun getStatistics(): CoordinationStatistics
+    suspend fun getStatistics(): CoordinationStatistics
 }
 
 /**
@@ -85,7 +85,7 @@ interface AgentStateProvider {
  */
 fun CoordinationTracker.asProvider(): CoordinationStateProvider = object : CoordinationStateProvider {
     override val state: StateFlow<CoordinationState> = this@asProvider.state
-    override fun getStatistics(): CoordinationStatistics = this@asProvider.getStatistics()
+    override suspend fun getStatistics(): CoordinationStatistics = this@asProvider.getStatistics()
 }
 
 /**
@@ -229,7 +229,7 @@ class CoordinationPresenter(
     /**
      * Update the view state based on current inputs.
      */
-    private fun updateViewState(
+    private suspend fun updateViewState(
         coordinationState: CoordinationState,
         agentStates: Map<AgentId, String>,
         subMode: CoordinationSubMode,

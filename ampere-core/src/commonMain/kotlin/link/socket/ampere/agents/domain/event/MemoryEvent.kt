@@ -1,10 +1,19 @@
 package link.socket.ampere.agents.domain.event
 
+import kotlin.math.roundToInt
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
 import link.socket.ampere.agents.domain.memory.MemoryContext
+
+/** Format a double to 2 decimal places (multiplatform compatible). */
+private fun Double.formatPercent(): String {
+    val scaled = (this * 100).roundToInt() / 100.0
+    val intPart = scaled.toInt()
+    val decPart = ((scaled - intPart) * 100).roundToInt()
+    return "$intPart.${decPart.toString().padStart(2, '0')}"
+}
 
 /**
  * Summary of a retrieved knowledge entry for logging purposes.
@@ -114,7 +123,7 @@ sealed interface MemoryEvent : Event {
             append("Knowledge recalled: $resultsFound result(s)")
             if (resultsFound > 0) {
                 val roundedRelevance = ((averageRelevance * 100).toInt()) / 100.0
-                append(" (avg relevance: ${String.format("%.2f", roundedRelevance)})")
+                append(" (avg relevance: ${roundedRelevance.formatPercent()})")
             }
 
             // Query context
@@ -145,7 +154,7 @@ sealed interface MemoryEvent : Event {
             if (retrievedKnowledge.isNotEmpty()) {
                 append("\n  Retrieved:")
                 retrievedKnowledge.take(3).forEachIndexed { index, summary ->
-                    append("\n    ${index + 1}. [${String.format("%.2f", summary.relevanceScore)}] ")
+                    append("\n    ${index + 1}. [${summary.relevanceScore.formatPercent()}] ")
                     val approachSnippet = if (summary.approach.length > 80) {
                         summary.approach.take(80) + "..."
                     } else {
