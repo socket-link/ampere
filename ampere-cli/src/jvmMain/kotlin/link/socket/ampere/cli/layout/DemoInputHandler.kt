@@ -7,7 +7,7 @@ import org.jline.terminal.TerminalBuilder
 import org.jline.utils.NonBlockingReader
 
 /**
- * Handles keyboard input for the Jazz Demo.
+ * Handles keyboard input for the interactive TUI.
  *
  * Hierarchical vim-like navigation:
  * - `a` then `1-9` -> Select agent

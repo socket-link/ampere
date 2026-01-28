@@ -216,7 +216,7 @@ class StatusBar(private val terminal: Terminal) {
 
     companion object {
         /**
-         * Default shortcuts for the Jazz demo.
+         * Default shortcuts for the interactive TUI.
          * Pulls from CommandRegistry for consistency.
          */
         fun defaultShortcuts(activeMode: String? = null): List<Shortcut> {

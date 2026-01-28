@@ -11,17 +11,17 @@ import com.github.ajalt.clikt.core.subcommands
  * and automated validation, not interactive use.
  *
  * For interactive demonstrations with visual feedback, use the 'run' command instead:
- *   ampere run --demo jazz
+ *   ampere run --demo agent
  *
  * Available tests:
- * - jazz: Autonomous agent test (CodeWriterAgent + `ampere task create` command) - headless
+ * - agent: Autonomous agent test (CodeWriterAgent + PROPEL cognitive cycle) - headless
  * - ticket: Issue creation test (GitHub issue management) - headless
  *
  * Usage:
  *   ampere test <test-name>
  *
  * Examples:
- *   ampere test jazz      # Run Jazz Test headlessly (for CI/validation)
+ *   ampere test agent     # Run autonomous agent test headlessly (for CI/validation)
  *   ampere test ticket    # Run Ticket Creation Test headlessly
  */
 class TestCommand : CliktCommand(
@@ -36,30 +36,30 @@ class TestCommand : CliktCommand(
           ampere run --demo <name>
 
         Available tests:
-          jazz      Headless autonomous agent test (`ampere task create` command)
+          agent     Headless autonomous agent test (PROPEL cognitive cycle)
           ticket    Headless GitHub issue creation test
 
         These tests validate AMPERE functionality and are designed for
         automated environments, not interactive exploration.
 
         Examples:
-          ampere test jazz              # Headless agent test (CI/validation)
+          ampere test agent             # Headless agent test (CI/validation)
           ampere test ticket            # Headless issue test
-          ampere test jazz --help       # Show test options
+          ampere test agent --help      # Show test options
 
         For interactive demos:
-          ampere run --demo jazz        # Interactive Jazz demo with TUI
+          ampere demo                   # Interactive demo with TUI
     """.trimIndent()
 ) {
     init {
         subcommands(
-            JazzSubcommand(),
+            AgentSubcommand(),
             TicketSubcommand()
         )
     }
 
     override fun run() {
         // Parent command doesn't do anything on its own
-        // User must specify a subcommand (jazz or ticket)
+        // User must specify a subcommand (agent or ticket)
     }
 }

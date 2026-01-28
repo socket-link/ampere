@@ -92,8 +92,8 @@ class StartCommand(
 
         Note: To run agents with active work, use the 'run' command:
           ampere run --goal "Implement FizzBuzz"
-          ampere run --demo jazz
           ampere run --issues
+          ampere demo   # Interactive demo with TUI
     """.trimIndent()
 ) {
 
@@ -101,6 +101,11 @@ class StartCommand(
         "--auto-work",
         help = "Start autonomous work mode in background (agents work on issues)"
     ).flag(default = false)
+
+    private val goal by option(
+        "--goal", "-g",
+        help = "Goal for the agent to work on"
+    )
 
     override fun run() = runBlocking {
         val context = contextProvider()
@@ -158,6 +163,16 @@ class StartCommand(
                 context.startAutonomousWork()
                 systemStatus = StatusBar.SystemStatus.WORKING
                 // TUI will show work happening in background
+            }
+
+            // Check for goal from command line OR config file
+            val effectiveGoal = goal ?: context.userConfig?.goal
+
+            // If we have a goal, activate it
+            if (effectiveGoal != null) {
+                jazzPane.startDemo()
+                systemStatus = StatusBar.SystemStatus.WORKING
+                goalHandler.activateGoal(effectiveGoal)
             }
 
             // Wait a moment for initial events to be processed

@@ -7,13 +7,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-class JazzTestRunnerTest {
+class AgentTestRunnerTest {
 
     @Test
-    fun `findGeneratedJazzFiles returns null when observability spark missing`() {
-        val tempDir = createTempDirectory("jazz-test").toFile()
+    fun `findGeneratedFiles returns null when observability spark missing`() {
+        val tempDir = createTempDirectory("agent-test").toFile()
         try {
-            val result = findGeneratedJazzFiles(tempDir)
+            val result = findGeneratedFiles(tempDir)
             assertNull(result)
         } finally {
             tempDir.deleteRecursively()
@@ -21,8 +21,8 @@ class JazzTestRunnerTest {
     }
 
     @Test
-    fun `findGeneratedJazzFiles detects observability spark file`() {
-        val tempDir = createTempDirectory("jazz-test").toFile()
+    fun `findGeneratedFiles detects observability spark file`() {
+        val tempDir = createTempDirectory("agent-test").toFile()
         try {
             val baseDir = File(tempDir, "ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/cognition/sparks")
             baseDir.mkdirs()
@@ -30,7 +30,7 @@ class JazzTestRunnerTest {
             val sparkFile = File(baseDir, "ObservabilitySpark.kt")
             sparkFile.writeText("sealed class ObservabilitySpark : Spark")
 
-            val result = findGeneratedJazzFiles(tempDir)
+            val result = findGeneratedFiles(tempDir)
             assertNotNull(result)
             assertEquals(sparkFile.absolutePath, result.observabilitySpark.absolutePath)
         } finally {

@@ -22,7 +22,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Integration tests for the escalation flow in the Jazz demo.
+ * Integration tests for the escalation flow in the demo.
  *
  * These tests verify that the components work together correctly:
  * - CognitiveProgressPane displays escalation UI
@@ -31,7 +31,7 @@ import kotlin.time.Duration.Companion.seconds
  *
  * Part of: MIL-84 (Demo Escalation Moment)
  */
-class JazzDemoEscalationTest {
+class DemoEscalationTest {
 
     private lateinit var testRegistry: HumanResponseRegistry
 

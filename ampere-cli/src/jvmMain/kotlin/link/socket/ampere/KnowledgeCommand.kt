@@ -184,7 +184,7 @@ class KnowledgeStatsCommand(
             terminal.println(dim("No knowledge entries stored yet."))
             terminal.println()
             terminal.println("Knowledge is accumulated as agents work:")
-            terminal.println("  - Run ${cyan("ampere run --demo jazz")} to generate sample knowledge")
+            terminal.println("  - Run ${cyan("ampere demo")} to generate sample knowledge")
             terminal.println("  - Or start autonomous work with ${cyan("ampere run --issues")}")
             return@runBlocking
         }

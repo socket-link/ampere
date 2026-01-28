@@ -12,12 +12,12 @@ import com.github.ajalt.clikt.core.CliktCommand
  * - ampere / ampere start: Interactive TUI dashboard
  * - ampere run: Run agents with active work (TUI visualization)
  *   - ampere run --goal <text>: Run agent with custom goal
- *   - ampere run --demo <name>: Run preset demo (jazz, etc.)
+ *   - ampere run --demo <name>: Run preset demo
  *   - ampere run --issues: Work on GitHub issues
  *   - ampere run --issue <number>: Work on specific issue
  * - ampere watch: Watch live event stream
  * - ampere test: Headless automated tests (CI/validation)
- *   - ampere test jazz: Headless Jazz test
+ *   - ampere test agent: Headless autonomous agent test
  *   - ampere test ticket: Headless issue test
  * - ampere task: Publish task events
  * - ampere thread: Manage conversation threads
@@ -89,12 +89,12 @@ class AmpereCommand : CliktCommand(
 
           # Run agents with TUI visualization
           ampere run --goal "Implement FizzBuzz"
-          ampere run --demo jazz              # Interactive Jazz demo
           ampere run --issues                 # Work on GitHub issues
           ampere run --issue 42               # Work on specific issue
+          ampere demo                         # Interactive demo with TUI
 
           # Headless tests (CI/validation)
-          ampere test jazz                    # Headless Jazz test
+          ampere test agent                   # Headless autonomous agent test
           ampere test ticket                  # Headless issue test
 
           # Observation

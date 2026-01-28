@@ -264,8 +264,37 @@ class CognitiveProgressPane(
         // Header with separator and spacing
         lines.addAll(renderSectionHeader("Cognitive Cycle", width, terminal))
 
-        // Elapsed time (2 lines)
-        val elapsed = state.startTime?.let { formatElapsed(it) } ?: "0s"
+        // If no goal started, show idle state
+        if (state.startTime == null) {
+            lines.add("")
+            lines.add(terminal.render(dim("No active goal")))
+            lines.add("")
+            lines.add(terminal.render(dim("The cognitive cycle will")))
+            lines.add(terminal.render(dim("show progress here once")))
+            lines.add(terminal.render(dim("an agent starts working.")))
+            lines.add("")
+            lines.add(terminal.render(dim("─── PROPEL Loop ───────")))
+            lines.add(terminal.render(dim("○ PERCEIVE - Analyze")))
+            lines.add(terminal.render(dim("○ RECALL   - Remember")))
+            lines.add(terminal.render(dim("○ OPTIMIZE - Prioritize")))
+            lines.add(terminal.render(dim("○ PLAN     - Decide")))
+            lines.add(terminal.render(dim("○ EXECUTE  - Act")))
+            lines.add(terminal.render(dim("○ LOOP     - Learn")))
+
+            // Pad to height
+            while (lines.size < height - 2) {
+                lines.add("")
+            }
+
+            // Footer
+            lines.add("─".repeat(width))
+            lines.add(terminal.render(dim("AMPERE Cognitive Cycle")))
+
+            return lines.take(height).map { it.fitToWidth(width) }
+        }
+
+        // Active goal - show progress
+        val elapsed = formatElapsed(state.startTime!!)
         lines.add("${terminal.render(dim("Elapsed:"))} $elapsed")
         lines.add("")
 
