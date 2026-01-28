@@ -73,7 +73,7 @@ class CognitiveCycleDemo {
             println("✓ Agent initialized: ${agent.id}")
             println()
 
-            // Define a realistic task (the "Jazz Test")
+            // Define a realistic task for the demo
             val task = Task.CodeChange(
                 id = "demo-task-001",
                 status = TaskStatus.Pending,

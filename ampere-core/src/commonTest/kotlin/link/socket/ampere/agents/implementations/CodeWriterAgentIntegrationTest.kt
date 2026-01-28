@@ -440,7 +440,7 @@ class CodeWriterAgentIntegrationTest {
     }
 
     /**
-     * Test 7: The Jazz Test - vague requirement to working code
+     * Test 7: Vague requirement to working code
      *
      * This is the ultimate validation of autonomous agency: given a vague,
      * natural language requirement, the agent should autonomously produce
@@ -453,7 +453,7 @@ class CodeWriterAgentIntegrationTest {
      */
     @Ignore
     @Test
-    fun `test the Jazz Test - vague requirement to working code`() = runBlocking {
+    fun `test vague requirement to working code`() = runBlocking {
         val mockTool = createMockWriteCodeFileTool(alwaysSucceed = true)
         val agent = CodeAgent(
             initialState = CodeState.blank,
@@ -467,7 +467,7 @@ class CodeWriterAgentIntegrationTest {
         val vagueRequirement = "I need a way to store user information"
 
         val task = Task.CodeChange(
-            id = "jazz-test-task",
+            id = "vague-req-task",
             status = TaskStatus.Pending,
             description = vagueRequirement,
         )
@@ -496,7 +496,7 @@ class CodeWriterAgentIntegrationTest {
         val learningIdea = agent.evaluateNextIdeaFromOutcomes(outcome)
         assertNotNull(learningIdea)
 
-        // The Jazz Test passes if the agent:
+        // The test passes if the agent:
         // - Understood the vague requirement (generated insights)
         // - Created a concrete plan (has actionable steps)
         // - Attempted execution (produced an outcome)
@@ -505,7 +505,7 @@ class CodeWriterAgentIntegrationTest {
 
         assertTrue(
             plan.tasks.isNotEmpty() && outcome !is Outcome.Blank,
-            "Jazz Test: Agent should autonomously transform vague requirement into concrete action",
+            "Agent should autonomously transform vague requirement into concrete action",
         )
     }
 

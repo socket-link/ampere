@@ -144,7 +144,24 @@ AMPERE applies these principles:
 >
 > **[We're looking for collaborators →](https://github.com/socket-link/ampere/issues)**
 
-**Option 1: YAML Configuration (Recommended)**
+### Install and Run
+
+```bash
+# Build and install
+./gradlew :ampere-cli:installJvmDist
+
+# Add to your PATH (one-time setup)
+ln -sf "$(pwd)/ampere-cli/ampere" /usr/local/bin/ampere
+
+# Start the interactive TUI
+ampere
+```
+
+That's it. Running `ampere` with no arguments launches the interactive 3-column TUI dashboard where you can observe agent cognition in real-time, issue commands, and watch the PROPEL cognitive loop in action.
+
+**[→ Complete CLI Installation Guide](ampere-cli/README.md#installation)**
+
+### Configure Your Team
 
 Create an `ampere.yaml` file in your project:
 
@@ -168,10 +185,10 @@ team:
 goal: "Build a user authentication system"
 ```
 
-Then run with the CLI:
+Then run with a goal:
 
 ```bash
-./ampere-cli/ampere run --goal "Build a user authentication system"
+ampere --goal "Build a user authentication system"
 ```
 
 **Option 2: Kotlin DSL**
@@ -210,23 +227,26 @@ team.events.collect { event ->
 
 ## CLI
 
-The CLI provides real-time visibility into agent operations:
+The CLI provides real-time visibility into agent operations through an interactive TUI:
 
 ```bash
-# Install
-./gradlew :ampere-cli:installJvmDist
+# Start the interactive TUI (default when no args)
+ampere
+
+# Run agent with a goal
+ampere --goal "Implement authentication"
 
 # Watch events in real-time
-./ampere-cli/ampere watch
+ampere watch
 
 # Search agent knowledge
-./ampere-cli/ampere knowledge search "authentication"
+ampere knowledge search "authentication"
 
 # View event context
-./ampere-cli/ampere trace <event-id>
+ampere trace <event-id>
 
 # Detailed system status
-./ampere-cli/ampere status --verbose
+ampere status --verbose
 ```
 
 **[→ Complete CLI Guide](ampere-cli/README.md)**

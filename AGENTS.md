@@ -82,7 +82,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Run agents with active work (with TUI visualization)
 ./ampere-cli/ampere run --goal "Implement FizzBuzz"    # Custom goal
-./ampere-cli/ampere run --demo jazz                    # Jazz demo (Fibonacci)
+./ampere-cli/ampere demo                               # Interactive demo with TUI
 ./ampere-cli/ampere run --issues                       # Work on GitHub issues
 ./ampere-cli/ampere run --issue 42                     # Work on specific issue
 
@@ -118,7 +118,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./ampere-cli/ampere interactive
 
 # Headless tests (CI/validation - no interactive UI)
-./ampere-cli/ampere test jazz                          # Headless Jazz test (Fibonacci)
+./ampere-cli/ampere test agent                         # Headless autonomous agent test
 ./ampere-cli/ampere test ticket                        # Headless issue creation test
 
 # Legacy headless work mode (prefer 'run --issues' for TUI version)

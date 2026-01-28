@@ -44,26 +44,26 @@ import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 private const val ESCALATION_TIMEOUT_SECONDS = 30L
 
 /**
- * The Jazz Test Runner - Demonstrates end-to-end autonomous agent behavior.
+ * The Agent Test Runner - Demonstrates end-to-end autonomous agent behavior.
  *
  * This program:
  * 1. Starts the AMPERE environment
  * 2. Creates a CodeWriterAgent that listens for ticket events
- * 3. Creates a ticket: "Add `ampere task create` CLI command"
+ * 3. Creates a ticket: "Add ObservabilitySpark to AMPERE Spark system"
  * 4. Assigns the ticket to the agent
  * 5. The agent autonomously runs through the PROPEL cognitive cycle
  * 6. All events are emitted and observable via the CLI dashboard
  *
  * To run this:
  *   ./gradlew :ampere-cli:installJvmDist
- *   ./ampere-cli/build/install/ampere-cli-jvm/bin/ampere-cli-jvm jazz-test
+ *   ampere test agent
  *
  * In another terminal, observe with:
- *   ./ampere-cli/ampere start
+ *   ampere start
  */
 fun main(escalation: Boolean = false) {
     println("═".repeat(80))
-    println("THE JAZZ TEST - Autonomous Agent End-to-End Demonstration")
+    println("AUTONOMOUS AGENT TEST - End-to-End PROPEL Demonstration")
     println("═".repeat(80))
     println()
     if (escalation) {
@@ -72,7 +72,7 @@ fun main(escalation: Boolean = false) {
     }
 
     // Create output directory for generated code
-    val outputDir = File(System.getProperty("user.home"), ".ampere/jazz-test-output")
+    val outputDir = File(System.getProperty("user.home"), ".ampere/agent-test-output")
     outputDir.mkdirs()
 
     println("📁 Output directory: ${outputDir.absolutePath}")
@@ -199,7 +199,7 @@ fun main(escalation: Boolean = false) {
                 """.trimIndent())
                 .ofType(TicketType.TASK)
                 .withPriority(TicketPriority.HIGH)
-                .createdBy("human-jazz-test")
+                .createdBy("human-agent-test")
                 .assignedTo(agent.id)
                 .build()
 
@@ -248,7 +248,7 @@ fun main(escalation: Boolean = false) {
             println("  4. 📚 LEARN - Extract knowledge from the outcome")
             println()
             println("To observe in real-time, run in another terminal:")
-            println("  ./ampere-cli/ampere start")
+            println("  ampere start")
             println()
 
             // Wait for the agent to complete (up to 60 seconds)
@@ -260,7 +260,7 @@ fun main(escalation: Boolean = false) {
                 elapsedSeconds++
 
                 // Check if code was generated in the expected output directory
-                val generatedFiles = findGeneratedJazzFiles(outputDir)
+                val generatedFiles = findGeneratedFiles(outputDir)
                 if (generatedFiles != null) {
                     val sparkFile = generatedFiles.observabilitySpark
                     println()
@@ -332,7 +332,7 @@ fun main(escalation: Boolean = false) {
 
             println()
             println("═".repeat(80))
-            println("JAZZ TEST COMPLETE")
+            println("AGENT TEST COMPLETE")
             println("═".repeat(80))
             println()
             println("Environment will remain running for 10 more seconds...")
@@ -353,11 +353,11 @@ fun main(escalation: Boolean = false) {
     }
 }
 
-internal data class JazzGeneratedFiles(
+internal data class GeneratedFiles(
     val observabilitySpark: File,
 )
 
-internal fun findGeneratedJazzFiles(outputDir: File): JazzGeneratedFiles? {
+internal fun findGeneratedFiles(outputDir: File): GeneratedFiles? {
     val generatedSourceDir = File(
         outputDir,
         "ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/cognition/sparks"
@@ -367,7 +367,7 @@ internal fun findGeneratedJazzFiles(outputDir: File): JazzGeneratedFiles? {
         return null
     }
 
-    return JazzGeneratedFiles(
+    return GeneratedFiles(
         observabilitySpark = observabilitySparkFile,
     )
 }
@@ -589,7 +589,7 @@ private fun createWriteCodeFileTool(
             val endTime = Clock.System.now()
 
             ExecutionOutcome.CodeChanged.Success(
-                executorId = "jazz-test-executor",
+                executorId = "agent-test-executor",
                 ticketId = request.context.ticket.id,
                 taskId = request.context.task.id,
                 executionStartTimestamp = now,

@@ -6,65 +6,68 @@
 - **Observation Tools**: Event streaming, thread management, system monitoring
 - **Headless Testing**: Automated validation for CI/CD pipelines
 
-## Prerequisites
+## Installation
+
+### Prerequisites
 
 - **Java 21** or higher is required to run the CLI
 - Check your Java version: `java -version`
 - If you have multiple Java versions, you can list them: `/usr/libexec/java_home -V`
 
-## Building the CLI
+### Build and Install
 
 ```bash
+# Build the CLI
 ./gradlew :ampere-cli:installJvmDist
+
+# Add to your PATH (choose one):
+
+# Option A: Symlink to /usr/local/bin (recommended)
+sudo ln -sf "$(pwd)/ampere-cli/ampere" /usr/local/bin/ampere
+
+# Option B: Symlink to ~/.local/bin (no sudo required)
+mkdir -p ~/.local/bin
+ln -sf "$(pwd)/ampere-cli/ampere" ~/.local/bin/ampere
+# Add to PATH if not already: export PATH="$HOME/.local/bin:$PATH"
+
+# Option C: Add project bin to PATH in your shell profile
+echo 'export PATH="$PATH:/path/to/Ampere/ampere-cli"' >> ~/.zshrc
 ```
 
-The executable will be located at:
-```
-ampere-cli/build/install/ampere-cli-jvm/bin/ampere-cli
-```
-
-## Running with Java 21
-
-### Option 1: Use the wrapper script (recommended)
-
-A wrapper script is provided that automatically uses Java 21:
+After installation, verify it works:
 
 ```bash
-./ampere-cli/ampere <command>
+ampere --help
 ```
 
-### Option 2: Set JAVA_HOME manually
+### Alternative: Run Without Global Installation
 
-If your default Java version is not 21+, set JAVA_HOME before running:
+If you prefer not to install globally, run the wrapper script directly from the project:
 
 ```bash
-export JAVA_HOME=$(/usr/libexec/java_home -v 21)
-ampere-cli/build/install/ampere-cli-jvm/bin/ampere-cli <command>
+./ampere-cli/ampere              # Start interactive TUI
+./ampere-cli/ampere --goal "..." # Run with a goal
 ```
 
-Or inline:
-
-```bash
-JAVA_HOME=$(/usr/libexec/java_home -v 21) ampere-cli/build/install/ampere-cli-jvm/bin/ampere-cli <command>
-```
+The wrapper script automatically finds and uses Java 21+.
 
 ## Quick Start
 
 ```bash
 # Start the interactive TUI dashboard
-./ampere-cli/ampere              # or 'ampere start'
+ampere                           # Just run ampere with no arguments
 
-# Run an agent with a custom goal (with TUI)
-./ampere-cli/ampere run --goal "Implement FizzBuzz"
+# Run an agent with a custom goal
+ampere --goal "Implement FizzBuzz"
 
-# Run the Jazz demo (task create command, with TUI)
-./ampere-cli/ampere run --demo jazz
+# Run the interactive demo
+ampere demo
 
-# Work on GitHub issues (with TUI)
-./ampere-cli/ampere run --issues
+# Work on GitHub issues
+ampere run --issues
 
 # Run headless tests (CI/validation)
-./ampere-cli/ampere test jazz
+ampere test agent
 ```
 
 ## Commands
@@ -74,9 +77,9 @@ JAVA_HOME=$(/usr/libexec/java_home -v 21) ampere-cli/build/install/ampere-cli-jv
 Start the interactive 3-column TUI for observing the AMPERE system:
 
 ```bash
-./ampere-cli/ampere              # Default: starts TUI dashboard
-./ampere-cli/ampere start        # Explicit: same as above
-./ampere-cli/ampere start --auto-work   # Start with background issue work
+ampere              # Default: starts TUI dashboard
+ampere start        # Explicit: same as above
+ampere start --auto-work   # Start with background issue work
 ```
 
 The TUI shows:
@@ -109,15 +112,15 @@ Run agents with active work while visualizing progress in real-time:
 
 ```bash
 # Run agent with custom goal
-./ampere-cli/ampere run --goal "Implement FizzBuzz function"
-./ampere-cli/ampere run -g "Add authentication to API"
+ampere run --goal "Implement FizzBuzz function"
+ampere run -g "Add authentication to API"
 
-# Run preset demos
-./ampere-cli/ampere run --demo jazz          # Task create command demo (`ampere task create`)
+# Run the interactive demo
+ampere demo                     # Showcases PROPEL cognitive cycle
 
 # Work on GitHub issues
-./ampere-cli/ampere run --issues             # Continuous issue work
-./ampere-cli/ampere run --issue 42           # Specific issue
+ampere run --issues             # Continuous issue work
+ampere run --issue 42           # Specific issue
 ```
 
 The `run` command uses the same TUI as `start` but activates an agent to work
@@ -128,10 +131,10 @@ on the specified task. You can watch the agent's cognitive cycle in real-time.
 Stream events in real-time with filtering:
 
 ```bash
-./ampere-cli/ampere watch
-./ampere-cli/ampere watch --verbose                    # Show all events including routine
-./ampere-cli/ampere watch --group-cognitive-cycles     # Group knowledge operations
-./ampere-cli/ampere watch --filter TaskCreated --agent agent-pm
+ampere watch
+ampere watch --verbose                    # Show all events including routine
+ampere watch --group-cognitive-cycles     # Group knowledge operations
+ampere watch --filter TaskCreated --agent agent-pm
 ```
 
 ### Dashboard Command
@@ -139,8 +142,8 @@ Stream events in real-time with filtering:
 Static live-updating dashboard (non-interactive):
 
 ```bash
-./ampere-cli/ampere dashboard
-./ampere-cli/ampere dashboard --refresh-interval 2     # Update every 2 seconds
+ampere dashboard
+ampere dashboard --refresh-interval 2     # Update every 2 seconds
 ```
 
 ### Thread Command
@@ -148,8 +151,8 @@ Static live-updating dashboard (non-interactive):
 View and manage conversation threads:
 
 ```bash
-./ampere-cli/ampere thread list                        # List all threads
-./ampere-cli/ampere thread show <thread-id>            # Show thread details
+ampere thread list                        # List all threads
+ampere thread show <thread-id>            # Show thread details
 ```
 
 ### Status Command
@@ -157,7 +160,7 @@ View and manage conversation threads:
 System-wide status overview:
 
 ```bash
-./ampere-cli/ampere status
+ampere status
 ```
 
 ### Outcomes Command
@@ -165,10 +168,10 @@ System-wide status overview:
 View execution outcomes and accumulated experience:
 
 ```bash
-./ampere-cli/ampere outcomes ticket <ticket-id>        # Show execution history for a ticket
-./ampere-cli/ampere outcomes search <query>            # Find outcomes similar to a query
-./ampere-cli/ampere outcomes executor <executor-id>    # Show outcomes for a specific executor
-./ampere-cli/ampere outcomes stats                     # Show aggregate outcome statistics
+ampere outcomes ticket <ticket-id>        # Show execution history for a ticket
+ampere outcomes search <query>            # Find outcomes similar to a query
+ampere outcomes executor <executor-id>    # Show outcomes for a specific executor
+ampere outcomes stats                     # Show aggregate outcome statistics
 ```
 
 ### Issues Command
@@ -177,13 +180,13 @@ Manage GitHub issues with batch creation from JSON:
 
 ```bash
 # Create issues from file
-./ampere-cli/ampere issues create -f .ampere/issues/pm-agent-epic.json
+ampere issues create -f .ampere/issues/pm-agent-epic.json
 
 # Create from stdin (useful for piping)
-cat pm-agent-epic.json | ./ampere-cli/ampere issues create --stdin
+cat pm-agent-epic.json | ampere issues create --stdin
 
 # Validate JSON without creating issues (dry run)
-./ampere-cli/ampere issues create -f epic.json --dry-run
+ampere issues create -f epic.json --dry-run
 ```
 
 **JSON Format:**
@@ -244,7 +247,7 @@ Store issue definitions in `.ampere/issues/` for easy reference:
 Launch an interactive REPL session:
 
 ```bash
-./ampere-cli/ampere interactive
+ampere interactive
 ```
 
 ### Test: Headless Validation
@@ -252,8 +255,8 @@ Launch an interactive REPL session:
 Run headless tests for automated validation (CI/CD):
 
 ```bash
-./ampere-cli/ampere test jazz                          # Headless Jazz test (task create command)
-./ampere-cli/ampere test ticket                        # Headless issue creation test
+ampere test agent                         # Headless autonomous agent test
+ampere test ticket                        # Headless issue creation test
 ```
 
 **Note:** These run without interactive UI, suitable for CI pipelines. For
@@ -264,7 +267,7 @@ interactive demos with visual feedback, use `ampere run --demo <name>` instead.
 Respond to agent human input requests:
 
 ```bash
-./ampere-cli/ampere respond <request-id> "Your response"
+ampere respond <request-id> "Your response"
 ```
 
 ## Configuration
@@ -282,7 +285,7 @@ AMPERE uses YAML configuration files to define your AI provider, team compositio
 
 3. Run the CLI:
    ```bash
-   ./ampere-cli/ampere run --goal "Your task description"
+   ampere run --goal "Your task description"
    ```
 
 ### Configuration File Locations
@@ -508,16 +511,16 @@ goal: "Quick prototype of the feature"
 
 ```bash
 # Load from default location (ampere.yaml)
-./ampere-cli/ampere run --goal "Implement feature X"
+ampere run --goal "Implement feature X"
 
 # Load from specific file
-./ampere-cli/ampere --config path/to/config.yaml run --goal "Implement feature X"
+ampere --config path/to/config.yaml run --goal "Implement feature X"
 
 # Override goal from config file
-./ampere-cli/ampere run --goal "Different goal"
+ampere run --goal "Different goal"
 
 # Start TUI with config
-./ampere-cli/ampere --config team-config.yaml start
+ampere --config team-config.yaml start
 ```
 
 ### Environment Variables

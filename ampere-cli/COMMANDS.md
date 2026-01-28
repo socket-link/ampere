@@ -4,9 +4,13 @@ This document provides a comprehensive reference for all CLI commands, their beh
 
 ## Command Overview
 
-The Ampere CLI provides two modes of operation:
-1. **Command Mode**: Direct command execution (e.g., `ampere watch`)
-2. **Interactive Mode**: Persistent REPL session (default when running `ampere` with no args)
+Running `ampere` with no arguments launches the **interactive TUI dashboard** - a 3-column terminal interface for observing agent cognition in real-time.
+
+The CLI provides multiple modes of operation:
+1. **Interactive TUI** (default): `ampere` or `ampere start` - Rich 3-column visualization
+2. **Goal Mode**: `ampere --goal "..."` - Start TUI and immediately assign a goal
+3. **Command Mode**: `ampere <command>` - Direct command execution (e.g., `ampere watch`)
+4. **REPL Mode**: `ampere interactive` - Persistent command-line session
 
 ---
 
@@ -364,14 +368,50 @@ agent wake agent-dev
 
 ---
 
-## INTERACTIVE MODE
+## START/TUI MODE (Default)
 
-The interactive mode provides a persistent REPL session with additional features:
+The default mode when running `ampere` with no arguments. A rich 3-column terminal interface for observing agent cognition.
 
 **Launch:**
 ```bash
-ampere                    # Launches interactive mode
-ampere interactive        # Explicit interactive mode
+ampere                    # Launches TUI dashboard (default)
+ampere start              # Explicit start command
+ampere --goal "..."       # Start with a goal
+ampere start --auto-work  # Start with background issue work
+```
+
+**TUI Layout:**
+- **Left pane (35%)**: Event stream (filtered by significance)
+- **Middle pane (40%)**: Cognitive cycle progress / system vitals
+- **Right pane (25%)**: Agent memory stats (or logs in verbose mode)
+
+**Keyboard Controls:**
+- `d` - Dashboard mode (system vitals, agent status)
+- `e` - Event stream mode (filtered events)
+- `m` - Memory operations mode (knowledge patterns)
+- `v` - Toggle verbose mode (show/hide logs)
+- `h` or `?` - Toggle help screen
+- `:` - Command mode (issue commands like `:goal`, `:ticket`)
+- `1-9` - Focus on specific agent
+- `ESC` - Exit focus/help
+- `q` or `Ctrl+C` - Exit TUI
+
+**Command Mode (press `:`):**
+- `:goal <description>` - Start agent with goal
+- `:agents` - List all active agents
+- `:ticket <id>` - Show ticket details
+- `:thread <id>` - Show conversation thread
+- `:quit` - Exit TUI
+
+---
+
+## REPL MODE
+
+A persistent command-line REPL session (alternative to TUI):
+
+**Launch:**
+```bash
+ampere interactive        # Launch REPL session
 ```
 
 **Features:**
@@ -415,14 +455,18 @@ help watch            # Watch command details
 ## COMMAND RESOLUTION
 
 When running `ampere` with no arguments:
-1. Defaults to `interactive` mode
-2. Launches REPL session
-3. Waits for user commands
+1. Defaults to `start` command
+2. Launches interactive 3-column TUI dashboard
+3. Press `q` or `Ctrl+C` to exit
+
+When running `ampere --goal "..."` or `ampere -g "..."`:
+1. Automatically runs `start` command with the goal
+2. Launches TUI and immediately assigns the goal to agents
 
 When running `ampere <command>`:
 1. Parses command via Clikt framework
 2. Executes command
-3. Exits after completion
+3. Exits after completion (or stays open for interactive commands)
 
 ---
 

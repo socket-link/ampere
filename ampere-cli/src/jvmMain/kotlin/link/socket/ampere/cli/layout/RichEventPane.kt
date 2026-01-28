@@ -84,15 +84,16 @@ class RichEventPane(
         }
 
         if (visibleEvents.isEmpty()) {
-            // Enhanced empty state with visual indicator
+            // Enhanced empty state with guidance
             lines.add("")
-            lines.add(terminal.render(dim("  ○ ○ ○")))
+            lines.add(terminal.render(TextColors.cyan("  Ready")))
             lines.add("")
-            lines.add(terminal.render(dim("  Waiting for events...")))
+            lines.add(terminal.render(dim("  To start working:")))
+            lines.add(terminal.render(dim("  • Press [:] then type")))
+            lines.add(terminal.render(dim("    :goal <description>")))
             lines.add("")
-            lines.add(terminal.render(dim("  Events will stream here")))
-            lines.add(terminal.render(dim("  as the agent works on")))
-            lines.add(terminal.render(dim("  the assigned task.")))
+            lines.add(terminal.render(dim("  Or run with a goal:")))
+            lines.add(terminal.render(dim("  $ ampere --goal \"...\"")))
             lines.add("")
 
             if (!verboseMode && events.isNotEmpty()) {
@@ -101,11 +102,9 @@ class RichEventPane(
                 lines.add(terminal.render(dim("  ${events.size} routine event(s)")))
                 lines.add(terminal.render(dim("  hidden. Press [v] to")))
                 lines.add(terminal.render(dim("  enable verbose mode.")))
-            } else if (!verboseMode) {
+            } else {
                 lines.add(terminal.render(dim("  ─────────────────")))
-                lines.add(terminal.render(dim("  Tip: Press [v] for")))
-                lines.add(terminal.render(dim("  verbose mode to see")))
-                lines.add(terminal.render(dim("  all event types.")))
+                lines.add(terminal.render(dim("  [h] help  [q] quit")))
             }
         } else {
             val expanded = expandedIndex?.let { idx -> visibleEvents.find { it.index == idx } }

@@ -49,8 +49,12 @@ fun main(args: Array<String>) {
         }
     }
 
-    // Log config info if loaded
-    if (config != null) {
+    // Only log config info if not running start/interactive TUI commands
+    // (those commands show config info visually in the TUI)
+    val isInteractiveCommand = args.isEmpty() ||
+        args.firstOrNull()?.let { it == "start" || it.startsWith("--goal") || it.startsWith("-g") } == true
+
+    if (config != null && !isInteractiveCommand) {
         println("Loaded configuration:")
         println("  AI Provider: ${config.ai.provider} (${config.ai.model})")
         println("  Team: ${config.team.joinToString { it.role }}")

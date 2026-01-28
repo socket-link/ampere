@@ -46,7 +46,6 @@ import link.socket.ampere.repl.TerminalFactory
  * This command launches agents to work on specific tasks while visualizing
  * their progress in the 3-column TUI. You can:
  * - Set a custom goal for an agent to work on
- * - Run preset demos (like Jazz Test)
  * - Work on GitHub issues (specific or continuous)
  *
  * The TUI provides real-time visualization of:
@@ -73,7 +72,6 @@ class RunCommand(
 
         Work Modes:
           --goal <text>      Run agent with custom goal
-          --demo <name>      Run preset demo (jazz, etc.)
           --issues           Work on available GitHub issues
           --issue <number>   Work on specific GitHub issue
 
@@ -90,7 +88,6 @@ class RunCommand(
 
         Examples:
           ampere run --goal "Implement FizzBuzz"
-          ampere run --demo jazz
           ampere run --issues
           ampere run --issue 42
           ampere run --arc devops-pipeline --goal "Deploy to staging"
@@ -101,8 +98,6 @@ class RunCommand(
 ) {
 
     private val goal: String? by option("--goal", "-g", help = "Set an autonomous goal for the agent to work on")
-
-    private val demo: String? by option("--demo", "-d", help = "Run a preset demo (e.g., 'jazz')")
 
     private val issues: Boolean by option("--issues", help = "Work on available GitHub issues").flag(default = false)
 
@@ -148,20 +143,19 @@ class RunCommand(
         // Validate that only one work mode is specified
         val modesSpecified = listOfNotNull(
             goal?.let { "goal" },
-            demo?.let { "demo" },
             if (issues) "issues" else null,
             issue?.let { "issue" }
         )
 
         if (modesSpecified.isEmpty()) {
-            echo("Error: No work mode specified. Use --goal, --demo, --issues, or --issue", err = true)
+            echo("Error: No work mode specified. Use --goal, --issues, or --issue", err = true)
             echo("Run 'ampere run --help' for usage information", err = true)
             return@runBlocking
         }
 
         if (modesSpecified.size > 1) {
             echo("Error: Multiple work modes specified: ${modesSpecified.joinToString(", ")}", err = true)
-            echo("Please specify only one of: --goal, --demo, --issues, or --issue", err = true)
+            echo("Please specify only one of: --goal, --issues, or --issue", err = true)
             return@runBlocking
         }
 
@@ -237,14 +231,6 @@ class RunCommand(
                             systemStatus = StatusBar.SystemStatus.ATTENTION_NEEDED
                         }
                     }
-                }
-                demo == "jazz" -> {
-                    // Run the Jazz demo (task-create CLI command)
-                    runJazzDemo(context, agentScope, jazzPane, memoryPane, logPane)
-                }
-                demo != null -> {
-                    jazzPane.setFailed("Unknown demo: $demo. Available demos: jazz")
-                    systemStatus = StatusBar.SystemStatus.ATTENTION_NEEDED
                 }
                 issues -> {
                     // Start continuous issue work
@@ -686,29 +672,4 @@ class RunCommand(
         }
     }
 
-    private suspend fun runJazzDemo(
-        context: AmpereContext,
-        agentScope: CoroutineScope,
-        jazzPane: CognitiveProgressPane,
-        memoryPane: AgentMemoryPane,
-        logPane: LogPane
-    ) {
-        // Delegate to the existing demo runner logic
-        // This is a simplified version - the full implementation would be
-        // copied from DemoCommand.runDemo()
-        jazzPane.setPhase(CognitiveProgressPane.Phase.INITIALIZING, "Starting Jazz demo...")
-
-        // TODO: Implement full Jazz demo logic here
-        // For now, just show a placeholder
-        delay(1000)
-        jazzPane.setPhase(CognitiveProgressPane.Phase.PERCEIVE, "Analyzing task-create command...")
-        delay(2000)
-        jazzPane.setPhase(CognitiveProgressPane.Phase.PLAN, "Creating implementation plan...")
-        delay(2000)
-        jazzPane.setPhase(CognitiveProgressPane.Phase.EXECUTE, "Writing code...")
-        delay(3000)
-        jazzPane.setPhase(CognitiveProgressPane.Phase.LEARN, "Extracting knowledge...")
-        delay(1500)
-        jazzPane.setPhase(CognitiveProgressPane.Phase.COMPLETED)
-    }
 }

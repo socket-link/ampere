@@ -5,12 +5,12 @@ import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 
 /**
- * Subcommand for running the Jazz Test.
+ * Subcommand for running the autonomous agent test.
  *
- * This is a subcommand of `test`, invoked via `ampere test jazz`.
- * It runs the same Jazz Test as the standalone `ampere jazz-test` command.
+ * This is a subcommand of `test`, invoked via `ampere test agent`.
+ * It runs an end-to-end demonstration of the PROPEL cognitive cycle.
  *
- * The Jazz Test demonstrates:
+ * The test demonstrates:
  * 1. Starting the AMPERE environment
  * 2. Creating a CodeWriterAgent
  * 3. Assigning a ticket (task-create command implementation)
@@ -18,15 +18,15 @@ import com.github.ajalt.clikt.parameters.options.option
  * 5. Generating working Kotlin code
  *
  * Usage:
- *   ampere test jazz
+ *   ampere test agent
  *
  * To observe with the dashboard:
  *   ampere start
  */
-class JazzSubcommand : CliktCommand(
-    name = "jazz",
+class AgentSubcommand : CliktCommand(
+    name = "agent",
     help = """
-        Run the Jazz Test - End-to-end autonomous agent demonstration.
+        Run the autonomous agent test - End-to-end PROPEL cognitive cycle demonstration.
 
         This test demonstrates the complete PROPEL cognitive cycle:
         - Agent perceives a ticket assignment
@@ -34,8 +34,8 @@ class JazzSubcommand : CliktCommand(
         - Agent executes code writing
         - Agent learns from the outcome
 
-        The agent will generate a new TaskCommand and save it to:
-          ~/.ampere/jazz-test-output/ampere-cli/src/jvmMain/kotlin/link/socket/ampere/TaskCommand.kt
+        The agent will generate code and save it to:
+          ~/.ampere/agent-test-output/
 
         To observe the agent's cognitive cycle in real-time, run the dashboard
         in another terminal:
@@ -51,9 +51,9 @@ class JazzSubcommand : CliktCommand(
           --escalation    Enable human-in-the-loop escalation (prompts for input)
 
         Examples:
-          ampere test jazz              # Run the test
-          ampere test jazz --escalation # Run with human escalation prompts
-          ampere test jazz --help       # Show this help
+          ampere test agent              # Run the test
+          ampere test agent --escalation # Run with human escalation prompts
+          ampere test agent --help       # Show this help
 
         Note: Requires Anthropic API key in local.properties
     """.trimIndent()
@@ -65,13 +65,13 @@ class JazzSubcommand : CliktCommand(
     ).flag()
 
     override fun run() {
-        echo("Starting Jazz Test...")
+        echo("Starting autonomous agent test...")
         if (escalation) {
             echo("Escalation mode enabled - will prompt for input during PLAN phase")
         }
         echo()
 
-        // Call the JazzTestRunner main function with escalation setting
+        // Call the AgentTestRunner main function with escalation setting
         link.socket.ampere.demo.main(escalation = escalation)
     }
 }
