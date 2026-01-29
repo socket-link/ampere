@@ -1,5 +1,8 @@
 @file:OptIn(ExperimentalKotlinGradlePluginApi::class)
 
+import com.vanniktech.maven.publish.SonatypeHost
+import com.vanniktech.maven.publish.KotlinMultiplatform
+import com.vanniktech.maven.publish.JavadocJar
 import org.gradle.jvm.application.tasks.CreateStartScripts
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -7,8 +10,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
-    id("maven-publish")
-    id("signing")
+    id("com.vanniktech.maven.publish")
 }
 
 val ampereVersion: String by project
@@ -17,95 +19,66 @@ group = "link.socket"
 version = ampereVersion
 
 // === PUBLISHING CONFIGURATION ===
-publishing {
-    publications.withType<MavenPublication>().configureEach {
-        groupId = "link.socket"
-        artifactId = when (name) {
-            "kotlinMultiplatform" -> "ampere-cli"
-            else -> "ampere-cli-${name.lowercase()}"
+mavenPublishing {
+    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
+    signAllPublications()
+
+    configure(KotlinMultiplatform(javadocJar = JavadocJar.Empty()))
+
+    coordinates("link.socket", "ampere-cli", version.toString())
+
+    pom {
+        name.set("Ampere CLI")
+        description.set("Command-line interface for Ampere, a Kotlin Multiplatform library for building AI agent systems.")
+        url.set("https://github.com/socket-link/ampere")
+        inceptionYear.set("2024")
+
+        licenses {
+            license {
+                name.set("The Apache License, Version 2.0")
+                url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                distribution.set("repo")
+            }
         }
 
-        pom {
-            name.set("Ampere CLI")
-            description.set("Command-line interface for Ampere, a Kotlin Multiplatform library for building AI agent systems.")
+        developers {
+            developer {
+                id.set("socket-link")
+                name.set("Socket Link")
+                url.set("https://github.com/socket-link")
+            }
+        }
+
+        scm {
+            connection.set("scm:git:git://github.com/socket-link/ampere.git")
+            developerConnection.set("scm:git:ssh://git@github.com:socket-link/ampere.git")
             url.set("https://github.com/socket-link/ampere")
-            inceptionYear.set("2024")
-
-            licenses {
-                license {
-                    name.set("The Apache License, Version 2.0")
-                    url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
-                    distribution.set("repo")
-                }
-            }
-
-            developers {
-                developer {
-                    id.set("socket-link")
-                    name.set("Socket Link")
-                    url.set("https://github.com/socket-link")
-                }
-            }
-
-            scm {
-                connection.set("scm:git:git://github.com/socket-link/ampere.git")
-                developerConnection.set("scm:git:ssh://git@github.com:socket-link/ampere.git")
-                url.set("https://github.com/socket-link/ampere")
-            }
-
-            issueManagement {
-                system.set("GitHub Issues")
-                url.set("https://github.com/socket-link/ampere/issues")
-            }
         }
-    }
 
-    repositories {
-        mavenLocal()
-        maven {
-            name = "ossrh"
-            url = if (version.toString().endsWith("-SNAPSHOT")) {
-                uri("https://s01.oss.sonatype.org/content/repositories/snapshots/")
-            } else {
-                uri("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
-            }
-            credentials {
-                username = findProperty("ossrhUsername")?.toString() ?: System.getenv("OSSRH_USERNAME") ?: ""
-                password = findProperty("ossrhPassword")?.toString() ?: System.getenv("OSSRH_PASSWORD") ?: ""
-            }
+        issueManagement {
+            system.set("GitHub Issues")
+            url.set("https://github.com/socket-link/ampere/issues")
         }
     }
 }
 
-// === SIGNING CONFIGURATION ===
-signing {
-    val signingKeyId = findProperty("signing.keyId")?.toString() ?: System.getenv("SIGNING_KEY_ID")
-    val signingKey = findProperty("signing.key")?.toString() ?: System.getenv("SIGNING_KEY")
-    val signingPassword = findProperty("signing.password")?.toString() ?: System.getenv("SIGNING_PASSWORD")
-
-    if (signingKey != null && signingPassword != null) {
-        // CI: Use in-memory key
-        if (signingKeyId != null) {
-            useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
-        } else {
-            useInMemoryPgpKeys(signingKey, signingPassword)
-        }
-    } else {
-        // Local: Use GPG agent
-        useGpgCmd()
+// Auto-detect GPG executable if not configured (handles Homebrew, system installs, etc.)
+if (findProperty("signing.gnupg.executable") == null) {
+    val gpgPath = Runtime.getRuntime().exec(arrayOf("which", "gpg"))
+        .inputStream.bufferedReader().readText().trim()
+    if (gpgPath.isNotEmpty()) {
+        extra["signing.gnupg.executable"] = gpgPath
     }
-
-    // Only require signing when publishing to OSSRH
-    setRequired {
-        gradle.taskGraph.allTasks.any { it.name.contains("publishAllPublicationsToOssrhRepository") }
-    }
-
-    sign(publishing.publications)
 }
 
-// Ensure proper task ordering
-tasks.withType<Sign>().configureEach {
-    dependsOn(tasks.withType<Jar>())
+// Map signing.keyId/password to signing.gnupg.* for GPG command signing
+val signingKeyId = findProperty("signing.keyId")?.toString()
+val signingPassword = findProperty("signing.password")?.toString()
+if (signingKeyId != null && findProperty("signing.gnupg.keyName") == null) {
+    extra["signing.gnupg.keyName"] = signingKeyId
+}
+if (signingPassword != null && findProperty("signing.gnupg.passphrase") == null) {
+    extra["signing.gnupg.passphrase"] = signingPassword
 }
 
 kotlin {
