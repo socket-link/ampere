@@ -37,7 +37,7 @@ sealed interface MessageChannel {
     fun getIdentifier(): String
 
     companion object {
-        val ALL_PUBLIC_CHANNELS = listOf(
+        val ALL_PUBLIC_CHANNELS: List<MessageChannel> = listOf(
             Public.Engineering,
             Public.Design,
             Public.Product,

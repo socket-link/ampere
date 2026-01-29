@@ -312,7 +312,7 @@ internal class ArcAgentSpawner(
 }
 
 internal object RoleSparkResolver {
-    private val mapping = mapOf(
+    private val mapping: Map<String, RoleSpark> = mapOf(
         "pm" to RoleSpark.Planning,
         "product" to RoleSpark.Planning,
         "project" to RoleSpark.Planning,
