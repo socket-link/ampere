@@ -124,7 +124,13 @@ signing {
     sign(publishing.publications)
 }
 
-// Ensure proper task ordering
+// Fix task dependencies: ensure all signing tasks complete before any publish task runs
+// This prevents the implicit dependency warning where publish tasks use signing outputs
+tasks.withType<AbstractPublishToMaven>().configureEach {
+    dependsOn(tasks.withType<Sign>())
+}
+
+// Ensure signing tasks depend on all JAR tasks
 tasks.withType<Sign>().configureEach {
     dependsOn(tasks.withType<Jar>())
 }
