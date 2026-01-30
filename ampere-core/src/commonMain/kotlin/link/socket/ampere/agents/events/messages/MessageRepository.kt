@@ -15,7 +15,7 @@ import link.socket.ampere.db.messages.MessageStoreQueries
  * Repository responsible for persisting and querying Messages using SQLDelight.
  *
  * This lives in common code and works across KMP targets. Callers are responsible for
- * providing a platform-specific SQLDelight [SqlDriver] to construct the generated [link.socket.ampere.agents.messages.Database]
+ * providing a platform-specific SQLDelight `SqlDriver` to construct the generated [Database]
  * instance and then pass it into this repository.
  */
 // TODO: Remove duplication

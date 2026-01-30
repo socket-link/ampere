@@ -183,7 +183,7 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
     /**
      * Human-readable description of the current cognitive state.
      *
-     * Format: [AFFINITY] → [Spark1] → [Spark2] → ...
+     * Format: `[AFFINITY] → [Spark1] → [Spark2] → ...`
      */
     val cognitiveState: String
         get() {

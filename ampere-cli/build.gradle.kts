@@ -1,8 +1,8 @@
 @file:OptIn(ExperimentalKotlinGradlePluginApi::class)
 
-import com.vanniktech.maven.publish.SonatypeHost
-import com.vanniktech.maven.publish.KotlinMultiplatform
 import com.vanniktech.maven.publish.JavadocJar
+import com.vanniktech.maven.publish.KotlinMultiplatform
+import com.vanniktech.maven.publish.SonatypeHost
 import org.gradle.jvm.application.tasks.CreateStartScripts
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -11,12 +11,18 @@ plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
     id("com.vanniktech.maven.publish")
+    id("signing")
 }
 
 val ampereVersion: String by project
 
 group = "link.socket"
 version = ampereVersion
+
+// === SIGNING CONFIGURATION ===
+signing {
+    useGpgCmd()
+}
 
 // === PUBLISHING CONFIGURATION ===
 mavenPublishing {
@@ -60,25 +66,6 @@ mavenPublishing {
             url.set("https://github.com/socket-link/ampere/issues")
         }
     }
-}
-
-// Auto-detect GPG executable if not configured (handles Homebrew, system installs, etc.)
-if (findProperty("signing.gnupg.executable") == null) {
-    val gpgPath = Runtime.getRuntime().exec(arrayOf("which", "gpg"))
-        .inputStream.bufferedReader().readText().trim()
-    if (gpgPath.isNotEmpty()) {
-        extra["signing.gnupg.executable"] = gpgPath
-    }
-}
-
-// Map signing.keyId/password to signing.gnupg.* for GPG command signing
-val signingKeyId = findProperty("signing.keyId")?.toString()
-val signingPassword = findProperty("signing.password")?.toString()
-if (signingKeyId != null && findProperty("signing.gnupg.keyName") == null) {
-    extra["signing.gnupg.keyName"] = signingKeyId
-}
-if (signingPassword != null && findProperty("signing.gnupg.passphrase") == null) {
-    extra["signing.gnupg.passphrase"] = signingPassword
 }
 
 kotlin {

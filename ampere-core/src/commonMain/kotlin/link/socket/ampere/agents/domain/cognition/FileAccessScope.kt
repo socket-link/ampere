@@ -13,8 +13,8 @@ import kotlinx.serialization.Serializable
  * Standard glob syntax is used:
  * - * matches any characters except path separator
  * - ** matches any characters including path separator (recursive)
- * - ? matches any single character
- * - [abc] matches any character in brackets
+ * - `?` matches any single character
+ * - `[abc]` matches any character in brackets
  *
  * Examples:
  * - "src/ * * / *.kt" - all Kotlin files under src

@@ -18,7 +18,7 @@ import link.socket.ampere.db.events.EventStoreQueries
  * Repository responsible for persisting and querying Events using SQLDelight.
  *
  * This lives in common code and works across KMP targets. Callers are responsible for
- * providing a platform-specific SQLDelight [SqlDriver] to construct the generated [Database]
+ * providing a platform-specific SQLDelight `SqlDriver` to construct the generated [Database]
  * instance and then pass it into this repository.
  */
 // TODO: Remove duplication

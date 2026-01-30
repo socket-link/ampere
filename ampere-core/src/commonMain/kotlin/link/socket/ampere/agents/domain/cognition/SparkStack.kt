@@ -126,7 +126,7 @@ class SparkStack private constructor(
     /**
      * Returns a human-readable description of the current cognitive state.
      *
-     * Format: [AFFINITY] → [Spark1] → [Spark2] → ...
+     * Format: `[AFFINITY] → [Spark1] → [Spark2] → ...`
      *
      * @return A string representation of the stack
      */
