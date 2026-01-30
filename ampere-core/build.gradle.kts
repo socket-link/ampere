@@ -1,6 +1,9 @@
 
 import java.io.FileInputStream
 import java.util.Properties
+import com.vanniktech.maven.publish.SonatypeHost
+import com.vanniktech.maven.publish.KotlinMultiplatform
+import com.vanniktech.maven.publish.JavadocJar
 import org.jetbrains.dokka.gradle.tasks.DokkaGenerateTask
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
@@ -12,7 +15,7 @@ plugins {
     id("com.android.library")
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("maven-publish")
+    id("com.vanniktech.maven.publish")
     id("signing")
     id("org.jetbrains.dokka") version "2.1.0"
     id("app.cash.sqldelight") version "2.2.1"
@@ -24,116 +27,55 @@ val ampereVersion: String by project
 group = "link.socket"
 version = ampereVersion
 
-// === PUBLISHING CONFIGURATION ===
-publishing {
-    publications.withType<MavenPublication>().configureEach {
-        groupId = "link.socket"
-        artifactId = when (name) {
-            "kotlinMultiplatform" -> "ampere-core"
-            else -> "ampere-core-${name.lowercase()}"
-        }
-
-        pom {
-            name.set("Ampere")
-            description.set("A Kotlin Multiplatform library for building AI agent systems with built-in observability and transparent cognition.")
-            url.set("https://github.com/socket-link/ampere")
-            inceptionYear.set("2024")
-
-            licenses {
-                license {
-                    name.set("The Apache License, Version 2.0")
-                    url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
-                    distribution.set("repo")
-                }
-            }
-
-            developers {
-                developer {
-                    id.set("socket-link")
-                    name.set("Socket Link")
-                    url.set("https://github.com/socket-link")
-                }
-            }
-
-            scm {
-                connection.set("scm:git:git://github.com/socket-link/ampere.git")
-                developerConnection.set("scm:git:ssh://git@github.com:socket-link/ampere.git")
-                url.set("https://github.com/socket-link/ampere")
-            }
-
-            issueManagement {
-                system.set("GitHub Issues")
-                url.set("https://github.com/socket-link/ampere/issues")
-            }
-        }
-    }
-
-    repositories {
-        mavenLocal()
-        maven {
-            name = "ossrh"
-            url = if (version.toString().endsWith("-SNAPSHOT")) {
-                uri("https://s01.oss.sonatype.org/content/repositories/snapshots/")
-            } else {
-                uri("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
-            }
-            credentials {
-                username = findProperty("ossrhUsername")?.toString() ?: System.getenv("OSSRH_USERNAME") ?: ""
-                password = findProperty("ossrhPassword")?.toString() ?: System.getenv("OSSRH_PASSWORD") ?: ""
-            }
-        }
-    }
-}
-
-// === DOKKA CONFIGURATION ===
-val javadocJar by tasks.registering(Jar::class) {
-    val dokkaHtml = tasks.named<DokkaGenerateTask>("dokkaGeneratePublicationHtml")
-    dependsOn(dokkaHtml)
-    archiveClassifier.set("javadoc")
-    from(dokkaHtml.flatMap { it.outputDirectory })
-}
-
-// Add javadoc JAR to all publications
-publishing.publications.withType<MavenPublication>().configureEach {
-    artifact(javadocJar)
-}
-
 // === SIGNING CONFIGURATION ===
 signing {
-    val signingKeyId = findProperty("signing.keyId")?.toString() ?: System.getenv("SIGNING_KEY_ID")
-    val signingKey = findProperty("signing.key")?.toString() ?: System.getenv("SIGNING_KEY")
-    val signingPassword = findProperty("signing.password")?.toString() ?: System.getenv("SIGNING_PASSWORD")
+    useGpgCmd()
+}
 
-    if (signingKey != null && signingPassword != null) {
-        // CI: Use in-memory key
-        if (signingKeyId != null) {
-            useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
-        } else {
-            useInMemoryPgpKeys(signingKey, signingPassword)
+// === PUBLISHING CONFIGURATION ===
+mavenPublishing {
+    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
+    signAllPublications()
+
+    configure(KotlinMultiplatform(javadocJar = JavadocJar.Dokka("dokkaGeneratePublicationHtml")))
+
+    coordinates("link.socket", "ampere-core", version.toString())
+
+    pom {
+        name.set("Ampere")
+        description.set("A Kotlin Multiplatform library for building AI agent systems with built-in observability and transparent cognition.")
+        url.set("https://github.com/socket-link/ampere")
+        inceptionYear.set("2024")
+
+        licenses {
+            license {
+                name.set("The Apache License, Version 2.0")
+                url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                distribution.set("repo")
+            }
         }
-    } else {
-        // Local: Use GPG agent
-        useGpgCmd()
+
+        developers {
+            developer {
+                id.set("socket-link")
+                name.set("Socket Link")
+                url.set("https://github.com/socket-link")
+            }
+        }
+
+        scm {
+            connection.set("scm:git:git://github.com/socket-link/ampere.git")
+            developerConnection.set("scm:git:ssh://git@github.com:socket-link/ampere.git")
+            url.set("https://github.com/socket-link/ampere")
+        }
+
+        issueManagement {
+            system.set("GitHub Issues")
+            url.set("https://github.com/socket-link/ampere/issues")
+        }
     }
-
-    // Only require signing when publishing to OSSRH
-    setRequired {
-        gradle.taskGraph.allTasks.any { it.name.contains("publishAllPublicationsToOssrhRepository") }
-    }
-
-    sign(publishing.publications)
 }
 
-// Fix task dependencies: ensure all signing tasks complete before any publish task runs
-// This prevents the implicit dependency warning where publish tasks use signing outputs
-tasks.withType<AbstractPublishToMaven>().configureEach {
-    dependsOn(tasks.withType<Sign>())
-}
-
-// Ensure signing tasks depend on all JAR tasks
-tasks.withType<Sign>().configureEach {
-    dependsOn(tasks.withType<Jar>())
-}
 
 sqldelight {
     databases {

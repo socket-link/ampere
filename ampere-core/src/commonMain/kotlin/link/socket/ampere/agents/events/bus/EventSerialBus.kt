@@ -73,7 +73,7 @@ class EventSerialBus(
     }
 
     /**
-     * Subscribe to events of [eventClassType]. Returns a [EventSubscription] that can be used to
+     * Subscribe to events of [eventType]. Returns an [EventSubscription] that can be used to
      * [unsubscribe]. The [handler] runs asynchronously for each matching event.
      */
     @Suppress("UNCHECKED_CAST")

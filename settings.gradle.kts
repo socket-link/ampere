@@ -31,6 +31,7 @@ pluginManagement {
         kotlin("plugin.compose").version(kotlinVersion)
         id("io.ktor.plugin").version(ktorVersion)
         id("app.cash.sqldelight").version(sqldelight)
+        id("com.vanniktech.maven.publish").version("0.30.0")
     }
 }
 

@@ -54,9 +54,9 @@ class DefaultTicketViewService(
     /**
      * Extracts acceptance criteria from the ticket description.
      * Looks for patterns like:
-     * - Bullet points (lines starting with "- " or "* ")
-     * - Numbered lists (lines starting with digits followed by "." or ")")
-     * - Checkbox lists (lines starting with "- [ ]" or "- [x]")
+     * - Bullet points (lines starting with `- ` or `* `)
+     * - Numbered lists (lines starting with digits followed by `.` or `)`)
+     * - Checkbox lists (lines starting with `- [ ]` or `- [x]`)
      *
      * If a section explicitly titled "Acceptance Criteria:" is found,
      * only items under that section are extracted.
