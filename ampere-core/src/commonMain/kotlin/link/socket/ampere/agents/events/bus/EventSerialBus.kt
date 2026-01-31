@@ -2,7 +2,7 @@ package link.socket.ampere.agents.events.bus
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import link.socket.ampere.util.runBlockingCompat
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import link.socket.ampere.agents.definition.AgentId
@@ -127,7 +127,7 @@ class EventSerialBus(
     /** Helper to reuse the same locking pattern in non-suspending API without exposing Mutex */
     private inline fun <R> runBlockingLock(
         crossinline block: () -> R,
-    ): R = runBlocking {
+    ): R = runBlockingCompat {
         // Fast-path tryLock not used to keep logic simple and deterministic.
         mutex.withLock { block() }
     }
