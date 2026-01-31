@@ -7,8 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  jvm-tests:
-    name: JVM Tests
+  tests:
+    name: Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -32,5 +32,5 @@ jobs:
           openai_api_key=placeholder
           EOF
 
-      - name: Run JVM tests
-        run: ./gradlew jvmTest
+      - name: Run tests
+        run: ./gradlew test

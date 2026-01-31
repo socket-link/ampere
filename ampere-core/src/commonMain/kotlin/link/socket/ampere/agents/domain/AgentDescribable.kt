@@ -68,16 +68,10 @@ object AgentTypeDescriber {
         appendLine()
 
         types.groupBy { type ->
-            // Extract parent class name from qualified name
-            // e.g., "...Escalation.Discussion.CodeReview" -> "Discussion"
-            type::class.qualifiedName?.let { qualifiedName ->
-                val parts = qualifiedName.split('.')
-                if (parts.size >= 2) {
-                    parts[parts.size - 2] // Parent class name
-                } else {
-                    type::class.simpleName ?: "Other"
-                }
-            } ?: type::class.simpleName ?: "Other"
+            // Extract parent class name from class string representation
+            // JVM: "class ...Escalation$Discussion$CodeReview" -> "Discussion"
+            // JS: may vary, falls back to simpleName
+            extractParentClassName(type::class)
         }.forEach { (category, items) ->
             appendLine("## $category")
             items.forEach { item ->
@@ -85,6 +79,33 @@ object AgentTypeDescriber {
             }
             appendLine()
         }
+    }
+
+    /**
+     * Extracts the parent class name from a KClass for grouping purposes.
+     * Works cross-platform by parsing the string representation.
+     */
+    private fun extractParentClassName(klass: kotlin.reflect.KClass<*>): String {
+        val klassString = klass.toString()
+        // Try to find nested class pattern with $ separator (JVM style)
+        // e.g., "class ...Escalation$Discussion$CodeReview"
+        val dollarParts = klassString.split('$')
+        if (dollarParts.size >= 2) {
+            return dollarParts[dollarParts.size - 2]
+                .substringAfterLast('.') // Remove any package prefix
+        }
+        // Try dot-separated pattern (some platforms)
+        // e.g., "...Escalation.Discussion.CodeReview"
+        val dotParts = klassString.split('.')
+        if (dotParts.size >= 2) {
+            val secondLast = dotParts[dotParts.size - 2]
+            // Filter out package-like names (all lowercase)
+            if (secondLast.firstOrNull()?.isUpperCase() == true) {
+                return secondLast
+            }
+        }
+        // Fallback to simple name
+        return klass.simpleName ?: "Other"
     }
 
     /**
