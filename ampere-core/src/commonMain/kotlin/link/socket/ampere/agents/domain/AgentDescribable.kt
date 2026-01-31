@@ -68,10 +68,15 @@ object AgentTypeDescriber {
         appendLine()
 
         types.groupBy { type ->
-            // Get the parent class name from the supertype hierarchy
-            // For Discussion.CodeReview, this extracts "Discussion" from its superclass
-            type::class.supertypes.firstOrNull()?.let { supertype ->
-                (supertype.classifier as? kotlin.reflect.KClass<*>)?.simpleName
+            // Group by type name - uses simpleName which works across all platforms
+            // For nested classes, attempts to extract parent from toString() representation
+            type::class.simpleName?.let { name ->
+                // If nested class (contains $), extract parent name
+                if (name.contains('$')) {
+                    name.substringBefore('$')
+                } else {
+                    name
+                }
             } ?: "Other"
         }.forEach { (category, items) ->
             appendLine("## $category")
