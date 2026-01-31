@@ -2,6 +2,8 @@ package link.socket.ampere.agents.execution.tools
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import link.socket.ampere.agents.config.AgentActionAutonomy
 
 class ToolCreateIssuesTest {
@@ -13,8 +15,8 @@ class ToolCreateIssuesTest {
         assertEquals("create_issues", tool.id)
         assertEquals("Create Issues", tool.name)
         assertEquals(AgentActionAutonomy.ACT_WITH_NOTIFICATION, tool.requiredAgentAutonomy)
-        assert(tool.description.contains("hierarchical"))
-        assert(tool.description.contains("dependency"))
+        assertTrue(tool.description.contains("hierarchical"))
+        assertTrue(tool.description.contains("dependency"))
     }
 
     @Test
@@ -30,6 +32,6 @@ class ToolCreateIssuesTest {
     fun `ToolCreateIssues is a FunctionTool`() {
         val tool = ToolCreateIssues()
 
-        assert(tool is FunctionTool)
+        assertIs<FunctionTool<*>>(tool)
     }
 }

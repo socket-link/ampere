@@ -2,7 +2,7 @@ package link.socket.ampere.agents.definition
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
+import link.socket.ampere.util.runBlockingCompat
 import kotlinx.coroutines.withTimeout
 import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Clock
@@ -108,7 +108,7 @@ class QualityAgent(
 
     override val runLLMToEvaluatePerception: (perception: Perception<QualityState>) -> Idea =
         { perception ->
-            runBlocking(ioDispatcher) {
+            runBlockingCompat(ioDispatcher) {
                 withTimeout(60000) {
                     reasoning.evaluatePerception(perception)
                 }
@@ -117,7 +117,7 @@ class QualityAgent(
 
     override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan =
         { task, ideas ->
-            runBlocking(ioDispatcher) {
+            runBlockingCompat(ioDispatcher) {
                 withTimeout(60000) {
                     reasoning.generatePlan(task, ideas)
                 }
@@ -126,7 +126,7 @@ class QualityAgent(
 
     override val runLLMToExecuteTask: (task: Task) -> Outcome =
         { task ->
-            runBlocking(ioDispatcher) {
+            runBlockingCompat(ioDispatcher) {
                 withTimeout(60000) {
                     executeTaskWithReasoning(task)
                 }
@@ -135,7 +135,7 @@ class QualityAgent(
 
     override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome =
         { tool, request ->
-            runBlocking(ioDispatcher) {
+            runBlockingCompat(ioDispatcher) {
                 withTimeout(60000) {
                     reasoning.executeTool(tool, request)
                 }
@@ -144,7 +144,7 @@ class QualityAgent(
 
     override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea =
         { outcomes ->
-            runBlocking(ioDispatcher) {
+            runBlockingCompat(ioDispatcher) {
                 withTimeout(60000) {
                     reasoning.evaluateOutcomes(outcomes, memoryService).summaryIdea
                 }
@@ -158,7 +158,7 @@ class QualityAgent(
     ): Knowledge.FromOutcome = extractQualityKnowledge(outcome, task, plan)
 
     override fun callLLM(prompt: String): String =
-        runBlocking(ioDispatcher) {
+        runBlockingCompat(ioDispatcher) {
             withTimeout(60000) {
                 reasoning.callLLM(prompt)
             }

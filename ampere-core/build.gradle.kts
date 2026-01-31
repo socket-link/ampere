@@ -100,6 +100,28 @@ kotlin {
         }
     }
 
+    js(IR) {
+        browser {
+            commonWebpackConfig {
+                cssSupport {
+                    enabled.set(true)
+                }
+            }
+        }
+        binaries.executable()
+    }
+
+    wasmJs {
+        browser {
+            commonWebpackConfig {
+                cssSupport {
+                    enabled.set(true)
+                }
+            }
+        }
+        binaries.executable()
+    }
+
     val xcf = XCFramework()
     val iosTargets = listOf(iosX64(), iosArm64(), iosSimulatorArm64())
 
@@ -134,7 +156,6 @@ kotlin {
                 implementation("co.touchlab:kermit:2.0.6")
                 implementation("io.ktor:ktor-client-core:3.2.2")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
-                implementation("com.charleskorn.kaml:kaml:0.72.0")
             }
         }
         val commonTest by getting {
@@ -168,6 +189,19 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
                 implementation("io.mockk:mockk:1.13.14")
+                implementation("com.charleskorn.kaml:kaml:0.72.0")
+            }
+        }
+        val jsMain by getting {
+            dependencies {
+                implementation("io.ktor:ktor-client-js:3.2.2")
+                implementation("com.squareup.okio:okio-fakefilesystem:3.11.0")
+            }
+        }
+        val wasmJsMain by getting {
+            dependencies {
+                implementation("io.ktor:ktor-client-js:3.2.2")
+                implementation("com.squareup.okio:okio-fakefilesystem:3.11.0")
             }
         }
         val iosX64Main by getting
