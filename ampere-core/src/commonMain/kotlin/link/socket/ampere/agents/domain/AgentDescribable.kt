@@ -68,16 +68,16 @@ object AgentTypeDescriber {
         appendLine()
 
         types.groupBy { type ->
-            // Group by type name - uses simpleName which works across all platforms
-            // For nested classes, attempts to extract parent from toString() representation
-            type::class.simpleName?.let { name ->
-                // If nested class (contains $), extract parent name
-                if (name.contains('$')) {
-                    name.substringBefore('$')
+            // Extract parent class name from qualified name
+            // e.g., "...Escalation.Discussion.CodeReview" -> "Discussion"
+            type::class.qualifiedName?.let { qualifiedName ->
+                val parts = qualifiedName.split('.')
+                if (parts.size >= 2) {
+                    parts[parts.size - 2] // Parent class name
                 } else {
-                    name
+                    type::class.simpleName ?: "Other"
                 }
-            } ?: "Other"
+            } ?: type::class.simpleName ?: "Other"
         }.forEach { (category, items) ->
             appendLine("## $category")
             items.forEach { item ->
