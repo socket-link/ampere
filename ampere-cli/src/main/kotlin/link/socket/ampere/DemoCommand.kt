@@ -1,6 +1,8 @@
 package link.socket.ampere
 
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.parameters.options.convert
+import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.mordant.rendering.TextColors
@@ -52,6 +54,9 @@ import link.socket.ampere.cli.layout.ThreeColumnLayout
 import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.WatchPresenter
 import link.socket.ampere.cli.watch.presentation.WatchViewState
+import link.socket.ampere.cli.animation.demo.AnimationDemoRunner
+import link.socket.ampere.cli.animation.demo.DemoConfig
+import link.socket.ampere.cli.animation.demo.DemoScenario
 import link.socket.ampere.demo.DemoTiming
 import link.socket.ampere.demo.GoldenOutput
 import link.socket.ampere.demo.MultiAgentDemoRunner
@@ -106,10 +111,19 @@ class DemoCommand(
         Middle pane: Cognitive cycle progress (PERCEIVE → PLAN → EXECUTE → LEARN)
         Right pane:  Agent status and memory statistics
 
-        Timing Profiles:
+        Demo Modes:
+          (default)        Live LLM demo with real agent execution
+          --scripted       Scripted animation demo (offline, no LLM calls)
+          --multi-agent    Multi-agent demo with coordinator and workers
+
+        Timing Profiles (live mode):
           --fast       Quick run (~45s) for GIF recording or CI
           --detailed   Slow run (~120s) for conference presentations
           (default)    Balanced run (~85s) for general viewing
+
+        Scripted Mode Options:
+          --scenario / -s  Scenario name (release-notes, code-review)
+          --speed          Speed multiplier (e.g., 0.5, 2.0)
 
         CI/Scripting Options:
           --quiet / -q     Non-TUI mode with machine-parseable output
@@ -133,10 +147,11 @@ class DemoCommand(
           ampere demo
           ampere demo --fast
           ampere demo --detailed
+          ampere demo --scripted
+          ampere demo --scripted --scenario code-review
+          ampere demo --scripted --speed 2.0
           ampere demo --auto-respond
-          ampere demo --fast --auto-respond
           ampere demo --quiet --no-escalation
-          ampere demo --fast --quiet --no-escalation
     """.trimIndent()
 ) {
     private val autoRespond: Boolean by option(
@@ -169,7 +184,28 @@ class DemoCommand(
         help = "Run multi-agent demo with coordinator and worker agents (shows handoff between agents)"
     ).flag(default = false)
 
+    private val scripted: Boolean by option(
+        "--scripted", "--animation",
+        help = "Run scripted animation demo without LLM calls (offline mode)"
+    ).flag(default = false)
+
+    private val scenario: String by option(
+        "--scenario", "-s",
+        help = "Scenario for scripted demo: release-notes (default), code-review"
+    ).default("release-notes")
+
+    private val speed: Float by option(
+        "--speed",
+        help = "Speed multiplier for scripted demo (e.g., 0.5 = half speed, 2.0 = double speed)"
+    ).convert { it.toFloat() }.default(1.0f)
+
     override fun run() = runBlocking {
+        // Check if scripted animation mode
+        if (scripted) {
+            runScriptedMode()
+            return@runBlocking
+        }
+
         // Determine timing profile (--fast takes precedence over --detailed)
         val timing = when {
             fast -> DemoTiming.FAST
@@ -193,6 +229,70 @@ class DemoCommand(
         } else {
             // Interactive mode: full TUI
             runInteractiveMode(context, agentScope, timing, outputDir, effectiveAutoRespond, multiAgent)
+        }
+    }
+
+    /**
+     * Run scripted animation demo without LLM calls.
+     * Uses pre-defined mock events to showcase the TUI.
+     */
+    private suspend fun runScriptedMode() {
+        val demoScenario = DemoScenario.byName(scenario) ?: run {
+            System.err.println("Unknown scenario: $scenario")
+            System.err.println("Available: ${DemoScenario.names.joinToString(", ")}")
+            return
+        }
+
+        val config = DemoConfig(
+            speed = speed,
+            showLogo = true,
+            showSubstrate = true,
+            showParticles = true,
+            useColor = true,
+            useUnicode = true,
+            targetFps = 20
+        )
+
+        val runner = AnimationDemoRunner(demoScenario, config)
+
+        // Get terminal size
+        val terminal = TerminalFactory.createTerminal()
+        val width = terminal.info.width.coerceAtLeast(80)
+        val height = terminal.info.height.coerceAtLeast(24)
+
+        runner.initialize(width, height)
+
+        try {
+            // Start demo
+            print(runner.start())
+            System.out.flush()
+
+            val frameIntervalMs = config.frameIntervalMs
+
+            // Run animation loop
+            while (!runner.completed) {
+                val frame = runner.updateAndRender(frameIntervalMs)
+                print(frame)
+                System.out.flush()
+                delay(frameIntervalMs)
+            }
+
+            // Show completion for a moment
+            delay(1000)
+
+        } catch (e: CancellationException) {
+            // User cancelled
+        } finally {
+            print(runner.stop())
+            System.out.flush()
+        }
+
+        println("\nScripted demo completed")
+        println("  Scenario: ${demoScenario.name}")
+        println("  Speed: ${speed}x")
+        runner.getOutput().takeIf { it.isNotEmpty() }?.let {
+            println("  Generated output preview:")
+            it.lines().take(5).forEach { line -> println("    $line") }
         }
     }
 
