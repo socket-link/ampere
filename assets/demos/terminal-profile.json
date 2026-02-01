@@ -1,0 +1,42 @@
+{
+  "name": "Ampere Demo",
+  "description": "Terminal profile optimized for Ampere TUI recordings",
+  "font": "JetBrains Mono",
+  "fontSize": 14,
+  "cols": 100,
+  "rows": 30,
+  "lineHeight": 1.2,
+  "theme": {
+    "background": "#1a1a2e",
+    "foreground": "#eaeaea",
+    "cursor": "#7acada",
+    "cursorAccent": "#1a1a2e",
+    "selection": "rgba(122, 202, 218, 0.3)",
+    "black": "#1a1a2e",
+    "red": "#ff5555",
+    "green": "#50fa7b",
+    "yellow": "#faca2a",
+    "blue": "#6272a4",
+    "magenta": "#aa5afa",
+    "cyan": "#7acada",
+    "white": "#f8f8f2",
+    "brightBlack": "#4d4d4d",
+    "brightRed": "#ff6e6e",
+    "brightGreen": "#69ff94",
+    "brightYellow": "#ffffa5",
+    "brightBlue": "#d6acff",
+    "brightMagenta": "#ff92df",
+    "brightCyan": "#a4ffff",
+    "brightWhite": "#ffffff"
+  },
+  "padding": 10,
+  "cursorBlink": false,
+  "fontWeight": "normal",
+  "fontWeightBold": "bold",
+  "notes": [
+    "This profile is designed for recording Ampere TUI demos",
+    "Colors match the Ampere color palette (AmperePalette.kt)",
+    "The dark background (#1a1a2e) provides good contrast",
+    "JetBrains Mono is chosen for its excellent Unicode support"
+  ]
+}
