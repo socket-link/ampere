@@ -1,19 +1,18 @@
-<p align="center">
-  <h1 align="center">⚡ AMPERE</h1>
-</p>
+<div align="center">
 
-<p align="center">
-  <strong>Watch your AI agents think.</strong>
-</p>
+# ⚡ AMPERE
 
-<p align="center">
-  <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/socket-link/ampere/actions/workflows/ci.yml"><img src="https://github.com/socket-link/ampere/actions/workflows/ci.yml/badge.svg" alt="Build"></a>
-</p>
+**Watch your AI agents think.**
 
-Ampere is a Kotlin Multiplatform framework for multi-agent AI systems where observability is built in, not bolted on. Every agent decision — perception, memory recall, planning, uncertainty — emits a structured event you can watch, query, and act on in real time.
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Build](https://github.com/socket-link/ampere/actions/workflows/ci.yml/badge.svg)](https://github.com/socket-link/ampere/actions/workflows/ci.yml)
 
-<!-- TODO: Replace with recorded GIF once available (see assets/demos/RECORDING.md) -->
+</div>
+
+Ampere is a Kotlin Multiplatform framework for multi-agent AI systems where observability is built in, not bolted on. Every agent decision emits a structured event you can watch, query, and act on in real time.
+
+<!-- TODO: Replace with recorded demo GIF (see assets/demos/RECORDING.md) -->
+> **What the event stream looks like:**
 ```
 📋 TicketCreated    [pm-agent]        14:23:01  FEAT-123: Add user authentication
 ✅ TicketAssigned   [pm-agent]        14:23:15  FEAT-123 → engineer-agent
@@ -35,21 +34,14 @@ git clone https://github.com/socket-link/ampere.git
 cd ampere
 ./gradlew :ampere-cli:installDist
 
-# Launch the interactive TUI
-./ampere-cli/ampere
-```
-
-You're now watching the 3-column TUI dashboard. Agents show their perception, planning, and decisions as they work.
-
-### Give agents a goal
-
-```bash
 # Copy the example config and add your API key
 cp ampere.example.yaml ampere.yaml
 
-# Run with a goal
+# Run with a goal — launches the TUI and starts agents
 ./ampere-cli/ampere run --goal "Build a user authentication system"
 ```
+
+The 3-column TUI dashboard shows agent perception, planning, and decisions in real time. Use `d` for dashboard mode, `e` for event stream, `m` for memory operations, or `?` for help.
 
 > **[CLI Guide](ampere-cli/README.md)** · **[Configuration](ampere-cli/README.md#configuration)** · **[Contributing](CONTRIBUTING.md)**
 
@@ -59,20 +51,17 @@ cp ampere.example.yaml ampere.yaml
 <summary><strong>Kotlin DSL (library usage)</strong></summary>
 
 ```kotlin
-// 1. Configure your AI provider
-val aiConfig = AnthropicConfig(
-    apiKey = "your-api-key",
-    model = Claude.Sonnet4
-)
-
-// 2. Create an agent team
 val team = AgentTeam.create {
+    // Configure your AI provider
+    config(AnthropicConfig(model = Claude.Sonnet4))
+
+    // Add agents with personality traits
     agent(ProductManager) { personality { directness = 0.8 } }
     agent(Engineer) { personality { creativity = 0.7 } }
     agent(QATester)
 }
 
-// 3. Assign a goal and observe the event stream
+// Assign a goal and observe the event stream
 team.pursue("Build a user authentication system")
 
 team.events.collect { event ->
@@ -101,9 +90,9 @@ dependencies {
 
 ## Why Ampere?
 
-Most agent frameworks treat observability as external tooling — LangSmith, Langfuse, or AgentOps added after the agent is built. This reconstructs agent behavior from traces after the fact.
+Agent frameworks like LangChain and CrewAI treat observability as an add-on — you bolt on LangSmith or Langfuse after building the agent and reconstruct behavior from traces after the fact.
 
-Ampere's cognitive architecture is designed for legibility from the start:
+Ampere takes the opposite approach. The cognitive architecture emits observable events as agents work:
 
 | External Observability                | Built-in Observability             |
 |---------------------------------------|------------------------------------|
@@ -112,7 +101,7 @@ Ampere's cognitive architecture is designed for legibility from the start:
 | Uncertainty often hidden              | Uncertainty surfaces and escalates |
 | Memory is implementation detail       | Memory operations are visible      |
 
-**Uncertainty escalation** — When an agent's confidence drops below a threshold, it escalates to a human rather than guessing. The agent explains its uncertainty in terms you can evaluate, then incorporates your judgment into subsequent reasoning.
+When an agent's confidence drops below a threshold, it **escalates to a human** rather than guessing — explaining its uncertainty in terms you can evaluate, then incorporating your judgment into subsequent reasoning.
 
 **[→ Agent Lifecycle](docs/AGENT_LIFECYCLE.md)** · **[→ Core Concepts](docs/CORE_CONCEPTS.md)**
 
@@ -177,7 +166,7 @@ val config = AnthropicConfig(model = Claude.Sonnet4)
 
 ## Contributing
 
-> **Current Status:** Alpha — we're looking for collaborators.
+> **Alpha — [we're looking for collaborators](https://github.com/socket-link/ampere/issues)**
 
 - **Observability systems** — Agent monitoring and tracing
 - **Kotlin Multiplatform** — Cross-platform development
