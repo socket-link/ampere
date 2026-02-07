@@ -25,7 +25,7 @@ import link.socket.ampere.agents.execution.tools.issue.IssueType
  * 4. Displays created issue numbers and URLs
  *
  * To run this:
- *   ./gradlew :ampere-cli:installJvmDist
+ *   ./gradlew :ampere-cli:installDist
  *   ./ampere-cli/ampere test ticket
  *
  * Prerequisites:

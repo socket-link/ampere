@@ -21,4 +21,4 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Execute the ampere CLI
-exec "$SCRIPT_DIR/build/install/ampere-cli-jvm/bin/ampere-cli" "$@"
+exec "$SCRIPT_DIR/build/install/ampere-cli/bin/ampere-cli" "$@"

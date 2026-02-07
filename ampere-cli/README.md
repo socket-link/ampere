@@ -18,7 +18,7 @@
 
 ```bash
 # Build the CLI
-./gradlew :ampere-cli:installJvmDist
+./gradlew :ampere-cli:installDist
 
 # Add to your PATH (choose one):
 

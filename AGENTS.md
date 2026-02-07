@@ -54,7 +54,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Build the CLI
-./gradlew :ampere-cli:installJvmDist
+./gradlew :ampere-cli:installDist
 
 # Start the interactive TUI dashboard
 ./ampere-cli/ampere              # Default: starts TUI
