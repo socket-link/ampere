@@ -57,6 +57,7 @@ import link.socket.ampere.cli.watch.presentation.WatchViewState
 import link.socket.ampere.cli.animation.demo.AnimationDemoRunner
 import link.socket.ampere.cli.animation.demo.DemoConfig
 import link.socket.ampere.cli.animation.demo.DemoScenario
+import link.socket.ampere.cli.hybrid.HybridDashboardRenderer
 import link.socket.ampere.demo.DemoTiming
 import link.socket.ampere.demo.GoldenOutput
 import link.socket.ampere.demo.MultiAgentDemoRunner
@@ -199,6 +200,11 @@ class DemoCommand(
         help = "Speed multiplier for scripted demo (e.g., 0.5 = half speed, 2.0 = double speed)"
     ).convert { it.toFloat() }.default(1.0f)
 
+    private val hybrid: Boolean by option(
+        "--hybrid",
+        help = "Enable hybrid mode with animated substrate accents in the dashboard"
+    ).flag(default = false)
+
     override fun run() = runBlocking {
         // Check if scripted animation mode
         if (scripted) {
@@ -228,7 +234,7 @@ class DemoCommand(
             runQuietMode(context, agentScope, timing, outputDir, noEscalation, multiAgent)
         } else {
             // Interactive mode: full TUI
-            runInteractiveMode(context, agentScope, timing, outputDir, effectiveAutoRespond, multiAgent)
+            runInteractiveMode(context, agentScope, timing, outputDir, effectiveAutoRespond, multiAgent, hybrid)
         }
     }
 
@@ -581,11 +587,15 @@ class DemoCommand(
         outputDir: File,
         autoRespond: Boolean,
         multiAgent: Boolean,
+        useHybridRenderer: Boolean = false,
     ) {
         val terminal = TerminalFactory.createTerminal()
 
         // Create 3-column layout and panes
         val layout = ThreeColumnLayout(terminal)
+        val hybridRenderer = if (useHybridRenderer) {
+            HybridDashboardRenderer(terminal).also { it.initialize() }
+        } else null
         val eventPane = RichEventPane(terminal)
         val jazzPane = CognitiveProgressPane(terminal)
         val memoryPane = AgentMemoryPane(terminal)
@@ -764,8 +774,19 @@ class DemoCommand(
                         else -> memoryPane
                     }
 
-                    // Render the 3-column layout
-                    val output = layout.render(eventPane, jazzPane, rightPane, statusBarStr)
+                    // Render the 3-column layout (hybrid or standard)
+                    val output = if (hybridRenderer != null) {
+                        hybridRenderer.render(
+                            leftPane = eventPane,
+                            middlePane = jazzPane,
+                            rightPane = rightPane,
+                            statusBar = statusBarStr,
+                            viewState = watchState,
+                            deltaSeconds = timing.renderInterval.inWholeMilliseconds / 1000f
+                        )
+                    } else {
+                        layout.render(eventPane, jazzPane, rightPane, statusBarStr)
+                    }
                     // Use original stdout to bypass LogCapture suppression
                     val out = LogCapture.getOriginalOut() ?: System.out
                     out.print(output)
