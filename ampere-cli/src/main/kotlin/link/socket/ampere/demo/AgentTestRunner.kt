@@ -55,7 +55,7 @@ private const val ESCALATION_TIMEOUT_SECONDS = 30L
  * 6. All events are emitted and observable via the CLI dashboard
  *
  * To run this:
- *   ./gradlew :ampere-cli:installJvmDist
+ *   ./gradlew :ampere-cli:installDist
  *   ampere test agent
  *
  * In another terminal, observe with:

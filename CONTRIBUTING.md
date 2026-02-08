@@ -76,7 +76,7 @@ openai_api_key=sk-...
 ./gradlew :ampere-android:lint
 
 # CLI
-./gradlew :ampere-cli:installJvmDist
+./gradlew :ampere-cli:installDist
 ./ampere-cli/ampere --help
 
 # iOS (requires Xcode)

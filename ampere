@@ -3,7 +3,7 @@
 # Any arguments are forwarded to the CLI.
 
 if [ $# -eq 0 ]; then
-    ./gradlew --quiet ":ampere-cli:runJvm"
+    ./gradlew --quiet ":ampere-cli:run"
 else
-    ./gradlew --quiet ":ampere-cli:runJvm" --args="$*"
+    ./gradlew --quiet ":ampere-cli:run" --args="$*"
 fi
