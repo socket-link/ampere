@@ -288,7 +288,7 @@ class CognitiveProgressPane(
 
             // Footer
             lines.add("─".repeat(width))
-            lines.add(terminal.render(dim("AMPERE Cognitive Cycle")))
+            lines.add("")
 
             return lines.take(height).map { it.fitToWidth(width) }
         }
@@ -356,7 +356,7 @@ class CognitiveProgressPane(
 
         // Footer
         lines.add("─".repeat(width))
-        lines.add(terminal.render(dim("AMPERE Cognitive Cycle")))
+        lines.add("")
 
         return lines.take(height).map { it.fitToWidth(width) }
     }
