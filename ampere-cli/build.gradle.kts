@@ -95,6 +95,8 @@ kotlin {
 
                 // REPL terminal handling
                 implementation("org.jline:jline:3.25.0")
+                implementation("org.jline:jline-terminal-jna:3.25.0")
+                implementation("net.java.dev.jna:jna:5.14.0")
 
                 // Coroutines
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
