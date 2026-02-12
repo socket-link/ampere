@@ -24,7 +24,7 @@ When Ampere runs multiple agents in parallel, this open architecture allows each
 
 #### Build CLI
 ```bash
-# <!--- Option 1: Installation from source ---> 
+# <!--- Option 1: Installation from source --->
 #
 # 1. Clone the project
 git clone https://github.com/socket-link/ampere.git
@@ -37,8 +37,8 @@ nano ampere-cli/local.properties
 # 3. Build the CLI
 ./gradlew :ampere-cli:installDist
 
-# 4. Add `ampere-cli` to your PATH for easy access from your project 
-export PATH="$PATH:$(pwd)/ampere-cli/build/install/ampere-cli/bin"
+# 4. Add `ampere` to your PATH for easy access from your project
+export PATH="$PATH:$(pwd)/ampere-cli/build/install/ampere-jvm/bin"
 
 
 # <!--- Option 2: Install prebuilt binaries --->
@@ -62,7 +62,7 @@ nano <project>/ampere.yaml
 
 ```bash
 # Runs Ampere with a goal — this launches the TUI, and agents begin to communicate
-cd <project> 
+cd <project>
 ampere run --goal "Add comprehensive documentation with interactive examples"
 ```
 

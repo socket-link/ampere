@@ -2,6 +2,7 @@
 import com.vanniktech.maven.publish.JavadocJar
 import com.vanniktech.maven.publish.KotlinMultiplatform
 import com.vanniktech.maven.publish.SonatypeHost
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -73,6 +74,13 @@ kotlin {
         }
         mainRun {
             mainClass.set("link.socket.ampere.MainKt")
+        }
+        @OptIn(ExperimentalKotlinGradlePluginApi::class)
+        binaries {
+            executable {
+                mainClass.set("link.socket.ampere.MainKt")
+                applicationName.set("ampere")
+            }
         }
     }
 
