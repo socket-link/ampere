@@ -153,27 +153,27 @@ This allows you to steer the agent toward an informed decision in real-time, rat
 
 **[Core Concepts Guide →](docs/CORE_CONCEPTS.md)**
 
-## PROPEL Cognitive Loop
+## The PROPEL Cognitive Loop
 
 During each timestep of the environment simulation, each agent executes its own independent cognitive cycle:
 
 ```
-  1. Perceive  ──▶  2. Recall  ──▶  3. Optimize
-  
-         ▲                               │
-         │                               ▼
-        
-      6. Loop  ◀──  5. Execute  ◀──  4. Plan
+1. Perceive  ──▶  2. Recall  ──▶  3. Optimize
+
+       ▲                               │
+       │                               ▼
+
+    6. Loop  ◀──  5. Execute  ◀──  4. Plan
 ```
 
-| # | Phase        | Operation                           | Emitted Events                         |
-|---|--------------|-------------------------------------|----------------------------------------|
-| 1 | **Perceive** | Ingest signals from the environment | `SignalReceived`, `PerceptionFormed`   |
-| 2 | **Recall**   | Query relevant memory and context   | `MemoryQueried`, `ContextAssembled`    |
-| 3 | **Optimize** | Prioritize competing objectives     | `ObjectivesRanked`, `ConfidenceScored` |
-| 4 | **Plan**     | Select and structure actions        | `PlanCreated`, `TasksDecomposed`       |
-| 5 | **Execute**  | Carry out the plan                  | `ActionTaken`, `ResultObserved`        |
-| 6 | **Loop**     | Evaluate results, re-enter cycle    | `OutcomeEvaluated`, `CycleRestarted`   |
+| # | Phase          | Operation                           | Emitted Events                         |
+|---|----------------|-------------------------------------|----------------------------------------|
+| 1 | **(P)erceive** | Ingest signals from the environment | `SignalReceived`, `PerceptionFormed`   |
+| 2 | **(R)ecall**   | Query relevant memory and context   | `MemoryQueried`, `ContextAssembled`    |
+| 3 | **(O)ptimize** | Prioritize competing objectives     | `ObjectivesRanked`, `ConfidenceScored` |
+| 4 | **(P)lan**     | Select and structure actions        | `PlanCreated`, `TasksDecomposed`       |
+| 5 | **(E)xecute**  | Carry out the plan                  | `ActionTaken`, `ResultObserved`        |
+| 6 | **(L)oop**     | Evaluate results, re-enter cycle    | `OutcomeEvaluated`, `CycleRestarted`   |
 
 Every phase transition is emitted as an event, ensuring every action inside an agent can be audited and traced.
 
