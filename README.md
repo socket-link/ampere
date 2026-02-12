@@ -2,7 +2,7 @@
 
 # ⚡ AMPERE
 
-**Real-time cognition observability using collaborative AI agents.**
+**Peer into your AI's glass brain.**
 
 [![Maven Central](https://img.shields.io/maven-central/v/link.socket/ampere-core)](https://central.sonatype.com/artifact/link.socket/ampere-core)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -10,9 +10,9 @@
 
 </div>
 
-Ampere is a Kotlin Multiplatform framework where every agent decision emits a structured, queryable event – providing a cognitive architecture around AI actions that is observable by default, rather than just being instrumented after the fact.
+Ampere is a Kotlin Multiplatform framework where every agent decision emits a structured, queryable event — providing real-time cognition observability around AI actions that is built into the core of the architecture, rather than being bolted-on after the fact.
 
-When Ampere is used to run multiple agents in parallel, this open architecture allows for each agent to easily coordinate, negotiate, and react in real time to any environmental changes.
+When Ampere runs multiple agents in parallel, this open architecture allows each agent to observe, coordinate, and react to the reasoning of others as it forms — making multi-agent coordination reactive rather than scripted.
 
 ---
 
@@ -20,7 +20,7 @@ When Ampere is used to run multiple agents in parallel, this open architecture a
 
 > **Prerequisites:** Java 21+ (run `java -version` to check)
 
-### Option 1: Standalone Tool (`ampere-cli`)
+### Run agents from the command line (`ampere-cli`)
 
 #### Build CLI
 ```bash
@@ -38,7 +38,7 @@ nano ampere-cli/local.properties
 ./gradlew :ampere-cli:installDist
 
 # 4. Add `ampere-cli` to your PATH for easy access from your project 
-export PATH="$PATH:$(pwd)/ampere/ampere-cli"
+export PATH="$PATH:$(pwd)/ampere-cli/build/install/ampere-cli/bin"
 
 
 # <!--- Option 2: Install prebuilt binaries --->
@@ -77,7 +77,7 @@ Press  `?` for more options.
 
 **[Full Usage Guide →](ampere-cli/README.md)**
 
-### Option 2: Kotlin Multiplatform Library (`ampere-core`)
+### Embed in your Kotlin project (`ampere-core`)
 
 <details>
 <summary><strong>Dependency Setup</strong></summary>
@@ -123,13 +123,13 @@ team.events.collect { event ->
 
 ---
 
-## Why AMPERE?
+## Why Ampere?
 
-Existing agent frameworks treat observability only as an afterthought – like when you attach LangSmith or Langfuse post-hoc to reconstruct AI behavior using traces.
+Most agent frameworks bolt on observability after the fact — attaching tools like LangSmith or Langfuse to reconstruct behavior from traces.
 
-AMPERE takes the opposite approach, where the cognitive architecture is emitting observable events at every single decision point.
+Ampere inverts this. Every cognitive phase emits structured events as a natural consequence of its architecture. This isn't just for debugging — it's what enables agents to coordinate. When Agent B can observe Agent A's reasoning as it forms, coordination becomes reactive rather than scripted.
 
-| "Post-hoc" Observability                  | Ampere Observability                     |
+| Post-hoc Observability                    | Ampere Observability                     |
 |-------------------------------------------|------------------------------------------|
 | Reconstruct behavior from traces          | Decisions are observable as they form    |
 | Observe from outside the agent            | Cognition emits structured events        |
@@ -138,9 +138,9 @@ AMPERE takes the opposite approach, where the cognitive architecture is emitting
 
 When agent confidence for a plan drops below a configurable threshold, agents are able to **escalate to a human**, surfacing exactly what they're uncertain about.
 
-This allows you to steer the agent toward an informed decision in real-time, rather than needing to debug opaque failures after the fact. 
+This allows you to steer the agent toward an informed decision in real-time, rather than needing to debug opaque failures after the fact.
 
-## Cognition Primitives
+## Coordination Primitives
 
 | Concept       | Observable Surface         | Purpose                              |
 |---------------|----------------------------|--------------------------------------|
