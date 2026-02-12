@@ -1,5 +1,10 @@
 package link.socket.ampere
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.options.convert
 import com.github.ajalt.clikt.parameters.options.default
@@ -9,6 +14,8 @@ import com.github.ajalt.mordant.rendering.TextColors
 import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
+import com.jakewharton.mosaic.runMosaicBlocking
+import com.jakewharton.mosaic.ui.Text
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -268,29 +275,33 @@ class DemoCommand(
 
         runner.initialize(width, height)
 
-        try {
-            // Start demo
-            print(runner.start())
-            System.out.flush()
+        // Use Mosaic to handle terminal output for the animation
+        runMosaicBlocking {
+            var frame by remember { mutableStateOf("") }
+            var isComplete by remember { mutableStateOf(false) }
 
-            val frameIntervalMs = config.frameIntervalMs
+            LaunchedEffect(Unit) {
+                runner.start()
+                val frameIntervalMs = config.frameIntervalMs
 
-            // Run animation loop
-            while (!runner.completed) {
-                val frame = runner.updateAndRender(frameIntervalMs)
-                print(frame)
-                System.out.flush()
-                delay(frameIntervalMs)
+                try {
+                    while (!runner.completed) {
+                        frame = runner.updateAndRender(frameIntervalMs)
+                        delay(frameIntervalMs)
+                    }
+                    // Show completion for a moment
+                    delay(1000)
+                } catch (_: CancellationException) {
+                    // User cancelled
+                } finally {
+                    runner.stop()
+                    isComplete = true
+                }
             }
 
-            // Show completion for a moment
-            delay(1000)
-
-        } catch (e: CancellationException) {
-            // User cancelled
-        } finally {
-            print(runner.stop())
-            System.out.flush()
+            if (!isComplete) {
+                Text(frame)
+            }
         }
 
         println("\nScripted demo completed")

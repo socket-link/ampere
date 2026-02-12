@@ -292,6 +292,42 @@ class HybridDashboardRenderer(
         buffer.writePaneRegion(0, statusRow, listOf(statusCells), layer = 3)
     }
 
+    /**
+     * Render one frame and return the cell buffer directly (for Mosaic integration).
+     *
+     * This runs the same 10-step pipeline as [render] but returns the buffer
+     * instead of converting to ANSI escape sequences. The buffer can then be
+     * converted to Mosaic AnnotatedStrings.
+     *
+     * @return The cell buffer after rendering, or null if not initialized
+     */
+    fun renderToBuffer(
+        leftPane: PaneRenderer,
+        middlePane: PaneRenderer,
+        rightPane: PaneRenderer,
+        statusBar: String,
+        viewState: WatchViewState? = null,
+        deltaSeconds: Float = 0.033f
+    ): HybridCellBuffer? {
+        if (!initialized) initialize()
+
+        // 1. Bridge updates animation from watch state
+        substrate = bridge.update(viewState, substrate, deltaSeconds)
+
+        // 4. Clear buffer
+        buffer.clear()
+
+        // 5-9: Same pipeline as render()
+        if (config.enableSubstrate) renderSubstrateAccents()
+        renderPaneContent(leftPane, middlePane, rightPane)
+        renderDividers()
+        if (config.enableParticles) renderParticleAccents()
+        renderStatusBar(statusBar)
+
+        frameCount++
+        return buffer
+    }
+
     fun hideCursor(): String = "\u001B[?25l"
     fun showCursor(): String = "\u001B[?25h"
 }

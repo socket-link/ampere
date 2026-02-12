@@ -1,21 +1,27 @@
 package link.socket.ampere
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
-import kotlinx.coroutines.CancellationException
+import com.jakewharton.mosaic.runMosaicBlocking
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.events.relay.EventRelayService
+import link.socket.ampere.cli.mosaic.DashboardScreen
 import link.socket.ampere.cli.watch.presentation.WatchPresenter
-import link.socket.ampere.renderer.DashboardRenderer
-import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.cli.watch.presentation.WatchViewState
+import link.socket.ampere.cli.watch.presentation.SystemVitals
 
 /**
  * Command to display a live-updating dashboard of the AMPERE environment.
  *
  * Shows system vitals, agent activity, and recent significant events
- * in a condensed, easy-to-scan format.
+ * in a condensed, easy-to-scan format. Rendered with Mosaic (Compose for terminal).
  */
 class DashboardCommand(
     private val eventRelayService: EventRelayService,
@@ -43,42 +49,37 @@ class DashboardCommand(
         help = "Refresh interval in seconds (default: 1)"
     ).default("1")
 
-    override fun run() = runBlocking {
-        val terminal = TerminalFactory.createTerminal()
+    override fun run() {
         val presenter = WatchPresenter(eventRelayService)
-        val renderer = DashboardRenderer(terminal)
+        val intervalSeconds = refreshInterval.toLongOrNull() ?: 1L
+        val intervalMs = intervalSeconds * 1000
 
-        try {
-            // Start the presenter
-            presenter.start()
-
-            // Parse refresh interval
-            val intervalSeconds = refreshInterval.toLongOrNull() ?: 1L
-            val intervalMs = intervalSeconds * 1000
-
-            // Render loop
-            while (true) {
-                // Get current view state
-                val viewState = presenter.getViewState()
-
-                // Render to terminal
-                val output = renderer.render(viewState)
-                print(output)
-
-                // Wait for next refresh
-                delay(intervalMs)
+        runMosaicBlocking {
+            var viewState by remember {
+                mutableStateOf(
+                    WatchViewState(
+                        systemVitals = SystemVitals(),
+                        agentStates = emptyMap(),
+                        recentSignificantEvents = emptyList(),
+                    )
+                )
             }
-        } catch (e: CancellationException) {
-            // Clean shutdown
-            throw e
-        } catch (e: Exception) {
-            terminal.println("Error: ${e.message}")
-            throw e
-        } finally {
-            presenter.stop()
-            // Show cursor and clear formatting
-            print("\u001B[?25h") // Show cursor
-            println("\nDashboard stopped")
+            var frameTick by remember { mutableLongStateOf(0L) }
+
+            LaunchedEffect(Unit) {
+                presenter.start()
+                try {
+                    while (true) {
+                        viewState = presenter.getViewState()
+                        frameTick++
+                        delay(intervalMs)
+                    }
+                } finally {
+                    presenter.stop()
+                }
+            }
+
+            DashboardScreen(viewState, frameTick)
         }
     }
 }
