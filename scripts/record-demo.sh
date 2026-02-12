@@ -1,17 +1,21 @@
 #!/bin/bash
 #
-# Demo Recording Script for Ampere TUI
+# Demo Recording Script for Ampere Dashboard
 #
-# Records terminal demos and converts them to optimized GIFs for README
-# and marketing materials.
+# Records the live Ampere dashboard and converts to optimized GIFs
+# for README and marketing materials.
 #
 # Usage:
-#   ./scripts/record-demo.sh [scenario-name] [options]
+#   ./scripts/record-demo.sh [options]
+#
+# Options:
+#   --duration SECONDS   How long to record (default: 15)
+#   --name NAME          Output file name (default: dashboard)
 #
 # Examples:
-#   ./scripts/record-demo.sh                    # Record default scenario
-#   ./scripts/record-demo.sh release-notes      # Record specific scenario
-#   ./scripts/record-demo.sh code-review --fast # Quick recording with 2x speed
+#   ./scripts/record-demo.sh                     # Record 15s dashboard demo
+#   ./scripts/record-demo.sh --duration 30       # Record 30s
+#   ./scripts/record-demo.sh --name my-demo      # Custom output name
 #
 # Required tools:
 #   brew install asciinema
@@ -21,26 +25,34 @@
 
 set -e
 
-# Configuration
-DEMO_NAME=${1:-release-notes}
-SPEED=${2:-1.0}
+# Defaults
+DURATION=45
+DEMO_NAME="dashboard"
 OUTPUT_DIR="assets/demos"
 
-# Terminal dimensions (match DemoConfig defaults)
-COLS=100
-ROWS=30
-FONT="JetBrains Mono"
+# Terminal dimensions
+COLS=160
+ROWS=40
+FONT="Input Mono"
 FONT_SIZE=14
 
 # Parse options
-EXTRA_ARGS=""
-if [[ "$2" == "--fast" ]]; then
-    SPEED="2.0"
-    EXTRA_ARGS="--speed 2.0"
-elif [[ "$2" == "--slow" ]]; then
-    SPEED="0.5"
-    EXTRA_ARGS="--speed 0.5"
-fi
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --duration)
+            DURATION="$2"
+            shift 2
+            ;;
+        --name)
+            DEMO_NAME="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
 
 # Check for required tools
 check_tool() {
@@ -58,27 +70,62 @@ check_tool gifsicle "brew install gifsicle"
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
-# Set terminal size
+# Ensure Java 21+ is used (the CLI is compiled for JVM 21)
+export JAVA_HOME=$(/usr/libexec/java_home -v 21 2>/dev/null || /usr/libexec/java_home -v 22 2>/dev/null || /usr/libexec/java_home -v 23 2>/dev/null || /usr/libexec/java_home -v 24 2>/dev/null)
+if [ -z "$JAVA_HOME" ]; then
+    echo "Error: Java 21+ is required but not found."
+    echo "Install with: brew install --cask temurin@21"
+    exit 1
+fi
+
+# Build the CLI distribution
+echo "Building CLI distribution..."
+./gradlew :ampere-cli:installJvmDist -q
+
+# Create a temporary config that uses fast models for demo recording
+DEMO_CONFIG=$(mktemp)
+trap "rm -f '$DEMO_CONFIG'" EXIT
+cat > "$DEMO_CONFIG" <<'YAML'
+ai:
+  provider: anthropic
+  model: haiku-3
+  backups:
+    - provider: openai
+      model: gpt-4o-mini
+team:
+  - role: product-manager
+  - role: engineer
+  - role: qa-tester
+goal: "Add CI/CD pipeline"
+YAML
+
+# Set terminal size — both the window and the environment variables
+# so the CLI process sees the correct dimensions
 printf '\e[8;%d;%dt' "$ROWS" "$COLS"
+export COLUMNS="$COLS"
+export LINES="$ROWS"
+stty cols "$COLS" rows "$ROWS" 2>/dev/null || true
+
+AMPERE_BIN="ampere-cli/build/install/ampere-jvm/bin/ampere"
 
 echo "=========================================="
-echo "  Ampere Demo Recording"
+echo "  Ampere Dashboard Recording"
 echo "=========================================="
 echo ""
-echo "  Scenario:  $DEMO_NAME"
-echo "  Speed:     ${SPEED}x"
+echo "  Duration:  ${DURATION}s"
 echo "  Terminal:  ${COLS}x${ROWS}"
 echo "  Output:    $OUTPUT_DIR/$DEMO_NAME.cast"
+echo "  Java:      $JAVA_HOME"
 echo ""
 echo "Recording will start in 3 seconds..."
 sleep 3
 
-# Record the demo using asciinema
+# Record the dashboard for DURATION seconds, then send SIGINT to stop cleanly
 asciinema rec "$OUTPUT_DIR/$DEMO_NAME.cast" \
     --cols "$COLS" \
     --rows "$ROWS" \
-    --idle-time-limit 2 \
-    --command "./gradlew :ampere-cli:run --args='demo --scripted --scenario $DEMO_NAME $EXTRA_ARGS' -q"
+    --idle-time-limit 10 \
+    --command "bash -c 'export COLUMNS=$COLS LINES=$ROWS; stty cols $COLS rows $ROWS 2>/dev/null; $AMPERE_BIN --config $DEMO_CONFIG run --goal \"Add CI/CD pipeline\" & PID=\$!; sleep $DURATION; kill \$PID 2>/dev/null; wait \$PID 2>/dev/null'"
 
 echo ""
 echo "Recording complete!"
@@ -90,7 +137,7 @@ agg "$OUTPUT_DIR/$DEMO_NAME.cast" "$OUTPUT_DIR/$DEMO_NAME.gif" \
     --font-family "$FONT" \
     --font-size "$FONT_SIZE" \
     --theme monokai \
-    --fps 15
+    --fps-cap 15
 
 # Optimize GIF with gifsicle
 echo "Optimizing GIF..."

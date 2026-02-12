@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
+import com.jakewharton.mosaic.NonInteractivePolicy
 import com.jakewharton.mosaic.runMosaicBlocking
 import kotlinx.coroutines.delay
 import link.socket.ampere.agents.events.relay.EventRelayService
@@ -54,7 +55,7 @@ class DashboardCommand(
         val intervalSeconds = refreshInterval.toLongOrNull() ?: 1L
         val intervalMs = intervalSeconds * 1000
 
-        runMosaicBlocking {
+        runMosaicBlocking(onNonInteractive = NonInteractivePolicy.Ignore) {
             var viewState by remember {
                 mutableStateOf(
                     WatchViewState(

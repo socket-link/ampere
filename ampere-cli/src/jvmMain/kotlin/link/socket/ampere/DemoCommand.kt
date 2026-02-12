@@ -14,6 +14,7 @@ import com.github.ajalt.mordant.rendering.TextColors
 import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
+import com.jakewharton.mosaic.NonInteractivePolicy
 import com.jakewharton.mosaic.runMosaicBlocking
 import com.jakewharton.mosaic.ui.Text
 import java.io.File
@@ -276,7 +277,8 @@ class DemoCommand(
         runner.initialize(width, height)
 
         // Use Mosaic to handle terminal output for the animation
-        runMosaicBlocking {
+        // Use Ignore policy so scripted demos work inside asciinema/non-interactive terminals
+        runMosaicBlocking(onNonInteractive = NonInteractivePolicy.Ignore) {
             var frame by remember { mutableStateOf("") }
             var isComplete by remember { mutableStateOf(false) }
 
