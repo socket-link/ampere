@@ -12,10 +12,10 @@
 
 # AI Provider Configuration
 # -------------------------
-# Choose your AI provider and model. Backups are used if the primary fails.
+# Choose your AI provider and model. Backups will only be used if the preferred provider fails.
 ai:
   provider: anthropic           # Options: anthropic, openai, gemini
-  model: sonnet-4               # See model list below
+  model: sonnet-4               # See the model list below
 
   # Optional: Fallback providers (tried in order if primary fails)
   backups:
