@@ -2,53 +2,98 @@
 
 # ⚡ AMPERE
 
-**Watch your AI agents think.**
+**Real-time cognition observability using collaborative AI agents.**
 
+[![Maven Central](https://img.shields.io/maven-central/v/link.socket/ampere-core)](https://central.sonatype.com/artifact/link.socket/ampere-core)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Build](https://github.com/socket-link/ampere/actions/workflows/ci.yml/badge.svg)](https://github.com/socket-link/ampere/actions/workflows/ci.yml)
 
 </div>
 
-Ampere is a Kotlin Multiplatform framework for multi-agent AI systems where observability is built in, not bolted on. Every agent decision emits a structured event you can watch, query, and act on in real time.
+Ampere is a Kotlin Multiplatform framework where every agent decision emits a structured, queryable event – providing a cognitive architecture around AI actions that is observable by default, rather than just being instrumented after the fact.
 
-<!-- TODO: Replace with recorded demo GIF (see assets/demos/RECORDING.md) -->
-> **What the event stream looks like:**
-```
-📋 TicketCreated    [pm-agent]        14:23:01  FEAT-123: Add user authentication
-✅ TicketAssigned   [pm-agent]        14:23:15  FEAT-123 → engineer-agent
-🔨 StatusChanged    [engineer-agent]  14:23:45  FEAT-123: Ready → InProgress
-⚠️ Uncertain        [engineer-agent]  14:25:12  "Should we use PKCE or implicit flow?"
-🧠 Recalled         [engineer-agent]  14:25:14  Previous: "PKCE required for mobile"
-✅ TaskCompleted    [engineer-agent]  14:27:33  Create User model - SUCCESS
-```
+When Ampere is used to run multiple agents in parallel, this open architecture allows for each agent to easily coordinate, negotiate, and react in real time to any environmental changes.
 
 ---
 
 ## Quick Start
 
-> **Prerequisites:** Java 21+ (`java -version` to check)
+> **Prerequisites:** Java 21+ (run `java -version` to check)
 
+### Option 1: Standalone Tool (`ampere-cli`)
+
+#### Build CLI
 ```bash
-# Clone and build
+# <!--- Option 1: Installation from source ---> 
+#
+# 1. Clone the project
 git clone https://github.com/socket-link/ampere.git
 cd ampere
+
+# 2. Configure LLM provider API keys in `local.properties`
+cp ampere-cli/local.properties.example ampere-cli/local.properties
+nano ampere-cli/local.properties
+
+# 3. Build the CLI
 ./gradlew :ampere-cli:installDist
 
-# Copy the example config and add your API key
-cp ampere.example.yaml ampere.yaml
+# 4. Add `ampere-cli` to your PATH for easy access from your project 
+export PATH="$PATH:$(pwd)/ampere/ampere-cli"
 
-# Run with a goal — launches the TUI and starts agents
-./ampere-cli/ampere run --goal "Build a user authentication system"
+
+# <!--- Option 2: Install prebuilt binaries --->
+#
+# Coming soon!
 ```
 
-The 3-column TUI dashboard shows agent perception, planning, and decisions in real time. Use `d` for dashboard mode, `e` for event stream, `m` for memory operations, or `?` for help.
+#### Configure Project
+```bash
+# 1. Copy the example `ampere.yaml` config into your <project> directory
+cp ampere/ampere.example.yaml <project>/ampere.yaml
 
-> **[CLI Guide](ampere-cli/README.md)** · **[Configuration](ampere-cli/README.md#configuration)** · **[Contributing](CONTRIBUTING.md)**
+# 2. Make any necessary adjustments to the default agent configuration
+nano <project>/ampere.yaml
+```
 
----
+**[All Configuration Options →](ampere-cli/README.md#configuration)**
+
+
+#### Start Ampere
+
+```bash
+# Runs Ampere with a goal — this launches the TUI, and agents begin to communicate
+cd <project> 
+ampere run --goal "Add comprehensive documentation with interactive examples"
+```
+
+The dashboard then displays all agent cognition in real time: perception, recall, optimization, planning, execution, and coordination.
+
+To change focus between panes in the CLI, press
+- `d` for runtime overview
+- `e` for event stream
+- `m` for agent memory
+
+Press  `?` for more options.
+
+**[Full Usage Guide →](ampere-cli/README.md)**
+
+### Option 2: Kotlin Multiplatform Library (`ampere-core`)
 
 <details>
-<summary><strong>Kotlin DSL (library usage)</strong></summary>
+<summary><strong>Dependency Setup</strong></summary>
+
+Add to your project:
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    implementation("link.socket:ampere-core:0.1.1")
+}
+```
+
+</details>
+<details>
+<summary><strong>Library Usage</strong></summary>
 
 ```kotlin
 val team = AgentTeam.create {
@@ -62,7 +107,7 @@ val team = AgentTeam.create {
 }
 
 // Assign a goal and observe the event stream
-team.pursue("Build a user authentication system")
+team.goal("Build a user authentication system")
 
 team.events.collect { event ->
     when (event) {
@@ -74,118 +119,80 @@ team.events.collect { event ->
     }
 }
 ```
-
-Add to your project:
-
-```kotlin
-// build.gradle.kts
-dependencies {
-    implementation("link.socket:ampere:0.1.0")
-}
-```
-
 </details>
 
 ---
 
-## Why Ampere?
+## Why AMPERE?
 
-Agent frameworks like LangChain and CrewAI treat observability as an add-on — you bolt on LangSmith or Langfuse after building the agent and reconstruct behavior from traces after the fact.
+Existing agent frameworks treat observability only as an afterthought – like when you attach LangSmith or Langfuse post-hoc to reconstruct AI behavior using traces.
 
-Ampere takes the opposite approach. The cognitive architecture emits observable events as agents work:
+AMPERE takes the opposite approach, where the cognitive architecture is emitting observable events at every single decision point.
 
-| External Observability                | Built-in Observability             |
-|---------------------------------------|------------------------------------|
-| Reconstruct behavior from traces      | Watch decisions as they form       |
-| Observe from outside the agent        | Cognition emits events directly    |
-| Uncertainty often hidden              | Uncertainty surfaces and escalates |
-| Memory is implementation detail       | Memory operations are visible      |
+| "Post-hoc" Observability                  | Ampere Observability                     |
+|-------------------------------------------|------------------------------------------|
+| Reconstruct behavior from traces          | Decisions are observable as they form    |
+| Observe from outside the agent            | Cognition emits structured events        |
+| Uncertainty hidden in token probabilities | Uncertainty surfaces and escalates       |
+| Memory is an implementation detail        | Memory operations are first-class events |
 
-When an agent's confidence drops below a threshold, it **escalates to a human** rather than guessing — explaining its uncertainty in terms you can evaluate, then incorporating your judgment into subsequent reasoning.
+When agent confidence for a plan drops below a configurable threshold, agents are able to **escalate to a human**, surfacing exactly what they're uncertain about.
 
-**[→ Agent Lifecycle](docs/AGENT_LIFECYCLE.md)** · **[→ Core Concepts](docs/CORE_CONCEPTS.md)**
+This allows you to steer the agent toward an informed decision in real-time, rather than needing to debug opaque failures after the fact. 
 
----
+## Cognition Primitives
 
-## The PROPEL Cognitive Loop
+| Concept       | Observable Surface         | Purpose                              |
+|---------------|----------------------------|--------------------------------------|
+| **Tickets**   | Goals and their lifecycle  | Track work from creation to close    |
+| **Tasks**     | Discrete execution steps   | Trace every action an agent performs |
+| **Plans**     | Structured decision logic  | Inspect reasoning before execution   |
+| **Meetings**  | Inter-agent coordination   | Audit how agents negotiate and align |
+| **Outcomes**  | Execution results          | Query historical performance         |
+| **Knowledge** | Accumulated understanding  | Search what agents have learned      |
 
-Each agent executes an observable cognitive cycle:
+**[Core Concepts Guide →](docs/CORE_CONCEPTS.md)**
+
+## PROPEL Cognitive Loop
+
+During each timestep of the environment simulation, each agent executes its own independent cognitive cycle:
 
 ```
-  PERCEIVE ──▶ RECALL ──▶ OPTIMIZE
-      ▲                       │
-      │                       ▼
-    LOOP ◀──── EXECUTE ◀──── PLAN
+  1. Perceive  ──▶  2. Recall  ──▶  3. Optimize
+  
+         ▲                               │
+         │                               ▼
+        
+      6. Loop  ◀──  5. Execute  ◀──  4. Plan
 ```
 
-**Perceive** — "What's happening?" · **Recall** — "What do I know?" · **Optimize** — "What matters most?"
-**Plan** — "What should I do?" · **Execute** — "Do it." · **Loop** — "What next?"
+| # | Phase        | Operation                           | Emitted Events                         |
+|---|--------------|-------------------------------------|----------------------------------------|
+| 1 | **Perceive** | Ingest signals from the environment | `SignalReceived`, `PerceptionFormed`   |
+| 2 | **Recall**   | Query relevant memory and context   | `MemoryQueried`, `ContextAssembled`    |
+| 3 | **Optimize** | Prioritize competing objectives     | `ObjectivesRanked`, `ConfidenceScored` |
+| 4 | **Plan**     | Select and structure actions        | `PlanCreated`, `TasksDecomposed`       |
+| 5 | **Execute**  | Carry out the plan                  | `ActionTaken`, `ResultObserved`        |
+| 6 | **Loop**     | Evaluate results, re-enter cycle    | `OutcomeEvaluated`, `CycleRestarted`   |
 
-Every phase emits events that describe the agent's current cognitive state. **[→ Details](docs/AGENT_LIFECYCLE.md)**
+Every phase transition is emitted as an event, ensuring every action inside an agent can be audited and traced.
 
----
+**[Full Cognitive Lifecycle →](docs/AGENT_LIFECYCLE.md)**
 
-## Core Concepts
+## Full Documentation
 
-| Concept       | What You See           | Purpose                           |
-|---------------|------------------------|-----------------------------------|
-| **Tickets**   | Goals being pursued    | Work units with visible lifecycle |
-| **Tasks**     | Actions being taken    | Individual steps you can trace    |
-| **Plans**     | Decisions being formed | The reasoning you can follow      |
-| **Meetings**  | Coordination happening | Agents explaining to each other   |
-| **Outcomes**  | Results being recorded | Execution history you can query   |
-| **Knowledge** | Understanding forming  | Learnings you can search          |
-
-**[→ Core Concepts Guide](docs/CORE_CONCEPTS.md)**
-
----
-
-## Platform Support
-
-| Platform    | Status   | Use Case                  |
-|-------------|----------|---------------------------|
-| **JVM**     | ✅ Stable | Server-side orchestration |
-| **Android** | ✅ Stable | On-device agents          |
-| **Desktop** | ✅ Stable | Local development         |
-| **iOS**     | 🔄 Beta  | Cross-platform apps       |
-| **CLI**     | ✅ Stable | Monitoring and management |
-
-## Model Support
-
-Model-agnostic with automatic failover:
-
-```kotlin
-val config = AnthropicConfig(model = Claude.Sonnet4)
-    .withBackup(OpenAIConfig(model = GPT.GPT4_1))
-    .withBackup(GeminiConfig(model = Gemini.Flash2_5))
-```
-
-**Supported providers:** Anthropic (Claude 4.x, 3.x) · Google (Gemini 3, 2.x) · OpenAI (GPT-5.x, 4.x, o3/o4)
+| Guide                                      | Description                         |
+|--------------------------------------------|-------------------------------------|
+| [CLI Reference](ampere-cli/README.md)      | Command-line tools                  |
+| [Core Concepts](docs/CORE_CONCEPTS.md)     | The observable cognition primitives |
+| [Agent Lifecycle](docs/AGENT_LIFECYCLE.md) | The PROPEL loop in detail           |
+| [Architecture](docs/ARCS.md)               | System architecture overview        |
+| [Contributing](CONTRIBUTING.md)            | How to contribute to the project    |
 
 ---
-
-## Contributing
-
-> **Alpha — [we're looking for collaborators](https://github.com/socket-link/ampere/issues)**
-
-- **Observability systems** — Agent monitoring and tracing
-- **Kotlin Multiplatform** — Cross-platform development
-- **Agent architectures** — LangChain, AutoGen, CrewAI experience
-- **Cognitive science** — How humans understand complex systems
-
-**[→ Contributing Guide](CONTRIBUTING.md)**
-
-## Documentation
-
-| Guide                                      | Description                   |
-|--------------------------------------------|-------------------------------|
-| [CLI Reference](ampere-cli/README.md)      | Command-line tools            |
-| [Core Concepts](docs/CORE_CONCEPTS.md)     | The six observable primitives |
-| [Agent Lifecycle](docs/AGENT_LIFECYCLE.md) | The PROPEL loop in detail     |
-| [Architecture](docs/ARCS.md)              | System architecture overview  |
 
 ## License
 
-Apache 2.0 — see [LICENSE.txt](LICENSE.txt) for details.
+Apache 2.0 — see [LICENSE.txt](LICENSE.txt) for more details.
 
 Copyright 2026 Miley Chandonnet, Stedfast Softworks LLC

@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# Run the ampere CLI.
-# Any arguments are forwarded to the CLI.
-
-if [ $# -eq 0 ]; then
-    ./gradlew --quiet ":ampere-cli:run"
-else
-    ./gradlew --quiet ":ampere-cli:run" --args="$*"
-fi
