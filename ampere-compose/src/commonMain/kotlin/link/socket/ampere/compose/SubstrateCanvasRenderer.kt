@@ -1,5 +1,7 @@
 package link.socket.ampere.compose
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import link.socket.ampere.animation.substrate.SubstrateState
 
@@ -25,6 +27,21 @@ object SubstrateCanvasRenderer {
         cellWidth: Float,
         cellHeight: Float
     ) {
-        // TODO: Task 5 — Full implementation
+        with(drawScope) {
+            for (y in 0 until substrate.height) {
+                for (x in 0 until substrate.width) {
+                    val density = substrate.getDensity(x, y)
+                    if (density > 0.05f) {
+                        val color = CognitivePalette.forDensity(density)
+                        drawRect(
+                            color = color,
+                            topLeft = Offset(x * cellWidth, y * cellHeight),
+                            size = Size(cellWidth, cellHeight),
+                            alpha = density * 0.6f
+                        )
+                    }
+                }
+            }
+        }
     }
 }
