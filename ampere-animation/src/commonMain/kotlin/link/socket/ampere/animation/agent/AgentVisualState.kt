@@ -3,6 +3,27 @@ package link.socket.ampere.animation.agent
 import link.socket.ampere.animation.substrate.Vector2
 
 /**
+ * Cognitive phases from the PROPEL loop.
+ * Each phase maps to a distinct visual choreography.
+ */
+enum class CognitivePhase {
+    /** Gathering sensory input — particles drift inward */
+    PERCEIVE,
+    /** Memory activation — warm embers brightening */
+    RECALL,
+    /** Strategy formation — tentative structures testing formations */
+    PLAN,
+    /** Committed action — discharge/acceleration */
+    EXECUTE,
+    /** Reflection — afterglow, particles slow and persist */
+    EVALUATE,
+    /** Cycle complete — brief stillness before next iteration */
+    LOOP,
+    /** No active cognition */
+    NONE
+}
+
+/**
  * Activity states for agents in the visualization.
  */
 enum class AgentActivityState {
@@ -39,7 +60,9 @@ data class AgentVisualState(
     val position: Vector2,
     val state: AgentActivityState = AgentActivityState.IDLE,
     val statusText: String = "",
-    val pulsePhase: Float = 0f
+    val pulsePhase: Float = 0f,
+    val cognitivePhase: CognitivePhase = CognitivePhase.NONE,
+    val phaseProgress: Float = 0f
 ) {
     /**
      * Create a copy with updated position.
@@ -60,6 +83,12 @@ data class AgentVisualState(
      * Create a copy with updated pulse phase.
      */
     fun withPulsePhase(phase: Float): AgentVisualState = copy(pulsePhase = phase % 1f)
+
+    /**
+     * Create a copy with updated cognitive phase and progress.
+     */
+    fun withCognitivePhase(phase: CognitivePhase, progress: Float = 0f): AgentVisualState =
+        copy(cognitivePhase = phase, phaseProgress = progress.coerceIn(0f, 1f))
 
     /**
      * Get the primary glyph for this agent's current state.

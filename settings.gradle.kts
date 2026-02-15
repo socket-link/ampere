@@ -3,6 +3,7 @@ rootProject.name = "Ampere"
 include(":ampere-core")
 include(":ampere-animation")
 include(":ampere-android")
+include(":ampere-compose")
 include(":ampere-desktop")
 include(":ampere-cli")
 
