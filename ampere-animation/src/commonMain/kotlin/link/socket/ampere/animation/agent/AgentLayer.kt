@@ -78,6 +78,15 @@ class AgentLayer(
     }
 
     /**
+     * Update an agent's cognitive phase and optional progress.
+     */
+    fun updateAgentCognitivePhase(agentId: String, phase: CognitivePhase, progress: Float = 0f) {
+        agents[agentId]?.let { agent ->
+            agents[agentId] = agent.withCognitivePhase(phase, progress)
+        }
+    }
+
+    /**
      * Update an agent's status text.
      */
     fun updateAgentStatus(agentId: String, status: String) {

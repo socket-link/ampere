@@ -19,6 +19,8 @@ kotlin {
         val jvmMain by getting {
             dependencies {
                 implementation(project(":ampere-core"))
+                implementation(project(":ampere-compose"))
+                implementation(project(":ampere-animation"))
                 implementation(compose.desktop.currentOs)
             }
         }
