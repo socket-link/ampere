@@ -1,5 +1,11 @@
 package link.socket.ampere.cli.hybrid
 
+import link.socket.ampere.animation.agent.AgentActivityState as AnimAgentActivityState
+import link.socket.ampere.animation.agent.AgentLayer
+import link.socket.ampere.animation.agent.AgentLayoutOrientation
+import link.socket.ampere.animation.agent.AgentVisualState
+import link.socket.ampere.animation.agent.CognitiveChoreographer
+import link.socket.ampere.animation.agent.CognitivePhase
 import link.socket.ampere.animation.particle.BurstEmitter
 import link.socket.ampere.animation.particle.EmitterConfig
 import link.socket.ampere.animation.particle.ParticleSystem
@@ -18,6 +24,7 @@ import link.socket.ampere.cli.watch.presentation.WatchViewState
  * Converts agent activity, events, and system state into:
  * - Substrate density hotspots (near active agents)
  * - Particle bursts (on significant events)
+ * - Phase-specific choreography via [CognitiveChoreographer]
  *
  * All effects are subtle so they enhance pane content rather than competing with it.
  *
@@ -36,6 +43,13 @@ class WatchStateAnimationBridge(
     private var previousEventCount = 0
     private var previousAgentStates = mapOf<String, AgentState>()
     private val burstEmitter = BurstEmitter()
+
+    private val choreographer = CognitiveChoreographer(particles, substrateAnimator)
+    private val agentLayer = AgentLayer(
+        width = accentColumns.maxOrNull()?.plus(10) ?: 80,
+        height = height,
+        orientation = AgentLayoutOrientation.HORIZONTAL
+    )
 
     /**
      * Update animation state based on current watch state.
@@ -63,6 +77,10 @@ class WatchStateAnimationBridge(
         // Detect agent state transitions and trigger pulses
         detectStateTransitions(viewState, result)?.let { result = it }
 
+        // Sync agent layer from view state and run choreographer
+        syncAgentLayer(viewState)
+        result = choreographer.update(agentLayer, result, deltaSeconds)
+
         // Apply ambient animation
         result = substrateAnimator.updateAmbient(result, deltaSeconds)
 
@@ -74,6 +92,46 @@ class WatchStateAnimationBridge(
         previousAgentStates = viewState.agentStates.mapValues { it.value.currentState }
 
         return result
+    }
+
+    /**
+     * Sync the internal AgentLayer from WatchViewState agent states,
+     * mapping CLI AgentState to animation CognitivePhase.
+     */
+    private fun syncAgentLayer(viewState: WatchViewState) {
+        val currentIds = viewState.agentStates.keys
+        val existingIds = agentLayer.allAgents.map { it.id }.toSet()
+
+        // Remove agents no longer present
+        for (id in existingIds - currentIds) {
+            agentLayer.removeAgent(id)
+        }
+
+        // Add or update agents
+        for ((id, activityState) in viewState.agentStates) {
+            val phase = mapAgentStateToCognitivePhase(activityState.currentState)
+            val animState = mapAgentStateToActivityState(activityState.currentState)
+
+            if (id in existingIds) {
+                agentLayer.updateAgentState(id, animState)
+                agentLayer.updateAgentCognitivePhase(id, phase)
+            } else {
+                val col = accentColumns.elementAtOrElse(
+                    viewState.agentStates.keys.indexOf(id) % accentColumns.size.coerceAtLeast(1)
+                ) { 0 }
+                val row = height / 2
+                agentLayer.addAgent(
+                    AgentVisualState(
+                        id = id,
+                        name = activityState.displayName,
+                        role = "",
+                        position = Vector2(col.toFloat(), row.toFloat()),
+                        state = animState,
+                        cognitivePhase = phase,
+                    )
+                )
+            }
+        }
     }
 
     private fun updateHotspotsFromAgentActivity(
@@ -157,5 +215,33 @@ class WatchStateAnimationBridge(
         val col = accentColumns.randomOrNull() ?: 0
         val row = (1 until height.coerceAtLeast(2)).random()
         return Point(col, row)
+    }
+
+    companion object {
+        /**
+         * Map CLI AgentState to animation CognitivePhase.
+         */
+        fun mapAgentStateToCognitivePhase(state: AgentState): CognitivePhase {
+            return when (state) {
+                AgentState.THINKING -> CognitivePhase.PLAN
+                AgentState.WORKING -> CognitivePhase.EXECUTE
+                AgentState.IN_MEETING -> CognitivePhase.RECALL
+                AgentState.WAITING -> CognitivePhase.PERCEIVE
+                AgentState.IDLE -> CognitivePhase.NONE
+            }
+        }
+
+        /**
+         * Map CLI AgentState to animation AgentActivityState.
+         */
+        fun mapAgentStateToActivityState(state: AgentState): AnimAgentActivityState {
+            return when (state) {
+                AgentState.THINKING -> AnimAgentActivityState.PROCESSING
+                AgentState.WORKING -> AnimAgentActivityState.ACTIVE
+                AgentState.IN_MEETING -> AnimAgentActivityState.PROCESSING
+                AgentState.WAITING -> AnimAgentActivityState.IDLE
+                AgentState.IDLE -> AnimAgentActivityState.IDLE
+            }
+        }
     }
 }

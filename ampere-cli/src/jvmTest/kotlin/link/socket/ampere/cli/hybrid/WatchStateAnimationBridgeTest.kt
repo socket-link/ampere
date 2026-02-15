@@ -193,6 +193,30 @@ class WatchStateAnimationBridgeTest {
     }
 
     @Test
+    fun `choreographer triggers on cognitive phase transition`() {
+        val (bridge, substrate, particles) = createBridge()
+
+        // First update: agent is THINKING (maps to PLAN phase)
+        val viewState1 = createViewState(
+            agents = mapOf("agent-1" to createAgent("agent-1", AgentState.THINKING, idle = false))
+        )
+        bridge.update(viewState1, substrate, 0.1f)
+        val particlesAfterThinking = particles.count
+
+        // Second update: agent transitions to WORKING (maps to EXECUTE phase)
+        // EXECUTE transition should trigger a spark burst via choreographer
+        val viewState2 = createViewState(
+            agents = mapOf("agent-1" to createAgent("agent-1", AgentState.WORKING, idle = false))
+        )
+        bridge.update(viewState2, substrate, 0.1f)
+
+        assertTrue(
+            particles.count > particlesAfterThinking,
+            "Phase transition to EXECUTE should trigger particle burst via choreographer"
+        )
+    }
+
+    @Test
     fun `agent state transition triggers pulse`() {
         val (bridge, substrate, _) = createBridge()
 
