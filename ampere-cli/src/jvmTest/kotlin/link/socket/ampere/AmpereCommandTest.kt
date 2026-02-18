@@ -2,37 +2,40 @@ package link.socket.ampere
 
 import com.github.ajalt.clikt.testing.test
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.io.TempDir
-import java.io.File
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 
 /**
- * Tests for RunCommand, focusing on arc-related flags.
+ * Tests for the unified AmpereCommand, focusing on flag parsing and early exit paths.
  *
- * Note: These tests verify command-line option parsing and early exit paths.
- * Full integration testing with TUI and agent execution requires manual testing.
+ * Note: Full integration testing with TUI and agent execution requires manual testing.
  */
-class RunCommandTest {
+class AmpereCommandTest {
 
-    /**
-     * Create a lazy context provider that throws if accessed.
-     * Used for help tests where the context shouldn't be needed.
-     */
     private fun lazyContext(): AmpereContext =
         error("Context should not be accessed for this test")
 
-    /**
-     * Create a test context for use in tests that need actual context.
-     */
-    private fun createTestContext(tempDir: File): AmpereContext {
-        val dbPath = File(tempDir, "test.db").absolutePath
-        return AmpereContext(databasePath = dbPath)
+    @Test
+    fun `help text shows goal option`() {
+        val command = AmpereCommand { lazyContext() }
+        val result = command.test("--help")
+
+        assertContains(result.output, "--goal")
+        assertContains(result.output, "Goal for the agent to work on")
     }
 
     @Test
-    fun `run command help text shows arc option`() {
-        val command = RunCommand { lazyContext() }
+    fun `help text shows issues option`() {
+        val command = AmpereCommand { lazyContext() }
+        val result = command.test("--help")
+
+        assertContains(result.output, "--issues")
+        assertContains(result.output, "Work on available GitHub issues")
+    }
+
+    @Test
+    fun `help text shows arc option`() {
+        val command = AmpereCommand { lazyContext() }
         val result = command.test("--help")
 
         assertContains(result.output, "--arc")
@@ -40,8 +43,8 @@ class RunCommandTest {
     }
 
     @Test
-    fun `run command help text shows list-arcs option`() {
-        val command = RunCommand { lazyContext() }
+    fun `help text shows list-arcs option`() {
+        val command = AmpereCommand { lazyContext() }
         val result = command.test("--help")
 
         assertContains(result.output, "--list-arcs")
@@ -49,17 +52,16 @@ class RunCommandTest {
     }
 
     @Test
-    fun `run command help text shows arc examples`() {
-        val command = RunCommand { lazyContext() }
+    fun `help text shows auto-work option`() {
+        val command = AmpereCommand { lazyContext() }
         val result = command.test("--help")
 
-        assertContains(result.output, "ampere run --arc devops-pipeline")
-        assertContains(result.output, "ampere run --list-arcs")
+        assertContains(result.output, "--auto-work")
     }
 
     @Test
     fun `list-arcs flag displays available arcs`() {
-        val command = RunCommand { lazyContext() }
+        val command = AmpereCommand { lazyContext() }
         val result = command.test("--list-arcs")
 
         assertContains(result.output, "Available arc configurations")
@@ -74,7 +76,7 @@ class RunCommandTest {
 
     @Test
     fun `list-arcs flag shows arc descriptions`() {
-        val command = RunCommand { lazyContext() }
+        val command = AmpereCommand { lazyContext() }
         val result = command.test("--list-arcs")
 
         assertContains(result.output, "PM -> Code -> QA pipeline")
@@ -83,7 +85,7 @@ class RunCommandTest {
 
     @Test
     fun `list-arcs flag shows agent roles`() {
-        val command = RunCommand { lazyContext() }
+        val command = AmpereCommand { lazyContext() }
         val result = command.test("--list-arcs")
 
         assertContains(result.output, "Agents:")
@@ -92,19 +94,11 @@ class RunCommandTest {
 
     @Test
     fun `unknown arc name triggers error`() {
-        val command = RunCommand { lazyContext() }
+        val command = AmpereCommand { lazyContext() }
         val result = command.test("--arc nonexistent-arc --goal test")
 
         assertContains(result.output, "Error: Unknown arc 'nonexistent-arc'")
         assertContains(result.output, "Available arcs:")
         assertContains(result.output, "startup-saas")
-    }
-
-    @Test
-    fun `no work mode still requires a mode even with arc flag`() {
-        val command = RunCommand { lazyContext() }
-        val result = command.test("--arc startup-saas")
-
-        assertContains(result.output, "Error: No work mode specified")
     }
 }

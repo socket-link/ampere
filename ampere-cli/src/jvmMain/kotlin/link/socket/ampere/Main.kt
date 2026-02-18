@@ -49,12 +49,12 @@ fun main(args: Array<String>) {
         }
     }
 
-    // Only log config info if not running start/interactive TUI commands
-    // (those commands show config info visually in the TUI)
-    val isInteractiveCommand = args.isEmpty() ||
-        args.firstOrNull()?.let { it == "start" || it.startsWith("--goal") || it.startsWith("-g") } == true
+    // Only log config info if running a non-TUI subcommand
+    val isSubcommand = args.firstOrNull()?.let { first ->
+        !first.startsWith("-") && first != "ampere"
+    } == true
 
-    if (config != null && !isInteractiveCommand) {
+    if (config != null && isSubcommand) {
         println("Loaded configuration:")
         println("  AI Provider: ${config.ai.provider} (${config.ai.model})")
         println("  Team: ${config.team.joinToString { it.role }}")
@@ -117,24 +117,9 @@ fun main(args: Array<String>) {
         // Filter out --config/-c flag (already processed)
         val filteredArgs = filterConfigArgs(args)
 
-        // If no arguments provided, or if --goal is first arg, launch start mode
-        val effectiveArgs = when {
-            filteredArgs.isEmpty() -> arrayOf("start")
-            filteredArgs.firstOrNull()?.startsWith("--goal") == true ||
-            filteredArgs.firstOrNull()?.startsWith("-g") == true -> arrayOf("start") + filteredArgs
-            else -> filteredArgs
-        }
-
-        // Run the CLI with injected dependencies
-        AmpereCommand()
+        // Run the CLI
+        AmpereCommand { context }
             .subcommands(
-                StartCommand { context },
-                RunCommand { context },
-                DemoCommand { context },
-                HelpCommand(),
-                InteractiveCommand(context),
-                WatchCommand(context.eventRelayService),
-                DashboardCommand(context.eventRelayService),
                 ThreadCommand(context.threadViewService),
                 StatusCommand(context.threadViewService, context.ticketViewService),
                 OutcomesCommand(context.outcomeMemoryRepository),
@@ -146,7 +131,7 @@ fun main(args: Array<String>) {
                 WorkCommand { context },
                 TestCommand(),
             )
-            .main(effectiveArgs)
+            .main(filteredArgs)
     } finally {
         // Clean up resources
         context.close()
