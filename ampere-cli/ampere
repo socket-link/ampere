@@ -1,9 +1,17 @@
 #!/bin/bash
 # Wrapper script for ampere CLI that ensures Java 21+ is used
+#
+# Usage:
+#   ./ampere-cli/ampere [args]        Run the CLI (must build first)
+#   ./ampere-cli/ampere --rebuild [args]  Rebuild before running
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Find Java 21 or higher
-JAVA_21=$(/usr/libexec/java_home -v 21 2>/dev/null)
 JAVA_24=$(/usr/libexec/java_home -v 24 2>/dev/null)
+JAVA_21=$(/usr/libexec/java_home -v 21 2>/dev/null)
 
 if [ -n "$JAVA_24" ]; then
     export JAVA_HOME="$JAVA_24"
@@ -17,8 +25,22 @@ else
     exit 1
 fi
 
-# Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BINARY="$SCRIPT_DIR/build/install/ampere-jvm/bin/ampere"
+
+# Handle --rebuild flag
+if [ "$1" = "--rebuild" ]; then
+    shift
+    echo "Rebuilding ampere CLI..."
+    "$PROJECT_DIR/gradlew" -p "$PROJECT_DIR" :ampere-cli:installJvmDist --quiet || exit 1
+fi
+
+# Check the binary exists
+if [ ! -f "$BINARY" ]; then
+    echo "Error: ampere CLI not built yet. Run one of:"
+    echo "  ./gradlew :ampere-cli:installDist"
+    echo "  ./ampere-cli/ampere --rebuild"
+    exit 1
+fi
 
 # Execute the ampere CLI
-exec "$SCRIPT_DIR/build/install/ampere-cli/bin/ampere-cli" "$@"
+exec "$BINARY" "$@"
