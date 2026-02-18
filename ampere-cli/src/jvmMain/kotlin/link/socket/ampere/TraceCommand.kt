@@ -58,7 +58,7 @@ class TraceCommand(
                     terminal.println()
                     terminal.println("Tips:")
                     terminal.println("  - Event IDs are UUIDs like ${gray("a1b2c3d4-e5f6-7890-abcd-ef1234567890")}")
-                    terminal.println("  - Run ${cyan("ampere watch")} to see events as they occur")
+                    terminal.println("  - Run ${cyan("ampere")} to see events in the TUI dashboard")
                     terminal.println("  - Event IDs are shown in the event stream output")
                     return@fold
                 }

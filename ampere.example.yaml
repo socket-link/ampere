@@ -87,5 +87,5 @@ team:
 # Initial Goal (optional)
 # -----------------------
 # Set a default goal for the team. Can also be passed via CLI:
-#   ampere run --goal "Build a user authentication system"
+#   ampere --goal "Build a user authentication system"
 goal: "Build a user authentication system"

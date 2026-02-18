@@ -60,11 +60,8 @@ ampere                           # Just run ampere with no arguments
 # Run an agent with a custom goal
 ampere --goal "Implement FizzBuzz"
 
-# Run the interactive demo
-ampere demo
-
 # Work on GitHub issues
-ampere run --issues
+ampere --issues
 
 # Run headless tests (CI/validation)
 ampere test agent
@@ -72,14 +69,13 @@ ampere test agent
 
 ## Commands
 
-### Start: Interactive TUI Dashboard
+### Default: Interactive TUI Dashboard
 
-Start the interactive 3-column TUI for observing the AMPERE system:
+Running `ampere` with no arguments (or with work flags) launches the interactive TUI:
 
 ```bash
-ampere              # Default: starts TUI dashboard
-ampere start        # Explicit: same as above
-ampere start --auto-work   # Start with background issue work
+ampere                     # Idle TUI dashboard
+ampere --auto-work         # Start with background issue work
 ```
 
 The TUI shows:
@@ -106,45 +102,25 @@ The TUI shows:
 - `:thread <id>` - Show conversation thread
 - `:quit` - Exit TUI
 
-### Run: Active Work with TUI Visualization
+### Active Work Modes
 
-Run agents with active work while visualizing progress in real-time:
+Assign work to agents while visualizing progress in real-time:
 
 ```bash
 # Run agent with custom goal
-ampere run --goal "Implement FizzBuzz function"
-ampere run -g "Add authentication to API"
-
-# Run the interactive demo
-ampere demo                     # Showcases PROPEL cognitive cycle
+ampere --goal "Implement FizzBuzz function"
+ampere -g "Add authentication to API"
 
 # Work on GitHub issues
-ampere run --issues             # Continuous issue work
-ampere run --issue 42           # Specific issue
+ampere --issues                  # Continuous issue work
+ampere --issue 42                # Specific issue
+
+# Use arc workflow patterns
+ampere --arc devops-pipeline     # Use a specific arc
+ampere --list-arcs               # List available arcs
 ```
 
-The `run` command uses the same TUI as `start` but activates an agent to work
-on the specified task. You can watch the agent's cognitive cycle in real-time.
-
-### Watch Command
-
-Stream events in real-time with filtering:
-
-```bash
-ampere watch
-ampere watch --verbose                    # Show all events including routine
-ampere watch --group-cognitive-cycles     # Group knowledge operations
-ampere watch --filter TaskCreated --agent agent-pm
-```
-
-### Dashboard Command
-
-Static live-updating dashboard (non-interactive):
-
-```bash
-ampere dashboard
-ampere dashboard --refresh-interval 2     # Update every 2 seconds
-```
+The TUI displays the agent's cognitive cycle progress in real-time.
 
 ### Thread Command
 
@@ -242,14 +218,6 @@ Store issue definitions in `.ampere/issues/` for easy reference:
     └── ...
 ```
 
-### Interactive Command
-
-Launch an interactive REPL session:
-
-```bash
-ampere interactive
-```
-
 ### Test: Headless Validation
 
 Run headless tests for automated validation (CI/CD):
@@ -259,8 +227,7 @@ ampere test agent                         # Headless autonomous agent test
 ampere test ticket                        # Headless issue creation test
 ```
 
-**Note:** These run without interactive UI, suitable for CI pipelines. For
-interactive demos with visual feedback, use `ampere run --demo <name>` instead.
+**Note:** These run without interactive UI, suitable for CI pipelines.
 
 ### Respond Command
 
@@ -285,7 +252,7 @@ AMPERE uses YAML configuration files to define your AI provider, team compositio
 
 3. Run the CLI:
    ```bash
-   ampere run --goal "Your task description"
+   ampere --goal "Your task description"
    ```
 
 ### Configuration File Locations
@@ -511,16 +478,13 @@ goal: "Quick prototype of the feature"
 
 ```bash
 # Load from default location (ampere.yaml)
-ampere run --goal "Implement feature X"
+ampere --goal "Implement feature X"
 
 # Load from specific file
-ampere --config path/to/config.yaml run --goal "Implement feature X"
+ampere --config path/to/config.yaml --goal "Implement feature X"
 
 # Override goal from config file
-ampere run --goal "Different goal"
-
-# Start TUI with config
-ampere --config team-config.yaml start
+ampere --goal "Different goal"
 ```
 
 ### Environment Variables
