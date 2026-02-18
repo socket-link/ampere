@@ -17,11 +17,16 @@
 ### Build and Install
 
 ```bash
-# Build the CLI
+# Build the CLI distribution
 ./gradlew :ampere-cli:installDist
 
-# Add to your PATH (choose one):
+# Run directly from the project
+./ampere-cli/ampere --help
+```
 
+To make `ampere` available globally, choose one:
+
+```bash
 # Option A: Symlink to /usr/local/bin (recommended)
 sudo ln -sf "$(pwd)/ampere-cli/ampere" /usr/local/bin/ampere
 
@@ -34,19 +39,17 @@ ln -sf "$(pwd)/ampere-cli/ampere" ~/.local/bin/ampere
 echo 'export PATH="$PATH:/path/to/Ampere/ampere-cli"' >> ~/.zshrc
 ```
 
-After installation, verify it works:
+### Development Workflow
+
+When iterating on CLI changes, use the `--rebuild` flag to build and run in one step:
 
 ```bash
-ampere --help
-```
+# Rebuild and run (single command)
+./ampere-cli/ampere --rebuild --help
+./ampere-cli/ampere --rebuild --goal "Test my changes"
 
-### Alternative: Run Without Global Installation
-
-If you prefer not to install globally, run the wrapper script directly from the project:
-
-```bash
-./ampere-cli/ampere              # Start interactive TUI
-./ampere-cli/ampere --goal "..." # Run with a goal
+# Or if ampere is on your PATH via symlink:
+ampere --rebuild --goal "Test my changes"
 ```
 
 The wrapper script automatically finds and uses Java 21+.

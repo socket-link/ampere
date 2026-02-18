@@ -139,3 +139,8 @@ kotlin {
 tasks.named<Test>("jvmTest") {
     useJUnitPlatform()
 }
+
+// Wire installDist to installJvmDist so the familiar command works
+tasks.named("installDist") {
+    dependsOn("installJvmDist")
+}
