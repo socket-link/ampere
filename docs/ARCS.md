@@ -47,8 +47,8 @@ Convergence and delivery. The system evaluates completion and delivers results.
 
 ### Zero-config (recommended)
 ```bash
-ampere run                      # Uses startup-saas by default
-ampere run --arc devops-pipeline
+ampere                          # Uses startup-saas by default
+ampere --arc devops-pipeline
 ```
 
 ### Custom override

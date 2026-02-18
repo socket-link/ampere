@@ -59,7 +59,7 @@ private const val ESCALATION_TIMEOUT_SECONDS = 30L
  *   ampere test agent
  *
  * In another terminal, observe with:
- *   ampere start
+ *   ampere
  */
 fun main(escalation: Boolean = false) {
     println("═".repeat(80))
@@ -248,7 +248,7 @@ fun main(escalation: Boolean = false) {
             println("  4. 📚 LEARN - Extract knowledge from the outcome")
             println()
             println("To observe in real-time, run in another terminal:")
-            println("  ampere start")
+            println("  ampere")
             println()
 
             // Wait for the agent to complete (up to 60 seconds)

@@ -63,7 +63,7 @@ nano <project>/ampere.yaml
 ```bash
 # Runs Ampere with a goal — this launches the TUI, and agents begin to communicate
 cd <project>
-ampere run --goal "Add comprehensive documentation with interactive examples"
+ampere --goal "Add comprehensive documentation with interactive examples"
 ```
 
 The dashboard then displays all agent cognition in real time: perception, recall, optimization, planning, execution, and coordination.

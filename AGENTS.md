@@ -57,9 +57,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew :ampere-cli:installDist
 
 # Start the interactive TUI dashboard
-./ampere-cli/ampere              # Default: starts TUI
-./ampere-cli/ampere start        # Explicit: same as above
-./ampere-cli/ampere start --auto-work   # Start with background issue work
+./ampere-cli/ampere                                    # Idle TUI dashboard
+./ampere-cli/ampere --auto-work                        # Start with background issue work
+
+# Run agents with active work (with TUI visualization)
+./ampere-cli/ampere --goal "Implement FizzBuzz"        # Custom goal
+./ampere-cli/ampere --issues                           # Work on GitHub issues
+./ampere-cli/ampere --issue 42                         # Work on specific issue
 
 # TUI keyboard controls (while dashboard is running):
 #   d - Dashboard mode (system vitals, agent status, recent events)
@@ -80,22 +84,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 #   :thread <id> - Show conversation thread
 #   :quit - Exit TUI
 
-# Run agents with active work (with TUI visualization)
-./ampere-cli/ampere run --goal "Implement FizzBuzz"    # Custom goal
-./ampere-cli/ampere demo                               # Interactive demo with TUI
-./ampere-cli/ampere run --issues                       # Work on GitHub issues
-./ampere-cli/ampere run --issue 42                     # Work on specific issue
-
-# Watch events in real-time (streaming mode, no TUI)
-./ampere-cli/ampere watch
-./ampere-cli/ampere watch --verbose                    # Show all events including routine
-./ampere-cli/ampere watch --group-cognitive-cycles     # Group knowledge operations
-./ampere-cli/ampere watch --filter TaskCreated --agent agent-pm
-
-# Static dashboard view (non-interactive)
-./ampere-cli/ampere dashboard
-./ampere-cli/ampere dashboard --refresh-interval 2     # Update every 2 seconds
-
 # View conversation threads
 ./ampere-cli/ampere thread list
 ./ampere-cli/ampere thread show <thread-id>
@@ -114,14 +102,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./ampere-cli/ampere issues create --stdin < epic.json                # Create from stdin
 ./ampere-cli/ampere issues create -f epic.json --dry-run             # Validate without creating
 
-# Interactive REPL session
-./ampere-cli/ampere interactive
-
 # Headless tests (CI/validation - no interactive UI)
 ./ampere-cli/ampere test agent                         # Headless autonomous agent test
 ./ampere-cli/ampere test ticket                        # Headless issue creation test
 
-# Legacy headless work mode (prefer 'run --issues' for TUI version)
+# Legacy headless work mode (prefer '--issues' for TUI version)
 ./ampere-cli/ampere work                               # Work on issues (headless)
 ./ampere-cli/ampere work --continuous                  # Keep working (headless)
 ```

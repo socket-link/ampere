@@ -10,8 +10,7 @@ import com.github.ajalt.clikt.core.subcommands
  * tests of AMPERE's capabilities. These tests are intended for CI/CD pipelines
  * and automated validation, not interactive use.
  *
- * For interactive demonstrations with visual feedback, use the 'run' command instead:
- *   ampere run --demo agent
+ * For interactive use with visual feedback, run `ampere` directly.
  *
  * Available tests:
  * - agent: Autonomous agent test (CodeWriterAgent + PROPEL cognitive cycle) - headless
@@ -32,8 +31,8 @@ class TestCommand : CliktCommand(
         This command runs tests in headless mode without interactive UI,
         suitable for CI/CD pipelines and automated validation.
 
-        For interactive demonstrations with visual feedback, use:
-          ampere run --demo <name>
+        For interactive use with the TUI dashboard, run:
+          ampere
 
         Available tests:
           agent     Headless autonomous agent test (PROPEL cognitive cycle)
@@ -47,8 +46,6 @@ class TestCommand : CliktCommand(
           ampere test ticket            # Headless issue test
           ampere test agent --help      # Show test options
 
-        For interactive demos:
-          ampere demo                   # Interactive demo with TUI
     """.trimIndent()
 ) {
     init {

@@ -21,7 +21,7 @@ import com.github.ajalt.clikt.parameters.options.option
  *   ampere test agent
  *
  * To observe with the dashboard:
- *   ampere start
+ *   ampere
  */
 class AgentSubcommand : CliktCommand(
     name = "agent",
@@ -39,7 +39,7 @@ class AgentSubcommand : CliktCommand(
 
         To observe the agent's cognitive cycle in real-time, run the dashboard
         in another terminal:
-          ampere start
+          ampere
 
         Then switch between viewing modes:
           d - Dashboard mode (system vitals, agent status)
