@@ -60,6 +60,7 @@ class AmpereCommand(
     private val contextProvider: () -> AmpereContext,
 ) : CliktCommand(
     name = "ampere",
+    invokeWithoutSubcommand = true,
     help = """
         AMPERE - Animated Multi-Agent Prompting Environment
 
