@@ -1,5 +1,7 @@
 package link.socket.ampere.cli.hybrid
 
+import com.github.ajalt.mordant.rendering.AnsiLevel
+import com.github.ajalt.mordant.terminal.Terminal
 import link.socket.ampere.cli.layout.AnsiCellParser
 import link.socket.ampere.cli.layout.PaneRenderer
 import link.socket.ampere.cli.watch.presentation.AgentActivityState
@@ -9,7 +11,9 @@ import link.socket.ampere.cli.watch.presentation.SignificantEventSummary
 import link.socket.ampere.cli.watch.presentation.SystemState
 import link.socket.ampere.cli.watch.presentation.SystemVitals
 import link.socket.ampere.cli.watch.presentation.WatchViewState
+import link.socket.ampere.repl.TerminalFactory
 import kotlinx.datetime.Clock
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -272,5 +276,115 @@ class HybridDashboardRendererTest {
 
         val stripped = AnsiCellParser.stripAnsi(output)
         assertTrue(stripped.contains("|"), "ASCII mode should use pipe dividers")
+    }
+
+    // --- Resize tests ---
+
+    /**
+     * Mock SystemAccess that returns controllable terminal dimensions.
+     */
+    private class MockSystemAccess(
+        var width: Int = 80,
+        var height: Int = 24
+    ) : TerminalFactory.SystemAccess {
+        override fun getProperty(name: String): String? = when (name) {
+            "stdout.encoding", "file.encoding" -> "UTF-8"
+            else -> null
+        }
+        override fun getEnv(name: String): String? = when (name) {
+            "TERM" -> "xterm-256color"
+            "COLORTERM" -> "truecolor"
+            else -> null
+        }
+        override fun hasConsole(): Boolean = true
+        override fun sttySize(): Pair<Int?, Int?> = height to width
+    }
+
+    @AfterEach
+    fun tearDown() {
+        TerminalFactory.reset()
+    }
+
+    @Test
+    fun `detects terminal resize and reinitializes layout`() {
+        val mock = MockSystemAccess(width = 100, height = 30)
+        TerminalFactory.reset()
+        TerminalFactory.systemAccess = mock
+
+        // Create renderer with live terminal (no explicit dimensions)
+        val terminal = Terminal(ansiLevel = AnsiLevel.NONE)
+        val config = HybridConfig(
+            enableSubstrate = false,
+            enableParticles = false,
+            useColor = false,
+            useUnicode = true
+        )
+        val renderer = HybridDashboardRenderer(
+            terminal = terminal,
+            config = config,
+            explicitWidth = null,
+            explicitHeight = null
+        )
+
+        // First render at 100x30
+        val output1 = renderer.render(
+            leftPane = TestPane('A'),
+            middlePane = TestPane('B'),
+            rightPane = TestPane('C'),
+            statusBar = "status"
+        )
+        assertTrue(output1.isNotEmpty(), "First render should produce output")
+
+        // Simulate terminal resize to 120x40 (mimics SIGWINCH updating capabilities)
+        mock.width = 120
+        mock.height = 40
+        TerminalFactory.refreshCapabilities()
+
+        // Second render should detect resize and include screen clear
+        val output2 = renderer.render(
+            leftPane = TestPane('A'),
+            middlePane = TestPane('B'),
+            rightPane = TestPane('C'),
+            statusBar = "status"
+        )
+        assertTrue(output2.contains("\u001B[2J"), "Resize should trigger screen clear")
+    }
+
+    @Test
+    fun `no resize when dimensions unchanged`() {
+        val mock = MockSystemAccess(width = 80, height = 24)
+        TerminalFactory.reset()
+        TerminalFactory.systemAccess = mock
+
+        val terminal = Terminal(ansiLevel = AnsiLevel.NONE)
+        val config = HybridConfig(
+            enableSubstrate = false,
+            enableParticles = false,
+            useColor = false,
+            useUnicode = true
+        )
+        val renderer = HybridDashboardRenderer(
+            terminal = terminal,
+            config = config,
+            explicitWidth = null,
+            explicitHeight = null
+        )
+
+        // First render
+        renderer.render(
+            leftPane = TestPane(),
+            middlePane = TestPane(),
+            rightPane = TestPane(),
+            statusBar = "status"
+        )
+
+        // Second render without resize - should use diff rendering (no screen clear)
+        val output2 = renderer.render(
+            leftPane = TestPane(),
+            middlePane = TestPane(),
+            rightPane = TestPane(),
+            statusBar = "status"
+        )
+        assertFalse(output2.contains("\u001B[2J"), "No resize should not trigger screen clear")
     }
 }
