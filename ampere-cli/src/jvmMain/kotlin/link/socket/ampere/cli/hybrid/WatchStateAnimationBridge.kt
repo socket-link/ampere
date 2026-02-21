@@ -6,6 +6,7 @@ import link.socket.ampere.animation.agent.AgentLayoutOrientation
 import link.socket.ampere.animation.agent.AgentVisualState
 import link.socket.ampere.animation.agent.CognitiveChoreographer
 import link.socket.ampere.animation.agent.CognitivePhase
+import link.socket.ampere.animation.emitter.CognitiveEvent
 import link.socket.ampere.animation.math.Vector3
 import link.socket.ampere.animation.particle.BurstEmitter
 import link.socket.ampere.animation.particle.EmitterConfig
@@ -46,11 +47,17 @@ class WatchStateAnimationBridge(
     private val burstEmitter = BurstEmitter()
 
     private val choreographer = CognitiveChoreographer(particles, substrateAnimator)
-    private val agentLayer = AgentLayer(
+    val agentLayer = AgentLayer(
         width = accentColumns.maxOrNull()?.plus(10) ?: 80,
         height = height,
         orientation = AgentLayoutOrientation.HORIZONTAL
     )
+
+    /**
+     * Callback invoked when cognitive events are detected (phase transitions,
+     * state changes). Used by the emitter bridge to fire visual effects.
+     */
+    var onCognitiveEvent: ((CognitiveEvent, Vector3) -> Unit)? = null
 
     /**
      * Update animation state based on current watch state.
@@ -122,6 +129,15 @@ class WatchStateAnimationBridge(
             val animState = mapAgentStateToActivityState(activityState.currentState)
 
             if (id in existingIds) {
+                // Detect phase transitions and fire cognitive events
+                val existingAgent = agentLayer.getAgent(id)
+                if (existingAgent != null && existingAgent.cognitivePhase != phase) {
+                    val agentPos = existingAgent.position3D
+                    onCognitiveEvent?.invoke(
+                        CognitiveEvent.PhaseTransition(id, existingAgent.cognitivePhase, phase),
+                        agentPos
+                    )
+                }
                 agentLayer.updateAgentState(id, animState)
                 agentLayer.updateAgentCognitivePhase(id, phase)
             } else {
@@ -185,6 +201,14 @@ class WatchStateAnimationBridge(
             spawnEventParticles(
                 if (newEvents.any { it.significance == EventSignificance.CRITICAL }) 3 else 2
             )
+
+            // Fire spark events on agents for waveform emitter effects
+            for (agent in agentLayer.allAgents.take(2)) {
+                onCognitiveEvent?.invoke(
+                    CognitiveEvent.SparkReceived(agent.id),
+                    agent.position3D
+                )
+            }
         }
     }
 
@@ -209,6 +233,12 @@ class WatchStateAnimationBridge(
                     intensity = 0.3f,
                     radius = 3f
                 )
+            }
+
+            // Fire TaskCompleted when agent finishes (WORKING → IDLE)
+            if (previousState == AgentState.WORKING && currentState == AgentState.IDLE) {
+                val agentPos = agentLayer.getAgent(agentId)?.position3D ?: Vector3.ZERO
+                onCognitiveEvent?.invoke(CognitiveEvent.TaskCompleted(agentId), agentPos)
             }
         }
 
