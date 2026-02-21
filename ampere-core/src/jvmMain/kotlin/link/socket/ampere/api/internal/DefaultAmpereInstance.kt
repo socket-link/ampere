@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.events.messages.DefaultThreadViewService
@@ -23,6 +24,9 @@ import link.socket.ampere.api.service.StatusService
 import link.socket.ampere.api.service.ThreadService
 import link.socket.ampere.api.service.TicketService
 import link.socket.ampere.db.Database
+import link.socket.ampere.domain.ai.configuration.AIConfiguration
+import link.socket.ampere.dsl.events.Escalated
+import link.socket.ampere.dsl.events.TeamEventAdapter
 
 /**
  * JVM implementation of [AmpereInstance].
@@ -35,6 +39,9 @@ internal class DefaultAmpereInstance(
 ) : AmpereInstance {
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+    @Suppress("unused") // Available for downstream use when agents need AI calls
+    private val aiConfiguration: AIConfiguration = config.provider.toAIConfiguration()
 
     private val databasePath: String = config.databasePath ?: defaultDatabasePath()
 
@@ -112,11 +119,28 @@ internal class DefaultAmpereInstance(
 
     init {
         environmentService.start()
+        wireEscalationCallback(config.onEscalation)
     }
 
     override fun close() {
         scope.cancel()
         driver.close()
+    }
+
+    private fun wireEscalationCallback(handler: ((Escalated) -> Unit)?) {
+        if (handler == null) return
+
+        val adapter = TeamEventAdapter()
+        scope.launch {
+            environmentService.eventRelayService
+                .subscribeToLiveEvents()
+                .collect { event ->
+                    val teamEvent = adapter.adapt(event)
+                    if (teamEvent is Escalated) {
+                        handler(teamEvent)
+                    }
+                }
+        }
     }
 
     companion object {

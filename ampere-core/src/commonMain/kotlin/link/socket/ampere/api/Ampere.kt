@@ -3,17 +3,23 @@ package link.socket.ampere.api
 /**
  * Primary entry point for the AMPERE SDK.
  *
- * Usage:
  * ```
+ * // Programmatic configuration
  * val ampere = Ampere.create {
- *     provider("anthropic", "sonnet-4")
+ *     provider(AnthropicConfig(model = Claude.Sonnet4))
  *     workspace("/path/to/project")
+ *     onEscalation { event -> println("${event.agent} needs help: ${event.reason}") }
  * }
  *
  * ampere.agents.pursue("Build authentication system")
  * ampere.events.observe().collect { event -> ... }
  *
  * ampere.close()
+ *
+ * // File-based configuration (JVM only)
+ * val ampere = Ampere.create {
+ *     fromYaml("/path/to/ampere.yaml")
+ * }
  * ```
  */
 object Ampere {
@@ -23,8 +29,10 @@ object Ampere {
      *
      * The instance manages its own coroutine scope and database connection.
      * Call [AmpereInstance.close] when done to release resources.
+     *
+     * @throws IllegalArgumentException if required configuration (provider) is missing
      */
-    fun create(configure: AmpereConfig.Builder.() -> Unit = {}): AmpereInstance {
+    fun create(configure: AmpereConfig.Builder.() -> Unit): AmpereInstance {
         val config = AmpereConfig.Builder().apply(configure).build()
         return createInstance(config)
     }

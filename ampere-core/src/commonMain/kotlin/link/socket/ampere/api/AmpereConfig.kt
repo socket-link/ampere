@@ -1,37 +1,54 @@
 package link.socket.ampere.api
 
+import link.socket.ampere.dsl.config.ProviderConfig
+import link.socket.ampere.dsl.events.Escalated
+
 /**
  * Configuration for creating an [AmpereInstance].
  *
  * Use the builder DSL via [Ampere.create]:
  * ```
+ * // Mode 1: Programmatic configuration
  * val ampere = Ampere.create {
- *     provider("anthropic", "sonnet-4")
+ *     provider(AnthropicConfig(apiKey = "...", model = Claude.Sonnet4))
  *     workspace("/path/to/project")
- *     database("/path/to/ampere.db")
+ *     onEscalation { event -> notifySlack(event) }
+ * }
+ *
+ * // Mode 2: File-based configuration (JVM only)
+ * val ampere = Ampere.create {
+ *     fromYaml("/path/to/ampere.yaml")
  * }
  * ```
+ *
+ * @param provider Type-safe provider configuration (Anthropic, OpenAI, or Gemini)
+ * @param workspace Workspace directory for file operations
+ * @param databasePath Override default database location
+ * @param onEscalation Callback invoked when an agent escalates to human
  */
 data class AmpereConfig(
-    /** AI provider name (e.g., "anthropic", "openai", "gemini") */
-    val providerName: String,
-    /** Model name (e.g., "sonnet-4", "gpt-4.1") */
-    val modelName: String,
-    /** Workspace directory for file operations, null to disable workspace monitoring */
+    val provider: ProviderConfig,
     val workspace: String? = null,
-    /** Override default database location */
     val databasePath: String? = null,
+    val onEscalation: ((Escalated) -> Unit)? = null,
 ) {
     class Builder {
-        private var providerName: String = "anthropic"
-        private var modelName: String = "sonnet-4"
+        private var providerConfig: ProviderConfig? = null
         private var workspace: String? = null
         private var databasePath: String? = null
+        private var escalationHandler: ((Escalated) -> Unit)? = null
 
-        /** Configure the AI provider and model. */
-        fun provider(name: String, model: String) {
-            providerName = name
-            modelName = model
+        /**
+         * Set the AI provider configuration.
+         *
+         * ```
+         * provider(AnthropicConfig(model = Claude.Sonnet4))
+         * provider(OpenAIConfig(apiKey = "...", model = GPT.GPT_4_1))
+         * provider(GeminiConfig(model = Gemini.Flash_2_5))
+         * ```
+         */
+        fun provider(config: ProviderConfig) {
+            providerConfig = config
         }
 
         /** Set the workspace directory for file operations. */
@@ -44,11 +61,29 @@ data class AmpereConfig(
             databasePath = path
         }
 
-        fun build(): AmpereConfig = AmpereConfig(
-            providerName = providerName,
-            modelName = modelName,
-            workspace = workspace,
-            databasePath = databasePath,
-        )
+        /**
+         * Register a callback for agent escalation events.
+         *
+         * ```
+         * onEscalation { event ->
+         *     println("${event.agent} needs help: ${event.reason}")
+         * }
+         * ```
+         */
+        fun onEscalation(handler: (Escalated) -> Unit) {
+            escalationHandler = handler
+        }
+
+        fun build(): AmpereConfig {
+            val provider = requireNotNull(providerConfig) {
+                "Provider is required. Use provider(AnthropicConfig()) or similar."
+            }
+            return AmpereConfig(
+                provider = provider,
+                workspace = workspace,
+                databasePath = databasePath,
+                onEscalation = escalationHandler,
+            )
+        }
     }
 }

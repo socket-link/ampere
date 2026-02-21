@@ -14,8 +14,11 @@ import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
 import link.socket.ampere.agents.domain.outcome.OutcomeMemory
+import link.socket.ampere.agents.domain.status.EventStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.events.messages.Message
+import link.socket.ampere.agents.events.messages.MessageChannel
+import link.socket.ampere.agents.events.messages.MessageSender
 import link.socket.ampere.agents.events.messages.MessageThread
 import link.socket.ampere.agents.events.messages.MessageThreadId
 import link.socket.ampere.agents.events.messages.ThreadDetail
@@ -51,25 +54,47 @@ import link.socket.ampere.dsl.team.AgentTeamBuilder
  * ergonomics issues, missing types, and signature problems at compile time.
  *
  * Uses dummy implementations (not real infrastructure) to ensure the
- * public API surface is consumable before any real wiring exists.
+ * public API surface is consumable before any real implementation exists.
  */
 class ConsumerSimulationTest {
 
     private val now = Clock.System.now()
 
-    // ==================== Dummy Implementations ====================
+    // ==================== Dummy Data ====================
 
     private val dummyTicket = Ticket(
         id = "ticket-1",
         title = "Fix auth",
         description = "Retry logic",
-        priority = TicketPriority.HIGH,
         type = TicketType.BUG,
+        priority = TicketPriority.HIGH,
         status = TicketStatus.Backlog,
         assignedAgentId = null,
+        createdByAgentId = "sdk",
         createdAt = now,
         updatedAt = now,
     )
+
+    private val dummyMessage = Message(
+        id = "msg-1",
+        threadId = "thread-1",
+        sender = MessageSender.Human,
+        content = "Hello",
+        timestamp = now,
+    )
+
+    private val dummyThread = MessageThread(
+        id = "thread-1",
+        channel = MessageChannel.Public.Engineering,
+        createdBy = MessageSender.Human,
+        participants = setOf(MessageSender.Human),
+        messages = listOf(dummyMessage),
+        status = EventStatus.Open,
+        createdAt = now,
+        updatedAt = now,
+    )
+
+    // ==================== Stub Implementations ====================
 
     private val stubTicketService = object : TicketService {
         override suspend fun create(title: String, configure: (link.socket.ampere.api.service.TicketBuilder.() -> Unit)?): Result<Ticket> {
@@ -81,20 +106,18 @@ class ConsumerSimulationTest {
         override suspend fun transition(ticketId: TicketId, status: TicketStatus) = Result.success(Unit)
         override suspend fun get(ticketId: TicketId) = Result.success(dummyTicket)
         override suspend fun list(filter: TicketFilter?) = Result.success(listOf(
-            TicketSummary(id = "ticket-1", title = "Fix auth", priority = TicketPriority.HIGH, status = TicketStatus.Backlog, assignedAgentId = null)
+            TicketSummary(ticketId = "ticket-1", title = "Fix auth", priority = "HIGH", status = "Backlog", assigneeId = null, createdAt = now)
         ))
     }
 
     private val stubThreadService = object : ThreadService {
         override suspend fun create(title: String, configure: (link.socket.ampere.api.service.ThreadBuilder.() -> Unit)?): Result<MessageThread> {
-            val builder = link.socket.ampere.api.service.ThreadBuilder()
-            configure?.invoke(builder)
-            return Result.success(MessageThread(id = "thread-1", title = title, createdAt = now))
+            return Result.success(dummyThread)
         }
         override suspend fun post(threadId: MessageThreadId, content: String, senderId: String) =
-            Result.success(Message(id = "msg-1", threadId = threadId, senderId = senderId, content = content, timestamp = now))
+            Result.success(dummyMessage.copy(content = content))
         override suspend fun get(threadId: MessageThreadId) =
-            Result.success(ThreadDetail(id = threadId, title = "Thread", messages = emptyList(), createdAt = now))
+            Result.success(ThreadDetail(threadId = threadId, title = "Thread", messages = emptyList(), participants = emptyList()))
         override suspend fun list(filter: ThreadFilter?) = Result.success(emptyList<ThreadSummary>())
         override fun observe(threadId: MessageThreadId): Flow<Message> = emptyFlow()
     }
@@ -127,7 +150,7 @@ class ConsumerSimulationTest {
 
     private val stubKnowledgeService = object : KnowledgeService {
         override suspend fun store(knowledge: Knowledge, tags: List<String>, taskType: String?, complexityLevel: String?) =
-            Result.success(KnowledgeEntry(id = "k-1", knowledgeType = KnowledgeType.OUTCOME, approach = "test", learnings = "test", timestamp = now))
+            Result.success(KnowledgeEntry(id = "k-1", knowledgeType = KnowledgeType.FROM_OUTCOME, approach = "test", learnings = "test", timestamp = now))
         override suspend fun recall(query: String, limit: Int) = Result.success(emptyList<KnowledgeEntry>())
         override suspend fun provenance(knowledgeId: String) = Result.success(emptyList<KnowledgeEntry>())
     }
@@ -144,7 +167,7 @@ class ConsumerSimulationTest {
     // ==================== Consumer Simulation Tests ====================
 
     @Test
-    fun `ticket lifecycle - create with DSL, assign, transition, list with filter`() = kotlinx.coroutines.runBlocking {
+    fun `ticket lifecycle - create with DSL, assign, transition, list with filter`() = kotlinx.coroutines.runBlocking<Unit> {
         // Create with builder DSL
         val ticket = stubTicketService.create("Fix auth retry") {
             description("Transient failures cause immediate failure")
@@ -178,7 +201,7 @@ class ConsumerSimulationTest {
     }
 
     @Test
-    fun `thread lifecycle - create with DSL, post, observe, list with filter`() = kotlinx.coroutines.runBlocking {
+    fun `thread lifecycle - create with DSL, post, observe, list with filter`() = kotlinx.coroutines.runBlocking<Unit> {
         // Create with builder DSL
         val thread = stubThreadService.create("Auth design discussion") {
             participants("pm-agent", "engineer-agent")
@@ -209,7 +232,7 @@ class ConsumerSimulationTest {
     }
 
     @Test
-    fun `agent lifecycle - team DSL, pursue, inspect, listAll, pause`() = kotlinx.coroutines.runBlocking {
+    fun `agent lifecycle - pursue, inspect, listAll, pause`() = kotlinx.coroutines.runBlocking<Unit> {
         // Pursue a goal
         val goalId = stubAgentService.pursue("Build authentication system").getOrThrow()
         assertTrue(goalId.startsWith("goal-"))
@@ -232,7 +255,7 @@ class ConsumerSimulationTest {
     }
 
     @Test
-    fun `event service - observe with filters, query time range, replay`() = kotlinx.coroutines.runBlocking {
+    fun `event service - observe with filters, query time range, replay`() = kotlinx.coroutines.runBlocking<Unit> {
         // Observe all events
         val allEvents: Flow<Event> = stubEventService.observe()
         assertNotNull(allEvents)
@@ -256,7 +279,7 @@ class ConsumerSimulationTest {
     }
 
     @Test
-    fun `outcome service - search, stats, byTicket, byExecutor`() = kotlinx.coroutines.runBlocking {
+    fun `outcome service - search, stats, byTicket, byExecutor`() = kotlinx.coroutines.runBlocking<Unit> {
         // Search
         val results = stubOutcomeService.search("authentication retry", limit = 10).getOrThrow()
         assertNotNull(results)
@@ -274,7 +297,7 @@ class ConsumerSimulationTest {
     }
 
     @Test
-    fun `knowledge service - recall, provenance`() = kotlinx.coroutines.runBlocking {
+    fun `knowledge service - recall, provenance`() = kotlinx.coroutines.runBlocking<Unit> {
         // Recall
         val entries = stubKnowledgeService.recall("how did we handle auth?").getOrThrow()
         assertNotNull(entries)
@@ -288,7 +311,7 @@ class ConsumerSimulationTest {
     }
 
     @Test
-    fun `status service - snapshot and health flow`() = kotlinx.coroutines.runBlocking {
+    fun `status service - snapshot and health flow`() = kotlinx.coroutines.runBlocking<Unit> {
         // Snapshot
         val snapshot = stubStatusService.snapshot().getOrThrow()
         assertTrue(snapshot.activeTickets > 0)

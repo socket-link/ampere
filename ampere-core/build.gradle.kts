@@ -181,6 +181,7 @@ kotlin {
                 implementation(compose.desktop.common)
 
                 implementation("app.cash.sqldelight:sqlite-driver:2.2.1")
+                implementation("com.charleskorn.kaml:kaml:0.72.0")
                 implementation("com.lordcodes.turtle:turtle:0.10.0")
                 implementation("io.ktor:ktor-client-okhttp:3.2.2")
             }
