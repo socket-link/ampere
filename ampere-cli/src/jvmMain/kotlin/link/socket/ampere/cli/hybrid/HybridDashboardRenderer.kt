@@ -208,7 +208,7 @@ class HybridDashboardRenderer(
         substrate = bridge.update(viewState, substrate, deltaSeconds)
 
         // 2. Update waveform pane with current substrate/flow state
-        waveformPane?.update(substrate, flow = null, dt = deltaSeconds)
+        waveformPane?.update(substrate, flow = bridge.flowLayer, dt = deltaSeconds)
 
         // 3. (ambient + particle updates handled inside bridge.update)
 
@@ -373,7 +373,7 @@ class HybridDashboardRenderer(
         substrate = bridge.update(viewState, substrate, deltaSeconds)
 
         // 2. Update waveform pane with current substrate/flow state
-        waveformPane?.update(substrate, flow = null, dt = deltaSeconds)
+        waveformPane?.update(substrate, flow = bridge.flowLayer, dt = deltaSeconds)
 
         // 4. Clear buffer
         buffer.clear()
