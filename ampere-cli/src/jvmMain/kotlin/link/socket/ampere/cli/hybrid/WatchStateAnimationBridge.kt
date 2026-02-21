@@ -6,6 +6,7 @@ import link.socket.ampere.animation.agent.AgentLayoutOrientation
 import link.socket.ampere.animation.agent.AgentVisualState
 import link.socket.ampere.animation.agent.CognitiveChoreographer
 import link.socket.ampere.animation.agent.CognitivePhase
+import link.socket.ampere.animation.math.Vector3
 import link.socket.ampere.animation.particle.BurstEmitter
 import link.socket.ampere.animation.particle.EmitterConfig
 import link.socket.ampere.animation.particle.ParticleSystem
@@ -97,6 +98,10 @@ class WatchStateAnimationBridge(
     /**
      * Sync the internal AgentLayer from WatchViewState agent states,
      * mapping CLI AgentState to animation CognitivePhase.
+     *
+     * Assigns 3D positions: X uses horizontal distribution, Z-depth is
+     * assigned based on creation order, Y (height) is left at 0 for the
+     * waveform to control.
      */
     private fun syncAgentLayer(viewState: WatchViewState) {
         val currentIds = viewState.agentStates.keys
@@ -108,7 +113,11 @@ class WatchStateAnimationBridge(
         }
 
         // Add or update agents
-        for ((id, activityState) in viewState.agentStates) {
+        val agentEntries = viewState.agentStates.entries.toList()
+        val agentCount = agentEntries.size
+
+        for ((index, entry) in agentEntries.withIndex()) {
+            val (id, activityState) = entry
             val phase = mapAgentStateToCognitivePhase(activityState.currentState)
             val animState = mapAgentStateToActivityState(activityState.currentState)
 
@@ -117,15 +126,23 @@ class WatchStateAnimationBridge(
                 agentLayer.updateAgentCognitivePhase(id, phase)
             } else {
                 val col = accentColumns.elementAtOrElse(
-                    viewState.agentStates.keys.indexOf(id) % accentColumns.size.coerceAtLeast(1)
+                    index % accentColumns.size.coerceAtLeast(1)
                 ) { 0 }
                 val row = height / 2
+
+                // Assign Z-depth based on creation order: distribute agents
+                // across the depth range so they appear at different distances
+                val depthRange = height * 0.6f
+                val zDepth = if (agentCount <= 1) 0f
+                    else (index.toFloat() / (agentCount - 1) - 0.5f) * depthRange
+
                 agentLayer.addAgent(
                     AgentVisualState(
                         id = id,
                         name = activityState.displayName,
                         role = "",
                         position = Vector2(col.toFloat(), row.toFloat()),
+                        position3D = Vector3(col.toFloat(), 0f, zDepth),
                         state = animState,
                         cognitivePhase = phase,
                     )

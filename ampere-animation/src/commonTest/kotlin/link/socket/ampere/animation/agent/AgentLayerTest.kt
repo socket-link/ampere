@@ -1,5 +1,6 @@
 package link.socket.ampere.animation.agent
 
+import link.socket.ampere.animation.math.Vector3
 import link.socket.ampere.animation.substrate.Vector2
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -87,9 +88,9 @@ class AgentVisualStateTest {
 
     @Test
     fun `getPrimaryGlyph returns correct glyph for state`() {
-        val idleAgent = AgentVisualState("1", "A", "r", Vector2.ZERO, AgentActivityState.IDLE)
-        val activeAgent = AgentVisualState("2", "B", "r", Vector2.ZERO, AgentActivityState.ACTIVE)
-        val completeAgent = AgentVisualState("3", "C", "r", Vector2.ZERO, AgentActivityState.COMPLETE)
+        val idleAgent = AgentVisualState("1", "A", "r", Vector2.ZERO, state = AgentActivityState.IDLE)
+        val activeAgent = AgentVisualState("2", "B", "r", Vector2.ZERO, state = AgentActivityState.ACTIVE)
+        val completeAgent = AgentVisualState("3", "C", "r", Vector2.ZERO, state = AgentActivityState.COMPLETE)
 
         assertEquals(AgentGlyphs.IDLE_UNICODE, idleAgent.getPrimaryGlyph(useUnicode = true))
         assertEquals(AgentGlyphs.ACTIVE_UNICODE, activeAgent.getPrimaryGlyph(useUnicode = true))
@@ -98,8 +99,8 @@ class AgentVisualStateTest {
 
     @Test
     fun `getAccentSuffix returns checkmark for COMPLETE`() {
-        val completeAgent = AgentVisualState("1", "A", "r", Vector2.ZERO, AgentActivityState.COMPLETE)
-        val activeAgent = AgentVisualState("2", "B", "r", Vector2.ZERO, AgentActivityState.ACTIVE)
+        val completeAgent = AgentVisualState("1", "A", "r", Vector2.ZERO, state = AgentActivityState.COMPLETE)
+        val activeAgent = AgentVisualState("2", "B", "r", Vector2.ZERO, state = AgentActivityState.ACTIVE)
 
         assertTrue(completeAgent.getAccentSuffix(useUnicode = true).contains("\u2713"))
         assertEquals("", activeAgent.getAccentSuffix())
@@ -231,7 +232,7 @@ class AgentLayerTest {
     }
 
     @Test
-    fun `circular layout positions agents in circle`() {
+    fun `circular layout positions agents in XZ plane with 3D coordinates`() {
         val layer = AgentLayer(100, 100, AgentLayoutOrientation.CIRCULAR)
 
         // Add 4 agents for quadrant positions
@@ -240,29 +241,34 @@ class AgentLayerTest {
         layer.addAgent(AgentVisualState("3", "C", "r", Vector2.ZERO))
         layer.addAgent(AgentVisualState("4", "D", "r", Vector2.ZERO))
 
-        val positions = layer.allAgents.map { it.position }
+        val positions3D = layer.allAgents.map { it.position3D }
 
-        // Center should be around 50, 50
-        val centerX = 50f
-        val centerY = 50f
+        // All agents should be at Y=0 (height controlled by waveform)
+        positions3D.forEach { p ->
+            assertEquals(0f, p.y, 0.01f)
+        }
 
-        // All agents should be roughly equal distance from center
-        val distances = positions.map { p ->
-            val dx = p.x - centerX
-            val dy = p.y - centerY
-            kotlin.math.sqrt(dx * dx + dy * dy)
+        // All agents should be roughly equal distance from origin in XZ plane
+        val distances = positions3D.map { p ->
+            kotlin.math.sqrt(p.x * p.x + p.z * p.z)
         }
 
         val avgDistance = distances.average()
         distances.forEach { d ->
-            assertEquals(avgDistance.toFloat(), d, 5f)
+            assertEquals(avgDistance.toFloat(), d, 1f)
+        }
+
+        // 2D position should be derived from 3D (x, z) mapping
+        layer.allAgents.forEach { agent ->
+            assertEquals(agent.position3D.x, agent.position.x, 0.01f)
+            assertEquals(agent.position3D.z, agent.position.y, 0.01f)
         }
     }
 
     @Test
     fun `update advances pulse phase for processing agents`() {
         val layer = AgentLayer(100, 30)
-        val agent = AgentVisualState("1", "A", "r", Vector2.ZERO, AgentActivityState.PROCESSING)
+        val agent = AgentVisualState("1", "A", "r", Vector2.ZERO, state = AgentActivityState.PROCESSING)
 
         layer.addAgent(agent)
         layer.update(deltaTime = 0.1f, shimmerSpeed = 2f)
@@ -275,7 +281,7 @@ class AgentLayerTest {
     @Test
     fun `update progresses spawning agents`() {
         val layer = AgentLayer(100, 30)
-        val agent = AgentVisualState("1", "A", "r", Vector2.ZERO, AgentActivityState.SPAWNING)
+        val agent = AgentVisualState("1", "A", "r", Vector2.ZERO, state = AgentActivityState.SPAWNING)
 
         layer.addAgent(agent)
         assertEquals(0f, layer.getSpawnProgress("1"))
@@ -288,7 +294,7 @@ class AgentLayerTest {
     @Test
     fun `spawning completes and transitions to IDLE`() {
         val layer = AgentLayer(100, 30)
-        val agent = AgentVisualState("1", "A", "r", Vector2.ZERO, AgentActivityState.SPAWNING)
+        val agent = AgentVisualState("1", "A", "r", Vector2.ZERO, state = AgentActivityState.SPAWNING)
 
         layer.addAgent(agent)
 
@@ -321,6 +327,156 @@ class AgentLayerTest {
         layer.clear()
 
         assertEquals(0, layer.agentCount)
+    }
+
+    @Test
+    fun `sphere layout distributes agents with Y variation`() {
+        val layer = AgentLayer(100, 100, AgentLayoutOrientation.SPHERE)
+
+        layer.addAgent(AgentVisualState("1", "A", "r", Vector2.ZERO))
+        layer.addAgent(AgentVisualState("2", "B", "r", Vector2.ZERO))
+        layer.addAgent(AgentVisualState("3", "C", "r", Vector2.ZERO))
+        layer.addAgent(AgentVisualState("4", "D", "r", Vector2.ZERO))
+        layer.addAgent(AgentVisualState("5", "E", "r", Vector2.ZERO))
+        layer.addAgent(AgentVisualState("6", "F", "r", Vector2.ZERO))
+
+        val positions3D = layer.allAgents.map { it.position3D }
+
+        // Should have meaningful Y variation (not all at Y=0)
+        val yValues = positions3D.map { it.y }
+        val yRange = yValues.max() - yValues.min()
+        assertTrue(yRange > 1f, "SPHERE should distribute agents with meaningful Y variation, got range=$yRange")
+
+        // All agents should be roughly equal distance from origin
+        val distances = positions3D.map { it.length() }
+        val avgDistance = distances.average()
+        distances.forEach { d ->
+            assertEquals(avgDistance.toFloat(), d, 2f)
+        }
+
+        // 2D position should be derived from XZ projection
+        layer.allAgents.forEach { agent ->
+            assertEquals(agent.position3D.x, agent.position.x, 0.01f)
+            assertEquals(agent.position3D.z, agent.position.y, 0.01f)
+        }
+    }
+
+    @Test
+    fun `clustered layout groups agents by role at different depths`() {
+        val layer = AgentLayer(100, 100, AgentLayoutOrientation.CLUSTERED)
+
+        // Two roles: reasoning and codegen
+        layer.addAgent(AgentVisualState("1", "Spark", "reasoning", Vector2.ZERO))
+        layer.addAgent(AgentVisualState("2", "Nova", "reasoning", Vector2.ZERO))
+        layer.addAgent(AgentVisualState("3", "Jazz", "codegen", Vector2.ZERO))
+        layer.addAgent(AgentVisualState("4", "Riff", "codegen", Vector2.ZERO))
+
+        val agents = layer.allAgents
+
+        // Agents of the same role should be near each other in Z
+        val reasoningZ = agents.filter { it.role == "reasoning" }.map { it.position3D.z }
+        val codegenZ = agents.filter { it.role == "codegen" }.map { it.position3D.z }
+
+        // Within-cluster Z variation should be small
+        val reasoningZRange = reasoningZ.max() - reasoningZ.min()
+        val codegenZRange = codegenZ.max() - codegenZ.min()
+        assertTrue(reasoningZRange < 20f, "Same-role agents should be clustered in Z")
+        assertTrue(codegenZRange < 20f, "Same-role agents should be clustered in Z")
+
+        // Different clusters should have different Z centers
+        val reasoningZCenter = reasoningZ.average()
+        val codegenZCenter = codegenZ.average()
+        assertTrue(
+            kotlin.math.abs(reasoningZCenter - codegenZCenter) > 1f,
+            "Different role clusters should be at different depths"
+        )
+
+        // Y should be 0 (waveform controls height)
+        agents.forEach { agent ->
+            assertEquals(0f, agent.position3D.y, 0.01f)
+        }
+    }
+
+    @Test
+    fun `setAgentPosition3D sets custom 3D position`() {
+        val layer = AgentLayer(100, 30, AgentLayoutOrientation.CUSTOM)
+        val agent = AgentVisualState("1", "A", "r", Vector2.ZERO)
+
+        layer.addAgent(agent)
+        layer.setAgentPosition3D("1", Vector3(10f, 5f, 20f))
+
+        val updated = layer.getAgent("1")
+        assertNotNull(updated)
+        assertEquals(Vector3(10f, 5f, 20f), updated.position3D)
+        // 2D position should be XZ projection
+        assertEquals(10f, updated.position.x, 0.01f)
+        assertEquals(20f, updated.position.y, 0.01f)
+    }
+}
+
+class AgentVisualState3DTest {
+
+    @Test
+    fun `default position3D derived from position2D`() {
+        val agent = AgentVisualState(
+            id = "1",
+            name = "A",
+            role = "r",
+            position = Vector2(10f, 20f)
+        )
+
+        assertEquals(10f, agent.position3D.x, 0.01f)
+        assertEquals(0f, agent.position3D.y, 0.01f)
+        assertEquals(20f, agent.position3D.z, 0.01f)
+    }
+
+    @Test
+    fun `explicit position3D preserves both fields`() {
+        val agent = AgentVisualState(
+            id = "1",
+            name = "A",
+            role = "r",
+            position = Vector2(10f, 20f),
+            position3D = Vector3(10f, 5f, 20f)
+        )
+
+        assertEquals(Vector2(10f, 20f), agent.position)
+        assertEquals(Vector3(10f, 5f, 20f), agent.position3D)
+    }
+
+    @Test
+    fun `withPosition updates position3D keeping Y`() {
+        val agent = AgentVisualState(
+            id = "1",
+            name = "A",
+            role = "r",
+            position = Vector2(10f, 20f),
+            position3D = Vector3(10f, 5f, 20f)
+        )
+
+        val updated = agent.withPosition(Vector2(30f, 40f))
+
+        assertEquals(Vector2(30f, 40f), updated.position)
+        assertEquals(30f, updated.position3D.x, 0.01f)
+        assertEquals(5f, updated.position3D.y, 0.01f) // Y preserved
+        assertEquals(40f, updated.position3D.z, 0.01f)
+    }
+
+    @Test
+    fun `withPosition3D updates both position and position3D`() {
+        val agent = AgentVisualState(
+            id = "1",
+            name = "A",
+            role = "r",
+            position = Vector2.ZERO
+        )
+
+        val updated = agent.withPosition3D(Vector3(15f, 8f, 25f))
+
+        assertEquals(Vector3(15f, 8f, 25f), updated.position3D)
+        // 2D position is XZ projection
+        assertEquals(15f, updated.position.x, 0.01f)
+        assertEquals(25f, updated.position.y, 0.01f)
     }
 }
 

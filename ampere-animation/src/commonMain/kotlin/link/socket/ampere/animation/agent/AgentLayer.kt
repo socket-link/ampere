@@ -1,9 +1,12 @@
 package link.socket.ampere.animation.agent
 
+import link.socket.ampere.animation.math.Vector3
 import link.socket.ampere.animation.substrate.Vector2
 import kotlin.math.PI
+import kotlin.math.acos
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * Layout orientations for agent positioning.
@@ -11,7 +14,12 @@ import kotlin.math.sin
 enum class AgentLayoutOrientation {
     HORIZONTAL,
     VERTICAL,
+    /** Agents on a circle in the XZ plane at Y=0 */
     CIRCULAR,
+    /** Agents distributed on a sphere surface */
+    SPHERE,
+    /** Agents grouped by role, with cluster centers at different depths */
+    CLUSTERED,
     CUSTOM
 }
 
@@ -129,27 +137,68 @@ class AgentLayer(
 
     /**
      * Recalculate agent positions based on layout.
+     *
+     * For 3D-aware layouts (CIRCULAR, SPHERE, CLUSTERED), both [AgentVisualState.position]
+     * and [AgentVisualState.position3D] are updated. For 2D-only layouts (HORIZONTAL, VERTICAL),
+     * the 3D position is derived with Y=0 and Z mapped from the 2D Y coordinate.
      */
     fun relayout() {
         val agentList = agents.values.toList()
-        val positions = calculateLayout(agentList.size)
 
-        agentList.forEachIndexed { index, agent ->
-            agents[agent.id] = agent.withPosition(positions.getOrElse(index) { Vector2.ZERO })
+        when (orientation) {
+            AgentLayoutOrientation.SPHERE,
+            AgentLayoutOrientation.CLUSTERED -> {
+                val positions3D = calculateLayout3D(agentList)
+                agentList.forEachIndexed { index, agent ->
+                    agents[agent.id] = agent.withPosition3D(
+                        positions3D.getOrElse(index) { Vector3.ZERO }
+                    )
+                }
+            }
+            AgentLayoutOrientation.CIRCULAR -> {
+                // CIRCULAR now distributes in XZ plane at Y=0
+                val positions3D = layoutCircular3D(agentList.size)
+                agentList.forEachIndexed { index, agent ->
+                    agents[agent.id] = agent.withPosition3D(
+                        positions3D.getOrElse(index) { Vector3.ZERO }
+                    )
+                }
+            }
+            else -> {
+                val positions = calculateLayout2D(agentList.size)
+                agentList.forEachIndexed { index, agent ->
+                    agents[agent.id] = agent.withPosition(
+                        positions.getOrElse(index) { Vector2.ZERO }
+                    )
+                }
+            }
         }
     }
 
     /**
-     * Calculate positions for agents based on layout orientation.
+     * Calculate 2D positions for agents.
      */
-    private fun calculateLayout(count: Int): List<Vector2> {
+    private fun calculateLayout2D(count: Int): List<Vector2> {
         if (count == 0) return emptyList()
 
         return when (orientation) {
             AgentLayoutOrientation.HORIZONTAL -> layoutHorizontal(count)
             AgentLayoutOrientation.VERTICAL -> layoutVertical(count)
-            AgentLayoutOrientation.CIRCULAR -> layoutCircular(count)
             AgentLayoutOrientation.CUSTOM -> agents.values.map { it.position }
+            else -> agents.values.map { it.position }
+        }
+    }
+
+    /**
+     * Calculate 3D positions for SPHERE and CLUSTERED layouts.
+     */
+    private fun calculateLayout3D(agentList: List<AgentVisualState>): List<Vector3> {
+        if (agentList.isEmpty()) return emptyList()
+
+        return when (orientation) {
+            AgentLayoutOrientation.SPHERE -> layoutSphere(agentList.size)
+            AgentLayoutOrientation.CLUSTERED -> layoutClustered(agentList)
+            else -> agentList.map { it.position3D }
         }
     }
 
@@ -171,27 +220,95 @@ class AgentLayer(
         }
     }
 
-    private fun layoutCircular(count: Int): List<Vector2> {
-        val centerX = width / 2f
-        val centerY = height / 2f
+    /**
+     * Distribute agents on a circle in the XZ plane at Y=0.
+     * The 2D position is derived as (X, Z) from the 3D position.
+     */
+    private fun layoutCircular3D(count: Int): List<Vector3> {
         val radius = minOf(width, height) * 0.35f
         val angleStep = 2 * PI / count
 
         return (0 until count).map { i ->
             val angle = i * angleStep - PI / 2 // Start from top
-            Vector2(
-                centerX + (cos(angle) * radius).toFloat(),
-                centerY + (sin(angle) * radius).toFloat()
+            Vector3(
+                (cos(angle) * radius).toFloat(),
+                0f,
+                (sin(angle) * radius).toFloat()
             )
         }
     }
 
     /**
-     * Set a custom position for an agent.
+     * Distribute agents on a sphere surface using the Fibonacci sphere algorithm.
+     * Provides near-uniform distribution with meaningful Y (height) variation.
+     */
+    private fun layoutSphere(count: Int): List<Vector3> {
+        val radius = minOf(width, height) * 0.35f
+        val goldenRatio = (1f + sqrt(5f)) / 2f
+
+        return (0 until count).map { i ->
+            // Fibonacci sphere: evenly distribute points on a sphere
+            val theta = 2f * PI.toFloat() * i / goldenRatio
+            val phi = acos(1f - 2f * (i + 0.5f) / count)
+
+            Vector3(
+                (sin(phi) * cos(theta) * radius).toFloat(),
+                (cos(phi) * radius).toFloat(),
+                (sin(phi) * sin(theta) * radius).toFloat()
+            )
+        }
+    }
+
+    /**
+     * Group agents by role, placing each role cluster at a different Z-depth.
+     * Within each cluster, agents are arranged in a small circle.
+     */
+    private fun layoutClustered(agentList: List<AgentVisualState>): List<Vector3> {
+        val roleGroups = agentList.groupBy { it.role }
+        val clusterCount = roleGroups.size
+        val result = mutableMapOf<String, Vector3>()
+
+        roleGroups.entries.forEachIndexed { clusterIndex, (_, groupAgents) ->
+            // Distribute cluster centers at different Z-depths
+            val clusterZ = if (clusterCount <= 1) 0f
+                else (clusterIndex.toFloat() / (clusterCount - 1) - 0.5f) * minOf(width, height) * 0.5f
+
+            // Spread clusters along X axis
+            val clusterX = if (clusterCount <= 1) 0f
+                else (clusterIndex.toFloat() / (clusterCount - 1) - 0.5f) * width * 0.4f
+
+            // Arrange agents in a small circle within the cluster
+            val clusterRadius = minOf(width, height) * 0.1f
+            val angleStep = 2 * PI / groupAgents.size
+
+            groupAgents.forEachIndexed { agentIndex, agent ->
+                val angle = agentIndex * angleStep
+                result[agent.id] = Vector3(
+                    clusterX + (cos(angle) * clusterRadius).toFloat(),
+                    0f, // Y (height) left at 0 for waveform to control
+                    clusterZ + (sin(angle) * clusterRadius).toFloat()
+                )
+            }
+        }
+
+        return agentList.map { result[it.id] ?: Vector3.ZERO }
+    }
+
+    /**
+     * Set a custom 2D position for an agent.
      */
     fun setAgentPosition(agentId: String, position: Vector2) {
         agents[agentId]?.let { agent ->
             agents[agentId] = agent.withPosition(position)
+        }
+    }
+
+    /**
+     * Set a custom 3D position for an agent.
+     */
+    fun setAgentPosition3D(agentId: String, position3D: Vector3) {
+        agents[agentId]?.let { agent ->
+            agents[agentId] = agent.withPosition3D(position3D)
         }
     }
 
