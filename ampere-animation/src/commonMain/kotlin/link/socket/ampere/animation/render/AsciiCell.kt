@@ -46,5 +46,40 @@ data class AsciiCell(
                 bold = isBold
             )
         }
+
+        /**
+         * Build a cell from surface lighting parameters with ordered dithering.
+         *
+         * Screen coordinates drive the Bayer matrix pattern, breaking up
+         * banding in both character selection and color.
+         *
+         * @param luminance 0.0 (dark) to 1.0 (bright)
+         * @param normalX Horizontal surface normal component (-1.0 to 1.0)
+         * @param normalY Vertical surface normal component (-1.0 to 1.0)
+         * @param screenX Horizontal screen coordinate
+         * @param screenY Vertical screen coordinate
+         * @param palette Character palette for this phase
+         * @param colorRamp Color ramp for this phase
+         * @return A fully resolved AsciiCell with dithered character and color
+         */
+        fun fromSurfaceDithered(
+            luminance: Float,
+            normalX: Float,
+            normalY: Float,
+            screenX: Int,
+            screenY: Int,
+            palette: AsciiLuminancePalette,
+            colorRamp: CognitiveColorRamp
+        ): AsciiCell {
+            val ch = palette.charForSurfaceDithered(luminance, normalX, normalY, screenX, screenY)
+            val fg = colorRamp.colorForLuminanceDithered(luminance, screenX, screenY)
+            val isBold = luminance > 0.8f
+            return AsciiCell(
+                char = ch,
+                fgColor = fg,
+                bgColor = null,
+                bold = isBold
+            )
+        }
     }
 }

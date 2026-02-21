@@ -113,6 +113,71 @@ class AsciiCellTest {
         assertNull(cell.bgColor)
     }
 
+    // --- Dithered fromSurface ---
+
+    @Test
+    fun `fromSurfaceDithered produces valid cell`() {
+        val cell = AsciiCell.fromSurfaceDithered(
+            luminance = 0.5f,
+            normalX = 0f,
+            normalY = 0f,
+            screenX = 2,
+            screenY = 3,
+            palette = AsciiLuminancePalette.STANDARD,
+            colorRamp = CognitiveColorRamp.PERCEIVE
+        )
+        assertNotEquals(' ', cell.char)
+        assertNull(cell.bgColor)
+    }
+
+    @Test
+    fun `fromSurfaceDithered respects bold threshold`() {
+        val notBold = AsciiCell.fromSurfaceDithered(
+            luminance = 0.79f,
+            normalX = 0f,
+            normalY = 0f,
+            screenX = 0,
+            screenY = 0,
+            palette = AsciiLuminancePalette.STANDARD,
+            colorRamp = CognitiveColorRamp.PERCEIVE
+        )
+        val isBold = AsciiCell.fromSurfaceDithered(
+            luminance = 0.81f,
+            normalX = 0f,
+            normalY = 0f,
+            screenX = 0,
+            screenY = 0,
+            palette = AsciiLuminancePalette.STANDARD,
+            colorRamp = CognitiveColorRamp.PERCEIVE
+        )
+        assertFalse(notBold.bold)
+        assertTrue(isBold.bold)
+    }
+
+    @Test
+    fun `fromSurfaceDithered produces variation across screen positions`() {
+        // At a luminance near a boundary, different positions should give different results
+        val cells = mutableSetOf<Char>()
+        for (y in 0..3) {
+            for (x in 0..3) {
+                cells.add(
+                    AsciiCell.fromSurfaceDithered(
+                        luminance = 0.45f,
+                        normalX = 0f,
+                        normalY = 0f,
+                        screenX = x,
+                        screenY = y,
+                        palette = AsciiLuminancePalette.STANDARD,
+                        colorRamp = CognitiveColorRamp.NEUTRAL
+                    ).char
+                )
+            }
+        }
+        assert(cells.size >= 2) {
+            "Dithered cells should vary across screen positions, got $cells"
+        }
+    }
+
     @Test
     fun `different phases produce different cells at same luminance`() {
         val perceiveCell = AsciiCell.fromSurface(

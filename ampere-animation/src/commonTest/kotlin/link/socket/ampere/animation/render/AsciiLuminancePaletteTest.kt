@@ -122,6 +122,63 @@ class AsciiLuminancePaletteTest {
         }
     }
 
+    // --- Dithered character selection ---
+
+    @Test
+    fun `dithered luminance extremes are stable`() {
+        // At 0.0 and 1.0, dithering should not push beyond palette bounds
+        val palette = AsciiLuminancePalette.STANDARD
+        for (y in 0..3) {
+            for (x in 0..3) {
+                assertEquals(' ', palette.charForLuminanceDithered(0.0f, x, y))
+                assertEquals(palette.characters.last(), palette.charForLuminanceDithered(1.0f, x, y))
+            }
+        }
+    }
+
+    @Test
+    fun `dithering produces variation at mid-luminance`() {
+        // At a luminance near a character boundary, different screen positions
+        // should produce at least two different characters
+        val palette = AsciiLuminancePalette("ABCDE", "test")
+        // Boundary between B and C is at luminance 0.375 (1.5/4)
+        val chars = mutableSetOf<Char>()
+        for (y in 0..3) {
+            for (x in 0..3) {
+                chars.add(palette.charForLuminanceDithered(0.375f, x, y))
+            }
+        }
+        assert(chars.size >= 2) {
+            "Dithering at boundary luminance should produce at least 2 characters, got $chars"
+        }
+    }
+
+    @Test
+    fun `dithered surface falls back to dithered luminance for weak normals`() {
+        val palette = AsciiLuminancePalette.STANDARD
+        val ditheredLum = palette.charForLuminanceDithered(0.5f, 3, 7)
+        val ditheredSurf = palette.charForSurfaceDithered(0.5f, 0.1f, 0.1f, 3, 7)
+        assertEquals(ditheredLum, ditheredSurf)
+    }
+
+    @Test
+    fun `dithered surface still returns edge chars for strong normals`() {
+        val palette = AsciiLuminancePalette.STANDARD
+        assertEquals('/', palette.charForSurfaceDithered(0.5f, 0.8f, 0.0f, 0, 0))
+        assertEquals('\\', palette.charForSurfaceDithered(0.5f, -0.8f, 0.0f, 2, 3))
+        assertEquals('|', palette.charForSurfaceDithered(0.5f, 0.0f, 0.8f, 1, 1))
+    }
+
+    @Test
+    fun `single character palette dithering is stable`() {
+        val palette = AsciiLuminancePalette("X", "single")
+        for (y in 0..3) {
+            for (x in 0..3) {
+                assertEquals('X', palette.charForLuminanceDithered(0.5f, x, y))
+            }
+        }
+    }
+
     @Test
     fun `different phase palettes produce different characters for same luminance`() {
         // At mid-luminance, phase palettes should differ from each other
