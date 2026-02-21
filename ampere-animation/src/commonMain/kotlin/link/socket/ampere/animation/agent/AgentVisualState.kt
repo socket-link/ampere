@@ -1,5 +1,6 @@
 package link.socket.ampere.animation.agent
 
+import link.socket.ampere.animation.math.Vector3
 import link.socket.ampere.animation.substrate.Vector2
 
 /**
@@ -48,7 +49,8 @@ enum class AgentActivityState {
  * @property id Unique agent identifier
  * @property name Display name for the agent
  * @property role Agent's role (e.g., "reasoning", "codegen")
- * @property position Position in 2D space
+ * @property position Position in 2D space (preserved for 2D renderers)
+ * @property position3D Full 3D position (x=horizontal, y=height/waveform, z=depth)
  * @property state Current activity state
  * @property statusText Status message displayed below agent
  * @property pulsePhase Phase for shimmer animation (0.0-1.0)
@@ -58,6 +60,7 @@ data class AgentVisualState(
     val name: String,
     val role: String,
     val position: Vector2,
+    val position3D: Vector3 = Vector3(position.x, 0f, position.y),
     val state: AgentActivityState = AgentActivityState.IDLE,
     val statusText: String = "",
     val pulsePhase: Float = 0f,
@@ -65,9 +68,22 @@ data class AgentVisualState(
     val phaseProgress: Float = 0f
 ) {
     /**
-     * Create a copy with updated position.
+     * Create a copy with updated 2D position. The 3D position is updated
+     * to keep X and Z in sync, preserving the current Y (height).
      */
-    fun withPosition(newPosition: Vector2): AgentVisualState = copy(position = newPosition)
+    fun withPosition(newPosition: Vector2): AgentVisualState = copy(
+        position = newPosition,
+        position3D = Vector3(newPosition.x, position3D.y, newPosition.y)
+    )
+
+    /**
+     * Create a copy with updated 3D position. The 2D position is
+     * derived as the XZ projection.
+     */
+    fun withPosition3D(newPosition3D: Vector3): AgentVisualState = copy(
+        position = Vector2(newPosition3D.x, newPosition3D.z),
+        position3D = newPosition3D
+    )
 
     /**
      * Create a copy with updated state.
