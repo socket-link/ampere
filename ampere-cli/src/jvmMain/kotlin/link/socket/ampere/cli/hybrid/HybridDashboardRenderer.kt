@@ -1,6 +1,8 @@
 package link.socket.ampere.cli.hybrid
 
 import com.github.ajalt.mordant.terminal.Terminal
+import link.socket.ampere.animation.emitter.CognitiveEmitterBridge
+import link.socket.ampere.animation.emitter.EmitterManager
 import link.socket.ampere.animation.particle.ParticleSystem
 import link.socket.ampere.cli.animation.render.AmperePalette
 import link.socket.ampere.cli.animation.render.CompositeRenderer
@@ -11,6 +13,7 @@ import link.socket.ampere.cli.layout.AnsiCellParser
 import link.socket.ampere.cli.layout.PaneRenderer
 import link.socket.ampere.cli.layout.fitToHeight
 import link.socket.ampere.cli.layout.fitToWidth
+import link.socket.ampere.cli.render.WaveformPaneRenderer
 import link.socket.ampere.cli.watch.presentation.WatchViewState
 import link.socket.ampere.repl.TerminalFactory
 import kotlin.math.roundToInt
@@ -21,6 +24,7 @@ import kotlin.math.roundToInt
 data class HybridConfig(
     val enableSubstrate: Boolean = true,
     val enableParticles: Boolean = true,
+    val enableWaveform: Boolean = true,
     val substrateOpacity: Float = 0.15f,
     val particleMaxCount: Int = 30,
     val useColor: Boolean = CompositeRenderer.supports256Colors(),
@@ -60,6 +64,20 @@ class HybridDashboardRenderer(
     private lateinit var substrateAnimator: SubstrateAnimator
     private lateinit var particles: ParticleSystem
     private lateinit var bridge: WatchStateAnimationBridge
+
+    // 3D waveform pipeline
+    private lateinit var emitterManager: EmitterManager
+    private lateinit var cognitiveEmitterBridge: CognitiveEmitterBridge
+
+    /**
+     * The waveform pane renderer for the middle pane. Callers can pass this
+     * as the `middlePane` parameter to [render] or [renderToBuffer] to display
+     * the 3D cognitive waveform instead of the flat spatial map.
+     *
+     * Only available after [initialize] has been called and [HybridConfig.enableWaveform] is true.
+     */
+    var waveformPane: WaveformPaneRenderer? = null
+        private set
 
     private var initialized = false
     private var frameCount = 0L
@@ -129,6 +147,24 @@ class HybridDashboardRenderer(
             maxParticles = config.particleMaxCount
         )
 
+        // Initialize waveform pipeline
+        emitterManager = EmitterManager()
+        cognitiveEmitterBridge = CognitiveEmitterBridge(emitterManager)
+
+        if (config.enableWaveform) {
+            val wfPane = WaveformPaneRenderer(
+                agentLayer = bridge.agentLayer,
+                emitterManager = emitterManager,
+                cognitiveEmitterBridge = cognitiveEmitterBridge
+            )
+            waveformPane = wfPane
+
+            // Wire cognitive events from bridge to emitter bridge
+            bridge.onCognitiveEvent = { event, position ->
+                cognitiveEmitterBridge.onCognitiveEvent(event, position)
+            }
+        }
+
         initialized = true
     }
 
@@ -171,7 +207,10 @@ class HybridDashboardRenderer(
         // 1. Bridge updates animation from watch state
         substrate = bridge.update(viewState, substrate, deltaSeconds)
 
-        // 2-3. (ambient + particle updates handled inside bridge.update)
+        // 2. Update waveform pane with current substrate/flow state
+        waveformPane?.update(substrate, flow = null, dt = deltaSeconds)
+
+        // 3. (ambient + particle updates handled inside bridge.update)
 
         // 4. Clear buffer
         buffer.clear()
@@ -332,6 +371,9 @@ class HybridDashboardRenderer(
 
         // 1. Bridge updates animation from watch state
         substrate = bridge.update(viewState, substrate, deltaSeconds)
+
+        // 2. Update waveform pane with current substrate/flow state
+        waveformPane?.update(substrate, flow = null, dt = deltaSeconds)
 
         // 4. Clear buffer
         buffer.clear()
