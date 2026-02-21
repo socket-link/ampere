@@ -366,4 +366,50 @@ class AmpereInstanceTest {
             assertTrue(e.message!!.contains("Provider is required"))
         }
     }
+
+    // ==================== Stub Instance Tests ====================
+
+    @Test
+    fun `Ampere createStub returns working instance`() = runBlocking {
+        val ampere = Ampere.createStub()
+
+        // Tickets: create succeeds with correct data
+        val ticket = ampere.tickets.create("Test ticket") {
+            description("Test description")
+        }
+        assertTrue(ticket.isSuccess)
+        assertEquals("Test ticket", ticket.getOrNull()!!.title)
+
+        // Agents: listAll returns empty
+        val agents = ampere.agents.listAll()
+        assertTrue(agents.isEmpty())
+
+        // Agents: pursue returns a goal ID
+        val goalResult = ampere.agents.pursue("Build something")
+        assertTrue(goalResult.isSuccess)
+        assertTrue(goalResult.getOrNull()!!.startsWith("stub-goal-"))
+
+        // Threads: create and post work
+        val thread = ampere.threads.create("Discussion")
+        assertTrue(thread.isSuccess)
+        val msg = ampere.threads.post(thread.getOrNull()!!.id, "Hello")
+        assertTrue(msg.isSuccess)
+
+        // Events: observe returns a flow
+        assertNotNull(ampere.events.observe())
+
+        // Outcomes: stats returns zeroed
+        val stats = ampere.outcomes.stats().getOrNull()!!
+        assertEquals(0, stats.totalOutcomes)
+
+        // Status: snapshot returns zeroed
+        val snapshot = ampere.status.snapshot().getOrNull()!!
+        assertEquals(0, snapshot.activeTickets)
+
+        // Knowledge: recall returns empty
+        val knowledge = ampere.knowledge.recall("test").getOrNull()!!
+        assertTrue(knowledge.isEmpty())
+
+        ampere.close()
+    }
 }

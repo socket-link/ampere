@@ -43,6 +43,23 @@ object Ampere {
     fun create(config: AmpereConfig): AmpereInstance {
         return createInstance(config)
     }
+
+    /**
+     * Create a stub AMPERE instance for testing and parallel development.
+     *
+     * No database, no network, no real infrastructure — just correct types
+     * and sensible defaults. Use this when coding against the API surface
+     * before real implementations are available.
+     *
+     * ```
+     * val ampere = Ampere.createStub()
+     * val ticket = ampere.tickets.create("Test").getOrThrow()
+     * ampere.close()
+     * ```
+     */
+    fun createStub(): AmpereInstance {
+        return link.socket.ampere.api.service.stub.StubAmpereInstance()
+    }
 }
 
 /**
