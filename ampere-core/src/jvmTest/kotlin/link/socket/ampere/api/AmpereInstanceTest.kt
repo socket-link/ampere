@@ -68,6 +68,11 @@ class AmpereInstanceTest {
 
         val sdkEventApi = environmentService.createEventApi("sdk-test")
 
+        agentService = DefaultAgentService(
+            agentActionService = AgentActionService(eventApi = sdkEventApi),
+            eventApi = sdkEventApi,
+        )
+
         ticketService = DefaultTicketService(
             actionService = TicketActionService(
                 ticketRepository = environmentService.ticketRepository,
@@ -109,12 +114,8 @@ class AmpereInstanceTest {
             ticketViewService = DefaultTicketViewService(
                 ticketRepository = environmentService.ticketRepository,
             ),
+            agentService = agentService,
             workspace = "/test/workspace",
-        )
-
-        agentService = DefaultAgentService(
-            agentActionService = AgentActionService(eventApi = sdkEventApi),
-            eventApi = sdkEventApi,
         )
     }
 
@@ -127,13 +128,12 @@ class AmpereInstanceTest {
     // ==================== TicketService Tests ====================
 
     @Test
-    fun `TicketService create creates a ticket and returns it`() = runBlocking {
-        val result = ticketService.create(
-            title = "Test Ticket",
-            description = "Test Description",
-            priority = TicketPriority.HIGH,
-            type = TicketType.BUG,
-        )
+    fun `TicketService create with builder DSL creates a ticket`() = runBlocking {
+        val result = ticketService.create("Test Ticket") {
+            description("Test Description")
+            priority(TicketPriority.HIGH)
+            type(TicketType.BUG)
+        }
 
         assertTrue(result.isSuccess)
         val ticket = result.getOrNull()!!
@@ -145,9 +145,20 @@ class AmpereInstanceTest {
     }
 
     @Test
+    fun `TicketService create without builder uses defaults`() = runBlocking {
+        val result = ticketService.create("Simple Ticket")
+
+        assertTrue(result.isSuccess)
+        val ticket = result.getOrNull()!!
+        assertEquals("Simple Ticket", ticket.title)
+        assertEquals(TicketPriority.MEDIUM, ticket.priority)
+        assertEquals(TicketType.TASK, ticket.type)
+    }
+
+    @Test
     fun `TicketService list returns active tickets after creation`() = runBlocking {
-        ticketService.create(title = "Ticket A", description = "A")
-        ticketService.create(title = "Ticket B", description = "B")
+        ticketService.create("Ticket A")
+        ticketService.create("Ticket B")
 
         val result = ticketService.list()
         assertTrue(result.isSuccess)
@@ -157,9 +168,8 @@ class AmpereInstanceTest {
 
     @Test
     fun `TicketService transition updates ticket status`() = runBlocking {
-        val ticket = ticketService.create(title = "Transition Test", description = "Test").getOrNull()!!
+        val ticket = ticketService.create("Transition Test").getOrNull()!!
 
-        // Backlog -> Ready
         val transitionResult = ticketService.transition(ticket.id, TicketStatus.Ready)
         assertTrue(transitionResult.isSuccess)
 
@@ -169,7 +179,7 @@ class AmpereInstanceTest {
 
     @Test
     fun `TicketService assign assigns ticket to agent`() = runBlocking {
-        val ticket = ticketService.create(title = "Assign Test", description = "Test").getOrNull()!!
+        val ticket = ticketService.create("Assign Test").getOrNull()!!
 
         val assignResult = ticketService.assign(ticket.id, "engineer-1")
         assertTrue(assignResult.isSuccess)
@@ -181,11 +191,19 @@ class AmpereInstanceTest {
     // ==================== ThreadService Tests ====================
 
     @Test
-    fun `ThreadService create creates a thread and returns it`() = runBlocking {
-        val result = threadService.create(
-            title = "Design Discussion",
-            participantIds = listOf("pm-agent", "eng-agent"),
-        )
+    fun `ThreadService create with builder DSL creates a thread`() = runBlocking {
+        val result = threadService.create("Design Discussion") {
+            participants("pm-agent", "eng-agent")
+        }
+
+        assertTrue(result.isSuccess)
+        val thread = result.getOrNull()!!
+        assertTrue(thread.id.isNotEmpty())
+    }
+
+    @Test
+    fun `ThreadService create without builder uses defaults`() = runBlocking {
+        val result = threadService.create("Simple Thread")
 
         assertTrue(result.isSuccess)
         val thread = result.getOrNull()!!
@@ -194,7 +212,7 @@ class AmpereInstanceTest {
 
     @Test
     fun `ThreadService post adds message to thread`() = runBlocking {
-        val thread = threadService.create(title = "Test Thread").getOrNull()!!
+        val thread = threadService.create("Test Thread").getOrNull()!!
 
         val msgResult = threadService.post(thread.id, "Hello from SDK test")
 
@@ -206,13 +224,20 @@ class AmpereInstanceTest {
 
     @Test
     fun `ThreadService list returns active threads`() = runBlocking {
-        threadService.create(title = "Thread 1")
-        threadService.create(title = "Thread 2")
+        threadService.create("Thread 1")
+        threadService.create("Thread 2")
 
         val result = threadService.list()
         assertTrue(result.isSuccess)
         val threads = result.getOrNull()!!
         assertEquals(2, threads.size)
+    }
+
+    @Test
+    fun `ThreadService observe returns a flow`() {
+        val thread = runBlocking { threadService.create("Observable Thread").getOrNull()!! }
+        val flow = threadService.observe(thread.id)
+        assertNotNull(flow)
     }
 
     // ==================== AgentService Tests ====================
@@ -232,13 +257,24 @@ class AmpereInstanceTest {
         assertTrue(result.isSuccess)
     }
 
+    @Test
+    fun `AgentService listAll returns empty when no team configured`() = runBlocking {
+        val agents = agentService.listAll()
+        assertTrue(agents.isEmpty())
+    }
+
+    @Test
+    fun `AgentService inspect fails when no team configured`() = runBlocking {
+        val result = agentService.inspect("nonexistent")
+        assertTrue(result.isFailure)
+    }
+
     // ==================== StatusService Tests ====================
 
     @Test
     fun `StatusService snapshot returns system state`() = runBlocking {
-        // Create some data
-        ticketService.create(title = "Active Ticket", description = "Test")
-        threadService.create(title = "Active Thread")
+        ticketService.create("Active Ticket")
+        threadService.create("Active Thread")
 
         val result = statusService.snapshot()
 
@@ -259,6 +295,12 @@ class AmpereInstanceTest {
         assertEquals(0, snapshot.activeThreads)
     }
 
+    @Test
+    fun `StatusService health returns a flow`() {
+        val flow = statusService.health()
+        assertNotNull(flow)
+    }
+
     // ==================== EventService Tests ====================
 
     @Test
@@ -269,13 +311,32 @@ class AmpereInstanceTest {
 
     @Test
     fun `EventService query returns events in time range`() = runBlocking {
-        // Create some activity to generate events
-        ticketService.create(title = "Event Test", description = "Test")
+        ticketService.create("Event Test")
 
         val from = now - kotlin.time.Duration.parse("1h")
         val to = Clock.System.now() + kotlin.time.Duration.parse("1h")
 
         val result = eventService.query(from, to)
         assertTrue(result.isSuccess)
+    }
+
+    // ==================== OutcomeService Tests ====================
+
+    @Test
+    fun `OutcomeService stats returns aggregated statistics`() = runBlocking {
+        val result = outcomeService.stats()
+
+        assertTrue(result.isSuccess)
+        val stats = result.getOrNull()!!
+        assertEquals(0, stats.totalOutcomes)
+        assertEquals(0.0, stats.successRate)
+    }
+
+    // ==================== KnowledgeService Tests ====================
+
+    @Test
+    fun `KnowledgeService provenance fails for nonexistent knowledge`() = runBlocking {
+        val result = knowledgeService.provenance("nonexistent-id")
+        assertTrue(result.isFailure)
     }
 }

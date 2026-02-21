@@ -9,19 +9,36 @@ import link.socket.ampere.agents.events.relay.EventRelayFilters
  * SDK service for event stream observation and querying.
  *
  * This is the "glass brain" — AMPERE's core differentiator. Every cognitive
- * state change, coordination event, and decision flows through here.
+ * state change, every coordination event, every decision flows through here.
  *
  * Maps to CLI command: `watch`
+ *
+ * ```
+ * ampere.events.observe()
+ *     .filter { it is TicketEvent }
+ *     .collect { event ->
+ *         when (event) {
+ *             is TicketEvent.TicketCreated -> handleCreated(event)
+ *             is TicketEvent.TicketAssigned -> handleAssigned(event)
+ *         }
+ *     }
+ * ```
  */
 interface EventService {
 
     /**
      * Observe the live event stream.
      *
+     * The returned [Flow] is hot and will continue emitting events until cancelled.
+     * Events are filtered according to the provided [filters].
+     *
      * ```
-     * ampere.events.observe()
-     *     .filter { it is TicketEvent }
-     *     .collect { event -> handleEvent(event) }
+     * // All events:
+     * ampere.events.observe().collect { event -> println(event) }
+     *
+     * // Filtered by source:
+     * ampere.events.observe(EventRelayFilters.forSource(EventSource.Agent("pm")))
+     *     .collect { event -> println(event) }
      * ```
      *
      * @param filters Optional filters to limit which events are emitted
@@ -31,6 +48,13 @@ interface EventService {
 
     /**
      * Query historical events from persistent storage.
+     *
+     * ```
+     * val recentEvents = ampere.events.query(
+     *     fromTime = Clock.System.now() - 1.hours,
+     *     toTime = Clock.System.now(),
+     * )
+     * ```
      *
      * @param fromTime Start of time range (inclusive)
      * @param toTime End of time range (inclusive)
@@ -45,6 +69,12 @@ interface EventService {
 
     /**
      * Replay a time range of events as a flow (useful for debugging).
+     *
+     * ```
+     * ampere.events.replay(startTime, endTime).collect { event ->
+     *     println("${event.timestamp}: ${event.eventType}")
+     * }
+     * ```
      *
      * @param from Start of time range (inclusive)
      * @param to End of time range (inclusive)

@@ -106,6 +106,7 @@ internal class DefaultAmpereInstance(
         ticketViewService = DefaultTicketViewService(
             ticketRepository = environmentService.ticketRepository,
         ),
+        agentService = agents,
         workspace = config.workspace,
     )
 
