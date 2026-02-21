@@ -130,6 +130,7 @@ fun main(args: Array<String>) {
                 RespondCommand(),
                 WorkCommand { context },
                 TestCommand(),
+                DemoCommand(),
             )
             .main(filteredArgs)
     } finally {

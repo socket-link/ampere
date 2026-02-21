@@ -102,6 +102,7 @@ class AmpereCommand(
           work         Autonomous headless work on issues
           respond      Respond to agent input requests
           test         Headless automated tests
+          demo         Run visual demos (e.g., ampere demo waveform)
     """.trimIndent()
 ) {
 
