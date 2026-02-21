@@ -12,6 +12,7 @@ import link.socket.ampere.cli.layout.PaneRenderer
 import link.socket.ampere.cli.layout.fitToHeight
 import link.socket.ampere.cli.layout.fitToWidth
 import link.socket.ampere.cli.watch.presentation.WatchViewState
+import link.socket.ampere.repl.TerminalFactory
 import kotlin.math.roundToInt
 
 /**
@@ -62,6 +63,7 @@ class HybridDashboardRenderer(
 
     private var initialized = false
     private var frameCount = 0L
+    private var resized = false
 
     // Column layout (mirrors ThreeColumnLayout calculations)
     private var totalWidth = 0
@@ -79,8 +81,11 @@ class HybridDashboardRenderer(
      * Must be called before first render.
      */
     fun initialize() {
-        totalWidth = (explicitWidth ?: terminal?.info?.width ?: 80).coerceAtLeast(40)
-        totalHeight = (explicitHeight ?: terminal?.info?.height ?: 24).coerceAtLeast(10)
+        // Use TerminalFactory for live dimensions (updated via SIGWINCH) instead of
+        // stale terminal.info values which are captured once at Terminal creation time.
+        val liveCaps = if (terminal != null) TerminalFactory.getCapabilities() else null
+        totalWidth = (explicitWidth ?: liveCaps?.width ?: 80).coerceAtLeast(40)
+        totalHeight = (explicitHeight ?: liveCaps?.height ?: 24).coerceAtLeast(10)
         contentHeight = totalHeight - 2
 
         // Replicate ThreeColumnLayout width calculations
@@ -148,12 +153,18 @@ class HybridDashboardRenderer(
     ): String {
         if (!initialized) initialize()
 
-        // Detect terminal resize (only when using live terminal, not explicit dimensions)
+        // Detect terminal resize (only when using live terminal, not explicit dimensions).
+        // Uses TerminalFactory.getCapabilities() which is updated via SIGWINCH signal handler,
+        // rather than stale terminal.info values that are captured once at Terminal creation.
         if (explicitWidth == null && terminal != null) {
-            val currentWidth = terminal.info.width
-            val currentHeight = terminal.info.height
+            val caps = TerminalFactory.getCapabilities()
+            val currentWidth = caps.width
+            val currentHeight = caps.height
             if (currentWidth != totalWidth || currentHeight != totalHeight) {
                 initialize()
+                // Force full redraw (not diff) after resize to avoid artifacts
+                frameCount = 0
+                resized = true
             }
         }
 
@@ -185,10 +196,18 @@ class HybridDashboardRenderer(
         renderStatusBar(statusBar)
 
         // 10. Generate output
-        val output = if (frameCount == 0L) {
+        val rawOutput = if (frameCount == 0L) {
             buffer.renderFull()
         } else {
             buffer.renderDiff()
+        }
+
+        // Prepend screen clear on resize to remove old layout artifacts
+        val output = if (resized) {
+            resized = false
+            "\u001B[2J$rawOutput"
+        } else {
+            rawOutput
         }
 
         buffer.swapBuffers()

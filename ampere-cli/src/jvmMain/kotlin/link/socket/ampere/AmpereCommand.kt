@@ -370,7 +370,7 @@ class AmpereCommand(
                         }
                         val shortcuts = StatusBar.defaultShortcuts(activeMode)
                         val statusBarStr = statusBar.render(
-                            width = terminal.info.width,
+                            width = TerminalFactory.getCapabilities().width.coerceAtLeast(40),
                             shortcuts = shortcuts,
                             status = systemStatus,
                             focusedAgent = viewConfig.focusedAgentIndex,
