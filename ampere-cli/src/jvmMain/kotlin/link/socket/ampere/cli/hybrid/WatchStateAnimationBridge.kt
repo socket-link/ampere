@@ -7,6 +7,7 @@ import link.socket.ampere.animation.agent.AgentVisualState
 import link.socket.ampere.animation.agent.CognitiveChoreographer
 import link.socket.ampere.animation.agent.CognitivePhase
 import link.socket.ampere.animation.emitter.CognitiveEvent
+import link.socket.ampere.animation.flow.FlowLayer
 import link.socket.ampere.animation.math.Vector3
 import link.socket.ampere.animation.particle.BurstEmitter
 import link.socket.ampere.animation.particle.EmitterConfig
@@ -50,7 +51,16 @@ class WatchStateAnimationBridge(
     val agentLayer = AgentLayer(
         width = accentColumns.maxOrNull()?.plus(10) ?: 80,
         height = height,
-        orientation = AgentLayoutOrientation.HORIZONTAL
+        orientation = AgentLayoutOrientation.CIRCULAR
+    )
+
+    /**
+     * Flow connections between agents. Connections are auto-managed
+     * when agents delegate tasks or communicate.
+     */
+    val flowLayer = FlowLayer(
+        width = accentColumns.maxOrNull()?.plus(10) ?: 80,
+        height = height
     )
 
     /**
@@ -92,6 +102,9 @@ class WatchStateAnimationBridge(
         // Apply ambient animation
         result = substrateAnimator.updateAmbient(result, deltaSeconds)
 
+        // Update flow connections
+        flowLayer.update(deltaSeconds)
+
         // Update particle physics
         particles.update(deltaSeconds)
 
@@ -117,13 +130,16 @@ class WatchStateAnimationBridge(
         // Remove agents no longer present
         for (id in existingIds - currentIds) {
             agentLayer.removeAgent(id)
+            // Clean up flow connections involving removed agents
+            flowLayer.allConnections
+                .filter { it.sourceAgentId == id || it.targetAgentId == id }
+                .forEach { flowLayer.removeConnection(it.id) }
         }
 
         // Add or update agents
         val agentEntries = viewState.agentStates.entries.toList()
-        val agentCount = agentEntries.size
 
-        for ((index, entry) in agentEntries.withIndex()) {
+        for (entry in agentEntries) {
             val (id, activityState) = entry
             val phase = mapAgentStateToCognitivePhase(activityState.currentState)
             val animState = mapAgentStateToActivityState(activityState.currentState)
@@ -141,28 +157,59 @@ class WatchStateAnimationBridge(
                 agentLayer.updateAgentState(id, animState)
                 agentLayer.updateAgentCognitivePhase(id, phase)
             } else {
-                val col = accentColumns.elementAtOrElse(
-                    index % accentColumns.size.coerceAtLeast(1)
-                ) { 0 }
-                val row = height / 2
-
-                // Assign Z-depth based on creation order: distribute agents
-                // across the depth range so they appear at different distances
-                val depthRange = height * 0.6f
-                val zDepth = if (agentCount <= 1) 0f
-                    else (index.toFloat() / (agentCount - 1) - 0.5f) * depthRange
-
+                // New agent — CIRCULAR layout will assign 3D positions via relayout()
                 agentLayer.addAgent(
                     AgentVisualState(
                         id = id,
                         name = activityState.displayName,
                         role = "",
-                        position = Vector2(col.toFloat(), row.toFloat()),
-                        position3D = Vector3(col.toFloat(), 0f, zDepth),
+                        position = Vector2.ZERO,
                         state = animState,
                         cognitivePhase = phase,
                     )
                 )
+            }
+        }
+
+        // Auto-manage flow connections between active agents
+        syncFlowConnections()
+    }
+
+    /**
+     * Create flow connections between active agents to visualize
+     * inter-agent communication as ridges on the waveform surface.
+     * Agents in EXECUTE or PROCESSING states get connected to each other.
+     */
+    private fun syncFlowConnections() {
+        val activeAgents = agentLayer.allAgents.filter {
+            it.state == AnimAgentActivityState.ACTIVE ||
+            it.state == AnimAgentActivityState.PROCESSING
+        }
+
+        // Create connections between adjacent active agents (chain topology)
+        val existingConnectionIds = flowLayer.allConnections.map { it.id }.toSet()
+        val desiredConnectionIds = mutableSetOf<String>()
+
+        for (i in 0 until activeAgents.size - 1) {
+            val source = activeAgents[i]
+            val target = activeAgents[i + 1]
+            val connectionId = "${source.id}->${target.id}"
+            desiredConnectionIds.add(connectionId)
+
+            if (connectionId !in existingConnectionIds) {
+                flowLayer.createConnection(
+                    sourceAgentId = source.id,
+                    targetAgentId = target.id,
+                    sourcePosition = source.position,
+                    targetPosition = target.position
+                )
+            }
+        }
+
+        // Remove stale connections
+        for (connection in flowLayer.allConnections) {
+            if (connection.id !in desiredConnectionIds) {
+                flowLayer.removeConnection(connection.id)
             }
         }
     }

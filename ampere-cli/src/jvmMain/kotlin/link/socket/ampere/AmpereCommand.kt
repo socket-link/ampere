@@ -401,10 +401,13 @@ class AmpereCommand(
                             else -> memoryPane
                         }
 
+                        // Use waveform pane as center if available, otherwise fall back to progress pane
+                        val middlePane: PaneRenderer = hybridRenderer.waveformPane ?: jazzPane
+
                         // Render the hybrid animated layout
                         hybridRenderer.render(
                             leftPane = eventPane,
-                            middlePane = jazzPane,
+                            middlePane = middlePane,
                             rightPane = rightPane,
                             statusBar = statusBarStr,
                             viewState = watchState,
