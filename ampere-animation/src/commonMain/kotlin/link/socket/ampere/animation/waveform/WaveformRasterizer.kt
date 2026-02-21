@@ -87,12 +87,14 @@ class WaveformRasterizer(
                 val baseLuminance = lighting.computeLuminance(normal, viewDir)
 
                 val cell = if (influence != null && influence.intensity > 0f) {
-                    buildEffectCell(baseLuminance, normal, influence, palette, colorRamp)
+                    buildEffectCell(baseLuminance, normal, influence, palette, colorRamp, sx, sy)
                 } else {
-                    AsciiCell.fromSurface(
+                    AsciiCell.fromSurfaceDithered(
                         luminance = baseLuminance,
                         normalX = normal.x,
                         normalY = normal.z,
+                        screenX = sx,
+                        screenY = sy,
                         palette = palette,
                         colorRamp = colorRamp
                     )
@@ -166,12 +168,14 @@ class WaveformRasterizer(
                 ) ?: (fallbackPalette to fallbackRamp)
 
                 val cell = if (influence != null && influence.intensity > 0f) {
-                    buildEffectCell(baseLuminance, normal, influence, palette, colorRamp)
+                    buildEffectCell(baseLuminance, normal, influence, palette, colorRamp, sx, sy)
                 } else {
-                    AsciiCell.fromSurface(
+                    AsciiCell.fromSurfaceDithered(
                         luminance = baseLuminance,
                         normalX = normal.x,
                         normalY = normal.z,
+                        screenX = sx,
+                        screenY = sy,
                         palette = palette,
                         colorRamp = colorRamp
                     )
@@ -199,7 +203,9 @@ class WaveformRasterizer(
         normal: Vector3,
         influence: EffectInfluence,
         basePalette: AsciiLuminancePalette,
-        baseColorRamp: CognitiveColorRamp
+        baseColorRamp: CognitiveColorRamp,
+        screenX: Int,
+        screenY: Int
     ): AsciiCell {
         val modifiedLuminance = (baseLuminance + influence.luminanceModifier).coerceIn(0f, 1f)
         val effectivePalette = influence.paletteOverride ?: basePalette
@@ -207,27 +213,31 @@ class WaveformRasterizer(
 
         // Character override takes priority (for confetti, etc.)
         return if (influence.characterOverride != null) {
-            val fg = influence.colorOverride ?: effectiveColorRamp.colorForLuminance(modifiedLuminance)
+            val fg = influence.colorOverride
+                ?: effectiveColorRamp.colorForLuminanceDithered(modifiedLuminance, screenX, screenY)
             AsciiCell(
                 char = influence.characterOverride,
                 fgColor = fg,
                 bold = influence.intensity > 0.7f
             )
         } else {
-            val fg = influence.colorOverride ?: effectiveColorRamp.colorForLuminance(modifiedLuminance)
             if (influence.colorOverride != null) {
                 // Color override: use the overridden color but still pick character from palette
-                val ch = effectivePalette.charForSurface(modifiedLuminance, normal.x, normal.z)
+                val ch = effectivePalette.charForSurfaceDithered(
+                    modifiedLuminance, normal.x, normal.z, screenX, screenY
+                )
                 AsciiCell(
                     char = ch,
-                    fgColor = fg,
+                    fgColor = influence.colorOverride,
                     bold = modifiedLuminance > 0.8f
                 )
             } else {
-                AsciiCell.fromSurface(
+                AsciiCell.fromSurfaceDithered(
                     luminance = modifiedLuminance,
                     normalX = normal.x,
                     normalY = normal.z,
+                    screenX = screenX,
+                    screenY = screenY,
                     palette = effectivePalette,
                     colorRamp = effectiveColorRamp
                 )

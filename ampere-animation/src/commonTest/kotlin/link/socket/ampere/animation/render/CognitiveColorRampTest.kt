@@ -108,6 +108,36 @@ class CognitiveColorRampTest {
         }
     }
 
+    // --- Dithered color selection ---
+
+    @Test
+    fun `dithered color extremes are stable`() {
+        val ramp = CognitiveColorRamp.PERCEIVE
+        for (y in 0..3) {
+            for (x in 0..3) {
+                assertEquals(ramp.colorStops.first(), ramp.colorForLuminanceDithered(0.0f, x, y))
+                assertEquals(ramp.colorStops.last(), ramp.colorForLuminanceDithered(1.0f, x, y))
+            }
+        }
+    }
+
+    @Test
+    fun `dithered color produces variation at boundary`() {
+        val ramp = CognitiveColorRamp.EXECUTE
+        // Near a color stop boundary, dithering should produce at least 2 different colors
+        val step = 1f / ramp.colorStops.lastIndex
+        val boundaryLuminance = step * 3 + step * 0.5f // midway between stops 3 and 4
+        val colors = mutableSetOf<Int>()
+        for (y in 0..3) {
+            for (x in 0..3) {
+                colors.add(ramp.colorForLuminanceDithered(boundaryLuminance, x, y))
+            }
+        }
+        assert(colors.size >= 2) {
+            "Dithering at color boundary should produce at least 2 colors, got $colors"
+        }
+    }
+
     @Test
     fun `different phases produce different colors at same luminance`() {
         val perceiveColor = CognitiveColorRamp.PERCEIVE.colorForLuminance(0.5f)

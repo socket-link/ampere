@@ -32,6 +32,27 @@ data class CognitiveColorRamp(
         return colorStops[index]
     }
 
+    /**
+     * Get the ANSI 256-color code with ordered dithering.
+     *
+     * Applies Bayer matrix dithering to break up color banding between
+     * adjacent color stops.
+     *
+     * @param luminance 0.0 (dark) to 1.0 (bright), clamped internally
+     * @param screenX Horizontal screen coordinate (for dither pattern)
+     * @param screenY Vertical screen coordinate (for dither pattern)
+     * @return ANSI 256-color code
+     */
+    fun colorForLuminanceDithered(luminance: Float, screenX: Int, screenY: Int): Int {
+        val clamped = luminance.coerceIn(0f, 1f)
+        val scaled = clamped * lastIndex
+        val base = scaled.toInt().coerceIn(0, lastIndex)
+        if (base >= lastIndex) return colorStops[lastIndex]
+        val frac = scaled - base
+        val index = if (frac > BayerDither.threshold(screenX, screenY)) base + 1 else base
+        return colorStops[index]
+    }
+
     companion object {
         /** Cool blues -> white (sensory, exploratory) */
         val PERCEIVE = CognitiveColorRamp(

@@ -33,6 +33,28 @@ data class AsciiLuminancePalette(
     }
 
     /**
+     * Select a character for the given luminance with ordered dithering.
+     *
+     * Applies a Bayer matrix threshold offset to break up banding between
+     * adjacent palette characters. The dither strength is one character step,
+     * so smooth gradients produce a stippled mix of neighboring characters.
+     *
+     * @param luminance 0.0 (dark) to 1.0 (bright), clamped internally
+     * @param screenX Horizontal screen coordinate (for dither pattern)
+     * @param screenY Vertical screen coordinate (for dither pattern)
+     */
+    fun charForLuminanceDithered(luminance: Float, screenX: Int, screenY: Int): Char {
+        if (lastIndex == 0) return characters[0]
+        val clamped = luminance.coerceIn(0f, 1f)
+        val scaled = clamped * lastIndex
+        val base = scaled.toInt().coerceIn(0, lastIndex)
+        if (base >= lastIndex) return characters[lastIndex]
+        val frac = scaled - base
+        val index = if (frac > BayerDither.threshold(screenX, screenY)) base + 1 else base
+        return characters[index]
+    }
+
+    /**
      * Select a character considering surface normal direction.
      * Surfaces facing left use '\', facing right use '/', horizontal use '-', vertical use '|'.
      * Falls back to luminance-only selection for non-edge cases.
@@ -64,6 +86,49 @@ data class AsciiLuminancePalette(
         }
 
         return charForLuminance(clamped)
+    }
+
+    /**
+     * Select a character considering surface normal direction, with ordered dithering.
+     *
+     * Edge characters (/, \, |, -) are not dithered — only luminance-based
+     * characters receive the dither pattern.
+     *
+     * @param luminance 0.0 to 1.0
+     * @param normalX Horizontal component of surface normal (-1.0 to 1.0)
+     * @param normalY Vertical component of surface normal (-1.0 to 1.0)
+     * @param screenX Horizontal screen coordinate (for dither pattern)
+     * @param screenY Vertical screen coordinate (for dither pattern)
+     */
+    fun charForSurfaceDithered(
+        luminance: Float,
+        normalX: Float,
+        normalY: Float,
+        screenX: Int,
+        screenY: Int
+    ): Char {
+        val clamped = luminance.coerceIn(0f, 1f)
+
+        // Only use directional characters for mid-luminance edges
+        if (clamped in 0.15f..0.85f) {
+            val absX = abs(normalX)
+            val absY = abs(normalY)
+
+            // Strong directional bias triggers edge characters
+            if (absX > EDGE_THRESHOLD || absY > EDGE_THRESHOLD) {
+                return when {
+                    absX > absY && normalX > 0f -> '/'
+                    absX > absY && normalX < 0f -> '\\'
+                    absY > absX && absY > EDGE_THRESHOLD -> '|'
+                    absX > EDGE_THRESHOLD && absY > EDGE_THRESHOLD -> {
+                        if (normalX > 0f) '/' else '\\'
+                    }
+                    else -> '-'
+                }
+            }
+        }
+
+        return charForLuminanceDithered(clamped, screenX, screenY)
     }
 
     companion object {
