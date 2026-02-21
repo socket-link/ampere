@@ -1,5 +1,7 @@
 package link.socket.ampere.animation.waveform
 
+import link.socket.ampere.animation.emitter.EffectInfluence
+import link.socket.ampere.animation.emitter.EmitterManager
 import link.socket.ampere.animation.math.Vector3
 import link.socket.ampere.animation.projection.Camera
 import link.socket.ampere.animation.projection.ScreenProjector
@@ -48,7 +50,8 @@ class WaveformRasterizer(
         waveform: CognitiveWaveform,
         camera: Camera,
         palette: AsciiLuminancePalette,
-        colorRamp: CognitiveColorRamp
+        colorRamp: CognitiveColorRamp,
+        emitterManager: EmitterManager? = null
     ): Array<Array<AsciiCell>> {
         clear()
 
@@ -60,7 +63,15 @@ class WaveformRasterizer(
 
         // Rasterize back-to-front
         for ((gx, gz, _) in gridPoints) {
-            val worldPos = waveform.worldPosition(gx, gz)
+            val baseWorldPos = waveform.worldPosition(gx, gz)
+
+            // Apply emitter height modification before projection
+            val influence = emitterManager?.aggregateInfluenceAt(baseWorldPos.x, baseWorldPos.z)
+            val worldPos = if (influence != null && influence.heightModifier != 0f) {
+                Vector3(baseWorldPos.x, baseWorldPos.y + influence.heightModifier, baseWorldPos.z)
+            } else {
+                baseWorldPos
+            }
 
             val screenPoint = projector.project(worldPos, camera)
             if (!screenPoint.visible) continue
@@ -73,15 +84,19 @@ class WaveformRasterizer(
             if (screenPoint.depth < depthBuffer[bufferIndex]) {
                 val normal = waveform.normalAt(gx, gz)
                 val viewDir = (cameraPos - worldPos).normalized()
-                val luminance = lighting.computeLuminance(normal, viewDir)
+                val baseLuminance = lighting.computeLuminance(normal, viewDir)
 
-                val cell = AsciiCell.fromSurface(
-                    luminance = luminance,
-                    normalX = normal.x,
-                    normalY = normal.z, // Z maps to screen-space vertical component
-                    palette = palette,
-                    colorRamp = colorRamp
-                )
+                val cell = if (influence != null && influence.intensity > 0f) {
+                    buildEffectCell(baseLuminance, normal, influence, palette, colorRamp)
+                } else {
+                    AsciiCell.fromSurface(
+                        luminance = baseLuminance,
+                        normalX = normal.x,
+                        normalY = normal.z,
+                        palette = palette,
+                        colorRamp = colorRamp
+                    )
+                }
 
                 cellBuffer[bufferIndex] = cell
                 depthBuffer[bufferIndex] = screenPoint.depth
@@ -114,7 +129,8 @@ class WaveformRasterizer(
         blender: PhaseBlender,
         agents: link.socket.ampere.animation.agent.AgentLayer,
         fallbackPalette: AsciiLuminancePalette = AsciiLuminancePalette.STANDARD,
-        fallbackRamp: CognitiveColorRamp = CognitiveColorRamp.NEUTRAL
+        fallbackRamp: CognitiveColorRamp = CognitiveColorRamp.NEUTRAL,
+        emitterManager: EmitterManager? = null
     ): Array<Array<AsciiCell>> {
         clear()
 
@@ -122,7 +138,15 @@ class WaveformRasterizer(
         val cameraPos = camera.position
 
         for ((gx, gz, _) in gridPoints) {
-            val worldPos = waveform.worldPosition(gx, gz)
+            val baseWorldPos = waveform.worldPosition(gx, gz)
+
+            // Apply emitter height modification before projection
+            val influence = emitterManager?.aggregateInfluenceAt(baseWorldPos.x, baseWorldPos.z)
+            val worldPos = if (influence != null && influence.heightModifier != 0f) {
+                Vector3(baseWorldPos.x, baseWorldPos.y + influence.heightModifier, baseWorldPos.z)
+            } else {
+                baseWorldPos
+            }
 
             val screenPoint = projector.project(worldPos, camera)
             if (!screenPoint.visible) continue
@@ -134,20 +158,24 @@ class WaveformRasterizer(
             if (screenPoint.depth < depthBuffer[bufferIndex]) {
                 val normal = waveform.normalAt(gx, gz)
                 val viewDir = (cameraPos - worldPos).normalized()
-                val luminance = lighting.computeLuminance(normal, viewDir)
+                val baseLuminance = lighting.computeLuminance(normal, viewDir)
 
                 // Get blended palette and color ramp for this position
                 val (palette, colorRamp) = blender.blendedPaletteAt(
                     worldPos.x, worldPos.z, agents
                 ) ?: (fallbackPalette to fallbackRamp)
 
-                val cell = AsciiCell.fromSurface(
-                    luminance = luminance,
-                    normalX = normal.x,
-                    normalY = normal.z,
-                    palette = palette,
-                    colorRamp = colorRamp
-                )
+                val cell = if (influence != null && influence.intensity > 0f) {
+                    buildEffectCell(baseLuminance, normal, influence, palette, colorRamp)
+                } else {
+                    AsciiCell.fromSurface(
+                        luminance = baseLuminance,
+                        normalX = normal.x,
+                        normalY = normal.z,
+                        palette = palette,
+                        colorRamp = colorRamp
+                    )
+                }
 
                 cellBuffer[bufferIndex] = cell
                 depthBuffer[bufferIndex] = screenPoint.depth
@@ -157,6 +185,52 @@ class WaveformRasterizer(
         return Array(screenHeight) { y ->
             Array(screenWidth) { x ->
                 cellBuffer[y * screenWidth + x]
+            }
+        }
+    }
+
+    /**
+     * Build a cell with emitter effect modifications applied.
+     *
+     * Applies luminance boost, palette/color/character overrides from the effect influence.
+     */
+    private fun buildEffectCell(
+        baseLuminance: Float,
+        normal: Vector3,
+        influence: EffectInfluence,
+        basePalette: AsciiLuminancePalette,
+        baseColorRamp: CognitiveColorRamp
+    ): AsciiCell {
+        val modifiedLuminance = (baseLuminance + influence.luminanceModifier).coerceIn(0f, 1f)
+        val effectivePalette = influence.paletteOverride ?: basePalette
+        val effectiveColorRamp = baseColorRamp
+
+        // Character override takes priority (for confetti, etc.)
+        return if (influence.characterOverride != null) {
+            val fg = influence.colorOverride ?: effectiveColorRamp.colorForLuminance(modifiedLuminance)
+            AsciiCell(
+                char = influence.characterOverride,
+                fgColor = fg,
+                bold = influence.intensity > 0.7f
+            )
+        } else {
+            val fg = influence.colorOverride ?: effectiveColorRamp.colorForLuminance(modifiedLuminance)
+            if (influence.colorOverride != null) {
+                // Color override: use the overridden color but still pick character from palette
+                val ch = effectivePalette.charForSurface(modifiedLuminance, normal.x, normal.z)
+                AsciiCell(
+                    char = ch,
+                    fgColor = fg,
+                    bold = modifiedLuminance > 0.8f
+                )
+            } else {
+                AsciiCell.fromSurface(
+                    luminance = modifiedLuminance,
+                    normalX = normal.x,
+                    normalY = normal.z,
+                    palette = effectivePalette,
+                    colorRamp = effectiveColorRamp
+                )
             }
         }
     }

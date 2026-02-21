@@ -4,6 +4,7 @@ import link.socket.ampere.animation.agent.AgentActivityState
 import link.socket.ampere.animation.agent.AgentLayer
 import link.socket.ampere.animation.agent.AgentLayoutOrientation
 import link.socket.ampere.animation.agent.AgentVisualState
+import link.socket.ampere.animation.emitter.EmitterManager
 import link.socket.ampere.animation.flow.FlowLayer
 import link.socket.ampere.animation.logo.LogoCrystallizer
 import link.socket.ampere.animation.particle.ParticleSystem
@@ -60,6 +61,7 @@ class AnimationDemoRunner(
     private lateinit var agents: AgentLayer
     private lateinit var flow: FlowLayer
     private var logoCrystallizer: LogoCrystallizer? = null
+    private val emitterManager: EmitterManager = EmitterManager()
 
     // Timing
     private var elapsedTime: Duration = Duration.ZERO
@@ -125,6 +127,7 @@ class AnimationDemoRunner(
         outputBuffer.clear()
         statusMessage = ""
         logoCrystallizer = null
+        emitterManager.clear()
     }
 
     /**
@@ -320,6 +323,9 @@ class AnimationDemoRunner(
         if (config.showParticles) {
             particles.update(deltaSeconds)
         }
+
+        // Update emitter effects (decay/expire active effects)
+        emitterManager.update(deltaSeconds)
 
         // Update substrate
         if (config.showSubstrate) {
