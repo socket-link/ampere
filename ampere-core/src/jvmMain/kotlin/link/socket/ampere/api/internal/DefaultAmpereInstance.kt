@@ -91,6 +91,7 @@ internal class DefaultAmpereInstance(
         viewService = DefaultThreadViewService(
             messageRepository = environmentService.messageRepository,
         ),
+        eventRelayService = environmentService.eventRelayService,
     )
 
     override val events: EventService = DefaultEventService(
@@ -113,6 +114,7 @@ internal class DefaultAmpereInstance(
         ticketViewService = DefaultTicketViewService(
             ticketRepository = environmentService.ticketRepository,
         ),
+        ticketRepository = environmentService.ticketRepository,
         agentService = agents,
         workspace = config.workspace,
     )

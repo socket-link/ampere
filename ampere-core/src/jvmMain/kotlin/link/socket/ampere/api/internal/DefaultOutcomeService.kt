@@ -19,7 +19,8 @@ internal class DefaultOutcomeService(
 
     override suspend fun stats(): Result<OutcomeStats> {
         return try {
-            // Aggregate stats from all outcomes
+            // OutcomeMemoryRepository lacks a dedicated count/stats query, so we
+            // use a broad FTS5 match to retrieve all outcomes for aggregation.
             val allOutcomes = outcomeRepository.findSimilarOutcomes("", limit = 10000)
                 .getOrElse { emptyList() }
 

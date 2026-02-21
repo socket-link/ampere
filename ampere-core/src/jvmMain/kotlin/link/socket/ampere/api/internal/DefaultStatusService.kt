@@ -4,6 +4,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import link.socket.ampere.agents.events.messages.ThreadViewService
+import link.socket.ampere.agents.events.tickets.TicketRepository
 import link.socket.ampere.agents.events.tickets.TicketViewService
 import link.socket.ampere.api.model.AgentSnapshot
 import link.socket.ampere.api.model.HealthLevel
@@ -15,6 +16,7 @@ import link.socket.ampere.api.service.StatusService
 internal class DefaultStatusService(
     private val threadViewService: ThreadViewService,
     private val ticketViewService: TicketViewService,
+    private val ticketRepository: TicketRepository,
     private val agentService: AgentService,
     private val workspace: String?,
 ) : StatusService {
@@ -22,7 +24,8 @@ internal class DefaultStatusService(
     override suspend fun snapshot(): Result<SystemSnapshot> {
         return try {
             val threads = threadViewService.listActiveThreads().getOrElse { emptyList() }
-            val tickets = ticketViewService.listActiveTickets().getOrElse { emptyList() }
+            val activeTickets = ticketViewService.listActiveTickets().getOrElse { emptyList() }
+            val allTickets = ticketRepository.getAllTickets().getOrElse { emptyList() }
             val agents = agentService.listAll()
 
             val totalMessages = threads.sumOf { it.messageCount }
@@ -31,8 +34,8 @@ internal class DefaultStatusService(
             Result.success(
                 SystemSnapshot(
                     agents = agents,
-                    activeTickets = tickets.size,
-                    totalTickets = tickets.size,
+                    activeTickets = activeTickets.size,
+                    totalTickets = allTickets.size,
                     activeThreads = threads.size,
                     totalMessages = totalMessages,
                     escalatedThreads = escalatedThreads,

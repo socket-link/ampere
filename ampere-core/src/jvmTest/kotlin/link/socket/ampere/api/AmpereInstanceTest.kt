@@ -92,6 +92,7 @@ class AmpereInstanceTest {
             viewService = DefaultThreadViewService(
                 messageRepository = environmentService.messageRepository,
             ),
+            eventRelayService = environmentService.eventRelayService,
         )
 
         eventService = DefaultEventService(
@@ -114,6 +115,7 @@ class AmpereInstanceTest {
             ticketViewService = DefaultTicketViewService(
                 ticketRepository = environmentService.ticketRepository,
             ),
+            ticketRepository = environmentService.ticketRepository,
             agentService = agentService,
             workspace = "/test/workspace",
         )

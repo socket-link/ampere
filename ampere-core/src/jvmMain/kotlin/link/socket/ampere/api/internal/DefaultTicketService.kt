@@ -43,6 +43,30 @@ internal class DefaultTicketService(
             ticket ?: throw IllegalArgumentException("Ticket not found: $ticketId")
         }
 
-    override suspend fun list(filter: TicketFilter?): Result<List<TicketSummary>> =
-        viewService.listActiveTickets()
+    override suspend fun list(filter: TicketFilter?): Result<List<TicketSummary>> {
+        if (filter == null) return viewService.listActiveTickets()
+
+        // Use repository for filtered queries — TicketViewService only returns active tickets
+        val tickets = ticketRepository.getAllTickets().getOrElse { return Result.failure(it) }
+
+        val filtered = tickets.filter { ticket ->
+            (filter.status == null || ticket.status == filter.status) &&
+                (filter.priority == null || ticket.priority == filter.priority) &&
+                (filter.type == null || ticket.type == filter.type) &&
+                (filter.assignedTo == null || ticket.assignedAgentId == filter.assignedTo)
+        }
+
+        return Result.success(
+            filtered.map { ticket ->
+                TicketSummary(
+                    ticketId = ticket.id,
+                    title = ticket.title,
+                    status = ticket.status.name,
+                    assigneeId = ticket.assignedAgentId,
+                    priority = ticket.priority.name,
+                    createdAt = ticket.createdAt,
+                )
+            }
+        )
+    }
 }

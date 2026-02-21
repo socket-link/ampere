@@ -1,10 +1,8 @@
 package link.socket.ampere.api.internal
 
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.event.Event
-import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.relay.EventRelayFilters
 import link.socket.ampere.agents.events.relay.EventRelayService
@@ -33,11 +31,7 @@ internal class DefaultEventService(
         to: Instant,
         filters: EventRelayFilters,
     ): Flow<Event> {
-        // EventRelayService.replayEvents is suspend, so we wrap it.
-        // Consumers should call this in a coroutine context.
-        // For now, delegate to live observation with a note that
-        // replay requires a suspend context.
-        // A proper implementation would use a channelFlow.
+        // EventRelayService.replayEvents is suspend, so we bridge to Flow via channelFlow.
         return kotlinx.coroutines.flow.channelFlow {
             val result = eventRelayService.replayEvents(from, to, filters)
             result.getOrNull()?.collect { event ->
