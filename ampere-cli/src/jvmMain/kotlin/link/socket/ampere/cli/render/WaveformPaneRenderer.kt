@@ -56,6 +56,7 @@ class WaveformPaneRenderer(
     // Animation time tracking
     private var elapsedTime = 0f
     private var deltaSeconds = 0.033f // ~30fps default, updated externally
+    private var diagLogged = false
 
     // Substrate and flow state provided externally via update()
     private var currentSubstrate: SubstrateState? = null
@@ -85,6 +86,14 @@ class WaveformPaneRenderer(
     override fun render(width: Int, height: Int): List<String> {
         ensureComponents(width, height)
 
+        if (!diagLogged) {
+            diagLogged = true
+            val caps = link.socket.ampere.repl.TerminalFactory.getCapabilities()
+            link.socket.ampere.cli.diagLog("[DIAG:caps] colorLevel=${caps.colorLevel} unicode=${caps.supportsUnicode} interactive=${caps.isInteractive} size=${caps.width}x${caps.height}")
+            link.socket.ampere.cli.diagLog("[DIAG:env] TERM=${System.getenv("TERM")} COLORTERM=${System.getenv("COLORTERM")} LANG=${System.getenv("LANG")}")
+            link.socket.ampere.cli.diagLog("[DIAG:pane] waveformPane pane_size=${width}x${height} agents=${agentLayer.agentCount}")
+        }
+
         val wf = waveform ?: return emptyGrid(width, height)
         val rast = rasterizer ?: return emptyGrid(width, height)
 
@@ -93,6 +102,7 @@ class WaveformPaneRenderer(
 
         // 2. Update waveform heightmap from current state
         val substrate = currentSubstrate ?: SubstrateState.create(width, height, baseDensity = 0.1f)
+
         wf.update(substrate, agentLayer, currentFlow, deltaSeconds)
 
         // 3. Update emitter effects
@@ -117,6 +127,25 @@ class WaveformPaneRenderer(
                 colorRamp = CognitiveColorRamp.NEUTRAL,
                 emitterManager = emitterManager
             )
+        }
+
+        // DIAG: log cell counts to verify effects are actually hitting rendered cells
+        link.socket.ampere.cli.diagLog("[DIAG:cells] emitters=${emitterManager.activeCount} total=${rast.lastTotalCells} effects=${rast.lastEffectCells} charOverride=${rast.lastCharOverrideCells} written=${rast.lastWrittenCells} screen=${width}x${height}")
+
+        // DIAG: Stamp a bright visual indicator when effects are active.
+        // This bypasses the effect rendering to test if the pipeline itself works.
+        if (emitterManager.activeCount > 0) {
+            val fxLabel = "FX:${emitterManager.activeCount}"
+            for (i in fxLabel.indices) {
+                if (i < width && cells[0].size > i) {
+                    cells[0][i] = AsciiCell(
+                        char = fxLabel[i],
+                        fgColor = 231,  // bright white
+                        bgColor = 196,  // bright red background
+                        bold = true
+                    )
+                }
+            }
         }
 
         // 5. Convert AsciiCell grid to ANSI-styled strings

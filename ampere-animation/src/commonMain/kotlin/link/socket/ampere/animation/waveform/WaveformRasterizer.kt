@@ -31,11 +31,28 @@ class WaveformRasterizer(
     val projector: ScreenProjector,
     val lighting: SurfaceLighting
 ) {
+    companion object {
+        /** Maximum expected height for normalization (agentPeakScale + ridge stacking). */
+        private const val HEIGHT_CEILING = 3.5f
+
+        /**
+         * Additive luminance boost at maximum height. Peaks get brighter characters
+         * while flat terrain remains unchanged from normal Blinn-Phong shading.
+         */
+        private const val PEAK_BRIGHTNESS_BOOST = 0.35f
+    }
+
     /** Depth buffer for occlusion -- one float per screen cell */
     private val depthBuffer = FloatArray(screenWidth * screenHeight) { Float.MAX_VALUE }
 
     /** Output buffer (flat, row-major) */
     private val cellBuffer = Array(screenWidth * screenHeight) { AsciiCell.EMPTY }
+
+    /** Diagnostic counters from last rasterize call. */
+    var lastTotalCells = 0; private set
+    var lastEffectCells = 0; private set
+    var lastCharOverrideCells = 0; private set
+    var lastWrittenCells = 0; private set
 
     /**
      * Rasterize the waveform to a 2D cell grid.
@@ -82,15 +99,26 @@ class WaveformRasterizer(
 
             // Depth test: write only if closer than what's already there
             if (screenPoint.depth < depthBuffer[bufferIndex]) {
+                lastTotalCells++
                 val normal = waveform.normalAt(gx, gz)
                 val viewDir = (cameraPos - worldPos).normalized()
                 val baseLuminance = lighting.computeLuminance(normal, viewDir)
 
-                val cell = if (influence != null && influence.intensity > 0f) {
-                    buildEffectCell(baseLuminance, normal, influence, palette, colorRamp)
+                // Height-based luminance boost: peaks glow brighter than flat terrain.
+                // Without this, peak tops have flat normals and look identical to plains.
+                val normalizedHeight = (worldPos.y / HEIGHT_CEILING).coerceIn(0f, 1f)
+                val luminance = (baseLuminance + normalizedHeight * PEAK_BRIGHTNESS_BOOST).coerceIn(0f, 1f)
+
+                val isEffect = influence != null && influence.intensity > 0f
+                if (isEffect) {
+                    lastEffectCells++
+                    if (influence!!.characterOverride != null) lastCharOverrideCells++
+                }
+                val cell = if (isEffect) {
+                    buildEffectCell(luminance, normal, influence!!, palette, colorRamp)
                 } else {
                     AsciiCell.fromSurface(
-                        luminance = baseLuminance,
+                        luminance = luminance,
                         normalX = normal.x,
                         normalY = normal.z,
                         palette = palette,
@@ -102,6 +130,8 @@ class WaveformRasterizer(
                 depthBuffer[bufferIndex] = screenPoint.depth
             }
         }
+
+        lastWrittenCells = cellBuffer.count { it != AsciiCell.EMPTY }
 
         // Convert flat buffer to 2D array
         return Array(screenHeight) { y ->
@@ -156,20 +186,30 @@ class WaveformRasterizer(
             val bufferIndex = sy * screenWidth + sx
 
             if (screenPoint.depth < depthBuffer[bufferIndex]) {
+                lastTotalCells++
                 val normal = waveform.normalAt(gx, gz)
                 val viewDir = (cameraPos - worldPos).normalized()
                 val baseLuminance = lighting.computeLuminance(normal, viewDir)
+
+                // Height-based luminance boost: peaks glow brighter than flat terrain.
+                val normalizedHeight = (worldPos.y / HEIGHT_CEILING).coerceIn(0f, 1f)
+                val luminance = (baseLuminance + normalizedHeight * PEAK_BRIGHTNESS_BOOST).coerceIn(0f, 1f)
 
                 // Get blended palette and color ramp for this position
                 val (palette, colorRamp) = blender.blendedPaletteAt(
                     worldPos.x, worldPos.z, agents
                 ) ?: (fallbackPalette to fallbackRamp)
 
-                val cell = if (influence != null && influence.intensity > 0f) {
-                    buildEffectCell(baseLuminance, normal, influence, palette, colorRamp)
+                val isEffect = influence != null && influence.intensity > 0f
+                if (isEffect) {
+                    lastEffectCells++
+                    if (influence!!.characterOverride != null) lastCharOverrideCells++
+                }
+                val cell = if (isEffect) {
+                    buildEffectCell(luminance, normal, influence!!, palette, colorRamp)
                 } else {
                     AsciiCell.fromSurface(
-                        luminance = baseLuminance,
+                        luminance = luminance,
                         normalX = normal.x,
                         normalY = normal.z,
                         palette = palette,
@@ -181,6 +221,8 @@ class WaveformRasterizer(
                 depthBuffer[bufferIndex] = screenPoint.depth
             }
         }
+
+        lastWrittenCells = cellBuffer.count { it != AsciiCell.EMPTY }
 
         return Array(screenHeight) { y ->
             Array(screenWidth) { x ->
@@ -205,12 +247,21 @@ class WaveformRasterizer(
         val effectivePalette = influence.paletteOverride ?: basePalette
         val effectiveColorRamp = baseColorRamp
 
-        // Character override takes priority (for confetti, etc.)
+        // Background glow proportional to effect intensity — makes effects visible
+        // even when character/color differences are subtle.
+        val bgColor = when {
+            influence.intensity > 0.5f -> 17  // dark blue for strong effects
+            influence.intensity > 0.2f -> 234 // very dark grey for medium effects
+            else -> null
+        }
+
+        // Character override takes priority (for confetti, sparks, etc.)
         return if (influence.characterOverride != null) {
             val fg = influence.colorOverride ?: effectiveColorRamp.colorForLuminance(modifiedLuminance)
             AsciiCell(
                 char = influence.characterOverride,
                 fgColor = fg,
+                bgColor = bgColor ?: 17, // Always show bg for character overrides
                 bold = influence.intensity > 0.7f
             )
         } else {
@@ -221,16 +272,18 @@ class WaveformRasterizer(
                 AsciiCell(
                     char = ch,
                     fgColor = fg,
+                    bgColor = bgColor,
                     bold = modifiedLuminance > 0.8f
                 )
             } else {
-                AsciiCell.fromSurface(
+                val base = AsciiCell.fromSurface(
                     luminance = modifiedLuminance,
                     normalX = normal.x,
                     normalY = normal.z,
                     palette = effectivePalette,
                     colorRamp = effectiveColorRamp
                 )
+                if (bgColor != null) base.copy(bgColor = bgColor) else base
             }
         }
     }
@@ -243,6 +296,10 @@ class WaveformRasterizer(
         for (i in cellBuffer.indices) {
             cellBuffer[i] = AsciiCell.EMPTY
         }
+        lastTotalCells = 0
+        lastEffectCells = 0
+        lastCharOverrideCells = 0
+        lastWrittenCells = 0
     }
 
     /**

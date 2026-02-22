@@ -81,6 +81,7 @@ class WatchPresenter(
     private fun handleEvent(event: Event) {
         try {
             val agentId = (event.eventSource as? EventSource.Agent)?.agentId ?: return
+
             val significance = categorizer.categorize(event)
 
             // Try to cluster the event
@@ -246,8 +247,8 @@ class WatchPresenter(
 
     private fun updateIdleStates() {
         val now = clock.now()
-        val idleThresholdMs = 5000L // 5 seconds without activity = idle
-        val removalThresholdMs = 30000L // 30 seconds idle = remove from memory
+        val idleThresholdMs = 15000L // 15 seconds without activity = idle
+        val removalThresholdMs = 300000L // 5 minutes idle = remove from memory
 
         // Collect agents to remove (can't modify map while iterating)
         val agentsToRemove = mutableListOf<String>()

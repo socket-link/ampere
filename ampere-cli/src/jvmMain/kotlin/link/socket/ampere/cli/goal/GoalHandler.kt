@@ -12,8 +12,10 @@ import link.socket.ampere.agents.definition.CodeAgent
 import link.socket.ampere.agents.definition.AgentFactory
 import link.socket.ampere.agents.definition.AgentType
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.api.AgentEventApi
@@ -29,6 +31,7 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.util.randomUUID
 
 /**
  * Orchestrates goal activation, agent creation, and task execution.
@@ -197,6 +200,7 @@ class GoalHandler(
 
             // PHASE 1: PERCEIVE
             progressPane.setPhase(CognitiveProgressPane.Phase.PERCEIVE, "Analyzing task...")
+            publishPhaseEvent(api, agent.id, ticketId, TicketStatus.InProgress, "Perceive")
             val perception = agent.perceiveState(agent.getCurrentState())
             progressPane.setPerceiveResult(perception.ideas)
 
@@ -207,6 +211,7 @@ class GoalHandler(
 
             // PHASE 2: PLAN
             progressPane.setPhase(CognitiveProgressPane.Phase.PLAN, "Creating plan...")
+            publishPhaseEvent(api, agent.id, ticketId, TicketStatus.InProgress, "Plan")
             val plan = agent.determinePlanForTask(
                 task = task,
                 ideas = arrayOf(perception.ideas.first()),
@@ -216,6 +221,7 @@ class GoalHandler(
 
             // PHASE 3: EXECUTE
             progressPane.setPhase(CognitiveProgressPane.Phase.EXECUTE, "Calling LLM...")
+            publishPhaseEvent(api, agent.id, ticketId, TicketStatus.InProgress, "Execute")
             val outcome = agent.executePlan(plan)
 
             when (outcome) {
@@ -242,15 +248,43 @@ class GoalHandler(
 
             // PHASE 4: LEARN
             progressPane.setPhase(CognitiveProgressPane.Phase.LEARN, "Extracting knowledge...")
+            publishPhaseEvent(api, agent.id, ticketId, TicketStatus.InProgress, "Learn")
             val knowledge = agent.extractKnowledgeFromOutcome(outcome, task, plan)
             progressPane.addKnowledgeStored(knowledge.approach)
 
             // Complete!
             progressPane.setPhase(CognitiveProgressPane.Phase.COMPLETED)
+            publishPhaseEvent(api, agent.id, ticketId, TicketStatus.Done, "Completed")
 
         } catch (e: Exception) {
             progressPane.setFailed(e.message ?: "Unknown error")
         }
+    }
+
+    /**
+     * Publish a TicketStatusChanged event to keep the WatchPresenter's agent
+     * alive during long-running PROPEL phases. Without these events, the
+     * presenter's idle detection removes agents after 30 seconds of silence,
+     * leaving the waveform visualization empty.
+     */
+    private suspend fun publishPhaseEvent(
+        api: AgentEventApi?,
+        agentId: String,
+        ticketId: String,
+        status: TicketStatus,
+        phaseName: String,
+    ) {
+        api?.publish(
+            TicketEvent.TicketStatusChanged(
+                eventId = randomUUID(),
+                ticketId = ticketId,
+                previousStatus = TicketStatus.InProgress,
+                newStatus = status,
+                eventSource = EventSource.Agent(agentId),
+                timestamp = Clock.System.now(),
+                urgency = Urgency.LOW,
+            )
+        )
     }
 
     /**

@@ -101,7 +101,7 @@ data class AsciiLuminancePalette(
 
         /** Diffuse, reflective — for EVALUATE phase (afterglow, fading) */
         val EVALUATE = AsciiLuminancePalette(
-            characters = " .\u00B7:*\u2218\u25CB\u25CC ",
+            characters = " .\u00B7:*\u2218\u25CB\u25CC\u25EF",
             name = "evaluate"
         )
     }

@@ -51,7 +51,11 @@ class WatchStateAnimationBridge(
     val agentLayer = AgentLayer(
         width = accentColumns.maxOrNull()?.plus(10) ?: 80,
         height = height,
-        orientation = AgentLayoutOrientation.CIRCULAR
+        orientation = AgentLayoutOrientation.CIRCULAR,
+        // 3D layouts must use waveform world-space dimensions, not screen dimensions,
+        // so agent positions land within the waveform surface bounds regardless of terminal size.
+        worldWidth = 20f,
+        worldDepth = 15f
     )
 
     /**
@@ -86,17 +90,19 @@ class WatchStateAnimationBridge(
             return substrateAnimator.updateAmbient(substrate, deltaSeconds)
         }
 
+        // Sync agent layer first so agents exist for event detection and emitter firing
+        syncAgentLayer(viewState)
+
         // Update substrate hotspots based on active agents
         var result = updateHotspotsFromAgentActivity(viewState, substrate)
 
-        // Detect new significant events and spawn particles
+        // Detect new significant events and spawn particles (needs agents for SparkReceived)
         detectNewEvents(viewState)
 
         // Detect agent state transitions and trigger pulses
         detectStateTransitions(viewState, result)?.let { result = it }
 
-        // Sync agent layer from view state and run choreographer
-        syncAgentLayer(viewState)
+        // Run choreographer
         result = choreographer.update(agentLayer, result, deltaSeconds)
 
         // Apply ambient animation

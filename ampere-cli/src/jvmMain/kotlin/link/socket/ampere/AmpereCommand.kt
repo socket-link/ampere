@@ -213,8 +213,10 @@ class AmpereCommand(
             // Start log capture immediately to prevent any output leaking below TUI
             LogCapture.start(logPane)
 
-            // Start the presenter
+            // Start the presenter and allow event subscriptions to be established
+            // before activating goals (relay subscriptions are asynchronous)
             presenter.start()
+            delay(100)
 
             // Activate work mode (if any)
             if (autoWork) {
@@ -275,7 +277,11 @@ class AmpereCommand(
                     if (configGoal != null) {
                         jazzPane.startDemo()
                         systemStatus = StatusBar.SystemStatus.WORKING
-                        goalHandler.activateGoal(configGoal)
+                        val activationResult = goalHandler.activateGoal(configGoal)
+                        if (activationResult.isFailure) {
+                            jazzPane.setFailed("Failed to activate goal: ${activationResult.exceptionOrNull()?.message}")
+                            systemStatus = StatusBar.SystemStatus.ATTENTION_NEEDED
+                        }
                     }
                     // Otherwise: idle TUI dashboard
                 }
@@ -334,92 +340,99 @@ class AmpereCommand(
             // Launch rendering in background
             val renderJob = launch(Dispatchers.IO) {
                 while (isActive) {
-                    val output = if (lastCommandResult != null) {
-                        renderCommandResult(lastCommandResult!!, terminal)
-                    } else if (viewConfig.showHelp) {
-                        helpRenderer.render()
-                    } else {
-                        val watchState = presenter.getViewState()
-                        eventPane.updateEvents(watchState.recentSignificantEvents, watchState.agentStates)
+                    try {
+                        val output = if (lastCommandResult != null) {
+                            renderCommandResult(lastCommandResult!!, terminal)
+                        } else if (viewConfig.showHelp) {
+                            helpRenderer.render()
+                        } else {
+                            val watchState = presenter.getViewState()
+                            eventPane.updateEvents(watchState.recentSignificantEvents, watchState.agentStates)
 
-                        memoryState = updateMemoryState(memoryState, watchState, jazzPane)
-                        memoryPane.updateState(memoryState)
+                            memoryState = updateMemoryState(memoryState, watchState, jazzPane)
+                            memoryPane.updateState(memoryState)
 
-                        viewConfig.expandedEventIndex?.let { eventPane.expandEvent(it) }
-                            ?: eventPane.collapseEvent()
+                            viewConfig.expandedEventIndex?.let { eventPane.expandEvent(it) }
+                                ?: eventPane.collapseEvent()
 
-                        // Update system status based on current phase
-                        systemStatus = when {
-                            jazzPane.isAwaitingHuman -> StatusBar.SystemStatus.WAITING
-                            else -> when (jazzPane.currentPhase) {
-                                CognitiveProgressPane.Phase.INITIALIZING -> {
-                                    if (hasActiveWork) StatusBar.SystemStatus.WORKING else StatusBar.SystemStatus.IDLE
+                            // Update system status based on current phase
+                            systemStatus = when {
+                                jazzPane.isAwaitingHuman -> StatusBar.SystemStatus.WAITING
+                                else -> when (jazzPane.currentPhase) {
+                                    CognitiveProgressPane.Phase.INITIALIZING -> {
+                                        if (hasActiveWork) StatusBar.SystemStatus.WORKING else StatusBar.SystemStatus.IDLE
+                                    }
+                                    CognitiveProgressPane.Phase.PERCEIVE -> StatusBar.SystemStatus.THINKING
+                                    CognitiveProgressPane.Phase.PLAN -> StatusBar.SystemStatus.THINKING
+                                    CognitiveProgressPane.Phase.EXECUTE -> StatusBar.SystemStatus.WORKING
+                                    CognitiveProgressPane.Phase.LEARN -> StatusBar.SystemStatus.THINKING
+                                    CognitiveProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.COMPLETED
+                                    CognitiveProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
                                 }
-                                CognitiveProgressPane.Phase.PERCEIVE -> StatusBar.SystemStatus.THINKING
-                                CognitiveProgressPane.Phase.PLAN -> StatusBar.SystemStatus.THINKING
-                                CognitiveProgressPane.Phase.EXECUTE -> StatusBar.SystemStatus.WORKING
-                                CognitiveProgressPane.Phase.LEARN -> StatusBar.SystemStatus.THINKING
-                                CognitiveProgressPane.Phase.COMPLETED -> StatusBar.SystemStatus.COMPLETED
-                                CognitiveProgressPane.Phase.FAILED -> StatusBar.SystemStatus.ATTENTION_NEEDED
                             }
-                        }
 
-                        val activeMode = when (viewConfig.mode) {
-                            DemoInputHandler.DemoMode.DASHBOARD -> "dashboard"
-                            DemoInputHandler.DemoMode.EVENTS -> "events"
-                            DemoInputHandler.DemoMode.MEMORY -> "memory"
-                            DemoInputHandler.DemoMode.AGENT_FOCUS -> "agent_focus"
-                        }
-                        val shortcuts = StatusBar.defaultShortcuts(activeMode)
-                        val statusBarStr = statusBar.render(
-                            width = TerminalFactory.getCapabilities().width.coerceAtLeast(40),
-                            shortcuts = shortcuts,
-                            status = systemStatus,
-                            focusedAgent = viewConfig.focusedAgentIndex,
-                            inputHint = viewConfig.inputHint
-                        )
+                            val activeMode = when (viewConfig.mode) {
+                                DemoInputHandler.DemoMode.DASHBOARD -> "dashboard"
+                                DemoInputHandler.DemoMode.EVENTS -> "events"
+                                DemoInputHandler.DemoMode.MEMORY -> "memory"
+                                DemoInputHandler.DemoMode.AGENT_FOCUS -> "agent_focus"
+                            }
+                            val shortcuts = StatusBar.defaultShortcuts(activeMode)
+                            val statusBarStr = statusBar.render(
+                                width = TerminalFactory.getCapabilities().width.coerceAtLeast(40),
+                                shortcuts = shortcuts,
+                                status = systemStatus,
+                                focusedAgent = viewConfig.focusedAgentIndex,
+                                inputHint = viewConfig.inputHint
+                            )
 
-                        // Determine right pane based on mode
-                        val rightPane: PaneRenderer = when {
-                            viewConfig.mode == DemoInputHandler.DemoMode.AGENT_FOCUS -> {
-                                val focusedAgentId = viewConfig.focusedAgentIndex?.let { idx ->
-                                    watchState.agentStates.keys.elementAtOrNull(idx - 1)
-                                }
-                                agentFocusPane.updateState(
-                                    AgentFocusPane.FocusState(
-                                        agentId = focusedAgentId,
-                                        agentIndex = viewConfig.focusedAgentIndex,
-                                        agentState = focusedAgentId?.let { watchState.agentStates[it] },
-                                        recentEvents = watchState.recentSignificantEvents,
-                                        cognitiveClusters = emptyList(),
-                                        sparkHistory = focusedAgentId?.let { presenter.getSparkHistory(it, 20) }
-                                            ?: emptyList()
+                            // Determine right pane based on mode
+                            val rightPane: PaneRenderer = when {
+                                viewConfig.mode == DemoInputHandler.DemoMode.AGENT_FOCUS -> {
+                                    val focusedAgentId = viewConfig.focusedAgentIndex?.let { idx ->
+                                        watchState.agentStates.keys.elementAtOrNull(idx - 1)
+                                    }
+                                    agentFocusPane.updateState(
+                                        AgentFocusPane.FocusState(
+                                            agentId = focusedAgentId,
+                                            agentIndex = viewConfig.focusedAgentIndex,
+                                            agentState = focusedAgentId?.let { watchState.agentStates[it] },
+                                            recentEvents = watchState.recentSignificantEvents,
+                                            cognitiveClusters = emptyList(),
+                                            sparkHistory = focusedAgentId?.let { presenter.getSparkHistory(it, 20) }
+                                                ?: emptyList()
+                                        )
                                     )
-                                )
-                                agentFocusPane
+                                    agentFocusPane
+                                }
+                                viewConfig.verboseMode -> logPane
+                                else -> memoryPane
                             }
-                            viewConfig.verboseMode -> logPane
-                            else -> memoryPane
+
+                            // Use waveform pane as center if available, otherwise fall back to progress pane
+                            val middlePane: PaneRenderer = hybridRenderer.waveformPane ?: jazzPane
+
+                            // Render the hybrid animated layout
+                            hybridRenderer.render(
+                                leftPane = eventPane,
+                                middlePane = middlePane,
+                                rightPane = rightPane,
+                                statusBar = statusBarStr,
+                                viewState = watchState,
+                                deltaSeconds = 0.25f
+                            )
                         }
 
-                        // Use waveform pane as center if available, otherwise fall back to progress pane
-                        val middlePane: PaneRenderer = hybridRenderer.waveformPane ?: jazzPane
-
-                        // Render the hybrid animated layout
-                        hybridRenderer.render(
-                            leftPane = eventPane,
-                            middlePane = middlePane,
-                            rightPane = rightPane,
-                            statusBar = statusBarStr,
-                            viewState = watchState,
-                            deltaSeconds = 0.25f
-                        )
+                        // Write every frame (animation state changes even when pane content doesn't)
+                        val out = LogCapture.getOriginalOut() ?: System.out
+                        out.print(output)
+                        out.flush()
+                    } catch (_: CancellationException) {
+                        throw CancellationException()
+                    } catch (e: Exception) {
+                        // Log render errors without killing the loop — agent work must continue
+                        logPane.error("Render: ${e::class.simpleName}: ${e.message}", source = "render")
                     }
-
-                    // Write every frame (animation state changes even when pane content doesn't)
-                    val out = LogCapture.getOriginalOut() ?: System.out
-                    out.print(output)
-                    out.flush()
 
                     delay(250) // Render at 4 FPS
                 }

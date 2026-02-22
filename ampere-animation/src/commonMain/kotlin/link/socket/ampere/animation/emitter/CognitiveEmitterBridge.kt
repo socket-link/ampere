@@ -37,13 +37,31 @@ class CognitiveEmitterBridge(
     fun onCognitiveEvent(event: CognitiveEvent, agentPosition: Vector3) {
         when (event) {
             is CognitiveEvent.SparkReceived -> {
-                emitterManager.emit(EmitterEffect.SparkBurst(), agentPosition)
-                emitterManager.emit(EmitterEffect.HeightPulse(), agentPosition)
+                emitterManager.emit(
+                    EmitterEffect.SparkBurst(
+                        duration = 3f,
+                        radius = 8f,
+                        ringWidth = 2f,
+                        expansionSpeed = 2.5f
+                    ),
+                    agentPosition
+                )
+                emitterManager.emit(
+                    EmitterEffect.HeightPulse(
+                        duration = 3f,
+                        radius = 6f,
+                        maxHeightBoost = 4f
+                    ),
+                    agentPosition
+                )
             }
             is CognitiveEvent.PhaseTransition -> {
                 emitterManager.emit(
                     EmitterEffect.ColorWash(
-                        colorRamp = CognitiveColorRamp.forPhase(event.newPhase)
+                        duration = 3f,
+                        radius = 12f,
+                        colorRamp = CognitiveColorRamp.forPhase(event.newPhase),
+                        waveFrontSpeed = 3f
                     ),
                     agentPosition
                 )
@@ -51,19 +69,29 @@ class CognitiveEmitterBridge(
             is CognitiveEvent.UncertaintySpike -> {
                 emitterManager.emit(
                     EmitterEffect.Turbulence(
+                        duration = 3f,
+                        radius = 8f,
                         noiseAmplitude = 1.5f * event.level.coerceIn(0f, 1f)
                     ),
                     agentPosition
                 )
             }
             is CognitiveEvent.TaskCompleted -> {
-                emitterManager.emit(EmitterEffect.Confetti(), agentPosition)
+                emitterManager.emit(
+                    EmitterEffect.Confetti(
+                        duration = 2f,
+                        radius = 6f
+                    ),
+                    agentPosition
+                )
             }
             is CognitiveEvent.HumanEscalation -> {
                 emitterManager.emit(
                     EmitterEffect.SparkBurst(
-                        duration = 2f,
-                        radius = 10f,
+                        duration = 4f,
+                        radius = 12f,
+                        ringWidth = 3f,
+                        expansionSpeed = 2f,
                         palette = AsciiLuminancePalette.EXECUTE
                     ),
                     agentPosition

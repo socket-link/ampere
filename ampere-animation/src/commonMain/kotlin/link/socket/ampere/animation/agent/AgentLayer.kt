@@ -35,7 +35,11 @@ enum class AgentLayoutOrientation {
 class AgentLayer(
     private val width: Int,
     private val height: Int,
-    private val orientation: AgentLayoutOrientation = AgentLayoutOrientation.HORIZONTAL
+    private val orientation: AgentLayoutOrientation = AgentLayoutOrientation.HORIZONTAL,
+    /** World-space width for 3D layouts (CIRCULAR, SPHERE, CLUSTERED). Defaults to width. */
+    private val worldWidth: Float = width.toFloat(),
+    /** World-space depth for 3D layouts. Defaults to height. */
+    private val worldDepth: Float = height.toFloat()
 ) {
     private val agents = mutableMapOf<String, AgentVisualState>()
     private val spawnProgress = mutableMapOf<String, Float>()
@@ -225,7 +229,7 @@ class AgentLayer(
      * The 2D position is derived as (X, Z) from the 3D position.
      */
     private fun layoutCircular3D(count: Int): List<Vector3> {
-        val radius = minOf(width, height) * 0.35f
+        val radius = minOf(worldWidth, worldDepth) * 0.35f
         val angleStep = 2 * PI / count
 
         return (0 until count).map { i ->
@@ -243,7 +247,7 @@ class AgentLayer(
      * Provides near-uniform distribution with meaningful Y (height) variation.
      */
     private fun layoutSphere(count: Int): List<Vector3> {
-        val radius = minOf(width, height) * 0.35f
+        val radius = minOf(worldWidth, worldDepth) * 0.35f
         val goldenRatio = (1f + sqrt(5f)) / 2f
 
         return (0 until count).map { i ->
@@ -271,14 +275,14 @@ class AgentLayer(
         roleGroups.entries.forEachIndexed { clusterIndex, (_, groupAgents) ->
             // Distribute cluster centers at different Z-depths
             val clusterZ = if (clusterCount <= 1) 0f
-                else (clusterIndex.toFloat() / (clusterCount - 1) - 0.5f) * minOf(width, height) * 0.5f
+                else (clusterIndex.toFloat() / (clusterCount - 1) - 0.5f) * minOf(worldWidth, worldDepth) * 0.5f
 
             // Spread clusters along X axis
             val clusterX = if (clusterCount <= 1) 0f
-                else (clusterIndex.toFloat() / (clusterCount - 1) - 0.5f) * width * 0.4f
+                else (clusterIndex.toFloat() / (clusterCount - 1) - 0.5f) * worldWidth * 0.4f
 
             // Arrange agents in a small circle within the cluster
-            val clusterRadius = minOf(width, height) * 0.1f
+            val clusterRadius = minOf(worldWidth, worldDepth) * 0.1f
             val angleStep = 2 * PI / groupAgents.size
 
             groupAgents.forEachIndexed { agentIndex, agent ->

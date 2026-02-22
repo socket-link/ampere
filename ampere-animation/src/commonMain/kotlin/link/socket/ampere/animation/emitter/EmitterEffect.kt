@@ -38,7 +38,9 @@ sealed class EmitterEffect(
         radius: Float = 5f,
         val ringWidth: Float = 0.5f,
         val expansionSpeed: Float = 8f,
-        val palette: AsciiLuminancePalette = AsciiLuminancePalette.EXECUTE
+        val palette: AsciiLuminancePalette = AsciiLuminancePalette.EXECUTE,
+        val ringColor: Int = 231, // bright white
+        val ringCharacters: String = "\u2605\u25C6*\u26A1\u2588" // ★◆*⚡█
     ) : EmitterEffect("spark_burst", duration, radius) {
 
         override fun influence(distanceFromCenter: Float, timeSinceActivation: Float): EffectInfluence {
@@ -57,8 +59,16 @@ sealed class EmitterEffect(
             val timeDecay = 1f - (timeSinceActivation / duration)
             val intensity = ringInfluence * timeDecay * peakIntensity
 
+            if (intensity < 0.1f) return EffectInfluence(intensity = intensity)
+
+            // Pick a ring character based on distance (deterministic variation)
+            val charIndex = ((distanceFromCenter * 5.3f).toInt() and 0x7FFFFFFF) % ringCharacters.length
+            val ch = ringCharacters[charIndex]
+
             return EffectInfluence(
                 luminanceModifier = intensity * 0.6f,
+                characterOverride = if (intensity > 0.3f) ch else null,
+                colorOverride = if (intensity > 0.3f) ringColor else null,
                 paletteOverride = if (intensity > 0.3f) palette else null,
                 intensity = intensity
             )
@@ -71,7 +81,8 @@ sealed class EmitterEffect(
         radius: Float = 4f,
         val maxHeightBoost: Float = 3f,
         val riseSpeed: Float = 4f,
-        val fallSpeed: Float = 2f
+        val fallSpeed: Float = 2f,
+        val pulseColor: Int = 159 // bright cyan
     ) : EmitterEffect("height_pulse", duration, radius) {
 
         override fun influence(distanceFromCenter: Float, timeSinceActivation: Float): EffectInfluence {
@@ -95,6 +106,8 @@ sealed class EmitterEffect(
             return EffectInfluence(
                 heightModifier = heightMod,
                 luminanceModifier = intensity * 0.3f,
+                colorOverride = if (intensity > 0.4f) pulseColor else null,
+                characterOverride = if (intensity > 0.6f) '\u2588' else null, // █ at center
                 intensity = intensity
             )
         }
@@ -141,7 +154,8 @@ sealed class EmitterEffect(
         duration: Float = 1.5f,
         radius: Float = 8f,
         val colorRamp: CognitiveColorRamp,
-        val waveFrontSpeed: Float = 6f
+        val waveFrontSpeed: Float = 6f,
+        val waveFrontChars: String = "\u2593\u2592\u2591\u00B7" // ▓▒░·
     ) : EmitterEffect("color_wash", duration, radius) {
 
         override fun influence(distanceFromCenter: Float, timeSinceActivation: Float): EffectInfluence {
@@ -158,11 +172,19 @@ sealed class EmitterEffect(
             val timeDecay = 1f - (timeSinceActivation / duration)
             val intensity = behindWave * timeDecay * peakIntensity
 
-            val colorCode = colorRamp.colorForLuminance(intensity)
+            val colorCode = colorRamp.colorForLuminance(intensity.coerceIn(0f, 1f))
+
+            // At the wave front, show distinctive characters
+            val distBehind = waveFront - distanceFromCenter
+            val charOverride = if (distBehind < 1.5f && intensity > 0.3f) {
+                val idx = (distBehind * 2.5f).toInt().coerceIn(0, waveFrontChars.lastIndex)
+                waveFrontChars[idx]
+            } else null
 
             return EffectInfluence(
-                luminanceModifier = intensity * 0.2f,
+                luminanceModifier = intensity * 0.3f,
                 colorOverride = colorCode,
+                characterOverride = charOverride,
                 intensity = intensity
             )
         }

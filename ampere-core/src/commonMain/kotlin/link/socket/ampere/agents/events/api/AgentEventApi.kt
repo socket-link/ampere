@@ -52,18 +52,23 @@ class AgentEventApi(
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
 
-    /** Persist and publish a pre-constructed event. */
+    /** Persist and publish a pre-constructed event.
+     *
+     * The event is always published to the bus for real-time delivery,
+     * regardless of whether the repository save succeeds. Persistence
+     * failures are logged but must not block live event propagation
+     * (e.g. the WatchPresenter's agent activity tracking depends on
+     * receiving events promptly).
+     */
     suspend fun publish(event: Event) {
         eventRepository.saveEvent(event)
-            .onSuccess {
-                eventSerialBus.publish(event)
-            }
             .onFailure { throwable ->
                 logger.logError(
-                    message = "Failed to create event ${event.eventType} id=${event.eventId}",
+                    message = "Failed to persist event ${event.eventType} id=${event.eventId}",
                     throwable = throwable,
                 )
             }
+        eventSerialBus.publish(event)
     }
 
     /** Publish a TaskCreated event with auto-generated ID and current timestamp. */

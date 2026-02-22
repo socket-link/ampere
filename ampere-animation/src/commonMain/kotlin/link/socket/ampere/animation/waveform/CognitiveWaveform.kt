@@ -166,8 +166,9 @@ class CognitiveWaveform(
 
         for (gz in 0 until gridDepth) {
             for (gx in 0 until gridWidth) {
-                val wx = (gx.toFloat() / gridWidth) * worldWidth
-                val wz = (gz.toFloat() / gridDepth) * worldDepth
+                // Centered world coordinates to match worldPosition() and CIRCULAR layout
+                val wx = (gx.toFloat() / gridWidth) * worldWidth - worldWidth / 2f
+                val wz = (gz.toFloat() / gridDepth) * worldDepth - worldDepth / 2f
 
                 val dx = wx - agentWorldX
                 val dz = wz - agentWorldZ
@@ -205,8 +206,9 @@ class CognitiveWaveform(
 
             for (gz in 0 until gridDepth) {
                 for (gx in 0 until gridWidth) {
-                    val wx = (gx.toFloat() / gridWidth) * worldWidth
-                    val wz = (gz.toFloat() / gridDepth) * worldDepth
+                    // Centered world coordinates to match worldPosition() and CIRCULAR layout
+                    val wx = (gx.toFloat() / gridWidth) * worldWidth - worldWidth / 2f
+                    val wz = (gz.toFloat() / gridDepth) * worldDepth - worldDepth / 2f
 
                     // Vector from source to this point
                     val px = wx - sx
