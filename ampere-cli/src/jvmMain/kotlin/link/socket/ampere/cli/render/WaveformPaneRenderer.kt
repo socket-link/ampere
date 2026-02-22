@@ -132,22 +132,6 @@ class WaveformPaneRenderer(
         // DIAG: log cell counts to verify effects are actually hitting rendered cells
         link.socket.ampere.cli.diagLog("[DIAG:cells] emitters=${emitterManager.activeCount} total=${rast.lastTotalCells} effects=${rast.lastEffectCells} charOverride=${rast.lastCharOverrideCells} written=${rast.lastWrittenCells} screen=${width}x${height}")
 
-        // DIAG: Stamp a bright visual indicator when effects are active.
-        // This bypasses the effect rendering to test if the pipeline itself works.
-        if (emitterManager.activeCount > 0) {
-            val fxLabel = "FX:${emitterManager.activeCount}"
-            for (i in fxLabel.indices) {
-                if (i < width && cells[0].size > i) {
-                    cells[0][i] = AsciiCell(
-                        char = fxLabel[i],
-                        fgColor = 231,  // bright white
-                        bgColor = 196,  // bright red background
-                        bold = true
-                    )
-                }
-            }
-        }
-
         // 5. Convert AsciiCell grid to ANSI-styled strings
         return cellsToLines(cells, width, height)
     }
