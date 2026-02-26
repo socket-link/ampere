@@ -140,6 +140,11 @@ tasks.named<Test>("jvmTest") {
     useJUnitPlatform()
 }
 
+// Allow SQLite JDBC (and other libs) to call restricted native methods without warnings
+tasks.named<CreateStartScripts>("startScriptsForJvm") {
+    defaultJvmOpts = listOf("--enable-native-access=ALL-UNNAMED")
+}
+
 // Wire installDist to installJvmDist so the familiar command works
 tasks.named("installDist") {
     dependsOn("installJvmDist")
