@@ -28,6 +28,7 @@ import link.socket.ampere.cli.layout.LogPane
 import link.socket.ampere.cli.layout.PaneRenderer
 import link.socket.ampere.cli.layout.RichEventPane
 import link.socket.ampere.cli.layout.StatusBar
+import link.socket.ampere.cli.layout.TaskChecklistPane
 import link.socket.ampere.cli.hybrid.HybridDashboardRenderer
 import link.socket.ampere.cli.watch.CommandExecutor
 import link.socket.ampere.cli.watch.CommandResult
@@ -51,6 +52,7 @@ import link.socket.ampere.repl.TerminalFactory
  *   d - Dashboard mode
  *   e - Event stream mode
  *   m - Memory operations mode
+ *   t - Task checklist mode
  *   v - Toggle verbose mode (shows log panel)
  *   1-9 - Focus on specific agent
  *   : - Command mode (type :help for available commands)
@@ -85,6 +87,7 @@ class AmpereCommand(
           d          Dashboard mode
           e          Event stream mode
           m          Memory operations mode
+          t          Task checklist
           1-9        Focus on specific agent
           v          Toggle verbose mode
           h  or  ?   Toggle help screen
@@ -173,6 +176,7 @@ class AmpereCommand(
         val agentScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         val terminal = TerminalFactory.createTerminal()
         val presenter = WatchPresenter(context.eventRelayService)
+        val workspaceStateStore = context.environmentService.workspaceStateStore
 
         // Create TUI components
         val hybridRenderer = HybridDashboardRenderer(terminal).also { it.initialize() }
@@ -181,6 +185,7 @@ class AmpereCommand(
         val memoryPane = AgentMemoryPane(terminal)
         val logPane = LogPane(terminal)
         val agentFocusPane = AgentFocusPane(terminal)
+        val taskChecklistPane = TaskChecklistPane(terminal)
         val statusBar = StatusBar(terminal)
         val inputHandler = DemoInputHandler(terminal)
         val helpRenderer = HelpOverlayRenderer(terminal)
@@ -364,10 +369,14 @@ class AmpereCommand(
                             }
                         }
 
+                        // Update task checklist pane with current workspace state
+                        taskChecklistPane.updateState(workspaceStateStore.state.value)
+
                         val activeMode = when (viewConfig.mode) {
                             DemoInputHandler.DemoMode.DASHBOARD -> "dashboard"
                             DemoInputHandler.DemoMode.EVENTS -> "events"
                             DemoInputHandler.DemoMode.MEMORY -> "memory"
+                            DemoInputHandler.DemoMode.TASKS -> "tasks"
                             DemoInputHandler.DemoMode.AGENT_FOCUS -> "agent_focus"
                         }
                         val shortcuts = StatusBar.defaultShortcuts(activeMode)
@@ -381,6 +390,7 @@ class AmpereCommand(
 
                         // Determine right pane based on mode
                         val rightPane: PaneRenderer = when {
+                            viewConfig.mode == DemoInputHandler.DemoMode.TASKS -> taskChecklistPane
                             viewConfig.mode == DemoInputHandler.DemoMode.AGENT_FOCUS -> {
                                 val focusedAgentId = viewConfig.focusedAgentIndex?.let { idx ->
                                     watchState.agentStates.keys.elementAtOrNull(idx - 1)

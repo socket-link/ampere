@@ -153,6 +153,12 @@ object CommandRegistry {
             category = ShortcutCategory.VIEWING_MODES,
         ),
         ShortcutDefinition(
+            key = 't',
+            label = "tasks",
+            description = "Task Checklist - Current task status and progress",
+            category = ShortcutCategory.VIEWING_MODES,
+        ),
+        ShortcutDefinition(
             key = '1',
             label = "1-9",
             description = "Agent Focus - Detailed view of specific agent",
