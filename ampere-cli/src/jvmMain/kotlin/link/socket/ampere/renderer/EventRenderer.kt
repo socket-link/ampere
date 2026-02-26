@@ -27,6 +27,7 @@ import link.socket.ampere.agents.domain.event.CognitiveStateSnapshot
 import link.socket.ampere.agents.domain.event.SparkAppliedEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.SparkRemovedEvent
+import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 
@@ -128,6 +129,7 @@ class EventRenderer(
             is Event.CodeSubmitted -> "💻" to cyan
             is Event.QuestionRaised -> "❓" to magenta
             is Event.TaskCreated -> "📋" to green
+            is TaskEvent -> "📋" to green
             is FileSystemEvent -> "📄" to cyan
             is GitEvent -> "🪾" to cyan
             is HumanInteractionEvent -> "🙋" to red

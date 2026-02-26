@@ -15,6 +15,7 @@ import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
+import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.events.subscription.Subscription
@@ -91,6 +92,14 @@ class SignificanceAwareEventLogger(
         is Event.QuestionRaised -> EventSignificance.CRITICAL
         is TicketEvent.TicketBlocked -> EventSignificance.CRITICAL
         is MessageEvent.EscalationRequested -> EventSignificance.CRITICAL
+
+        // Task lifecycle events
+        is TaskEvent.TaskCompleted -> EventSignificance.SIGNIFICANT
+        is TaskEvent.TaskFailed -> EventSignificance.CRITICAL
+        is TaskEvent.TaskBlocked -> EventSignificance.SIGNIFICANT
+        is TaskEvent.TaskStarted -> EventSignificance.ROUTINE
+        is TaskEvent.TaskProgressed -> EventSignificance.ROUTINE
+        is TaskEvent.SubtaskCreated -> EventSignificance.SIGNIFICANT
 
         // Significant events represent state changes worth noting
         is Event.TaskCreated -> EventSignificance.SIGNIFICANT

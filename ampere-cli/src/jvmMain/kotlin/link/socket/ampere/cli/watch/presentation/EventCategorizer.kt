@@ -11,6 +11,7 @@ import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
+import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 
@@ -48,9 +49,13 @@ object EventCategorizer {
         is Event.QuestionRaised,
         is TicketEvent.TicketBlocked,
         is MessageEvent.EscalationRequested,
-        is HumanInteractionEvent.InputRequested -> EventSignificance.CRITICAL
+        is HumanInteractionEvent.InputRequested,
+        is TaskEvent.TaskFailed -> EventSignificance.CRITICAL
 
         // Significant events represent state changes worth noting
+        is TaskEvent.TaskCompleted,
+        is TaskEvent.TaskBlocked,
+        is TaskEvent.SubtaskCreated,
         is Event.TaskCreated,
         is Event.CodeSubmitted,
         is FileSystemEvent,
@@ -91,6 +96,8 @@ object EventCategorizer {
         is ToolEvent.ToolRegistered,
         is ToolEvent.ToolUnregistered,
         is ToolEvent.ToolDiscoveryComplete,
+        is TaskEvent.TaskStarted,
+        is TaskEvent.TaskProgressed,
         is ToolEvent.ToolExecutionStarted,
         is ToolEvent.ToolExecutionCompleted,
         is SparkEvent -> EventSignificance.ROUTINE
