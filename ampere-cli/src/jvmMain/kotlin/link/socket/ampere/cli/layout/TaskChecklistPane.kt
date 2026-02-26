@@ -1,7 +1,6 @@
 package link.socket.ampere.cli.layout
 
 import com.github.ajalt.mordant.rendering.TextColors
-import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
 import link.socket.ampere.agents.domain.state.WorkItem
@@ -16,8 +15,8 @@ import link.socket.ampere.agents.domain.task.AssignedTo
  * a Claude/Codex-style checklist showing each task's status, progress,
  * assignee, and subtask count.
  *
- * Designed for the right column (~25% width) of the 3-column layout,
- * but can work in any pane slot.
+ * Items are sorted by status priority: in-progress and blocked items appear
+ * first, then pending, then completed (collapsed to a count).
  */
 class TaskChecklistPane(
     private val terminal: Terminal,
@@ -34,53 +33,73 @@ class TaskChecklistPane(
 
         lines.addAll(renderSectionHeader("Tasks", width, terminal))
 
-        val rootItems = state.rootItems
-        if (rootItems.isEmpty()) {
+        val allItems = state.items.values.toList()
+        if (allItems.isEmpty()) {
             lines.add("")
             lines.add(terminal.render(dim("  No tasks yet")))
             lines.add("")
             lines.add(terminal.render(dim("  Tasks will appear here")))
             lines.add(terminal.render(dim("  as agents create them.")))
-        } else {
-            rootItems.forEach { item ->
-                if (lines.size >= height - 2) return@forEach
-                lines.addAll(renderItem(item, width, indent = 0))
+            return lines.fitToHeight(height, width).map { it.fitToWidth(width) }
+        }
 
-                // Render children (subtasks)
-                val children = state.childrenOf(item.id)
-                children.forEach { child ->
-                    if (lines.size >= height - 2) return@forEach
-                    lines.addAll(renderItem(child, width, indent = 1))
-                }
+        // Partition items by status
+        val inProgress = allItems.filter { it.status is TaskStatus.InProgress }
+        val blocked = allItems.filter { it.status is TaskStatus.Blocked }
+        val pending = allItems.filter { it.status is TaskStatus.Pending }
+        val completed = allItems.filter { it.status.isClosed }
+
+        // Reserve 3 lines for summary footer
+        val contentHeight = height - lines.size - 3
+
+        // Render active items first (in-progress, blocked, pending)
+        val activeItems = inProgress + blocked + pending
+
+        if (activeItems.isNotEmpty()) {
+            val visibleActive = activeItems.take(contentHeight / 2) // Each item is ~2 lines
+            visibleActive.forEach { item ->
+                if (lines.size >= height - 4) return@forEach
+                lines.addAll(renderItem(item, width))
+            }
+
+            val hidden = activeItems.size - visibleActive.size
+            if (hidden > 0) {
+                lines.add(terminal.render(dim("  +$hidden more...")))
             }
         }
 
-        // Summary line at the bottom
-        if (rootItems.isNotEmpty()) {
-            val allItems = state.items.values
-            val completed = allItems.count { it.status.isClosed }
-            val total = allItems.size
-            val blocked = allItems.count { it.status is TaskStatus.Blocked }
-
-            // Pad to leave room for summary
-            while (lines.size < height - 3) {
+        // Show completed count (collapsed, not individual items)
+        if (completed.isNotEmpty()) {
+            if (activeItems.isNotEmpty() && lines.size < height - 4) {
                 lines.add("")
             }
-
-            lines.add(terminal.render(dim("─".repeat(width))))
-            val summaryParts = mutableListOf("$completed/$total done")
-            if (blocked > 0) {
-                summaryParts.add(terminal.render(TextColors.red("$blocked blocked")))
+            if (lines.size < height - 4) {
+                lines.add(terminal.render(TextColors.green("  ✓ ${completed.size} completed")))
             }
-            lines.add(terminal.render(dim(" ")) + summaryParts.joinToString("  "))
         }
+
+        // Pad to leave room for summary
+        while (lines.size < height - 3) {
+            lines.add("")
+        }
+
+        // Summary footer
+        val total = allItems.size
+        lines.add(terminal.render(dim("─".repeat(width))))
+        val summaryParts = mutableListOf("${completed.size}/$total done")
+        if (blocked.isNotEmpty()) {
+            summaryParts.add(terminal.render(TextColors.red("${blocked.size} blocked")))
+        }
+        if (inProgress.isNotEmpty()) {
+            summaryParts.add(terminal.render(TextColors.cyan("${inProgress.size} active")))
+        }
+        lines.add(" " + summaryParts.joinToString("  "))
 
         return lines.fitToHeight(height, width).map { it.fitToWidth(width) }
     }
 
-    private fun renderItem(item: WorkItem, width: Int, indent: Int): List<String> {
+    private fun renderItem(item: WorkItem, width: Int): List<String> {
         val lines = mutableListOf<String>()
-        val prefix = "  ".repeat(indent)
 
         // Status checkbox
         val checkbox = when (item.status) {
@@ -91,20 +110,20 @@ class TaskChecklistPane(
             is TaskStatus.Deferred -> terminal.render(dim("⊘"))
         }
 
-        // First line: checkbox + title
-        val maxTitleWidth = width - (indent * 2) - 3
+        // Title
+        val maxTitleWidth = width - 3
         val truncatedTitle = item.title.take(maxTitleWidth)
         val title = when (item.status) {
             is TaskStatus.Completed -> terminal.render(dim(truncatedTitle))
             is TaskStatus.Blocked -> terminal.render(TextColors.red(truncatedTitle))
             else -> truncatedTitle
         }
-        lines.add("$prefix$checkbox $title")
+        lines.add("$checkbox $title")
 
-        // Second line: metadata (assignee + progress or blocked reason)
-        val meta = buildMetaLine(item, width - (indent * 2) - 2)
+        // Metadata line (assignee + progress or blocked reason)
+        val meta = buildMetaLine(item, width - 2)
         if (meta.isNotEmpty()) {
-            lines.add("$prefix  ${terminal.render(dim(meta))}")
+            lines.add("  ${terminal.render(dim(meta))}")
         }
 
         return lines
@@ -115,10 +134,7 @@ class TaskChecklistPane(
 
         // Assignee
         when (val assigned = item.assignedTo) {
-            is AssignedTo.Agent -> {
-                val agentName = IdFormatter.formatAgentId(assigned.agentId)
-                parts.add(agentName)
-            }
+            is AssignedTo.Agent -> parts.add(IdFormatter.formatAgentId(assigned.agentId))
             is AssignedTo.Team -> parts.add("team:${assigned.teamId}")
             is AssignedTo.Human -> parts.add("human")
             null -> {}
@@ -131,9 +147,7 @@ class TaskChecklistPane(
                     parts.add("${(item.progress * 100).toInt()}%")
                 }
             }
-            is TaskStatus.Blocked -> {
-                parts.add(status.reason.take(20))
-            }
+            is TaskStatus.Blocked -> parts.add(status.reason.take(20))
             else -> {}
         }
 
