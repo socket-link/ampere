@@ -4,7 +4,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.jline.terminal.Terminal
-import org.jline.terminal.TerminalBuilder
+import org.jline.terminal.impl.DumbTerminal
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import kotlin.test.assertTrue
 
@@ -16,10 +17,7 @@ class MultiStageProgressTest {
     @BeforeEach
     fun setup() {
         outputStream = ByteArrayOutputStream()
-        terminal = TerminalBuilder.builder()
-            .system(false)
-            .streams(System.`in`, outputStream)
-            .build()
+        terminal = DumbTerminal(ByteArrayInputStream(ByteArray(0)), outputStream)
     }
 
     @AfterEach

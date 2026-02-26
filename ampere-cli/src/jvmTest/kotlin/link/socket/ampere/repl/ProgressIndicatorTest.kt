@@ -5,8 +5,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.jline.terminal.Terminal
-import org.jline.terminal.TerminalBuilder
 import org.jline.terminal.Size
+import org.jline.terminal.impl.DumbTerminal
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.PrintWriter
 import kotlin.test.assertEquals
@@ -34,10 +35,7 @@ class ProgressIndicatorTest {
     @BeforeEach
     fun setup() {
         outputStream = ByteArrayOutputStream()
-        terminal = TerminalBuilder.builder()
-            .system(false)
-            .streams(System.`in`, outputStream)
-            .build()
+        terminal = DumbTerminal(ByteArrayInputStream(ByteArray(0)), outputStream)
         writer = terminal.writer()
 
         // Reset TerminalFactory for consistent tests
