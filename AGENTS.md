@@ -1,333 +1,126 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Ampere is a transparent cognitive engine built in Kotlin Multiplatform, where AI reasoning is visible by design. Read [SOUL.md](SOUL.md) for project philosophy and values.
 
 ## Development Commands
 
 ### Build & Test
 ```bash
-# Build the project
-./gradlew build
-
-# Run desktop application
-./gradlew run
-
-# Package desktop application for distribution
-./gradlew package
-
-# Run Android app
-./gradlew installDebug
-
-# Run all tests
-./gradlew allTests
-
-# Run JVM-specific tests
-./gradlew jvmTest
-
-# Run iOS tests (simulator)
-./gradlew iosSimulatorArm64Test
-./gradlew iosX64Test
+./gradlew build                        # Build the project
+./gradlew allTests                     # Run all tests
+./gradlew jvmTest                      # Run JVM-specific tests (fastest, primary gate)
+./gradlew iosSimulatorArm64Test        # Run iOS tests (Apple Silicon simulator)
+./gradlew run                          # Run desktop application
+./gradlew installDebug                 # Run Android app
+./gradlew package                      # Package desktop app for distribution
 ```
 
 ### Code Quality
 ```bash
-# Format code with ktlint
-./gradlew ktlintFormat
-
-# Check code formatting
-./gradlew ktlintCheck
-
-# Run Android lint
-./gradlew lint
+./gradlew ktlintFormat                 # Auto-format code
+./gradlew ktlintCheck                  # Check formatting
+./gradlew lint                         # Android lint
+./gradlew dokkaHtml                    # Generate API documentation
 ```
 
-### Documentation
+### CLI
 ```bash
-# Generate API documentation
-./gradlew dokkaHtml
+./gradlew :ampere-cli:installDist      # Build the CLI
 
-# Generate Javadocs
-./gradlew generateJavadocs
-```
-
-### CLI Commands
-
-```bash
-# Build the CLI
-./gradlew :ampere-cli:installDist
-
-# Start the interactive TUI dashboard
-./ampere-cli/ampere                                    # Idle TUI dashboard
+# TUI dashboard
+./ampere-cli/ampere                                    # Idle dashboard
 ./ampere-cli/ampere --auto-work                        # Start with background issue work
-
-# Run agents with active work (with TUI visualization)
 ./ampere-cli/ampere --goal "Implement FizzBuzz"        # Custom goal
 ./ampere-cli/ampere --issues                           # Work on GitHub issues
 ./ampere-cli/ampere --issue 42                         # Work on specific issue
 
-# TUI keyboard controls (while dashboard is running):
-#   d - Dashboard mode (system vitals, agent status, recent events)
-#   e - Event stream mode (filtered event stream)
-#   m - Memory operations mode (knowledge recall/storage patterns)
-#   v - Toggle verbose mode (show/hide logs in right pane)
-#   h or ? - Toggle help screen
-#   : - Command mode (issue commands to the system)
-#   ESC - Close help / Cancel command mode
-#   1-9 - Agent focus mode (detailed view of specific agent)
-#   q or Ctrl+C - Exit
+# TUI controls: d=dashboard, e=events, m=memory, v=verbose, ?=help, :=command mode, q=quit
 
-# Command mode (press ':' while in TUI):
-#   :goal <description> - Start agent with goal
-#   :help - Show available commands
-#   :agents - List all active agents
-#   :ticket <id> - Show ticket details
-#   :thread <id> - Show conversation thread
-#   :quit - Exit TUI
-
-# View conversation threads
-./ampere-cli/ampere thread list
-./ampere-cli/ampere thread show <thread-id>
-
-# System status dashboard
-./ampere-cli/ampere status
-
-# View execution outcomes
-./ampere-cli/ampere outcomes ticket <ticket-id>
-./ampere-cli/ampere outcomes search <query>
-./ampere-cli/ampere outcomes executor <executor-id>
-./ampere-cli/ampere outcomes stats
-
-# Manage GitHub issues
-./ampere-cli/ampere issues create -f .ampere/issues/epic.json        # Create issues from file
-./ampere-cli/ampere issues create --stdin < epic.json                # Create from stdin
-./ampere-cli/ampere issues create -f epic.json --dry-run             # Validate without creating
-
-# Headless tests (CI/validation - no interactive UI)
-./ampere-cli/ampere test agent                         # Headless autonomous agent test
-./ampere-cli/ampere test ticket                        # Headless issue creation test
-
-# Legacy headless work mode (prefer '--issues' for TUI version)
-./ampere-cli/ampere work                               # Work on issues (headless)
-./ampere-cli/ampere work --continuous                  # Keep working (headless)
+# Other CLI commands
+./ampere-cli/ampere thread list                        # View conversation threads
+./ampere-cli/ampere status                             # System status dashboard
+./ampere-cli/ampere outcomes stats                     # Execution outcome stats
+./ampere-cli/ampere issues create -f epic.json         # Create issues from file
+./ampere-cli/ampere test agent                         # Headless agent test
 ```
 
-See [ampere-cli/README.md](ampere-cli/README.md) for complete CLI documentation.
+See [ampere-cli/README.md](ampere-cli/README.md) for full CLI documentation.
 
-## High-Level Architecture
+## Architecture at a Glance
 
-Ampere is a Kotlin Multiplatform library for creating AI Agents and Assistants with multi-provider support. The architecture follows a layered approach:
+Ampere follows a layered architecture built on the **PROPEL** cognitive loop (Perceive, Recall, Optimize, Plan, Execute, Loop) and six core primitives (Tickets, Tasks, Plans, Meetings, Outcomes, Knowledge).
 
-### AI Provider Layer (`domain/ai/`)
-Multi-provider AI support with three providers:
-- **OpenAI**: GPT-5, GPT-5-mini, GPT-5-nano, GPT-4.1, GPT-4.1-mini, GPT-4o, GPT-4o-mini, o4-mini, o3, o3-mini
-- **Anthropic (Claude)**: Opus 4.1, Opus 4, Sonnet 4, Sonnet 3.7, Haiku 3.5, Haiku 3
-- **Google (Gemini)**: Multiple Gemini models
+| Layer | Location | Purpose |
+|-------|----------|---------|
+| AI Providers | `domain/ai/` | Multi-provider support (Anthropic, OpenAI, Google) with fallback chains |
+| Agent Definitions | `domain/agent/` | Agent identities, prompts, and bundled agent catalog |
+| Cognitive Core | `agents/core/` | PROPEL loop, autonomous agent contracts |
+| Event System | `agents/events/` | EventBus, routing, persistence, messaging, escalation |
+| Coordination | `agents/meetings/` | Standup, sprint planning, code review, ad-hoc meetings |
+| Tools | `agents/tools/` | WriteCode, RunTests, ReadCodebase, AskHuman |
+| Persistence | `data/` | SQLDelight repositories with observable state |
+| UI | `ui/` | Compose Multiplatform screens and components |
+| CLI | `ampere-cli/` | TUI dashboard, event streaming, thread management |
 
-Key components:
-- `AIConfiguration`: Interface with default and backup implementations
-- `AIModelFeatures`: Defines available tools, reasoning level, speed, supported inputs
-- `ModelLimits`: Token limits and rate limits per tier
-- `RateLimits`: Tier-based rate limiting (Free, Tier1-5)
+For details: [Core Concepts](docs/CORE_CONCEPTS.md) | [Agent Lifecycle](docs/AGENT_LIFECYCLE.md) | [Architecture](docs/ARCS.md)
 
-### Agent Layer (`domain/agent/` & `agents/`)
-- **Agents**: Specialized AI chatbots defined by `AgentDefinition` classes with domain-specific prompts
-  - `LLMAgent`: Interface for AI interaction with function calling support
-  - `KoreAgent`: Concrete implementation managing conversations and tool execution
-  - `MinimalAutonomousAgent`: Contract with perceive/reason/act/signal methods
+## Key Paths
 
-- **Bundled Agents** (`domain/agent/bundled/`): 24+ pre-built agents organized in categories:
-  - **Code**: APIDesignAgent, CleanJsonAgent, DocumentationAgent, PerformanceOptimizationAgent, PlatformCompatibilityAgent, QATestingAgent, ReleaseManagementAgent, SecurityReviewAgent, WriteCodeAgent
-  - **General**: BusinessAgent, CareerAgent, CookingAgent, DIYAgent, EmailAgent, FinancialAgent, HealthAgent, LanguageAgent, MediaAgent, StudyAgent, TechAgent, TravelAgent
-  - **Prompt**: ComparePromptsAgent, TestAgentAgent, WritePromptAgent
-  - **Reasoning**: DelegateTasksAgent, ReActAgent
+| Module | Purpose |
+|--------|---------|
+| `ampere-core/src/commonMain/` | Shared business logic (agents, events, domain, UI) |
+| `ampere-core/src/jvmMain/` | JVM platform implementations (SQL drivers) |
+| `ampere-core/src/androidMain/` | Android platform implementations |
+| `ampere-core/src/iosMain/` | iOS platform implementations |
+| `ampere-cli/` | Command-line TUI and tools |
+| `ampere-android/` | Android application |
+| `ampere-desktop/` | Desktop application (Compose) |
+| `ampere-ios/` | iOS application (Xcode project) |
+| `docs/` | Architecture and concept documentation |
 
-### Event System (`agents/events/`)
-Enterprise event-driven architecture:
-- **AgentEventApi**: High-level API for publishing/subscribing to events
-- **Event Types**:
-  - `TaskCreated`: Tasks created in the system
-  - `QuestionRaised`: Questions needing attention
-  - `CodeSubmitted`: Code reviews with optional requirement flags
-- **EventBus**: Central event broker with pub/sub pattern
-- **EventRouter**: Routes events between subscribed agents
-- **EventRepository**: SQLDelight-backed persistence
-- **EventLogger**: Logging interface with console implementation
+## Before You Change Anything
 
-### Message System (`agents/events/messages/`)
-Complete messaging infrastructure:
-- **MessageChannel**: Public channels (#engineering, #design, #product) and Direct messages
-- **MessageThread**: Thread-based conversations with participants and status tracking
-- **Message**: Individual messages with sender, timestamp, and metadata
-- **MessageRouter**: Routes messages between agents and channels
-- **MessageRepository**: SQLDelight persistence for messages
-- **AgentMessageApi**: High-level API for message operations
-- **Status tracking**: OPEN, WAITING_FOR_HUMAN, RESOLVED
+- Read the file you're modifying. Read its tests. Read its callers.
+- Check [docs/CORE_CONCEPTS.md](docs/CORE_CONCEPTS.md) if touching primitives (Tickets, Tasks, Plans, Meetings, Outcomes, Knowledge).
+- Check [docs/AGENT_LIFECYCLE.md](docs/AGENT_LIFECYCLE.md) if touching the PROPEL loop.
+- Check [docs/ARCS.md](docs/ARCS.md) if touching orchestration patterns.
 
-### Meeting System (`agents/meetings/`)
-Complete meeting management:
-- **Meeting Types**: Standup, SprintPlanning, CodeReview, AdHoc
-- **Meeting Statuses**: Scheduled, Delayed, InProgress, Completed, Canceled
-- **Meeting Outcomes**: BlockerRaised, GoalCreated, DecisionMade, ActionItem
-- **Tasks/AgendaItems**: With status tracking (Pending, InProgress, Blocked, Completed, Deferred)
+## Kotlin Conventions
 
-### Escalation System (`agents/events/messages/escalation/`)
-- **EscalationEventHandler**: Listens for escalation events and notifies humans
-- **Notifier**: Interface for human notification system
+- Sealed classes/interfaces for closed type hierarchies
+- Data classes for immutable value types
+- `expect`/`actual` for platform-specific code
+- Follow existing SQLDelight patterns for persistence
+- ktlint with IntelliJ IDEA code style (auto-format with `./gradlew ktlintFormat`)
 
-### Capabilities & Tools (`domain/capability/` & `agents/tools/`)
-Modular tool system:
-- `AgentCapability`: Agent spawning and delegation
-- `IOCapability`: File operations and CSV parsing
-- `FunctionProvider`: Defines available tools for agents
-- **Specific Tools**:
-  - `WriteCodeFileTool`: Write code to files
-  - `RunTestsTool`: Execute tests
-  - `ReadCodebaseTool`: Analyze codebase
-  - `AskHumanTool`: Request human input
-- **Provider-specific tools**: AITool_Claude, AITool_OpenAI, AITool_Gemini
+## Agent System Rules
 
-### Conversations (`domain/chat/`)
-Chat session management:
-- `Conversation`: Container for agent + chat history
-- `ConversationHistory`: Manages chat message sequences
-- `Chat`: Message types (Text, CSV, System)
+- Every new event type needs: serializer, EventBus registration, CLI display handler
+- Agent prompts belong in `AgentDefinition` subclasses, not loose strings
+- Tool functions must handle errors gracefully and return structured results
+- Confidence thresholds should be configurable, not hardcoded
+- New agents go in `domain/agent/bundled/` following existing category organization
 
-### UI Layer (`ui/`)
-**Compose Multiplatform** UI with screens and components:
-- `HomeScreen`: List existing conversations or create new ones
-- `AgentSelectionScreen`: Choose agent types
-- `AgentSetupScreen`: Configure agent with inputs
-- `ConversationScreen`: Active chat interface with agent
-- `ModelSelectionBottomSheet`: Model selection UI with detailed info
+## Testing
 
-**Model Display Components**:
-- ModelDetailsSection, ModelFeaturesSection, ModelLimitsSection
-- ModelRateLimitsSection, TokenUsageInfo, RateLimitChart
-- PerformanceChip, SuggestedModelsSection, ModelFiltersSection
+- **Primary gate:** `./gradlew jvmTest` — run this after every change
+- Test behavior, not implementation details
+- Mock AI provider responses in tests; never call real APIs
+- New features need tests in `commonTest`
 
-**State Management**: Uses repositories for persistent storage
+## Safety Boundaries
 
-### Data Layer (`data/`)
-Repository pattern with SQLDelight persistence:
-- **Repository<K,V>**: Generic repository with observable state
-- **ConversationRepository**: Managing agent conversations
-- **EventRepository**: Event persistence and querying
-- **MessageRepository**: Message/thread persistence
-- **UserConversationRepository**: Enhanced conversation management
+- **Never** modify `local.properties` (contains API keys)
+- **Never** push directly to `main`
+- **Never** delete SQLDelight migration files
+- **Never** commit API keys, tokens, or secrets
+- **Always** run `./gradlew jvmTest` before considering work complete
+- **Always** run `./gradlew ktlintFormat` before committing
 
-### CLI Layer (`ampere-cli/`)
-**Command-line tools** for observing and managing the agent substrate:
-- **WatchCommand**: Real-time event streaming with filtering
-- **ThreadCommand**: View and manage conversation threads
-- **StatusCommand**: System-wide dashboard and metrics
-- **OutcomesCommand**: Execution outcome memory and analysis
+## Permissions
 
-**Technologies:**
-- Clikt for command-line interface
-- Mordant for terminal rendering
-- SQLite/SQLDelight for persistence
-
-See [ampere-cli/README.md](ampere-cli/README.md) for complete documentation.
-
-### Platform Targets
-- **Android**: Native Android app in `ampere-android/`
-- **Desktop/JVM**: Desktop app in `ampere-desktop/`
-- **iOS**: iOS app in `ampere-ios/` (Xcode project)
-- **CLI**: Command-line tools in `ampere-cli/` (JVM-based)
-
-## Directory Structure
-
-```
-ampere-core/src/commonMain/kotlin/link/socket/ampere/
-├── domain/
-│   ├── ai/
-│   │   ├── provider/          # AI providers (OpenAI, Anthropic, Google)
-│   │   ├── model/             # Model definitions and features
-│   │   └── configuration/     # AI configuration with backups
-│   ├── agent/
-│   │   └── bundled/           # 24+ pre-built agents
-│   ├── assistant/             # KoreAssistant implementation
-│   ├── capability/            # IOCapability, AgentCapability
-│   ├── chat/                  # Conversation management
-│   ├── tool/                  # Tool definitions
-│   ├── koog/                  # KoogAgentFactory integration
-│   ├── util/                  # Utilities
-│   └── limits/                # Token/Rate limits
-├── agents/
-│   ├── core/                  # Core agent types and interfaces
-│   ├── events/                # Event system and routing
-│   │   └── messages/          # Message system
-│   │       └── escalation/    # Human escalation
-│   ├── meetings/              # Meeting types and management
-│   └── tools/                 # Specific tool implementations
-├── data/                      # Repositories and persistence
-└── ui/                        # Compose Multiplatform UI
-
-ampere-cli/
-├── src/jvmMain/kotlin/link/socket/ampere/
-│   ├── AmpereCommand.kt       # Root CLI command
-│   ├── WatchCommand.kt        # Real-time event streaming
-│   ├── ThreadCommand.kt       # Thread management (list/show)
-│   ├── StatusCommand.kt       # System dashboard
-│   ├── OutcomesCommand.kt     # Outcome memory (ticket/search/executor/stats)
-│   ├── AmpereContext.kt       # Dependency injection
-│   ├── renderer/              # CLI rendering (tables, events, colors)
-│   └── util/                  # Event type parsing
-└── README.md                  # Complete CLI documentation
-```
-
-## Key Patterns
-
-### Agent System
-Agents are defined by extending `AgentDefinition` with:
-- `name`: Display name
-- `prompt`: System prompt defining behavior
-- `neededInputs`/`optionalInputs`: Configuration parameters
-- Tone and seriousness settings for response style
-
-### Function Calling
-Agents can be equipped with tools via `FunctionProvider`:
-- `FunctionDefinition.StringReturn`: Text-based functions
-- `FunctionDefinition.CSVReturn`: Structured data functions
-- Tools are automatically exposed to AI providers for function calling
-
-### Event-Driven Architecture
-- Events published via `AgentEventApi.publish()`
-- Agents subscribe to specific event types
-- `EventRouter` handles routing between subscribers
-- Events persisted via SQLDelight for durability
-
-### Message Routing
-- Messages sent to channels or direct conversations
-- `MessageRouter` handles routing based on channel/thread
-- Status transitions track conversation state
-- Escalation to humans when needed
-
-### Multiplatform Structure
-- `commonMain`: Shared business logic and UI
-- `androidMain`: Android-specific implementations (SQL driver)
-- `jvmMain`: Desktop-specific implementations (SQL driver)
-- `iosMain`: iOS-specific implementations (SQL driver)
-
-## Important Dependencies
-
-### Core
-- **OpenAI Kotlin**: `openai-kotlin` for OpenAI LLM integration
-- **KOOG Agents**: `ai.koog:koog-agents` for external agent framework
-- **Compose Multiplatform**: UI framework
-- **Ktor**: `ktor-client-*` HTTP client for different platforms
-
-### Persistence
-- **SQLDelight**: `app.cash.sqldelight:*` for database persistence
-
-### Utilities
-- **Turtle**: Shell script execution capabilities
-- **Kermit**: `co.touchlab:kermit` for logging
-- **Multiplatform Markdown**: `com.mikepenz:multiplatform-markdown-renderer`
-
-## Configuration
-- AI API credentials configured via `local.properties`
-- Supports multiple providers with fallback configurations
-- ktlint formatting uses IntelliJ IDEA code style
-- Gradle with Kotlin Multiplatform plugin
-- SQLDelight for cross-platform database
+- **File read:** any file in the repository
+- **File write:** `src/`, `test/`, `docs/`, config files (not `local.properties`)
+- **Git:** branch creation, commits (with review)
+- **Build/test:** full access to `./gradlew` commands
+- **External:** no network requests or API calls without explicit approval

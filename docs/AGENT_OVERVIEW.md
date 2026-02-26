@@ -2,7 +2,7 @@
 
 AMPERE includes **24+ pre-built agents** organized by domain. Each agent has a specialized system prompt, configurable inputs, and customizable personality settings.
 
-> **Note:** Some of the code examples below show the planned high-level API that is currently in development. For accurate details of the current API implementation, see the [CLI Guide](ampere-cli/README.md) and [CLAUDE.md](CLAUDE.md).
+> **Note:** Some of the code examples below show the planned high-level API that is currently in development. For accurate details of the current API implementation, see the [CLI Guide](ampere-cli/README.md) and [AGENTS.md](../AGENTS.md).
 
 ---
 
