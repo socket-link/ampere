@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.event.Event
-import link.socket.ampere.agents.domain.event.EventRegistry
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.state.WorkItem
 import link.socket.ampere.agents.domain.state.WorkspaceState
@@ -119,7 +118,7 @@ class WorkspaceStateStore(
                     createdAt = event.timestamp,
                     updatedAt = event.timestamp,
                     events = listOf(event.eventId),
-                )
+                ),
             )
 
             is TaskEvent.TaskStarted -> current.updateItem(event.taskId) {
@@ -181,7 +180,7 @@ class WorkspaceStateStore(
                     createdAt = event.timestamp,
                     updatedAt = event.timestamp,
                     events = listOf(event.eventId),
-                )
+                ),
             )
 
             // Ignore all other event types

@@ -1,6 +1,5 @@
 package link.socket.ampere.util
 
-import kotlin.js.Date
 import kotlin.random.Random
 
 actual fun randomUUID(): String {

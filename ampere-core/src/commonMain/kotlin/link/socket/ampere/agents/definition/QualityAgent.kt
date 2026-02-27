@@ -2,9 +2,7 @@ package link.socket.ampere.agents.definition
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import link.socket.ampere.util.runBlockingCompat
 import kotlinx.coroutines.withTimeout
-import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.qa.QualityPrompts
@@ -30,6 +28,8 @@ import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.util.ioDispatcher
+import link.socket.ampere.util.runBlockingCompat
 
 /**
  * Quality Assurance Agent responsible for verifying code quality, correctness,

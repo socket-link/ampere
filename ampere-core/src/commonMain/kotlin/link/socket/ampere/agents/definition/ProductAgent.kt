@@ -2,9 +2,7 @@ package link.socket.ampere.agents.definition
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import link.socket.ampere.util.runBlockingCompat
 import kotlinx.coroutines.withTimeout
-import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.product.PlanningInsights
@@ -24,15 +22,17 @@ import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.tickets.AgentWorkload
 import link.socket.ampere.agents.events.tickets.BacklogSummary
 import link.socket.ampere.agents.events.tickets.TicketOrchestrator
-import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.util.ioDispatcher
+import link.socket.ampere.util.runBlockingCompat
 
 /**
  * Product Manager Agent responsible for breaking down features into tasks

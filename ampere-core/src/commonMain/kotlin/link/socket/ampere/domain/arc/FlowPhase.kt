@@ -6,8 +6,6 @@ import link.socket.ampere.agents.definition.Agent
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.memory.MemoryContext
 import link.socket.ampere.agents.domain.outcome.Outcome
-import link.socket.ampere.agents.domain.reasoning.Idea
-import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
 

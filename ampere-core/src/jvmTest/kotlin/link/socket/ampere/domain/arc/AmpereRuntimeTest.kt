@@ -68,10 +68,12 @@ class AmpereRuntimeTest {
         // Verify Flow phase results
         assertNotNull(result.flowResult)
         assertTrue(result.flowResult.finalTick >= 0)
-        assertTrue(result.flowResult.terminationReason in listOf(
-            TerminationReason.GOAL_COMPLETE,
-            TerminationReason.MAX_TICKS_REACHED,
-        ))
+        assertTrue(
+            result.flowResult.terminationReason in listOf(
+                TerminationReason.GOAL_COMPLETE,
+                TerminationReason.MAX_TICKS_REACHED,
+            ),
+        )
 
         // Verify Pulse phase results
         assertNotNull(result.pulseResult)
@@ -274,8 +276,10 @@ class AmpereRuntimeTest {
         val result = runtime.execute("Deploy to staging")
 
         assertEquals(3, result.chargeResult.agents.size)
-        assertTrue(result.chargeResult.agents.filterIsInstance<SparkBasedAgent>().any {
-            it.cognitiveState.contains("Role:Operations")
-        })
+        assertTrue(
+            result.chargeResult.agents.filterIsInstance<SparkBasedAgent>().any {
+                it.cognitiveState.contains("Role:Operations")
+            },
+        )
     }
 }

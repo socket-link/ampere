@@ -3,7 +3,6 @@ package link.socket.ampere.api
 import com.charleskorn.kaml.Yaml
 import com.charleskorn.kaml.YamlConfiguration
 import java.io.File
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
@@ -63,7 +62,7 @@ internal data class YamlAIProviderConfig(
             "openai" -> OpenAIConfig(model = toOpenAIModel(model))
             "gemini" -> GeminiConfig(model = toGeminiModel(model))
             else -> throw IllegalArgumentException(
-                "Unknown provider: $provider. Supported: anthropic, openai, gemini"
+                "Unknown provider: $provider. Supported: anthropic, openai, gemini",
             )
         }
 

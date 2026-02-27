@@ -97,27 +97,51 @@ class ConsumerSimulationTest {
     // ==================== Stub Implementations ====================
 
     private val stubTicketService = object : TicketService {
-        override suspend fun create(title: String, configure: (link.socket.ampere.api.service.TicketBuilder.() -> Unit)?): Result<Ticket> {
+        override suspend fun create(
+            title: String,
+            configure: (link.socket.ampere.api.service.TicketBuilder.() -> Unit)?,
+        ): Result<Ticket> {
             val builder = link.socket.ampere.api.service.TicketBuilder()
             configure?.invoke(builder)
-            return Result.success(dummyTicket.copy(title = title, description = builder.description, priority = builder.priority, type = builder.type))
+            return Result.success(
+                dummyTicket.copy(
+                    title = title,
+                    description = builder.description,
+                    priority = builder.priority,
+                    type = builder.type,
+                ),
+            )
         }
         override suspend fun assign(ticketId: TicketId, agentId: AgentId?) = Result.success(Unit)
         override suspend fun transition(ticketId: TicketId, status: TicketStatus) = Result.success(Unit)
         override suspend fun get(ticketId: TicketId) = Result.success(dummyTicket)
-        override suspend fun list(filter: TicketFilter?) = Result.success(listOf(
-            TicketSummary(ticketId = "ticket-1", title = "Fix auth", priority = "HIGH", status = "Backlog", assigneeId = null, createdAt = now)
-        ))
+        override suspend fun list(filter: TicketFilter?) = Result.success(
+            listOf(
+                TicketSummary(
+                    ticketId = "ticket-1",
+                    title = "Fix auth",
+                    priority = "HIGH",
+                    status = "Backlog",
+                    assigneeId = null,
+                    createdAt = now,
+                ),
+            ),
+        )
     }
 
     private val stubThreadService = object : ThreadService {
-        override suspend fun create(title: String, configure: (link.socket.ampere.api.service.ThreadBuilder.() -> Unit)?): Result<MessageThread> {
+        override suspend fun create(
+            title: String,
+            configure: (link.socket.ampere.api.service.ThreadBuilder.() -> Unit)?,
+        ): Result<MessageThread> {
             return Result.success(dummyThread)
         }
         override suspend fun post(threadId: MessageThreadId, content: String, senderId: String) =
             Result.success(dummyMessage.copy(content = content))
         override suspend fun get(threadId: MessageThreadId) =
-            Result.success(ThreadDetail(threadId = threadId, title = "Thread", messages = emptyList(), participants = emptyList()))
+            Result.success(
+                ThreadDetail(threadId = threadId, title = "Thread", messages = emptyList(), participants = emptyList()),
+            )
         override suspend fun list(filter: ThreadFilter?) = Result.success(emptyList<ThreadSummary>())
         override fun observe(threadId: MessageThreadId): Flow<Message> = emptyFlow()
     }
@@ -127,10 +151,24 @@ class ConsumerSimulationTest {
         override suspend fun pursue(goal: String) = Result.success("goal-123")
         override suspend fun wake(agentId: AgentId) = Result.success(Unit)
         override suspend fun inspect(agentId: AgentId) = Result.success(
-            AgentSnapshot(id = agentId, role = "engineer", state = AgentState.Active, currentTask = null, sparkStack = emptyList(), lastActivity = now)
+            AgentSnapshot(
+                id = agentId,
+                role = "engineer",
+                state = AgentState.Active,
+                currentTask = null,
+                sparkStack = emptyList(),
+                lastActivity = now,
+            ),
         )
         override suspend fun listAll() = listOf(
-            AgentSnapshot(id = "eng", role = "engineer", state = AgentState.Active, currentTask = "ticket-1", sparkStack = listOf("code-review"), lastActivity = now)
+            AgentSnapshot(
+                id = "eng",
+                role = "engineer",
+                state = AgentState.Active,
+                currentTask = "ticket-1",
+                sparkStack = listOf("code-review"),
+                lastActivity = now,
+            ),
         )
         override suspend fun pause(agentId: AgentId) = Result.success(Unit)
     }
@@ -138,20 +176,43 @@ class ConsumerSimulationTest {
     private val stubEventService = object : EventService {
         override suspend fun get(eventId: String) = Result.success<Event?>(null)
         override fun observe(filters: EventRelayFilters): Flow<Event> = emptyFlow()
-        override suspend fun query(fromTime: Instant, toTime: Instant, sourceIds: Set<String>?) = Result.success(emptyList<Event>())
+        override suspend fun query(fromTime: Instant, toTime: Instant, sourceIds: Set<String>?) = Result.success(
+            emptyList<Event>(),
+        )
         override fun replay(from: Instant, to: Instant, filters: EventRelayFilters): Flow<Event> = emptyFlow()
     }
 
     private val stubOutcomeService = object : OutcomeService {
         override suspend fun forTicket(ticketId: TicketId) = Result.success(emptyList<OutcomeMemory>())
         override suspend fun search(query: String, limit: Int) = Result.success(emptyList<OutcomeMemory>())
-        override suspend fun stats() = Result.success(OutcomeStats(totalOutcomes = 10, successCount = 8, failureCount = 2, successRate = 0.8, averageDurationMs = 1500))
+        override suspend fun stats() = Result.success(
+            OutcomeStats(
+                totalOutcomes = 10,
+                successCount = 8,
+                failureCount = 2,
+                successRate = 0.8,
+                averageDurationMs = 1500,
+            ),
+        )
         override suspend fun byExecutor(executorId: ExecutorId, limit: Int) = Result.success(emptyList<OutcomeMemory>())
     }
 
     private val stubKnowledgeService = object : KnowledgeService {
-        override suspend fun store(knowledge: Knowledge, tags: List<String>, taskType: String?, complexityLevel: String?) =
-            Result.success(KnowledgeEntry(id = "k-1", knowledgeType = KnowledgeType.FROM_OUTCOME, approach = "test", learnings = "test", timestamp = now))
+        override suspend fun store(
+            knowledge: Knowledge,
+            tags: List<String>,
+            taskType: String?,
+            complexityLevel: String?,
+        ) =
+            Result.success(
+                KnowledgeEntry(
+                    id = "k-1",
+                    knowledgeType = KnowledgeType.FROM_OUTCOME,
+                    approach = "test",
+                    learnings = "test",
+                    timestamp = now,
+                ),
+            )
         override suspend fun get(id: String) = Result.success<KnowledgeEntry?>(null)
         override suspend fun recall(query: String, limit: Int) = Result.success(emptyList<KnowledgeEntry>())
         override suspend fun search(query: String?, type: KnowledgeType?, taskType: String?, tags: List<String>?, limit: Int) = Result.success(emptyList<KnowledgeEntry>())
@@ -161,10 +222,18 @@ class ConsumerSimulationTest {
 
     private val stubStatusService = object : StatusService {
         override suspend fun snapshot() = Result.success(
-            SystemSnapshot(agents = emptyList(), activeTickets = 5, totalTickets = 12, activeThreads = 3, totalMessages = 45, escalatedThreads = 1, workspace = "/project")
+            SystemSnapshot(
+                agents = emptyList(),
+                activeTickets = 5,
+                totalTickets = 12,
+                activeThreads = 3,
+                totalMessages = 45,
+                escalatedThreads = 1,
+                workspace = "/project",
+            ),
         )
         override fun health(): Flow<HealthStatus> = flowOf(
-            HealthStatus(overall = HealthLevel.Healthy, activeAgents = 3, idleAgents = 1, pendingTickets = 2)
+            HealthStatus(overall = HealthLevel.Healthy, activeAgents = 3, idleAgents = 1, pendingTickets = 2),
         )
     }
 
@@ -193,10 +262,12 @@ class ConsumerSimulationTest {
         assertNotNull(retrieved)
 
         // List with filter
-        val filtered = stubTicketService.list(TicketFilter(
-            priority = TicketPriority.HIGH,
-            type = TicketType.BUG,
-        )).getOrThrow()
+        val filtered = stubTicketService.list(
+            TicketFilter(
+                priority = TicketPriority.HIGH,
+                type = TicketType.BUG,
+            ),
+        ).getOrThrow()
         assertTrue(filtered.isNotEmpty())
 
         // List without filter

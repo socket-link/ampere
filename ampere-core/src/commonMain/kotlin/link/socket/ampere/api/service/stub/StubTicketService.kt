@@ -39,7 +39,7 @@ class StubTicketService : TicketService {
                 createdByAgentId = "stub",
                 createdAt = now,
                 updatedAt = now,
-            )
+            ),
         )
     }
 

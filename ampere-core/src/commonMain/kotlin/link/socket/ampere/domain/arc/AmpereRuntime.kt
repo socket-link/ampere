@@ -1,9 +1,9 @@
 package link.socket.ampere.domain.arc
 
+import link.socket.ampere.util.systemFileSystem
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
-import link.socket.ampere.util.systemFileSystem
 
 /**
  * Result of a complete Arc lifecycle execution.

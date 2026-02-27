@@ -10,6 +10,7 @@ import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
+import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
@@ -100,6 +101,9 @@ object EventCategorizer {
         is TaskEvent.TaskProgressed,
         is ToolEvent.ToolExecutionStarted,
         is ToolEvent.ToolExecutionCompleted,
+        is RoutingEvent.RouteSelected,
         is SparkEvent -> EventSignificance.ROUTINE
+
+        is RoutingEvent.RouteFallback -> EventSignificance.SIGNIFICANT
     }
 }

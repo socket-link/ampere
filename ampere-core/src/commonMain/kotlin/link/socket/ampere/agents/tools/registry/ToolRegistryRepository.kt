@@ -2,7 +2,6 @@ package link.socket.ampere.agents.tools.registry
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
-import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.config.AgentActionAutonomy
@@ -11,6 +10,7 @@ import link.socket.ampere.agents.execution.tools.ToolId
 import link.socket.ampere.data.Repository
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.tools.ToolRegistryQueries
+import link.socket.ampere.util.ioDispatcher
 
 /**
  * Repository responsible for persisting and querying tool metadata using SQLDelight.

@@ -24,7 +24,7 @@ class StubStatusService : StatusService {
                 totalMessages = 0,
                 escalatedThreads = 0,
                 workspace = null,
-            )
+            ),
         )
 
     override fun health(): Flow<HealthStatus> = flowOf(
@@ -33,6 +33,6 @@ class StubStatusService : StatusService {
             activeAgents = 0,
             idleAgents = 0,
             pendingTickets = 0,
-        )
+        ),
     )
 }

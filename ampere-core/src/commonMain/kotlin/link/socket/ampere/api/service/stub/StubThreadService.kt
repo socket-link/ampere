@@ -5,7 +5,6 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.status.EventStatus
 import link.socket.ampere.agents.events.messages.Message
-import link.socket.ampere.agents.events.messages.MessageChannel
 import link.socket.ampere.agents.events.messages.MessageSender
 import link.socket.ampere.agents.events.messages.MessageThread
 import link.socket.ampere.agents.events.messages.MessageThreadId
@@ -43,7 +42,7 @@ class StubThreadService : ThreadService {
                 status = EventStatus.Open,
                 createdAt = now,
                 updatedAt = now,
-            )
+            ),
         )
     }
 
@@ -60,7 +59,7 @@ class StubThreadService : ThreadService {
                 sender = if (senderId == "human") MessageSender.Human else MessageSender.Agent(senderId),
                 content = content,
                 timestamp = Clock.System.now(),
-            )
+            ),
         )
     }
 
@@ -71,7 +70,7 @@ class StubThreadService : ThreadService {
                 title = "Stub Thread",
                 messages = emptyList(),
                 participants = emptyList(),
-            )
+            ),
         )
 
     override suspend fun list(filter: ThreadFilter?): Result<List<ThreadSummary>> =

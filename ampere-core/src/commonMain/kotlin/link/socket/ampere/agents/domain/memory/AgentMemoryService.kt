@@ -1,7 +1,6 @@
 package link.socket.ampere.agents.domain.memory
 
 import kotlinx.coroutines.withContext
-import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.EventSource
@@ -12,6 +11,7 @@ import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.util.ioDispatcher
 
 /**
  * Service layer for persistent agent memory management.

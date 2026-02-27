@@ -23,6 +23,7 @@ import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
+import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.event.CognitiveStateSnapshot
 import link.socket.ampere.agents.domain.event.SparkAppliedEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
@@ -141,6 +142,9 @@ class EventRenderer(
             is ProductEvent -> "💡" to green
             is TicketEvent -> "🎫" to green
             is ToolEvent -> "🔧" to yellow
+            // Routing events
+            is RoutingEvent.RouteSelected -> "🔀" to cyan
+            is RoutingEvent.RouteFallback -> "🔀" to yellow
             // Spark events have distinct icons based on type
             is SparkAppliedEvent -> SparkColors.SparkIcons.APPLIED to cyan
             is SparkRemovedEvent -> SparkColors.SparkIcons.REMOVED to gray

@@ -1,12 +1,12 @@
 package link.socket.ampere.api.service.stub
 
+import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.api.model.AgentSnapshot
 import link.socket.ampere.api.model.AgentState
 import link.socket.ampere.api.service.AgentService
 import link.socket.ampere.dsl.team.AgentTeam
 import link.socket.ampere.dsl.team.AgentTeamBuilder
-import kotlinx.datetime.Clock
 
 /**
  * Stub implementation of [AgentService] for testing and parallel development.
@@ -37,7 +37,7 @@ class StubAgentService : AgentService {
                 currentTask = null,
                 sparkStack = emptyList(),
                 lastActivity = Clock.System.now(),
-            )
+            ),
         )
 
     override suspend fun listAll(): List<AgentSnapshot> = emptyList()

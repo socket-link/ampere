@@ -66,7 +66,7 @@ internal class DefaultTicketService(
                     priority = ticket.priority.name,
                     createdAt = ticket.createdAt,
                 )
-            }
+            },
         )
     }
 }

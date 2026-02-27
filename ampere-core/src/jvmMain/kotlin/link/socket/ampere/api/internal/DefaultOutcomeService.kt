@@ -29,7 +29,9 @@ internal class DefaultOutcomeService(
             val failures = total - successes
             val avgDuration = if (allOutcomes.isNotEmpty()) {
                 allOutcomes.map { it.executionDurationMs }.average().toLong()
-            } else 0L
+            } else {
+                0L
+            }
 
             Result.success(
                 OutcomeStats(
@@ -38,7 +40,7 @@ internal class DefaultOutcomeService(
                     failureCount = failures,
                     successRate = if (total > 0) successes.toDouble() / total else 0.0,
                     averageDurationMs = avgDuration,
-                )
+                ),
             )
         } catch (e: Exception) {
             Result.failure(e)

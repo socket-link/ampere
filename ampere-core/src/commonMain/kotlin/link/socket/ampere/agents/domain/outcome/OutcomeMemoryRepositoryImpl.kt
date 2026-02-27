@@ -1,7 +1,6 @@
 package link.socket.ampere.agents.domain.outcome
 
 import kotlinx.coroutines.withContext
-import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.events.utils.generateUUID
@@ -9,6 +8,7 @@ import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.memory.OutcomeMemoryStore
 import link.socket.ampere.db.memory.OutcomeMemoryStoreQueries
+import link.socket.ampere.util.ioDispatcher
 
 /**
  * SQLDelight-backed implementation of OutcomeMemoryRepository.

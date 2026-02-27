@@ -44,7 +44,7 @@ internal class DefaultAgentService(
 
     override suspend fun inspect(agentId: AgentId): Result<AgentSnapshot> {
         val team = currentTeam ?: return Result.failure(
-            IllegalStateException("No team configured. Call team {} first.")
+            IllegalStateException("No team configured. Call team {} first."),
         )
         val member = team.getMembers().find { it.role == agentId }
             ?: return Result.failure(IllegalArgumentException("Agent not found: $agentId"))
@@ -57,7 +57,7 @@ internal class DefaultAgentService(
                 currentTask = null,
                 sparkStack = member.capabilities,
                 lastActivity = Clock.System.now(),
-            )
+            ),
         )
     }
 

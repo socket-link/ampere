@@ -113,7 +113,9 @@ class PulsePhase(
         val recommendations = mutableListOf<String>()
 
         if (goalsCompleted < goalsTotal) {
-            recommendations.add("Not all goals completed ($goalsCompleted/$goalsTotal). Consider running another Flow phase iteration.")
+            recommendations.add(
+                "Not all goals completed ($goalsCompleted/$goalsTotal). Consider running another Flow phase iteration.",
+            )
         }
 
         if (failedOutcomes > 0) {

@@ -1,12 +1,12 @@
 package link.socket.ampere.agents.domain.knowledge
 
 import kotlinx.coroutines.withContext
-import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.memory.KnowledgeStore
 import link.socket.ampere.db.memory.KnowledgeStoreQueries
+import link.socket.ampere.util.ioDispatcher
 
 /**
  * SQLDelight-backed implementation of KnowledgeRepository.

@@ -101,5 +101,5 @@ You approach problems by understanding how parts relate to the whole:
 - Identify dependencies and relationships between components
 - Communicate in ways that help others see the big picture
         """.trimIndent(),
-        ),
+    ),
 }

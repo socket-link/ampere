@@ -1,10 +1,9 @@
 
+import com.vanniktech.maven.publish.JavadocJar
+import com.vanniktech.maven.publish.KotlinMultiplatform
+import com.vanniktech.maven.publish.SonatypeHost
 import java.io.FileInputStream
 import java.util.Properties
-import com.vanniktech.maven.publish.SonatypeHost
-import com.vanniktech.maven.publish.KotlinMultiplatform
-import com.vanniktech.maven.publish.JavadocJar
-import org.jetbrains.dokka.gradle.tasks.DokkaGenerateTask
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
@@ -43,7 +42,9 @@ mavenPublishing {
 
     pom {
         name.set("Ampere")
-        description.set("A Kotlin Multiplatform library for building AI agent systems with built-in observability and transparent cognition.")
+        description.set(
+            "A Kotlin Multiplatform library for building AI agent systems with built-in observability and transparent cognition.",
+        )
         url.set("https://github.com/socket-link/ampere")
         inceptionYear.set("2024")
 
@@ -75,7 +76,6 @@ mavenPublishing {
         }
     }
 }
-
 
 sqldelight {
     databases {

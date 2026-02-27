@@ -2,7 +2,6 @@ package link.socket.ampere.agents.events
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
-import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -13,6 +12,7 @@ import link.socket.ampere.agents.events.utils.EventSerializationException
 import link.socket.ampere.data.Repository
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.events.EventStoreQueries
+import link.socket.ampere.util.ioDispatcher
 
 /**
  * Repository responsible for persisting and querying Events using SQLDelight.
