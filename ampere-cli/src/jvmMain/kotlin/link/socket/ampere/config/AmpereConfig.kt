@@ -37,6 +37,9 @@ data class AmpereConfig(
 
     /** Optional initial goal for the team */
     val goal: String? = null,
+
+    /** Optional MCP server configuration for external tool integration */
+    val mcp: McpServersConfig? = null,
 )
 
 /**
@@ -112,4 +115,73 @@ data class PersonalityConfig(
     /** How risk-tolerant vs conservative (0=conservative, 1=risk-taking) */
     @SerialName("risk-tolerance")
     val riskTolerance: Double = 0.3,
+)
+
+/**
+ * MCP servers configuration.
+ *
+ * Example YAML:
+ * ```yaml
+ * mcp:
+ *   servers:
+ *     - id: github
+ *       name: GitHub CLI
+ *       protocol: stdio
+ *       endpoint: /usr/local/bin/github-mcp-server
+ *       autonomy: act-with-notification
+ *     - id: database
+ *       name: Database Query Service
+ *       protocol: http
+ *       endpoint: https://db-mcp.example.com/api
+ *       auth-token: secret-token
+ *       autonomy: ask-before-action
+ *       timeout-ms: 60000
+ * ```
+ */
+@Serializable
+data class McpServersConfig(
+    /** List of MCP server configurations */
+    val servers: List<McpServerConfigYaml> = emptyList(),
+)
+
+/**
+ * Configuration for a single MCP server.
+ *
+ * @property id Unique identifier for this server (used for tool namespacing)
+ * @property name Human-readable display name
+ * @property protocol Transport protocol: stdio, http, or sse
+ * @property endpoint Connection endpoint (path for stdio, URL for http/sse)
+ * @property authToken Optional authentication token for http/sse
+ * @property autonomy Required agent autonomy level for tools from this server
+ * @property timeoutMs Request timeout in milliseconds (default: 30000)
+ * @property autoReconnect Whether to auto-reconnect on connection loss
+ */
+@Serializable
+data class McpServerConfigYaml(
+    /** Unique identifier for this MCP server */
+    val id: String,
+
+    /** Human-readable display name */
+    val name: String,
+
+    /** Transport protocol: stdio, http, or sse */
+    val protocol: String,
+
+    /** Connection endpoint */
+    val endpoint: String,
+
+    /** Optional authentication token */
+    @SerialName("auth-token")
+    val authToken: String? = null,
+
+    /** Required agent autonomy level */
+    val autonomy: String = "act-with-notification",
+
+    /** Request timeout in milliseconds */
+    @SerialName("timeout-ms")
+    val timeoutMs: Long = 30_000,
+
+    /** Whether to auto-reconnect on connection loss */
+    @SerialName("auto-reconnect")
+    val autoReconnect: Boolean = false,
 )

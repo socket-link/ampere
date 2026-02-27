@@ -182,7 +182,7 @@ class ToolHierarchyTest {
     }
 
     @Test
-    fun `McpTool execute throws NotImplementedError`() = runTest {
+    fun `McpTool execute throws IllegalStateException without executor`() = runTest {
         val mcpTool = McpTool(
             id = "test-mcp",
             name = "Test MCP",
@@ -192,7 +192,7 @@ class ToolHierarchyTest {
             remoteToolName = "test_tool",
         )
 
-        assertFailsWith<NotImplementedError> {
+        assertFailsWith<IllegalStateException> {
             mcpTool.execute(createTestExecutionRequest())
         }
     }

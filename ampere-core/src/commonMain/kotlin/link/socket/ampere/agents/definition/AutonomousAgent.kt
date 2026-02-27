@@ -31,6 +31,8 @@ import link.socket.ampere.agents.domain.task.TaskId
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.agents.tools.registry.ToolMetadata
+import link.socket.ampere.agents.tools.registry.ToolRegistry
 
 /**
  * Contract for autonomous agents.
@@ -53,6 +55,19 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
 
     /** Set of tools that this agent requires to execute its actions */
     open val requiredTools: Set<Tool<*>> = emptySet()
+
+    /**
+     * Optional reference to the ToolRegistry for dynamic tool discovery.
+     *
+     * When set, the agent can perceive dynamically discovered tools (including MCP tools)
+     * during the PERCEIVE phase of the cognitive loop. This enables agents to be aware of
+     * tools that are registered at runtime, not just their statically-defined [requiredTools].
+     *
+     * Set this after agent creation (e.g., during system initialization) via
+     * [AmpereStartupResult.registry].
+     */
+    @Transient
+    var toolRegistry: ToolRegistry? = null
 
     // ==================== Cognitive Context (Spark System) ====================
 
@@ -261,10 +276,16 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
 
             val previousIdea = getCurrentState().getCurrentMemory().idea
 
+            // Gather dynamic tool awareness from the registry
+            val perceptionIdeas = buildList {
+                add(previousIdea)
+                buildToolAwarenessIdea()?.let { add(it) }
+            }
+
             val statePerception = phaseSparkManager.withPhase(CognitivePhase.PERCEIVE) {
                 perceiveState(
                     currentState = getCurrentState(),
-                    newIdeas = listOf(previousIdea).toTypedArray(),
+                    newIdeas = perceptionIdeas.toTypedArray(),
                 )
             }
             rememberNewPerception(statePerception)
@@ -537,6 +558,35 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         val idea = runLLMToEvaluateOutcomes(outcomes.toList())
         rememberNewIdea(idea)
         return idea
+    }
+
+    /**
+     * Builds an Idea describing dynamically discovered tools from the ToolRegistry.
+     *
+     * Returns null if no registry is set or no tools beyond requiredTools are available.
+     * This enables agents to perceive MCP tools and other dynamically registered tools
+     * during the PERCEIVE phase.
+     */
+    private suspend fun buildToolAwarenessIdea(): Idea? {
+        val registry = toolRegistry ?: return null
+
+        val discoveredTools = registry.getAllTools()
+        if (discoveredTools.isEmpty()) return null
+
+        // Only surface tools that aren't already in requiredTools
+        val requiredToolIds = requiredTools.map { it.id }.toSet()
+        val dynamicTools = discoveredTools.filter { it.id !in requiredToolIds }
+        if (dynamicTools.isEmpty()) return null
+
+        val toolSummary = dynamicTools.joinToString("\n") { tool ->
+            val source = if (tool.isMcpTool()) " (MCP: ${tool.mcpServerId})" else ""
+            "  - ${tool.name}: ${tool.description}$source"
+        }
+
+        return Idea(
+            name = "Available dynamic tools",
+            description = "The following ${dynamicTools.size} tools are dynamically available:\n$toolSummary",
+        )
     }
 
     private fun applyTaskSparkIfMissing(task: Task) {

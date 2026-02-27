@@ -84,6 +84,47 @@ team:
 # - formality: How formal vs casual (0=casual, 1=formal)
 # - risk-tolerance: How risk-tolerant vs conservative (0=conservative, 1=risk-taking)
 
+# MCP Servers (optional)
+# ----------------------
+# Connect to external MCP (Model Context Protocol) servers to give agents
+# access to tools like GitHub, databases, code analysis, etc.
+#
+# Each server exposes tools that agents can discover and invoke dynamically.
+# Tools inherit the server's autonomy level for access control.
+#
+# mcp:
+#   servers:
+#     # Local MCP server via stdio (spawns a child process)
+#     - id: github
+#       name: GitHub CLI
+#       protocol: stdio
+#       endpoint: /usr/local/bin/github-mcp-server
+#       autonomy: act-with-notification
+#
+#     # Remote MCP server via HTTP
+#     - id: database
+#       name: Database Query Service
+#       protocol: http
+#       endpoint: https://db-mcp.example.com/api
+#       auth-token: your-secret-token
+#       autonomy: ask-before-action
+#       timeout-ms: 60000
+#
+#     # Streaming MCP server via SSE
+#     - id: code-analysis
+#       name: Code Analysis
+#       protocol: sse
+#       endpoint: https://analysis.example.com/mcp
+#       autonomy: fully-autonomous
+#       auto-reconnect: true
+#
+# Supported protocols: stdio, http, sse
+# Supported autonomy levels:
+#   - ask-before-action: Agent proposes, waits for human approval
+#   - act-with-notification: Agent acts immediately, notifies human
+#   - fully-autonomous: Agent acts independently, logs for audit
+#   - self-correcting: Agent acts, self-reviews, and iterates
+
 # Initial Goal (optional)
 # -----------------------
 # Set a default goal for the team. Can also be passed via CLI:

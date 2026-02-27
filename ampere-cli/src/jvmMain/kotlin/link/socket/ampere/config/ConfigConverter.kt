@@ -1,5 +1,8 @@
 package link.socket.ampere.config
 
+import link.socket.ampere.agents.config.AgentActionAutonomy
+import link.socket.ampere.agents.tools.mcp.McpProtocol
+import link.socket.ampere.agents.tools.mcp.McpServerConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_WithBackups
@@ -132,6 +135,54 @@ object ConfigConverter {
         formality = config.formality,
         riskTolerance = config.riskTolerance,
     )
+
+    /**
+     * Convert MCP servers configuration to McpServerConfiguration list.
+     *
+     * @param mcpConfig The MCP servers config from YAML (null if not configured)
+     * @return List of McpServerConfiguration objects, empty if no servers configured
+     */
+    fun toMcpServerConfigurations(mcpConfig: McpServersConfig?): List<McpServerConfiguration> {
+        if (mcpConfig == null) return emptyList()
+
+        return mcpConfig.servers.map { server ->
+            McpServerConfiguration(
+                id = server.id,
+                displayName = server.name,
+                protocol = toMcpProtocol(server.protocol),
+                endpoint = server.endpoint,
+                authToken = server.authToken,
+                requiredAgentAutonomy = toAgentAutonomy(server.autonomy),
+                timeoutMs = server.timeoutMs,
+                autoReconnect = server.autoReconnect,
+            )
+        }
+    }
+
+    /**
+     * Convert a protocol string to an McpProtocol enum value.
+     */
+    fun toMcpProtocol(protocol: String): McpProtocol = when (protocol.lowercase()) {
+        "stdio" -> McpProtocol.STDIO
+        "http" -> McpProtocol.HTTP
+        "sse" -> McpProtocol.SSE
+        else -> throw IllegalArgumentException(
+            "Unknown MCP protocol: '$protocol'. Supported: stdio, http, sse",
+        )
+    }
+
+    /**
+     * Convert an autonomy string to an AgentActionAutonomy enum value.
+     */
+    fun toAgentAutonomy(autonomy: String): AgentActionAutonomy = when (autonomy.lowercase()) {
+        "ask-before-action" -> AgentActionAutonomy.ASK_BEFORE_ACTION
+        "act-with-notification" -> AgentActionAutonomy.ACT_WITH_NOTIFICATION
+        "fully-autonomous" -> AgentActionAutonomy.FULLY_AUTONOMOUS
+        "self-correcting" -> AgentActionAutonomy.SELF_CORRECTING
+        else -> throw IllegalArgumentException(
+            "Unknown autonomy level: '$autonomy'. Supported: ask-before-action, act-with-notification, fully-autonomous, self-correcting",
+        )
+    }
 
     /**
      * Get team members from config (for inspection without creating full team).
