@@ -87,6 +87,10 @@ object EventRegistry {
         TaskEvent.TaskFailed.EVENT_TYPE,
         TaskEvent.TaskBlocked.EVENT_TYPE,
         TaskEvent.SubtaskCreated.EVENT_TYPE,
+
+        // RoutingEvent types
+        RoutingEvent.RouteSelected.EVENT_TYPE,
+        RoutingEvent.RouteFallback.EVENT_TYPE,
     )
 
     /**

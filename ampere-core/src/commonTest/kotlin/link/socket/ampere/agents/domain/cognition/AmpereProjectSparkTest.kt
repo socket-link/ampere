@@ -46,7 +46,7 @@ class AmpereProjectSparkTest {
         val spark = AmpereProjectSpark.spark
         assertTrue(
             spark.projectDescription.contains("Kotlin Multiplatform"),
-            "Description should mention Kotlin Multiplatform"
+            "Description should mention Kotlin Multiplatform",
         )
     }
 
@@ -56,7 +56,7 @@ class AmpereProjectSparkTest {
         assertTrue(
             spark.projectDescription.contains("autonomous", ignoreCase = true) ||
                 spark.projectDescription.contains("AI agent", ignoreCase = true),
-            "Description should mention autonomous AI agents"
+            "Description should mention autonomous AI agents",
         )
     }
 
@@ -65,19 +65,19 @@ class AmpereProjectSparkTest {
         val spark = AmpereProjectSpark.spark
         assertTrue(
             spark.projectDescription.contains("Agents"),
-            "Description should mention Agents"
+            "Description should mention Agents",
         )
         assertTrue(
             spark.projectDescription.contains("Events"),
-            "Description should mention Events"
+            "Description should mention Events",
         )
         assertTrue(
             spark.projectDescription.contains("Spark"),
-            "Description should mention Sparks"
+            "Description should mention Sparks",
         )
         assertTrue(
             spark.projectDescription.contains("Memory"),
-            "Description should mention Memory"
+            "Description should mention Memory",
         )
     }
 
@@ -88,7 +88,7 @@ class AmpereProjectSparkTest {
             spark.projectDescription.contains("PERCEIVE") ||
                 spark.projectDescription.contains("PLAN") ||
                 spark.projectDescription.contains("EXECUTE"),
-            "Description should mention cognitive loop phases"
+            "Description should mention cognitive loop phases",
         )
     }
 
@@ -97,7 +97,7 @@ class AmpereProjectSparkTest {
         val spark = AmpereProjectSpark.spark
         assertTrue(
             spark.projectDescription.contains("ampere-core"),
-            "Description should mention ampere-core"
+            "Description should mention ampere-core",
         )
     }
 
@@ -108,7 +108,7 @@ class AmpereProjectSparkTest {
         val spark = AmpereProjectSpark.spark
         assertTrue(
             spark.conventions.isNotBlank(),
-            "Conventions should not be empty"
+            "Conventions should not be empty",
         )
     }
 
@@ -117,7 +117,7 @@ class AmpereProjectSparkTest {
         val spark = AmpereProjectSpark.spark
         assertTrue(
             spark.conventions.contains("Kotlin", ignoreCase = true),
-            "Conventions should mention Kotlin"
+            "Conventions should mention Kotlin",
         )
     }
 
@@ -127,7 +127,7 @@ class AmpereProjectSparkTest {
         assertTrue(
             spark.conventions.contains("Package Structure") ||
                 spark.conventions.contains("agents."),
-            "Conventions should describe package structure"
+            "Conventions should describe package structure",
         )
     }
 
@@ -136,7 +136,7 @@ class AmpereProjectSparkTest {
         val spark = AmpereProjectSpark.spark
         assertTrue(
             spark.conventions.contains("Test") || spark.conventions.contains("test"),
-            "Conventions should mention testing"
+            "Conventions should mention testing",
         )
     }
 
@@ -145,7 +145,7 @@ class AmpereProjectSparkTest {
         val spark = AmpereProjectSpark.spark
         assertTrue(
             spark.conventions.contains("Event") || spark.conventions.contains("event"),
-            "Conventions should mention event handling"
+            "Conventions should mention event handling",
         )
     }
 
@@ -156,7 +156,7 @@ class AmpereProjectSparkTest {
             spark.conventions.contains("serialization") ||
                 spark.conventions.contains("Serializable") ||
                 spark.conventions.contains("serializable"),
-            "Conventions should mention serialization"
+            "Conventions should mention serialization",
         )
     }
 
@@ -167,7 +167,7 @@ class AmpereProjectSparkTest {
         val spark = AmpereProjectSpark.spark
         assertTrue(
             spark.repositoryRoot.isNotBlank(),
-            "Repository root should not be empty"
+            "Repository root should not be empty",
         )
     }
 
@@ -189,19 +189,19 @@ class AmpereProjectSparkTest {
 
         assertTrue(
             prompt.contains("## Project Context"),
-            "Prompt should include 'Project Context' header"
+            "Prompt should include 'Project Context' header",
         )
         assertTrue(
             prompt.contains("### Description"),
-            "Prompt should include 'Description' section"
+            "Prompt should include 'Description' section",
         )
         assertTrue(
             prompt.contains("### Repository Root"),
-            "Prompt should include 'Repository Root' section"
+            "Prompt should include 'Repository Root' section",
         )
         assertTrue(
             prompt.contains("### Conventions"),
-            "Prompt should include 'Conventions' section"
+            "Prompt should include 'Conventions' section",
         )
     }
 
@@ -212,7 +212,7 @@ class AmpereProjectSparkTest {
 
         assertTrue(
             prompt.contains("ampere"),
-            "Prompt should mention project name"
+            "Prompt should mention project name",
         )
     }
 
@@ -223,7 +223,7 @@ class AmpereProjectSparkTest {
 
         assertTrue(
             prompt.length < 4000,
-            "Prompt contribution should be under 4000 characters (was ${prompt.length})"
+            "Prompt contribution should be under 4000 characters (was ${prompt.length})",
         )
     }
 
@@ -236,7 +236,7 @@ class AmpereProjectSparkTest {
 
         assertTrue(
             fileAccess.readPatterns.contains("**/*"),
-            "Should allow reading all files"
+            "Should allow reading all files",
         )
     }
 
@@ -247,7 +247,7 @@ class AmpereProjectSparkTest {
 
         assertTrue(
             fileAccess.writePatterns.isEmpty(),
-            "ProjectSpark should not enable writes (RoleSparksprovide write access)"
+            "ProjectSpark should not enable writes (RoleSparksprovide write access)",
         )
     }
 
@@ -258,7 +258,7 @@ class AmpereProjectSparkTest {
 
         assertTrue(
             fileAccess.forbiddenPatterns.isNotEmpty(),
-            "Should have forbidden patterns for sensitive files"
+            "Should have forbidden patterns for sensitive files",
         )
     }
 
@@ -271,7 +271,7 @@ class AmpereProjectSparkTest {
         assertEquals(
             null,
             spark.allowedTools,
-            "ProjectSpark should not restrict tools (inherits from affinity)"
+            "ProjectSpark should not restrict tools (inherits from affinity)",
         )
     }
 
@@ -282,7 +282,7 @@ class AmpereProjectSparkTest {
         val spark = ProjectSpark.simple(
             projectId = "test-project",
             description = "A test project",
-            repositoryRoot = "/test/path"
+            repositoryRoot = "/test/path",
         )
 
         assertEquals("test-project", spark.projectId)
@@ -298,7 +298,7 @@ class AmpereProjectSparkTest {
             projectId = "custom",
             projectDescription = "Custom project",
             repositoryRoot = "/custom",
-            conventions = conventions
+            conventions = conventions,
         )
 
         assertEquals(conventions, spark.conventions)

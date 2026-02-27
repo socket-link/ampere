@@ -27,7 +27,7 @@ class StubOutcomeService : OutcomeService {
                 failureCount = 0,
                 successRate = 0.0,
                 averageDurationMs = 0,
-            )
+            ),
         )
 
     override suspend fun byExecutor(executorId: ExecutorId, limit: Int): Result<List<OutcomeMemory>> =

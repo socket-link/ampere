@@ -11,8 +11,8 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
-import link.socket.ampere.util.ioDispatcher
 import kotlinx.coroutines.withContext
+import link.socket.ampere.util.ioDispatcher
 
 /**
  * JS implementation of HttpClientHandler using Ktor with JS engine.

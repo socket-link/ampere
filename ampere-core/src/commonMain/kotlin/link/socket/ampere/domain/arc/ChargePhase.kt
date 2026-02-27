@@ -1,8 +1,5 @@
 package link.socket.ampere.domain.arc
 
-import okio.FileSystem
-import okio.Path
-import link.socket.ampere.util.systemFileSystem
 import link.socket.ampere.agents.definition.Agent
 import link.socket.ampere.agents.definition.SparkAgentFactory
 import link.socket.ampere.agents.definition.SparkBasedAgent
@@ -12,6 +9,9 @@ import link.socket.ampere.agents.domain.cognition.sparks.LanguageSpark
 import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
 import link.socket.ampere.agents.domain.cognition.sparks.RoleSpark
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.util.systemFileSystem
+import okio.FileSystem
+import okio.Path
 
 data class ChargeResult(
     val projectContext: ProjectContext,

@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
+import java.awt.Dimension
 import kotlinx.coroutines.delay
 import link.socket.ampere.animation.agent.AgentActivityState
 import link.socket.ampere.animation.agent.AgentLayer
@@ -26,7 +27,6 @@ import link.socket.ampere.animation.substrate.SubstrateAnimator
 import link.socket.ampere.animation.substrate.SubstrateState
 import link.socket.ampere.animation.substrate.Vector2
 import link.socket.ampere.compose.CognitiveCanvas
-import java.awt.Dimension
 
 fun main() =
     application {

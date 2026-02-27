@@ -51,7 +51,7 @@ class ConsoleEventLogger : EventLogger {
             throwable?.let {
                 ": ${it::class.simpleName} - ${it.message}"
             } ?: ""
-        )
+            )
         logger.e(throwable) { errorMessage }
     }
 

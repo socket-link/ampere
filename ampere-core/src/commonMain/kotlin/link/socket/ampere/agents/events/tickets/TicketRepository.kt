@@ -2,7 +2,6 @@ package link.socket.ampere.agents.events.tickets
 
 import kotlin.time.Duration.Companion.days
 import kotlinx.coroutines.withContext
-import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.definition.AgentId
@@ -10,6 +9,7 @@ import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.events.meetings.MeetingId
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.tickets.TicketStore
+import link.socket.ampere.util.ioDispatcher
 
 /**
  * Sealed class representing errors that can occur during ticket operations.

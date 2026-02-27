@@ -5,12 +5,13 @@ import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
 import kotlinx.coroutines.withContext
-import link.socket.ampere.util.ioDispatcher
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.domain.util.toClientModelId
+import link.socket.ampere.util.ioDispatcher
 import link.socket.ampere.util.logWith
 
 /**
@@ -59,12 +60,17 @@ class AgentLLMService(
      * Calls the LLM with a prompt and returns the raw response text.
      *
      * If a custom [LlmProvider] is configured, the call is routed through it.
-     * Otherwise, the built-in OpenAI client is used.
+     * If a [CognitiveRelay][link.socket.ampere.agents.domain.routing.CognitiveRelay]
+     * is configured and a [routingContext] is provided, the relay resolves the
+     * appropriate [AIConfiguration][link.socket.ampere.domain.ai.configuration.AIConfiguration]
+     * before making the call.
+     * Otherwise, the built-in OpenAI client is used with the agent's default configuration.
      *
      * @param prompt The user prompt to send
      * @param systemMessage Optional system message to set context
      * @param temperature Response randomness (0.0 = deterministic, 1.0 = creative)
      * @param maxTokens Maximum tokens in response
+     * @param routingContext Optional routing context for CognitiveRelay-based model selection
      * @return The raw LLM response text
      */
     suspend fun call(
@@ -72,8 +78,9 @@ class AgentLLMService(
         systemMessage: String = DEFAULT_SYSTEM_MESSAGE,
         temperature: Double = DEFAULT_TEMPERATURE,
         maxTokens: Int = DEFAULT_MAX_TOKENS,
+        routingContext: RoutingContext? = null,
     ): String {
-        // Route through custom provider if configured
+        // Route through custom provider if configured (takes precedence over relay)
         agentConfiguration.llmProvider?.let { provider ->
             logger.d { "[LLM] Using custom provider" }
             val combinedPrompt = buildCombinedPrompt(systemMessage, prompt)
@@ -82,9 +89,18 @@ class AgentLLMService(
             }
         }
 
-        // Fall back to built-in provider
-        val client = agentConfiguration.aiConfiguration.provider.client
-        val model = agentConfiguration.aiConfiguration.model
+        // Resolve configuration through CognitiveRelay if available
+        val effectiveConfig = if (routingContext != null) {
+            agentConfiguration.cognitiveRelay?.resolve(
+                context = routingContext,
+                fallbackConfiguration = agentConfiguration.aiConfiguration,
+            ) ?: agentConfiguration.aiConfiguration
+        } else {
+            agentConfiguration.aiConfiguration
+        }
+
+        val client = effectiveConfig.provider.client
+        val model = effectiveConfig.model
 
         val messages = listOf(
             ChatMessage(
@@ -130,6 +146,7 @@ class AgentLLMService(
      * @param systemMessage Optional system message (defaults to JSON-focused message)
      * @param temperature Response randomness
      * @param maxTokens Maximum tokens in response
+     * @param routingContext Optional routing context for CognitiveRelay-based model selection
      * @return LLMJsonResponse wrapping the parsed JSON
      */
     suspend fun callForJson(
@@ -137,12 +154,14 @@ class AgentLLMService(
         systemMessage: String = JSON_SYSTEM_MESSAGE,
         temperature: Double = DEFAULT_TEMPERATURE,
         maxTokens: Int = DEFAULT_MAX_TOKENS,
+        routingContext: RoutingContext? = null,
     ): LLMJsonResponse {
         val rawResponse = call(
             prompt = prompt,
             systemMessage = systemMessage,
             temperature = temperature,
             maxTokens = maxTokens,
+            routingContext = routingContext,
         )
 
         val cleanedResponse = LLMResponseParser.cleanJsonResponse(rawResponse)
@@ -156,6 +175,7 @@ class AgentLLMService(
      * @param systemMessage Optional system message
      * @param temperature Response randomness
      * @param maxTokens Maximum tokens in response
+     * @param routingContext Optional routing context for CognitiveRelay-based model selection
      * @return The parsed JsonObject
      * @throws IllegalStateException if response is not a valid JSON object
      */
@@ -164,8 +184,9 @@ class AgentLLMService(
         systemMessage: String = JSON_SYSTEM_MESSAGE,
         temperature: Double = DEFAULT_TEMPERATURE,
         maxTokens: Int = DEFAULT_MAX_TOKENS,
+        routingContext: RoutingContext? = null,
     ): JsonObject {
-        return callForJson(prompt, systemMessage, temperature, maxTokens).asObject()
+        return callForJson(prompt, systemMessage, temperature, maxTokens, routingContext).asObject()
     }
 
     /**
@@ -175,6 +196,7 @@ class AgentLLMService(
      * @param systemMessage Optional system message
      * @param temperature Response randomness
      * @param maxTokens Maximum tokens in response
+     * @param routingContext Optional routing context for CognitiveRelay-based model selection
      * @return The parsed JsonArray
      * @throws IllegalStateException if response is not a valid JSON array
      */
@@ -183,8 +205,9 @@ class AgentLLMService(
         systemMessage: String = JSON_SYSTEM_MESSAGE,
         temperature: Double = DEFAULT_TEMPERATURE,
         maxTokens: Int = DEFAULT_MAX_TOKENS,
+        routingContext: RoutingContext? = null,
     ): JsonArray {
-        return callForJson(prompt, systemMessage, temperature, maxTokens).asArray()
+        return callForJson(prompt, systemMessage, temperature, maxTokens, routingContext).asArray()
     }
 
     companion object {

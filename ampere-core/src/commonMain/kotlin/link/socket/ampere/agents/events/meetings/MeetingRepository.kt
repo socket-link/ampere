@@ -2,7 +2,6 @@ package link.socket.ampere.agents.events.meetings
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
-import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerializationException
@@ -17,6 +16,7 @@ import link.socket.ampere.agents.domain.task.MeetingTask
 import link.socket.ampere.data.Repository
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.meetings.MeetingStoreQueries
+import link.socket.ampere.util.ioDispatcher
 
 /**
  * Repository responsible for persisting and querying Meetings using SQLDelight.

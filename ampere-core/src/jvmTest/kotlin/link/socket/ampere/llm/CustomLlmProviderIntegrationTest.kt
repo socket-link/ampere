@@ -1,8 +1,8 @@
 package link.socket.ampere.llm
 
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.config.AgentConfiguration

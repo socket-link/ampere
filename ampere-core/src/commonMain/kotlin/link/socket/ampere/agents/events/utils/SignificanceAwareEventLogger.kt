@@ -14,6 +14,7 @@ import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
+import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
@@ -79,7 +80,7 @@ class SignificanceAwareEventLogger(
             throwable?.let {
                 ": ${it::class.simpleName} - ${it.message}"
             } ?: ""
-        )
+            )
         logger.e(throwable) { errorMessage }
     }
 
@@ -148,6 +149,10 @@ class SignificanceAwareEventLogger(
 
         // Spark cognitive state events - routine cognitive operations
         is SparkEvent -> EventSignificance.ROUTINE
+
+        // Routing events - routine for selection, significant for fallbacks
+        is RoutingEvent.RouteSelected -> EventSignificance.ROUTINE
+        is RoutingEvent.RouteFallback -> EventSignificance.SIGNIFICANT
     }
 
     private fun formatUrgency(urgency: Urgency): String = when (urgency) {

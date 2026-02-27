@@ -13,16 +13,18 @@ class ArcRegistryTest {
 
         val names = arcs.map { it.name }.toSet()
         assertEquals(6, arcs.size)
-        assertTrue(names.containsAll(
-            listOf(
-                "startup-saas",
-                "devops-pipeline",
-                "research-paper",
-                "data-pipeline",
-                "security-audit",
-                "content-creation",
-            )
-        ))
+        assertTrue(
+            names.containsAll(
+                listOf(
+                    "startup-saas",
+                    "devops-pipeline",
+                    "research-paper",
+                    "data-pipeline",
+                    "security-audit",
+                    "content-creation",
+                ),
+            ),
+        )
     }
 
     @Test

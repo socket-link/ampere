@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.flow
 import link.socket.ampere.agents.events.messages.ThreadViewService
 import link.socket.ampere.agents.events.tickets.TicketRepository
 import link.socket.ampere.agents.events.tickets.TicketViewService
-import link.socket.ampere.api.model.AgentSnapshot
 import link.socket.ampere.api.model.HealthLevel
 import link.socket.ampere.api.model.HealthStatus
 import link.socket.ampere.api.model.SystemSnapshot
@@ -75,7 +74,7 @@ internal class DefaultStatusService(
                     idleAgents = idleAgents,
                     pendingTickets = tickets.size,
                     issues = issues,
-                )
+                ),
             )
 
             delay(5000) // Poll every 5 seconds

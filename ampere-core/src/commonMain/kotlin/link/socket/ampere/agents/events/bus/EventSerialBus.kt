@@ -2,7 +2,6 @@ package link.socket.ampere.agents.events.bus
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import link.socket.ampere.util.runBlockingCompat
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import link.socket.ampere.agents.definition.AgentId
@@ -13,6 +12,7 @@ import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
+import link.socket.ampere.util.runBlockingCompat
 
 typealias HandlerMap = MutableMap<EventType, List<EventHandler<Event, Subscription>>>
 typealias SubscriptionMap = MutableMap<EventType, Subscription>

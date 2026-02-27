@@ -3,9 +3,7 @@ package link.socket.ampere.agents.definition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import link.socket.ampere.util.runBlockingCompat
 import kotlinx.coroutines.withTimeout
-import link.socket.ampere.util.ioDispatcher
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.code.CodeParams
@@ -55,6 +53,8 @@ import link.socket.ampere.integrations.issues.ExistingIssue
 import link.socket.ampere.integrations.issues.IssueQuery
 import link.socket.ampere.integrations.issues.IssueState
 import link.socket.ampere.integrations.issues.IssueUpdate
+import link.socket.ampere.util.ioDispatcher
+import link.socket.ampere.util.runBlockingCompat
 
 /**
  * Code Writer Agent - Autonomous code generation and file writing.

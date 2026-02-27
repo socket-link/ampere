@@ -2,9 +2,7 @@ package link.socket.ampere.agents.definition
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import link.socket.ampere.util.runBlockingCompat
 import kotlinx.coroutines.withTimeout
-import link.socket.ampere.util.ioDispatcher
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import link.socket.ampere.agents.config.AgentConfiguration
@@ -27,6 +25,8 @@ import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.domain.agent.bundled.AgentDefinition
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
+import link.socket.ampere.util.ioDispatcher
+import link.socket.ampere.util.runBlockingCompat
 
 /**
  * A concrete agent implementation using the Spark-based cognitive differentiation system.

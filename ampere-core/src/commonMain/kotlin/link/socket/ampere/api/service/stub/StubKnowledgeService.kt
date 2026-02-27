@@ -1,10 +1,10 @@
 package link.socket.ampere.api.service.stub
 
+import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
 import link.socket.ampere.api.service.KnowledgeService
-import kotlinx.datetime.Clock
 
 /**
  * Stub implementation of [KnowledgeService] for testing and parallel development.
@@ -29,7 +29,7 @@ class StubKnowledgeService : KnowledgeService {
                 approach = knowledge.approach,
                 learnings = knowledge.learnings,
                 timestamp = Clock.System.now(),
-            )
+            ),
         )
     }
 

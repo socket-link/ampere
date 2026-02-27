@@ -2,7 +2,6 @@ package link.socket.ampere.agents.domain.state
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.AssignedTo
