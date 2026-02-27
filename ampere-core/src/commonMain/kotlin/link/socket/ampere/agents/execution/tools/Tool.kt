@@ -1,11 +1,13 @@
 package link.socket.ampere.agents.execution.tools
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.json.JsonElement
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
+import link.socket.ampere.agents.tools.mcp.McpToolExecutor
 
 typealias ToolId = String
 typealias McpServerId = String
@@ -126,14 +128,24 @@ data class McpTool(
     val inputSchema: JsonElement? = null,
 ) : Tool<ExecutionContext> {
 
+    /**
+     * The executor that routes tool invocations to the MCP server.
+     *
+     * This is set by [McpServerManager] when the tool is discovered and created.
+     * It is transient because it holds a reference to the server connection layer
+     * which cannot be serialized.
+     */
+    @Transient
+    var executor: McpToolExecutor? = null
+
     override suspend fun execute(executionRequest: ExecutionRequest<ExecutionContext>): Outcome {
-        // MCP tool execution will be implemented in a later task (AMP-203.4)
-        // For now, this is a placeholder that will be filled in when MCP server
-        // integration is complete.
-        throw NotImplementedError(
-            "MCP tool execution is not yet implemented. " +
-                "This will be added in task AMP-203.4 (MCP Server Integration).",
-        )
+        val toolExecutor = executor
+            ?: throw IllegalStateException(
+                "McpTool '${name}' (server: ${serverId}) has no executor set. " +
+                    "Tools must be created via McpServerManager to be executable.",
+            )
+
+        return toolExecutor.execute(this, executionRequest)
     }
 }
 

@@ -54,6 +54,7 @@ class McpServerManager(
     private val eventBus: EventSerialBus,
     private val eventSource: EventSource,
     private val logger: Logger = Logger.withTag("McpServerManager"),
+    private val connectionFactory: ((McpServerConfiguration) -> McpServerConnection)? = null,
 ) : ServerManager {
     // Server configurations indexed by server ID
     private val serverConfigs = mutableMapOf<McpServerId, McpServerConfiguration>()
@@ -257,8 +258,17 @@ class McpServerManager(
         )
     }
 
+    // Executor shared across all MCP tools created by this manager
+    private val toolExecutor = McpToolExecutor(
+        serverManager = this,
+        logger = logger,
+    )
+
     /**
      * Converts an MCP tool descriptor to our internal McpTool type.
+     *
+     * The created McpTool has its executor set so it can be invoked through
+     * the standard Tool.execute() interface.
      */
     private fun convertToMcpTool(
         config: McpServerConfiguration,
@@ -275,13 +285,20 @@ class McpServerManager(
             serverId = config.id,
             remoteToolName = descriptor.name,
             inputSchema = descriptor.inputSchema,
-        )
+        ).also { it.executor = toolExecutor }
     }
 
     /**
      * Creates the appropriate connection type based on protocol.
+     *
+     * If a [connectionFactory] was provided (e.g., for testing), it is used
+     * instead of the default protocol-based connection creation.
      */
     private fun createConnection(config: McpServerConfiguration): McpServerConnection {
+        connectionFactory?.let { factory ->
+            return factory(config)
+        }
+
         return when (config.protocol) {
             McpProtocol.STDIO -> StdioMcpConnection(
                 config = config,

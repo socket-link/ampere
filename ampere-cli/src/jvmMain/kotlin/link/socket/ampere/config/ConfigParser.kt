@@ -105,6 +105,25 @@ object ConfigParser {
             }
         }
 
+        // Validate MCP server configurations
+        config.mcp?.servers?.forEachIndexed { index, server ->
+            if (server.id.isBlank()) {
+                errors.add("MCP server[$index]: 'id' must not be blank")
+            }
+            if (server.protocol.lowercase() !in SUPPORTED_MCP_PROTOCOLS) {
+                errors.add("MCP server '${server.id}': unknown protocol '${server.protocol}'. Supported: ${SUPPORTED_MCP_PROTOCOLS.joinToString()}")
+            }
+            if (server.endpoint.isBlank()) {
+                errors.add("MCP server '${server.id}': 'endpoint' must not be blank")
+            }
+            if (server.autonomy.lowercase() !in SUPPORTED_AUTONOMY_LEVELS) {
+                errors.add("MCP server '${server.id}': unknown autonomy '${server.autonomy}'. Supported: ${SUPPORTED_AUTONOMY_LEVELS.joinToString()}")
+            }
+            if (server.timeoutMs <= 0) {
+                errors.add("MCP server '${server.id}': 'timeout-ms' must be positive")
+            }
+        }
+
         return errors
     }
 
@@ -117,6 +136,15 @@ object ConfigParser {
         "architect",
         "security-reviewer",
         "technical-writer",
+    )
+
+    private val SUPPORTED_MCP_PROTOCOLS = setOf("stdio", "http", "sse")
+
+    private val SUPPORTED_AUTONOMY_LEVELS = setOf(
+        "ask-before-action",
+        "act-with-notification",
+        "fully-autonomous",
+        "self-correcting",
     )
 
     private val MODELS_BY_PROVIDER = mapOf(
