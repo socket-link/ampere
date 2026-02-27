@@ -115,10 +115,10 @@ class MessageActionService(
     }
 
     private fun generateThreadId(): MessageThreadId {
-        return "thread-${Clock.System.now().toEpochMilliseconds()}"
+        return generateUUID("thread")
     }
 
     private fun generateMessageId(): String {
-        return "msg-${Clock.System.now().toEpochMilliseconds()}"
+        return generateUUID("msg")
     }
 }

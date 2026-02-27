@@ -140,6 +140,6 @@ class TicketActionService(
     }
 
     private fun generateTicketId(): TicketId {
-        return "ticket-${Clock.System.now().toEpochMilliseconds()}"
+        return generateUUID("ticket")
     }
 }
