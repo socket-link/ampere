@@ -15,7 +15,6 @@ plugins {
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.vanniktech.maven.publish")
-    id("signing")
     id("org.jetbrains.dokka") version "2.1.0"
     id("app.cash.sqldelight") version "2.2.1"
     id("org.jlleitschuh.gradle.ktlint")
@@ -25,11 +24,6 @@ val ampereVersion: String by project
 
 group = "link.socket"
 version = ampereVersion
-
-// === SIGNING CONFIGURATION ===
-signing {
-    useGpgCmd()
-}
 
 // === PUBLISHING CONFIGURATION ===
 mavenPublishing {
