@@ -4,11 +4,11 @@ This document describes how to publish new versions of AMPERE to Maven Central.
 
 ## Prerequisites
 
-### 1. Sonatype OSSRH Account
+### 1. Maven Central Portal Account
 
-1. Create account at https://issues.sonatype.org
-2. Create JIRA ticket requesting access to `link.socket` group ID
-3. Wait for approval (usually 1-2 business days)
+1. Create account at https://central.sonatype.com
+2. Register the `link.socket` namespace
+3. Generate a user token at https://central.sonatype.com/account
 
 ### 2. GPG Key Setup
 
@@ -28,10 +28,11 @@ gpg --keyserver keyserver.ubuntu.com --send-keys YOUR_KEY_ID
 Add to `~/.gradle/gradle.properties`:
 
 ```properties
-ossrhUsername=your-sonatype-username
-ossrhPassword=your-sonatype-password
-signing.keyId=ABCD1234
-signing.password=your-gpg-passphrase
+mavenCentralUsername=your-token-username
+mavenCentralPassword=your-token-password
+signingInMemoryKeyId=ABCD1234
+signingInMemoryKey=exported-ascii-armored-key
+signingInMemoryKeyPassword=your-gpg-passphrase
 ```
 
 ### 4. GitHub Secrets (for CI)
@@ -40,15 +41,15 @@ Add these repository secrets:
 
 | Secret | Description |
 |--------|-------------|
-| `OSSRH_USERNAME` | Sonatype JIRA username |
-| `OSSRH_PASSWORD` | Sonatype JIRA password |
+| `MAVEN_CENTRAL_USERNAME` | Maven Central Portal token username |
+| `MAVEN_CENTRAL_PASSWORD` | Maven Central Portal token password |
 | `SIGNING_KEY_ID` | Last 8 chars of GPG key ID |
-| `SIGNING_KEY` | Base64-encoded GPG private key |
+| `SIGNING_KEY` | ASCII-armored GPG private key |
 | `SIGNING_PASSWORD` | GPG key passphrase |
 
 To export the signing key for CI:
 ```bash
-gpg --armor --export-secret-keys YOUR_KEY_ID | base64
+gpg --armor --export-secret-keys YOUR_KEY_ID
 ```
 
 ## Version Numbering
@@ -81,23 +82,20 @@ AMPERE follows [Semantic Versioning](https://semver.org/):
    - Publish to Maven Central staging
    - Create a GitHub Release
 
-4. Release from staging:
-   - Log in to https://s01.oss.sonatype.org
-   - Navigate to Staging Repositories
-   - Find your repository (linksocket-XXXX)
-   - Click "Close" and wait for validation
-   - Click "Release" if validation passes
+4. The vanniktech plugin publishes directly via the Maven Central Portal API.
+   Monitor status at https://central.sonatype.com/publishing
 
 ### Manual Release
 
 If CI fails or you need to publish manually:
 
 ```bash
-./gradlew :ampere-core:publishAllPublicationsToOssrhRepository \
-  -PossrhUsername=YOUR_USERNAME \
-  -PossrhPassword=YOUR_PASSWORD \
-  -Psigning.keyId=KEY_ID \
-  -Psigning.password=KEY_PASSPHRASE
+./gradlew :ampere-core:publishAllPublicationsToMavenCentralRepository \
+  -PmavenCentralUsername=YOUR_TOKEN_USERNAME \
+  -PmavenCentralPassword=YOUR_TOKEN_PASSWORD \
+  -PsigningInMemoryKeyId=KEY_ID \
+  -PsigningInMemoryKey="$(gpg --armor --export-secret-keys KEY_ID)" \
+  -PsigningInMemoryKeyPassword=KEY_PASSPHRASE
 ```
 
 ## Prepare Next Development Cycle
@@ -122,8 +120,8 @@ After release, artifacts appear on Maven Central within ~30 minutes:
 
 ## Troubleshooting
 
-### Staging repository not found
-Wait a few minutes and refresh. Sonatype can be slow.
+### Publishing not appearing
+Wait a few minutes and check https://central.sonatype.com/publishing. The Portal can be slow.
 
 ### Signature verification failed
 Ensure your GPG public key is published to `keyserver.ubuntu.com`:

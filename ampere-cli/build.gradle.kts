@@ -10,18 +10,12 @@ plugins {
     kotlin("plugin.serialization")
     kotlin("plugin.compose")
     id("com.vanniktech.maven.publish")
-    id("signing")
 }
 
 val ampereVersion: String by project
 
 group = "link.socket"
 version = ampereVersion
-
-// === SIGNING CONFIGURATION ===
-signing {
-    useGpgCmd()
-}
 
 // === PUBLISHING CONFIGURATION ===
 mavenPublishing {

@@ -57,18 +57,18 @@ jobs:
       - name: Publish to Maven Central
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:
-          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
-          SIGNING_KEY_ID: ${{ secrets.SIGNING_KEY_ID }}
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
-        run: ./gradlew :ampere-core:publishAllPublicationsToOssrhRepository
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+        run: ./gradlew :ampere-core:publishAllPublicationsToMavenCentralRepository
 
       - name: Dry run publish
         if: ${{ github.event.inputs.dry_run == 'true' }}
         run: |
           echo "Dry run mode - skipping actual publish"
-          ./gradlew :ampere-core:publishAllPublicationsToOssrhRepository --dry-run
+          ./gradlew :ampere-core:publishAllPublicationsToMavenCentralRepository --dry-run
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') && github.event.inputs.dry_run != 'true'
