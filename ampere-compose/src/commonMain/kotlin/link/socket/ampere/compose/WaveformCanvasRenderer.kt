@@ -114,7 +114,7 @@ object WaveformCanvasRenderer {
      * Find the dominant cognitive phase at a world position based on
      * inverse-distance weighting from nearby agents.
      */
-    private fun dominantPhaseAt(
+    internal fun dominantPhaseAt(
         worldX: Float,
         worldZ: Float,
         agentPositions: List<Triple<Float, Float, CognitivePhase>>
