@@ -28,6 +28,7 @@ import link.socket.ampere.agents.events.utils.EventLogger
  * - MeetingOrchestrator: Handles meeting scheduling and lifecycle
  * - TicketOrchestrator: Handles ticket creation and workflow
  * - EventRouter: Routes events between subscribed agents
+ * - WorkspaceStateStore: Projects task lifecycle events into a live checklist
  *
  * By centralizing orchestrator management here, we avoid circular dependencies
  * between orchestrators while allowing them to communicate with each other
@@ -44,6 +45,7 @@ class EnvironmentOrchestrator(
     val eventApiFactory: AgentEventApiFactory,
     val outcomeMemoryRepository: OutcomeMemoryRepository,
     val eventSerialBus: EventSerialBus,
+    val workspaceStateStore: WorkspaceStateStore,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
     companion object {
@@ -104,6 +106,7 @@ class EnvironmentOrchestrator(
      */
     fun start() {
         eventRouter.startRouting()
+        workspaceStateStore.start()
     }
 
     /**

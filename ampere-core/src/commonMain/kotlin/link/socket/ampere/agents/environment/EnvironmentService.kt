@@ -81,6 +81,14 @@ class EnvironmentService(
         get() = orchestrator.ticketOrchestrator
 
     /**
+     * Access to the workspace state store for task checklist UI.
+     *
+     * Collect [WorkspaceStateStore.state] for reactive workspace state updates.
+     */
+    val workspaceStateStore: WorkspaceStateStore
+        get() = orchestrator.workspaceStateStore
+
+    /**
      * Create an [AgentEventApi] for the given agent.
      *
      * The event API allows agents to:

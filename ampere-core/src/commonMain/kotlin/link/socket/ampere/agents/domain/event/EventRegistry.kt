@@ -79,6 +79,14 @@ object EventRegistry {
         SparkAppliedEvent.EVENT_TYPE,
         SparkRemovedEvent.EVENT_TYPE,
         CognitiveStateSnapshot.EVENT_TYPE,
+
+        // TaskEvent lifecycle types
+        TaskEvent.TaskStarted.EVENT_TYPE,
+        TaskEvent.TaskProgressed.EVENT_TYPE,
+        TaskEvent.TaskCompleted.EVENT_TYPE,
+        TaskEvent.TaskFailed.EVENT_TYPE,
+        TaskEvent.TaskBlocked.EVENT_TYPE,
+        TaskEvent.SubtaskCreated.EVENT_TYPE,
     )
 
     /**

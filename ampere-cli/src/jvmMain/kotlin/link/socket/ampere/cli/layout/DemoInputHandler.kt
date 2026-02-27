@@ -67,6 +67,7 @@ class DemoInputHandler(
         DASHBOARD,
         EVENTS,
         MEMORY,
+        TASKS,
         AGENT_FOCUS
     }
 
@@ -344,6 +345,17 @@ class DemoInputHandler(
                     showHelp = false
                 )
             )
+
+            // 't' switches to task checklist view
+            't' -> KeyResult.ConfigChange(
+                current.copy(
+                    mode = DemoMode.TASKS,
+                    focusedAgentIndex = null,
+                    expandedEventIndex = null,
+                    showHelp = false
+                )
+            )
+
             'v' -> KeyResult.ConfigChange(current.copy(verboseMode = !current.verboseMode))
             'h', '?' -> KeyResult.ConfigChange(current.copy(showHelp = true))
             'q' -> KeyResult.Exit

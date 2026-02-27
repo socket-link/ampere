@@ -51,13 +51,24 @@ object IdFormatter {
      * @param agentName Optional human-readable agent name
      * @return Formatted agent identifier
      */
+    private val UUID_PREFIX_REGEX = Regex(
+        "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(.+)$",
+        RegexOption.IGNORE_CASE
+    )
+
     fun formatAgentId(agentId: String, agentName: String? = null): String {
         // Prefer human-readable name
         if (!agentName.isNullOrBlank()) {
             return agentName
         }
 
-        // Check if it looks like a UUID
+        // Check if it's a UUID followed by a class name (e.g. "uuid-here-CodeWriterAgent")
+        val prefixMatch = UUID_PREFIX_REGEX.find(agentId)
+        if (prefixMatch != null) {
+            return prefixMatch.groupValues[1]
+        }
+
+        // Check if it looks like a plain UUID
         return if (UUID_REGEX.matches(agentId)) {
             truncateUuid(agentId)
         } else {

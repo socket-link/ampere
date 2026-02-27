@@ -226,6 +226,7 @@ class StatusBar(private val terminal: Terminal) {
                     'd' -> activeMode == "dashboard"
                     'e' -> activeMode == "events"
                     'm' -> activeMode == "memory"
+                    't' -> activeMode == "tasks"
                     else -> false
                 }
                 Shortcut(def.key, def.label, isActive)

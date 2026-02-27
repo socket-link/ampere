@@ -103,6 +103,14 @@ class EnvironmentOrchestratorFactory(
             logger = logger,
         )
 
+        // Create workspace state store (event-sourced projection for task checklist)
+        val workspaceStateStore = WorkspaceStateStore(
+            eventSerialBus = eventSerialBus,
+            scope = scope,
+            eventRepository = eventRepository,
+            logger = logger,
+        )
+
         // Create the environment orchestrator
         return EnvironmentOrchestrator(
             meetingRepository = meetingRepository,
@@ -114,6 +122,7 @@ class EnvironmentOrchestratorFactory(
             eventApiFactory = eventApiFactory,
             outcomeMemoryRepository = outcomeMemoryRepository,
             eventSerialBus = eventSerialBus,
+            workspaceStateStore = workspaceStateStore,
             logger = logger,
         )
     }

@@ -9,7 +9,10 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.domain.event.MessageEvent
+import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
+import link.socket.ampere.agents.domain.task.TaskId
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.messages.MessageThreadId
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -255,6 +258,185 @@ class AgentEventApi(
             eventSerialBus.publish(event)
         }
     }
+
+    // ==================== Task Lifecycle Publishing Methods ====================
+
+    /** Publish a TaskStarted event when an agent begins executing a task. */
+    suspend fun publishTaskStarted(
+        taskId: TaskId,
+        workspace: ExecutionWorkspace? = null,
+        urgency: Urgency = Urgency.LOW,
+    ) {
+        val event = TaskEvent.TaskStarted(
+            eventId = generateUUID(taskId, agentId),
+            taskId = taskId,
+            eventSource = EventSource.Agent(agentId),
+            timestamp = Clock.System.now(),
+            assignedTo = agentId,
+            workspace = workspace,
+            urgency = urgency,
+        )
+
+        publish(event)
+    }
+
+    /** Publish a TaskProgressed event for measurable progress on a task. */
+    suspend fun publishTaskProgressed(
+        taskId: TaskId,
+        description: String,
+        progress: Float? = null,
+        urgency: Urgency = Urgency.LOW,
+    ) {
+        val event = TaskEvent.TaskProgressed(
+            eventId = generateUUID(taskId, agentId),
+            taskId = taskId,
+            eventSource = EventSource.Agent(agentId),
+            timestamp = Clock.System.now(),
+            description = description,
+            progress = progress,
+            urgency = urgency,
+        )
+
+        publish(event)
+    }
+
+    /** Publish a TaskCompleted event when a task finishes successfully. */
+    suspend fun publishTaskCompleted(
+        taskId: TaskId,
+        summary: String,
+        urgency: Urgency = Urgency.MEDIUM,
+    ) {
+        val event = TaskEvent.TaskCompleted(
+            eventId = generateUUID(taskId, agentId),
+            taskId = taskId,
+            eventSource = EventSource.Agent(agentId),
+            timestamp = Clock.System.now(),
+            summary = summary,
+            urgency = urgency,
+        )
+
+        publish(event)
+    }
+
+    /** Publish a TaskFailed event when a task cannot be completed. */
+    suspend fun publishTaskFailed(
+        taskId: TaskId,
+        reason: String,
+        urgency: Urgency = Urgency.HIGH,
+    ) {
+        val event = TaskEvent.TaskFailed(
+            eventId = generateUUID(taskId, agentId),
+            taskId = taskId,
+            eventSource = EventSource.Agent(agentId),
+            timestamp = Clock.System.now(),
+            reason = reason,
+            urgency = urgency,
+        )
+
+        publish(event)
+    }
+
+    /** Publish a TaskBlocked event when a task is blocked by another task. */
+    suspend fun publishTaskBlocked(
+        taskId: TaskId,
+        blockedByTaskId: TaskId,
+        reason: String,
+        urgency: Urgency = Urgency.MEDIUM,
+    ) {
+        val event = TaskEvent.TaskBlocked(
+            eventId = generateUUID(taskId, agentId),
+            taskId = taskId,
+            eventSource = EventSource.Agent(agentId),
+            timestamp = Clock.System.now(),
+            blockedByTaskId = blockedByTaskId,
+            reason = reason,
+            urgency = urgency,
+        )
+
+        publish(event)
+    }
+
+    /** Publish a SubtaskCreated event when a task is decomposed. */
+    suspend fun publishSubtaskCreated(
+        parentTaskId: TaskId,
+        subtaskId: TaskId,
+        description: String,
+        assignedTo: AgentId? = null,
+        workspace: ExecutionWorkspace? = null,
+        urgency: Urgency = Urgency.LOW,
+    ) {
+        val event = TaskEvent.SubtaskCreated(
+            eventId = generateUUID(subtaskId, agentId),
+            taskId = parentTaskId,
+            eventSource = EventSource.Agent(agentId),
+            timestamp = Clock.System.now(),
+            subtaskId = subtaskId,
+            description = description,
+            assignedTo = assignedTo,
+            workspace = workspace,
+            urgency = urgency,
+        )
+
+        publish(event)
+    }
+
+    // ==================== Task Lifecycle Subscription Methods ====================
+
+    /** Subscribe to TaskStarted events. */
+    fun onTaskStarted(
+        filter: EventFilter<TaskEvent.TaskStarted> = EventFilter.noFilter(),
+        handler: suspend (TaskEvent.TaskStarted, Subscription?) -> Unit,
+    ): Subscription =
+        eventSerialBus.subscribe<TaskEvent.TaskStarted, EventSubscription.ByEventClassType>(
+            agentId = agentId,
+            eventType = TaskEvent.TaskStarted.EVENT_TYPE,
+        ) { event, subscription ->
+            if (filter.execute(event)) {
+                handler(event, subscription)
+            }
+        }
+
+    /** Subscribe to TaskCompleted events. */
+    fun onTaskCompleted(
+        filter: EventFilter<TaskEvent.TaskCompleted> = EventFilter.noFilter(),
+        handler: suspend (TaskEvent.TaskCompleted, Subscription?) -> Unit,
+    ): Subscription =
+        eventSerialBus.subscribe<TaskEvent.TaskCompleted, EventSubscription.ByEventClassType>(
+            agentId = agentId,
+            eventType = TaskEvent.TaskCompleted.EVENT_TYPE,
+        ) { event, subscription ->
+            if (filter.execute(event)) {
+                handler(event, subscription)
+            }
+        }
+
+    /** Subscribe to TaskFailed events. */
+    fun onTaskFailed(
+        filter: EventFilter<TaskEvent.TaskFailed> = EventFilter.noFilter(),
+        handler: suspend (TaskEvent.TaskFailed, Subscription?) -> Unit,
+    ): Subscription =
+        eventSerialBus.subscribe<TaskEvent.TaskFailed, EventSubscription.ByEventClassType>(
+            agentId = agentId,
+            eventType = TaskEvent.TaskFailed.EVENT_TYPE,
+        ) { event, subscription ->
+            if (filter.execute(event)) {
+                handler(event, subscription)
+            }
+        }
+
+    /** Subscribe to TaskBlocked events. */
+    fun onTaskBlocked(
+        filter: EventFilter<TaskEvent.TaskBlocked> = EventFilter.noFilter(),
+        handler: suspend (TaskEvent.TaskBlocked, Subscription?) -> Unit,
+    ): Subscription =
+        eventSerialBus.subscribe<TaskEvent.TaskBlocked, EventSubscription.ByEventClassType>(
+            agentId = agentId,
+            eventType = TaskEvent.TaskBlocked.EVENT_TYPE,
+        ) { event, subscription ->
+            if (filter.execute(event)) {
+                handler(event, subscription)
+            }
+        }
 
     // ==================== Tool Event Publishing Methods ====================
 

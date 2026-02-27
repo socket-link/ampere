@@ -20,6 +20,7 @@ import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.SparkAppliedEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.SparkRemovedEvent
+import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.events.relay.EventRelayFilters
 import link.socket.ampere.agents.events.relay.EventRelayService
@@ -189,6 +190,12 @@ class WatchPresenter(
     private fun determineAgentState(event: Event, cycleCount: Int): AgentState {
         return when {
             event is Event.TaskCreated -> AgentState.WORKING
+            event is TaskEvent.TaskStarted -> AgentState.WORKING
+            event is TaskEvent.TaskProgressed -> AgentState.WORKING
+            event is TaskEvent.SubtaskCreated -> AgentState.WORKING
+            event is TaskEvent.TaskCompleted -> AgentState.IDLE
+            event is TaskEvent.TaskFailed -> AgentState.IDLE
+            event is TaskEvent.TaskBlocked -> AgentState.WAITING
             event is TicketEvent.TicketAssigned -> AgentState.WORKING
             event is TicketEvent.TicketStatusChanged -> AgentState.WORKING
             event is ProductEvent.FeatureRequested -> AgentState.WORKING
@@ -307,6 +314,21 @@ class WatchPresenter(
     private fun generateSummaryText(event: Event): String {
         return when (event) {
             is Event.TaskCreated -> "Task created: ${event.description.take(50)}"
+            is TaskEvent.TaskStarted -> {
+                val workspace = event.workspace?.baseDirectory?.let { " in ${it.takeLast(30)}" } ?: ""
+                "Task started by ${extractAgentName(event.assignedTo)}$workspace"
+            }
+            is TaskEvent.TaskProgressed -> {
+                val pct = event.progress?.let { " (${(it * 100).toInt()}%)" } ?: ""
+                "Progress: ${event.description.take(40)}$pct"
+            }
+            is TaskEvent.TaskCompleted -> "Task completed: ${event.summary.take(50)}"
+            is TaskEvent.TaskFailed -> "Task failed: ${event.reason.take(50)}"
+            is TaskEvent.TaskBlocked -> "Blocked by ${event.blockedByTaskId}: ${event.reason.take(40)}"
+            is TaskEvent.SubtaskCreated -> {
+                val assignee = event.assignedTo?.let { " -> ${extractAgentName(it)}" } ?: ""
+                "Subtask: ${event.description.take(40)}$assignee"
+            }
             is TicketEvent.TicketStatusChanged -> "Ticket status: ${event.newStatus}"
             is TicketEvent.TicketCreated -> "Ticket: ${event.title.take(50)}"
             is TicketEvent.TicketAssigned -> {
