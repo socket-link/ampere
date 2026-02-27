@@ -33,6 +33,9 @@ import link.socket.ampere.agents.receptors.WorkspaceEventMapper
 import link.socket.ampere.agents.service.AgentActionService
 import link.socket.ampere.agents.service.MessageActionService
 import link.socket.ampere.agents.service.TicketActionService
+import link.socket.ampere.api.Ampere
+import link.socket.ampere.api.AmpereInstance
+import link.socket.ampere.api.fromEnvironment
 import link.socket.ampere.config.AmpereConfig
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
@@ -154,6 +157,21 @@ class AmpereContext(
      */
     val knowledgeRepository: KnowledgeRepository by lazy {
         KnowledgeRepositoryImpl(database)
+    }
+
+    /**
+     * Public API surface backed by this context's infrastructure.
+     *
+     * CLI commands use this to access the 7 service interfaces (AgentService,
+     * TicketService, ThreadService, EventService, OutcomeService, KnowledgeService,
+     * StatusService) instead of accessing internal repositories directly.
+     */
+    val ampereInstance: AmpereInstance by lazy {
+        Ampere.fromEnvironment(
+            environmentService = environmentService,
+            knowledgeRepository = knowledgeRepository,
+            workspace = workspace?.baseDirectory,
+        )
     }
 
     /**

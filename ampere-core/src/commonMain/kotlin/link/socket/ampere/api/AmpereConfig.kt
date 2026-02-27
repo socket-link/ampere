@@ -26,6 +26,7 @@ import link.socket.ampere.dsl.events.Escalated
  * @param databasePath Override default database location
  * @param onEscalation Callback invoked when an agent escalates to human
  */
+@AmpereStableApi
 data class AmpereConfig(
     val provider: ProviderConfig,
     val workspace: String? = null,

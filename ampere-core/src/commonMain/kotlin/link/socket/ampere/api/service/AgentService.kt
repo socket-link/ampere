@@ -20,6 +20,7 @@ import link.socket.ampere.dsl.team.AgentTeamBuilder
  * ampere.agents.pursue("Build authentication system")
  * ```
  */
+@link.socket.ampere.api.AmpereStableApi
 interface AgentService {
 
     /**

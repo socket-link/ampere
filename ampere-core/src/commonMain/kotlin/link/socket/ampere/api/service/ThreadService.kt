@@ -21,6 +21,7 @@ import link.socket.ampere.api.model.ThreadFilter
  * ampere.threads.post(thread.id, "What about OAuth2 PKCE?")
  * ```
  */
+@link.socket.ampere.api.AmpereStableApi
 interface ThreadService {
 
     /**

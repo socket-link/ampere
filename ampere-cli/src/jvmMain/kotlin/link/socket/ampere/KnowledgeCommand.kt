@@ -21,8 +21,8 @@ import com.github.ajalt.mordant.table.table
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
-import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
+import link.socket.ampere.api.service.KnowledgeService
 import link.socket.ampere.repl.TerminalFactory
 
 /**
@@ -31,16 +31,16 @@ import link.socket.ampere.repl.TerminalFactory
  * Provides access to the system's accumulated learnings from agent operations.
  */
 class KnowledgeCommand(
-    knowledgeRepository: KnowledgeRepository,
+    knowledgeService: KnowledgeService,
 ) : CliktCommand(
     name = "knowledge",
     help = "Query agent knowledge and learnings",
 ) {
     init {
         subcommands(
-            KnowledgeSearchCommand(knowledgeRepository),
-            KnowledgeShowCommand(knowledgeRepository),
-            KnowledgeStatsCommand(knowledgeRepository),
+            KnowledgeSearchCommand(knowledgeService),
+            KnowledgeShowCommand(knowledgeService),
+            KnowledgeStatsCommand(knowledgeService),
         )
     }
 
@@ -53,7 +53,7 @@ class KnowledgeCommand(
  * The primary query: "What have agents learned about X?"
  */
 class KnowledgeSearchCommand(
-    private val knowledgeRepository: KnowledgeRepository,
+    private val knowledgeService: KnowledgeService,
 ) : CliktCommand(
     name = "search",
     help = "Search knowledge entries by text",
@@ -78,17 +78,13 @@ class KnowledgeSearchCommand(
     override fun run() = runBlocking {
         val terminal = TerminalFactory.createTerminal()
 
-        // Use contextual search if filters provided, otherwise simple search
-        val result = if (type != null || taskType != null || !tags.isNullOrEmpty()) {
-            knowledgeRepository.searchKnowledgeByContext(
-                knowledgeType = type,
-                taskType = taskType,
-                tags = tags,
-                limit = limit,
-            )
-        } else {
-            knowledgeRepository.findSimilarKnowledge(query, limit)
-        }
+        val result = knowledgeService.search(
+            query = query,
+            type = type,
+            taskType = taskType,
+            tags = tags,
+            limit = limit,
+        )
 
         result.fold(
             onSuccess = { entries ->
@@ -116,7 +112,7 @@ class KnowledgeSearchCommand(
  * Show detailed information about a specific knowledge entry.
  */
 class KnowledgeShowCommand(
-    private val knowledgeRepository: KnowledgeRepository,
+    private val knowledgeService: KnowledgeService,
 ) : CliktCommand(
     name = "show",
     help = "Show details of a specific knowledge entry",
@@ -129,7 +125,7 @@ class KnowledgeShowCommand(
     override fun run() = runBlocking {
         val terminal = TerminalFactory.createTerminal()
 
-        knowledgeRepository.getKnowledgeById(id).fold(
+        knowledgeService.get(id).fold(
             onSuccess = { entry ->
                 if (entry == null) {
                     terminal.println(red("Knowledge entry not found: $id"))
@@ -137,7 +133,7 @@ class KnowledgeShowCommand(
                 }
 
                 // Get tags separately
-                val tags = knowledgeRepository.getTagsForKnowledge(id).getOrDefault(emptyList())
+                val tags = knowledgeService.tags(id).getOrDefault(emptyList())
                 val entryWithTags = entry.copy(tags = tags)
 
                 terminal.println(cyan(bold("KNOWLEDGE ENTRY")))
@@ -155,7 +151,7 @@ class KnowledgeShowCommand(
  * Show aggregate statistics about knowledge entries.
  */
 class KnowledgeStatsCommand(
-    private val knowledgeRepository: KnowledgeRepository,
+    private val knowledgeService: KnowledgeService,
 ) : CliktCommand(
     name = "stats",
     help = "Show knowledge statistics by type and source",
@@ -171,7 +167,7 @@ class KnowledgeStatsCommand(
         val typeCounts = mutableMapOf<KnowledgeType, Int>()
 
         KnowledgeType.entries.forEach { type ->
-            knowledgeRepository.findKnowledgeByType(type, limit = 1000).fold(
+            knowledgeService.search(type = type, limit = 1000).fold(
                 onSuccess = { entries ->
                     typeCounts[type] = entries.size
                     totalCount += entries.size

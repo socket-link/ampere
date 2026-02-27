@@ -1,9 +1,20 @@
 package link.socket.ampere
 
 import com.github.ajalt.clikt.testing.test
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import link.socket.ampere.agents.events.messages.Message
+import link.socket.ampere.agents.events.messages.MessageChannel
+import link.socket.ampere.agents.events.messages.MessageSender
+import link.socket.ampere.agents.events.messages.MessageThread
+import link.socket.ampere.agents.events.messages.MessageThreadId
 import link.socket.ampere.agents.events.messages.ThreadDetail
 import link.socket.ampere.agents.events.messages.ThreadSummary
-import link.socket.ampere.agents.events.messages.ThreadViewService
+import link.socket.ampere.agents.domain.status.EventStatus
+import link.socket.ampere.api.model.ThreadFilter
+import link.socket.ampere.api.service.ThreadBuilder
+import link.socket.ampere.api.service.ThreadService
+import kotlinx.datetime.Clock
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
@@ -30,22 +41,44 @@ class ThreadCommandTest {
     }
 
     /**
-     * Mock ThreadViewService that returns test data.
+     * Mock ThreadService that returns test data.
      */
-    private class MockThreadViewService : ThreadViewService {
-        var listActiveThreadsResult: Result<List<ThreadSummary>> = Result.success(emptyList())
-        var getThreadDetailResult: Result<ThreadDetail>? = null
+    private class MockThreadService : ThreadService {
+        private val now = Clock.System.now()
 
-        override suspend fun listActiveThreads(): Result<List<ThreadSummary>> =
-            listActiveThreadsResult
+        override suspend fun create(title: String, configure: (ThreadBuilder.() -> Unit)?): Result<MessageThread> {
+            return Result.success(
+                MessageThread(
+                    id = "mock-thread",
+                    channel = MessageChannel.Public.Engineering,
+                    createdBy = MessageSender.Human,
+                    participants = setOf(MessageSender.Human),
+                    messages = emptyList(),
+                    status = EventStatus.Open,
+                    createdAt = now,
+                    updatedAt = now,
+                )
+            )
+        }
 
-        override suspend fun getThreadDetail(threadId: String): Result<ThreadDetail> =
-            getThreadDetailResult ?: Result.failure(Exception("Thread not found"))
+        override suspend fun post(threadId: MessageThreadId, content: String, senderId: String): Result<Message> {
+            return Result.success(
+                Message(id = "mock-msg", threadId = threadId, sender = MessageSender.Human, content = content, timestamp = now)
+            )
+        }
+
+        override suspend fun get(threadId: MessageThreadId): Result<ThreadDetail> =
+            Result.success(ThreadDetail(threadId = threadId, title = "Thread", messages = emptyList(), participants = emptyList()))
+
+        override suspend fun list(filter: ThreadFilter?): Result<List<ThreadSummary>> =
+            Result.success(emptyList())
+
+        override fun observe(threadId: MessageThreadId): Flow<Message> = emptyFlow()
     }
 
     @Test
     fun `thread command help text shows usage`() {
-        val mockService = MockThreadViewService()
+        val mockService = MockThreadService()
         val command = ThreadCommand(mockService)
         val result = command.test("--help")
 
@@ -55,7 +88,7 @@ class ThreadCommandTest {
 
     @Test
     fun `thread list command help text shows usage`() {
-        val mockService = MockThreadViewService()
+        val mockService = MockThreadService()
         val command = ThreadCommand(mockService)
         val result = command.test("list --help")
 
@@ -64,7 +97,7 @@ class ThreadCommandTest {
 
     @Test
     fun `thread show command help text shows usage`() {
-        val mockService = MockThreadViewService()
+        val mockService = MockThreadService()
         val command = ThreadCommand(mockService)
         val result = command.test("show --help")
 
@@ -76,7 +109,7 @@ class ThreadCommandTest {
     fun `thread command can be created with real context`(@TempDir tempDir: File) {
         val context = createTestContext(tempDir)
         try {
-            val command = ThreadCommand(context.threadViewService)
+            val command = ThreadCommand(context.ampereInstance.threads)
             val result = command.test("--help")
 
             assertContains(result.output, "View conversation threads")

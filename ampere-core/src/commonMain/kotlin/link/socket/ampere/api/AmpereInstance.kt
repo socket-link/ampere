@@ -24,6 +24,7 @@ import link.socket.ampere.api.service.TicketService
  * ampere.close()
  * ```
  */
+@AmpereStableApi
 interface AmpereInstance : AutoCloseable {
 
     /** Agent lifecycle and team management */

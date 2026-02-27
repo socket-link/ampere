@@ -16,6 +16,7 @@ import link.socket.ampere.api.model.OutcomeStats
  * println("${stats.successRate * 100}% success rate over ${stats.totalOutcomes} outcomes")
  * ```
  */
+@link.socket.ampere.api.AmpereStableApi
 interface OutcomeService {
 
     /**

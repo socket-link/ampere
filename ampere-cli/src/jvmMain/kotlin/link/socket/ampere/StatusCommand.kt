@@ -16,9 +16,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import kotlinx.serialization.Serializable
-import link.socket.ampere.agents.events.messages.ThreadViewService
-import link.socket.ampere.agents.events.tickets.TicketViewService
+import link.socket.ampere.agents.events.messages.ThreadSummary
+import link.socket.ampere.agents.events.tickets.TicketSummary
+import link.socket.ampere.api.AmpereInstance
 import link.socket.ampere.repl.TerminalFactory
 import kotlin.time.Duration.Companion.hours
 
@@ -27,8 +27,7 @@ import kotlin.time.Duration.Companion.hours
  * This is your situational awareness command.
  */
 class StatusCommand(
-    private val threadViewService: ThreadViewService,
-    private val ticketViewService: TicketViewService
+    private val ampere: AmpereInstance,
 ) : CliktCommand(
     name = "status",
     help = "Show system-wide status dashboard"
@@ -42,8 +41,8 @@ class StatusCommand(
 
     override fun run() = runBlocking {
         // Fetch data from multiple services concurrently
-        val threadsDeferred = async { threadViewService.listActiveThreads() }
-        val ticketsDeferred = async { ticketViewService.listActiveTickets() }
+        val threadsDeferred = async { ampere.threads.list() }
+        val ticketsDeferred = async { ampere.tickets.list() }
 
         val threadsResult = threadsDeferred.await()
         val ticketsResult = ticketsDeferred.await()
@@ -56,9 +55,9 @@ class StatusCommand(
      * Output status as a formatted dashboard for human viewing.
      */
     private fun outputDashboard(
-        threadsResult: Result<List<link.socket.ampere.agents.events.messages.ThreadSummary>>,
-        ticketsResult: Result<List<link.socket.ampere.agents.events.tickets.TicketSummary>>,
-        verbose: Boolean
+        threadsResult: Result<List<ThreadSummary>>,
+        ticketsResult: Result<List<TicketSummary>>,
+        verbose: Boolean,
     ) {
         terminal.println(bold(cyan("⚡ AMPERE System Status")))
         terminal.println()

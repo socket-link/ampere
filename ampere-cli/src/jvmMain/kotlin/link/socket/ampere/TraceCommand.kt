@@ -20,7 +20,7 @@ import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
-import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.api.service.EventService
 import link.socket.ampere.repl.TerminalFactory
 import kotlin.time.Duration.Companion.seconds
 
@@ -32,7 +32,7 @@ import kotlin.time.Duration.Companion.seconds
  * providing context for understanding what led to a decision.
  */
 class TraceCommand(
-    private val eventRepository: EventRepository,
+    private val eventService: EventService,
 ) : CliktCommand(
     name = "trace",
     help = "Show an event and its surrounding context",
@@ -51,7 +51,7 @@ class TraceCommand(
         val terminal = TerminalFactory.createTerminal()
 
         // First, get the target event
-        eventRepository.getEventById(eventId).fold(
+        eventService.get(eventId).fold(
             onSuccess = { event ->
                 if (event == null) {
                     terminal.println(red("Event not found: $eventId"))
@@ -76,7 +76,7 @@ class TraceCommand(
                 )
 
                 // Get surrounding events from the same source
-                eventRepository.getEventsWithFilters(
+                eventService.query(
                     fromTime = fromTime,
                     toTime = toTime,
                     sourceIds = setOf(sourceId),

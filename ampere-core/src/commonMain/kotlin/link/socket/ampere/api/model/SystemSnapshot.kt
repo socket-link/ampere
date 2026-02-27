@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
  * println("${status.agents.size} agents, ${status.activeTickets} active tickets")
  * ```
  */
+@link.socket.ampere.api.AmpereStableApi
 @Serializable
 data class SystemSnapshot(
     val agents: List<AgentSnapshot>,

@@ -33,7 +33,22 @@ class StubKnowledgeService : KnowledgeService {
         )
     }
 
+    override suspend fun get(id: String): Result<KnowledgeEntry?> =
+        Result.success(null)
+
     override suspend fun recall(query: String, limit: Int): Result<List<KnowledgeEntry>> =
+        Result.success(emptyList())
+
+    override suspend fun search(
+        query: String?,
+        type: KnowledgeType?,
+        taskType: String?,
+        tags: List<String>?,
+        limit: Int,
+    ): Result<List<KnowledgeEntry>> =
+        Result.success(emptyList())
+
+    override suspend fun tags(knowledgeId: String): Result<List<String>> =
         Result.success(emptyList())
 
     override suspend fun provenance(knowledgeId: String): Result<List<KnowledgeEntry>> =

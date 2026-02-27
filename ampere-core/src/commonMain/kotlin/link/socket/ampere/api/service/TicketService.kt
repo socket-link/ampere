@@ -21,6 +21,7 @@ import link.socket.ampere.api.model.TicketFilter
  * }
  * ```
  */
+@link.socket.ampere.api.AmpereStableApi
 interface TicketService {
 
     /**

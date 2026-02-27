@@ -334,7 +334,46 @@ class AmpereInstanceTest {
         assertEquals(0.0, stats.successRate)
     }
 
+    // ==================== EventService Tests (new methods) ====================
+
+    @Test
+    fun `EventService get returns null for nonexistent event`() = runBlocking {
+        val result = eventService.get("nonexistent-event-id")
+        assertTrue(result.isSuccess)
+        assertEquals(null, result.getOrNull())
+    }
+
     // ==================== KnowledgeService Tests ====================
+
+    @Test
+    fun `KnowledgeService get returns null for nonexistent ID`() = runBlocking {
+        val result = knowledgeService.get("nonexistent-id")
+        assertTrue(result.isSuccess)
+        assertEquals(null, result.getOrNull())
+    }
+
+    @Test
+    fun `KnowledgeService search returns empty list when no knowledge exists`() = runBlocking {
+        val result = knowledgeService.search(query = "authentication")
+        assertTrue(result.isSuccess)
+        assertTrue(result.getOrNull()!!.isEmpty())
+    }
+
+    @Test
+    fun `KnowledgeService search with type filter returns empty list`() = runBlocking {
+        val result = knowledgeService.search(
+            type = link.socket.ampere.agents.domain.knowledge.KnowledgeType.FROM_OUTCOME,
+        )
+        assertTrue(result.isSuccess)
+        assertTrue(result.getOrNull()!!.isEmpty())
+    }
+
+    @Test
+    fun `KnowledgeService tags returns empty for nonexistent knowledge`() = runBlocking {
+        val result = knowledgeService.tags("nonexistent-id")
+        assertTrue(result.isSuccess)
+        assertTrue(result.getOrNull()!!.isEmpty())
+    }
 
     @Test
     fun `KnowledgeService provenance fails for nonexistent knowledge`() = runBlocking {

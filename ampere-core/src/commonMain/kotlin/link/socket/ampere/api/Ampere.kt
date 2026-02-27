@@ -22,6 +22,7 @@ package link.socket.ampere.api
  * }
  * ```
  */
+@AmpereStableApi
 object Ampere {
 
     /**

@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 /**
  * Level of system health.
  */
+@link.socket.ampere.api.AmpereStableApi
 @Serializable
 enum class HealthLevel {
     Healthy,
@@ -23,6 +24,7 @@ enum class HealthLevel {
  * }
  * ```
  */
+@link.socket.ampere.api.AmpereStableApi
 @Serializable
 data class HealthStatus(
     val overall: HealthLevel,
