@@ -1,6 +1,7 @@
 package link.socket.ampere.compose
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -14,6 +15,22 @@ import link.socket.ampere.animation.flow.FlowState
  * showing active handoffs between agents.
  */
 object FlowCanvasRenderer {
+
+    /** Map flow state to its display color. */
+    internal fun colorForFlowState(state: FlowState): Color = when (state) {
+        FlowState.DORMANT -> CognitivePalette.flowDormant
+        FlowState.ACTIVATING -> CognitivePalette.flowActive
+        FlowState.TRANSMITTING -> CognitivePalette.flowActive
+        FlowState.RECEIVED -> CognitivePalette.agentComplete
+    }
+
+    /** Map flow state to path alpha (visibility). */
+    internal fun alphaForFlowState(state: FlowState): Float = when (state) {
+        FlowState.DORMANT -> 0.15f
+        FlowState.ACTIVATING -> 0.4f
+        FlowState.TRANSMITTING -> 0.7f
+        FlowState.RECEIVED -> 0.5f
+    }
 
     /**
      * Render flow connections and active handoffs.
@@ -42,24 +59,10 @@ object FlowCanvasRenderer {
                     }
                 }
 
-                val pathColor = when (connection.state) {
-                    FlowState.DORMANT -> CognitivePalette.flowDormant
-                    FlowState.ACTIVATING -> CognitivePalette.flowActive
-                    FlowState.TRANSMITTING -> CognitivePalette.flowActive
-                    FlowState.RECEIVED -> CognitivePalette.agentComplete
-                }
-
-                val pathAlpha = when (connection.state) {
-                    FlowState.DORMANT -> 0.15f
-                    FlowState.ACTIVATING -> 0.4f
-                    FlowState.TRANSMITTING -> 0.7f
-                    FlowState.RECEIVED -> 0.5f
-                }
-
                 drawPath(
                     path = path,
-                    color = pathColor,
-                    alpha = pathAlpha,
+                    color = colorForFlowState(connection.state),
+                    alpha = alphaForFlowState(connection.state),
                     style = Stroke(width = 2f)
                 )
 

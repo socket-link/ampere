@@ -13,6 +13,12 @@ import link.socket.ampere.animation.substrate.SubstrateState
  */
 object SubstrateCanvasRenderer {
 
+    /** Threshold below which cells are not rendered. */
+    internal fun shouldRenderCell(density: Float): Boolean = density > 0.05f
+
+    /** Map density to alpha for rendering. */
+    internal fun cellAlpha(density: Float): Float = density * 0.6f
+
     /**
      * Render substrate density field.
      *
@@ -31,13 +37,12 @@ object SubstrateCanvasRenderer {
             for (y in 0 until substrate.height) {
                 for (x in 0 until substrate.width) {
                     val density = substrate.getDensity(x, y)
-                    if (density > 0.05f) {
-                        val color = CognitivePalette.forDensity(density)
+                    if (shouldRenderCell(density)) {
                         drawRect(
-                            color = color,
+                            color = CognitivePalette.forDensity(density),
                             topLeft = Offset(x * cellWidth, y * cellHeight),
                             size = Size(cellWidth, cellHeight),
-                            alpha = density * 0.6f
+                            alpha = cellAlpha(density)
                         )
                     }
                 }
