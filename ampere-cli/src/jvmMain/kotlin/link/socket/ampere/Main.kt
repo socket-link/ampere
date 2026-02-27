@@ -118,14 +118,15 @@ fun main(args: Array<String>) {
         val filteredArgs = filterConfigArgs(args)
 
         // Run the CLI
+        val api = context.ampereInstance
         AmpereCommand { context }
             .subcommands(
-                ThreadCommand(context.threadViewService),
-                StatusCommand(context.threadViewService, context.ticketViewService),
-                OutcomesCommand(context.outcomeMemoryRepository),
-                KnowledgeCommand(context.knowledgeRepository),
-                TraceCommand(context.eventRepository),
-                TaskCommand { context },
+                ThreadCommand(api.threads),
+                StatusCommand(api),
+                OutcomesCommand(api.outcomes),
+                KnowledgeCommand(api.knowledge),
+                TraceCommand(api.events),
+                TaskCommand(api.tickets),
                 IssuesCommand(),
                 RespondCommand(),
                 WorkCommand { context },

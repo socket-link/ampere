@@ -14,6 +14,8 @@ import link.socket.ampere.api.service.EventService
  */
 class StubEventService : EventService {
 
+    override suspend fun get(eventId: String): Result<Event?> = Result.success(null)
+
     override fun observe(filters: EventRelayFilters): Flow<Event> = emptyFlow()
 
     override suspend fun query(

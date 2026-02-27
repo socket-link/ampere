@@ -7,8 +7,8 @@ import com.github.ajalt.clikt.parameters.arguments.help
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
 import kotlinx.coroutines.runBlocking
-import link.socket.ampere.agents.domain.Urgency
-import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.agents.events.tickets.TicketPriority
+import link.socket.ampere.api.service.TicketService
 
 /**
  * Root command for task operations.
@@ -16,14 +16,14 @@ import link.socket.ampere.agents.events.utils.generateUUID
  * Provides access to task creation and management commands.
  */
 class TaskCommand(
-    private val contextProvider: () -> AmpereContext,
+    ticketService: TicketService,
 ) : CliktCommand(
     name = "task",
-    help = "Create or manage task events",
+    help = "Create or manage tasks",
 ) {
     init {
         subcommands(
-            TaskCreateCommand(contextProvider),
+            TaskCreateCommand(ticketService),
         )
     }
 
@@ -31,37 +31,27 @@ class TaskCommand(
 }
 
 /**
- * Create a TaskCreated event from the CLI.
+ * Create a ticket from the CLI.
  */
 class TaskCreateCommand(
-    private val contextProvider: () -> AmpereContext,
+    private val ticketService: TicketService,
 ) : CliktCommand(
     name = "create",
-    help = "Publish a TaskCreated event",
+    help = "Create a new ticket",
 ) {
     private val description by argument()
         .help("Task description (quote if it contains spaces)")
 
-    private val taskId by option("--id", help = "Optional task ID (auto-generated if omitted)")
-
-    private val urgencyInput by option("--urgency", help = "Urgency level: low|medium|high")
+    private val urgencyInput by option("--urgency", help = "Priority level: low|medium|high")
         .default("medium")
 
     private val assignedTo by option("--assign", help = "Agent ID to assign the task to")
 
     override fun run() = runBlocking {
-        val context = contextProvider()
-        val eventApi = context.environmentService.createEventApi("human-cli")
-
-        val effectiveTaskId = taskId ?: run {
-            // Assumption: when no task ID is provided, a generated UUID is acceptable.
-            generateUUID("task-cli")
-        }
-
-        val urgency = when (urgencyInput.lowercase()) {
-            "low" -> Urgency.LOW
-            "medium" -> Urgency.MEDIUM
-            "high" -> Urgency.HIGH
+        val priority = when (urgencyInput.lowercase()) {
+            "low" -> TicketPriority.LOW
+            "medium" -> TicketPriority.MEDIUM
+            "high" -> TicketPriority.HIGH
             else -> {
                 echo(
                     "Invalid --urgency value: $urgencyInput (expected low|medium|high)",
@@ -71,18 +61,21 @@ class TaskCreateCommand(
             }
         }
 
-        try {
-            eventApi.publishTaskCreated(
-                taskId = effectiveTaskId,
-                urgency = urgency,
-                description = description,
-                assignedTo = assignedTo,
-            )
+        ticketService.create(description) {
+            priority(priority)
+        }.fold(
+            onSuccess = { ticket ->
+                // Assign if requested
+                assignedTo?.let { agentId ->
+                    ticketService.assign(ticket.id, agentId)
+                }
 
-            val assignmentSuffix = assignedTo?.let { " assigned to $it" } ?: ""
-            echo("TaskCreated $effectiveTaskId (${urgency.name.lowercase()})$assignmentSuffix: $description")
-        } catch (e: Exception) {
-            echo("Failed to publish TaskCreated: ${e.message}", err = true)
-        }
+                val assignmentSuffix = assignedTo?.let { " assigned to $it" } ?: ""
+                echo("Created ticket ${ticket.id} (${priority.name.lowercase()})$assignmentSuffix: $description")
+            },
+            onFailure = { error ->
+                echo("Failed to create ticket: ${error.message}", err = true)
+            },
+        )
     }
 }

@@ -11,6 +11,7 @@ import link.socket.ampere.agents.events.tickets.TicketType
  * All fields are optional. `null` means "no filter on this dimension".
  * Multiple non-null fields are combined with AND logic.
  */
+@link.socket.ampere.api.AmpereStableApi
 data class TicketFilter(
     val status: TicketStatus? = null,
     val priority: TicketPriority? = null,

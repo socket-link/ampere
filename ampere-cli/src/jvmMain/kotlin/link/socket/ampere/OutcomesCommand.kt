@@ -16,7 +16,7 @@ import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.table.table
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
+import link.socket.ampere.api.service.OutcomeService
 import link.socket.ampere.repl.TerminalFactory
 
 /**
@@ -25,17 +25,17 @@ import link.socket.ampere.repl.TerminalFactory
  * Provides access to the environment's accumulated execution experience.
  */
 class OutcomesCommand(
-    outcomeRepository: OutcomeMemoryRepository,
+    outcomeService: OutcomeService,
 ) : CliktCommand(
     name = "outcomes",
     help = "View execution outcomes and accumulated experience",
 ) {
     init {
         subcommands(
-            OutcomesTicketCommand(outcomeRepository),
-            OutcomesSearchCommand(outcomeRepository),
-            OutcomesExecutorCommand(outcomeRepository),
-            OutcomesStatsCommand(outcomeRepository),
+            OutcomesTicketCommand(outcomeService),
+            OutcomesSearchCommand(outcomeService),
+            OutcomesExecutorCommand(outcomeService),
+            OutcomesStatsCommand(outcomeService),
         )
     }
 
@@ -48,7 +48,7 @@ class OutcomesCommand(
  * Useful for debugging: "This ticket keeps failing, what have we tried?"
  */
 class OutcomesTicketCommand(
-    private val outcomeRepository: OutcomeMemoryRepository,
+    private val outcomeService: OutcomeService,
 ) : CliktCommand(
     name = "ticket",
     help = "Show execution history for a specific ticket",
@@ -61,7 +61,7 @@ class OutcomesTicketCommand(
     override fun run() = runBlocking {
         val terminal = TerminalFactory.createTerminal()
 
-        outcomeRepository.getOutcomesByTicket(ticketId).fold(
+        outcomeService.forTicket(ticketId).fold(
             onSuccess = { outcomes ->
                 if (outcomes.isEmpty()) {
                     terminal.println("No execution attempts found for ticket $ticketId")
@@ -136,7 +136,7 @@ class OutcomesTicketCommand(
  * The learning query: "Has anyone tried something like this before?"
  */
 class OutcomesSearchCommand(
-    private val outcomeRepository: OutcomeMemoryRepository,
+    private val outcomeService: OutcomeService,
 ) : CliktCommand(
     name = "search",
     help = "Find outcomes similar to a description",
@@ -153,7 +153,7 @@ class OutcomesSearchCommand(
     override fun run() = runBlocking {
         val terminal = TerminalFactory.createTerminal()
 
-        outcomeRepository.findSimilarOutcomes(query, limit).fold(
+        outcomeService.search(query, limit).fold(
             onSuccess = { outcomes ->
                 if (outcomes.isEmpty()) {
                     terminal.println("No similar outcomes found for: $query")
@@ -192,7 +192,7 @@ class OutcomesSearchCommand(
  * Useful for analyzing executor performance.
  */
 class OutcomesExecutorCommand(
-    private val outcomeRepository: OutcomeMemoryRepository,
+    private val outcomeService: OutcomeService,
 ) : CliktCommand(
     name = "executor",
     help = "Show outcomes for a specific executor",
@@ -209,7 +209,7 @@ class OutcomesExecutorCommand(
     override fun run() = runBlocking {
         val terminal = TerminalFactory.createTerminal()
 
-        outcomeRepository.getOutcomesByExecutor(executorId, limit).fold(
+        outcomeService.byExecutor(executorId, limit).fold(
             onSuccess = { outcomes ->
                 if (outcomes.isEmpty()) {
                     terminal.println("No outcomes found for executor: $executorId")
@@ -275,23 +275,32 @@ class OutcomesExecutorCommand(
  * Overall system learning and performance metrics.
  */
 class OutcomesStatsCommand(
-    private val outcomeRepository: OutcomeMemoryRepository,
+    private val outcomeService: OutcomeService,
 ) : CliktCommand(
     name = "stats",
     help = "Show aggregate outcome statistics",
 ) {
-    // This would query aggregate data from the repository
-    // For now, just a placeholder showing what it could display
-    override fun run() {
+    override fun run() = runBlocking {
         val terminal = TerminalFactory.createTerminal()
-        terminal.println(cyan("📊 OUTCOME STATISTICS"))
-        terminal.println()
-        terminal.println(yellow("This command shows aggregate learning metrics:"))
-        terminal.println("  - Overall success rate")
-        terminal.println("  - Success rate by executor")
-        terminal.println("  - Success rate by ticket category")
-        terminal.println("  - Trends over time")
-        terminal.println()
-        terminal.println(dim("TODO: Implement aggregate queries"))
+
+        outcomeService.stats().fold(
+            onSuccess = { stats ->
+                terminal.println(cyan("📊 OUTCOME STATISTICS"))
+                terminal.println()
+                terminal.println("Total outcomes: ${green(stats.totalOutcomes.toString())}")
+                terminal.println("  Success: ${green(stats.successCount.toString())}")
+                terminal.println("  Failure: ${red(stats.failureCount.toString())}")
+                terminal.println("  Success rate: ${green("${(stats.successRate * 100).toInt()}%")}")
+                terminal.println("  Average duration: ${formatDuration(stats.averageDurationMs)}")
+            },
+            onFailure = { error ->
+                terminal.println(red("Error: ${error.message}"))
+            },
+        )
+    }
+
+    private fun formatDuration(ms: Long): String {
+        val seconds = ms / 1000
+        return if (seconds < 60) "${seconds}s" else "${seconds / 60}m ${seconds % 60}s"
     }
 }

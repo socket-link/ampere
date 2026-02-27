@@ -101,8 +101,7 @@ class ObservationCommandRegistry(
     private suspend fun executeStatus(args: Array<String>): CommandResult {
         return executor.execute {
             val command = StatusCommand(
-                threadViewService = context.threadViewService,
-                ticketViewService = context.ticketViewService
+                ampere = context.ampereInstance
             )
             val adapter = CommandAdapter(terminal)
             adapter.execute(command, args)
@@ -112,7 +111,7 @@ class ObservationCommandRegistry(
     private suspend fun executeThread(args: Array<String>): CommandResult {
         return executor.execute {
             val command = ThreadCommand(
-                threadViewService = context.threadViewService,
+                threadService = context.ampereInstance.threads,
                 renderer = renderer
             )
             val adapter = CommandAdapter(terminal)
@@ -123,7 +122,7 @@ class ObservationCommandRegistry(
     private suspend fun executeOutcomes(args: Array<String>): CommandResult {
         return executor.execute {
             val command = OutcomesCommand(
-                outcomeRepository = context.outcomeMemoryRepository
+                outcomeService = context.ampereInstance.outcomes
             )
             val adapter = CommandAdapter(terminal)
             adapter.execute(command, args)

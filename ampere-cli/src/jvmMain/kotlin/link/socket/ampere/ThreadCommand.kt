@@ -4,7 +4,7 @@ import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.arguments.argument
 import kotlinx.coroutines.runBlocking
-import link.socket.ampere.agents.events.messages.ThreadViewService
+import link.socket.ampere.api.service.ThreadService
 import link.socket.ampere.repl.TerminalFactory
 
 /**
@@ -12,7 +12,7 @@ import link.socket.ampere.repl.TerminalFactory
  * just serves as a container for list and show subcommands.
  */
 class ThreadCommand(
-    threadViewService: ThreadViewService,
+    threadService: ThreadService,
     renderer: link.socket.ampere.renderer.CLIRenderer = link.socket.ampere.renderer.CLIRenderer(TerminalFactory.createTerminal())
 ) : CliktCommand(
     name = "thread",
@@ -20,8 +20,8 @@ class ThreadCommand(
 ) {
     init {
         subcommands(
-            ThreadListCommand(threadViewService, renderer),
-            ThreadShowCommand(threadViewService, renderer)
+            ThreadListCommand(threadService, renderer),
+            ThreadShowCommand(threadService, renderer)
         )
     }
 
@@ -33,14 +33,14 @@ class ThreadCommand(
  * Shows summary information: message counts, participants, last activity.
  */
 class ThreadListCommand(
-    private val threadViewService: ThreadViewService,
+    private val threadService: ThreadService,
     private val renderer: link.socket.ampere.renderer.CLIRenderer
 ) : CliktCommand(
     name = "list",
     help = "List all active threads"
 ) {
     override fun run() = runBlocking {
-        val result = threadViewService.listActiveThreads()
+        val result = threadService.list()
 
         result.fold(
             onSuccess = { threads ->
@@ -68,7 +68,7 @@ class ThreadListCommand(
  * Displays all messages with timestamps and speaker identification.
  */
 class ThreadShowCommand(
-    private val threadViewService: ThreadViewService,
+    private val threadService: ThreadService,
     private val renderer: link.socket.ampere.renderer.CLIRenderer
 ) : CliktCommand(
     name = "show",
@@ -77,7 +77,7 @@ class ThreadShowCommand(
     private val threadId by argument(name = "thread-id", help = "ID of the thread to display")
 
     override fun run() = runBlocking {
-        val result = threadViewService.getThreadDetail(threadId)
+        val result = threadService.get(threadId)
 
         result.fold(
             onSuccess = { thread ->

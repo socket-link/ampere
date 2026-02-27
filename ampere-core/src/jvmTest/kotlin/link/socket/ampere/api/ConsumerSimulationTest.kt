@@ -136,6 +136,7 @@ class ConsumerSimulationTest {
     }
 
     private val stubEventService = object : EventService {
+        override suspend fun get(eventId: String) = Result.success<Event?>(null)
         override fun observe(filters: EventRelayFilters): Flow<Event> = emptyFlow()
         override suspend fun query(fromTime: Instant, toTime: Instant, sourceIds: Set<String>?) = Result.success(emptyList<Event>())
         override fun replay(from: Instant, to: Instant, filters: EventRelayFilters): Flow<Event> = emptyFlow()
@@ -151,7 +152,10 @@ class ConsumerSimulationTest {
     private val stubKnowledgeService = object : KnowledgeService {
         override suspend fun store(knowledge: Knowledge, tags: List<String>, taskType: String?, complexityLevel: String?) =
             Result.success(KnowledgeEntry(id = "k-1", knowledgeType = KnowledgeType.FROM_OUTCOME, approach = "test", learnings = "test", timestamp = now))
+        override suspend fun get(id: String) = Result.success<KnowledgeEntry?>(null)
         override suspend fun recall(query: String, limit: Int) = Result.success(emptyList<KnowledgeEntry>())
+        override suspend fun search(query: String?, type: KnowledgeType?, taskType: String?, tags: List<String>?, limit: Int) = Result.success(emptyList<KnowledgeEntry>())
+        override suspend fun tags(knowledgeId: String) = Result.success(emptyList<String>())
         override suspend fun provenance(knowledgeId: String) = Result.success(emptyList<KnowledgeEntry>())
     }
 
@@ -255,7 +259,12 @@ class ConsumerSimulationTest {
     }
 
     @Test
-    fun `event service - observe with filters, query time range, replay`() = kotlinx.coroutines.runBlocking<Unit> {
+    fun `event service - get, observe with filters, query time range, replay`() = kotlinx.coroutines.runBlocking<Unit> {
+        // Get by ID
+        val event = stubEventService.get("event-123").getOrThrow()
+        // May be null from stub
+        assertNotNull(stubEventService.get("event-123"))
+
         // Observe all events
         val allEvents: Flow<Event> = stubEventService.observe()
         assertNotNull(allEvents)
@@ -297,13 +306,36 @@ class ConsumerSimulationTest {
     }
 
     @Test
-    fun `knowledge service - recall, provenance`() = kotlinx.coroutines.runBlocking<Unit> {
+    fun `knowledge service - get, recall, search, tags, provenance`() = kotlinx.coroutines.runBlocking<Unit> {
+        // Get by ID
+        val entry = stubKnowledgeService.get("knowledge-123").getOrThrow()
+        // May be null from stub
+        assertNotNull(stubKnowledgeService.get("knowledge-123"))
+
         // Recall
         val entries = stubKnowledgeService.recall("how did we handle auth?").getOrThrow()
         assertNotNull(entries)
 
         // Recall with limit
         stubKnowledgeService.recall("retry patterns", limit = 10).getOrThrow()
+
+        // Search with query only
+        stubKnowledgeService.search(query = "authentication").getOrThrow()
+
+        // Search with type filter
+        stubKnowledgeService.search(type = KnowledgeType.FROM_OUTCOME).getOrThrow()
+
+        // Search with multiple filters
+        stubKnowledgeService.search(
+            query = "retry",
+            type = KnowledgeType.FROM_OUTCOME,
+            tags = listOf("auth"),
+            limit = 5,
+        ).getOrThrow()
+
+        // Tags
+        val tags = stubKnowledgeService.tags("knowledge-123").getOrThrow()
+        assertNotNull(tags)
 
         // Provenance
         val trail = stubKnowledgeService.provenance("knowledge-456").getOrThrow()

@@ -18,6 +18,7 @@ import link.socket.ampere.api.model.SystemSnapshot
  * }
  * ```
  */
+@link.socket.ampere.api.AmpereStableApi
 interface StatusService {
 
     /**

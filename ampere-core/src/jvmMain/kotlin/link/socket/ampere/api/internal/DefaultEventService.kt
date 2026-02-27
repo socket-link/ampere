@@ -13,6 +13,9 @@ internal class DefaultEventService(
     private val eventRepository: EventRepository,
 ) : EventService {
 
+    override suspend fun get(eventId: String): Result<Event?> =
+        eventRepository.getEventById(eventId)
+
     override fun observe(filters: EventRelayFilters): Flow<Event> =
         eventRelayService.subscribeToLiveEvents(filters)
 

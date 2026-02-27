@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 /**
  * Aggregate statistics about execution outcomes.
  */
+@link.socket.ampere.api.AmpereStableApi
 @Serializable
 data class OutcomeStats(
     val totalOutcomes: Int,

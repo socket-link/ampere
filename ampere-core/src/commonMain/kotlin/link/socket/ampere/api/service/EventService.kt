@@ -24,7 +24,21 @@ import link.socket.ampere.agents.events.relay.EventRelayFilters
  *     }
  * ```
  */
+@link.socket.ampere.api.AmpereStableApi
 interface EventService {
+
+    /**
+     * Retrieve a specific event by ID.
+     *
+     * ```
+     * val event = ampere.events.get("event-123").getOrNull()
+     * event?.let { println("${it.eventType}: ${it.getSummary()}") }
+     * ```
+     *
+     * @param eventId The ID of the event to retrieve
+     * @return The event, or null if not found
+     */
+    suspend fun get(eventId: String): Result<Event?>
 
     /**
      * Observe the live event stream.
