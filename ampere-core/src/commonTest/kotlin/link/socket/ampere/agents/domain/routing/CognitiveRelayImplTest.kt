@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.event.Event
@@ -104,7 +105,7 @@ class CognitiveRelayImplTest {
     }
 
     @Test
-    fun `emits RouteSelected event through EventBus`() = runTest {
+    fun `emits RouteSelected event through EventBus`() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Default)
         val eventBus = EventSerialBus(scope)
         val receivedEvents = mutableListOf<Event>()
@@ -132,7 +133,7 @@ class CognitiveRelayImplTest {
         )
         relay.resolve(context, openaiConfig)
 
-        // Give coroutine time to process
+        // Give coroutine time to process on Dispatchers.Default
         kotlinx.coroutines.delay(100)
 
         assertTrue(receivedEvents.isNotEmpty(), "Expected at least one routing event")
