@@ -26,6 +26,37 @@ import kotlin.math.sin
  */
 object AgentCanvasRenderer {
 
+    /** Map depth (0=near, 1=far) to a factor (1=near, 0=far). */
+    internal fun depthFactor(depth: Float): Float = 1f - depth.coerceIn(0f, 1f)
+
+    /** Scale node radius by depth: near agents are full-size, far agents are half. */
+    internal fun nodeRadius(baseRadius: Float, depthFactor: Float): Float =
+        baseRadius * (0.5f + 0.5f * depthFactor)
+
+    /** Outer ring alpha: active phases are brighter, NONE phase is dim. */
+    internal fun ringAlpha(depthFactor: Float, phase: CognitivePhase): Float =
+        if (phase != CognitivePhase.NONE) {
+            0.3f + 0.5f * depthFactor
+        } else {
+            0.1f + 0.1f * depthFactor
+        }
+
+    /** Inner fill alpha scaled by depth. */
+    internal fun fillAlpha(depthFactor: Float): Float = 0.4f + 0.5f * depthFactor
+
+    /** Processing shimmer alpha oscillating in [0, 0.5]. */
+    internal fun shimmerAlpha(pulsePhase: Float): Float =
+        (sin(pulsePhase * 2 * PI.toFloat()) + 1f) / 4f
+
+    /** Map agent activity state to its display color. */
+    internal fun colorForState(state: AgentActivityState): Color = when (state) {
+        AgentActivityState.IDLE -> CognitivePalette.agentIdle
+        AgentActivityState.ACTIVE -> CognitivePalette.agentActive
+        AgentActivityState.PROCESSING -> CognitivePalette.agentProcessing
+        AgentActivityState.COMPLETE -> CognitivePalette.agentComplete
+        AgentActivityState.SPAWNING -> CognitivePalette.agentIdle
+    }
+
     /**
      * Render all agents with optional 3D depth-based scaling.
      *
@@ -109,18 +140,14 @@ object AgentCanvasRenderer {
 
         with(drawScope) {
             for ((cx, cy, depth, agent) in projected) {
-                // Depth factor: near (depth≈0) → 1.0, far (depth≈1) → 0.0
-                val depthFactor = 1f - depth.coerceIn(0f, 1f)
-
-                val nodeRadius = baseRadius * (0.5f + 0.5f * depthFactor)
-                val ringAlpha = if (agent.cognitivePhase != CognitivePhase.NONE) {
-                    0.3f + 0.5f * depthFactor
-                } else {
-                    0.1f + 0.1f * depthFactor
-                }
-                val fillAlpha = 0.4f + 0.5f * depthFactor
-
-                drawAgentNode(this, cx, cy, nodeRadius, ringAlpha, fillAlpha, agent)
+                val df = depthFactor(depth)
+                drawAgentNode(
+                    this, cx, cy,
+                    nodeRadius(baseRadius, df),
+                    ringAlpha(df, agent.cognitivePhase),
+                    fillAlpha(df),
+                    agent
+                )
             }
         }
     }
@@ -149,16 +176,8 @@ object AgentCanvasRenderer {
             )
 
             // Inner fill: agent state color
-            val stateColor = when (agent.state) {
-                AgentActivityState.IDLE -> CognitivePalette.agentIdle
-                AgentActivityState.ACTIVE -> CognitivePalette.agentActive
-                AgentActivityState.PROCESSING -> CognitivePalette.agentProcessing
-                AgentActivityState.COMPLETE -> CognitivePalette.agentComplete
-                AgentActivityState.SPAWNING -> CognitivePalette.agentIdle
-            }
-
             drawCircle(
-                color = stateColor,
+                color = colorForState(agent.state),
                 radius = nodeRadius,
                 center = Offset(cx, cy),
                 alpha = fillAlpha
@@ -166,12 +185,11 @@ object AgentCanvasRenderer {
 
             // Processing shimmer (pulse phase)
             if (agent.state == AgentActivityState.PROCESSING) {
-                val shimmerAlpha = (sin(agent.pulsePhase * 2 * PI.toFloat()) + 1f) / 4f
                 drawCircle(
                     color = Color.White,
                     radius = nodeRadius * 0.8f,
                     center = Offset(cx, cy),
-                    alpha = shimmerAlpha * fillAlpha
+                    alpha = shimmerAlpha(agent.pulsePhase) * fillAlpha
                 )
             }
         }

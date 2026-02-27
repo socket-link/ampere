@@ -16,6 +16,16 @@ import link.socket.ampere.animation.particle.ParticleType
  */
 object ParticleCanvasRenderer {
 
+    /** Compute particle radius from life and cell width. */
+    internal fun particleRadius(life: Float, cellWidth: Float): Float =
+        (life * 4f + 1f) * (cellWidth / 4)
+
+    /** Outer glow alpha scales linearly with life. */
+    internal fun glowAlpha(life: Float): Float = life * 0.2f
+
+    /** Core circle alpha scales linearly with life. */
+    internal fun coreAlpha(life: Float): Float = life * 0.8f
+
     /**
      * Render all alive particles.
      *
@@ -34,7 +44,7 @@ object ParticleCanvasRenderer {
             particles.getParticles().forEach { particle ->
                 val cx = particle.position.x * cellWidth + cellWidth / 2
                 val cy = particle.position.y * cellHeight + cellHeight / 2
-                val radius = (particle.life * 4f + 1f) * (cellWidth / 4)
+                val radius = particleRadius(particle.life, cellWidth)
                 val color = colorForParticle(particle)
 
                 // Glow effect: outer translucent circle
@@ -42,7 +52,7 @@ object ParticleCanvasRenderer {
                     color = color,
                     radius = radius * 2f,
                     center = Offset(cx, cy),
-                    alpha = particle.life * 0.2f
+                    alpha = glowAlpha(particle.life)
                 )
 
                 // Core: solid circle
@@ -50,13 +60,13 @@ object ParticleCanvasRenderer {
                     color = color,
                     radius = radius,
                     center = Offset(cx, cy),
-                    alpha = particle.life * 0.8f
+                    alpha = coreAlpha(particle.life)
                 )
             }
         }
     }
 
-    private fun colorForParticle(particle: Particle): Color {
+    internal fun colorForParticle(particle: Particle): Color {
         return when (particle.type) {
             ParticleType.MOTE -> CognitivePalette.substrateMid
             ParticleType.SPARK -> CognitivePalette.sparkAccent
