@@ -1,8 +1,8 @@
 package link.socket.ampere.compose
 
-import link.socket.ampere.animation.particle.Particle
-import link.socket.ampere.animation.particle.ParticleType
-import link.socket.ampere.animation.substrate.Vector2
+import link.socket.phosphor.field.Particle
+import link.socket.phosphor.field.ParticleType
+import link.socket.phosphor.math.Vector2
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

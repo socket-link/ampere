@@ -1,6 +1,6 @@
 package link.socket.ampere.compose
 
-import link.socket.ampere.animation.flow.FlowState
+import link.socket.phosphor.field.FlowState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

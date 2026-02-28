@@ -1,15 +1,15 @@
 package link.socket.ampere.cli.animation.render
 
-import link.socket.ampere.animation.agent.AgentActivityState
-import link.socket.ampere.animation.agent.AgentLayer
-import link.socket.ampere.animation.agent.AgentVisualState
-import link.socket.ampere.animation.flow.FlowLayer
-import link.socket.ampere.animation.logo.LogoCrystallizer
-import link.socket.ampere.animation.particle.ParticleSystem
-import link.socket.ampere.animation.substrate.SubstrateState
-import link.socket.ampere.animation.substrate.Vector2
-import link.socket.ampere.animation.render.RenderCell
-import link.socket.ampere.animation.render.RenderLayer
+import link.socket.phosphor.signal.AgentActivityState
+import link.socket.phosphor.choreography.AgentLayer
+import link.socket.phosphor.signal.AgentVisualState
+import link.socket.phosphor.field.FlowLayer
+import link.socket.ampere.cli.animation.logo.LogoCrystallizer
+import link.socket.phosphor.field.ParticleSystem
+import link.socket.phosphor.field.SubstrateState
+import link.socket.phosphor.math.Vector2
+import link.socket.phosphor.render.RenderCell
+import link.socket.phosphor.render.RenderLayer
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -56,8 +56,7 @@ class RenderLayerTest {
         assertTrue(RenderLayer.SUBSTRATE.priority < RenderLayer.FLOW.priority)
         assertTrue(RenderLayer.FLOW.priority < RenderLayer.PARTICLES.priority)
         assertTrue(RenderLayer.PARTICLES.priority < RenderLayer.AGENTS.priority)
-        assertTrue(RenderLayer.AGENTS.priority < RenderLayer.LOGO.priority)
-        assertTrue(RenderLayer.LOGO.priority < RenderLayer.UI_OVERLAY.priority)
+        assertTrue(RenderLayer.AGENTS.priority < RenderLayer.UI_OVERLAY.priority)
     }
 }
 

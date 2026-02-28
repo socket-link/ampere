@@ -5,8 +5,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import link.socket.ampere.animation.flow.FlowLayer
-import link.socket.ampere.animation.flow.FlowState
+import link.socket.phosphor.field.FlowLayer
+import link.socket.phosphor.field.FlowState
 
 /**
  * Renders flow connections between agents onto a Compose Canvas.

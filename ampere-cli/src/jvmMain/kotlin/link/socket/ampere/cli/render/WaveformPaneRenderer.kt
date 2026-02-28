@@ -1,22 +1,22 @@
 package link.socket.ampere.cli.render
 
-import link.socket.ampere.animation.agent.AgentLayer
-import link.socket.ampere.animation.agent.AgentLayoutOrientation
-import link.socket.ampere.animation.emitter.CognitiveEmitterBridge
-import link.socket.ampere.animation.emitter.CognitiveEvent
-import link.socket.ampere.animation.emitter.EmitterManager
-import link.socket.ampere.animation.flow.FlowLayer
-import link.socket.ampere.animation.math.Vector3
-import link.socket.ampere.animation.projection.CameraOrbit
-import link.socket.ampere.animation.projection.ScreenProjector
-import link.socket.ampere.animation.render.AsciiCell
-import link.socket.ampere.animation.render.AsciiLuminancePalette
-import link.socket.ampere.animation.render.CognitiveColorRamp
-import link.socket.ampere.animation.substrate.SubstrateState
-import link.socket.ampere.animation.waveform.CognitiveWaveform
-import link.socket.ampere.animation.waveform.PhaseBlender
-import link.socket.ampere.animation.waveform.SurfaceLighting
-import link.socket.ampere.animation.waveform.WaveformRasterizer
+import link.socket.phosphor.choreography.AgentLayer
+import link.socket.phosphor.choreography.AgentLayoutOrientation
+import link.socket.phosphor.bridge.CognitiveEmitterBridge
+import link.socket.phosphor.bridge.CognitiveEvent
+import link.socket.phosphor.emitter.EmitterManager
+import link.socket.phosphor.field.FlowLayer
+import link.socket.phosphor.math.Vector3
+import link.socket.phosphor.render.CameraOrbit
+import link.socket.phosphor.render.ScreenProjector
+import link.socket.phosphor.render.AsciiCell
+import link.socket.phosphor.palette.AsciiLuminancePalette
+import link.socket.phosphor.palette.CognitiveColorRamp
+import link.socket.phosphor.field.SubstrateState
+import link.socket.phosphor.render.CognitiveWaveform
+import link.socket.phosphor.render.PhaseBlender
+import link.socket.phosphor.render.SurfaceLighting
+import link.socket.phosphor.render.WaveformRasterizer
 import link.socket.ampere.cli.layout.PaneRenderer
 
 /**

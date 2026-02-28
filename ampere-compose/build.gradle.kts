@@ -23,7 +23,7 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                implementation(project(":ampere-animation"))
+                implementation("link.socket:phosphor-core:0.2.2")
                 implementation(compose.runtime)
                 implementation(compose.foundation)
                 implementation(compose.ui)

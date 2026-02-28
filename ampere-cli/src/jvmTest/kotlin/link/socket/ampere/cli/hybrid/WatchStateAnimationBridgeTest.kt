@@ -1,9 +1,9 @@
 package link.socket.ampere.cli.hybrid
 
 import kotlinx.datetime.Clock
-import link.socket.ampere.animation.particle.ParticleSystem
-import link.socket.ampere.animation.substrate.SubstrateAnimator
-import link.socket.ampere.animation.substrate.SubstrateState
+import link.socket.phosphor.field.ParticleSystem
+import link.socket.phosphor.field.SubstrateAnimator
+import link.socket.phosphor.field.SubstrateState
 import link.socket.ampere.cli.watch.presentation.AgentActivityState
 import link.socket.ampere.cli.watch.presentation.AgentState
 import link.socket.ampere.cli.watch.presentation.EventSignificance

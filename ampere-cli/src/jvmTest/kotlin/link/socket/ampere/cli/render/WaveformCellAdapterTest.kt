@@ -1,6 +1,6 @@
 package link.socket.ampere.cli.render
 
-import link.socket.ampere.animation.render.AsciiCell
+import link.socket.phosphor.render.AsciiCell
 import link.socket.ampere.cli.hybrid.HybridCellBuffer
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
