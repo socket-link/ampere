@@ -41,4 +41,5 @@ jobs:
           EOF
 
       - name: Run tests
+        timeout-minutes: 10
         run: ./gradlew test

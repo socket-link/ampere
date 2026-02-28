@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.demo
 
 import java.io.File
+import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -41,6 +42,7 @@ import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
  */
 class CognitiveCycleDemo {
 
+    @Ignore("Manual demo requiring real LLM API keys - not for CI")
     @Test
     fun `demonstrate complete PROPEL cognitive cycle`() {
         runBlocking {
