@@ -55,6 +55,7 @@ jobs:
           EOF
 
       - name: Run tests before publish
+        timeout-minutes: 10
         run: ./gradlew :ampere-core:jvmTest
 
       - name: Decode signing key
