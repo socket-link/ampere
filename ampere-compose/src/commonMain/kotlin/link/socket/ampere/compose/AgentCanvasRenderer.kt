@@ -4,12 +4,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import link.socket.ampere.animation.agent.AgentActivityState
-import link.socket.ampere.animation.agent.AgentLayer
-import link.socket.ampere.animation.agent.AgentVisualState
-import link.socket.ampere.animation.agent.CognitivePhase
-import link.socket.ampere.animation.projection.Camera
-import link.socket.ampere.animation.projection.ScreenProjector
+import link.socket.phosphor.choreography.AgentLayer
+import link.socket.phosphor.render.Camera
+import link.socket.phosphor.render.ScreenProjector
+import link.socket.phosphor.signal.AgentActivityState
+import link.socket.phosphor.signal.AgentVisualState
+import link.socket.phosphor.signal.CognitivePhase
 import kotlin.math.PI
 import kotlin.math.sin
 

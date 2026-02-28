@@ -4,11 +4,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import link.socket.ampere.animation.agent.AgentLayer
-import link.socket.ampere.animation.agent.CognitivePhase
-import link.socket.ampere.animation.projection.Camera
-import link.socket.ampere.animation.projection.ScreenProjector
-import link.socket.ampere.animation.waveform.CognitiveWaveform
+import link.socket.phosphor.choreography.AgentLayer
+import link.socket.phosphor.render.Camera
+import link.socket.phosphor.render.CognitiveWaveform
+import link.socket.phosphor.render.ScreenProjector
+import link.socket.phosphor.signal.CognitivePhase
 import kotlin.math.sqrt
 
 /**

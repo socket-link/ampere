@@ -1,14 +1,14 @@
 package link.socket.ampere
 
-import link.socket.ampere.animation.agent.AgentLayer
-import link.socket.ampere.animation.agent.AgentLayoutOrientation
-import link.socket.ampere.animation.emitter.CognitiveEmitterBridge
-import link.socket.ampere.animation.emitter.EmitterManager
-import link.socket.ampere.animation.flow.FlowLayer
-import link.socket.ampere.animation.substrate.SubstrateState
-import link.socket.ampere.animation.timeline.TimelineController
-import link.socket.ampere.animation.timeline.TimelineEvent
-import link.socket.ampere.animation.timeline.WaveformDemoTimeline
+import link.socket.phosphor.choreography.AgentLayer
+import link.socket.phosphor.choreography.AgentLayoutOrientation
+import link.socket.phosphor.bridge.CognitiveEmitterBridge
+import link.socket.phosphor.emitter.EmitterManager
+import link.socket.phosphor.field.FlowLayer
+import link.socket.phosphor.field.SubstrateState
+import link.socket.phosphor.timeline.TimelineController
+import link.socket.phosphor.timeline.TimelineEvent
+import link.socket.phosphor.timeline.WaveformDemoTimeline
 import link.socket.ampere.cli.render.WaveformPaneRenderer
 import kotlin.test.Test
 import kotlin.test.assertEquals

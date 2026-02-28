@@ -20,7 +20,8 @@ kotlin {
             dependencies {
                 implementation(project(":ampere-core"))
                 implementation(project(":ampere-compose"))
-                implementation(project(":ampere-animation"))
+                implementation(project(":ampere-cli"))
+                implementation("link.socket:phosphor-core:0.2.2")
                 implementation(compose.desktop.currentOs)
             }
         }

@@ -1,14 +1,14 @@
 package link.socket.ampere.cli.hybrid
 
 import com.github.ajalt.mordant.terminal.Terminal
-import link.socket.ampere.animation.emitter.CognitiveEmitterBridge
-import link.socket.ampere.animation.emitter.EmitterManager
-import link.socket.ampere.animation.particle.ParticleSystem
+import link.socket.phosphor.bridge.CognitiveEmitterBridge
+import link.socket.phosphor.emitter.EmitterManager
+import link.socket.phosphor.field.ParticleSystem
 import link.socket.ampere.cli.animation.render.AmperePalette
 import link.socket.ampere.cli.animation.render.CompositeRenderer
-import link.socket.ampere.animation.substrate.SubstrateAnimator
-import link.socket.ampere.animation.substrate.SubstrateGlyphs
-import link.socket.ampere.animation.substrate.SubstrateState
+import link.socket.phosphor.field.SubstrateAnimator
+import link.socket.phosphor.field.SubstrateGlyphs
+import link.socket.phosphor.field.SubstrateState
 import link.socket.ampere.cli.layout.AnsiCellParser
 import link.socket.ampere.cli.layout.PaneRenderer
 import link.socket.ampere.cli.layout.fitToHeight

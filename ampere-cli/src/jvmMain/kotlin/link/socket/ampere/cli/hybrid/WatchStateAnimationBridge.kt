@@ -1,22 +1,22 @@
 package link.socket.ampere.cli.hybrid
 
-import link.socket.ampere.animation.agent.AgentActivityState as AnimAgentActivityState
-import link.socket.ampere.animation.agent.AgentLayer
-import link.socket.ampere.animation.agent.AgentLayoutOrientation
-import link.socket.ampere.animation.agent.AgentVisualState
-import link.socket.ampere.animation.agent.CognitiveChoreographer
-import link.socket.ampere.animation.agent.CognitivePhase
-import link.socket.ampere.animation.emitter.CognitiveEvent
-import link.socket.ampere.animation.flow.FlowLayer
-import link.socket.ampere.animation.math.Vector3
-import link.socket.ampere.animation.particle.BurstEmitter
-import link.socket.ampere.animation.particle.EmitterConfig
-import link.socket.ampere.animation.particle.ParticleSystem
-import link.socket.ampere.animation.particle.ParticleType
-import link.socket.ampere.animation.substrate.Point
-import link.socket.ampere.animation.substrate.SubstrateAnimator
-import link.socket.ampere.animation.substrate.SubstrateState
-import link.socket.ampere.animation.substrate.Vector2
+import link.socket.phosphor.signal.AgentActivityState as AnimAgentActivityState
+import link.socket.phosphor.choreography.AgentLayer
+import link.socket.phosphor.choreography.AgentLayoutOrientation
+import link.socket.phosphor.signal.AgentVisualState
+import link.socket.ampere.cli.animation.choreography.CognitiveChoreographer
+import link.socket.phosphor.signal.CognitivePhase
+import link.socket.phosphor.bridge.CognitiveEvent
+import link.socket.phosphor.field.FlowLayer
+import link.socket.phosphor.math.Vector3
+import link.socket.phosphor.field.BurstEmitter
+import link.socket.phosphor.field.EmitterConfig
+import link.socket.phosphor.field.ParticleSystem
+import link.socket.phosphor.field.ParticleType
+import link.socket.phosphor.math.Point
+import link.socket.phosphor.field.SubstrateAnimator
+import link.socket.phosphor.field.SubstrateState
+import link.socket.phosphor.math.Vector2
 import link.socket.ampere.cli.watch.presentation.AgentState
 import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.WatchViewState

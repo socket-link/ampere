@@ -1,7 +1,7 @@
 package link.socket.ampere.compose
 
-import link.socket.ampere.animation.agent.AgentActivityState
-import link.socket.ampere.animation.agent.CognitivePhase
+import link.socket.phosphor.signal.AgentActivityState
+import link.socket.phosphor.signal.CognitivePhase
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals

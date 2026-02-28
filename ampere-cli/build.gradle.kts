@@ -84,7 +84,7 @@ kotlin {
         val jvmMain by getting {
             dependencies {
                 implementation(project(":ampere-core"))
-                implementation(project(":ampere-animation"))
+                implementation("link.socket:phosphor-core:0.2.2")
 
                 // CLI argument parsing
                 implementation("com.github.ajalt.clikt:clikt:4.4.0")

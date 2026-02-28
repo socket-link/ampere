@@ -1,16 +1,16 @@
 package link.socket.ampere.cli.render
 
-import link.socket.ampere.animation.agent.AgentActivityState
-import link.socket.ampere.animation.agent.AgentLayer
-import link.socket.ampere.animation.agent.AgentLayoutOrientation
-import link.socket.ampere.animation.agent.AgentVisualState
-import link.socket.ampere.animation.agent.CognitivePhase
-import link.socket.ampere.animation.emitter.CognitiveEmitterBridge
-import link.socket.ampere.animation.emitter.EmitterManager
-import link.socket.ampere.animation.math.Vector3
-import link.socket.ampere.animation.render.AsciiCell
-import link.socket.ampere.animation.substrate.SubstrateState
-import link.socket.ampere.animation.substrate.Vector2
+import link.socket.phosphor.signal.AgentActivityState
+import link.socket.phosphor.choreography.AgentLayer
+import link.socket.phosphor.choreography.AgentLayoutOrientation
+import link.socket.phosphor.signal.AgentVisualState
+import link.socket.phosphor.signal.CognitivePhase
+import link.socket.phosphor.bridge.CognitiveEmitterBridge
+import link.socket.phosphor.emitter.EmitterManager
+import link.socket.phosphor.math.Vector3
+import link.socket.phosphor.render.AsciiCell
+import link.socket.phosphor.field.SubstrateState
+import link.socket.phosphor.math.Vector2
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -168,7 +168,7 @@ class WaveformPaneRendererTest {
 
         // Fire an emitter effect
         renderer.onCognitiveEvent(
-            link.socket.ampere.animation.emitter.CognitiveEvent.SparkReceived("test-agent"),
+            link.socket.phosphor.bridge.CognitiveEvent.SparkReceived("test-agent"),
             Vector3(0f, 0f, 0f)
         )
 

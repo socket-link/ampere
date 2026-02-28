@@ -1,19 +1,19 @@
 package link.socket.ampere.cli.animation.render
 
-import link.socket.ampere.animation.agent.AgentLayer
-import link.socket.ampere.animation.agent.AgentLayerRenderer
-import link.socket.ampere.animation.flow.FlowLayer
-import link.socket.ampere.animation.flow.FlowLayerRenderer
-import link.socket.ampere.animation.logo.LogoCrystallizer
-import link.socket.ampere.animation.logo.LogoRenderer
-import link.socket.ampere.animation.particle.ParticleRenderer
-import link.socket.ampere.animation.particle.ParticleSystem
-import link.socket.ampere.animation.substrate.BasicSubstrateRenderer
-import link.socket.ampere.animation.substrate.ColoredSubstrateRenderer
-import link.socket.ampere.animation.substrate.SubstrateState
-import link.socket.ampere.animation.substrate.Vector2
-import link.socket.ampere.animation.render.RenderCell
-import link.socket.ampere.animation.render.RenderLayer
+import link.socket.phosphor.choreography.AgentLayer
+import link.socket.phosphor.choreography.AgentLayerRenderer
+import link.socket.phosphor.field.FlowLayer
+import link.socket.phosphor.field.FlowLayerRenderer
+import link.socket.ampere.cli.animation.logo.LogoCrystallizer
+import link.socket.ampere.cli.animation.logo.LogoRenderer
+import link.socket.phosphor.field.ParticleRenderer
+import link.socket.phosphor.field.ParticleSystem
+import link.socket.phosphor.field.BasicSubstrateRenderer
+import link.socket.phosphor.field.ColoredSubstrateRenderer
+import link.socket.phosphor.field.SubstrateState
+import link.socket.phosphor.math.Vector2
+import link.socket.phosphor.render.RenderCell
+import link.socket.phosphor.render.RenderLayer
 import kotlin.math.roundToInt
 
 /**
@@ -193,7 +193,7 @@ class CompositeRenderer(
         for (y in 0 until minOf(height, substrate.height)) {
             for (x in 0 until minOf(width, substrate.width)) {
                 val density = substrate.getDensity(x, y)
-                val glyph = link.socket.ampere.animation.substrate.SubstrateGlyphs.forDensity(
+                val glyph = link.socket.phosphor.field.SubstrateGlyphs.forDensity(
                     density,
                     useUnicode
                 )
@@ -306,7 +306,7 @@ class CompositeRenderer(
                     in 'A'..'Z' -> AmperePalette.LOGO_TEXT
                     else -> AmperePalette.SUBSTRATE_BRIGHT
                 }
-                buffer[y][x] = RenderCell(glyph.glyph, color, RenderLayer.LOGO)
+                buffer[y][x] = RenderCell(glyph.glyph, color, RenderLayer.UI_OVERLAY)
             }
         }
     }

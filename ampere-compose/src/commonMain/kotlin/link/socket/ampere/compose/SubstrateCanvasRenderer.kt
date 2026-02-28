@@ -3,7 +3,7 @@ package link.socket.ampere.compose
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import link.socket.ampere.animation.substrate.SubstrateState
+import link.socket.phosphor.field.SubstrateState
 
 /**
  * Renders the substrate density field onto a Compose Canvas.

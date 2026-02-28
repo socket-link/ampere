@@ -15,17 +15,17 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import java.awt.Dimension
 import kotlinx.coroutines.delay
-import link.socket.ampere.animation.agent.AgentActivityState
-import link.socket.ampere.animation.agent.AgentLayer
-import link.socket.ampere.animation.agent.AgentLayoutOrientation
-import link.socket.ampere.animation.agent.AgentVisualState
-import link.socket.ampere.animation.agent.CognitiveChoreographer
-import link.socket.ampere.animation.agent.CognitivePhase
-import link.socket.ampere.animation.flow.FlowLayer
-import link.socket.ampere.animation.particle.ParticleSystem
-import link.socket.ampere.animation.substrate.SubstrateAnimator
-import link.socket.ampere.animation.substrate.SubstrateState
-import link.socket.ampere.animation.substrate.Vector2
+import link.socket.phosphor.signal.AgentActivityState
+import link.socket.phosphor.choreography.AgentLayer
+import link.socket.phosphor.choreography.AgentLayoutOrientation
+import link.socket.phosphor.signal.AgentVisualState
+import link.socket.ampere.cli.animation.choreography.CognitiveChoreographer
+import link.socket.phosphor.signal.CognitivePhase
+import link.socket.phosphor.field.FlowLayer
+import link.socket.phosphor.field.ParticleSystem
+import link.socket.phosphor.field.SubstrateAnimator
+import link.socket.phosphor.field.SubstrateState
+import link.socket.phosphor.math.Vector2
 import link.socket.ampere.compose.CognitiveCanvas
 
 fun main() =

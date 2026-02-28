@@ -4,12 +4,12 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import link.socket.ampere.animation.agent.AgentLayer
-import link.socket.ampere.animation.flow.FlowLayer
-import link.socket.ampere.animation.particle.ParticleSystem
-import link.socket.ampere.animation.projection.Camera
-import link.socket.ampere.animation.substrate.SubstrateState
-import link.socket.ampere.animation.waveform.CognitiveWaveform
+import link.socket.phosphor.choreography.AgentLayer
+import link.socket.phosphor.field.FlowLayer
+import link.socket.phosphor.field.ParticleSystem
+import link.socket.phosphor.field.SubstrateState
+import link.socket.phosphor.render.Camera
+import link.socket.phosphor.render.CognitiveWaveform
 
 /**
  * Primary composable for rendering AMPERE's cognitive visualization.

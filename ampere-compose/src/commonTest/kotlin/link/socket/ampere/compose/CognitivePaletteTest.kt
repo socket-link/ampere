@@ -1,7 +1,7 @@
 package link.socket.ampere.compose
 
 import androidx.compose.ui.graphics.Color
-import link.socket.ampere.animation.agent.CognitivePhase
+import link.socket.phosphor.signal.CognitivePhase
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
