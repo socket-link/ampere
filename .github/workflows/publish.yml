@@ -54,15 +54,21 @@ jobs:
       - name: Run tests before publish
         run: ./gradlew :ampere-core:jvmTest
 
+      - name: Decode signing key
+        env:
+          SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY }}
+        run: echo "$SIGNING_KEY_BASE64" | base64 -d > /tmp/signing-key.asc
+
       - name: Publish to Maven Central
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
-          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
-        run: ./gradlew :ampere-core:publishAllPublicationsToMavenCentralRepository
+        run: |
+          export ORG_GRADLE_PROJECT_signingInMemoryKey="$(cat /tmp/signing-key.asc)"
+          ./gradlew :ampere-core:publishAllPublicationsToMavenCentralRepository
 
       - name: Dry run publish
         if: ${{ github.event.inputs.dry_run == 'true' }}
