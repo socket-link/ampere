@@ -32,9 +32,28 @@ interface CognitiveRelay {
     ): AIConfiguration
 
     /**
+     * Resolves routing and returns metadata suitable for external telemetry.
+     *
+     * The default implementation preserves compatibility for relays that only
+     * care about the selected configuration.
+     */
+    suspend fun resolveWithMetadata(
+        context: RoutingContext,
+        fallbackConfiguration: AIConfiguration,
+    ): RoutingResolution = RoutingResolution(
+        configuration = resolve(context, fallbackConfiguration),
+        reason = "relay",
+    )
+
+    /**
      * Updates the relay configuration at runtime (hot-swap).
      *
      * @param newConfig The new relay configuration.
      */
     suspend fun updateConfig(newConfig: RelayConfig)
 }
+
+data class RoutingResolution(
+    val configuration: AIConfiguration,
+    val reason: String,
+)

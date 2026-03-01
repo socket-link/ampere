@@ -9,6 +9,8 @@ import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
+import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
+import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
@@ -80,6 +82,7 @@ object EventCategorizer {
         is ProductEvent.FeatureRequested,
         is ProductEvent.EpicDefined,
         is ProductEvent.PhaseDefined,
+        is ProviderCallCompletedEvent,
         is TicketEvent.TicketCreated,
         is TicketEvent.TicketStatusChanged,
         is TicketEvent.TicketAssigned,
@@ -101,9 +104,16 @@ object EventCategorizer {
         is TaskEvent.TaskProgressed,
         is ToolEvent.ToolExecutionStarted,
         is ToolEvent.ToolExecutionCompleted,
+        is ProviderCallStartedEvent,
         is RoutingEvent.RouteSelected,
         is SparkEvent -> EventSignificance.ROUTINE
 
         is RoutingEvent.RouteFallback -> EventSignificance.SIGNIFICANT
+    }.let { significance ->
+        if (event is ProviderCallCompletedEvent && !event.success) {
+            EventSignificance.SIGNIFICANT
+        } else {
+            significance
+        }
     }
 }

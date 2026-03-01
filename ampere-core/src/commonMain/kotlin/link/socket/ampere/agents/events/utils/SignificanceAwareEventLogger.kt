@@ -14,6 +14,8 @@ import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
+import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
+import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
@@ -143,6 +145,8 @@ class SignificanceAwareEventLogger(
         is ToolEvent.ToolDiscoveryComplete -> EventSignificance.ROUTINE
         is ToolEvent.ToolExecutionStarted -> EventSignificance.ROUTINE
         is ToolEvent.ToolExecutionCompleted -> EventSignificance.ROUTINE
+        is ProviderCallStartedEvent -> EventSignificance.ROUTINE
+        is ProviderCallCompletedEvent -> if (event.success) EventSignificance.ROUTINE else EventSignificance.SIGNIFICANT
         is HumanInteractionEvent.InputRequested -> EventSignificance.CRITICAL
         is HumanInteractionEvent.InputProvided -> EventSignificance.SIGNIFICANT
         is HumanInteractionEvent.RequestTimedOut -> EventSignificance.SIGNIFICANT

@@ -38,7 +38,13 @@ class CognitiveRelayImpl(
     override suspend fun resolve(
         context: RoutingContext,
         fallbackConfiguration: AIConfiguration,
-    ): AIConfiguration {
+    ): AIConfiguration =
+        resolveWithMetadata(context, fallbackConfiguration).configuration
+
+    override suspend fun resolveWithMetadata(
+        context: RoutingContext,
+        fallbackConfiguration: AIConfiguration,
+    ): RoutingResolution {
         val currentConfig = mutex.withLock { _config }
 
         val matchedRule = currentConfig.rules.firstOrNull { rule ->
@@ -64,7 +70,10 @@ class CognitiveRelayImpl(
 
         emitRouteSelected(context, decision)
 
-        return selectedConfig
+        return RoutingResolution(
+            configuration = selectedConfig,
+            reason = ruleDescription,
+        )
     }
 
     override suspend fun updateConfig(newConfig: RelayConfig) {

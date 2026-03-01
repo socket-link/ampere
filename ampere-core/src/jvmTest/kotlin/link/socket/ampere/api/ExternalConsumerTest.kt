@@ -9,6 +9,7 @@ import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.api.model.TicketFilter
+import link.socket.ampere.api.service.EventStreamFilter
 
 /**
  * External consumer integration test.
@@ -61,6 +62,7 @@ class ExternalConsumerTest {
         val eventResult = ampere.events.get("nonexistent-event")
         assertTrue(eventResult.isSuccess)
         assertNotNull(ampere.events.observe())
+        assertNotNull(ampere.events.observe(EventStreamFilter.TELEMETRY))
         val from = kotlinx.datetime.Clock.System.now() - kotlin.time.Duration.parse("1h")
         val to = kotlinx.datetime.Clock.System.now()
         ampere.events.query(from, to).getOrThrow()

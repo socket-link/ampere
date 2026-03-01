@@ -74,7 +74,7 @@ class ProductAgent(
     // Unified Reasoning - All cognitive logic in one place
     // ========================================================================
 
-    private val reasoning = AgentReasoning.create(agentConfiguration, id) {
+    private val reasoning = AgentReasoning.create(agentConfiguration, id, eventApiOverride) {
         agentRole = "Product Manager"
         availableTools = requiredTools
         this.executor = this@ProductAgent.executor

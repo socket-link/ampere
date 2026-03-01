@@ -7,8 +7,10 @@ import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.execution.ParameterStrategy
 import link.socket.ampere.agents.execution.ToolExecutionEngine
 import link.socket.ampere.agents.execution.executor.Executor
@@ -63,9 +65,10 @@ import link.socket.ampere.agents.execution.tools.Tool
 class AgentReasoning private constructor(
     private val config: AgentConfiguration?,
     private val settings: ReasoningSettings,
+    private val eventApi: AgentEventApi? = null,
     private val mockResponses: MockReasoningResponses? = null,
 ) {
-    private val llmService: AgentLLMService? = config?.let { AgentLLMService(it) }
+    private val llmService: AgentLLMService? = config?.let { AgentLLMService(it, eventApi) }
     private val perceptionEvaluator: PerceptionEvaluator? = llmService?.let { PerceptionEvaluator(it) }
     private val planGenerator: PlanGenerator? = llmService?.let { PlanGenerator(it) }
     private val outcomeEvaluator: OutcomeEvaluator? = llmService?.let { OutcomeEvaluator(it) }
@@ -235,6 +238,10 @@ class AgentReasoning private constructor(
         return llmService?.call(
             prompt = prompt,
             systemMessage = systemMessage ?: "You are a ${settings.agentRole} agent.",
+            routingContext = RoutingContext(
+                agentId = settings.executorId,
+                agentRole = settings.agentRole,
+            ),
         ) ?: throw IllegalStateException("No LLM service configured")
     }
 
@@ -242,7 +249,13 @@ class AgentReasoning private constructor(
      * Calls the LLM expecting a JSON response.
      */
     suspend fun callLLMForJson(prompt: String): LLMJsonResponse {
-        return llmService?.callForJson(prompt)
+        return llmService?.callForJson(
+            prompt = prompt,
+            routingContext = RoutingContext(
+                agentId = settings.executorId,
+                agentRole = settings.agentRole,
+            ),
+        )
             ?: throw IllegalStateException("No LLM service configured")
     }
 
@@ -253,11 +266,12 @@ class AgentReasoning private constructor(
         fun create(
             config: AgentConfiguration,
             executorId: ExecutorId,
+            eventApi: AgentEventApi? = null,
             configure: ReasoningSettingsBuilder.() -> Unit,
         ): AgentReasoning {
             val builder = ReasoningSettingsBuilder(executorId)
             builder.configure()
-            return AgentReasoning(config, builder.build())
+            return AgentReasoning(config, builder.build(), eventApi = eventApi)
         }
 
         /**
@@ -294,7 +308,12 @@ class AgentReasoning private constructor(
                 outcomeContextBuilder = null,
                 knowledgeExtractor = null,
             )
-            return AgentReasoning(null, settings, builder.build())
+            return AgentReasoning(
+                config = null,
+                settings = settings,
+                eventApi = null,
+                mockResponses = builder.build(),
+            )
         }
     }
 }

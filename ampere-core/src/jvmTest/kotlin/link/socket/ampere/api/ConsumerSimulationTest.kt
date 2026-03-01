@@ -40,6 +40,7 @@ import link.socket.ampere.api.model.ThreadFilter
 import link.socket.ampere.api.model.TicketFilter
 import link.socket.ampere.api.service.AgentService
 import link.socket.ampere.api.service.EventService
+import link.socket.ampere.api.service.EventStreamFilter
 import link.socket.ampere.api.service.KnowledgeService
 import link.socket.ampere.api.service.OutcomeService
 import link.socket.ampere.api.service.StatusService
@@ -215,7 +216,13 @@ class ConsumerSimulationTest {
             )
         override suspend fun get(id: String) = Result.success<KnowledgeEntry?>(null)
         override suspend fun recall(query: String, limit: Int) = Result.success(emptyList<KnowledgeEntry>())
-        override suspend fun search(query: String?, type: KnowledgeType?, taskType: String?, tags: List<String>?, limit: Int) = Result.success(emptyList<KnowledgeEntry>())
+        override suspend fun search(
+            query: String?,
+            type: KnowledgeType?,
+            taskType: String?,
+            tags: List<String>?,
+            limit: Int,
+        ) = Result.success(emptyList<KnowledgeEntry>())
         override suspend fun tags(knowledgeId: String) = Result.success(emptyList<String>())
         override suspend fun provenance(knowledgeId: String) = Result.success(emptyList<KnowledgeEntry>())
     }
@@ -343,6 +350,8 @@ class ConsumerSimulationTest {
         // Observe with filters
         val filtered: Flow<Event> = stubEventService.observe(EventRelayFilters())
         assertNotNull(filtered)
+        val telemetryOnly: Flow<Event> = stubEventService.observe(EventStreamFilter.TELEMETRY)
+        assertNotNull(telemetryOnly)
 
         // Query time range
         val from = now - kotlin.time.Duration.parse("1h")

@@ -16,6 +16,7 @@ import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeSpeed
  * @property phase The cognitive phase active during this call, if any.
  * @property agentId The agent making the call.
  * @property agentRole The agent definition name (e.g., "CodeAgent", "ProductAgent").
+ * @property workflowId Optional correlation ID for the broader reasoning unit being executed.
  * @property preferredReasoning Hint for desired reasoning level.
  * @property preferredSpeed Hint for desired speed.
  * @property tags Free-form tags for task-based routing (e.g., "code-generation", "summarization").
@@ -25,6 +26,7 @@ data class RoutingContext(
     val phase: CognitivePhase? = null,
     val agentId: AgentId? = null,
     val agentRole: String? = null,
+    val workflowId: String? = null,
     val preferredReasoning: RelativeReasoning? = null,
     val preferredSpeed: RelativeSpeed? = null,
     val tags: Set<String> = emptySet(),
