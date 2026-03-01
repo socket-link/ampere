@@ -6,11 +6,13 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.agents.domain.event.Event
-import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.CognitiveStateSnapshot
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.SparkAppliedEvent
 import link.socket.ampere.agents.domain.event.SparkRemovedEvent
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.api.model.TokenUsage
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
@@ -181,6 +183,32 @@ class EventRendererTest {
         availableToolCount = availableToolCount
     )
 
+    private fun providerCallCompletedEvent(
+        eventId: String = "evt-llm-1",
+        timestamp: Instant = Clock.System.now(),
+        source: EventSource = EventSource.Agent("agent-test"),
+        urgency: Urgency = Urgency.LOW,
+        usage: TokenUsage = TokenUsage(
+            inputTokens = 1247,
+            outputTokens = 892,
+            estimatedCost = 0.0031,
+        ),
+        latencyMs: Long = 340,
+        success: Boolean = true,
+    ): ProviderCallCompletedEvent = ProviderCallCompletedEvent(
+        eventId = eventId,
+        timestamp = timestamp,
+        eventSource = source,
+        urgency = urgency,
+        workflowId = "wf-render",
+        agentId = "agent-test",
+        providerId = "openai",
+        modelId = "gpt-4.1",
+        usage = usage,
+        latencyMs = latencyMs,
+        success = success,
+    )
+
     @Test
     fun `render TaskCreated event shows task ID, description, and assignment`() {
         val output = captureTerminalOutput { _, renderer ->
@@ -263,6 +291,19 @@ class EventRendererTest {
             renderer.render(codeEvent(urgency = Urgency.LOW))
         }
         assertContains(lowUrgencyOutput, "[LOW]")
+    }
+
+    @Test
+    fun `render completed provider call shows usage cost and latency`() {
+        val output = captureTerminalOutput { _, renderer ->
+            renderer.render(providerCallCompletedEvent())
+        }
+
+        val rendered = stripAnsi(output)
+        assertContains(rendered, "1,247 in / 892 out")
+        assertContains(rendered, "~\$0.0031")
+        assertContains(rendered, "340ms")
+        assertContains(rendered, "ProviderCallCompleted")
     }
 
     @Test

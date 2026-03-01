@@ -2,6 +2,7 @@ package link.socket.ampere.api.service
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.FileSystemEvent
@@ -142,6 +143,16 @@ interface EventService {
         else -> replay(from, to).filter(filter::matches)
     }
 }
+
+@link.socket.ampere.api.AmpereStableApi
+fun EventService.routingEvents(
+    filters: EventRelayFilters = EventRelayFilters(),
+): Flow<RoutingEvent> = observe(filters).filterIsInstance<RoutingEvent>()
+
+@link.socket.ampere.api.AmpereStableApi
+fun EventService.completionEvents(
+    filters: EventRelayFilters = EventRelayFilters(),
+): Flow<ProviderCallCompletedEvent> = observe(filters).filterIsInstance<ProviderCallCompletedEvent>()
 
 @link.socket.ampere.api.AmpereStableApi
 enum class EventStreamFilter {
