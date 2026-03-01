@@ -242,7 +242,7 @@ android {
     }
 }
 
-tasks.register("kotlinConfiguration") {
+val kotlinConfiguration = tasks.register("kotlinConfiguration") {
     val generatedSources = File(layout.buildDirectory.asFile.get(), "generated/kotlin/config")
     generatedSources.mkdirs()
     kotlin.sourceSets.commonMain.get().kotlin.srcDirs(generatedSources)
@@ -265,9 +265,13 @@ tasks.register("kotlinConfiguration") {
     )
 }
 
-tasks.findByName("build")?.dependsOn(
-    tasks.findByName("kotlinConfiguration"),
-)
+tasks.matching { task ->
+    task.name.startsWith("compile") && task.name.contains("Kotlin")
+}.configureEach {
+    dependsOn(kotlinConfiguration)
+}
+
+tasks.findByName("build")?.dependsOn(kotlinConfiguration)
 
 ktlint {
     android.set(true)

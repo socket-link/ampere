@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.domain.event
 
+import kotlin.math.roundToLong
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -86,10 +87,21 @@ data class ProviderCallCompletedEvent(
     ): String = buildString {
         append("LLM call ${if (success) "completed" else "failed"}: $providerId/$modelId")
         cognitivePhase?.let { append(" [${it.name}]") }
-        append(" (${latencyMs}ms")
+        append(" (")
+        var wroteDetail = false
         if (usage.inputTokens != null || usage.outputTokens != null) {
-            append(", in=${usage.inputTokens ?: "?"}, out=${usage.outputTokens ?: "?"}")
+            append(
+                "${usage.inputTokens?.formatGrouped() ?: "?"} in / ${usage.outputTokens?.formatGrouped() ?: "?"} out",
+            )
+            wroteDetail = true
         }
+        usage.estimatedCost?.let { estimatedCost ->
+            if (wroteDetail) append(", ")
+            append("~${estimatedCost.formatUsd()}")
+            wroteDetail = true
+        }
+        if (wroteDetail) append(", ")
+        append("${latencyMs}ms")
         append(")")
         errorType?.let { append(" [$it]") }
         workflowId?.let { append(" workflow=$it") }
@@ -99,5 +111,39 @@ data class ProviderCallCompletedEvent(
 
     companion object {
         const val EVENT_TYPE: EventType = "ProviderCallCompleted"
+    }
+}
+
+private fun Int.formatGrouped(): String = toString().formatGroupedDigits()
+
+private fun Long.formatGrouped(): String = toString().formatGroupedDigits()
+
+private fun String.formatGroupedDigits(): String {
+    if (length <= 3) return this
+
+    val firstGroupSize = if (length % 3 == 0) 3 else length % 3
+    return buildString {
+        append(this@formatGroupedDigits.substring(0, firstGroupSize))
+        var index = firstGroupSize
+        while (index < this@formatGroupedDigits.length) {
+            append(",")
+            append(this@formatGroupedDigits.substring(index, index + 3))
+            index += 3
+        }
+    }
+}
+
+private fun Double.formatUsd(): String {
+    val scaled = (this * 10_000).roundToLong()
+    val absoluteScaled = if (scaled < 0) -scaled else scaled
+    val dollars = absoluteScaled / 10_000
+    val fraction = (absoluteScaled % 10_000).toString().padStart(4, '0')
+
+    return buildString {
+        if (scaled < 0) append("-")
+        append("$")
+        append(dollars.formatGrouped())
+        append(".")
+        append(fraction)
     }
 }

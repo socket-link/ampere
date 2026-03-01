@@ -205,16 +205,13 @@ class AgentLLMService(
             }
         }
 
+        val usage = TokenUsageExtractor.fromOpenAiUsage(completion.usage)
+
         emitCompletedTelemetry(
             routingContext = routingContext,
             providerId = effectiveConfig.provider.id,
             modelId = model.name,
-            usage = completion.usage?.let { usage ->
-                TokenUsage(
-                    inputTokens = usage.promptTokens,
-                    outputTokens = usage.completionTokens,
-                )
-            } ?: TokenUsage(),
+            usage = usage,
             success = true,
             startedAt = startedAt,
         )
