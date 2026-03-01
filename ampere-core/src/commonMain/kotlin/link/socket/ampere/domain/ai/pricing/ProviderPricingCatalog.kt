@@ -29,6 +29,7 @@ data class TokenPricingTier(
 @OptIn(ExperimentalResourceApi::class)
 internal object BundledProviderPricingCatalog {
     private const val RESOURCE_PATH = "files/provider_pricing.v1.json"
+    private const val RESOURCE_PACKAGE_PATH = "composeResources/link.socket.ampere.resources/$RESOURCE_PATH"
 
     private var cachedCatalog: IndexedProviderPricingCatalog? = null
 
@@ -40,7 +41,14 @@ internal object BundledProviderPricingCatalog {
     private suspend fun loadIndexedCatalog(): IndexedProviderPricingCatalog {
         cachedCatalog?.let { return it }
 
-        val json = Res.readBytes(RESOURCE_PATH).decodeToString()
+        val json = runCatching {
+            Res.readBytes(RESOURCE_PATH).decodeToString()
+        }.getOrElse { composeResourceError ->
+            loadBundledProviderPricingFallback(
+                resourcePath = RESOURCE_PACKAGE_PATH,
+                fallbackPath = RESOURCE_PATH,
+            ) ?: throw composeResourceError
+        }
         val catalog = DEFAULT_JSON.decodeFromString(ProviderPricingCatalog.serializer(), json)
         return IndexedProviderPricingCatalog(
             catalog = catalog,
@@ -53,6 +61,11 @@ internal object BundledProviderPricingCatalog {
         ).also { cachedCatalog = it }
     }
 }
+
+internal expect suspend fun loadBundledProviderPricingFallback(
+    resourcePath: String,
+    fallbackPath: String,
+): String?
 
 private data class IndexedProviderPricingCatalog(
     val catalog: ProviderPricingCatalog,
