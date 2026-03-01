@@ -7,7 +7,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import link.socket.ampere.agents.tools.mcp.protocol.*
+import link.socket.ampere.agents.tools.mcp.protocol.McpClient
 
 /**
  * Tests for McpClient - MCP protocol implementation.

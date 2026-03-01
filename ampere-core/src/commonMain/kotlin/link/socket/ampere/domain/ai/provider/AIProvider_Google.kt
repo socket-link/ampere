@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:class-naming")
+
 package link.socket.ampere.domain.ai.provider
 
 import com.aallam.openai.client.OpenAI as Client

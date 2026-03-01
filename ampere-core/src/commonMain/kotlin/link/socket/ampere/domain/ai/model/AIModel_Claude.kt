@@ -427,7 +427,9 @@ sealed class AIModel_Claude(
 
         private const val Sonnet_3_7_NAME = "claude-3-7-sonnet-latest"
         private const val Sonnet_3_7_DISPLAY_NAME = "Claude Sonnet 3.7"
-        private const val Sonnet_3_7_DESCRIPTION = "High-performance model with early extended thinking. High intelligence with toggleable extended thinking."
+        private const val Sonnet_3_7_DESCRIPTION =
+            "High-performance model with early extended thinking. " +
+                "High intelligence with toggleable extended thinking."
 
         private const val Haiku_3_5_NAME = "claude-3-5-haiku-latest"
         private const val Haiku_3_5_DISPLAY_NAME = "Claude Haiku 3.5"
@@ -435,19 +437,28 @@ sealed class AIModel_Claude(
 
         private const val Haiku_3_NAME = "claude-3-haiku-20240307"
         private const val Haiku_3_DISPLAY_NAME = "Claude Haiku 3"
-        private const val Haiku_3_DESCRIPTION = "Fast and compact model for near-instant responsiveness. Quick and accurate targeted performance."
+        private const val Haiku_3_DESCRIPTION =
+            "Fast and compact model for near-instant responsiveness. " +
+                "Quick and accurate targeted performance."
 
         private const val Opus_4_5_NAME = "claude-opus-4-5-20251101"
         private const val Opus_4_5_DISPLAY_NAME = "Claude Opus 4.5"
-        private const val Opus_4_5_DESCRIPTION = "Our newest flagship model setting new standards across coding, agents, computer use, and office tasks. Supports an effort parameter for trading compute/tokens for reasoning depth."
+        private const val Opus_4_5_DESCRIPTION =
+            "Our newest flagship model setting new standards across coding, " +
+                "agents, computer use, and office tasks. Supports an effort " +
+                "parameter for trading compute/tokens for reasoning depth."
 
         private const val Sonnet_4_5_NAME = "claude-sonnet-4-5-20250929"
         private const val Sonnet_4_5_DISPLAY_NAME = "Claude Sonnet 4.5"
-        private const val Sonnet_4_5_DESCRIPTION = "The best coding model in the world. Leads OSWorld at 61.4% and maintains concentration for 30+ hours on complex tasks. Features a 1M token context window."
+        private const val Sonnet_4_5_DESCRIPTION =
+            "The best coding model in the world. Leads OSWorld at 61.4% and " +
+                "maintains concentration for 30+ hours on complex tasks. Features a 1M token context window."
 
         private const val Haiku_4_5_NAME = "claude-haiku-4-5"
         private const val Haiku_4_5_DISPLAY_NAME = "Claude Haiku 4.5"
-        private const val Haiku_4_5_DESCRIPTION = "Near-frontier coding power at a fraction of the cost. Matches Claude Sonnet 4's performance on coding tasks while being faster and more affordable."
+        private const val Haiku_4_5_DESCRIPTION =
+            "Near-frontier coding power at a fraction of the cost. Matches " +
+                "Claude Sonnet 4's performance on coding tasks while being faster and more affordable."
 
         // ---- Models ----
 

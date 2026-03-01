@@ -279,7 +279,9 @@ class PlanGenerator(
 
     companion object {
         private const val PLANNING_SYSTEM_MESSAGE =
-            "You are an autonomous agent planning system. Generate structured execution plans. Respond only with valid JSON."
+            "You are an autonomous agent planning system. " +
+                "Generate structured execution plans. " +
+                "Respond only with valid JSON."
     }
 }
 

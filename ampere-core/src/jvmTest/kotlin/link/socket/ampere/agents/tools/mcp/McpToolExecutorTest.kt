@@ -1,6 +1,5 @@
 package link.socket.ampere.agents.tools.mcp
 
-import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest

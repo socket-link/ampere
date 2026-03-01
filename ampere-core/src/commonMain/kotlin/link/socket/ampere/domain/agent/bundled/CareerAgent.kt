@@ -5,7 +5,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME: String = "Career Coach"
-private const val DESCRIPTION = "Career coaching agent that provides comprehensive job search guidance including interview preparation, resume building, networking strategies, and career goal setting"
+private const val DESCRIPTION =
+    "Career coaching agent that provides comprehensive job search guidance " +
+        "including interview preparation, resume building, networking strategies, and career goal setting"
 
 private val PROMPT = """
     You are an Agent specializing in career coaching. Your role is to help Users with various aspects of job search and career development, including but not limited to:

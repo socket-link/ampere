@@ -32,7 +32,9 @@ sealed class EscalationProcess : AgentDescribable {
     data object AgentMeeting : EscalationProcess() {
         override val requiresMeeting: Boolean = true
         override val requiresHuman: Boolean = false
-        override val description: String = "Resolved through agent meeting - technical discussions and decisions handled by AI agents"
+        override val description: String =
+            "Resolved through agent meeting - technical discussions and " +
+                "decisions handled by AI agents"
     }
 
     /**
@@ -43,7 +45,9 @@ sealed class EscalationProcess : AgentDescribable {
     data object HumanApproval : EscalationProcess() {
         override val requiresMeeting: Boolean = false
         override val requiresHuman: Boolean = true
-        override val description: String = "Resolved through human approval - straightforward sign-offs and permissions without discussion"
+        override val description: String =
+            "Resolved through human approval - straightforward sign-offs and " +
+                "permissions without discussion"
     }
 
     /**
@@ -54,7 +58,9 @@ sealed class EscalationProcess : AgentDescribable {
     data object HumanMeeting : EscalationProcess() {
         override val requiresMeeting: Boolean = true
         override val requiresHuman: Boolean = true
-        override val description: String = "Resolved through human meeting - strategic decisions requiring both discussion and human authority"
+        override val description: String =
+            "Resolved through human meeting - strategic decisions requiring " +
+                "both discussion and human authority"
     }
 
     /**
@@ -65,6 +71,8 @@ sealed class EscalationProcess : AgentDescribable {
     data object ExternalDependency : EscalationProcess() {
         override val requiresMeeting: Boolean = false
         override val requiresHuman: Boolean = false
-        override val description: String = "Waiting for external dependency - third-party APIs, vendor responses, or other external factors"
+        override val description: String =
+            "Waiting for external dependency - third-party APIs, vendor " +
+                "responses, or other external factors"
     }
 }

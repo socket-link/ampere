@@ -54,6 +54,10 @@ jobs:
           openai_api_key=placeholder
           EOF
 
+      - name: Run ktlint before publish
+        timeout-minutes: 10
+        run: ./gradlew ktlintCheck
+
       - name: Run tests before publish
         timeout-minutes: 10
         run: ./gradlew :ampere-core:jvmTest

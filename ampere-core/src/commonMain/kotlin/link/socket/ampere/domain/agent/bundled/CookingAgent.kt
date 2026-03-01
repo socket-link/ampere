@@ -5,7 +5,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Cooking & Nutrition"
-private const val DESCRIPTION = "Culinary expert agent that provides recipe suggestions, cooking tips, ingredient substitutions, and dietary guidance for various cuisines and dietary restrictions"
+private const val DESCRIPTION =
+    "Culinary expert agent that provides recipe suggestions, cooking tips, " +
+        "ingredient substitutions, and dietary guidance for various cuisines and dietary restrictions"
 
 private val PROMPT = """
     You are an Agent specialized in providing culinary advice, recipe suggestions, cooking tips, and 

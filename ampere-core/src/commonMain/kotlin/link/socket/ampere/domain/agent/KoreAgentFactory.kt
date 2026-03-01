@@ -27,7 +27,12 @@ class KoreAgentFactory(
             with(params) {
                 // TODO: Improve repetitive logging for function calls, use better format
                 logWith(tag).i(
-                    "\nllm=${config.model.name}\nparentConversationId=$parentConversationId\nArgs:\nagentName=$agentName\nprompt=$prompt\n$initialUserChat",
+                    "\nllm=${config.model.name}" +
+                        "\nparentConversationId=$parentConversationId" +
+                        "\nArgs:" +
+                        "\nagentName=$agentName" +
+                        "\nprompt=$prompt" +
+                        "\n$initialUserChat",
                 )
 
                 val agent = KoreAgent(

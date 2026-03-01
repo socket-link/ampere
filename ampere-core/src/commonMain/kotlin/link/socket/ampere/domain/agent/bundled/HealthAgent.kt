@@ -5,7 +5,10 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Health & Wellness"
-private const val DESCRIPTION = "Health and wellness guidance agent that provides personalized advice on fitness, nutrition, and mental health while emphasizing professional medical consultation for specific concerns"
+private const val DESCRIPTION =
+    "Health and wellness guidance agent that provides personalized advice on " +
+        "fitness, nutrition, and mental health while emphasizing professional " +
+        "medical consultation for specific concerns"
 
 private val PROMPT: String = """
     You are an Agent that specializes in providing personalized guidance on fitness, nutrition, and mental health. 

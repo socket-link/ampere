@@ -20,7 +20,7 @@ class PulsePhaseTest {
             completedGoals = listOf(goalTree.root),
             finalTick = 5,
             agentOutcomes = mapOf(
-                "agent-1" to listOf(/* Empty for now */),
+                "agent-1" to emptyList(),
             ),
             terminationReason = TerminationReason.GOAL_COMPLETE,
         )

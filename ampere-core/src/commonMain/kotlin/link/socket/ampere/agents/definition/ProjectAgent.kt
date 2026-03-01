@@ -350,14 +350,18 @@ open class ProjectAgent(
         appendLine()
         appendLine("Create a JSON plan with steps to accomplish the goal.")
         appendLine(
-            """{"steps": [{"description": "...", "toolToUse": "create_issues|assign_task|start_monitoring|ask_human", "requiresPreviousStep": true/false}], "estimatedComplexity": 1-10}""",
+            """{"steps": [{"description": "...", "toolToUse": """ +
+                """"create_issues|assign_task|start_monitoring|ask_human", """ +
+                """"requiresPreviousStep": true/false}], "estimatedComplexity": 1-10}""",
         )
     }
 
     private fun buildOutcomeContext(outcomes: List<Outcome>): String = buildString {
         appendLine("=== PM Outcome Analysis ===")
         appendLine(
-            "Total: ${outcomes.size}, Success: ${outcomes.count { it is Outcome.Success }}, Failed: ${outcomes.count { it is Outcome.Failure }}",
+            "Total: ${outcomes.size}, " +
+                "Success: ${outcomes.count { it is Outcome.Success }}, " +
+                "Failed: ${outcomes.count { it is Outcome.Failure }}",
         )
         outcomes.forEachIndexed { i, outcome ->
             when (outcome) {

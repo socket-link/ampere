@@ -79,9 +79,13 @@ data object ProductManager : AgentRole(
             "- Directness: ${formatTrait(personality.directness)} - ${directnessGuidance(personality.directness)}",
         )
         appendLine(
-            "- Thoroughness: ${formatTrait(personality.thoroughness)} - ${thoroughnessGuidance(personality.thoroughness)}",
+            "- Thoroughness: ${formatTrait(personality.thoroughness)} - " +
+                thoroughnessGuidance(personality.thoroughness),
         )
-        appendLine("- Formality: ${formatTrait(personality.formality)} - ${formalityGuidance(personality.formality)}")
+        appendLine(
+            "- Formality: ${formatTrait(personality.formality)} - " +
+                formalityGuidance(personality.formality),
+        )
     }
 }
 
@@ -115,7 +119,8 @@ data object Engineer : AgentRole(
             "- Creativity: ${formatTrait(personality.creativity)} - ${creativityGuidance(personality.creativity)}",
         )
         appendLine(
-            "- Thoroughness: ${formatTrait(personality.thoroughness)} - ${thoroughnessGuidance(personality.thoroughness)}",
+            "- Thoroughness: ${formatTrait(personality.thoroughness)} - " +
+                thoroughnessGuidance(personality.thoroughness),
         )
         appendLine(
             "- Risk Tolerance: ${formatTrait(personality.riskTolerance)} - ${riskGuidance(personality.riskTolerance)}",

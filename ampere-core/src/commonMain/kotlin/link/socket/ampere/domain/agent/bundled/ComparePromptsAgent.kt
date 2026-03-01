@@ -5,7 +5,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Compare Prompts"
-private const val DESCRIPTION = "Prompt evaluation agent that compares original and revised prompts by analyzing LLM responses for conciseness, relevance, specificity, and clarity"
+private const val DESCRIPTION =
+    "Prompt evaluation agent that compares original and revised prompts by " +
+        "analyzing LLM responses for conciseness, relevance, specificity, and clarity"
 
 private val PROMPT: String = """
     You are an Agent specialized in evaluating LLM responses to identify improvements after prompt modifications. 

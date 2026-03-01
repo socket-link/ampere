@@ -267,7 +267,9 @@ open class CodeAgent(
             desc.contains("stage files") || desc.contains("git add") -> OperationType.GIT_STAGE_FILES
             desc.contains("commit") -> OperationType.GIT_COMMIT
             desc.contains("push") || desc.contains("git push") -> OperationType.GIT_PUSH
-            desc.contains("create pr") || desc.contains("pull request") || desc.contains("create pull request") -> OperationType.GIT_CREATE_PR
+            desc.contains("create pr") ||
+                desc.contains("pull request") ||
+                desc.contains("create pull request") -> OperationType.GIT_CREATE_PR
             desc.contains("git status") || desc.contains("check status") -> OperationType.GIT_STATUS
             desc.contains("write") || desc.contains("create file") || desc.contains("modify file") ||
                 desc.contains("implement") || desc.contains("add code") -> OperationType.CODE_WRITE

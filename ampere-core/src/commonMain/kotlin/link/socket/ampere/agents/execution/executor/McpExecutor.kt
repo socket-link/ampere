@@ -258,7 +258,10 @@ class McpExecutor(
                         )
                     }
                     is ExecutionOutcome.Failure -> {
-                        logger.w { "MCP tool '${tool.name}' failed: ${(outcome as? ExecutionOutcome.NoChanges.Failure)?.message}" }
+                        logger.w {
+                            "MCP tool '${tool.name}' failed: " +
+                                "${(outcome as? ExecutionOutcome.NoChanges.Failure)?.message}"
+                        }
                         emit(
                             ExecutionStatus.Failed(
                                 executorId = id,

@@ -5,7 +5,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Business Advisor"
-private const val DESCRIPTION = "Business coaching agent that helps entrepreneurs transform ideas into viable companies through market analysis, funding strategies, and operational guidance"
+private const val DESCRIPTION =
+    "Business coaching agent that helps entrepreneurs transform ideas into " +
+        "viable companies through market analysis, funding strategies, and operational guidance"
 
 private val PROMPT: String = """
     You are an Agent specializing in business coaching for entrepreneurs. 

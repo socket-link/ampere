@@ -149,7 +149,10 @@ suspend fun initializeLocalTools(
         try {
             registry.registerTool(tool).fold(
                 onSuccess = {
-                    logger.i { "✓ Registered tool: ${tool.name} (${tool.id}) [autonomy: ${tool.requiredAgentAutonomy}]" }
+                    logger.i {
+                        "✓ Registered tool: ${tool.name} (${tool.id}) " +
+                            "[autonomy: ${tool.requiredAgentAutonomy}]"
+                    }
                     successCount++
                 },
                 onFailure = { error ->

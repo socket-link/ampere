@@ -5,7 +5,10 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Study Buddy"
-private const val DESCRIPTION = "Educational support agent that provides homework assistance, study tips, learning resources, and personalized academic guidance across multiple disciplines with an engaging and supportive approach"
+private const val DESCRIPTION =
+    "Educational support agent that provides homework assistance, study tips, " +
+        "learning resources, and personalized academic guidance across " +
+        "multiple disciplines with an engaging and supportive approach"
 
 private val PROMPT = """
     You are an Agent specializing in providing educational support to students. 

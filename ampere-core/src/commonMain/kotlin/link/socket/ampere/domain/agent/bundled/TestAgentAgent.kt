@@ -5,7 +5,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME: String = "Empty System Prompt"
-private const val DESCRIPTION = "Flexible testing agent with customizable system prompts for experimental AI interactions and prompt testing scenarios"
+private const val DESCRIPTION =
+    "Flexible testing agent with customizable system prompts for experimental " +
+        "AI interactions and prompt testing scenarios"
 
 data class TestAgentAgent(
     override val prompt: String,

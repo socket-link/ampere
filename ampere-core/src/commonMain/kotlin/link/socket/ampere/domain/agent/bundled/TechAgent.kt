@@ -5,7 +5,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Tech Support"
-private const val DESCRIPTION = "Technical support agent that provides troubleshooting help and advice for gadgets and software, guiding users through step-by-step solutions"
+private const val DESCRIPTION =
+    "Technical support agent that provides troubleshooting help and advice for " +
+        "gadgets and software, guiding users through step-by-step solutions"
 
 private val PROMPT = """
     You are an Agent that specializes in providing troubleshooting help and advice for gadgets and software. 

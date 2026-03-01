@@ -6,7 +6,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Write Code"
-private const val DESCRIPTION = "Programming expert agent that generates executable code in specified technologies, plans solutions step-by-step, and saves code to local storage"
+private const val DESCRIPTION =
+    "Programming expert agent that generates executable code in specified " +
+        "technologies, plans solutions step-by-step, and saves code to local storage"
 
 private fun promptFrom(technologies: String?): String = """
     You are an Agent that is a programming expert, and you are proficient in the following technologies: $technologies.

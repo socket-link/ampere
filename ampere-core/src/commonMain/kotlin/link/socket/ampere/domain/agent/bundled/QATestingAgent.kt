@@ -6,7 +6,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "QA Testing"
-private const val DESCRIPTION = "Quality assurance testing agent that creates comprehensive test suites including unit, integration, UI, and platform-specific tests for Kotlin Multiplatform projects"
+private const val DESCRIPTION =
+    "Quality assurance testing agent that creates comprehensive test suites " +
+        "including unit, integration, UI, and platform-specific tests for Kotlin Multiplatform projects"
 
 private fun promptFrom(testType: String, platform: String): String = """
     You are a QA Testing Agent specialized in creating comprehensive test suites for Kotlin Multiplatform projects.

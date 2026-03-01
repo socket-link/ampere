@@ -5,12 +5,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.bus.EventSerialBus
-import link.socket.ampere.agents.tools.ToolInitializationResult
 import link.socket.ampere.agents.tools.initializeLocalTools
 import link.socket.ampere.agents.tools.mcp.McpDiscoveryResult
 import link.socket.ampere.agents.tools.mcp.McpServerConfiguration
 import link.socket.ampere.agents.tools.mcp.McpServerManager
-import link.socket.ampere.agents.tools.mcp.ServerManager
 import link.socket.ampere.agents.tools.registry.ToolRegistry
 import link.socket.ampere.agents.tools.registry.ToolRegistryRepository
 import link.socket.ampere.db.Database
@@ -120,12 +118,17 @@ suspend fun initializeAmpere(
             (mcpDiscoveryResult?.totalToolsDiscovered ?: 0)
 
         logger.i {
+            val status = if (toolInitResult.isFullSuccess && (mcpDiscoveryResult?.isFullSuccess != false)) {
+                "SUCCESS"
+            } else {
+                "PARTIAL SUCCESS"
+            }
             "=== Ampere System Initialization Complete ===" +
                 "\n  Local tools: ${toolInitResult.successfulRegistrations}" +
                 "\n  MCP tools: ${mcpDiscoveryResult?.totalToolsDiscovered ?: 0}" +
                 "\n  Total tools: $totalTools" +
                 "\n  MCP servers: ${mcpDiscoveryResult?.successfulServers ?: 0}/${mcpServerConfigs.size}" +
-                "\n  Status: ${if (toolInitResult.isFullSuccess && (mcpDiscoveryResult?.isFullSuccess != false)) "SUCCESS" else "PARTIAL SUCCESS"}"
+                "\n  Status: $status"
         }
 
         Result.success(
@@ -172,38 +175,4 @@ private fun createToolRegistry(
     )
 
     return Triple(registry, eventBus, eventSource)
-}
-
-/**
- * Result of Ampere system initialization.
- *
- * @property registry The initialized ToolRegistry
- * @property serverManager The server manager for external tool integration
- * @property toolInitialization Statistics from local tool initialization
- * @property mcpDiscovery Statistics from MCP tool discovery (null if no MCP servers configured)
- */
-data class AmpereStartupResult(
-    val registry: ToolRegistry,
-    val serverManager: ServerManager,
-    val toolInitialization: ToolInitializationResult,
-    val mcpDiscovery: McpDiscoveryResult? = null,
-) {
-    /** Whether initialization was fully successful */
-    val isFullSuccess: Boolean
-        get() = toolInitialization.isFullSuccess &&
-            (mcpDiscovery?.isFullSuccess != false)
-
-    /** Whether at least partial initialization succeeded */
-    val isPartialSuccess: Boolean
-        get() = toolInitialization.isPartialSuccess ||
-            (mcpDiscovery?.isPartialSuccess == true)
-
-    /** Total number of tools discovered (local + MCP) */
-    val totalToolsDiscovered: Int
-        get() = toolInitialization.successfulRegistrations +
-            (mcpDiscovery?.totalToolsDiscovered ?: 0)
-
-    /** Number of successfully connected MCP servers */
-    val mcpServersConnected: Int
-        get() = mcpDiscovery?.successfulServers ?: 0
 }

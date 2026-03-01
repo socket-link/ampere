@@ -15,18 +15,18 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import java.awt.Dimension
 import kotlinx.coroutines.delay
-import link.socket.phosphor.signal.AgentActivityState
+import link.socket.ampere.cli.animation.choreography.CognitiveChoreographer
+import link.socket.ampere.compose.CognitiveCanvas
 import link.socket.phosphor.choreography.AgentLayer
 import link.socket.phosphor.choreography.AgentLayoutOrientation
-import link.socket.phosphor.signal.AgentVisualState
-import link.socket.ampere.cli.animation.choreography.CognitiveChoreographer
-import link.socket.phosphor.signal.CognitivePhase
 import link.socket.phosphor.field.FlowLayer
 import link.socket.phosphor.field.ParticleSystem
 import link.socket.phosphor.field.SubstrateAnimator
 import link.socket.phosphor.field.SubstrateState
 import link.socket.phosphor.math.Vector2
-import link.socket.ampere.compose.CognitiveCanvas
+import link.socket.phosphor.signal.AgentActivityState
+import link.socket.phosphor.signal.AgentVisualState
+import link.socket.phosphor.signal.CognitivePhase
 
 fun main() =
     application {
@@ -40,12 +40,12 @@ fun main() =
                 ),
         ) {
             window.minimumSize = Dimension(800, 600)
-            CognitiveDemoScreen()
+            cognitiveDemoScreen()
         }
     }
 
 @Composable
-fun CognitiveDemoScreen() {
+fun cognitiveDemoScreen() {
     val substrate = remember { mutableStateOf(SubstrateState.create(80, 40, 0.2f)) }
     val particles = remember { ParticleSystem(maxParticles = 200) }
     val agents = remember { AgentLayer(80, 40, AgentLayoutOrientation.CIRCULAR) }

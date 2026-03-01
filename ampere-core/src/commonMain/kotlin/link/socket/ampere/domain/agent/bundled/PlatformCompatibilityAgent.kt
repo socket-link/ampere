@@ -6,7 +6,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Platform Compatibility"
-private const val DESCRIPTION = "Platform compatibility validation agent that ensures consistent behavior and API surface across Kotlin Multiplatform targets including Android, iOS, and Desktop"
+private const val DESCRIPTION =
+    "Platform compatibility validation agent that ensures consistent behavior " +
+        "and API surface across Kotlin Multiplatform targets including Android, iOS, and Desktop"
 
 private fun promptFrom(platforms: String, checkType: String): String = """
     You are a Platform Compatibility Agent specialized in ensuring consistent behavior across Kotlin Multiplatform targets.
