@@ -2,7 +2,6 @@ package link.socket.ampere.cli.render
 
 import link.socket.phosphor.choreography.AgentLayer
 import link.socket.phosphor.choreography.AgentLayoutOrientation
-import link.socket.phosphor.bridge.CognitiveEmitterBridge
 import link.socket.phosphor.bridge.CognitiveEvent
 import link.socket.phosphor.emitter.EmitterManager
 import link.socket.phosphor.field.FlowLayer
@@ -33,7 +32,7 @@ import link.socket.ampere.cli.layout.PaneRenderer
 class WaveformPaneRenderer(
     private val agentLayer: AgentLayer,
     private val emitterManager: EmitterManager,
-    private val cognitiveEmitterBridge: CognitiveEmitterBridge
+    private val amperePhosphorBridge: AmperePhosphorBridge
 ) : PaneRenderer {
 
     private var cameraOrbit = CameraOrbit(
@@ -79,7 +78,7 @@ class WaveformPaneRenderer(
      * Fire a cognitive event through the emitter bridge.
      */
     fun onCognitiveEvent(event: CognitiveEvent, agentPosition: Vector3) {
-        cognitiveEmitterBridge.onCognitiveEvent(event, agentPosition)
+        amperePhosphorBridge.onCognitiveEvent(event, agentPosition)
     }
 
     override fun render(width: Int, height: Int): List<String> {

@@ -1,12 +1,14 @@
 package link.socket.ampere.cli.hybrid
 
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.phosphor.field.ParticleSystem
 import link.socket.phosphor.field.SubstrateAnimator
 import link.socket.phosphor.field.SubstrateState
 import link.socket.ampere.cli.watch.presentation.AgentActivityState
 import link.socket.ampere.cli.watch.presentation.AgentState
 import link.socket.ampere.cli.watch.presentation.EventSignificance
+import link.socket.ampere.cli.watch.presentation.ProviderCallTelemetrySummary
 import link.socket.ampere.cli.watch.presentation.SignificantEventSummary
 import link.socket.ampere.cli.watch.presentation.SystemVitals
 import link.socket.ampere.cli.watch.presentation.WatchViewState
@@ -36,7 +38,8 @@ class WatchStateAnimationBridgeTest {
 
     private fun createViewState(
         agents: Map<String, AgentActivityState> = emptyMap(),
-        events: List<SignificantEventSummary> = emptyList()
+        events: List<SignificantEventSummary> = emptyList(),
+        telemetry: List<ProviderCallTelemetrySummary> = emptyList()
     ): WatchViewState {
         return WatchViewState(
             systemVitals = SystemVitals(
@@ -45,7 +48,8 @@ class WatchStateAnimationBridgeTest {
                 lastSignificantEventTime = now
             ),
             agentStates = agents,
-            recentSignificantEvents = events
+            recentSignificantEvents = events,
+            recentProviderTelemetry = telemetry
         )
     }
 
@@ -74,6 +78,18 @@ class WatchStateAnimationBridgeTest {
             sourceAgentName = "test-agent",
             summaryText = "Test event",
             significance = significance
+        )
+    }
+
+    private fun createTelemetry(agentId: String): ProviderCallTelemetrySummary {
+        return ProviderCallTelemetrySummary(
+            eventId = "provider-${System.nanoTime()}",
+            agentId = agentId,
+            cognitivePhase = CognitivePhase.EXECUTE,
+            latencyMs = 900,
+            estimatedCost = 0.01,
+            totalTokens = 4_000,
+            success = true
         )
     }
 
@@ -190,6 +206,32 @@ class WatchStateAnimationBridgeTest {
         }
 
         assertTrue(particles.count <= 30, "Particles should be bounded at max 30, got ${particles.count}")
+    }
+
+    @Test
+    fun `provider telemetry callback fires for new provider event`() {
+        val (bridge, substrate, _) = createBridge()
+        val agents = mapOf(
+            "agent-1" to createAgent("agent-1", AgentState.WORKING, idle = false)
+        )
+        val telemetry = mutableListOf<ProviderCallTelemetrySummary>()
+
+        bridge.onProviderTelemetry = { summary, _ ->
+            telemetry += summary
+        }
+
+        bridge.update(createViewState(agents = agents), substrate, 0.1f)
+        bridge.update(
+            createViewState(
+                agents = agents,
+                telemetry = listOf(createTelemetry("agent-1"))
+            ),
+            substrate,
+            0.1f
+        )
+
+        assertEquals(1, telemetry.size)
+        assertEquals("agent-1", telemetry.single().agentId)
     }
 
     @Test
