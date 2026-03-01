@@ -2,13 +2,13 @@ package link.socket.ampere
 
 import link.socket.phosphor.choreography.AgentLayer
 import link.socket.phosphor.choreography.AgentLayoutOrientation
-import link.socket.phosphor.bridge.CognitiveEmitterBridge
 import link.socket.phosphor.emitter.EmitterManager
 import link.socket.phosphor.field.FlowLayer
 import link.socket.phosphor.field.SubstrateState
 import link.socket.phosphor.timeline.TimelineController
 import link.socket.phosphor.timeline.TimelineEvent
 import link.socket.phosphor.timeline.WaveformDemoTimeline
+import link.socket.ampere.cli.render.AmperePhosphorBridge
 import link.socket.ampere.cli.render.WaveformPaneRenderer
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,13 +27,13 @@ class DemoCommandTest {
         val agents = AgentLayer(width, height, AgentLayoutOrientation.CIRCULAR)
         val flow = FlowLayer(width, height)
         val emitters = EmitterManager()
-        val emitterBridge = CognitiveEmitterBridge(emitters)
+        val emitterBridge = AmperePhosphorBridge(emitters)
         val substrate = SubstrateState.create(width, height, baseDensity = 0.2f)
 
         val waveformPane = WaveformPaneRenderer(
             agentLayer = agents,
             emitterManager = emitters,
-            cognitiveEmitterBridge = emitterBridge
+            amperePhosphorBridge = emitterBridge
         )
 
         val timeline = WaveformDemoTimeline.build(agents, flow, emitters)

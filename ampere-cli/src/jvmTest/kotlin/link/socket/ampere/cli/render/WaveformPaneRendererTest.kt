@@ -5,7 +5,6 @@ import link.socket.phosphor.choreography.AgentLayer
 import link.socket.phosphor.choreography.AgentLayoutOrientation
 import link.socket.phosphor.signal.AgentVisualState
 import link.socket.phosphor.signal.CognitivePhase
-import link.socket.phosphor.bridge.CognitiveEmitterBridge
 import link.socket.phosphor.emitter.EmitterManager
 import link.socket.phosphor.math.Vector3
 import link.socket.phosphor.render.AsciiCell
@@ -19,12 +18,12 @@ class WaveformPaneRendererTest {
 
     private val agentLayer = AgentLayer(80, 24, AgentLayoutOrientation.CUSTOM)
     private val emitterManager = EmitterManager()
-    private val cognitiveEmitterBridge = CognitiveEmitterBridge(emitterManager)
+    private val amperePhosphorBridge = AmperePhosphorBridge(emitterManager)
 
     private val renderer = WaveformPaneRenderer(
         agentLayer = agentLayer,
         emitterManager = emitterManager,
-        cognitiveEmitterBridge = cognitiveEmitterBridge
+        amperePhosphorBridge = amperePhosphorBridge
     )
 
     @Test

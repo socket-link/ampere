@@ -17,6 +17,7 @@ import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
+import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.SparkAppliedEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.SparkRemovedEvent
@@ -45,6 +46,7 @@ class WatchPresenter(
     // Mutable state - only modified by event handler
     private val agentStates = mutableMapOf<String, AgentActivityState>()
     private val significantEvents = mutableListOf<SignificantEventSummary>()
+    private val providerTelemetry = mutableListOf<ProviderCallTelemetrySummary>()
     private var systemVitals = SystemVitals()
 
     private var eventCollectionJob: Job? = null
@@ -96,6 +98,10 @@ class WatchPresenter(
             // Add to significant events feed if warranted
             if (significance.shouldDisplayByDefault) {
                 addSignificantEvent(event, significance)
+            }
+
+            if (event is ProviderCallCompletedEvent) {
+                addProviderTelemetry(agentId, event)
             }
 
             // Update system vitals
@@ -224,6 +230,31 @@ class WatchPresenter(
         // Keep only most recent 20
         while (significantEvents.size > 20) {
             significantEvents.removeLast()
+        }
+
+        invalidateCache()
+    }
+
+    private fun addProviderTelemetry(agentId: String, event: ProviderCallCompletedEvent) {
+        val totalTokens = listOfNotNull(event.usage.inputTokens, event.usage.outputTokens)
+            .takeIf { it.isNotEmpty() }
+            ?.sum()
+
+        providerTelemetry.add(
+            0,
+            ProviderCallTelemetrySummary(
+                eventId = event.eventId,
+                agentId = agentId,
+                cognitivePhase = event.cognitivePhase,
+                latencyMs = event.latencyMs,
+                estimatedCost = event.usage.estimatedCost,
+                totalTokens = totalTokens,
+                success = event.success
+            )
+        )
+
+        while (providerTelemetry.size > 20) {
+            providerTelemetry.removeLast()
         }
 
         invalidateCache()
@@ -372,7 +403,8 @@ class WatchPresenter(
         val viewState = WatchViewState(
             systemVitals = systemVitals,
             agentStates = agentStates.toMap(), // Immutable copy
-            recentSignificantEvents = significantEvents.toList() // Immutable copy
+            recentSignificantEvents = significantEvents.toList(), // Immutable copy
+            recentProviderTelemetry = providerTelemetry.toList()
         )
 
         cachedViewState = viewState

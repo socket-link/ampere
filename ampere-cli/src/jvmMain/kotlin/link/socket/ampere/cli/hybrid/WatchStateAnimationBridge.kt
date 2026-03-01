@@ -19,6 +19,7 @@ import link.socket.phosphor.field.SubstrateState
 import link.socket.phosphor.math.Vector2
 import link.socket.ampere.cli.watch.presentation.AgentState
 import link.socket.ampere.cli.watch.presentation.EventSignificance
+import link.socket.ampere.cli.watch.presentation.ProviderCallTelemetrySummary
 import link.socket.ampere.cli.watch.presentation.WatchViewState
 
 /**
@@ -44,6 +45,7 @@ class WatchStateAnimationBridge(
     private val maxParticles: Int = 30
 ) {
     private var previousEventCount = 0
+    private var previousProviderTelemetryIds = emptySet<String>()
     private var previousAgentStates = mapOf<String, AgentState>()
     private val burstEmitter = BurstEmitter()
 
@@ -70,6 +72,11 @@ class WatchStateAnimationBridge(
     var onCognitiveEvent: ((CognitiveEvent, Vector3) -> Unit)? = null
 
     /**
+     * Callback invoked when provider telemetry should generate metadata-rich emitters.
+     */
+    var onProviderTelemetry: ((ProviderCallTelemetrySummary, Vector3) -> Unit)? = null
+
+    /**
      * Update animation state based on current watch state.
      *
      * @param viewState Current snapshot from WatchPresenter (null-safe for graceful degradation)
@@ -89,14 +96,17 @@ class WatchStateAnimationBridge(
         // Update substrate hotspots based on active agents
         var result = updateHotspotsFromAgentActivity(viewState, substrate)
 
+        // Sync agent positions before event-driven emitters use them.
+        syncAgentLayer(viewState)
+
         // Detect new significant events and spawn particles
         detectNewEvents(viewState)
+        detectProviderTelemetry(viewState)
 
         // Detect agent state transitions and trigger pulses
         detectStateTransitions(viewState, result)?.let { result = it }
 
-        // Sync agent layer from view state and run choreographer
-        syncAgentLayer(viewState)
+        // Run phase-based choreography on the synchronized agent layer
         result = choreographer.update(agentLayer, result, deltaSeconds)
 
         // Apply ambient animation
@@ -110,6 +120,8 @@ class WatchStateAnimationBridge(
 
         // Track state for next frame
         previousEventCount = viewState.recentSignificantEvents.size
+        previousProviderTelemetryIds = viewState.recentProviderTelemetry
+            .mapTo(linkedSetOf()) { it.eventId }
         previousAgentStates = viewState.agentStates.mapValues { it.value.currentState }
 
         return result
@@ -257,6 +269,18 @@ class WatchStateAnimationBridge(
                 )
             }
         }
+    }
+
+    private fun detectProviderTelemetry(viewState: WatchViewState) {
+        if (viewState.recentProviderTelemetry.isEmpty()) return
+
+        viewState.recentProviderTelemetry
+            .asReversed()
+            .filter { it.eventId !in previousProviderTelemetryIds }
+            .forEach { telemetry ->
+                val agentPos = agentLayer.getAgent(telemetry.agentId)?.position3D ?: Vector3.ZERO
+                onProviderTelemetry?.invoke(telemetry, agentPos)
+            }
     }
 
     private fun detectStateTransitions(

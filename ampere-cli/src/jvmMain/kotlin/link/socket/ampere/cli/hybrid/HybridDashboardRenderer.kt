@@ -1,11 +1,11 @@
 package link.socket.ampere.cli.hybrid
 
 import com.github.ajalt.mordant.terminal.Terminal
-import link.socket.phosphor.bridge.CognitiveEmitterBridge
 import link.socket.phosphor.emitter.EmitterManager
 import link.socket.phosphor.field.ParticleSystem
 import link.socket.ampere.cli.animation.render.AmperePalette
 import link.socket.ampere.cli.animation.render.CompositeRenderer
+import link.socket.ampere.cli.render.AmperePhosphorBridge
 import link.socket.phosphor.field.SubstrateAnimator
 import link.socket.phosphor.field.SubstrateGlyphs
 import link.socket.phosphor.field.SubstrateState
@@ -67,7 +67,7 @@ class HybridDashboardRenderer(
 
     // 3D waveform pipeline
     private lateinit var emitterManager: EmitterManager
-    private lateinit var cognitiveEmitterBridge: CognitiveEmitterBridge
+    private lateinit var amperePhosphorBridge: AmperePhosphorBridge
 
     /**
      * The waveform pane renderer for the middle pane. Callers can pass this
@@ -149,19 +149,22 @@ class HybridDashboardRenderer(
 
         // Initialize waveform pipeline
         emitterManager = EmitterManager()
-        cognitiveEmitterBridge = CognitiveEmitterBridge(emitterManager)
+        amperePhosphorBridge = AmperePhosphorBridge(emitterManager)
 
         if (config.enableWaveform) {
             val wfPane = WaveformPaneRenderer(
                 agentLayer = bridge.agentLayer,
                 emitterManager = emitterManager,
-                cognitiveEmitterBridge = cognitiveEmitterBridge
+                amperePhosphorBridge = amperePhosphorBridge
             )
             waveformPane = wfPane
 
             // Wire cognitive events from bridge to emitter bridge
             bridge.onCognitiveEvent = { event, position ->
-                cognitiveEmitterBridge.onCognitiveEvent(event, position)
+                amperePhosphorBridge.onCognitiveEvent(event, position)
+            }
+            bridge.onProviderTelemetry = { telemetry, position ->
+                amperePhosphorBridge.onProviderCallCompleted(telemetry, position)
             }
         }
 
