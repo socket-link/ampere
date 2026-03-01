@@ -17,6 +17,14 @@ object CognitiveRelayPassthrough : CognitiveRelay {
         fallbackConfiguration: AIConfiguration,
     ): AIConfiguration = fallbackConfiguration
 
+    override suspend fun resolveWithMetadata(
+        context: RoutingContext,
+        fallbackConfiguration: AIConfiguration,
+    ): RoutingResolution = RoutingResolution(
+        configuration = fallbackConfiguration,
+        reason = "passthrough",
+    )
+
     override suspend fun updateConfig(newConfig: RelayConfig) {
         // No-op: passthrough does not support reconfiguration.
     }

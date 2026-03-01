@@ -82,7 +82,11 @@ open class ProjectAgent(
     // Unified Reasoning - All cognitive logic in one place
     // ========================================================================
 
-    private val reasoning: AgentReasoning = reasoningOverride ?: AgentReasoning.create(agentConfiguration, id) {
+    private val reasoning: AgentReasoning = reasoningOverride ?: AgentReasoning.create(
+        agentConfiguration,
+        id,
+        eventApiOverride,
+    ) {
         agentRole = "Project Manager"
         availableTools = requiredTools
         this.executor = this@ProjectAgent.executor

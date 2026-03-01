@@ -3,9 +3,11 @@ package link.socket.ampere.agents.domain.reasoning
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.routing.RoutingContext
 
 /**
  * Evaluates execution outcomes and generates learnings.
@@ -83,6 +85,13 @@ class OutcomeEvaluator(
                 prompt = prompt,
                 systemMessage = EVALUATION_SYSTEM_MESSAGE,
                 maxTokens = 1000,
+                routingContext = RoutingContext(
+                    phase = CognitivePhase.LEARN,
+                    agentId = llmService.agentId,
+                    agentRole = agentRole,
+                    workflowId = outcomes.filterIsInstance<ExecutionOutcome>().firstOrNull()?.taskId
+                        ?: outcomes.firstOrNull()?.id,
+                ),
             )
             val knowledge = parseLearningsFromResponse(jsonResponse.rawJson, outcomes)
             val summaryIdea = createSummaryIdea(knowledge, outcomes)

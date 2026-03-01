@@ -219,4 +219,23 @@ class CognitiveRelayImplTest {
         )
         assertEquals(AIModel_OpenAI.GPT_4_1, relay.resolve(tagContext, claudeConfig).model)
     }
+
+    @Test
+    fun `resolveWithMetadata exposes matched rule description`() = runTest {
+        val relay = CognitiveRelayImpl(
+            initialConfig = RelayConfig(
+                rules = listOf(
+                    RoutingRule.ByPhase(CognitivePhase.PERCEIVE, geminiConfig),
+                ),
+            ),
+        )
+
+        val result = relay.resolveWithMetadata(
+            context = RoutingContext(phase = CognitivePhase.PERCEIVE),
+            fallbackConfiguration = openaiConfig,
+        )
+
+        assertEquals(AIModel_Gemini.Flash_2_5, result.configuration.model)
+        assertEquals("phase:PERCEIVE", result.reason)
+    }
 }

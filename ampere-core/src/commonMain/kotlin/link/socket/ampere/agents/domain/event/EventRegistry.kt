@@ -91,6 +91,10 @@ object EventRegistry {
         // RoutingEvent types
         RoutingEvent.RouteSelected.EVENT_TYPE,
         RoutingEvent.RouteFallback.EVENT_TYPE,
+
+        // TelemetryEvent types
+        ProviderCallStartedEvent.EVENT_TYPE,
+        ProviderCallCompletedEvent.EVENT_TYPE,
     )
 
     /**

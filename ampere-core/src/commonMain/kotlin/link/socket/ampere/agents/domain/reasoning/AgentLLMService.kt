@@ -5,10 +5,18 @@ import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
+import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.routing.RoutingContext
+import link.socket.ampere.agents.domain.routing.RoutingResolution
+import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.api.model.TokenUsage
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.domain.util.toClientModelId
 import link.socket.ampere.util.ioDispatcher
@@ -52,9 +60,13 @@ import link.socket.ampere.util.logWith
  */
 class AgentLLMService(
     private val agentConfiguration: AgentConfiguration,
+    private val eventApi: AgentEventApi? = null,
 ) {
 
     private val logger: Logger = logWith("AgentLLMService")
+
+    val agentId: String?
+        get() = eventApi?.agentId
 
     /**
      * Calls the LLM with a prompt and returns the raw response text.
@@ -84,20 +96,59 @@ class AgentLLMService(
         agentConfiguration.llmProvider?.let { provider ->
             logger.d { "[LLM] Using custom provider" }
             val combinedPrompt = buildCombinedPrompt(systemMessage, prompt)
-            return withContext(ioDispatcher) {
-                provider(combinedPrompt)
+            val providerId = resolveCustomProviderId()
+            val modelId = resolveCustomModelId()
+            emitStartedTelemetry(
+                routingContext = routingContext,
+                providerId = providerId,
+                modelId = modelId,
+                routingReason = "custom_provider",
+            )
+
+            val startedAt = Clock.System.now()
+            return try {
+                val response = withContext(ioDispatcher) {
+                    provider(combinedPrompt)
+                }
+                emitCompletedTelemetry(
+                    routingContext = routingContext,
+                    providerId = providerId,
+                    modelId = modelId,
+                    usage = TokenUsage(),
+                    success = true,
+                    startedAt = startedAt,
+                )
+                response
+            } catch (t: Throwable) {
+                emitCompletedTelemetry(
+                    routingContext = routingContext,
+                    providerId = providerId,
+                    modelId = modelId,
+                    usage = TokenUsage(),
+                    success = false,
+                    startedAt = startedAt,
+                    errorType = t::class.simpleName ?: "UnknownError",
+                )
+                throw t
             }
         }
 
         // Resolve configuration through CognitiveRelay if available
-        val effectiveConfig = if (routingContext != null) {
-            agentConfiguration.cognitiveRelay?.resolve(
+        val routingResolution = if (routingContext != null) {
+            agentConfiguration.cognitiveRelay?.resolveWithMetadata(
                 context = routingContext,
                 fallbackConfiguration = agentConfiguration.aiConfiguration,
-            ) ?: agentConfiguration.aiConfiguration
+            ) ?: RoutingResolution(
+                configuration = agentConfiguration.aiConfiguration,
+                reason = "agent_configuration",
+            )
         } else {
-            agentConfiguration.aiConfiguration
+            RoutingResolution(
+                configuration = agentConfiguration.aiConfiguration,
+                reason = "agent_configuration",
+            )
         }
+        val effectiveConfig = routingResolution.configuration
 
         val client = effectiveConfig.provider.client
         val model = effectiveConfig.model
@@ -120,8 +171,29 @@ class AgentLLMService(
             maxTokens = maxTokens,
         )
 
-        val completion = withContext(ioDispatcher) {
-            client.chatCompletion(request)
+        emitStartedTelemetry(
+            routingContext = routingContext,
+            providerId = effectiveConfig.provider.id,
+            modelId = model.name,
+            routingReason = routingResolution.reason,
+        )
+
+        val startedAt = Clock.System.now()
+        val completion = try {
+            withContext(ioDispatcher) {
+                client.chatCompletion(request)
+            }
+        } catch (t: Throwable) {
+            emitCompletedTelemetry(
+                routingContext = routingContext,
+                providerId = effectiveConfig.provider.id,
+                modelId = model.name,
+                usage = TokenUsage(),
+                success = false,
+                startedAt = startedAt,
+                errorType = t::class.simpleName ?: "UnknownError",
+            )
+            throw t
         }
 
         // Log token usage for monitoring
@@ -132,6 +204,20 @@ class AgentLLMService(
                     "Total: ${usage.totalTokens} (limit: $maxTokens)"
             }
         }
+
+        emitCompletedTelemetry(
+            routingContext = routingContext,
+            providerId = effectiveConfig.provider.id,
+            modelId = model.name,
+            usage = completion.usage?.let { usage ->
+                TokenUsage(
+                    inputTokens = usage.promptTokens,
+                    outputTokens = usage.completionTokens,
+                )
+            } ?: TokenUsage(),
+            success = true,
+            startedAt = startedAt,
+        )
 
         return completion.choices.firstOrNull()?.message?.content
             ?: throw IllegalStateException("No response from LLM")
@@ -242,6 +328,65 @@ class AgentLLMService(
             """.trimMargin()
         }
     }
+
+    private suspend fun emitStartedTelemetry(
+        routingContext: RoutingContext?,
+        providerId: String,
+        modelId: String,
+        routingReason: String,
+    ) {
+        val publishingAgentId = eventApi?.agentId ?: return
+        eventApi.publish(
+            ProviderCallStartedEvent(
+                eventId = generateUUID("llm-start", publishingAgentId),
+                timestamp = Clock.System.now(),
+                eventSource = EventSource.Agent(publishingAgentId),
+                workflowId = routingContext?.workflowId,
+                agentId = routingContext?.agentId ?: publishingAgentId,
+                cognitivePhase = routingContext?.phase,
+                providerId = providerId,
+                modelId = modelId,
+                routingReason = routingReason,
+            ),
+        )
+    }
+
+    private suspend fun emitCompletedTelemetry(
+        routingContext: RoutingContext?,
+        providerId: String,
+        modelId: String,
+        usage: TokenUsage,
+        success: Boolean,
+        startedAt: kotlinx.datetime.Instant,
+        errorType: String? = null,
+    ) {
+        val publishingAgentId = eventApi?.agentId ?: return
+        val completedAt = Clock.System.now()
+        eventApi.publish(
+            ProviderCallCompletedEvent(
+                eventId = generateUUID("llm-complete", publishingAgentId),
+                timestamp = completedAt,
+                eventSource = EventSource.Agent(publishingAgentId),
+                workflowId = routingContext?.workflowId,
+                agentId = routingContext?.agentId ?: publishingAgentId,
+                cognitivePhase = routingContext?.phase,
+                providerId = providerId,
+                modelId = modelId,
+                usage = usage,
+                latencyMs = (completedAt - startedAt).inWholeMilliseconds,
+                success = success,
+                errorType = errorType,
+            ),
+        )
+    }
+
+    private fun resolveCustomModelId(): String =
+        runCatching { agentConfiguration.aiConfiguration.model.name }
+            .getOrDefault("custom")
+
+    private fun resolveCustomProviderId(): String =
+        runCatching { agentConfiguration.aiConfiguration.provider.id }
+            .getOrDefault("custom")
 }
 
 /**

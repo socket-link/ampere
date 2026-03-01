@@ -70,7 +70,7 @@ class QualityAgent(
     // Unified Reasoning - All cognitive logic in one place
     // ========================================================================
 
-    private val reasoning = AgentReasoning.create(agentConfiguration, id) {
+    private val reasoning = AgentReasoning.create(agentConfiguration, id, eventApiOverride) {
         agentRole = "Quality Assurance"
         availableTools = requiredTools
         this.executor = this@QualityAgent.executor

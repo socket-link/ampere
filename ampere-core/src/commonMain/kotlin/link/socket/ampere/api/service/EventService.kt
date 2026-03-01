@@ -1,8 +1,25 @@
 package link.socket.ampere.api.service
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filter
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.FileSystemEvent
+import link.socket.ampere.agents.domain.event.GitEvent
+import link.socket.ampere.agents.domain.event.HumanInteractionEvent
+import link.socket.ampere.agents.domain.event.MeetingEvent
+import link.socket.ampere.agents.domain.event.MemoryEvent
+import link.socket.ampere.agents.domain.event.MessageEvent
+import link.socket.ampere.agents.domain.event.NotificationEvent
+import link.socket.ampere.agents.domain.event.PlanEvent
+import link.socket.ampere.agents.domain.event.ProductEvent
+import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
+import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
+import link.socket.ampere.agents.domain.event.RoutingEvent
+import link.socket.ampere.agents.domain.event.SparkEvent
+import link.socket.ampere.agents.domain.event.TaskEvent
+import link.socket.ampere.agents.domain.event.TicketEvent
+import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.events.relay.EventRelayFilters
 
 /**
@@ -61,6 +78,18 @@ interface EventService {
     fun observe(filters: EventRelayFilters = EventRelayFilters()): Flow<Event>
 
     /**
+     * Observe the live event stream using coarse-grained event categories.
+     *
+     * This is an additive convenience API for external consumers that want
+     * stable subscription groups like telemetry without constructing explicit
+     * [EventRelayFilters] instances.
+     */
+    fun observe(filter: EventStreamFilter): Flow<Event> = when (filter) {
+        EventStreamFilter.ALL -> observe()
+        else -> observe().filter(filter::matches)
+    }
+
+    /**
      * Query historical events from persistent storage.
      *
      * ```
@@ -100,4 +129,61 @@ interface EventService {
         to: Instant,
         filters: EventRelayFilters = EventRelayFilters(),
     ): Flow<Event>
+
+    /**
+     * Replay historical events using coarse-grained event categories.
+     */
+    fun replay(
+        from: Instant,
+        to: Instant,
+        filter: EventStreamFilter,
+    ): Flow<Event> = when (filter) {
+        EventStreamFilter.ALL -> replay(from, to)
+        else -> replay(from, to).filter(filter::matches)
+    }
+}
+
+@link.socket.ampere.api.AmpereStableApi
+enum class EventStreamFilter {
+    ALL,
+    TELEMETRY,
+    LIFECYCLE,
+    COORDINATION,
+    COGNITIVE,
+    ;
+
+    fun matches(event: Event): Boolean = when (this) {
+        ALL -> true
+        TELEMETRY -> event is ProviderCallStartedEvent || event is ProviderCallCompletedEvent
+        LIFECYCLE -> when (event) {
+            is Event.TaskCreated,
+            is TaskEvent,
+            is TicketEvent,
+            is MeetingEvent,
+            is FileSystemEvent,
+            is GitEvent,
+            is ToolEvent.ToolExecutionStarted,
+            is ToolEvent.ToolExecutionCompleted,
+            -> true
+            else -> false
+        }
+        COORDINATION -> when (event) {
+            is MessageEvent,
+            is NotificationEvent<*>,
+            is HumanInteractionEvent,
+            -> true
+            else -> false
+        }
+        COGNITIVE -> when (event) {
+            is Event.QuestionRaised,
+            is Event.CodeSubmitted,
+            is MemoryEvent,
+            is PlanEvent,
+            is ProductEvent,
+            is RoutingEvent,
+            is SparkEvent,
+            -> true
+            else -> false
+        }
+    }
 }

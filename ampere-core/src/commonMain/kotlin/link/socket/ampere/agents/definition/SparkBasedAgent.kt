@@ -94,7 +94,7 @@ class SparkBasedAgent(
     // ========================================================================
 
     private val reasoning: AgentReasoning by lazy {
-        AgentReasoning.create(agentConfiguration, id) {
+        AgentReasoning.create(agentConfiguration, id, _eventApi) {
             agentRole = "Spark-Based Agent (${affinity.name})"
             availableTools = requiredTools
 
