@@ -10,8 +10,9 @@ import link.socket.ampere.api.model.TokenUsage
 /**
  * Maps provider-specific usage metadata into AMPERE's stable [TokenUsage] contract.
  *
- * Cost remains nullable because not every provider reports it, and AMPERE does not
- * currently maintain local pricing tables for inference.
+ * Cost remains nullable because not every provider reports it. Provider-reported
+ * values are preserved here and can be overridden later by bundled pricing when
+ * AMPERE has a matching provider/model entry.
  */
 internal object TokenUsageExtractor {
 

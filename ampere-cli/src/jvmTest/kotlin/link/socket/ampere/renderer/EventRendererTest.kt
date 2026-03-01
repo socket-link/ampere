@@ -307,6 +307,26 @@ class EventRendererTest {
     }
 
     @Test
+    fun `render completed provider call omits cost when unavailable`() {
+        val output = captureTerminalOutput { _, renderer ->
+            renderer.render(
+                providerCallCompletedEvent(
+                    usage = TokenUsage(
+                        inputTokens = 1247,
+                        outputTokens = 892,
+                        estimatedCost = null,
+                    ),
+                ),
+            )
+        }
+
+        val rendered = stripAnsi(output)
+        assertContains(rendered, "1,247 in / 892 out")
+        assertContains(rendered, "340ms")
+        assertTrue(!rendered.contains("~$"))
+    }
+
+    @Test
     fun `render shows event source for agent events`() {
         val output = captureTerminalOutput { _, renderer ->
             renderer.render(
