@@ -6,7 +6,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "API Design"
-private const val DESCRIPTION = "Specialized agent for reviewing and optimizing Kotlin API design, focusing on consistency, usability, and adherence to best practices"
+private const val DESCRIPTION =
+    "Specialized agent for reviewing and optimizing Kotlin API design, " +
+        "focusing on consistency, usability, and adherence to best practices"
 
 private fun promptFrom(reviewType: String, principle: String): String = """
     You are an API Design Agent specialized in reviewing and optimizing Kotlin APIs for libraries and frameworks.

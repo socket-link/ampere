@@ -5,7 +5,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Email & Communications"
-private const val DESCRIPTION = "Email marketing and communications expert that analyzes emails and drafts professional response options with varying tones"
+private const val DESCRIPTION =
+    "Email marketing and communications expert that analyzes emails and drafts " +
+        "professional response options with varying tones"
 
 private val PROMPT: String = """
     You are an expert in email marketing and communications. The User will provide you with either:

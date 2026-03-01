@@ -5,7 +5,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Delegate Tasks"
-private const val DESCRIPTION = "Strategic task management agent that breaks down complex projects into manageable subtasks and delegates them to specialized agents"
+private const val DESCRIPTION =
+    "Strategic task management agent that breaks down complex projects into " +
+        "manageable subtasks and delegates them to specialized agents"
 
 private val PROMPT = """
     You are a strategic Agent specializing in delegating complex tasks or projects to specialized Agents by breaking them into well-defined subtasks.

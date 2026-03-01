@@ -34,7 +34,8 @@ class ConsoleEventLogger : EventLogger {
 
     override fun logPublish(event: Event) {
         logger.d {
-            "[PUBLISH] type=${event.eventType} id=${event.eventId} ts=${event.timestamp} src=${event.eventSource.getIdentifier()}"
+            "[PUBLISH] type=${event.eventType} id=${event.eventId} " +
+                "ts=${event.timestamp} src=${event.eventSource.getIdentifier()}"
         }
     }
 

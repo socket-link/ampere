@@ -41,7 +41,9 @@ sealed class Escalation : AgentDescribable {
          */
         data object CodeReview : Discussion() {
             override val escalationProcess = EscalationProcess.AgentMeeting
-            override val description = "Code needs review - includes PRs, implementation approaches, and quality concerns"
+            override val description =
+                "Code needs review - includes PRs, implementation approaches, " +
+                    "and quality concerns"
         }
 
         /**
@@ -68,7 +70,9 @@ sealed class Escalation : AgentDescribable {
          */
         data object Requirements : Discussion() {
             override val escalationProcess = EscalationProcess.HumanMeeting
-            override val description = "Requirements clarification needed - unclear specs, missing details, or conflicts"
+            override val description =
+                "Requirements clarification needed - unclear specs, " +
+                    "missing details, or conflicts"
         }
     }
 
@@ -86,7 +90,9 @@ sealed class Escalation : AgentDescribable {
          */
         data object Technical : Decision() {
             override val escalationProcess = EscalationProcess.AgentMeeting
-            override val description = "Technical decision needed - technology choices, libraries, or implementation strategies"
+            override val description =
+                "Technical decision needed - technology choices, libraries, " +
+                    "or implementation strategies"
         }
 
         /**
@@ -158,7 +164,9 @@ sealed class Escalation : AgentDescribable {
          */
         data object Conflict : Priorities() {
             override val escalationProcess = EscalationProcess.HumanMeeting
-            override val description = "Priority conflict - competing deadlines, resource conflicts, or dependency ordering"
+            override val description =
+                "Priority conflict - competing deadlines, resource conflicts, " +
+                    "or dependency ordering"
         }
 
         /**

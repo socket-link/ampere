@@ -220,7 +220,9 @@ object CodeAgentGitHelpers {
             issue.title.contains("fix", ignoreCase = true) -> "fix"
 
             // Check files
-            changedFiles.all { it.contains("test", ignoreCase = true) || it.contains("spec", ignoreCase = true) } -> "test"
+            changedFiles.all {
+                it.contains("test", ignoreCase = true) || it.contains("spec", ignoreCase = true)
+            } -> "test"
             changedFiles.all { it.endsWith(".md") } -> "docs"
 
             // Default to feat for new functionality

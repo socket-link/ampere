@@ -5,7 +5,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Clean JSON"
-private const val DESCRIPTION = "JSON parsing expert agent that validates, fixes, and cleans invalid JSON data to provide properly formatted JSON objects"
+private const val DESCRIPTION =
+    "JSON parsing expert agent that validates, fixes, and cleans invalid JSON " +
+        "data to provide properly formatted JSON objects"
 
 private val PROMPT = """
     You are an Agent that is an expert in understanding JSON parsing. 

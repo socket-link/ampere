@@ -14,12 +14,12 @@ import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.ToolEvent
-import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
@@ -28,9 +28,7 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
-import link.socket.ampere.agents.tools.mcp.protocol.ContentItem
 import link.socket.ampere.agents.tools.mcp.protocol.McpToolDescriptor
-import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
 import link.socket.ampere.agents.tools.registry.ToolRegistry
 import link.socket.ampere.agents.tools.registry.ToolRegistryRepository
 import link.socket.ampere.db.Database

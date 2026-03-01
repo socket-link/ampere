@@ -6,7 +6,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Security Review"
-private const val DESCRIPTION = "Security audit specialist agent that identifies vulnerabilities, reviews authentication mechanisms, validates data protection practices, and ensures compliance with security standards"
+private const val DESCRIPTION =
+    "Security audit specialist agent that identifies vulnerabilities, reviews " +
+        "authentication mechanisms, validates data protection practices, and ensures compliance with security standards"
 
 private fun promptFrom(securityFocus: String, threatModel: String): String = """
     You are a Security Review Agent specialized in identifying and mitigating security vulnerabilities in software applications and libraries.

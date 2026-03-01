@@ -6,7 +6,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Performance Optimization"
-private const val DESCRIPTION = "Performance optimization specialist agent that identifies bottlenecks and provides solutions for memory, CPU, network, and UI performance in Kotlin Multiplatform applications"
+private const val DESCRIPTION =
+    "Performance optimization specialist agent that identifies bottlenecks and " +
+        "provides solutions for memory, CPU, network, and UI performance in Kotlin Multiplatform applications"
 
 private fun promptFrom(optimizationType: String, platform: String): String = """
     You are a Performance Optimization Agent specialized in identifying and resolving performance bottlenecks in Kotlin Multiplatform applications.

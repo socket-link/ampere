@@ -397,7 +397,9 @@ class OutcomeEvaluator(
 
     companion object {
         private const val EVALUATION_SYSTEM_MESSAGE =
-            "You are an autonomous agent learning system. Analyze outcomes and extract actionable insights. Respond only with valid JSON."
+            "You are an autonomous agent learning system. " +
+                "Analyze outcomes and extract actionable insights. " +
+                "Respond only with valid JSON."
     }
 }
 

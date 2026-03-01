@@ -189,7 +189,9 @@ class MeetingParticipationHandler(
 
             messageApi.postMessage(
                 threadId = event.threadId,
-                content = "@${agent.id} The current topic is: ${currentItem.title}.$assignmentInfo Please share your input.",
+                content =
+                "@${agent.id} The current topic is: ${currentItem.title}." +
+                    "$assignmentInfo Please share your input.",
             )
         }
     }
@@ -221,13 +223,17 @@ class MeetingParticipationHandler(
             // Agent is assigned - prompt to present/contribute on topic
             messageApi.postMessage(
                 threadId = threadId,
-                content = "@${agent.id} You are assigned to present: ${event.agendaItem.title}. Please share your update or findings.",
+                content =
+                "@${agent.id} You are assigned to present: " +
+                    "${event.agendaItem.title}. Please share your update or findings.",
             )
         } else {
             // Agent is not assigned - prompt to listen and contribute as needed
             messageApi.postMessage(
                 threadId = threadId,
-                content = "@${agent.id} Now discussing: ${event.agendaItem.title}. Please contribute any relevant insights.",
+                content =
+                "@${agent.id} Now discussing: ${event.agendaItem.title}. " +
+                    "Please contribute any relevant insights.",
             )
         }
     }

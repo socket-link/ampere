@@ -219,7 +219,8 @@ class MeetingOrchestrator(
         if (meeting.status !is MeetingStatus.InProgress) {
             return Result.failure(
                 IllegalStateException(
-                    "Meeting must be in IN_PROGRESS status to advance agenda. Current status: ${meeting.status::class.simpleName}",
+                    "Meeting must be in IN_PROGRESS status to advance agenda. " +
+                        "Current status: ${meeting.status::class.simpleName}",
                 ),
             )
         }
@@ -262,7 +263,9 @@ class MeetingOrchestrator(
         // Post a message to the meeting thread about the agenda item
         messageApi.postMessage(
             threadId = meeting.status.messagingDetails.messageThreadId,
-            content = "Now discussing: ${nextItem.title}${nextItem.assignedTo?.let { " (assigned to ${it.getIdentifier()})" } ?: ""}",
+            content =
+            "Now discussing: ${nextItem.title}" +
+                (nextItem.assignedTo?.let { " (assigned to ${it.getIdentifier()})" } ?: ""),
         )
 
         return Result.success(updatedItem)
@@ -293,7 +296,8 @@ class MeetingOrchestrator(
         val inProgressStatus = meeting.status as? MeetingStatus.InProgress
             ?: return Result.failure(
                 IllegalStateException(
-                    "Meeting must be in IN_PROGRESS status to complete. Current status: ${meeting.status::class.simpleName}",
+                    "Meeting must be in IN_PROGRESS status to complete. " +
+                        "Current status: ${meeting.status::class.simpleName}",
                 ),
             )
 

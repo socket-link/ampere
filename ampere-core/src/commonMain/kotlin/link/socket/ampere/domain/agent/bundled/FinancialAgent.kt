@@ -5,7 +5,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Financial Advisor"
-private const val DESCRIPTION = "Financial data processing agent that specializes in transaction analysis, categorized balance sheet creation, and comprehensive financial reporting with privacy-focused data handling"
+private const val DESCRIPTION =
+    "Financial data processing agent that specializes in transaction analysis, " +
+        "categorized balance sheet creation, and comprehensive financial reporting with privacy-focused data handling"
 
 private val PROMPT: String = """
     You are an Agent with a specialty in processing transaction data and creating categorized balance sheets. 

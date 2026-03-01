@@ -61,7 +61,9 @@ sealed interface PlanEvent : Event {
         ): String {
             val status = when (outcome) {
                 is StepOutcome.Success -> "✓ completed"
-                is StepOutcome.PartialSuccess -> "⚠ partially completed (${outcome.successCount}/${outcome.successCount + outcome.failureCount})"
+                is StepOutcome.PartialSuccess ->
+                    "⚠ partially completed " +
+                        "(${outcome.successCount}/${outcome.successCount + outcome.failureCount})"
                 is StepOutcome.Failure -> "✗ failed: ${outcome.error}"
                 is StepOutcome.Skipped -> "⊘ skipped: ${outcome.reason}"
             }

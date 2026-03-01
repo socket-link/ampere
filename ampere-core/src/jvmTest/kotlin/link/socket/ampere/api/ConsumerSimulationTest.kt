@@ -215,7 +215,13 @@ class ConsumerSimulationTest {
             )
         override suspend fun get(id: String) = Result.success<KnowledgeEntry?>(null)
         override suspend fun recall(query: String, limit: Int) = Result.success(emptyList<KnowledgeEntry>())
-        override suspend fun search(query: String?, type: KnowledgeType?, taskType: String?, tags: List<String>?, limit: Int) = Result.success(emptyList<KnowledgeEntry>())
+        override suspend fun search(
+            query: String?,
+            type: KnowledgeType?,
+            taskType: String?,
+            tags: List<String>?,
+            limit: Int,
+        ) = Result.success(emptyList<KnowledgeEntry>())
         override suspend fun tags(knowledgeId: String) = Result.success(emptyList<String>())
         override suspend fun provenance(knowledgeId: String) = Result.success(emptyList<KnowledgeEntry>())
     }
@@ -240,40 +246,41 @@ class ConsumerSimulationTest {
     // ==================== Consumer Simulation Tests ====================
 
     @Test
-    fun `ticket lifecycle - create with DSL, assign, transition, list with filter`() = kotlinx.coroutines.runBlocking<Unit> {
-        // Create with builder DSL
-        val ticket = stubTicketService.create("Fix auth retry") {
-            description("Transient failures cause immediate failure")
-            priority(TicketPriority.HIGH)
-            type(TicketType.BUG)
-        }.getOrThrow()
+    fun `ticket lifecycle - create with DSL, assign, transition, list with filter`() =
+        kotlinx.coroutines.runBlocking<Unit> {
+            // Create with builder DSL
+            val ticket = stubTicketService.create("Fix auth retry") {
+                description("Transient failures cause immediate failure")
+                priority(TicketPriority.HIGH)
+                type(TicketType.BUG)
+            }.getOrThrow()
 
-        assertNotNull(ticket)
-        assertTrue(ticket.title == "Fix auth retry")
+            assertNotNull(ticket)
+            assertTrue(ticket.title == "Fix auth retry")
 
-        // Assign
-        stubTicketService.assign(ticket.id, "engineer-agent").getOrThrow()
+            // Assign
+            stubTicketService.assign(ticket.id, "engineer-agent").getOrThrow()
 
-        // Transition
-        stubTicketService.transition(ticket.id, TicketStatus.InProgress).getOrThrow()
+            // Transition
+            stubTicketService.transition(ticket.id, TicketStatus.InProgress).getOrThrow()
 
-        // Get
-        val retrieved = stubTicketService.get(ticket.id).getOrThrow()
-        assertNotNull(retrieved)
+            // Get
+            val retrieved = stubTicketService.get(ticket.id).getOrThrow()
+            assertNotNull(retrieved)
 
-        // List with filter
-        val filtered = stubTicketService.list(
-            TicketFilter(
-                priority = TicketPriority.HIGH,
-                type = TicketType.BUG,
-            ),
-        ).getOrThrow()
-        assertTrue(filtered.isNotEmpty())
+            // List with filter
+            val filtered = stubTicketService.list(
+                TicketFilter(
+                    priority = TicketPriority.HIGH,
+                    type = TicketType.BUG,
+                ),
+            ).getOrThrow()
+            assertTrue(filtered.isNotEmpty())
 
-        // List without filter
-        val all = stubTicketService.list().getOrThrow()
-        assertNotNull(all)
-    }
+            // List without filter
+            val all = stubTicketService.list().getOrThrow()
+            assertNotNull(all)
+        }
 
     @Test
     fun `thread lifecycle - create with DSL, post, observe, list with filter`() = kotlinx.coroutines.runBlocking<Unit> {

@@ -6,7 +6,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Release Management"
-private const val DESCRIPTION = "Release management specialist agent that handles version control, changelog generation, release preparation, and deployment processes with comprehensive quality gates"
+private const val DESCRIPTION =
+    "Release management specialist agent that handles version control, " +
+        "changelog generation, release preparation, and deployment processes with comprehensive quality gates"
 
 private fun promptFrom(
     releaseType: String,

@@ -5,7 +5,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME: String = "Travel Advice"
-private const val DESCRIPTION = "Travel planning and advisory agent that provides personalized destination recommendations, transportation guidance, accommodation suggestions, and travel safety information"
+private const val DESCRIPTION =
+    "Travel planning and advisory agent that provides personalized destination " +
+        "recommendations, transportation guidance, accommodation suggestions, and travel safety information"
 
 private val PROMPT = """
     You are an Agent specializing in travel planning and advice. 

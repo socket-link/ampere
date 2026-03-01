@@ -37,7 +37,8 @@ mavenPublishing {
     pom {
         name.set("Ampere")
         description.set(
-            "A Kotlin Multiplatform library for building AI agent systems with built-in observability and transparent cognition.",
+            "A Kotlin Multiplatform library for building AI agent systems " +
+                "with built-in observability and transparent cognition.",
         )
         url.set("https://github.com/socket-link/ampere")
         inceptionYear.set("2024")

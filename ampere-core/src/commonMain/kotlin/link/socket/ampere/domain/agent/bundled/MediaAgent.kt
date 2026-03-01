@@ -3,7 +3,9 @@ package link.socket.ampere.domain.agent.bundled
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
 
 private const val NAME = "Media Analyzer"
-private const val DESCRIPTION = "Entertainment recommendation agent that provides personalized suggestions for movies, books, music, and TV shows based on user preferences and current trends"
+private const val DESCRIPTION =
+    "Entertainment recommendation agent that provides personalized suggestions " +
+        "for movies, books, music, and TV shows based on user preferences and current trends"
 
 private val PROMPT: String = """
     You are an Agent that specializes in recommending entertainment content, including movies, books, music, and TV shows. 

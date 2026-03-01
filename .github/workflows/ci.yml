@@ -40,6 +40,10 @@ jobs:
           openai_api_key=placeholder
           EOF
 
+      - name: Run ktlint
+        timeout-minutes: 10
+        run: ./gradlew ktlintCheck
+
       - name: Run tests
         timeout-minutes: 10
         run: ./gradlew test

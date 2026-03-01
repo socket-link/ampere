@@ -5,7 +5,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Language Tutor"
-private const val DESCRIPTION = "Interactive language learning agent that provides conversational practice, grammar correction, vocabulary explanations, and tailored educational content for multiple languages"
+private const val DESCRIPTION =
+    "Interactive language learning agent that provides conversational practice, " +
+        "grammar correction, vocabulary explanations, and tailored educational content for multiple languages"
 
 private val PROMPT = """
     You are an Agent that specializes in assisting Users in learning new languages through interactive conversation and structured lessons. 

@@ -581,55 +581,89 @@ sealed class AIModel_OpenAI(
 
         private const val GPT_5_NAME = "gpt-5"
         private const val GPT_5_DISPLAY_NAME = "GPT-5"
-        private const val GPT_5_DESCRIPTION = "GPT-5 is our flagship model for coding, reasoning, and agentic tasks across domains."
+        private const val GPT_5_DESCRIPTION =
+            "GPT-5 is our flagship model for coding, reasoning, and agentic " +
+                "tasks across domains."
 
         private const val GPT_5_mini_NAME = "gpt-5-mini"
         private const val GPT_5_mini_DISPLAY_NAME = "GPT-5 mini"
-        private const val GPT_5_mini_DESCRIPTION = "GPT-5 mini is a faster, more cost-efficient version of GPT-5. It's great for well-defined tasks and precise prompts."
+        private const val GPT_5_mini_DESCRIPTION =
+            "GPT-5 mini is a faster, more cost-efficient version of GPT-5. " +
+                "It's great for well-defined tasks and precise prompts."
 
         private const val GPT_5_nano_NAME = "gpt-5-nano"
         private const val GPT_5_nano_DISPLAY_NAME = "GPT-5 nano"
-        private const val GPT_5_nano_DESCRIPTION = "GPT-5 Nano is our fastest, cheapest version of GPT-5. It's great for summarization and classification tasks."
+        private const val GPT_5_nano_DESCRIPTION =
+            "GPT-5 Nano is our fastest, cheapest version of GPT-5. " +
+                "It's great for summarization and classification tasks."
 
         private const val GPT_4_1_NAME = "gpt-4.1"
         private const val GPT_4_1_DISPLAY_NAME = "GPT-4.1"
-        private const val GPT_4_1_DESCRIPTION = "GPT-4.1 excels at instruction following and tool calling, with broad knowledge across domains. It features a 1M token context window, and low latency without a reasoning step."
+        private const val GPT_4_1_DESCRIPTION =
+            "GPT-4.1 excels at instruction following and tool calling, with " +
+                "broad knowledge across domains. It features a 1M token " +
+                "context window, and low latency without a reasoning step."
 
         private const val GPT_4_1_mini_NAME = "gpt-4.1-mini"
         private const val GPT_4_1_mini_DISPLAY_NAME = "GPT-4.1 mini"
-        private const val GPT_4_1_mini_DESCRIPTION = "GPT-4.1 mini excels at instruction following and tool calling. It features a 1M token context window, and low latency without a reasoning step."
+        private const val GPT_4_1_mini_DESCRIPTION =
+            "GPT-4.1 mini excels at instruction following and tool calling. " +
+                "It features a 1M token context window, and low latency without a reasoning step."
 
         private const val GPT_4o_NAME = "gpt-4o"
         private const val GPT_4o_DISPLAY_NAME = "GPT-4o"
-        private const val GPT_4o_DESCRIPTION = "GPT-4o (“o” for “omni”) is our versatile, high-intelligence flagship model. It accepts both text and image inputs, and produces text outputs (including Structured Outputs)."
+        private const val GPT_4o_DESCRIPTION =
+            "GPT-4o (“o” for “omni”) is our versatile, high-intelligence " +
+                "flagship model. It accepts both text and image inputs, and " +
+                "produces text outputs (including Structured Outputs)."
 
         private const val GPT_4o_mini_NAME = "gpt-4o-mini"
         private const val GPT_4o_mini_DISPLAY_NAME = "GPT-4o mini"
-        private const val GPT_4o_mini_DESCRIPTION = "GPT-4o mini (“o” for “omni”) is a fast, affordable small model for focused tasks. It accepts both text and image inputs, and produces text outputs (including Structured Outputs)."
+        private const val GPT_4o_mini_DESCRIPTION =
+            "GPT-4o mini (“o” for “omni”) is a fast, affordable small model " +
+                "for focused tasks. It accepts both text and image inputs, and " +
+                "produces text outputs (including Structured Outputs)."
 
         private const val o4_mini_NAME = "o4-mini"
         private const val o4_mini_DISPLAY_NAME = "04-mini"
-        private const val o4_mini_DESCRIPTION = "o4-mini is our latest small o-series model. It's optimized for fast, effective reasoning with exceptionally efficient performance in coding and visual tasks."
+        private const val o4_mini_DESCRIPTION =
+            "o4-mini is our latest small o-series model. It's optimized for " +
+                "fast, effective reasoning with exceptionally efficient performance in coding and visual tasks."
 
         private const val o3_NAME = "o3"
         private const val o3_DISPLAY_NAME = "o3"
-        private const val o3_DESCRIPTION = "o3 is a well-rounded and powerful model across domains. It sets a new standard for math, science, coding, and visual reasoning tasks. It also excels at technical writing and instruction-following. Use it to think through multi-step problems that involve analysis across text, code, and images."
+        private const val o3_DESCRIPTION =
+            "o3 is a well-rounded and powerful model across domains. " +
+                "It sets a new standard for math, science, coding, and visual " +
+                "reasoning tasks. It also excels at technical writing and " +
+                "instruction-following. Use it to think through multi-step " +
+                "problems that involve analysis across text, code, and images."
 
         private const val o3_mini_NAME = "o3-mini"
         private const val o3_mini_DISPLAY_NAME = "o3-mini"
-        private const val o3_mini_DESCRIPTION = "o3-mini is our newest small reasoning model, providing high intelligence at the same cost and latency targets of o1-mini. o3-mini supports key developer features, like Structured Outputs, function calling, and Batch API."
+        private const val o3_mini_DESCRIPTION =
+            "o3-mini is our newest small reasoning model, providing high " +
+                "intelligence at the same cost and latency targets of o1-mini. " +
+                "o3-mini supports key developer features, like Structured Outputs, function calling, and Batch API."
 
         private const val GPT_5_1_NAME = "gpt-5.1"
         private const val GPT_5_1_DISPLAY_NAME = "GPT-5.1"
-        private const val GPT_5_1_DESCRIPTION = "GPT-5.1 is OpenAI's flagship model with configurable reasoning modes and enhanced capabilities for coding and agentic tasks."
+        private const val GPT_5_1_DESCRIPTION =
+            "GPT-5.1 is OpenAI's flagship model with configurable reasoning " +
+                "modes and enhanced capabilities for coding and agentic tasks."
 
         private const val GPT_5_1_Chat_Latest_NAME = "gpt-5.1-chat-latest"
         private const val GPT_5_1_Chat_Latest_DISPLAY_NAME = "GPT-5.1 Instant"
-        private const val GPT_5_1_Chat_Latest_DESCRIPTION = "GPT-5.1 Instant uses adaptive reasoning to decide when to think before responding, offering fast responses while maintaining accuracy on complex tasks."
+        private const val GPT_5_1_Chat_Latest_DESCRIPTION =
+            "GPT-5.1 Instant uses adaptive reasoning to decide when to think " +
+                "before responding, offering fast responses while maintaining accuracy on complex tasks."
 
         private const val GPT_5_1_Codex_Max_NAME = "gpt-5.1-codex-max"
         private const val GPT_5_1_Codex_Max_DISPLAY_NAME = "GPT-5.1 Codex Max"
-        private const val GPT_5_1_Codex_Max_DESCRIPTION = "GPT-5.1 Codex Max is a specialized model for agentic coding tasks, featuring compaction technology for working across millions of tokens in long-running agent loops."
+        private const val GPT_5_1_Codex_Max_DESCRIPTION =
+            "GPT-5.1 Codex Max is a specialized model for agentic coding " +
+                "tasks, featuring compaction technology for working across " +
+                "millions of tokens in long-running agent loops."
 
         // ---- Models ----
 

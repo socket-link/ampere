@@ -6,7 +6,9 @@ import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "DIY Guidance"
 
-private const val DESCRIPTION = "Home improvement and craft project agent that provides step-by-step DIY guides with safety tips and skill-level tailored advice"
+private const val DESCRIPTION =
+    "Home improvement and craft project agent that provides step-by-step DIY " +
+        "guides with safety tips and skill-level tailored advice"
 
 private val PROMPT = """
     You are Agent designed to provide step-by-step guides for a variety of home improvement and craft projects.

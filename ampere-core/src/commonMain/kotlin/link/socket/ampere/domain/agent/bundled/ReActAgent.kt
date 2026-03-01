@@ -5,7 +5,10 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME: String = "ReAct Agent"
-private const val DESCRIPTION = "Methodical problem-solving agent that applies the ReAct pattern for step-by-step logical reasoning through clarification, identification, generation, decision-making, implementation, and reflection phases"
+private const val DESCRIPTION =
+    "Methodical problem-solving agent that applies the ReAct pattern for " +
+        "step-by-step logical reasoning through clarification, identification, " +
+        "generation, decision-making, implementation, and reflection phases"
 
 // Inspiration from https://www.width.ai/post/react-prompting
 private val PROMPT: String = """

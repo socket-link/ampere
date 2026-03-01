@@ -6,7 +6,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME = "Documentation"
-private const val DESCRIPTION = "Technical documentation specialist agent that creates comprehensive API documentation, user guides, and README files with proper formatting and audience-appropriate content"
+private const val DESCRIPTION =
+    "Technical documentation specialist agent that creates comprehensive API " +
+        "documentation, user guides, and README files with proper formatting and audience-appropriate content"
 
 private fun promptFrom(
     docType: String,

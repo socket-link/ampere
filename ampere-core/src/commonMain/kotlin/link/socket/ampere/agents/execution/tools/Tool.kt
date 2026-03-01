@@ -141,7 +141,7 @@ data class McpTool(
     override suspend fun execute(executionRequest: ExecutionRequest<ExecutionContext>): Outcome {
         val toolExecutor = executor
             ?: throw IllegalStateException(
-                "McpTool '${name}' (server: ${serverId}) has no executor set. " +
+                "McpTool '$name' (server: $serverId) has no executor set. " +
                     "Tools must be created via McpServerManager to be executable.",
             )
 
@@ -171,11 +171,15 @@ internal object ExecutionFunctionSerializer :
         encoder.encodeString("<<function>>")
     }
 
-    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): suspend (ExecutionRequest<*>) -> Outcome {
+    override fun deserialize(
+        decoder: kotlinx.serialization.encoding.Decoder,
+    ): suspend (ExecutionRequest<*>) -> Outcome {
         decoder.decodeString()
         // Return a placeholder function - in practice, tools should be looked up by ID
         return { _ ->
-            throw IllegalStateException("Cannot deserialize function directly. Tools should be looked up by ID.")
+            throw IllegalStateException(
+                "Cannot deserialize function directly. Tools should be looked up by ID.",
+            )
         }
     }
 }

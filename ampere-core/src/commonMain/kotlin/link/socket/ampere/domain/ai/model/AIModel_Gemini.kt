@@ -377,27 +377,43 @@ sealed class AIModel_Gemini(
 
         private const val _2_5_Pro_NAME = "gemini-2.5-pro"
         private const val _2_5_Pro_DISPLAY_NAME = "Gemini 2.5 Pro"
-        private const val _2_5_Pro_DESCRIPTION = "Gemini 2.5 Pro is our state-of-the-art thinking model, capable of reasoning over complex problems in code, math, and STEM, as well as analyzing large datasets, codebases, and documents using long context."
+        private const val _2_5_Pro_DESCRIPTION =
+            "Gemini 2.5 Pro is our state-of-the-art thinking model, capable " +
+                "of reasoning over complex problems in code, math, and STEM, " +
+                "as well as analyzing large datasets, codebases, and documents using long context."
 
         private const val _2_5_Flash_NAME = "gemini-2.5-flash"
         private const val _2_5_Flash_DISPLAY_NAME = "Gemini 2.5 Flash"
-        private const val _2_5_Flash_DESCRIPTION = "Our best model in terms of price-performance, offering well-rounded capabilities. 2.5 Flash is best for large scale processing, low-latency, high volume tasks that require thinking, and agentic use cases."
+        private const val _2_5_Flash_DESCRIPTION =
+            "Our best model in terms of price-performance, offering " +
+                "well-rounded capabilities. 2.5 Flash is best for large scale " +
+                "processing, low-latency, high volume tasks that require thinking, and agentic use cases."
 
         private const val _2_5_Flash_Lite_NAME = "gemini-2.5-flash-lite"
         private const val _2_5_Flash_Lite_DISPLAY_NAME = "Gemini 2.5 Flash Lite"
-        private const val _2_5_Flash_Lite_DESCRIPTION = "A Gemini 2.5 Flash model optimized for cost-efficiency and high throughput."
+        private const val _2_5_Flash_Lite_DESCRIPTION =
+            "A Gemini 2.5 Flash model optimized for cost-efficiency and " +
+                "high throughput."
 
         private const val _2_0_Flash_NAME = "gemini-2.0-flash"
         private const val _2_0_Flash_DISPLAY_NAME = "Gemini 2.0 Flash"
-        private const val _2_0_Flash_DESCRIPTION = "Gemini 2.0 Flash delivers next-gen features and improved capabilities, including superior speed, native tool use, and a 1M token context window."
+        private const val _2_0_Flash_DESCRIPTION =
+            "Gemini 2.0 Flash delivers next-gen features and improved " +
+                "capabilities, including superior speed, native tool use, and a 1M token context window."
 
         private const val _2_0_Flash_Lite_NAME = "gemini-2.0-flash-lite"
         private const val _2_0_Flash_Lite_DISPLAY_NAME = "Gemini 2.0 Flash Lite"
-        private const val _2_0_Flash_Lite_DESCRIPTION = "A Gemini 2.0 Flash model optimized for cost efficiency and low latency."
+        private const val _2_0_Flash_Lite_DESCRIPTION =
+            "A Gemini 2.0 Flash model optimized for cost efficiency and " +
+                "low latency."
 
         private const val _3_0_Pro_NAME = "gemini-3-pro-latest"
         private const val _3_0_Pro_DISPLAY_NAME = "Gemini 3 Pro"
-        private const val _3_0_Pro_DESCRIPTION = "Google's most intelligent AI model with state-of-the-art reasoning capabilities and advanced multimodal understanding. Achieves 1501 Elo on LMArena and reliably completes 10-15 coherent logical steps. Features a 1M token context window."
+        private const val _3_0_Pro_DESCRIPTION =
+            "Google's most intelligent AI model with state-of-the-art " +
+                "reasoning capabilities and advanced multimodal understanding. " +
+                "Achieves 1501 Elo on LMArena and reliably completes 10-15 " +
+                "coherent logical steps. Features a 1M token context window."
 
         // ---- Models ----
 

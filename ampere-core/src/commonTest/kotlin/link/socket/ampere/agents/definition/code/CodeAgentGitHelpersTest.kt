@@ -56,7 +56,8 @@ class CodeAgentGitHelpersTest {
     fun `generateBranchName truncates long titles`() {
         val issue = ExistingIssue(
             number = 789,
-            title = "Implement comprehensive authentication system with OAuth2 and JWT tokens including refresh token rotation",
+            title = "Implement comprehensive authentication system with OAuth2 " +
+                "and JWT tokens including refresh token rotation",
             body = "",
             state = IssueState.Open,
             labels = emptyList(),

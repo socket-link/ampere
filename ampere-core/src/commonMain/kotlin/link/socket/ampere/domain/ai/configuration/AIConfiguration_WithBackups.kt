@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:class-naming")
+
 package link.socket.ampere.domain.ai.configuration
 
 import link.socket.ampere.domain.ai.model.AIModel

@@ -5,7 +5,9 @@ import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 private const val NAME: String = "Refine Prompt"
-private const val DESCRIPTION = "Prompt engineering specialist agent that refines and optimizes prompts for clarity, specificity, and effectiveness following current best practices"
+private const val DESCRIPTION =
+    "Prompt engineering specialist agent that refines and optimizes prompts " +
+        "for clarity, specificity, and effectiveness following current best practices"
 
 private val PROMPT: String = """
     You are a specialized Agent focused on refining and optimizing prompts. 

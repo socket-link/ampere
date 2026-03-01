@@ -419,13 +419,16 @@ class MemoryContextTest {
         val context = MemoryContext(
             taskType = "refactoring",
             tags = setOf("kotlin", "clean-code", "repository-pattern"),
-            description = "refactor UserRepository to follow clean architecture with repository pattern and dependency injection",
+            description = "refactor UserRepository to follow clean architecture with " +
+                "repository pattern and dependency injection",
             projectContext = "backend-service",
         )
 
         val perfectMatch = createKnowledgeFromOutcome(
-            approach = "Refactored UserRepository following repository pattern with dependency injection for clean architecture",
-            learnings = "Repository pattern with dependency injection improves testability and follows clean architecture principles",
+            approach = "Refactored UserRepository following repository pattern " +
+                "with dependency injection for clean architecture",
+            learnings = "Repository pattern with dependency injection improves " +
+                "testability and follows clean architecture principles",
             timestamp = now.minus(5.days),
         )
 

@@ -495,7 +495,9 @@ object ProjectPrompts {
             appendLine()
             appendLine("Respond with:")
             appendLine(
-                """{"progressPercentage": 0, "blockedTasks": [], "risks": ["No tasks defined"], "recommendedActions": ["Define tasks for this epic"], "needsHumanInput": true, "humanInputReason": "Epic needs task breakdown"}""",
+                """{"progressPercentage": 0, "blockedTasks": [], "risks": ["No tasks defined"], """ +
+                    """"recommendedActions": ["Define tasks for this epic"], "needsHumanInput": true, """ +
+                    """"humanInputReason": "Epic needs task breakdown"}""",
             )
             return@buildString
         }

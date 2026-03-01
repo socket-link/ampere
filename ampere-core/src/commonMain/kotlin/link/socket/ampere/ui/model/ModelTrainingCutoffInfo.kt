@@ -25,7 +25,10 @@ fun ModelTrainingCutoffInfo(
         )
 
         val text = remember(cutoffDate) {
-            "Updated through ${cutoffDate.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${cutoffDate.year}"
+            val monthLabel = cutoffDate.month.name
+                .lowercase()
+                .replaceFirstChar { it.uppercase() }
+            "Updated through $monthLabel ${cutoffDate.year}"
         }
 
         Text(

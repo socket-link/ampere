@@ -49,9 +49,21 @@ fun RateLimitChart(
     val maxTokenValue: Long = max(inputTokensValue, outputTokensValue)
 
     // Calculate separate progress values for different metric types
-    val requestsProgress: Float = if (maxRequestsPerMinute > 0) (requestsValue.toFloat() / maxRequestsPerMinute.toFloat()) else 0f
-    val inputProgress: Float = if (maxTokenValue > 0) (inputTokensValue.toFloat() / maxTokenValue.toFloat()) else 0f
-    val outputProgress: Float = if (maxTokenValue > 0) (outputTokensValue.toFloat() / maxTokenValue.toFloat()) else 0f
+    val requestsProgress: Float = if (maxRequestsPerMinute > 0) {
+        requestsValue.toFloat() / maxRequestsPerMinute.toFloat()
+    } else {
+        0f
+    }
+    val inputProgress: Float = if (maxTokenValue > 0) {
+        inputTokensValue.toFloat() / maxTokenValue.toFloat()
+    } else {
+        0f
+    }
+    val outputProgress: Float = if (maxTokenValue > 0) {
+        outputTokensValue.toFloat() / maxTokenValue.toFloat()
+    } else {
+        0f
+    }
 
     Column(modifier = modifier) {
         RateLimitBar(
