@@ -34,6 +34,9 @@ class AgentLLMServicePricingTest {
                 inputTokens = 1_000,
                 outputTokens = 500,
             ),
+            estimateUsd = { _, _, inputTokens, outputTokens ->
+                if (inputTokens == 1_000 && outputTokens == 500) 0.006 else null
+            },
         )
 
         assertEquals(0.006, assertNotNull(usage.estimatedCost), absoluteTolerance = 0.0000001)
@@ -49,6 +52,7 @@ class AgentLLMServicePricingTest {
                 outputTokens = 500,
                 estimatedCost = 0.42,
             ),
+            estimateUsd = { _, _, _, _ -> null },
         )
 
         assertEquals(0.42, usage.estimatedCost)

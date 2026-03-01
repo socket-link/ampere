@@ -7,15 +7,27 @@ internal object ProviderPricingCalculator {
         inputTokens: Int?,
         outputTokens: Int?,
     ): Double? {
-        if (inputTokens == null || outputTokens == null) return null
-        if (inputTokens < 0 || outputTokens < 0) return null
-
         val pricing = BundledProviderPricingCatalog.find(
             providerId = providerId,
             modelId = modelId,
-        ) ?: return null
+        )
 
-        val tier = pricing.tiers.firstOrNull { candidate ->
+        return estimateUsd(
+            pricing = pricing,
+            inputTokens = inputTokens,
+            outputTokens = outputTokens,
+        )
+    }
+
+    fun estimateUsd(
+        pricing: ProviderModelPricing?,
+        inputTokens: Int?,
+        outputTokens: Int?,
+    ): Double? {
+        if (inputTokens == null || outputTokens == null) return null
+        if (inputTokens < 0 || outputTokens < 0) return null
+
+        val tier = pricing?.tiers?.firstOrNull { candidate ->
             candidate.maxInputTokens == null || inputTokens <= candidate.maxInputTokens
         } ?: return null
 

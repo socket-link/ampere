@@ -4,27 +4,40 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import kotlinx.coroutines.test.runTest
 
 class ProviderPricingCalculatorTest {
 
+    private val pricing = ProviderModelPricing(
+        providerId = "google",
+        modelId = "gemini-2.5-pro",
+        tiers = listOf(
+            TokenPricingTier(
+                maxInputTokens = 200_000,
+                inputUsdPerMillionTokens = 1.25,
+                outputUsdPerMillionTokens = 10.0,
+            ),
+            TokenPricingTier(
+                inputUsdPerMillionTokens = 2.5,
+                outputUsdPerMillionTokens = 15.0,
+            ),
+        ),
+    )
+
     @Test
-    fun `calculates cost for known model token counts`() = runTest {
+    fun `calculates cost for known model token counts`() {
         val estimatedCost = ProviderPricingCalculator.estimateUsd(
-            providerId = "openai",
-            modelId = "gpt-4.1",
+            pricing = pricing,
             inputTokens = 1_000,
             outputTokens = 500,
         )
 
-        assertEquals(0.006, assertNotNull(estimatedCost), absoluteTolerance = 0.0000001)
+        assertEquals(0.00625, assertNotNull(estimatedCost), absoluteTolerance = 0.0000001)
     }
 
     @Test
-    fun `uses higher tier pricing when input crosses threshold`() = runTest {
+    fun `uses higher tier pricing when input crosses threshold`() {
         val estimatedCost = ProviderPricingCalculator.estimateUsd(
-            providerId = "google",
-            modelId = "gemini-2.5-pro",
+            pricing = pricing,
             inputTokens = 250_000,
             outputTokens = 10_000,
         )
@@ -33,10 +46,9 @@ class ProviderPricingCalculatorTest {
     }
 
     @Test
-    fun `unknown model returns no estimate`() = runTest {
+    fun `unknown model returns no estimate`() {
         val estimatedCost = ProviderPricingCalculator.estimateUsd(
-            providerId = "openai",
-            modelId = "unknown-model",
+            pricing = null,
             inputTokens = 1_000,
             outputTokens = 500,
         )

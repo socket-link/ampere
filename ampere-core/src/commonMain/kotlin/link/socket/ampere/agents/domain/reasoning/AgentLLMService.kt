@@ -394,13 +394,22 @@ class AgentLLMService(
         providerId: String,
         modelId: String,
         usage: TokenUsage,
+        estimateUsd: suspend (providerId: String, modelId: String, inputTokens: Int?, outputTokens: Int?) -> Double? =
+            { estimateProviderId, estimateModelId, inputTokens, outputTokens ->
+                ProviderPricingCalculator.estimateUsd(
+                    providerId = estimateProviderId,
+                    modelId = estimateModelId,
+                    inputTokens = inputTokens,
+                    outputTokens = outputTokens,
+                )
+            },
     ): TokenUsage {
         val bundledEstimatedCost = runCatching {
-            ProviderPricingCalculator.estimateUsd(
-                providerId = providerId,
-                modelId = modelId,
-                inputTokens = usage.inputTokens,
-                outputTokens = usage.outputTokens,
+            estimateUsd(
+                providerId,
+                modelId,
+                usage.inputTokens,
+                usage.outputTokens,
             )
         }.getOrElse { error ->
             logger.w(error) {
