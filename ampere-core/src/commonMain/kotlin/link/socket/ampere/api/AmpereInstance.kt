@@ -4,6 +4,7 @@ import link.socket.ampere.api.service.AgentService
 import link.socket.ampere.api.service.EventService
 import link.socket.ampere.api.service.KnowledgeService
 import link.socket.ampere.api.service.OutcomeService
+import link.socket.ampere.api.service.PricingService
 import link.socket.ampere.api.service.StatusService
 import link.socket.ampere.api.service.ThreadService
 import link.socket.ampere.api.service.TicketService
@@ -41,6 +42,9 @@ interface AmpereInstance : AutoCloseable {
 
     /** Execution history and outcome tracking */
     val outcomes: OutcomeService
+
+    /** Bundled model pricing, overrides, and cost estimation */
+    val pricing: PricingService
 
     /** Persistent knowledge and memory */
     val knowledge: KnowledgeService

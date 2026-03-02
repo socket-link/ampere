@@ -32,12 +32,14 @@ data class AmpereConfig(
     val workspace: String? = null,
     val databasePath: String? = null,
     val onEscalation: ((Escalated) -> Unit)? = null,
+    val pricingOverrides: PricingOverrides = PricingOverrides(),
 ) {
     class Builder {
         private var providerConfig: ProviderConfig? = null
         private var workspace: String? = null
         private var databasePath: String? = null
         private var escalationHandler: ((Escalated) -> Unit)? = null
+        private val pricingOverridesBuilder = PricingOverridesBuilder()
 
         /**
          * Set the AI provider configuration.
@@ -75,6 +77,31 @@ data class AmpereConfig(
             escalationHandler = handler
         }
 
+        /**
+         * Override bundled pricing data or add private model pricing.
+         *
+         * ```
+         * pricing {
+         *     model("openai", "gpt-4.1") {
+         *         tier(
+         *             inputUsdPerMillionTokens = 1.5,
+         *             outputUsdPerMillionTokens = 6.0,
+         *         )
+         *     }
+         *
+         *     model("self-hosted", "mixtral-enterprise") {
+         *         tier(
+         *             inputUsdPerMillionTokens = 0.0,
+         *             outputUsdPerMillionTokens = 0.0,
+         *         )
+         *     }
+         * }
+         * ```
+         */
+        fun pricing(configure: PricingOverridesBuilder.() -> Unit) {
+            pricingOverridesBuilder.apply(configure)
+        }
+
         fun build(): AmpereConfig {
             val provider = requireNotNull(providerConfig) {
                 "Provider is required. Use provider(AnthropicConfig()) or similar."
@@ -84,6 +111,7 @@ data class AmpereConfig(
                 workspace = workspace,
                 databasePath = databasePath,
                 onEscalation = escalationHandler,
+                pricingOverrides = pricingOverridesBuilder.build(),
             )
         }
     }

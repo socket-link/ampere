@@ -12,6 +12,7 @@ import link.socket.ampere.api.internal.DefaultAmpereInstance
 import link.socket.ampere.api.internal.DefaultEventService
 import link.socket.ampere.api.internal.DefaultKnowledgeService
 import link.socket.ampere.api.internal.DefaultOutcomeService
+import link.socket.ampere.api.internal.DefaultPricingService
 import link.socket.ampere.api.internal.DefaultStatusService
 import link.socket.ampere.api.internal.DefaultThreadService
 import link.socket.ampere.api.internal.DefaultTicketService
@@ -74,6 +75,8 @@ fun Ampere.fromEnvironment(
         outcomeRepository = environmentService.outcomeMemoryRepository,
     )
 
+    val pricingService = DefaultPricingService()
+
     val knowledgeService = DefaultKnowledgeService(
         knowledgeRepository = knowledgeRepository,
     )
@@ -96,6 +99,7 @@ fun Ampere.fromEnvironment(
         override val threads = threadService
         override val events = eventService
         override val outcomes = outcomeService
+        override val pricing = pricingService
         override val knowledge = knowledgeService
         override val status = statusService
         override fun close() {

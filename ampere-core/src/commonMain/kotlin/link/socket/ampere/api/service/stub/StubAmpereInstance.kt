@@ -5,6 +5,7 @@ import link.socket.ampere.api.service.AgentService
 import link.socket.ampere.api.service.EventService
 import link.socket.ampere.api.service.KnowledgeService
 import link.socket.ampere.api.service.OutcomeService
+import link.socket.ampere.api.service.PricingService
 import link.socket.ampere.api.service.StatusService
 import link.socket.ampere.api.service.ThreadService
 import link.socket.ampere.api.service.TicketService
@@ -32,6 +33,8 @@ class StubAmpereInstance : AmpereInstance {
     override val events: EventService = StubEventService()
 
     override val outcomes: OutcomeService = StubOutcomeService()
+
+    override val pricing: PricingService = StubPricingService()
 
     override val knowledge: KnowledgeService = StubKnowledgeService()
 

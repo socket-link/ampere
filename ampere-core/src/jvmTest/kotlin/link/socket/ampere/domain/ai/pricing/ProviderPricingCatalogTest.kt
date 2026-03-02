@@ -14,6 +14,7 @@ class ProviderPricingCatalogTest {
 
         assertEquals(1, catalog.version)
         assertEquals("USD", catalog.currency)
+        assertEquals("2026-03-02", catalog.publishedAt)
         assertTrue(catalog.entries.isNotEmpty())
     }
 

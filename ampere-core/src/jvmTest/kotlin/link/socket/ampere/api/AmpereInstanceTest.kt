@@ -395,6 +395,10 @@ class AmpereInstanceTest {
             database(":memory:")
         }
         assertNotNull(instance)
+        runBlocking {
+            assertEquals("USD", instance.pricing.version().getOrThrow().currency)
+            assertNotNull(instance.pricing.get("openai", "gpt-4.1").getOrThrow())
+        }
         instance.close()
     }
 
@@ -442,6 +446,19 @@ class AmpereInstanceTest {
         // Outcomes: stats returns zeroed
         val stats = ampere.outcomes.stats().getOrNull()!!
         assertEquals(0, stats.totalOutcomes)
+
+        // Pricing: bundled lookups and estimates work
+        val pricing = ampere.pricing.get("openai", "gpt-4.1").getOrNull()
+        assertNotNull(pricing)
+        val estimate = ampere.pricing.estimate(
+            providerId = "openai",
+            modelId = "gpt-4.1",
+            usage = link.socket.ampere.api.model.TokenUsage(
+                inputTokens = 1_000,
+                outputTokens = 500,
+            ),
+        ).getOrNull()
+        assertNotNull(estimate)
 
         // Status: snapshot returns zeroed
         val snapshot = ampere.status.snapshot().getOrNull()!!
