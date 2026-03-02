@@ -1,6 +1,7 @@
 package link.socket.ampere.api
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.Flow
@@ -34,15 +35,22 @@ import link.socket.ampere.api.model.AgentSnapshot
 import link.socket.ampere.api.model.AgentState
 import link.socket.ampere.api.model.HealthLevel
 import link.socket.ampere.api.model.HealthStatus
+import link.socket.ampere.api.model.ModelPricing
 import link.socket.ampere.api.model.OutcomeStats
+import link.socket.ampere.api.model.PricingDataVersion
+import link.socket.ampere.api.model.PricingEstimateRequest
+import link.socket.ampere.api.model.PricingEstimateResult
+import link.socket.ampere.api.model.PricingTier
 import link.socket.ampere.api.model.SystemSnapshot
 import link.socket.ampere.api.model.ThreadFilter
 import link.socket.ampere.api.model.TicketFilter
+import link.socket.ampere.api.model.TokenUsage
 import link.socket.ampere.api.service.AgentService
 import link.socket.ampere.api.service.EventService
 import link.socket.ampere.api.service.EventStreamFilter
 import link.socket.ampere.api.service.KnowledgeService
 import link.socket.ampere.api.service.OutcomeService
+import link.socket.ampere.api.service.PricingService
 import link.socket.ampere.api.service.StatusService
 import link.socket.ampere.api.service.ThreadService
 import link.socket.ampere.api.service.TicketService
@@ -244,6 +252,43 @@ class ConsumerSimulationTest {
         )
     }
 
+    private val stubPricingService = object : PricingService {
+        private val version = PricingDataVersion(
+            version = 1,
+            currency = "USD",
+            publishedAt = "2026-03-02",
+        )
+        private val pricing = ModelPricing(
+            providerId = "openai",
+            modelId = "gpt-4.1",
+            tiers = listOf(
+                PricingTier(
+                    inputUsdPerMillionTokens = 2.0,
+                    outputUsdPerMillionTokens = 8.0,
+                ),
+            ),
+        )
+
+        override suspend fun get(providerId: String, modelId: String): Result<ModelPricing?> = Result.success(
+            pricing.takeIf { it.providerId == providerId && it.modelId == modelId },
+        )
+
+        override suspend fun list(): Result<List<ModelPricing>> = Result.success(listOf(pricing))
+
+        override suspend fun version(): Result<PricingDataVersion> = Result.success(version)
+
+        override suspend fun estimate(request: PricingEstimateRequest): Result<PricingEstimateResult?> = Result.success(
+            PricingEstimateResult(
+                providerId = request.providerId,
+                modelId = request.modelId,
+                usage = request.usage.copy(estimatedCost = 0.006),
+                pricing = pricing,
+                appliedTier = pricing.tiers.single(),
+                version = version,
+            ),
+        )
+    }
+
     // ==================== Consumer Simulation Tests ====================
 
     @Test
@@ -436,6 +481,28 @@ class ConsumerSimulationTest {
     }
 
     @Test
+    fun `pricing service - lookup and estimate flow`() = kotlinx.coroutines.runBlocking<Unit> {
+        val pricing = stubPricingService.get("openai", "gpt-4.1").getOrThrow()
+        val allPricing = stubPricingService.list().getOrThrow()
+        val version = stubPricingService.version().getOrThrow()
+        val estimate = stubPricingService.estimate(
+            PricingEstimateRequest(
+                providerId = "openai",
+                modelId = "gpt-4.1",
+                usage = TokenUsage(
+                    inputTokens = 1_000,
+                    outputTokens = 500,
+                ),
+            ),
+        ).getOrThrow()
+
+        assertNotNull(pricing)
+        assertEquals(1, allPricing.size)
+        assertEquals("USD", version.currency)
+        assertEquals(0.006, estimate?.usage?.estimatedCost)
+    }
+
+    @Test
     fun `AmpereInstance interface provides all service accessors`() {
         // Verify the AmpereInstance interface shape by creating a stub
         val instance = object : AmpereInstance {
@@ -444,6 +511,7 @@ class ConsumerSimulationTest {
             override val threads: ThreadService = stubThreadService
             override val events: EventService = stubEventService
             override val outcomes: OutcomeService = stubOutcomeService
+            override val pricing: PricingService = stubPricingService
             override val knowledge: KnowledgeService = stubKnowledgeService
             override val status: StatusService = stubStatusService
             override fun close() {}
@@ -454,6 +522,7 @@ class ConsumerSimulationTest {
         assertNotNull(instance.threads)
         assertNotNull(instance.events)
         assertNotNull(instance.outcomes)
+        assertNotNull(instance.pricing)
         assertNotNull(instance.knowledge)
         assertNotNull(instance.status)
     }

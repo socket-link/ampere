@@ -1,6 +1,7 @@
 {
   "version": 1,
   "currency": "USD",
+  "publishedAt": "2026-03-02",
   "entries": [
     {
       "providerId": "openai",

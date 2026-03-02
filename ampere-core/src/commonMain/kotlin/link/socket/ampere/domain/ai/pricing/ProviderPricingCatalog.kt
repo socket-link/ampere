@@ -9,6 +9,7 @@ import org.jetbrains.compose.resources.ExperimentalResourceApi
 data class ProviderPricingCatalog(
     val version: Int,
     val currency: String,
+    val publishedAt: String? = null,
     val entries: List<ProviderModelPricing>,
 )
 

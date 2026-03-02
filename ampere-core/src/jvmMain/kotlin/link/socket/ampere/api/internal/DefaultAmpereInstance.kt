@@ -20,6 +20,7 @@ import link.socket.ampere.api.service.AgentService
 import link.socket.ampere.api.service.EventService
 import link.socket.ampere.api.service.KnowledgeService
 import link.socket.ampere.api.service.OutcomeService
+import link.socket.ampere.api.service.PricingService
 import link.socket.ampere.api.service.StatusService
 import link.socket.ampere.api.service.ThreadService
 import link.socket.ampere.api.service.TicketService
@@ -101,6 +102,10 @@ internal class DefaultAmpereInstance(
 
     override val outcomes: OutcomeService = DefaultOutcomeService(
         outcomeRepository = environmentService.outcomeMemoryRepository,
+    )
+
+    override val pricing: PricingService = DefaultPricingService(
+        overrides = config.pricingOverrides,
     )
 
     override val knowledge: KnowledgeService = DefaultKnowledgeService(
