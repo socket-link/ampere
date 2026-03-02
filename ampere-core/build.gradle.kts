@@ -20,6 +20,10 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint")
 }
 
+compose.resources {
+    packageOfResClass = "link.socket.ampere.resources"
+}
+
 val ampereVersion: String by project
 
 group = "link.socket"

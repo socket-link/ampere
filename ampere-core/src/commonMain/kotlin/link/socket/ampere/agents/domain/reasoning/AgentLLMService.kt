@@ -17,6 +17,7 @@ import link.socket.ampere.agents.domain.routing.RoutingResolution
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.api.model.TokenUsage
+import link.socket.ampere.domain.ai.pricing.ProviderPricingCalculator
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.domain.util.toClientModelId
 import link.socket.ampere.util.ioDispatcher
@@ -205,7 +206,11 @@ class AgentLLMService(
             }
         }
 
-        val usage = TokenUsageExtractor.fromOpenAiUsage(completion.usage)
+        val usage = enrichUsageWithEstimatedCost(
+            providerId = effectiveConfig.provider.id,
+            modelId = model.name,
+            usage = TokenUsageExtractor.fromOpenAiUsage(completion.usage),
+        )
 
         emitCompletedTelemetry(
             routingContext = routingContext,
@@ -384,6 +389,41 @@ class AgentLLMService(
     private fun resolveCustomProviderId(): String =
         runCatching { agentConfiguration.aiConfiguration.provider.id }
             .getOrDefault("custom")
+
+    internal suspend fun enrichUsageWithEstimatedCost(
+        providerId: String,
+        modelId: String,
+        usage: TokenUsage,
+        estimateUsd: suspend (providerId: String, modelId: String, inputTokens: Int?, outputTokens: Int?) -> Double? =
+            { estimateProviderId, estimateModelId, inputTokens, outputTokens ->
+                ProviderPricingCalculator.estimateUsd(
+                    providerId = estimateProviderId,
+                    modelId = estimateModelId,
+                    inputTokens = inputTokens,
+                    outputTokens = outputTokens,
+                )
+            },
+    ): TokenUsage {
+        val bundledEstimatedCost = runCatching {
+            estimateUsd(
+                providerId,
+                modelId,
+                usage.inputTokens,
+                usage.outputTokens,
+            )
+        }.getOrElse { error ->
+            logger.w(error) {
+                "[LLM] Failed to resolve bundled pricing for $providerId/$modelId"
+            }
+            null
+        }
+
+        return if (bundledEstimatedCost != null) {
+            usage.copy(estimatedCost = bundledEstimatedCost)
+        } else {
+            usage
+        }
+    }
 }
 
 /**

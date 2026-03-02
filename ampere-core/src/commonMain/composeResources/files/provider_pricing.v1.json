@@ -1,0 +1,306 @@
+{
+  "version": 1,
+  "currency": "USD",
+  "entries": [
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 1.25,
+          "outputUsdPerMillionTokens": 10.0
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5-mini",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 0.25,
+          "outputUsdPerMillionTokens": 2.0
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5-nano",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 0.05,
+          "outputUsdPerMillionTokens": 0.4
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.1",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 2.0,
+          "outputUsdPerMillionTokens": 8.0
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.1-chat-latest",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 2.0,
+          "outputUsdPerMillionTokens": 8.0
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.1-codex-max",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 2.0,
+          "outputUsdPerMillionTokens": 8.0
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4.1",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 2.0,
+          "outputUsdPerMillionTokens": 8.0
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4.1-mini",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 0.4,
+          "outputUsdPerMillionTokens": 1.6
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4o",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 2.5,
+          "outputUsdPerMillionTokens": 10.0
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4o-mini",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 0.15,
+          "outputUsdPerMillionTokens": 0.6
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "o4-mini",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 1.1,
+          "outputUsdPerMillionTokens": 4.4
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "o3",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 2.0,
+          "outputUsdPerMillionTokens": 8.0
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "o3-mini",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 1.1,
+          "outputUsdPerMillionTokens": 4.4
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4-1",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 15.0,
+          "outputUsdPerMillionTokens": 75.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4-0",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 15.0,
+          "outputUsdPerMillionTokens": 75.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4-5-20251101",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 5.0,
+          "outputUsdPerMillionTokens": 25.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-sonnet-4-0",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 3.0,
+          "outputUsdPerMillionTokens": 15.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-sonnet-4-5-20250929",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 3.0,
+          "outputUsdPerMillionTokens": 15.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-3-7-sonnet-latest",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 3.0,
+          "outputUsdPerMillionTokens": 15.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-3-5-haiku-latest",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 0.8,
+          "outputUsdPerMillionTokens": 4.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-3-haiku-20240307",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 0.25,
+          "outputUsdPerMillionTokens": 1.25
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-haiku-4-5",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 1.0,
+          "outputUsdPerMillionTokens": 5.0
+        }
+      ]
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-2.5-pro",
+      "tiers": [
+        {
+          "maxInputTokens": 200000,
+          "inputUsdPerMillionTokens": 1.25,
+          "outputUsdPerMillionTokens": 10.0
+        },
+        {
+          "inputUsdPerMillionTokens": 2.5,
+          "outputUsdPerMillionTokens": 15.0
+        }
+      ]
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-2.5-flash",
+      "tiers": [
+        {
+          "maxInputTokens": 200000,
+          "inputUsdPerMillionTokens": 0.3,
+          "outputUsdPerMillionTokens": 2.5
+        },
+        {
+          "inputUsdPerMillionTokens": 0.6,
+          "outputUsdPerMillionTokens": 3.5
+        }
+      ]
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-2.5-flash-lite",
+      "tiers": [
+        {
+          "maxInputTokens": 200000,
+          "inputUsdPerMillionTokens": 0.1,
+          "outputUsdPerMillionTokens": 0.4
+        },
+        {
+          "inputUsdPerMillionTokens": 0.2,
+          "outputUsdPerMillionTokens": 0.8
+        }
+      ]
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-2.0-flash",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 0.1,
+          "outputUsdPerMillionTokens": 0.4
+        }
+      ]
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-2.0-flash-lite",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 0.075,
+          "outputUsdPerMillionTokens": 0.3
+        }
+      ]
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-3-pro-latest",
+      "tiers": [
+        {
+          "maxInputTokens": 200000,
+          "inputUsdPerMillionTokens": 2.0,
+          "outputUsdPerMillionTokens": 12.0
+        },
+        {
+          "inputUsdPerMillionTokens": 4.0,
+          "outputUsdPerMillionTokens": 18.0
+        }
+      ]
+    }
+  ]
+}
