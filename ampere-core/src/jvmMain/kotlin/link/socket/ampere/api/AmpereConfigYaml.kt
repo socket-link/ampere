@@ -20,6 +20,8 @@ import link.socket.ampere.dsl.config.ProviderConfig
  * ai:
  *   provider: anthropic
  *   model: sonnet-4
+ *   # Optional. Prefer injecting from your runtime environment instead of committing secrets.
+ *   apiKey: your-api-key
  *   backups:
  *     - provider: openai
  *       model: gpt-4.1
@@ -54,13 +56,14 @@ internal data class YamlAmpereConfig(
 internal data class YamlAIProviderConfig(
     val provider: String,
     val model: String,
+    val apiKey: String? = null,
     val backups: List<YamlAIProviderConfig> = emptyList(),
 ) {
     fun toProviderConfig(): ProviderConfig {
         val baseConfig = when (provider.lowercase()) {
-            "anthropic" -> AnthropicConfig(model = toClaudeModel(model))
-            "openai" -> OpenAIConfig(model = toOpenAIModel(model))
-            "gemini" -> GeminiConfig(model = toGeminiModel(model))
+            "anthropic" -> AnthropicConfig(apiKey = apiKey, model = toClaudeModel(model))
+            "openai" -> OpenAIConfig(apiKey = apiKey, model = toOpenAIModel(model))
+            "gemini" -> GeminiConfig(apiKey = apiKey, model = toGeminiModel(model))
             else -> throw IllegalArgumentException(
                 "Unknown provider: $provider. Supported: anthropic, openai, gemini",
             )

@@ -17,10 +17,12 @@ class KoogAgentFactory() {
         aiConfiguration: AIConfiguration,
         agent: KoreAgent,
     ): AIAgent<String, *>? {
-        val promptExecutor = when (val ai = aiConfiguration.provider) {
-            is AIProvider_Anthropic -> simpleAnthropicExecutor(ai.apiToken)
-            is AIProvider_Google -> simpleGoogleAIExecutor(ai.apiToken)
-            is AIProvider_OpenAI -> simpleOpenAIExecutor(ai.apiToken)
+        val provider = aiConfiguration.provider
+        val promptExecutor = when (provider.id) {
+            AIProvider_Anthropic.id -> simpleAnthropicExecutor(provider.apiToken)
+            AIProvider_Google.id -> simpleGoogleAIExecutor(provider.apiToken)
+            AIProvider_OpenAI.id -> simpleOpenAIExecutor(provider.apiToken)
+            else -> return null
         }
         val llmModel = aiConfiguration.model.toKoogLLMModel() ?: return null
         return AIAgent(

@@ -24,4 +24,13 @@ data object AIProvider_Anthropic : AIProvider<AITool_Claude, AIModel_Claude> {
             url = ANTHROPIC_API_ENDPOINT,
         )
     }
+
+    internal fun withApiToken(apiToken: String): AIProvider<AITool_Claude, AIModel_Claude> =
+        RuntimeAIProvider(
+            id = id,
+            name = name,
+            apiToken = apiToken,
+            availableModels = availableModels,
+            baseUrl = ANTHROPIC_API_ENDPOINT,
+        )
 }

@@ -3,12 +3,15 @@ package link.socket.ampere.dsl.config
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_WithBackups
+import link.socket.ampere.domain.ai.model.AIModel
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
+import link.socket.ampere.domain.ai.provider.AIProvider
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.domain.ai.provider.AIProvider_Google
 import link.socket.ampere.domain.ai.provider.AIProvider_OpenAI
+import link.socket.ampere.domain.tool.AITool
 
 /**
  * Base interface for provider-specific configurations in the DSL.
@@ -31,7 +34,7 @@ sealed interface ProviderConfig {
  * )
  * ```
  *
- * @param apiKey Optional API key (falls back to environment variable if not provided)
+ * @param apiKey Optional runtime API key. When omitted, falls back to the generated KotlinConfig value.
  * @param model The Claude model to use (defaults to Sonnet 4)
  */
 data class AnthropicConfig(
@@ -42,7 +45,11 @@ data class AnthropicConfig(
 
     override fun toAIConfiguration(): AIConfiguration {
         val primary = AIConfiguration_Default(
-            provider = AIProvider_Anthropic,
+            provider = runtimeProviderOrDefault(
+                apiKey = apiKey,
+                defaultProvider = AIProvider_Anthropic,
+                runtimeProviderFactory = AIProvider_Anthropic::withApiToken,
+            ),
             model = model,
         )
 
@@ -72,7 +79,7 @@ data class AnthropicConfig(
  * )
  * ```
  *
- * @param apiKey Optional API key (falls back to environment variable if not provided)
+ * @param apiKey Optional runtime API key. When omitted, falls back to the generated KotlinConfig value.
  * @param model The OpenAI model to use (defaults to GPT-4.1)
  */
 data class OpenAIConfig(
@@ -83,7 +90,11 @@ data class OpenAIConfig(
 
     override fun toAIConfiguration(): AIConfiguration {
         val primary = AIConfiguration_Default(
-            provider = AIProvider_OpenAI,
+            provider = runtimeProviderOrDefault(
+                apiKey = apiKey,
+                defaultProvider = AIProvider_OpenAI,
+                runtimeProviderFactory = AIProvider_OpenAI::withApiToken,
+            ),
             model = model,
         )
 
@@ -113,7 +124,7 @@ data class OpenAIConfig(
  * )
  * ```
  *
- * @param apiKey Optional API key (falls back to environment variable if not provided)
+ * @param apiKey Optional runtime API key. When omitted, falls back to the generated KotlinConfig value.
  * @param model The Gemini model to use (defaults to Flash 2.5)
  */
 data class GeminiConfig(
@@ -124,7 +135,11 @@ data class GeminiConfig(
 
     override fun toAIConfiguration(): AIConfiguration {
         val primary = AIConfiguration_Default(
-            provider = AIProvider_Google,
+            provider = runtimeProviderOrDefault(
+                apiKey = apiKey,
+                defaultProvider = AIProvider_Google,
+                runtimeProviderFactory = AIProvider_Google::withApiToken,
+            ),
             model = model,
         )
 
@@ -142,3 +157,9 @@ data class GeminiConfig(
         backups = backups + config.toAIConfiguration(),
     )
 }
+
+private fun <TD : AITool, L : AIModel> runtimeProviderOrDefault(
+    apiKey: String?,
+    defaultProvider: AIProvider<TD, L>,
+    runtimeProviderFactory: (String) -> AIProvider<TD, L>,
+): AIProvider<TD, L> = apiKey?.let(runtimeProviderFactory) ?: defaultProvider
