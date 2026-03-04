@@ -22,4 +22,12 @@ data object AIProvider_OpenAI : AIProvider<AITool_OpenAI, AIModel_OpenAI> {
             token = apiToken,
         )
     }
+
+    internal fun withApiToken(apiToken: String): AIProvider<AITool_OpenAI, AIModel_OpenAI> =
+        RuntimeAIProvider(
+            id = id,
+            name = name,
+            apiToken = apiToken,
+            availableModels = availableModels,
+        )
 }

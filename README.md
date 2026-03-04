@@ -98,7 +98,12 @@ dependencies {
 ```kotlin
 val team = AgentTeam.create {
     // Configure your AI provider
-    config(AnthropicConfig(model = Claude.Sonnet4))
+    config(
+        AnthropicConfig(
+            apiKey = System.getenv("ANTHROPIC_API_KEY"),
+            model = Claude.Sonnet4,
+        ),
+    )
 
     // Add agents with personality traits
     agent(ProductManager) { personality { directness = 0.8 } }
@@ -119,6 +124,8 @@ team.events.collect { event ->
     }
 }
 ```
+
+`apiKey` is optional. When you provide it, Ampere uses that runtime credential directly. When you omit it, provider clients fall back to the generated `KotlinConfig` values sourced from `local.properties` at build time.
 </details>
 
 ---

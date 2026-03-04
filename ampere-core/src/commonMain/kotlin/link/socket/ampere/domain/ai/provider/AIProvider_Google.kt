@@ -24,4 +24,13 @@ data object AIProvider_Google : AIProvider<AITool_Gemini, AIModel_Gemini> {
             url = GOOGLE_API_ENDPOINT,
         )
     }
+
+    internal fun withApiToken(apiToken: String): AIProvider<AITool_Gemini, AIModel_Gemini> =
+        RuntimeAIProvider(
+            id = id,
+            name = name,
+            apiToken = apiToken,
+            availableModels = availableModels,
+            baseUrl = GOOGLE_API_ENDPOINT,
+        )
 }
