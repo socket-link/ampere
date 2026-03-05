@@ -165,6 +165,7 @@ kotlin {
         }
         val androidMain by getting {
             dependencies {
+                implementation(project(":ampere-compose"))
                 implementation(compose.uiTooling)
 
                 api("androidx.activity:activity-compose:1.11.0")
@@ -209,6 +210,7 @@ kotlin {
         val iosSimulatorArm64Main by getting
         val iosMain by getting {
             dependencies {
+                implementation(project(":ampere-compose"))
                 implementation("app.cash.sqldelight:native-driver:2.2.1")
                 implementation("io.ktor:ktor-client-darwin:3.2.2")
             }

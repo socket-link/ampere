@@ -8,7 +8,6 @@ import link.socket.phosphor.field.SubstrateState
 import link.socket.phosphor.timeline.TimelineController
 import link.socket.phosphor.timeline.TimelineEvent
 import link.socket.phosphor.timeline.WaveformDemoTimeline
-import link.socket.ampere.cli.render.AmperePhosphorBridge
 import link.socket.ampere.cli.render.WaveformPaneRenderer
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,13 +26,10 @@ class DemoCommandTest {
         val agents = AgentLayer(width, height, AgentLayoutOrientation.CIRCULAR)
         val flow = FlowLayer(width, height)
         val emitters = EmitterManager()
-        val emitterBridge = AmperePhosphorBridge(emitters)
         val substrate = SubstrateState.create(width, height, baseDensity = 0.2f)
 
         val waveformPane = WaveformPaneRenderer(
-            agentLayer = agents,
-            emitterManager = emitters,
-            amperePhosphorBridge = emitterBridge
+            agentLayer = agents
         )
 
         val timeline = WaveformDemoTimeline.build(agents, flow, emitters)

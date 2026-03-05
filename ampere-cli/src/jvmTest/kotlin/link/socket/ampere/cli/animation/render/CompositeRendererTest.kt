@@ -1,5 +1,9 @@
 package link.socket.ampere.cli.animation.render
 
+import link.socket.phosphor.color.AnsiColorAdapter
+import link.socket.phosphor.color.CognitiveColorModel
+import link.socket.phosphor.color.FlowColorState
+import link.socket.phosphor.color.ParticleColorKind
 import link.socket.phosphor.signal.AgentActivityState
 import link.socket.phosphor.choreography.AgentLayer
 import link.socket.phosphor.signal.AgentVisualState
@@ -46,6 +50,29 @@ class AmperePaletteTest {
         colors.forEach { color ->
             assertTrue(color.startsWith("\u001B["), "Color should start with escape sequence")
         }
+    }
+
+    @Test
+    fun `palette colors align with phosphor cognitive color model`() {
+        val model = CognitiveColorModel
+        val adapter = AnsiColorAdapter()
+
+        assertEquals(
+            adapter.foreground(model.agentActivityColors.getValue(AgentActivityState.ACTIVE)),
+            AmperePalette.AGENT_ACTIVE
+        )
+        assertEquals(
+            adapter.foreground(model.agentActivityColors.getValue(AgentActivityState.PROCESSING)),
+            AmperePalette.AGENT_PROCESSING
+        )
+        assertEquals(
+            adapter.foreground(model.flowStateColors.getValue(FlowColorState.ACTIVATING)),
+            AmperePalette.FLOW_ACTIVE
+        )
+        assertEquals(
+            adapter.foreground(model.particleColors.getValue(ParticleColorKind.SPARK)),
+            AmperePalette.SPARK_ACCENT
+        )
     }
 }
 

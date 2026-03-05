@@ -18,7 +18,6 @@ import link.socket.phosphor.timeline.PlaybackState
 import link.socket.phosphor.timeline.TimelineController
 import link.socket.phosphor.timeline.TimelineEvent
 import link.socket.phosphor.timeline.WaveformDemoTimeline
-import link.socket.ampere.cli.render.AmperePhosphorBridge
 import link.socket.ampere.cli.render.WaveformPaneRenderer
 import link.socket.ampere.repl.TerminalFactory
 
@@ -68,14 +67,11 @@ class WaveformDemoSubcommand : CliktCommand(
         val agents = AgentLayer(width, contentHeight, AgentLayoutOrientation.CIRCULAR)
         val flow = FlowLayer(width, contentHeight)
         val emitters = EmitterManager()
-        val emitterBridge = AmperePhosphorBridge(emitters)
         val substrate = SubstrateState.create(width, contentHeight, baseDensity = 0.2f)
 
         // Create waveform renderer
         val waveformPane = WaveformPaneRenderer(
-            agentLayer = agents,
-            emitterManager = emitters,
-            amperePhosphorBridge = emitterBridge
+            agentLayer = agents
         )
 
         // Build timeline and controller

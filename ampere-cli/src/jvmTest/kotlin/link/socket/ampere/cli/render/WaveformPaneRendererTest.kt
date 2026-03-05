@@ -5,7 +5,6 @@ import link.socket.phosphor.choreography.AgentLayer
 import link.socket.phosphor.choreography.AgentLayoutOrientation
 import link.socket.phosphor.signal.AgentVisualState
 import link.socket.phosphor.signal.CognitivePhase
-import link.socket.phosphor.emitter.EmitterManager
 import link.socket.phosphor.math.Vector3
 import link.socket.phosphor.render.AsciiCell
 import link.socket.phosphor.field.SubstrateState
@@ -17,13 +16,9 @@ import kotlin.test.assertTrue
 class WaveformPaneRendererTest {
 
     private val agentLayer = AgentLayer(80, 24, AgentLayoutOrientation.CUSTOM)
-    private val emitterManager = EmitterManager()
-    private val amperePhosphorBridge = AmperePhosphorBridge(emitterManager)
 
     private val renderer = WaveformPaneRenderer(
-        agentLayer = agentLayer,
-        emitterManager = emitterManager,
-        amperePhosphorBridge = amperePhosphorBridge
+        agentLayer = agentLayer
     )
 
     @Test
@@ -148,7 +143,7 @@ class WaveformPaneRendererTest {
     }
 
     @Test
-    fun `emitter effects are active after update`() {
+    fun `queued cognitive events are emitted after runtime initialization`() {
         val width = 20
         val height = 10
         val substrate = SubstrateState.create(width, height, baseDensity = 0.3f)
@@ -171,11 +166,29 @@ class WaveformPaneRendererTest {
             Vector3(0f, 0f, 0f)
         )
 
-        // Effects should be active
-        assertTrue(emitterManager.activeCount > 0, "Emitter should have active effects after spark event")
+        // Runtime is not initialized before first render; event should be buffered.
+        assertEquals(0, renderer.activeEmitterCount())
 
         renderer.update(substrate, flow = null, dt = 0.033f)
         val lines = renderer.render(width, height)
         assertEquals(height, lines.size)
+        assertTrue(renderer.activeEmitterCount() > 0, "Emitter should activate once runtime is initialized")
+    }
+
+    @Test
+    fun `render advances runtime frame index`() {
+        val width = 24
+        val height = 12
+        val substrate = SubstrateState.create(width, height, baseDensity = 0.25f)
+
+        renderer.update(substrate, flow = null, dt = 0.016f)
+        renderer.render(width, height)
+        val firstFrame = requireNotNull(renderer.runtimeFrameIndex())
+
+        renderer.update(substrate, flow = null, dt = 0.016f)
+        renderer.render(width, height)
+        val secondFrame = requireNotNull(renderer.runtimeFrameIndex())
+
+        assertTrue(secondFrame > firstFrame, "Runtime frame index should advance after successive renders")
     }
 }

@@ -1,56 +1,63 @@
 package link.socket.ampere.compose
 
 import androidx.compose.ui.graphics.Color
+import link.socket.phosphor.color.CognitiveColorModel
+import link.socket.phosphor.color.FlowColorState
+import link.socket.phosphor.color.ParticleColorKind
+import link.socket.phosphor.renderer.ComposeColor
+import link.socket.phosphor.renderer.ComposeColorAdapter
+import link.socket.phosphor.signal.AgentActivityState
 import link.socket.phosphor.signal.CognitivePhase
 
 /**
- * Color palette for Compose rendering, equivalent to AmperePalette for terminal.
- *
- * Maps the same semantic color roles to Compose Color values.
+ * Color palette for Compose rendering sourced from Phosphor's neutral color model.
  */
 object CognitivePalette {
+    private val colorModel = CognitiveColorModel
+    private val composeColorAdapter = ComposeColorAdapter()
+
+    private fun toComposeColor(color: ComposeColor): Color = Color(
+        red = color.red / 255f,
+        green = color.green / 255f,
+        blue = color.blue / 255f,
+        alpha = color.alpha
+    )
 
     // Substrate
-    val substrateDim = Color(0xFF3A3F47)      // Dark blue-gray
-    val substrateMid = Color(0xFF5F9EA0)      // Teal
-    val substrateBright = Color(0xFF87CEEB)   // Cyan
+    val substrateDim = toComposeColor(composeColorAdapter.adapt(colorModel.flowIntensityRamp.sample(0.2f)))
+    val substrateMid = toComposeColor(composeColorAdapter.adapt(colorModel.flowIntensityRamp.sample(0.55f)))
+    val substrateBright = toComposeColor(composeColorAdapter.adapt(colorModel.flowIntensityRamp.sample(0.9f)))
 
     // Agents
-    val agentIdle = Color(0xFF808080)         // Gray
-    val agentActive = Color(0xFFFFD700)       // Gold
-    val agentProcessing = Color(0xFFFF8C00)   // Orange
-    val agentComplete = Color(0xFF32CD32)     // Green
+    val agentIdle = toComposeColor(composeColorAdapter.adapt(colorModel.agentActivityColors.getValue(AgentActivityState.IDLE)))
+    val agentActive = toComposeColor(composeColorAdapter.adapt(colorModel.agentActivityColors.getValue(AgentActivityState.ACTIVE)))
+    val agentProcessing = toComposeColor(composeColorAdapter.adapt(colorModel.agentActivityColors.getValue(AgentActivityState.PROCESSING)))
+    val agentComplete = toComposeColor(composeColorAdapter.adapt(colorModel.agentActivityColors.getValue(AgentActivityState.COMPLETE)))
 
     // Flow
-    val flowDormant = Color(0xFF3A3F47)
-    val flowActive = Color(0xFF9370DB)        // Purple
-    val flowToken = Color(0xFFFFD700)         // Yellow
+    val flowDormant = toComposeColor(composeColorAdapter.adapt(colorModel.flowStateColors.getValue(FlowColorState.DORMANT)))
+    val flowActive = toComposeColor(composeColorAdapter.adapt(colorModel.flowStateColors.getValue(FlowColorState.ACTIVATING)))
+    val flowToken = toComposeColor(composeColorAdapter.adapt(colorModel.particleColors.getValue(ParticleColorKind.TRAIL)))
 
     // Accents
-    val sparkAccent = Color(0xFFFF6B6B)       // Coral
-    val logoBolt = Color(0xFFFFD700)          // Bright yellow
-    val logoText = Color(0xFF00CED1)          // Cyan
+    val sparkAccent = toComposeColor(composeColorAdapter.adapt(colorModel.particleColors.getValue(ParticleColorKind.SPARK)))
+    val logoBolt = toComposeColor(composeColorAdapter.adapt(colorModel.roleColorFor("reasoning")))
+    val logoText = toComposeColor(composeColorAdapter.adapt(colorModel.roleColorFor("coordinator")))
 
-    // Cognitive phase colors (new — distinct from agent state colors)
-    val perceive = Color(0xFF6495ED)          // Cornflower blue (sensory)
-    val recall = Color(0xFFDAA520)            // Goldenrod (memory warmth)
-    val plan = Color(0xFF9370DB)              // Medium purple (exploration)
-    val execute = Color(0xFFFF8C00)           // Dark orange (discharge)
-    val evaluate = Color(0xFF66CDAA)          // Medium aquamarine (reflection)
-    val loop = Color(0xFF708090)              // Slate gray (reset)
+    // Cognitive phase colors
+    val perceive = toComposeColor(composeColorAdapter.adapt(colorModel.phaseColorFor(CognitivePhase.PERCEIVE)))
+    val recall = toComposeColor(composeColorAdapter.adapt(colorModel.phaseColorFor(CognitivePhase.RECALL)))
+    val plan = toComposeColor(composeColorAdapter.adapt(colorModel.phaseColorFor(CognitivePhase.PLAN)))
+    val execute = toComposeColor(composeColorAdapter.adapt(colorModel.phaseColorFor(CognitivePhase.EXECUTE)))
+    val evaluate = toComposeColor(composeColorAdapter.adapt(colorModel.phaseColorFor(CognitivePhase.EVALUATE)))
+    val loop = toComposeColor(composeColorAdapter.adapt(colorModel.phaseColorFor(CognitivePhase.LOOP)))
 
-    /**
-     * Get substrate color for a density value.
-     */
     fun forDensity(density: Float): Color = when {
         density < 0.3f -> substrateDim
         density < 0.6f -> substrateMid
         else -> substrateBright
     }
 
-    /**
-     * Get color for a cognitive phase.
-     */
     fun forPhase(phase: CognitivePhase): Color = when (phase) {
         CognitivePhase.PERCEIVE -> perceive
         CognitivePhase.RECALL -> recall

@@ -1,11 +1,23 @@
 package link.socket.ampere.compose
 
 import androidx.compose.ui.graphics.Color
+import link.socket.phosphor.color.CognitiveColorModel
+import link.socket.phosphor.color.FlowColorState
+import link.socket.phosphor.color.ParticleColorKind
+import link.socket.phosphor.renderer.ComposeColor
+import link.socket.phosphor.renderer.ComposeColorAdapter
+import link.socket.phosphor.signal.AgentActivityState
 import link.socket.phosphor.signal.CognitivePhase
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class CognitivePaletteTest {
+    private fun assertComposeColorEquals(expected: ComposeColor, actual: Color) {
+        assertEquals(expected.red / 255f, actual.red, 0.0001f)
+        assertEquals(expected.green / 255f, actual.green, 0.0001f)
+        assertEquals(expected.blue / 255f, actual.blue, 0.0001f)
+        assertEquals(expected.alpha, actual.alpha, 0.0001f)
+    }
 
     @Test
     fun forPhase_perceive_returns_cornflower_blue() {
@@ -90,5 +102,28 @@ class CognitivePaletteTest {
         for (color in colors) {
             assertEquals(1.0f, color.alpha, "Palette colors should be fully opaque")
         }
+    }
+
+    @Test
+    fun `palette colors align with phosphor cognitive color model`() {
+        val model = CognitiveColorModel
+        val adapter = ComposeColorAdapter()
+
+        assertComposeColorEquals(
+            adapter.adapt(model.agentActivityColors.getValue(AgentActivityState.ACTIVE)),
+            CognitivePalette.agentActive
+        )
+        assertComposeColorEquals(
+            adapter.adapt(model.flowStateColors.getValue(FlowColorState.ACTIVATING)),
+            CognitivePalette.flowActive
+        )
+        assertComposeColorEquals(
+            adapter.adapt(model.particleColors.getValue(ParticleColorKind.SPARK)),
+            CognitivePalette.sparkAccent
+        )
+        assertComposeColorEquals(
+            adapter.adapt(model.phaseColorFor(CognitivePhase.PLAN)),
+            CognitivePalette.plan
+        )
     }
 }

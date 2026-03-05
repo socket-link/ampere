@@ -1,11 +1,9 @@
 package link.socket.ampere.cli.hybrid
 
 import com.github.ajalt.mordant.terminal.Terminal
-import link.socket.phosphor.emitter.EmitterManager
 import link.socket.phosphor.field.ParticleSystem
 import link.socket.ampere.cli.animation.render.AmperePalette
 import link.socket.ampere.cli.animation.render.CompositeRenderer
-import link.socket.ampere.cli.render.AmperePhosphorBridge
 import link.socket.phosphor.field.SubstrateAnimator
 import link.socket.phosphor.field.SubstrateGlyphs
 import link.socket.phosphor.field.SubstrateState
@@ -66,9 +64,6 @@ class HybridDashboardRenderer(
     private lateinit var bridge: WatchStateAnimationBridge
 
     // 3D waveform pipeline
-    private lateinit var emitterManager: EmitterManager
-    private lateinit var amperePhosphorBridge: AmperePhosphorBridge
-
     /**
      * The waveform pane renderer for the middle pane. Callers can pass this
      * as the `middlePane` parameter to [render] or [renderToBuffer] to display
@@ -147,25 +142,15 @@ class HybridDashboardRenderer(
             maxParticles = config.particleMaxCount
         )
 
-        // Initialize waveform pipeline
-        emitterManager = EmitterManager()
-        amperePhosphorBridge = AmperePhosphorBridge(emitterManager)
-
         if (config.enableWaveform) {
             val wfPane = WaveformPaneRenderer(
-                agentLayer = bridge.agentLayer,
-                emitterManager = emitterManager,
-                amperePhosphorBridge = amperePhosphorBridge
+                agentLayer = bridge.agentLayer
             )
             waveformPane = wfPane
 
-            // Wire cognitive events from bridge to emitter bridge
-            bridge.onCognitiveEvent = { event, position ->
-                amperePhosphorBridge.onCognitiveEvent(event, position)
-            }
-            bridge.onProviderTelemetry = { telemetry, position ->
-                amperePhosphorBridge.onProviderCallCompleted(telemetry, position)
-            }
+            // Route watch events into the waveform pane's runtime-backed emitter bridge.
+            bridge.onCognitiveEvent = wfPane::onCognitiveEvent
+            bridge.onProviderTelemetry = wfPane::onProviderCallCompleted
         }
 
         initialized = true
