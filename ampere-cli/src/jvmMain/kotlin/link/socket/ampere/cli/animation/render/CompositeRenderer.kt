@@ -1,5 +1,9 @@
 package link.socket.ampere.cli.animation.render
 
+import link.socket.phosphor.color.AnsiColorAdapter
+import link.socket.phosphor.color.CognitiveColorModel
+import link.socket.phosphor.color.FlowColorState
+import link.socket.phosphor.color.ParticleColorKind
 import link.socket.phosphor.choreography.AgentLayer
 import link.socket.phosphor.choreography.AgentLayerRenderer
 import link.socket.phosphor.field.FlowLayer
@@ -14,36 +18,40 @@ import link.socket.phosphor.field.SubstrateState
 import link.socket.phosphor.math.Vector2
 import link.socket.phosphor.render.RenderCell
 import link.socket.phosphor.render.RenderLayer
+import link.socket.phosphor.signal.AgentActivityState
 import kotlin.math.roundToInt
 
 /**
  * Color palette for Ampere TUI.
  */
 object AmperePalette {
-    // Substrate colors (256-color ANSI codes)
-    const val SUBSTRATE_DIM = "\u001B[38;5;239m"      // Dark blue-gray
-    const val SUBSTRATE_MID = "\u001B[38;5;73m"       // Teal
-    const val SUBSTRATE_BRIGHT = "\u001B[38;5;117m"   // Cyan
+    private val colorModel = CognitiveColorModel
+    private val ansiAdapter = AnsiColorAdapter()
+
+    // Substrate colors sampled from Phosphor's shared flow-intensity ramp.
+    val SUBSTRATE_DIM = ansiAdapter.foreground(colorModel.flowIntensityRamp.sample(0.2f))
+    val SUBSTRATE_MID = ansiAdapter.foreground(colorModel.flowIntensityRamp.sample(0.55f))
+    val SUBSTRATE_BRIGHT = ansiAdapter.foreground(colorModel.flowIntensityRamp.sample(0.9f))
 
     // Agent colors
-    const val AGENT_IDLE = "\u001B[38;5;244m"         // Gray
-    const val AGENT_ACTIVE = "\u001B[38;5;220m"       // Gold
-    const val AGENT_PROCESSING = "\u001B[38;5;208m"   // Orange
-    const val AGENT_COMPLETE = "\u001B[38;5;46m"      // Green
+    val AGENT_IDLE = ansiAdapter.foreground(colorModel.agentActivityColors.getValue(AgentActivityState.IDLE))
+    val AGENT_ACTIVE = ansiAdapter.foreground(colorModel.agentActivityColors.getValue(AgentActivityState.ACTIVE))
+    val AGENT_PROCESSING = ansiAdapter.foreground(colorModel.agentActivityColors.getValue(AgentActivityState.PROCESSING))
+    val AGENT_COMPLETE = ansiAdapter.foreground(colorModel.agentActivityColors.getValue(AgentActivityState.COMPLETE))
 
     // Flow colors
-    const val FLOW_DORMANT = "\u001B[38;5;239m"       // Dark
-    const val FLOW_ACTIVE = "\u001B[38;5;135m"        // Purple
-    const val FLOW_TOKEN = "\u001B[38;5;226m"         // Yellow
+    val FLOW_DORMANT = ansiAdapter.foreground(colorModel.flowStateColors.getValue(FlowColorState.DORMANT))
+    val FLOW_ACTIVE = ansiAdapter.foreground(colorModel.flowStateColors.getValue(FlowColorState.ACTIVATING))
+    val FLOW_TOKEN = ansiAdapter.foreground(colorModel.particleColors.getValue(ParticleColorKind.TRAIL))
 
     // Accent colors
-    const val SPARK_ACCENT = "\u001B[38;5;203m"       // Coral
-    const val SUCCESS_GREEN = "\u001B[38;5;83m"       // Green
-    const val LOGO_BOLT = "\u001B[38;5;226m"          // Bright yellow
-    const val LOGO_TEXT = "\u001B[38;5;45m"           // Cyan
+    val SPARK_ACCENT = ansiAdapter.foreground(colorModel.particleColors.getValue(ParticleColorKind.SPARK))
+    val SUCCESS_GREEN = ansiAdapter.foreground(colorModel.agentActivityColors.getValue(AgentActivityState.COMPLETE))
+    val LOGO_BOLT = ansiAdapter.foreground(colorModel.roleColorFor("reasoning"))
+    val LOGO_TEXT = ansiAdapter.foreground(colorModel.roleColorFor("coordinator"))
 
     // Reset
-    const val RESET = "\u001B[0m"
+    val RESET = AnsiColorAdapter.RESET
 
     /**
      * Get substrate color for density value.
