@@ -8,6 +8,7 @@ import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.tools.mcp.McpToolExecutor
+import link.socket.ampere.plugin.PluginManifest
 
 typealias ToolId = String
 typealias McpServerId = String
@@ -49,6 +50,13 @@ sealed interface Tool<Context : ExecutionContext> {
     val requiredAgentAutonomy: AgentActionAutonomy
 
     /**
+     * Optional plugin manifest for tools supplied by a plugin.
+     * Built-in tools leave this null and bypass plugin permission checks.
+     */
+    val pluginManifest: PluginManifest?
+        get() = null
+
+    /**
      * Executes the tool with the given request parameters.
      *
      * @param executionRequest parameters, context, and instructions for the execution.
@@ -73,6 +81,7 @@ data class FunctionTool<Context : ExecutionContext>(
     override val name: String,
     override val description: String,
     override val requiredAgentAutonomy: AgentActionAutonomy,
+    override val pluginManifest: PluginManifest? = null,
 
     /**
      * The actual executable function wrapped by this tool.
@@ -108,6 +117,7 @@ data class McpTool(
     override val name: String,
     override val description: String,
     override val requiredAgentAutonomy: AgentActionAutonomy,
+    override val pluginManifest: PluginManifest? = null,
 
     /**
      * Identifier of the MCP server that exposes this tool.

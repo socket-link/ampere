@@ -17,6 +17,8 @@ import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.plugin.PluginManifest
+import link.socket.ampere.plugin.permission.UserGrants
 
 /**
  * Unified reasoning facade that composes all cognitive services.
@@ -75,7 +77,13 @@ class AgentReasoning private constructor(
     private val planExecutor = PlanExecutor(settings.executorId)
 
     private val toolExecutionEngine: ToolExecutionEngine? = if (llmService != null && settings.executor != null) {
-        ToolExecutionEngine(llmService, settings.executor, settings.executorId).also { engine ->
+        ToolExecutionEngine(
+            llmService = llmService,
+            executor = settings.executor,
+            executorId = settings.executorId,
+            eventApi = eventApi,
+            userGrantProvider = settings.userGrantProvider,
+        ).also { engine ->
             settings.parameterStrategies.forEach { (toolId, strategy) ->
                 engine.registerStrategy(toolId, strategy)
             }
@@ -305,6 +313,7 @@ class AgentReasoning private constructor(
                 planningPromptBuilder = null,
                 taskFactory = DefaultTaskFactory,
                 parameterStrategies = emptyMap(),
+                userGrantProvider = { UserGrants() },
                 outcomeContextBuilder = null,
                 knowledgeExtractor = null,
             )
@@ -380,6 +389,7 @@ data class ReasoningSettings(
     val planningPromptBuilder: ((Task, List<Idea>, Set<Tool<*>>, List<KnowledgeWithScore>) -> String)?,
     val taskFactory: TaskFactory,
     val parameterStrategies: Map<String, ParameterStrategy>,
+    val userGrantProvider: suspend (PluginManifest) -> UserGrants,
     val outcomeContextBuilder: ((List<Outcome>) -> String)?,
     val knowledgeExtractor: ((Outcome, Task, Plan) -> Knowledge.FromOutcome)?,
 )
@@ -396,6 +406,7 @@ class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
     private var planningPromptBuilder: ((Task, List<Idea>, Set<Tool<*>>, List<KnowledgeWithScore>) -> String)? = null
     private var taskFactory: TaskFactory = DefaultTaskFactory
     private val parameterStrategies = mutableMapOf<String, ParameterStrategy>()
+    private var userGrantProvider: suspend (PluginManifest) -> UserGrants = { UserGrants() }
     private var outcomeContextBuilder: ((List<Outcome>) -> String)? = null
     private var knowledgeExtractor: ((Outcome, Task, Plan) -> Knowledge.FromOutcome)? = null
 
@@ -425,6 +436,7 @@ class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
         val builder = ExecutionSettingsBuilder()
         builder.configure()
         parameterStrategies.putAll(builder.strategies)
+        userGrantProvider = builder.userGrantProvider
     }
 
     /**
@@ -455,6 +467,7 @@ class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
             planningPromptBuilder = planningPromptBuilder,
             taskFactory = taskFactory,
             parameterStrategies = parameterStrategies.toMap(),
+            userGrantProvider = userGrantProvider,
             outcomeContextBuilder = outcomeContextBuilder,
             knowledgeExtractor = knowledgeExtractor,
         )
@@ -472,9 +485,14 @@ class PlanningSettingsBuilder {
 
 class ExecutionSettingsBuilder {
     internal val strategies = mutableMapOf<String, ParameterStrategy>()
+    internal var userGrantProvider: suspend (PluginManifest) -> UserGrants = { UserGrants() }
 
     fun registerStrategy(toolId: String, strategy: ParameterStrategy) {
         strategies[toolId] = strategy
+    }
+
+    fun userGrants(provider: suspend (PluginManifest) -> UserGrants) {
+        userGrantProvider = provider
     }
 }
 

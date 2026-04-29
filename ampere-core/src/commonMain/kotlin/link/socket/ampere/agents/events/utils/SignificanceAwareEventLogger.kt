@@ -12,6 +12,7 @@ import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
+import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
@@ -95,6 +96,7 @@ class SignificanceAwareEventLogger(
         is Event.QuestionRaised -> EventSignificance.CRITICAL
         is TicketEvent.TicketBlocked -> EventSignificance.CRITICAL
         is MessageEvent.EscalationRequested -> EventSignificance.CRITICAL
+        is PermissionDeniedEvent -> EventSignificance.CRITICAL
 
         // Task lifecycle events
         is TaskEvent.TaskCompleted -> EventSignificance.SIGNIFICANT

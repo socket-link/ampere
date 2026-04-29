@@ -3,9 +3,15 @@ package link.socket.ampere.agents.execution
 import kotlinx.coroutines.flow.last
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
+import link.socket.ampere.agents.domain.event.PermissionDeniedReason
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.reasoning.AgentLLMService
 import link.socket.ampere.agents.domain.status.ExecutionStatus
+import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.request.ExecutionContext
@@ -13,6 +19,12 @@ import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.plugin.PluginManifest
+import link.socket.ampere.plugin.permission.GateResult
+import link.socket.ampere.plugin.permission.PluginPermission
+import link.socket.ampere.plugin.permission.PluginPermissionGate
+import link.socket.ampere.plugin.permission.PluginToolCall
+import link.socket.ampere.plugin.permission.UserGrants
 
 /**
  * Engine for executing tools with LLM-generated parameters.
@@ -49,6 +61,8 @@ class ToolExecutionEngine(
     private val llmService: AgentLLMService,
     private val executor: Executor,
     private val executorId: ExecutorId,
+    private val eventApi: AgentEventApi? = null,
+    private val userGrantProvider: suspend (PluginManifest) -> UserGrants = { UserGrants() },
 ) {
 
     private val strategies = mutableMapOf<String, ParameterStrategy>()
@@ -84,6 +98,11 @@ class ToolExecutionEngine(
                 startTime = startTime,
                 message = "Cannot execute tool: no intent found in request",
             )
+        }
+
+        val permissionFailure = checkPluginPermissions(tool, request, startTime)
+        if (permissionFailure != null) {
+            return permissionFailure
         }
 
         // Check for MCP tools (not yet supported)
@@ -206,6 +225,73 @@ class ToolExecutionEngine(
             executionStartTimestamp = startTime,
             executionEndTimestamp = Clock.System.now(),
             message = message,
+        )
+    }
+
+    private suspend fun checkPluginPermissions(
+        tool: Tool<*>,
+        request: ExecutionRequest<*>,
+        startTime: Instant,
+    ): ExecutionOutcome? {
+        val manifest = tool.pluginManifest ?: return null
+        val userGrants = userGrantProvider(manifest)
+        val gateResult = PluginPermissionGate.check(
+            toolCall = PluginToolCall(
+                pluginId = manifest.id,
+                toolId = tool.id,
+            ),
+            manifest = manifest,
+            userGrants = userGrants,
+        )
+
+        return when (gateResult) {
+            GateResult.Allow -> null
+            is GateResult.DenyMissing -> createPermissionDeniedFailure(
+                request = request,
+                startTime = startTime,
+                tool = tool,
+                manifest = manifest,
+                permission = gateResult.permission,
+                reason = PermissionDeniedReason.MISSING_GRANT,
+            )
+            is GateResult.DenyRevoked -> createPermissionDeniedFailure(
+                request = request,
+                startTime = startTime,
+                tool = tool,
+                manifest = manifest,
+                permission = gateResult.permission,
+                reason = PermissionDeniedReason.REVOKED_GRANT,
+            )
+        }
+    }
+
+    private suspend fun createPermissionDeniedFailure(
+        request: ExecutionRequest<*>,
+        startTime: Instant,
+        tool: Tool<*>,
+        manifest: PluginManifest,
+        permission: PluginPermission,
+        reason: PermissionDeniedReason,
+    ): ExecutionOutcome {
+        eventApi?.publish(
+            PermissionDeniedEvent(
+                eventId = generateUUID("permission-denied", manifest.id, tool.id, executorId),
+                timestamp = Clock.System.now(),
+                eventSource = EventSource.Agent(eventApi.agentId),
+                urgency = Urgency.HIGH,
+                pluginId = manifest.id,
+                toolId = tool.id,
+                toolName = tool.name,
+                permission = permission,
+                reason = reason,
+            ),
+        )
+
+        return createFailure(
+            request = request,
+            startTime = startTime,
+            message = "Permission denied for plugin '${manifest.id}' tool '${tool.id}': " +
+                "$reason for $permission",
         )
     }
 }

@@ -1,0 +1,31 @@
+CREATE TABLE PluginGrants (
+  plugin_id TEXT NOT NULL,
+  permission_json TEXT NOT NULL,
+  granted_at INTEGER NOT NULL,
+  PRIMARY KEY (plugin_id, permission_json)
+);
+
+CREATE INDEX idx_plugin_grants_plugin_id ON PluginGrants(plugin_id);
+
+upsertGrant:
+INSERT OR REPLACE INTO PluginGrants(plugin_id, permission_json, granted_at)
+VALUES (?, ?, ?);
+
+revokeGrant:
+DELETE FROM PluginGrants
+WHERE plugin_id = ? AND permission_json = ?;
+
+listGrants:
+SELECT plugin_id, permission_json, granted_at
+FROM PluginGrants
+WHERE plugin_id = ?
+ORDER BY granted_at ASC;
+
+countGrant:
+SELECT COUNT(*)
+FROM PluginGrants
+WHERE plugin_id = ? AND permission_json = ?;
+
+clearGrantsForPlugin:
+DELETE FROM PluginGrants
+WHERE plugin_id = ?;
