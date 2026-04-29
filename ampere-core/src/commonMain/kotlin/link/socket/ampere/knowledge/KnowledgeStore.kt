@@ -38,15 +38,52 @@ interface KnowledgeStore {
     /**
      * Retrieve chunks relevant to [text] using the supplied [mode].
      *
+     * Results may be restricted to documents tagged with at least one of
+     * [scopes]. An empty [scopes] (the default) disables scope filtering and
+     * preserves the W0.5 behaviour. Documents with no scope rows are returned
+     * only when [scopes] is empty.
+     *
      * @param text Free-form query.
      * @param limit Maximum number of results to return.
      * @param mode Retrieval strategy. Defaults to [QueryMode.HYBRID].
+     * @param scopes Optional scope set. Empty = no scope filter (W0.5 behaviour).
      */
     suspend fun query(
         text: String,
         limit: Int = DEFAULT_QUERY_LIMIT,
         mode: QueryMode = QueryMode.HYBRID,
+        scopes: Set<KnowledgeScope> = emptySet(),
     ): Result<List<KnowledgeQueryResult>>
+
+    /**
+     * Look up a previously-imported document by [id], or return `null` if no
+     * such document exists.
+     *
+     * Surfaces the [KnowledgeDocument.sourceUri] that retrieval consumers
+     * need to render a citation alongside each chunk.
+     */
+    suspend fun getDocument(id: String): Result<KnowledgeDocument?>
+
+    /**
+     * Replace the scope set associated with [documentId].
+     *
+     * The previous scope set is cleared atomically and replaced by [scopes].
+     * Calling with an empty [scopes] removes all scope tags (the document
+     * becomes scope-less and is excluded from any scope-filtered query).
+     *
+     * Implementations must be idempotent: calling twice with the same
+     * arguments leaves the store in the same state.
+     */
+    suspend fun setDocumentScopes(
+        documentId: String,
+        scopes: Set<KnowledgeScope>,
+    ): Result<Unit>
+
+    /**
+     * Return the scope set associated with [documentId], or an empty set
+     * when the document has no scope tags.
+     */
+    suspend fun getDocumentScopes(documentId: String): Result<Set<KnowledgeScope>>
 
     companion object {
         const val DEFAULT_QUERY_LIMIT: Int = 10
@@ -106,8 +143,15 @@ data class KnowledgeChunk(
  * @param chunk The matching chunk.
  * @param score Mode-dependent score (cosine similarity, FTS rank, or hybrid blend).
  *        Higher scores indicate better matches.
+ * @param sourceUri Source URI from the parent [KnowledgeDocument], populated
+ *        when the store knows it. May be `null` when the document has no
+ *        source URI or when the store cannot resolve it without an extra read.
+ * @param scopes Scope tags associated with the parent document. Empty when
+ *        the document has no scope tags or when scope data is not loaded.
  */
 data class KnowledgeQueryResult(
     val chunk: KnowledgeChunk,
     val score: Float,
+    val sourceUri: String? = null,
+    val scopes: Set<KnowledgeScope> = emptySet(),
 )
