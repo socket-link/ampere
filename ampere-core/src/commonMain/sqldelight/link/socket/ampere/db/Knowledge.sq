@@ -42,6 +42,21 @@ CREATE TABLE IF NOT EXISTS knowledge_embeddings (
 CREATE INDEX IF NOT EXISTS idx_knowledge_embeddings_model_id
     ON knowledge_embeddings(model_id);
 
+-- Per-document scope tags (W2.3 / AMPR-156).
+-- A document may belong to zero, one, or many scopes. Scope strings are
+-- open-ended (`personal`, `work`, `reading`, plus platform-defined names).
+-- Documents with no rows are scope-less: returned by unfiltered queries,
+-- filtered out of any scope-restricted query.
+CREATE TABLE IF NOT EXISTS document_scopes (
+    document_id TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    PRIMARY KEY (document_id, scope),
+    FOREIGN KEY (document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_scopes_scope
+    ON document_scopes(scope);
+
 -- =============================================================================
 -- DOCUMENT QUERIES
 -- =============================================================================
@@ -143,3 +158,24 @@ DELETE FROM knowledge_embeddings WHERE model_id = ?;
 
 countEmbeddings:
 SELECT COUNT(*) FROM knowledge_embeddings;
+
+-- =============================================================================
+-- DOCUMENT SCOPE QUERIES
+-- =============================================================================
+
+-- Replace a document's scope set in two steps: clear, then re-insert each scope.
+clearDocumentScopes:
+DELETE FROM document_scopes WHERE document_id = ?;
+
+insertDocumentScope:
+INSERT OR IGNORE INTO document_scopes(document_id, scope) VALUES (?, ?);
+
+getScopesForDocument:
+SELECT scope FROM document_scopes
+WHERE document_id = ?
+ORDER BY scope ASC;
+
+-- Returns the document IDs that match at least one of the supplied scopes.
+listDocumentsInScopes:
+SELECT DISTINCT document_id FROM document_scopes
+WHERE scope IN ?;
