@@ -98,6 +98,10 @@ object EventRegistry {
 
         // PermissionEvent types
         PermissionDeniedEvent.EVENT_TYPE,
+
+        // AgentSurfaceEvent types
+        AgentSurfaceEvent.Requested.EVENT_TYPE,
+        AgentSurfaceEvent.Responded.EVENT_TYPE,
     )
 
     /**

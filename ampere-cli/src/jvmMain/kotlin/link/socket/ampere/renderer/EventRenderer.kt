@@ -12,6 +12,7 @@ import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.FileSystemEvent
@@ -156,6 +157,9 @@ class EventRenderer(
             is SparkRemovedEvent -> SparkColors.SparkIcons.REMOVED to gray
             is CognitiveStateSnapshot -> SparkColors.SparkIcons.SNAPSHOT to magenta
             is SparkEvent -> SparkColors.SparkIcons.APPLIED to magenta // fallback
+            // AgentSurface events: native UI surface request/response
+            is AgentSurfaceEvent.Requested -> "🪟" to magenta
+            is AgentSurfaceEvent.Responded -> "🪟" to blue
         }
     }
 
