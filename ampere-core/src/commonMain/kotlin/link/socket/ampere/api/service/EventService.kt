@@ -12,6 +12,7 @@ import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
+import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
@@ -173,6 +174,7 @@ enum class EventStreamFilter {
             is MeetingEvent,
             is FileSystemEvent,
             is GitEvent,
+            is PermissionDeniedEvent,
             is ToolEvent.ToolExecutionStarted,
             is ToolEvent.ToolExecutionCompleted,
             -> true

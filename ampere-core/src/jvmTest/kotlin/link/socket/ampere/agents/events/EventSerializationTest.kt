@@ -8,6 +8,9 @@ import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
+import link.socket.ampere.agents.domain.event.PermissionDeniedReason
+import link.socket.ampere.plugin.permission.PluginPermission
 
 class EventSerializationTest {
 
@@ -68,6 +71,27 @@ class EventSerializationTest {
         val text = json.encodeToString(original)
         val decoded = json.decodeFromString<Event.CodeSubmitted>(text)
         assertIs<Event.CodeSubmitted>(decoded)
+        assertEquals(original, decoded)
+    }
+
+    @Test
+    fun `serialize and deserialize permission denied event polymorphic`() {
+        val original: Event = PermissionDeniedEvent(
+            eventId = "44444444-4444-4444-4444-444444444444",
+            timestamp = stubTimestamp,
+            eventSource = stubEventSource,
+            urgency = Urgency.HIGH,
+            pluginId = "example-plugin",
+            toolId = "fetch-example",
+            toolName = "Fetch Example",
+            permission = PluginPermission.NetworkDomain("api.example.com"),
+            reason = PermissionDeniedReason.MISSING_GRANT,
+        )
+
+        val text = json.encodeToString(Event.serializer(), original)
+        val decoded = json.decodeFromString(Event.serializer(), text)
+
+        assertIs<PermissionDeniedEvent>(decoded)
         assertEquals(original, decoded)
     }
 }

@@ -22,6 +22,7 @@ import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
+import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
@@ -141,6 +142,7 @@ class EventRenderer(
             is MessageEvent -> "💬" to blue
             is NotificationEvent<*> -> "🔔" to gray
             is PlanEvent -> "📋" to magenta
+            is PermissionDeniedEvent -> "⛔" to red
             is ProviderCallStartedEvent -> "📡" to cyan
             is ProviderCallCompletedEvent -> "📡" to if (event.success) blue else red
             is ProductEvent -> "💡" to green

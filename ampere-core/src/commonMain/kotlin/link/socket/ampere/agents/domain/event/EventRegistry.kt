@@ -95,6 +95,9 @@ object EventRegistry {
         // TelemetryEvent types
         ProviderCallStartedEvent.EVENT_TYPE,
         ProviderCallCompletedEvent.EVENT_TYPE,
+
+        // PermissionEvent types
+        PermissionDeniedEvent.EVENT_TYPE,
     )
 
     /**

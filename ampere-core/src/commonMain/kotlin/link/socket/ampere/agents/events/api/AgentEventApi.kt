@@ -9,6 +9,8 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.domain.event.MessageEvent
+import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
+import link.socket.ampere.agents.domain.event.PermissionDeniedReason
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.domain.task.TaskId
@@ -22,6 +24,7 @@ import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.plugin.permission.PluginPermission
 
 open class EventHandler<E : Event, S : Subscription>(
     private val executeOverride: (suspend (E, S?) -> Unit)? = null,
@@ -546,6 +549,42 @@ class AgentEventApi(
         eventSerialBus.subscribe<ToolEvent.ToolDiscoveryComplete, EventSubscription.ByEventClassType>(
             agentId = agentId,
             eventType = ToolEvent.ToolDiscoveryComplete.EVENT_TYPE,
+        ) { event, subscription ->
+            if (filter.execute(event)) {
+                handler(event, subscription)
+            }
+        }
+
+    suspend fun publishPermissionDenied(
+        pluginId: String,
+        toolId: String,
+        toolName: String,
+        permission: PluginPermission,
+        reason: PermissionDeniedReason,
+        urgency: Urgency = Urgency.HIGH,
+    ) {
+        val event = PermissionDeniedEvent(
+            eventId = generateUUID("permission-denied", pluginId, toolId, agentId),
+            timestamp = Clock.System.now(),
+            eventSource = EventSource.Agent(agentId),
+            urgency = urgency,
+            pluginId = pluginId,
+            toolId = toolId,
+            toolName = toolName,
+            permission = permission,
+            reason = reason,
+        )
+
+        publish(event)
+    }
+
+    fun onPermissionDenied(
+        filter: EventFilter<PermissionDeniedEvent> = EventFilter.noFilter(),
+        handler: suspend (PermissionDeniedEvent, Subscription?) -> Unit,
+    ): Subscription =
+        eventSerialBus.subscribe<PermissionDeniedEvent, EventSubscription.ByEventClassType>(
+            agentId = agentId,
+            eventType = PermissionDeniedEvent.EVENT_TYPE,
         ) { event, subscription ->
             if (filter.execute(event)) {
                 handler(event, subscription)
