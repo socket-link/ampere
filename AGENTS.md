@@ -2,6 +2,35 @@
 
 Ampere is a transparent cognitive engine built in Kotlin Multiplatform, where AI reasoning is visible by design. Read [SOUL.md](SOUL.md) for project philosophy and values.
 
+## Concepts
+
+This repo's load-bearing primitives are documented as concept cells in
+[`docs/concepts/`](docs/concepts/). The index is at
+[`docs/concepts/_index.md`](docs/concepts/_index.md).
+
+**Before starting any task:**
+- Read `docs/concepts/_index.md`.
+- For any concept whose `tracked_sources` include files you will touch, read
+  that concept file in full before writing code. Treat the `Invariants` and
+  `Anti-patterns` sections as binding.
+
+**When your changes touch `tracked_sources`:**
+- Re-read the concept file before opening the PR.
+- If your changes *confirm* the concept as written, update `last_verified` to
+  today's date. No other change required.
+- If your changes *contradict* the concept (new invariant, retired one,
+  changed file path, new common operation), update the relevant sections.
+- If you discover a wrong assumption you almost made, add it to
+  `Anti-patterns` with one sentence of reasoning.
+- The concept file update is part of your diff. Do not split it into a
+  follow-up PR.
+
+**Commit trailers:**
+- When a commit touches `tracked_sources` for a concept and you have verified
+  the concept is still accurate without changing the file, include the trailer
+  `Concept-Verified: <ConceptName>` in the commit message. This satisfies
+  the validator without requiring a separate `last_verified` bump.
+
 ## Development Commands
 
 ### Build & Test
