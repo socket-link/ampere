@@ -8,6 +8,10 @@ import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.domain.event.EventType
+import link.socket.ampere.agents.domain.event.MemoryEvent
+import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
+import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
+import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.events.utils.EventSerializationException
 import link.socket.ampere.data.Repository
 import link.socket.ampere.db.Database
@@ -41,12 +45,13 @@ class EventRepository(
             runCatching {
                 val eventPayload: String = encode(event)
 
-                queries.insertEvent(
+                queries.insertEventWithRunId(
                     event_id = event.eventId,
                     event_type = event.eventType,
                     source_id = event.eventSource.getIdentifier(),
                     timestamp = event.timestamp.toEpochMilliseconds(),
                     payload = eventPayload,
+                    run_id = event.runIdOrNull(),
                 )
             }.map { }
         }
@@ -238,4 +243,14 @@ class EventRepository(
             cause = throwable,
         )
     }
+}
+
+private fun Event.runIdOrNull(): String? = when (this) {
+    is ProviderCallStartedEvent -> workflowId
+    is ProviderCallCompletedEvent -> workflowId
+    is ToolEvent.ToolExecutionStarted -> runId
+    is ToolEvent.ToolExecutionCompleted -> runId
+    is MemoryEvent.KnowledgeStored -> runId
+    is MemoryEvent.KnowledgeRecalled -> runId
+    else -> null
 }

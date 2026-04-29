@@ -55,6 +55,7 @@ sealed interface MemoryEvent : Event {
         val approach: String? = null, // What approach was tried
         val learnings: String? = null, // What was learned
         val sourceId: String? = null, // The outcome/idea/task ID this came from
+        val runId: String? = null,
     ) : MemoryEvent {
 
         override val eventType: EventType = EVENT_TYPE
@@ -111,6 +112,7 @@ sealed interface MemoryEvent : Event {
         val topKnowledgeIds: List<String>,
         override val urgency: Urgency = Urgency.LOW,
         val retrievedKnowledge: List<RetrievedKnowledgeSummary> = emptyList(), // Summaries of what was retrieved
+        val runId: String? = null,
     ) : MemoryEvent {
 
         override val eventType: EventType = EVENT_TYPE

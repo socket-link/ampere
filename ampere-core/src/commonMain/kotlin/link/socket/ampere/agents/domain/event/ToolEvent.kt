@@ -131,6 +131,7 @@ sealed interface ToolEvent : Event {
         val invocationId: String,
         val toolId: ToolId,
         val toolName: String,
+        val runId: String? = null,
     ) : ToolEvent {
 
         override val eventType: EventType = EVENT_TYPE
@@ -172,6 +173,7 @@ sealed interface ToolEvent : Event {
         val success: Boolean,
         val durationMs: Long,
         val errorMessage: String? = null,
+        val runId: String? = null,
     ) : ToolEvent {
 
         override val eventType: EventType = EVENT_TYPE

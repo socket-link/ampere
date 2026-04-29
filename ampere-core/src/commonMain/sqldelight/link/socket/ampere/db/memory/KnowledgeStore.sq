@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS KnowledgeStore (
     approach TEXT NOT NULL,
     learnings TEXT NOT NULL,
     timestamp INTEGER NOT NULL, -- Unix epoch milliseconds
+    run_id TEXT,
 
     -- Type-specific foreign key IDs (only one will be non-null based on knowledge_type)
     idea_id TEXT,
@@ -29,6 +30,7 @@ CREATE TABLE IF NOT EXISTS KnowledgeStore (
 -- Indexes for common query patterns
 CREATE INDEX IF NOT EXISTS idx_knowledge_type ON KnowledgeStore(knowledge_type);
 CREATE INDEX IF NOT EXISTS idx_knowledge_timestamp ON KnowledgeStore(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_knowledge_run_id ON KnowledgeStore(run_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_task_type ON KnowledgeStore(task_type);
 CREATE INDEX IF NOT EXISTS idx_knowledge_complexity ON KnowledgeStore(complexity_level);
 
@@ -81,6 +83,14 @@ INSERT INTO KnowledgeStore (
     task_type, complexity_level
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
+-- Insert a knowledge entry with an Arc run correlation ID
+insertKnowledgeWithRunId:
+INSERT INTO KnowledgeStore (
+    id, knowledge_type, approach, learnings, timestamp, run_id,
+    idea_id, outcome_id, perception_id, plan_id, task_id,
+    task_type, complexity_level
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
 -- Insert tag association
 insertKnowledgeTag:
 INSERT OR IGNORE INTO KnowledgeTag (knowledge_id, tag) VALUES (?, ?);
@@ -105,6 +115,12 @@ findKnowledgeByTimeRange:
 SELECT * FROM KnowledgeStore
 WHERE timestamp BETWEEN ? AND ?
 ORDER BY timestamp DESC;
+
+-- Find knowledge written during a specific Arc run
+findKnowledgeByRunId:
+SELECT * FROM KnowledgeStore
+WHERE run_id = ?
+ORDER BY timestamp ASC;
 
 -- Find knowledge by task type
 findKnowledgeByTaskType:
