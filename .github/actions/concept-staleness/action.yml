@@ -7,11 +7,10 @@ author: socket-link/ampere
 inputs:
   base-ref:
     description: >-
-      The base ref for the diff. On a `pull_request` event this should be the
+      The base ref for the diff. On a pull_request event this should be the
       branch the PR targets (e.g. `main`); the action will resolve it to
-      `origin/<base-ref>` before passing it to the validator. Default:
-      ${{ github.base_ref }} when running on a pull_request, falling back to
-      `main` otherwise.
+      `origin/<base-ref>` before passing it to the validator. When left empty
+      (the default), the action falls back to GITHUB_BASE_REF, then to `main`.
     required: false
     default: ""
   head-ref:
@@ -138,7 +137,7 @@ runs:
       uses: actions/github-script@v7
       env:
         WARNING_COUNT: ${{ steps.run-validator.outputs.warning_count }}
-        VALIDATOR_OUTPUT: ${{ steps.run-validator.outputs.validator-output || steps.run-validator.outputs.validator_output }}
+        VALIDATOR_OUTPUT: ${{ steps.run-validator.outputs.validator_output }}
         COMMENT_MARKER: ${{ inputs.comment-marker }}
       with:
         script: |
