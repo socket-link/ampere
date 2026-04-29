@@ -3,6 +3,7 @@ package link.socket.ampere.plugin.permission
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.serialization.json.Json
+import link.socket.ampere.plugin.McpServerDependency
 import link.socket.ampere.plugin.PluginManifest
 
 class PluginPermissionSerializationTest {
@@ -60,6 +61,53 @@ class PluginPermissionSerializationTest {
         val encoded = json.encodeToString(original)
         val decoded = json.decodeFromString<PluginManifest>(encoded)
 
+        assertEquals(original.requiredPermissions, decoded.requiredPermissions)
+    }
+
+    @Test
+    fun `manifest missing mcp servers defaults to empty list`() {
+        val manifest = json.decodeFromString<PluginManifest>(
+            """
+            {
+              "id": "test-plugin",
+              "name": "Test Plugin",
+              "version": "1.0.0"
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(emptyList(), manifest.mcpServers)
+    }
+
+    @Test
+    fun `manifest round-trips mcp server dependencies through json`() {
+        val original = PluginManifest(
+            id = "github-plugin",
+            name = "GitHub Plugin",
+            version = "1.0.0",
+            requiredPermissions = listOf(
+                PluginPermission.MCPServer("mcp://github"),
+                PluginPermission.MCPServer("mcp://notion"),
+            ),
+            mcpServers = listOf(
+                McpServerDependency(
+                    name = "github",
+                    uri = "mcp://github",
+                    requiredPermissions = listOf(
+                        PluginPermission.NetworkDomain("api.github.com"),
+                    ),
+                ),
+                McpServerDependency(
+                    name = "notion",
+                    uri = "mcp://notion",
+                ),
+            ),
+        )
+
+        val encoded = json.encodeToString(original)
+        val decoded = json.decodeFromString<PluginManifest>(encoded)
+
+        assertEquals(original.mcpServers, decoded.mcpServers)
         assertEquals(original.requiredPermissions, decoded.requiredPermissions)
     }
 }
