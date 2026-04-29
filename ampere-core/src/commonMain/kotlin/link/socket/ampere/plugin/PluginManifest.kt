@@ -6,8 +6,8 @@ import link.socket.ampere.plugin.permission.PluginPermission
 /**
  * Manifest metadata for a plugin and the permissions it requires at runtime.
  *
- * [requiredPermissions] defaults to empty so manifests created before the
- * permission schema continue to decode unchanged.
+ * [requiredPermissions] and [mcpServers] default to empty so manifests created
+ * before each schema addition continue to decode unchanged.
  */
 @Serializable
 data class PluginManifest(
@@ -17,4 +17,5 @@ data class PluginManifest(
     val description: String? = null,
     val entrypoint: String? = null,
     val requiredPermissions: List<PluginPermission> = emptyList(),
+    val mcpServers: List<McpServerDependency> = emptyList(),
 )
