@@ -192,9 +192,27 @@ Every phase transition is emitted as an event, ensuring every action inside an a
 |--------------------------------------------|-------------------------------------|
 | [CLI Reference](ampere-cli/README.md)      | Command-line tools                  |
 | [Core Concepts](docs/CORE_CONCEPTS.md)     | The observable cognition primitives |
+| [Concept Cells](docs/concepts/_index.md)   | Per-primitive invariants and rationale |
 | [Agent Lifecycle](docs/AGENT_LIFECYCLE.md) | The PROPEL loop in detail           |
 | [Architecture](docs/ARCS.md)               | System architecture overview        |
 | [Contributing](CONTRIBUTING.md)            | How to contribute to the project    |
+
+---
+
+## Developer setup
+
+After cloning the repo, install the optional pre-push hook that warns when a
+push touches files listed under a [concept cell](docs/concepts/_index.md)'s
+`tracked_sources` without updating the concept file:
+
+```bash
+./scripts/install-hooks.sh
+```
+
+The hook calls `scripts/validate-concepts.sh` and is informational only — it
+never blocks a push. Re-running the installer is idempotent. To suppress a
+warning when your change confirms an existing concept, include the trailer
+`Concept-Verified: <ConceptName>` in your commit message.
 
 ---
 

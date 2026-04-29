@@ -1,0 +1,190 @@
+name: Concept staleness check
+description: >-
+  Run the concept-cells staleness validator over a PR's diff and surface
+  warnings as a sticky PR comment. Informs only; never fails the workflow.
+author: socket-link/ampere
+
+inputs:
+  base-ref:
+    description: >-
+      The base ref for the diff. On a pull_request event this should be the
+      branch the PR targets (e.g. `main`); the action will resolve it to
+      `origin/<base-ref>` before passing it to the validator. When left empty
+      (the default), the action falls back to GITHUB_BASE_REF, then to `main`.
+    required: false
+    default: ""
+  head-ref:
+    description: >-
+      The head ref for the diff. Default: `HEAD` (the checked-out commit).
+    required: false
+    default: HEAD
+  concepts-dir:
+    description: >-
+      Directory containing concept files. Default: `docs/concepts`.
+    required: false
+    default: docs/concepts
+  script-path:
+    description: >-
+      Path to the validator script. Override this when consuming the action
+      from a downstream repo that vendors validate-concepts.sh to a different
+      location. Default: `scripts/validate-concepts.sh`.
+    required: false
+    default: scripts/validate-concepts.sh
+  comment-marker:
+    description: >-
+      HTML comment marker used to identify the sticky bot comment so it can
+      be updated in place across pushes. Default: `<!-- concept-staleness-bot -->`.
+    required: false
+    default: "<!-- concept-staleness-bot -->"
+
+outputs:
+  warning-count:
+    description: Number of staleness warnings emitted by the validator.
+    value: ${{ steps.run-validator.outputs.warning_count }}
+  validator-output:
+    description: Full validator stdout (multiline; may be empty).
+    value: ${{ steps.run-validator.outputs.validator_output }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve refs
+      id: resolve-refs
+      shell: bash
+      run: |
+        set -eu
+        base_input='${{ inputs.base-ref }}'
+        if [ -z "$base_input" ]; then
+          if [ -n "${GITHUB_BASE_REF:-}" ]; then
+            base_input="$GITHUB_BASE_REF"
+          else
+            base_input="main"
+          fi
+        fi
+        echo "base_ref=$base_input" >> "$GITHUB_OUTPUT"
+
+    - name: Sanity-check fetch depth
+      shell: bash
+      run: |
+        set -eu
+        # If the calling workflow forgot `fetch-depth: 0`, the diff against
+        # the base ref is incomplete. Warn loudly but do not fail.
+        if [ "$(git rev-list --count HEAD)" = "1" ]; then
+          echo "::warning ::concept-staleness: shallow checkout detected. Add `fetch-depth: 0` to the actions/checkout step so the validator can diff against the base ref."
+        fi
+
+    - name: Ensure base ref is fetched
+      shell: bash
+      env:
+        BASE_REF: ${{ steps.resolve-refs.outputs.base_ref }}
+      run: |
+        set -eu
+        # Fetch the base ref so origin/<base> exists locally. Some workflows
+        # check out only the head; without this the validator's `git diff
+        # origin/<base>..HEAD` returns nothing.
+        if ! git rev-parse --verify "origin/$BASE_REF" >/dev/null 2>&1; then
+          git fetch --no-tags --prune origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF" || true
+        fi
+
+    - name: Run validator
+      id: run-validator
+      shell: bash
+      env:
+        BASE_REF: ${{ steps.resolve-refs.outputs.base_ref }}
+        HEAD_REF: ${{ inputs.head-ref }}
+        SCRIPT_PATH: ${{ inputs.script-path }}
+        CONCEPTS_DIR: ${{ inputs.concepts-dir }}
+      run: |
+        set -eu
+        if [ ! -x "$SCRIPT_PATH" ]; then
+          if [ -f "$SCRIPT_PATH" ]; then
+            chmod +x "$SCRIPT_PATH"
+          else
+            echo "::warning ::concept-staleness: validator script not found at $SCRIPT_PATH; skipping."
+            {
+              echo "warning_count=0"
+              echo "validator_output<<EOF"
+              echo ""
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+        fi
+
+        out=$(bash "$SCRIPT_PATH" \
+          --base "origin/$BASE_REF" \
+          --head "$HEAD_REF" \
+          --concepts-dir "$CONCEPTS_DIR" 2>&1 || true)
+
+        # Count warning lines emitted by the validator.
+        if [ -n "$out" ]; then
+          count=$(printf '%s\n' "$out" | grep -c '^⚠ Concept ' || true)
+        else
+          count=0
+        fi
+
+        printf '%s\n' "$out"
+
+        {
+          echo "warning_count=$count"
+          echo "validator_output<<__VALIDATOR_EOF__"
+          printf '%s\n' "$out"
+          echo "__VALIDATOR_EOF__"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Post / update sticky comment
+      if: ${{ github.event_name == 'pull_request' }}
+      uses: actions/github-script@v7
+      env:
+        WARNING_COUNT: ${{ steps.run-validator.outputs.warning_count }}
+        VALIDATOR_OUTPUT: ${{ steps.run-validator.outputs.validator_output }}
+        COMMENT_MARKER: ${{ inputs.comment-marker }}
+      with:
+        script: |
+          const marker = process.env.COMMENT_MARKER || '<!-- concept-staleness-bot -->';
+          const warningCount = parseInt(process.env.WARNING_COUNT || '0', 10);
+          const validatorOutput = (process.env.VALIDATOR_OUTPUT || '').trim();
+
+          let body;
+          if (warningCount === 0) {
+            body = `${marker}\n**Concept staleness check** — clean. No tracked-source changes need a concept update.`;
+          } else {
+            body = [
+              marker,
+              `**Concept staleness check** — ${warningCount} warning(s).`,
+              '',
+              'These changes touched files listed under a concept\'s `tracked_sources` without updating the concept file. Either update the concept (and bump `last_verified`) or include a `Concept-Verified: <ConceptName>` trailer in a commit on this PR.',
+              '',
+              '<details><summary>Validator output</summary>',
+              '',
+              '```',
+              validatorOutput || '(no output)',
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+          }
+
+          const { owner, repo } = context.repo;
+          const issue_number = context.payload.pull_request && context.payload.pull_request.number;
+          if (!issue_number) {
+            core.info('Not a pull_request event; skipping comment.');
+            return;
+          }
+
+          const { data: comments } = await github.rest.issues.listComments({
+            owner, repo, issue_number, per_page: 100,
+          });
+          const existing = comments.find(c => c.body && c.body.includes(marker));
+
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner, repo, comment_id: existing.id, body,
+            });
+            core.info(`Updated sticky comment ${existing.id}.`);
+          } else {
+            await github.rest.issues.createComment({
+              owner, repo, issue_number, body,
+            });
+            core.info('Created sticky comment.');
+          }
