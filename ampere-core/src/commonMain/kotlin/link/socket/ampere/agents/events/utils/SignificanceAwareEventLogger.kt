@@ -2,6 +2,7 @@ package link.socket.ampere.agents.events.utils
 
 import co.touchlab.kermit.Logger
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.EventType
@@ -159,6 +160,10 @@ class SignificanceAwareEventLogger(
         // Routing events - routine for selection, significant for fallbacks
         is RoutingEvent.RouteSelected -> EventSignificance.ROUTINE
         is RoutingEvent.RouteFallback -> EventSignificance.SIGNIFICANT
+
+        // AgentSurface events - significant; users see them directly via the renderer
+        is AgentSurfaceEvent.Requested -> EventSignificance.SIGNIFICANT
+        is AgentSurfaceEvent.Responded -> EventSignificance.SIGNIFICANT
     }
 
     private fun formatUrgency(urgency: Urgency): String = when (urgency) {

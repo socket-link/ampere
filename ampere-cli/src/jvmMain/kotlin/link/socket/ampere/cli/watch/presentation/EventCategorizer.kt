@@ -1,5 +1,6 @@
 package link.socket.ampere.cli.watch.presentation
 
+import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
@@ -89,7 +90,9 @@ object EventCategorizer {
         is TicketEvent.TicketStatusChanged,
         is TicketEvent.TicketAssigned,
         is TicketEvent.TicketCompleted,
-        is TicketEvent.TicketMeetingScheduled -> EventSignificance.SIGNIFICANT
+        is TicketEvent.TicketMeetingScheduled,
+        is AgentSurfaceEvent.Requested,
+        is AgentSurfaceEvent.Responded -> EventSignificance.SIGNIFICANT
 
         // Routine cognitive operations - maintenance work
         is GitEvent.BranchCreated,
