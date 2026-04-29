@@ -63,6 +63,8 @@ object EventRegistry {
         // ToolEvent types
         ToolEvent.ToolRegistered.EVENT_TYPE,
         ToolEvent.ToolUnregistered.EVENT_TYPE,
+        ToolEvent.ToolExecutionStarted.EVENT_TYPE,
+        ToolEvent.ToolExecutionCompleted.EVENT_TYPE,
         ToolEvent.ToolDiscoveryComplete.EVENT_TYPE,
 
         // FileSystemEvent types

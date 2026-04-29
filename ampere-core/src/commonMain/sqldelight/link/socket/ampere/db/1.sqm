@@ -1,0 +1,11 @@
+ALTER TABLE EventStore ADD COLUMN run_id TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_event_run_id ON EventStore(run_id);
+
+ALTER TABLE KnowledgeStore ADD COLUMN run_id TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_run_id ON KnowledgeStore(run_id);
+
+ALTER TABLE OutcomeMemoryStore ADD COLUMN run_id TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_outcome_run_id ON OutcomeMemoryStore(run_id);

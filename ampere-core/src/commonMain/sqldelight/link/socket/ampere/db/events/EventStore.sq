@@ -3,11 +3,13 @@ CREATE TABLE EventStore (
   event_type TEXT NOT NULL,
   source_id TEXT NOT NULL,
   timestamp INTEGER NOT NULL,
-  payload TEXT NOT NULL
+  payload TEXT NOT NULL,
+  run_id TEXT
 );
 
 CREATE INDEX idx_event_type ON EventStore(event_type);
 CREATE INDEX idx_timestamp ON EventStore(timestamp);
+CREATE INDEX idx_event_run_id ON EventStore(run_id);
 
 -- Queries
 
@@ -15,38 +17,55 @@ insertEvent:
 INSERT INTO EventStore(event_id, event_type, source_id, timestamp, payload)
 VALUES (?, ?, ?, ?, ?);
 
+insertEventWithRunId:
+INSERT INTO EventStore(event_id, event_type, source_id, timestamp, payload, run_id)
+VALUES (?, ?, ?, ?, ?, ?);
+
 getAllEvents:
-SELECT event_id, event_type, source_id, timestamp, payload
+SELECT event_id, event_type, source_id, timestamp, payload, run_id
 FROM EventStore
 ORDER BY timestamp DESC;
 
 getEventsByType:
-SELECT event_id, event_type, source_id, timestamp, payload
+SELECT event_id, event_type, source_id, timestamp, payload, run_id
 FROM EventStore
 WHERE event_type = ?
 ORDER BY timestamp DESC;
 
 getEventsSince:
-SELECT event_id, event_type, source_id, timestamp, payload
+SELECT event_id, event_type, source_id, timestamp, payload, run_id
 FROM EventStore
 WHERE timestamp >= ?
 ORDER BY timestamp ASC;
 
 getEventById:
-SELECT event_id, event_type, source_id, timestamp, payload
+SELECT event_id, event_type, source_id, timestamp, payload, run_id
 FROM EventStore
 WHERE event_id = ?
 LIMIT 1;
 
 getEventsBetween:
-SELECT event_id, event_type, source_id, timestamp, payload
+SELECT event_id, event_type, source_id, timestamp, payload, run_id
 FROM EventStore
 WHERE timestamp >= ? AND timestamp <= ?
 ORDER BY timestamp ASC;
 
+getEventsByRunId:
+SELECT event_id, event_type, source_id, timestamp, payload, run_id
+FROM EventStore
+WHERE run_id = ?
+ORDER BY timestamp ASC;
+
+getEventsByRunIdOrPayload:
+SELECT event_id, event_type, source_id, timestamp, payload, run_id
+FROM EventStore
+WHERE run_id = :run_id
+   OR payload LIKE '%' || :run_id || '%'
+ORDER BY timestamp ASC;
+
 -- Query events with event type filter
 getEventsBetweenWithEventTypes:
-SELECT event_id, event_type, source_id, timestamp, payload
+SELECT event_id, event_type, source_id, timestamp, payload, run_id
 FROM EventStore
 WHERE timestamp >= :fromTime
   AND timestamp <= :toTime
@@ -55,7 +74,7 @@ ORDER BY timestamp ASC;
 
 -- Query events with source ID filter
 getEventsBetweenWithSourceIds:
-SELECT event_id, event_type, source_id, timestamp, payload
+SELECT event_id, event_type, source_id, timestamp, payload, run_id
 FROM EventStore
 WHERE timestamp >= :fromTime
   AND timestamp <= :toTime
@@ -64,7 +83,7 @@ ORDER BY timestamp ASC;
 
 -- Query events with both event type and source ID filters
 getEventsBetweenWithBothFilters:
-SELECT event_id, event_type, source_id, timestamp, payload
+SELECT event_id, event_type, source_id, timestamp, payload, run_id
 FROM EventStore
 WHERE timestamp >= :fromTime
   AND timestamp <= :toTime
