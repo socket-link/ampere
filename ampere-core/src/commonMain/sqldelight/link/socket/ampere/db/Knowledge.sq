@@ -1,0 +1,145 @@
+-- On-device knowledge schema: documents, chunks, and embedding vectors.
+-- Vectors are stored as raw BLOBs serialized via EmbeddingVector.toBlob().
+-- Platform retrieval pipelines (W1.8 iOS, W1.9 Android) target this surface.
+
+CREATE TABLE IF NOT EXISTS knowledge_documents (
+    id TEXT PRIMARY KEY NOT NULL,
+    title TEXT NOT NULL,
+    source_uri TEXT,
+    imported_at INTEGER NOT NULL,
+    content_hash TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_documents_imported_at
+    ON knowledge_documents(imported_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_documents_content_hash
+    ON knowledge_documents(content_hash);
+
+CREATE TABLE IF NOT EXISTS knowledge_chunks (
+    id TEXT PRIMARY KEY NOT NULL,
+    document_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    char_start INTEGER NOT NULL,
+    char_end INTEGER NOT NULL,
+    FOREIGN KEY (document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+    UNIQUE (document_id, chunk_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_document_id
+    ON knowledge_chunks(document_id);
+
+CREATE TABLE IF NOT EXISTS knowledge_embeddings (
+    chunk_id TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    vector_blob BLOB NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (chunk_id, model_id),
+    FOREIGN KEY (chunk_id) REFERENCES knowledge_chunks(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_embeddings_model_id
+    ON knowledge_embeddings(model_id);
+
+-- =============================================================================
+-- DOCUMENT QUERIES
+-- =============================================================================
+
+insertDocument:
+INSERT INTO knowledge_documents(id, title, source_uri, imported_at, content_hash)
+VALUES (?, ?, ?, ?, ?);
+
+upsertDocument:
+INSERT OR REPLACE INTO knowledge_documents(id, title, source_uri, imported_at, content_hash)
+VALUES (?, ?, ?, ?, ?);
+
+getDocumentById:
+SELECT * FROM knowledge_documents WHERE id = ?;
+
+getDocumentByContentHash:
+SELECT * FROM knowledge_documents WHERE content_hash = ? LIMIT 1;
+
+listDocuments:
+SELECT * FROM knowledge_documents
+ORDER BY imported_at DESC
+LIMIT :limit;
+
+deleteDocument:
+DELETE FROM knowledge_documents WHERE id = ?;
+
+countDocuments:
+SELECT COUNT(*) FROM knowledge_documents;
+
+-- =============================================================================
+-- CHUNK QUERIES
+-- =============================================================================
+
+insertChunk:
+INSERT INTO knowledge_chunks(id, document_id, chunk_index, text, char_start, char_end)
+VALUES (?, ?, ?, ?, ?, ?);
+
+updateChunkText:
+UPDATE knowledge_chunks
+SET text = ?, char_start = ?, char_end = ?
+WHERE id = ?;
+
+getChunkById:
+SELECT * FROM knowledge_chunks WHERE id = ?;
+
+getChunksByDocument:
+SELECT * FROM knowledge_chunks
+WHERE document_id = ?
+ORDER BY chunk_index ASC;
+
+deleteChunksForDocument:
+DELETE FROM knowledge_chunks WHERE document_id = ?;
+
+countChunks:
+SELECT COUNT(*) FROM knowledge_chunks;
+
+-- =============================================================================
+-- EMBEDDING QUERIES
+-- =============================================================================
+
+insertEmbedding:
+INSERT INTO knowledge_embeddings(chunk_id, model_id, vector_blob, created_at)
+VALUES (?, ?, ?, ?);
+
+upsertEmbedding:
+INSERT OR REPLACE INTO knowledge_embeddings(chunk_id, model_id, vector_blob, created_at)
+VALUES (?, ?, ?, ?);
+
+getEmbedding:
+SELECT * FROM knowledge_embeddings
+WHERE chunk_id = ? AND model_id = ?;
+
+getEmbeddingsForModel:
+SELECT * FROM knowledge_embeddings
+WHERE model_id = ?;
+
+-- Joined view: every chunk with its embedding for a specific model.
+-- Platform similarity scoring iterates this set in memory.
+getChunkEmbeddingsForModel:
+SELECT
+    c.id AS chunk_id,
+    c.document_id AS document_id,
+    c.chunk_index AS chunk_index,
+    c.text AS text,
+    c.char_start AS char_start,
+    c.char_end AS char_end,
+    e.model_id AS model_id,
+    e.vector_blob AS vector_blob,
+    e.created_at AS created_at
+FROM knowledge_chunks c
+INNER JOIN knowledge_embeddings e ON c.id = e.chunk_id
+WHERE e.model_id = ?;
+
+deleteEmbeddingsForChunk:
+DELETE FROM knowledge_embeddings WHERE chunk_id = ?;
+
+deleteEmbeddingsForModel:
+DELETE FROM knowledge_embeddings WHERE model_id = ?;
+
+countEmbeddings:
+SELECT COUNT(*) FROM knowledge_embeddings;
