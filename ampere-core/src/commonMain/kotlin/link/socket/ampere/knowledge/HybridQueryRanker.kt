@@ -61,7 +61,7 @@ class HybridQueryRanker(
         // semantic hit so its enrichment wins ties (semantic queries usually
         // walk the document table; keyword search may not).
         val canonicalById = mutableMapOf<String, KnowledgeQueryResult>()
-        keywordResults.forEach { canonicalById.putIfAbsent(it.chunk.id, it) }
+        keywordResults.forEach { canonicalById.getOrPut(it.chunk.id) { it } }
         semanticResults.forEach { canonicalById[it.chunk.id] = it }
 
         return canonicalById.values
