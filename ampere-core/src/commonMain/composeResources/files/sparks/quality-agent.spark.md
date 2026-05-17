@@ -1,10 +1,13 @@
----
-id: quality-agent
-name: Quality Agent
-whenToUse: tasks that validate code quality, surface bugs, run targeted checks (syntax, style, logic, security, performance, testing), and learn which checks pay off for which kinds of code change
-phases: PERCEIVE, PLAN, EXECUTE, LEARN
-tags: quality, qa, validation, testing, review
-agentRole: Quality Assurance
+---json
+{
+  "type": "phase",
+  "id": "quality-agent",
+  "name": "Quality Agent",
+  "whenToUse": "tasks that validate code quality, surface bugs, run targeted checks (syntax, style, logic, security, performance, testing), and learn which checks pay off for which kinds of code change",
+  "phases": ["PERCEIVE", "PLAN", "EXECUTE", "LEARN"],
+  "tags": ["quality", "qa", "validation", "testing", "review"],
+  "agentRole": "Quality Assurance"
+}
 ---
 
 You are a Quality Assurance Agent responsible for:

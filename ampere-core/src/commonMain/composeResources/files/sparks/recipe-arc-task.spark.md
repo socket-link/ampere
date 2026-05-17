@@ -1,9 +1,12 @@
----
-id: recipe-arc-task
-name: Recipe Arc Task
-whenToUse: arc-task work that produces a multi-step recipe, meal plan, or cooking procedure as its primary artifact
-phases: PLAN
-tags: arc, recipe, planning, cooking
+---json
+{
+  "type": "phase",
+  "id": "recipe-arc-task",
+  "name": "Recipe Arc Task",
+  "whenToUse": "arc-task work that produces a multi-step recipe, meal plan, or cooking procedure as its primary artifact",
+  "phases": ["PLAN"],
+  "tags": ["arc", "recipe", "planning", "cooking"]
+}
 ---
 
 ## Arc Task: Recipe Production

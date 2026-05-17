@@ -18,6 +18,7 @@ import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.SparkBasedAgent
+import link.socket.ampere.agents.domain.cognition.sparks.DefaultPhaseSparkLibrary
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MeetingEvent
@@ -55,6 +56,7 @@ class MeetingParticipationHandlerTest {
     }
 
     private val stubAgent = SparkBasedAgent.Code(
+        sparkRegistry = runBlocking { DefaultPhaseSparkLibrary.load() },
         agentId = "meeting-stub-agent",
         aiConfiguration = AIConfiguration_Default(
             provider = AIProvider_Google,

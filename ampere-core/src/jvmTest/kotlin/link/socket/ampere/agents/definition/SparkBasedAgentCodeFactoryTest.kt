@@ -2,16 +2,18 @@ package link.socket.ampere.agents.definition
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.cognition.sparks.AmpereSpikeFlags
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.cognition.sparks.DefaultPhaseSparkLibrary
+import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
-import link.socket.ampere.agents.domain.cognition.sparks.RoleSpark
 import link.socket.ampere.agents.domain.cognition.sparks.SparkSelectionContext
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.FunctionTool
@@ -30,6 +32,8 @@ import link.socket.ampere.domain.ai.provider.AIProvider
  */
 class SparkBasedAgentCodeFactoryTest {
 
+    private val phaseSparkLibrary: PhaseSparkLibrary = runBlocking { DefaultPhaseSparkLibrary.load() }
+
     private class FakeAIConfiguration : AIConfiguration {
         override val provider: AIProvider<*, *>
             get() = throw NotImplementedError("provider should not be invoked in factory test")
@@ -42,14 +46,38 @@ class SparkBasedAgentCodeFactoryTest {
     @Test
     fun `factory builds an analytical code agent with the role spark on top`() {
         val agent = SparkBasedAgent.Code(
+            sparkRegistry = phaseSparkLibrary,
             agentId = "code-factory-test",
             aiConfiguration = FakeAIConfiguration(),
         )
 
         assertEquals(CognitiveAffinity.ANALYTICAL, agent.affinity)
+        // Role spark id is "code"; declarative fixture's name field is "Role:Code"
+        // (matching the legacy RoleSpark.Code singleton's name).
         assertTrue(
-            agent.cognitiveState.endsWith("[${RoleSpark.Code.name}]"),
-            "RoleSpark.Code should be the most recently applied spark; got: ${agent.cognitiveState}",
+            agent.cognitiveState.endsWith("[Role:Code]"),
+            "declarative role-code spark should be the most recently applied spark; got: ${agent.cognitiveState}",
+        )
+    }
+
+    @Test
+    fun `factory fails fast when the library has no role-code fixture`() {
+        // Library loaded with a single non-role fixture: lookup must fail loudly
+        // rather than silently fall back to the legacy RoleSpark.Code singleton.
+        val emptyLibrary: PhaseSparkLibrary = runBlocking {
+            DefaultPhaseSparkLibrary.load(sparkResourcePaths = listOf("files/sparks/minimal-edge.spark.md"))
+        }
+
+        val failure = assertFailsWith<IllegalStateException> {
+            SparkBasedAgent.Code(
+                sparkRegistry = emptyLibrary,
+                agentId = "code-factory-no-library-test",
+                aiConfiguration = FakeAIConfiguration(),
+            )
+        }
+        assertTrue(
+            failure.message?.contains("role-code") == true,
+            "error should name the missing fixture; got: ${failure.message}",
         )
     }
 
@@ -63,6 +91,7 @@ class SparkBasedAgentCodeFactoryTest {
             executionFunction = { error("not used in this test") },
         )
         val agent = SparkBasedAgent.Code(
+            sparkRegistry = phaseSparkLibrary,
             agentId = "code-factory-test-tools",
             aiConfiguration = FakeAIConfiguration(),
             tools = setOf(noopTool),
@@ -80,11 +109,12 @@ class SparkBasedAgentCodeFactoryTest {
 
     @Test
     fun `wiring a PhaseSparkLibrary lets the code-agent declarative spark activate during a phase`() = runTest {
+        val library = DefaultPhaseSparkLibrary.load()
         val agent = SparkBasedAgent.Code(
+            sparkRegistry = library,
             agentId = "code-factory-test-library",
             aiConfiguration = FakeAIConfiguration(),
         )
-        val library = DefaultPhaseSparkLibrary.load()
         agent.setPhaseSparkLibrary(library)
 
         // The code-agent spark must be in the loaded library.

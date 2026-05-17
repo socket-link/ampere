@@ -10,6 +10,16 @@ related: [PropelLoop, CognitiveRelay, PluginPermissions, CognitionTrace]
 last_verified: 2026-05-17
 ---
 
+> **2026-05-17 (AMPR-165):** Declarative `.spark.md` documents now use JSON
+> frontmatter (`---json` / `---`) decoded via a sealed [`SparkFrontmatter`]
+> family with `"type"` discriminator. The legacy `---` YAML form is rejected
+> at parse time with `SparkParseError.DeprecatedYamlFrontmatter`. The schema
+> supports two variants today (`"phase"` and `"role"`) and one role fixture
+> (`role-code.spark.md`) backs the [`SparkBasedAgent.Code`] /
+> [`SparkBasedAgent.Quality`] factories via the public [`SparkRegistry`]
+> surface — those factories no longer reference the `RoleSpark.Code` Kotlin
+> singleton.
+
 # Spark System
 
 ## What it is
@@ -42,20 +52,43 @@ show *exactly* what specialization was active at any point in a run.
 
 ### Declarative Sparks
 
-`DeclarativePhaseSpark`s are parsed from `.spark.md` files under
-`composeResources/files/sparks/`. A spark file has YAML-style frontmatter
-(id, name, whenToUse, phases, tags, agentRole, requestedToolIds,
-modelPreference) followed by a markdown body. The body may contain
-`## When Perceiving / Planning / Executing / Learning` sections, which the
-parser extracts into `phaseContributions`; text outside those headers
-becomes the base `promptContribution`.
+Sparks are parsed from `.spark.md` files under
+`composeResources/files/sparks/`. Each document opens with a JSON
+frontmatter block fenced by `---json` / `---`, decoded against the sealed
+`SparkFrontmatter` family via a `Json { classDiscriminator = "type";
+ignoreUnknownKeys = false; encodeDefaults = true }` configuration. Unknown
+keys fail parsing by intent: spark frontmatter is capability-bearing, and a
+misspelled `requestedToolIds` must not silently ship without its tools.
 
-`DefaultPhaseSparkLibrary` loads the bundled fixtures at construction time;
-`PhaseSparkLibrary.selectFor(SparkSelectionContext)` filters by phase
-eligibility, tag intersection, and keyword match against `whenToUse`.
-`PhaseSparkManager` consults the library when
-`AmpereSpikeFlags.declarativeSparksEnabled` is on, applying both the
-built-in `PhaseSpark.forPhase(phase)` and any selected declarative sparks.
+Two variants exist today, addressed by the `"type"` discriminator:
+
+- **`"phase"`** (`PhaseSparkFrontmatter`) — prompt-only guidance. The body
+  may contain `## When Perceiving / Planning / Executing / Learning`
+  sections, which the parser extracts into `phaseContributions`; text
+  outside those headers becomes the base `promptContribution`. Fields:
+  `id`, `name`, `whenToUse`, `phases`, `tags`, `agentRole`,
+  `requestedToolIds`, `modelPreference`.
+- **`"role"`** (`RoleSparkFrontmatter`) — capability-bearing. The body is
+  preserved verbatim as `promptContribution` (no per-phase section
+  extraction; role guidance applies uniformly across phases). Fields:
+  `id`, `name`, `agentRole`, `requestedToolIds`, `allowedTools`,
+  `fileAccessScope`.
+
+Documents that still open with the bare `---` YAML fence are rejected with
+`SparkParseError.DeprecatedYamlFrontmatter`. The legacy YAML parser was
+removed in AMPR-165 Wave 2.
+
+`DefaultPhaseSparkLibrary` loads the bundled fixtures at construction
+time, dispatching each parse result by variant: `Phase` becomes a
+`DeclarativePhaseSpark`, `Role` becomes a `DeclarativeRoleSpark`.
+`PhaseSparkLibrary.selectFor(SparkSelectionContext)` filters phase sparks
+by eligibility, tag intersection, and keyword match against `whenToUse`;
+`SparkRegistry.roleSparkById(id)` resolves role sparks by canonical id
+(e.g. `"code"` for `role-code.spark.md`). `PhaseSparkManager` consults
+the phase surface when `AmpereSpikeFlags.declarativeSparksEnabled` is on;
+the `SparkBasedAgent.Code` / `SparkBasedAgent.Quality` factories consult
+the role surface at construction time and fail fast if the bundled
+`role-code` fixture is missing.
 
 ## Why it exists
 
@@ -92,8 +125,12 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - `agents/domain/cognition/sparks/CoordinationSpark.kt` — multi-agent coordination context.
 - `agents/domain/cognition/sparks/PhaseSpark.kt` + `PhaseSparkManager.kt` — `PERCEIVE | PLAN | EXECUTE | LEARN`; manager applies built-in + selected declarative sparks as a list, pops in reverse on phase exit.
 - `agents/domain/cognition/sparks/DeclarativePhaseSpark.kt` — markdown-authored `PhaseSpark` with `eligiblePhases` + per-phase `phaseContributions`.
-- `agents/domain/cognition/sparks/SparkParser.kt` — hand-rolled frontmatter parser; extracts `## When <Phase>` sections.
-- `agents/domain/cognition/sparks/PhaseSparkLibrary.kt`, `DefaultPhaseSparkLibrary.kt` — read-only catalog with deterministic `selectFor` ordering.
+- `agents/domain/cognition/sparks/DeclarativeRoleSpark.kt` — markdown-authored role spark; capability-bearing (`allowedTools`, `fileAccessScope`).
+- `agents/domain/cognition/sparks/DeclarativeSparkSource.kt` — sealed parser output: `Phase` / `Role`.
+- `agents/domain/cognition/sparks/SparkFrontmatter.kt` — sealed `@Serializable` frontmatter schema with `"phase"` and `"role"` variants.
+- `agents/domain/cognition/sparks/SparkParser.kt` — JSON-fenced (`---json` / `---`) parser; extracts `## When <Phase>` sections for phase variants only.
+- `agents/domain/cognition/sparks/SparkRegistry.kt` — public role-spark lookup (`roleSparkById`) consumed by the agent factories.
+- `agents/domain/cognition/sparks/PhaseSparkLibrary.kt`, `DefaultPhaseSparkLibrary.kt` — read-only catalog with deterministic `selectFor` ordering; extends `SparkRegistry`.
 - `agents/domain/cognition/sparks/AmpereSpikeFlags.kt` — `declarativeSparksEnabled: Boolean = false`; gates declarative spark application.
 - `composeResources/files/sparks/*.spark.md` — bundled declarative spark fixtures.
 - `agents/domain/event/SparkAppliedEvent.kt`, `SparkRemovedEvent.kt` — observability.
@@ -112,7 +149,8 @@ exceed parent permissions, so adding a Spark is monotone safe.
 ## Common operations
 
 - **Add a new Spark type** — implement `Spark` (or extend an existing sealed family like `PhaseSpark`), define `name`, `promptContribution`, optionally `allowedTools` / `fileAccessScope` / `phaseContributions` / `agentRole` / `requestedToolIds`, mark it `@Serializable` with a stable `@SerialName`.
-- **Author a declarative spark** — write a `.spark.md` file under `composeResources/files/sparks/` with frontmatter (id, name, whenToUse required) and a markdown body, optionally with `## When <Phase>` sections for phase-specific guidance. Add the path to `DefaultPhaseSparkLibrary.DEFAULT_SPARKS`.
+- **Author a declarative phase spark** — write a `.spark.md` file under `composeResources/files/sparks/` with a `---json` / `---` frontmatter block of type `"phase"` (id, name, whenToUse required) and a markdown body, optionally with `## When <Phase>` sections for phase-specific guidance. Add the path to `DefaultPhaseSparkLibrary.DEFAULT_SPARKS`.
+- **Author a declarative role spark** — same path, `---json` / `---` frontmatter block of type `"role"` (id, name, agentRole required; `allowedTools` / `fileAccessScope` optional for narrowing). Body is the role's `promptContribution` verbatim — do not use `## When <Phase>` headers, they will not be extracted. Add the path to `DefaultPhaseSparkLibrary.DEFAULT_SPARKS`. Factory call sites resolve it via `SparkRegistry.roleSparkById(id)`.
 - **Apply a Spark transiently** — `SparkStack.push(spark)` and ensure a matching `pop` in `finally`. `PhaseSparkManager` handles this for phase boundaries.
 - **Compose a per-agent stack** — `RoleSpark` + `ProjectSpark` at agent construction, then `PhaseSpark` pushed/popped per phase (potentially multiple when declarative library is active), then `TaskSpark` pushed/popped per task.
 - **Inspect the active stack** — subscribe to `SparkAppliedEvent` / `SparkRemovedEvent` on the bus, or read `SparkStack.current`.

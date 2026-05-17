@@ -2,6 +2,7 @@ package link.socket.ampere.agents.domain.cognition.sparks
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -10,10 +11,11 @@ import kotlinx.coroutines.test.runTest
 class PhaseSparkLibraryTest {
 
     @Test
-    fun `all returns sparks for every bundled fixture`() = runTest {
+    fun `all returns phase sparks for every bundled phase fixture`() = runTest {
         val library = DefaultPhaseSparkLibrary.load()
         val sparks = library.all().filterIsInstance<DeclarativePhaseSpark>()
 
+        // Role fixtures load via roleSparkById, not via all() — only phase ids appear here.
         val ids = sparks.map { it.sparkId }.toSet()
         assertEquals(
             setOf(
@@ -27,6 +29,38 @@ class PhaseSparkLibraryTest {
             ),
             ids,
         )
+    }
+
+    @Test
+    fun `roleSparkById resolves bundled role-code fixture`() = runTest {
+        val library = DefaultPhaseSparkLibrary.load()
+
+        val role = library.roleSparkById("code")
+        assertNotNull(role, "role-code.spark.md should load via the default library")
+        val declarative = assertIs<DeclarativeRoleSpark>(role)
+
+        // Capability surface must match the legacy RoleSpark.Code singleton so the
+        // Wave 4 factory migration in AMPR-165 is a behaviour-preserving swap.
+        assertEquals(RoleSpark.Code.name, declarative.name)
+        assertEquals(RoleSpark.Code.agentRole, declarative.agentRole)
+        assertEquals(RoleSpark.Code.allowedTools, declarative.allowedTools)
+        assertEquals(RoleSpark.Code.requestedToolIds, declarative.requestedToolIds)
+        assertEquals(RoleSpark.Code.fileAccessScope, declarative.fileAccessScope)
+    }
+
+    @Test
+    fun `roleSparkById returns null for unknown id`() = runTest {
+        val library = DefaultPhaseSparkLibrary.load()
+        assertNull(library.roleSparkById("does-not-exist"))
+    }
+
+    @Test
+    fun `byId never returns a role spark`() = runTest {
+        // Role and phase sparks share the catalog but live in distinct lookup
+        // surfaces. `byId` is the phase-only door; routing role ids through it
+        // would let phase-driven code paths accidentally narrow capabilities.
+        val library = DefaultPhaseSparkLibrary.load()
+        assertNull(library.byId("code"))
     }
 
     @Test

@@ -1,10 +1,13 @@
----
-id: cooking-domain
-name: Cooking Domain
-whenToUse: tasks that mention recipes, ingredients, meal planning, cooking techniques, or kitchen workflows
-phases: PLAN, EXECUTE
-tags: cooking, recipes, food, kitchen
-modelPreference: gpt-4o-mini
+---json
+{
+  "type": "phase",
+  "id": "cooking-domain",
+  "name": "Cooking Domain",
+  "whenToUse": "tasks that mention recipes, ingredients, meal planning, cooking techniques, or kitchen workflows",
+  "phases": ["PLAN", "EXECUTE"],
+  "tags": ["cooking", "recipes", "food", "kitchen"],
+  "modelPreference": "gpt-4o-mini"
+}
 ---
 
 ## Domain Context: Cooking

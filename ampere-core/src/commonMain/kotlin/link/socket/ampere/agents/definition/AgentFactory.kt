@@ -204,6 +204,7 @@ class AgentFactory(
             val eventApi = eventApiFactory?.invoke(agentId)
             val memoryService = memoryServiceFactory?.invoke(agentId)
             SparkBasedAgent.Code(
+                sparkRegistry = phaseSparkLibrary,
                 agentId = agentId,
                 aiConfiguration = effectiveAiConfiguration,
                 eventApi = eventApi,
@@ -254,6 +255,7 @@ class AgentFactory(
             val eventApi = eventApiFactory?.invoke(agentId)
             val memoryService = memoryServiceFactory?.invoke(agentId)
             SparkBasedAgent.Quality(
+                sparkRegistry = phaseSparkLibrary,
                 agentId = agentId,
                 aiConfiguration = effectiveAiConfiguration,
                 eventApi = eventApi,
