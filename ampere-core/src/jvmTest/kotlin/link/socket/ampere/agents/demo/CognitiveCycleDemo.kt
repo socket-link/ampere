@@ -11,6 +11,7 @@ import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.SparkBasedAgent
+import link.socket.ampere.agents.domain.cognition.sparks.DefaultPhaseSparkLibrary
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
@@ -63,6 +64,7 @@ class CognitiveCycleDemo {
 
             // Create the spark-based code agent
             val agent = SparkBasedAgent.Code(
+                sparkRegistry = DefaultPhaseSparkLibrary.load(),
                 agentId = "cognitive-cycle-demo-agent",
                 aiConfiguration = agentConfig.aiConfiguration,
                 tools = setOf(mockWriteCodeFile),

@@ -164,12 +164,3 @@ fun stubQualityAssuranceState(
         plan = plan,
         outcome = outcome,
     )
-
-fun stubQualityAssuranceAgent(
-    @Suppress("UNUSED_PARAMETER") initialState: QualityState = stubQualityAssuranceState(),
-    agentConfiguration: AgentConfiguration = stubAgentConfiguration(),
-): SparkBasedAgent<QualityState> =
-    SparkBasedAgent.Quality(
-        agentId = "stub-quality-agent",
-        aiConfiguration = agentConfiguration.aiConfiguration,
-    )

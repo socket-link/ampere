@@ -1,7 +1,10 @@
----
-id: minimal-edge
-name: Minimal Edge
-whenToUse: smoke-test fixture exercising the minimum viable declarative spark shape
+---json
+{
+  "type": "phase",
+  "id": "minimal-edge",
+  "name": "Minimal Edge",
+  "whenToUse": "smoke-test fixture exercising the minimum viable declarative spark shape"
+}
 ---
 
 ## Minimal Edge Spark

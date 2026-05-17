@@ -16,27 +16,27 @@ internal data class SparkSelectionContext(
 )
 
 /**
- * Read-only catalog of declarative [PhaseSpark]s available for selection at
- * phase entry.
+ * Internal phase-spark surface consumed synchronously by [PhaseSparkManager]
+ * at phase entry, hence the non-suspend methods. Implementations populate
+ * the catalog asynchronously (e.g. `DefaultPhaseSparkLibrary.load`) and
+ * hand a fully-resolved library to the caller.
  *
- * The interface is intentionally non-suspend so it can be consulted from
- * synchronous code paths such as [PhaseSparkManager.enterPhase]. Implementations
- * that need async I/O to populate their catalog should expose a suspend
- * factory (e.g. `DefaultPhaseSparkLibrary.load(...)`) that materialises the
- * sparks once and hands a fully-resolved library back to the caller.
+ * Extends [SparkRegistry] so the same instance serves the public role-spark
+ * lookup used by the [link.socket.ampere.agents.definition.SparkBasedAgent]
+ * factories — one catalog, two access surfaces split by visibility.
  *
  * Implementations should:
  * - Return deterministic results from [selectFor] (stable order across runs)
  * - Never throw from these accessors; surface failures via empty results
  */
-internal interface PhaseSparkLibrary {
+internal interface PhaseSparkLibrary : SparkRegistry {
 
-    /** All declarative sparks the library could expose, regardless of selection. */
+    /** All phase sparks the library could expose, regardless of selection. */
     fun all(): List<PhaseSpark>
 
-    /** Returns the spark with [id] for any phase, or null if none. */
+    /** Returns the phase spark with [id], or null if none. */
     fun byId(id: PhaseSparkId): PhaseSpark?
 
-    /** Returns declarative sparks matching [context], ordered deterministically. */
+    /** Returns phase sparks matching [context], ordered deterministically. */
     fun selectFor(context: SparkSelectionContext): List<PhaseSpark>
 }

@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.domain.cognition.sparks
 
 import co.touchlab.kermit.Logger
+import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.resources.Res
 import link.socket.ampere.util.logWith
 import org.jetbrains.compose.resources.ExperimentalResourceApi
@@ -13,14 +14,16 @@ private val DEFAULT_SPARKS: List<String> = listOf(
     "files/sparks/product-agent.spark.md",
     "files/sparks/project-agent.spark.md",
     "files/sparks/quality-agent.spark.md",
+    "files/sparks/role-code.spark.md",
 )
 
 /**
  * In-memory [PhaseSparkLibrary] backed by a pre-parsed set of declarative sparks.
  *
  * Construction takes a fully-resolved list of sparks so the runtime accessors
- * (`all`, `byId`, `selectFor`) are non-suspend. Use [DefaultPhaseSparkLibrary.load]
- * to read and parse the bundled `.spark.md` resources asynchronously.
+ * (`all`, `byId`, `selectFor`, `roleSparkById`) are non-suspend. Use
+ * [DefaultPhaseSparkLibrary.load] to read and parse the bundled `.spark.md`
+ * resources asynchronously.
  *
  * The loader mirrors the resource-loading shape of
  * [link.socket.ampere.domain.ai.pricing.BundledProviderPricingCatalog]: it tries
@@ -30,16 +33,19 @@ private val DEFAULT_SPARKS: List<String> = listOf(
  * never throws.
  */
 internal class DefaultPhaseSparkLibrary internal constructor(
-    private val sparks: List<PhaseSpark>,
+    private val phaseSparks: List<PhaseSpark>,
+    private val roleSparks: Map<String, DeclarativeRoleSpark> = emptyMap(),
 ) : PhaseSparkLibrary {
 
-    override fun all(): List<PhaseSpark> = sparks
+    override fun all(): List<PhaseSpark> = phaseSparks
 
     override fun byId(id: PhaseSparkId): PhaseSpark? =
-        sparks.firstOrNull { spark -> spark is DeclarativePhaseSpark && spark.sparkId == id }
+        phaseSparks.firstOrNull { spark -> spark is DeclarativePhaseSpark && spark.sparkId == id }
+
+    override fun roleSparkById(id: String): Spark? = roleSparks[id]
 
     override fun selectFor(context: SparkSelectionContext): List<PhaseSpark> {
-        val phaseMatches = sparks.filterIsInstance<DeclarativePhaseSpark>()
+        val phaseMatches = phaseSparks.filterIsInstance<DeclarativePhaseSpark>()
             .filter { context.phase in it.eligiblePhases }
 
         if (phaseMatches.isEmpty()) return emptyList()
@@ -76,8 +82,9 @@ internal class DefaultPhaseSparkLibrary internal constructor(
         suspend fun load(
             sparkResourcePaths: List<String> = DEFAULT_SPARKS,
         ): DefaultPhaseSparkLibrary {
-            val seenIds = mutableSetOf<PhaseSparkId>()
-            val sparks = mutableListOf<PhaseSpark>()
+            val seenIds = mutableSetOf<String>()
+            val phaseSparks = mutableListOf<PhaseSpark>()
+            val roleSparks = mutableMapOf<String, DeclarativeRoleSpark>()
             for (path in sparkResourcePaths) {
                 val raw = readResource(path)
                 if (raw == null) {
@@ -92,7 +99,12 @@ internal class DefaultPhaseSparkLibrary internal constructor(
                                 "[PhaseSparkLibrary] duplicate spark id '${source.id}' from $path — skipping"
                             }
                         } else {
-                            sparks += source.toPhaseSpark()
+                            when (source) {
+                                is DeclarativeSparkSource.Phase ->
+                                    phaseSparks += source.toLegacySource().toPhaseSpark()
+                                is DeclarativeSparkSource.Role ->
+                                    roleSparks[source.id] = source.toRoleSpark()
+                            }
                         }
                     }
                     is SparkParseResult.Failed -> {
@@ -102,14 +114,18 @@ internal class DefaultPhaseSparkLibrary internal constructor(
                     }
                 }
             }
-            return DefaultPhaseSparkLibrary(sparks.toList())
+            return DefaultPhaseSparkLibrary(
+                phaseSparks = phaseSparks.toList(),
+                roleSparks = roleSparks.toMap(),
+            )
         }
 
         /**
-         * Builds a library from already-parsed sources (useful for tests).
+         * Builds a library from already-parsed phase sources (useful for tests
+         * that exercise the phase-spark surface).
          */
         internal fun fromSources(sources: List<DeclarativePhaseSparkSource>): DefaultPhaseSparkLibrary =
-            DefaultPhaseSparkLibrary(sources.map { it.toPhaseSpark() })
+            DefaultPhaseSparkLibrary(phaseSparks = sources.map { it.toPhaseSpark() })
 
         @OptIn(ExperimentalResourceApi::class)
         private suspend fun readResource(path: String): String? =

@@ -7,6 +7,8 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.cognition.sparks.DefaultPhaseSparkLibrary
+import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
 import link.socket.ampere.agents.domain.expectation.Expectations
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
@@ -30,6 +32,8 @@ import link.socket.ampere.agents.execution.tools.Tool
  * git workspace.
  */
 class SparkBasedAgentStepRoutingTest {
+
+    private val phaseSparkLibrary: PhaseSparkLibrary = runBlocking { DefaultPhaseSparkLibrary.load() }
 
     /** A recording tool that captures every invocation for later assertion. */
     private class RecordingTool(val id: String) {
@@ -87,6 +91,7 @@ class SparkBasedAgentStepRoutingTest {
             }
         }
         val agent = SparkBasedAgent.Code(
+            sparkRegistry = phaseSparkLibrary,
             agentId = "routing-agent",
             tools = setOf(recorder.tool),
             reasoningOverride = reasoning,
@@ -115,6 +120,7 @@ class SparkBasedAgentStepRoutingTest {
             onToolExecution { _, _ -> error("must not be reached when toolId is unknown") }
         }
         val agent = SparkBasedAgent.Code(
+            sparkRegistry = phaseSparkLibrary,
             agentId = "routing-agent",
             tools = setOf(recorder.tool),
             reasoningOverride = reasoning,
@@ -143,6 +149,7 @@ class SparkBasedAgentStepRoutingTest {
             onToolExecution { _, _ -> error("must not be reached when toolId is null") }
         }
         val agent = SparkBasedAgent.Code(
+            sparkRegistry = phaseSparkLibrary,
             agentId = "routing-agent",
             tools = setOf(recorder.tool),
             reasoningOverride = reasoning,
@@ -185,6 +192,7 @@ class SparkBasedAgentStepRoutingTest {
             }
         }
         val agent = SparkBasedAgent.Code(
+            sparkRegistry = phaseSparkLibrary,
             agentId = "routing-agent",
             tools = setOf<Tool<*>>(first.tool, second.tool),
             reasoningOverride = reasoning,
