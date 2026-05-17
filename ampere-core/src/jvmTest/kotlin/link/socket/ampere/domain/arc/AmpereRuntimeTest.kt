@@ -277,7 +277,7 @@ class AmpereRuntimeTest {
 
         assertEquals(3, result.chargeResult.agents.size)
         assertTrue(
-            result.chargeResult.agents.filterIsInstance<SparkBasedAgent>().any {
+            result.chargeResult.agents.filterIsInstance<SparkBasedAgent<*>>().any {
                 it.cognitiveState.contains("Role:Operations")
             },
         )

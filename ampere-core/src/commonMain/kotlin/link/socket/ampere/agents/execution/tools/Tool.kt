@@ -90,6 +90,10 @@ sealed interface Tool<Context : ExecutionContext> {
  *
  * @param Context The specific execution context this tool operates on.
  * @property executionFunction The actual function to invoke when this tool executes.
+ * @property parameterStrategy Optional tool-owned strategy for converting a
+ * high-level intent into the tool's call parameters via an LLM sub-call. The
+ * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine]
+ * prefers a tool-owned strategy over any externally-registered one.
  */
 @Serializable
 data class FunctionTool<Context : ExecutionContext>(
@@ -105,6 +109,15 @@ data class FunctionTool<Context : ExecutionContext>(
      */
     @Serializable(with = ExecutionFunctionSerializer::class)
     val executionFunction: suspend (ExecutionRequest<Context>) -> Outcome,
+
+    /**
+     * Optional tool-owned [ParameterStrategy]. Marked `@Transient` because
+     * strategies are behavioural hooks that do not round-trip through
+     * serialization — they are reconstructed when the tool is rebuilt by its
+     * factory function.
+     */
+    @Transient
+    override val parameterStrategy: ParameterStrategy? = null,
 ) : Tool<Context> {
 
     override suspend fun execute(executionRequest: ExecutionRequest<Context>): Outcome {

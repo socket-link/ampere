@@ -6,9 +6,11 @@ import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.config.CognitiveConfig
 import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.agents.domain.cognition.sparks.AmpereProjectSpark
+import link.socket.ampere.agents.domain.cognition.sparks.AmpereSpikeFlags
+import link.socket.ampere.agents.domain.cognition.sparks.DefaultPhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.LanguageSpark
+import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
-import link.socket.ampere.agents.domain.cognition.sparks.RoleSpark
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.events.api.AgentEventApi
@@ -18,12 +20,20 @@ import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.execution.tools.ToolAskHuman
 import link.socket.ampere.agents.execution.tools.ToolCreateIssues
+import link.socket.ampere.agents.execution.tools.ToolReadCodeFile
 import link.socket.ampere.agents.execution.tools.ToolWriteCodeFile
+import link.socket.ampere.agents.execution.tools.git.ToolCommit
+import link.socket.ampere.agents.execution.tools.git.ToolCreateBranch
+import link.socket.ampere.agents.execution.tools.git.ToolCreatePullRequest
+import link.socket.ampere.agents.execution.tools.git.ToolGitStatus
+import link.socket.ampere.agents.execution.tools.git.ToolPush
+import link.socket.ampere.agents.execution.tools.git.ToolStageFiles
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.integrations.issues.IssueTrackerProvider
+import link.socket.ampere.util.runBlockingCompat
 
 enum class AgentType {
     CODE,
@@ -41,7 +51,7 @@ enum class AgentType {
  *
  * **Spark Integration (Ticket #226)**:
  * Each agent is initialized with a proper Spark stack based on their type:
- * - CognitiveAffinity: Set by the agent class (e.g., ANALYTICAL for CodeAgent)
+ * - CognitiveAffinity: Set by the SparkBasedAgent factory (e.g. ANALYTICAL for the Code factory)
  * - ProjectSpark: Applied if provided (defaults to AmpereProjectSpark)
  * - RoleSpark: Applied based on agent type
  * - LanguageSpark: Applied for code agents (defaults to Kotlin)
@@ -73,10 +83,22 @@ class AgentFactory(
         toolWriteCodeFileOverride ?: ToolWriteCodeFile(AgentActionAutonomy.ASK_BEFORE_ACTION)
 
     private val toolCreateIssues: Tool<ExecutionContext.IssueManagement> =
-        ToolCreateIssues(AgentActionAutonomy.ACT_WITH_NOTIFICATION)
+        ToolCreateIssues(
+            requiredAgentAutonomy = AgentActionAutonomy.ACT_WITH_NOTIFICATION,
+            parameterStrategy = link.socket.ampere.agents.definition.project.ProjectParams.IssueCreation(
+                repository = repository ?: ".",
+                availableAgents = emptyList(),
+                existingIssues = emptyList(),
+            ),
+        )
 
     private val toolAskHuman: Tool<ExecutionContext.NoChanges> =
-        ToolAskHuman(AgentActionAutonomy.ASK_BEFORE_ACTION)
+        ToolAskHuman(
+            requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
+            parameterStrategy = link.socket.ampere.agents.definition.project.ProjectParams.HumanEscalation(
+                agentRole = "Project Manager",
+            ),
+        )
 
     private val effectiveAiConfiguration: AIConfiguration
         get() = aiConfiguration ?: AIConfigurationFactory.getDefaultConfiguration()
@@ -95,6 +117,22 @@ class AgentFactory(
      */
     private val effectiveProjectSpark: ProjectSpark
         get() = projectSpark ?: AmpereProjectSpark.spark
+
+    /**
+     * Bundled `.spark.md` library, loaded lazily on first agent creation.
+     * The factory's [createAgent] path attaches this library to every
+     * spark-based agent it builds so the declarative per-phase guidance
+     * (`code-agent.spark.md`, `product-agent.spark.md`, etc.) activates
+     * during the cognitive loop.
+     *
+     * Loading is suspend but the existing public `create` API is
+     * synchronous, so we resolve the library via `runBlocking` once and
+     * cache it. The load reads bundled resources and parses markdown —
+     * cheap enough at startup that the single blocking call is fine.
+     */
+    private val phaseSparkLibrary: PhaseSparkLibrary by lazy {
+        runBlockingCompat { DefaultPhaseSparkLibrary.load() }
+    }
 
     /**
      * Get an event API for publishing events on behalf of an agent.
@@ -122,12 +160,28 @@ class AgentFactory(
         agentType: AgentType,
     ): A {
         val agent = createAgent(agentType)
+        attachPhaseSparkLibrary(agent)
         applySparkStack(agent, agentType)
         if (agent is ObservableAgent<*>) {
             agent.emitCognitiveSnapshot()
         }
         @Suppress("UNCHECKED_CAST")
         return agent as A
+    }
+
+    /**
+     * Wires the bundled declarative spark library into the agent so its
+     * `.spark.md` per-phase contributions activate during the cognitive
+     * loop. Only spark-based agents have the setter (the legacy typed
+     * agents are gone after Waves 1–2). Also flips on the runtime gate
+     * for the declarative-spark path; the flag defaults to off for
+     * backward-compat callers that wire agents by hand without a
+     * library.
+     */
+    private fun attachPhaseSparkLibrary(agent: AutonomousAgent<*>) {
+        if (agent !is SparkBasedAgent<*>) return
+        agent.setPhaseSparkLibrary(phaseSparkLibrary)
+        AmpereSpikeFlags.declarativeSparksEnabled = true
     }
 
     /**
@@ -146,55 +200,66 @@ class AgentFactory(
 
     private fun createAgent(agentType: AgentType): AutonomousAgent<out AgentState> = when (agentType) {
         AgentType.CODE -> {
-            val agentId = generateUUID("CodeWriterAgent")
+            val agentId = generateUUID("SparkBasedAgent-Code")
             val eventApi = eventApiFactory?.invoke(agentId)
-            CodeAgent(
-                agentConfiguration = agentConfiguration,
-                toolWriteCodeFile = toolWriteCodeFile,
-                coroutineScope = scope,
-                memoryServiceFactory = memoryServiceFactory,
-                issueTrackerProvider = issueTrackerProvider,
-                repository = repository,
-                eventApiOverride = eventApi,
-                observabilityScope = scope,
+            val memoryService = memoryServiceFactory?.invoke(agentId)
+            SparkBasedAgent.Code(
                 agentId = agentId,
+                aiConfiguration = effectiveAiConfiguration,
+                eventApi = eventApi,
+                memoryService = memoryService,
+                llmProvider = llmProvider,
+                observabilityScope = scope,
+                tools = buildSet {
+                    add(toolWriteCodeFile)
+                    add(ToolReadCodeFile(AgentActionAutonomy.FULLY_AUTONOMOUS))
+                    add(ToolCreateBranch())
+                    add(ToolStageFiles())
+                    add(ToolCommit())
+                    add(ToolPush())
+                    add(ToolCreatePullRequest())
+                    add(ToolGitStatus())
+                },
             )
         }
         AgentType.PRODUCT -> {
-            val agentId = generateUUID("ProductManagerAgent")
+            val agentId = generateUUID("SparkBasedAgent-Product")
             val eventApi = eventApiFactory?.invoke(agentId)
-            ProductAgent(
-                agentConfiguration = agentConfiguration,
-                ticketOrchestrator = ticketOrchestrator,
-                memoryServiceFactory = memoryServiceFactory,
-                eventApiOverride = eventApi,
-                observabilityScope = scope,
+            val memoryService = memoryServiceFactory?.invoke(agentId)
+            SparkBasedAgent.Product(
                 agentId = agentId,
+                aiConfiguration = effectiveAiConfiguration,
+                eventApi = eventApi,
+                memoryService = memoryService,
+                llmProvider = llmProvider,
+                observabilityScope = scope,
             )
         }
         AgentType.PROJECT -> {
-            val agentId = generateUUID("ProjectManagerAgent")
+            val agentId = generateUUID("SparkBasedAgent-Project")
             val eventApi = eventApiFactory?.invoke(agentId)
-            ProjectAgent(
-                agentConfiguration = agentConfiguration,
-                toolCreateIssues = toolCreateIssues,
-                toolAskHuman = toolAskHuman,
-                coroutineScope = scope,
-                memoryServiceFactory = memoryServiceFactory,
-                eventApiOverride = eventApi,
-                observabilityScope = scope,
+            val memoryService = memoryServiceFactory?.invoke(agentId)
+            SparkBasedAgent.Project(
                 agentId = agentId,
+                aiConfiguration = effectiveAiConfiguration,
+                eventApi = eventApi,
+                memoryService = memoryService,
+                llmProvider = llmProvider,
+                observabilityScope = scope,
+                tools = setOf(toolCreateIssues, toolAskHuman),
             )
         }
         AgentType.QUALITY -> {
-            val agentId = generateUUID("QualityAssuranceAgent")
+            val agentId = generateUUID("SparkBasedAgent-Quality")
             val eventApi = eventApiFactory?.invoke(agentId)
-            QualityAgent(
-                agentConfiguration = agentConfiguration,
-                memoryServiceFactory = memoryServiceFactory,
-                eventApiOverride = eventApi,
-                observabilityScope = scope,
+            val memoryService = memoryServiceFactory?.invoke(agentId)
+            SparkBasedAgent.Quality(
                 agentId = agentId,
+                aiConfiguration = effectiveAiConfiguration,
+                eventApi = eventApi,
+                memoryService = memoryService,
+                llmProvider = llmProvider,
+                observabilityScope = scope,
             )
         }
     }
@@ -211,21 +276,21 @@ class AgentFactory(
         // Apply ProjectSpark first
         applySpark(agent, effectiveProjectSpark)
 
-        // Apply appropriate RoleSpark based on agent type
+        // Apply appropriate RoleSpark based on agent type.
+        // Note: the `SparkBasedAgent.<Role>(...)` factories each apply
+        // their own RoleSpark at construction time, so the branches here
+        // only layer additional sparks on top of what the factory already
+        // stacked. The CODE branch adds a language spark; the PRODUCT,
+        // PROJECT, and QUALITY branches add nothing further (their role
+        // sparks are already applied by their respective factories).
         when (agentType) {
             AgentType.CODE -> {
-                applySpark(agent, RoleSpark.Code)
                 applySpark(agent, LanguageSpark.Kotlin)
             }
-            AgentType.PRODUCT -> {
-                applySpark(agent, RoleSpark.Planning)
-            }
-            AgentType.PROJECT -> {
-                applySpark(agent, RoleSpark.Planning)
-            }
-            AgentType.QUALITY -> {
-                applySpark(agent, RoleSpark.Code)
-            }
+            AgentType.PRODUCT,
+            AgentType.PROJECT,
+            AgentType.QUALITY,
+            -> Unit
         }
     }
 

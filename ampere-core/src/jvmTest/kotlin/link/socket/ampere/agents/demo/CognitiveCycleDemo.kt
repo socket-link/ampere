@@ -10,12 +10,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.config.AgentConfiguration
-import link.socket.ampere.agents.definition.CodeAgent
-import link.socket.ampere.agents.definition.code.CodeState
+import link.socket.ampere.agents.definition.SparkBasedAgent
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
-import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.agents.execution.tools.FunctionTool
@@ -63,13 +61,11 @@ class CognitiveCycleDemo {
                 ),
             )
 
-            // Create the CodeWriterAgent
-            val agent = CodeAgent(
-                initialState = CodeState.blank,
-                agentConfiguration = agentConfig,
-                toolWriteCodeFile = mockWriteCodeFile,
-                coroutineScope = this,
-                executor = FunctionExecutor.create(),
+            // Create the spark-based code agent
+            val agent = SparkBasedAgent.Code(
+                agentId = "cognitive-cycle-demo-agent",
+                aiConfiguration = agentConfig.aiConfiguration,
+                tools = setOf(mockWriteCodeFile),
             )
 
             println("✓ Agent initialized: ${agent.id}")

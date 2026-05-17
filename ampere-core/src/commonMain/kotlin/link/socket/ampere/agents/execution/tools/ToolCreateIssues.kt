@@ -2,6 +2,7 @@ package link.socket.ampere.agents.execution.tools
 
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.execution.ParameterStrategy
 import link.socket.ampere.agents.execution.request.ExecutionContext
 
 /**
@@ -24,11 +25,14 @@ expect suspend fun executeCreateIssues(
  *        (can be closed/deleted) but should notify stakeholders.
  * @return A FunctionTool configured to create issues.
  */
+const val CREATE_ISSUES_TOOL_ID: String = "create_issues"
+
 fun ToolCreateIssues(
     requiredAgentAutonomy: AgentActionAutonomy = AgentActionAutonomy.ACT_WITH_NOTIFICATION,
+    parameterStrategy: ParameterStrategy? = null,
 ): FunctionTool<ExecutionContext.IssueManagement> {
     return FunctionTool(
-        id = ID,
+        id = CREATE_ISSUES_TOOL_ID,
         name = NAME,
         description = DESCRIPTION,
         requiredAgentAutonomy = requiredAgentAutonomy,
@@ -36,6 +40,7 @@ fun ToolCreateIssues(
             // TODO: Handle execution request constraints
             executeCreateIssues(executionRequest.context)
         },
+        parameterStrategy = parameterStrategy,
     )
 }
 

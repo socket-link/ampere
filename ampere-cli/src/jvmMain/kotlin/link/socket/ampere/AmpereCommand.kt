@@ -256,11 +256,11 @@ class AmpereCommand(
                     jazzPane.setPhase(CognitiveProgressPane.Phase.INITIALIZING, "Finding issue #$issue...")
                     agentScope.launch {
                         try {
-                            val availableIssues = context.codeAgent.queryAvailableIssues()
+                            val availableIssues = context.codeIssueWorkflow.queryAvailableIssues()
                             val targetIssue = availableIssues.find { it.number == issue }
                             if (targetIssue != null) {
                                 jazzPane.setPhase(CognitiveProgressPane.Phase.PERCEIVE, "Working on issue #$issue...")
-                                val issueResult = context.codeAgent.workOnIssue(targetIssue)
+                                val issueResult = context.codeIssueWorkflow.workOnIssue(targetIssue, context.codeAgent)
                                 if (issueResult.isSuccess) {
                                     jazzPane.setPhase(CognitiveProgressPane.Phase.COMPLETED)
                                 } else {

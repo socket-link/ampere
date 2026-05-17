@@ -3,6 +3,7 @@ package link.socket.ampere.agents.domain.outcome
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.error.ExecutionError
+import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.task.TaskId
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.events.utils.generateUUID
@@ -217,6 +218,42 @@ sealed interface ExecutionOutcome : Outcome {
             val error: ExecutionError,
             val partialResponse: GitOperationResponse? = null,
         ) : GitOperation, ExecutionOutcome.Failure {
+
+            override val id: OutcomeId =
+                generateUUID(executorId)
+        }
+    }
+
+    /**
+     * Outcomes from the `plan_steps` tool. Success carries the structured [Plan]
+     * the agent's planning phase can hand off to its executor.
+     */
+    @Serializable
+    sealed interface Planning : ExecutionOutcome {
+
+        @Serializable
+        data class Success(
+            override val executorId: ExecutorId,
+            override val ticketId: TicketId,
+            override val taskId: TaskId,
+            override val executionStartTimestamp: Instant,
+            override val executionEndTimestamp: Instant,
+            val plan: Plan,
+        ) : Planning, ExecutionOutcome.Success {
+
+            override val id: OutcomeId =
+                generateUUID(executorId)
+        }
+
+        @Serializable
+        data class Failure(
+            override val executorId: ExecutorId,
+            override val ticketId: TicketId,
+            override val taskId: TaskId,
+            override val executionStartTimestamp: Instant,
+            override val executionEndTimestamp: Instant,
+            val error: ExecutionError,
+        ) : Planning, ExecutionOutcome.Failure {
 
             override val id: OutcomeId =
                 generateUUID(executorId)

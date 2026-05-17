@@ -7,23 +7,30 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.code.CodeState
+import link.socket.ampere.agents.definition.product.ProductState
+import link.socket.ampere.agents.definition.project.ProjectState
+import link.socket.ampere.agents.definition.qa.QualityState
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
+import link.socket.ampere.agents.domain.cognition.sparks.RoleSpark
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.reasoning.AgentReasoning
 import link.socket.ampere.agents.domain.reasoning.Idea
-import link.socket.ampere.agents.domain.reasoning.KnowledgeExtractor
 import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.reasoning.StepResult
+import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.agents.execution.tools.planning.ToolPlanSteps
 import link.socket.ampere.domain.agent.bundled.AgentDefinition
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
@@ -42,19 +49,24 @@ import link.socket.ampere.util.runBlockingCompat
  * The system prompt is dynamically built from the SparkStack before each LLM
  * interaction, and tool/file access is computed from Spark constraints.
  *
- * Note: This uses CodeState as a simple state implementation. Custom state types
- * can be supported by subclassing.
+ * Parameterized over [S] so role-specific factories (e.g.
+ * `SparkBasedAgent<CodeState>`, `SparkBasedAgent<ProductState>`) can carry
+ * domain-specific state without subclassing for behavior.
  *
  * @param agentId Unique identifier for this agent
  * @param cognitiveAffinity The cognitive affinity that shapes how this agent thinks
- * @param eventApi Optional event API for observability
- * @param agentMemoryService Optional memory service for knowledge persistence
- * @param aiConfiguration Optional AI configuration (uses default if not provided)
+ * @param initialState The starting state for this agent
+ * @param _eventApi Optional event API for observability
+ * @param _memoryService Optional memory service for knowledge persistence
+ * @param _aiConfiguration Optional AI configuration (uses default if not provided)
  */
 @Serializable
-open class SparkBasedAgent(
+open class SparkBasedAgent<S : AgentState>(
     private val agentId: AgentId,
     private val cognitiveAffinity: CognitiveAffinity,
+    override val initialState: S,
+    @Transient
+    private val _additionalTools: Set<Tool<*>> = emptySet(),
     @Transient
     private val _eventApi: AgentEventApi? = null,
     @Transient
@@ -65,7 +77,9 @@ open class SparkBasedAgent(
     private val _llmProvider: LlmProvider? = null,
     @Transient
     private val _observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
-) : ObservableAgent<CodeState>(_eventApi, _observabilityScope) {
+    @Transient
+    private val _reasoningOverride: AgentReasoning? = null,
+) : ObservableAgent<S>(_eventApi, _observabilityScope) {
 
     @Transient
     private var _phaseSparkLibrary: PhaseSparkLibrary? = null
@@ -80,7 +94,7 @@ open class SparkBasedAgent(
         _phaseSparkLibrary = library
     }
 
-    override fun createPhaseSparkManager(): PhaseSparkManager<CodeState> =
+    override fun createPhaseSparkManager(): PhaseSparkManager<S> =
         PhaseSparkManager.createWithLibrary(
             agent = this,
             phaseConfig = agentConfiguration.cognitiveConfig.phaseSparks,
@@ -91,10 +105,18 @@ open class SparkBasedAgent(
 
     override val affinity: CognitiveAffinity = cognitiveAffinity
 
-    override val initialState: CodeState = CodeState.blank
-
     @Transient
     override val memoryService: AgentMemoryService? = _memoryService
+
+    /**
+     * Every Spark-based agent ships with [ToolPlanSteps] by default so that
+     * the JSON shape of a structured plan lives with the tool that produces
+     * it rather than being baked into any per-agent profile. Factories layer
+     * additional domain tools on top via the [_additionalTools] constructor
+     * parameter.
+     */
+    @Transient
+    override val requiredTools: Set<Tool<*>> = setOf(ToolPlanSteps()) + _additionalTools
 
     private val effectiveAiConfiguration: AIConfiguration
         get() = _aiConfiguration ?: AIConfigurationFactory.getDefaultConfiguration()
@@ -120,7 +142,7 @@ open class SparkBasedAgent(
     // ========================================================================
 
     private val reasoning: AgentReasoning by lazy {
-        AgentReasoning.create(
+        _reasoningOverride ?: AgentReasoning.create(
             config = agentConfiguration,
             executorId = id,
             eventApi = _eventApi,
@@ -128,21 +150,6 @@ open class SparkBasedAgent(
         ) {
             agentRole = "Spark-Based Agent (${affinity.name})"
             availableTools = requiredTools
-
-            knowledge {
-                extractor = { outcome, task, plan ->
-                    KnowledgeExtractor.extract(outcome, task, plan) {
-                        approach {
-                            prefix("Spark Task [${this@SparkBasedAgent.cognitiveState}]")
-                            taskType(task)
-                            planSize(plan)
-                        }
-                        learnings {
-                            fromOutcome(outcome)
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -150,8 +157,7 @@ open class SparkBasedAgent(
     // Neural Agent Implementation
     // ========================================================================
 
-    @Suppress("UNCHECKED_CAST")
-    override val runLLMToEvaluatePerception: (Perception<CodeState>) -> Idea = { perception ->
+    override val runLLMToEvaluatePerception: (Perception<S>) -> Idea = { perception ->
         runBlockingCompat(ioDispatcher) {
             withTimeout(60000) {
                 reasoning.evaluatePerception(perception)
@@ -172,13 +178,103 @@ open class SparkBasedAgent(
             withTimeout(60000) {
                 val plan = reasoning.generatePlan(task, emptyList())
                 reasoning.executePlan(plan) { step, _ ->
-                    StepResult.success(
-                        description = "Executed: ${step.id}",
-                        details = "Completed step",
-                    )
+                    executePlanStep(step, parentTask = task)
                 }.outcome
             }
         }
+    }
+
+    /**
+     * Routes a plan step to its nominated tool. Strict tool-id dispatch with no
+     * keyword fallback — if [Task.CodeChange.toolId] is missing or doesn't
+     * match a tool in [requiredTools], the step fails fast with a clear error.
+     *
+     * Steps with `toolId == null` are treated as pure reasoning placeholders
+     * and succeed without invoking anything (the LLM was asked to mark
+     * tool-less steps with `toolToUse = null` in the plan_steps schema).
+     */
+    private suspend fun executePlanStep(step: Task, parentTask: Task): StepResult {
+        if (step is Task.Blank) {
+            return StepResult.success(
+                description = "blank step",
+                details = "no-op",
+            )
+        }
+        if (step !is Task.CodeChange) {
+            return StepResult.failure(
+                description = step.id,
+                error = "Plan step ${step.id} is of unsupported type " +
+                    "${step::class.simpleName}; spark-based execution only " +
+                    "handles Task.CodeChange steps emitted by plan_steps.",
+                isCritical = true,
+            )
+        }
+
+        val toolId = step.toolId
+        if (toolId == null) {
+            return StepResult.success(
+                description = step.description,
+                details = "reasoning step (no toolToUse)",
+            )
+        }
+
+        val tool = requiredTools.firstOrNull { it.id == toolId }
+            ?: return StepResult.failure(
+                description = step.description,
+                error = "Plan step ${step.id} nominated toolToUse=\"$toolId\", " +
+                    "which is not in the agent's required tools " +
+                    "(${requiredTools.joinToString { it.id }}). The executor " +
+                    "routes strictly by tool id — no keyword fallback.",
+                isCritical = true,
+            )
+
+        val request = buildPlanStepRequest(step, parentTask)
+        return when (val outcome = reasoning.executeTool(tool, request)) {
+            is ExecutionOutcome.Success -> StepResult.success(
+                description = step.description,
+                details = "tool=$toolId outcome=${outcome::class.simpleName}",
+            )
+            is ExecutionOutcome.Failure -> StepResult.failure(
+                description = step.description,
+                error = "tool=$toolId failed: ${outcome::class.simpleName}",
+                isCritical = true,
+            )
+            else -> StepResult.success(
+                description = step.description,
+                details = "tool=$toolId outcome=${outcome::class.simpleName}",
+            )
+        }
+    }
+
+    /**
+     * Builds the initial request handed to the tool's parameter strategy. The
+     * strategy enriches this with a tool-specific context (e.g. promotes the
+     * generic [ExecutionContext.NoChanges] wrapper to
+     * [ExecutionContext.GitOperation] when invoking a git tool); when no
+     * strategy is registered the tool must be able to act on the raw request.
+     */
+    private fun buildPlanStepRequest(step: Task.CodeChange, parentTask: Task): ExecutionRequest<*> {
+        val ticket = link.socket.ampere.agents.events.tickets.Ticket(
+            id = "spark-task-${parentTask.id}",
+            title = parentTask.id,
+            description = step.description,
+            type = link.socket.ampere.agents.events.tickets.TicketType.TASK,
+            priority = link.socket.ampere.agents.events.tickets.TicketPriority.LOW,
+            status = link.socket.ampere.agents.domain.status.TicketStatus.InProgress,
+            assignedAgentId = id,
+            createdByAgentId = id,
+            createdAt = kotlinx.datetime.Clock.System.now(),
+            updatedAt = kotlinx.datetime.Clock.System.now(),
+        )
+        return ExecutionRequest(
+            context = ExecutionContext.NoChanges(
+                executorId = id,
+                ticket = ticket,
+                task = step,
+                instructions = step.description,
+            ),
+            constraints = link.socket.ampere.agents.execution.request.ExecutionConstraints(),
+        )
     }
 
     override val runLLMToExecuteTool: (Tool<*>, ExecutionRequest<*>) -> ExecutionOutcome = { tool, request ->
@@ -206,6 +302,190 @@ open class SparkBasedAgent(
     override fun callLLM(prompt: String): String = runBlockingCompat(ioDispatcher) {
         withTimeout(60000) {
             reasoning.callLLM(prompt)
+        }
+    }
+
+    companion object {
+
+        /**
+         * Resource id of the bundled declarative spark that supplies the
+         * Code agent's per-phase guidance. Activated during phase entry
+         * when a `PhaseSparkLibrary` containing it has been wired into
+         * the agent.
+         */
+        const val CODE_AGENT_SPARK_ID: String = "code-agent"
+
+        /**
+         * Builds a Code-focused [SparkBasedAgent]: `ANALYTICAL` affinity,
+         * the [RoleSpark.Code] role spark stacked at construction time,
+         * and the `plan_steps` tool already in its toolset.
+         *
+         * The factory is the supported entry point for a code agent in
+         * the spark world. It mirrors the constructor shape of the
+         * legacy `CodeAgent` so call sites can swap implementations
+         * without restructuring their dependency graph.
+         *
+         * The declarative `code-agent.spark.md` guidance is **not**
+         * applied here. That is the responsibility of the surrounding
+         * `AgentFactory` (or test harness), which wires a loaded
+         * `PhaseSparkLibrary` via the agent's internal setter before the
+         * first cognitive phase entry. Keeping the library hand-off off
+         * the factory keeps the public surface free of the spark
+         * library's internal interface while still giving the factory a
+         * one-line construction story.
+         *
+         * @param tools additional tools layered on top of the default
+         *   `plan_steps` tool (typically a code-writing tool plus the
+         *   git tool set). Tool-owned parameter strategies, if any,
+         *   travel with the tools themselves.
+         */
+        fun Code(
+            agentId: AgentId = generateUUID("SparkBasedAgent-Code"),
+            aiConfiguration: AIConfiguration? = null,
+            eventApi: AgentEventApi? = null,
+            memoryService: AgentMemoryService? = null,
+            llmProvider: LlmProvider? = null,
+            observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
+            tools: Set<Tool<*>> = emptySet(),
+            reasoningOverride: AgentReasoning? = null,
+        ): SparkBasedAgent<CodeState> {
+            val agent = SparkBasedAgent(
+                agentId = agentId,
+                cognitiveAffinity = CognitiveAffinity.ANALYTICAL,
+                initialState = CodeState.blank,
+                _additionalTools = tools,
+                _eventApi = eventApi,
+                _memoryService = memoryService,
+                _aiConfiguration = aiConfiguration,
+                _llmProvider = llmProvider,
+                _observabilityScope = observabilityScope,
+                _reasoningOverride = reasoningOverride,
+            )
+            agent.spark<SparkBasedAgent<CodeState>>(RoleSpark.Code)
+            return agent
+        }
+
+        /**
+         * Resource id of the bundled declarative spark that supplies the
+         * Product agent's per-phase guidance.
+         */
+        const val PRODUCT_AGENT_SPARK_ID: String = "product-agent"
+
+        /**
+         * Builds a Product-focused [SparkBasedAgent]: `INTEGRATIVE`
+         * affinity, [RoleSpark.Planning] stacked at construction time,
+         * and the `plan_steps` tool already in its toolset.
+         *
+         * Mirrors the legacy `ProductAgent` shape. Declarative
+         * `product-agent.spark.md` guidance is wired separately by the
+         * surrounding `AgentFactory`.
+         */
+        fun Product(
+            agentId: AgentId = generateUUID("SparkBasedAgent-Product"),
+            aiConfiguration: AIConfiguration? = null,
+            eventApi: AgentEventApi? = null,
+            memoryService: AgentMemoryService? = null,
+            llmProvider: LlmProvider? = null,
+            observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
+            tools: Set<Tool<*>> = emptySet(),
+            reasoningOverride: AgentReasoning? = null,
+        ): SparkBasedAgent<ProductState> {
+            val agent = SparkBasedAgent(
+                agentId = agentId,
+                cognitiveAffinity = CognitiveAffinity.INTEGRATIVE,
+                initialState = ProductState.blank,
+                _additionalTools = tools,
+                _eventApi = eventApi,
+                _memoryService = memoryService,
+                _aiConfiguration = aiConfiguration,
+                _llmProvider = llmProvider,
+                _observabilityScope = observabilityScope,
+                _reasoningOverride = reasoningOverride,
+            )
+            agent.spark<SparkBasedAgent<ProductState>>(RoleSpark.Planning)
+            return agent
+        }
+
+        /**
+         * Resource id of the bundled declarative spark that supplies the
+         * Project agent's per-phase guidance.
+         */
+        const val PROJECT_AGENT_SPARK_ID: String = "project-agent"
+
+        /**
+         * Builds a Project-focused [SparkBasedAgent]: `INTEGRATIVE`
+         * affinity, [RoleSpark.Planning] stacked at construction time,
+         * and the `plan_steps` tool already in its toolset.
+         *
+         * Mirrors the legacy `ProjectAgent` shape. Typical tool stack
+         * includes the issue-creation tool and the human-escalation
+         * tool, each carrying its own `ProjectParams.*` parameter
+         * strategy.
+         */
+        fun Project(
+            agentId: AgentId = generateUUID("SparkBasedAgent-Project"),
+            aiConfiguration: AIConfiguration? = null,
+            eventApi: AgentEventApi? = null,
+            memoryService: AgentMemoryService? = null,
+            llmProvider: LlmProvider? = null,
+            observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
+            tools: Set<Tool<*>> = emptySet(),
+            reasoningOverride: AgentReasoning? = null,
+        ): SparkBasedAgent<ProjectState> {
+            val agent = SparkBasedAgent(
+                agentId = agentId,
+                cognitiveAffinity = CognitiveAffinity.INTEGRATIVE,
+                initialState = ProjectState.blank,
+                _additionalTools = tools,
+                _eventApi = eventApi,
+                _memoryService = memoryService,
+                _aiConfiguration = aiConfiguration,
+                _llmProvider = llmProvider,
+                _observabilityScope = observabilityScope,
+                _reasoningOverride = reasoningOverride,
+            )
+            agent.spark<SparkBasedAgent<ProjectState>>(RoleSpark.Planning)
+            return agent
+        }
+
+        /**
+         * Resource id of the bundled declarative spark that supplies the
+         * Quality agent's per-phase guidance.
+         */
+        const val QUALITY_AGENT_SPARK_ID: String = "quality-agent"
+
+        /**
+         * Builds a Quality-focused [SparkBasedAgent]: `ANALYTICAL`
+         * affinity, [RoleSpark.Code] stacked at construction time
+         * (validation work reads & runs code), and the `plan_steps`
+         * tool already in its toolset.
+         *
+         * Mirrors the legacy `QualityAgent` shape.
+         */
+        fun Quality(
+            agentId: AgentId = generateUUID("SparkBasedAgent-Quality"),
+            aiConfiguration: AIConfiguration? = null,
+            eventApi: AgentEventApi? = null,
+            memoryService: AgentMemoryService? = null,
+            llmProvider: LlmProvider? = null,
+            observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
+            tools: Set<Tool<*>> = emptySet(),
+            reasoningOverride: AgentReasoning? = null,
+        ): SparkBasedAgent<QualityState> {
+            val agent = SparkBasedAgent(
+                agentId = agentId,
+                cognitiveAffinity = CognitiveAffinity.ANALYTICAL,
+                initialState = QualityState.blank,
+                _additionalTools = tools,
+                _eventApi = eventApi,
+                _memoryService = memoryService,
+                _aiConfiguration = aiConfiguration,
+                _llmProvider = llmProvider,
+                _observabilityScope = observabilityScope,
+                _reasoningOverride = reasoningOverride,
+            )
+            agent.spark<SparkBasedAgent<QualityState>>(RoleSpark.Code)
+            return agent
         }
     }
 }

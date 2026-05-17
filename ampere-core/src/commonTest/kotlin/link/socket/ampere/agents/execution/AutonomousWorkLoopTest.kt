@@ -101,7 +101,7 @@ class AutonomousWorkLoopTest {
 
     @Test
     fun loop_canBeStarted() = runTest {
-        // Since creating a full CodeAgent is complex, we verify the interface
+        // Since creating a full spark-based code agent + workflow is complex, we verify the interface
         // The loop should have start/stop methods and isRunning state
         // This is verified via compilation and type checking
         assertTrue(true)

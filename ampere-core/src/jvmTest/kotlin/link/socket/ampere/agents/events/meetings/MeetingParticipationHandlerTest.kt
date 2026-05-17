@@ -16,10 +16,8 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.config.AgentActionAutonomy
-import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.definition.CodeAgent
-import link.socket.ampere.agents.definition.code.CodeState
+import link.socket.ampere.agents.definition.SparkBasedAgent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MeetingEvent
@@ -32,7 +30,6 @@ import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
 import link.socket.ampere.agents.execution.tools.ToolWriteCodeFile
 import link.socket.ampere.db.Database
-import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.provider.AIProvider_Google
@@ -57,19 +54,17 @@ class MeetingParticipationHandlerTest {
         ignoreUnknownKeys = true
     }
 
-    private val stubAgent = CodeAgent(
-        initialState = CodeState.blank,
-        agentConfiguration = AgentConfiguration(
-            agentDefinition = WriteCodeAgent,
-            aiConfiguration = AIConfiguration_Default(
-                provider = AIProvider_Google,
-                model = AIModel_Gemini.Pro_2_5,
+    private val stubAgent = SparkBasedAgent.Code(
+        agentId = "meeting-stub-agent",
+        aiConfiguration = AIConfiguration_Default(
+            provider = AIProvider_Google,
+            model = AIModel_Gemini.Pro_2_5,
+        ),
+        tools = setOf(
+            ToolWriteCodeFile(
+                requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
             ),
         ),
-        toolWriteCodeFile = ToolWriteCodeFile(
-            requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
-        ),
-        coroutineScope = testScope,
     )
 
     private val stubScheduledBy = EventSource.Agent("scheduler-agent")

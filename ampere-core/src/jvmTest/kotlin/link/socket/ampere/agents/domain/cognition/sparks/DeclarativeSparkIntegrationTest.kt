@@ -6,6 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.definition.SparkBasedAgent
+import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
@@ -32,9 +33,10 @@ class DeclarativeSparkIntegrationTest {
     private class RecordingSparkAgent(
         agentId: String,
         provider: LlmProvider,
-    ) : SparkBasedAgent(
+    ) : SparkBasedAgent<CodeState>(
         agentId = agentId,
         cognitiveAffinity = CognitiveAffinity.ANALYTICAL,
+        initialState = CodeState.blank,
         _aiConfiguration = FakeAIConfiguration(),
         _llmProvider = provider,
     ) {

@@ -9,8 +9,9 @@ import link.socket.ampere.AmpereContext
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.definition.AgentFactory
 import link.socket.ampere.agents.definition.AgentType
-import link.socket.ampere.agents.definition.CodeAgent
-import link.socket.ampere.agents.definition.ProjectAgent
+import link.socket.ampere.agents.definition.SparkBasedAgent
+import link.socket.ampere.agents.definition.code.CodeState
+import link.socket.ampere.agents.definition.project.ProjectState
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.domain.event.EventSource
@@ -81,7 +82,7 @@ class MultiAgentDemoRunner(
                 model = AIModel_Claude.Sonnet_4
             ),
         )
-        val coordinator = coordinatorFactory.create<ProjectAgent>(AgentType.PROJECT)
+        val coordinator = coordinatorFactory.create<SparkBasedAgent<ProjectState>>(AgentType.PROJECT)
         val coordinatorEventApi = context.environmentService.createEventApi(coordinator.id)
 
         // Create worker agent (CodeWriter role)
@@ -97,7 +98,7 @@ class MultiAgentDemoRunner(
             ),
             toolWriteCodeFileOverride = writeCodeTool,
         )
-        val worker = workerFactory.create<CodeAgent>(AgentType.CODE)
+        val worker = workerFactory.create<SparkBasedAgent<CodeState>>(AgentType.CODE)
         val workerEventApi = context.environmentService.createEventApi(worker.id)
 
         // Set coordinator and worker info on progress pane
