@@ -6,8 +6,8 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.product.PlanningInsights
-import link.socket.ampere.agents.definition.product.ProductAgentState
 import link.socket.ampere.agents.definition.product.ProductPrompts
+import link.socket.ampere.agents.definition.product.ProductState
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
@@ -47,13 +47,13 @@ class ProductAgent(
     override val agentConfiguration: AgentConfiguration,
     private val ticketOrchestrator: TicketOrchestrator,
     private val coroutineScope: CoroutineScope? = null,
-    override val initialState: ProductAgentState = ProductAgentState.blank,
+    override val initialState: ProductState = ProductState.blank,
     private val executor: Executor = FunctionExecutor.create(),
     memoryServiceFactory: ((AgentId) -> AgentMemoryService)? = null,
     private val eventApiOverride: AgentEventApi? = null,
     private val observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
     private val agentId: AgentId = generateUUID("ProductManagerAgent"),
-) : ObservableAgent<ProductAgentState>(eventApiOverride, observabilityScope) {
+) : ObservableAgent<ProductState>(eventApiOverride, observabilityScope) {
 
     override val id: AgentId = agentId
 
@@ -80,7 +80,7 @@ class ProductAgent(
         this.executor = this@ProductAgent.executor
 
         perception {
-            contextBuilder = { state -> ProductPrompts.perceptionContext(state as ProductAgentState) }
+            contextBuilder = { state -> ProductPrompts.perceptionContext(state as ProductState) }
         }
 
         planning {
@@ -110,7 +110,7 @@ class ProductAgent(
     // PROPEL Cognitive Functions - Delegate to reasoning infrastructure
     // ========================================================================
 
-    override val runLLMToEvaluatePerception: (perception: Perception<ProductAgentState>) -> Idea =
+    override val runLLMToEvaluatePerception: (perception: Perception<ProductState>) -> Idea =
         { perception ->
             runBlockingCompat(ioDispatcher) {
                 withTimeout(60000) {
@@ -175,7 +175,7 @@ class ProductAgent(
     /**
      * Overrides getCurrentState to return fresh state from ticket orchestrator.
      */
-    override fun getCurrentState(): ProductAgentState = runBlockingCompat {
+    override fun getCurrentState(): ProductState = runBlockingCompat {
         getUpdatedAgentState()
     }
 
@@ -183,9 +183,9 @@ class ProductAgent(
      * Overrides perceiveState to fetch fresh state from ticket orchestrator.
      */
     override suspend fun perceiveState(
-        currentState: ProductAgentState,
+        currentState: ProductState,
         vararg newIdeas: Idea,
-    ): Perception<ProductAgentState> {
+    ): Perception<ProductState> {
         val freshState = getUpdatedAgentState()
 
         val ideas = mutableListOf<Idea>()
@@ -305,7 +305,7 @@ class ProductAgent(
     private suspend fun getUpdatedAgentState(
         agentIds: List<AgentId> = emptyList(),
         deadlineDaysAhead: Int = 7,
-    ): ProductAgentState {
+    ): ProductState {
         val backlogSummary = ticketOrchestrator.getBacklogSummary()
             .getOrElse { BacklogSummary.empty() }
 
@@ -339,7 +339,7 @@ class ProductAgent(
             }
             .distinctBy { it.id }
 
-        return ProductAgentState(
+        return ProductState(
             outcome = Outcome.blank,
             task = Task.Blank,
             plan = Plan.blank,

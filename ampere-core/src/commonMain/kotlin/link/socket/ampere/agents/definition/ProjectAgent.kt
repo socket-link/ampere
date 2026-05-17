@@ -4,9 +4,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeout
 import link.socket.ampere.agents.config.AgentConfiguration
-import link.socket.ampere.agents.definition.project.ProjectAgentState
 import link.socket.ampere.agents.definition.project.ProjectParams
 import link.socket.ampere.agents.definition.project.ProjectPrompts
+import link.socket.ampere.agents.definition.project.ProjectState
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
@@ -53,7 +53,7 @@ open class ProjectAgent(
     private val toolCreateIssues: Tool<ExecutionContext.IssueManagement>,
     private val toolAskHuman: Tool<ExecutionContext.NoChanges>,
     private val coroutineScope: CoroutineScope,
-    override val initialState: AgentState = ProjectAgentState.blank,
+    override val initialState: AgentState = ProjectState.blank,
     private val executor: Executor = FunctionExecutor.create(),
     memoryServiceFactory: ((AgentId) -> link.socket.ampere.agents.domain.memory.AgentMemoryService)? = null,
     reasoningOverride: AgentReasoning? = null,
@@ -307,7 +307,7 @@ open class ProjectAgent(
     // ========================================================================
 
     private fun buildPerceptionContext(state: AgentState): String {
-        val pmState = state as? ProjectAgentState ?: return "No PM state available"
+        val pmState = state as? ProjectState ?: return "No PM state available"
         return PerceptionContextBuilder()
             .header("Project Manager State Analysis")
             .sectionIf(pmState.activeGoals.isNotEmpty(), "Active Goals") {

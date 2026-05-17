@@ -6,7 +6,7 @@ import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.ProductAgent
 import link.socket.ampere.agents.definition.QualityAgent
-import link.socket.ampere.agents.definition.product.ProductAgentState
+import link.socket.ampere.agents.definition.product.ProductState
 import link.socket.ampere.agents.definition.qa.QualityState
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
@@ -133,8 +133,8 @@ fun stubProductManagerState(
     upcomingDeadlines: List<Ticket> = emptyList(),
     blockedTickets: List<Ticket> = emptyList(),
     overdueTickets: List<Ticket> = emptyList(),
-): ProductAgentState =
-    ProductAgentState(
+): ProductState =
+    ProductState(
         outcome = outcome,
         task = task,
         plan = plan,
@@ -147,7 +147,7 @@ fun stubProductManagerState(
 
 fun stubProductManagerAgent(
     ticketOrchestrator: TicketOrchestrator,
-    initialState: ProductAgentState = stubProductManagerState(),
+    initialState: ProductState = stubProductManagerState(),
     agentConfiguration: AgentConfiguration = stubAgentConfiguration(),
 ): ProductAgent =
     ProductAgent(

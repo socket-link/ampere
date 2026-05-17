@@ -21,7 +21,7 @@ import link.socket.ampere.agents.events.tickets.Ticket
  * assignment.
  */
 @Serializable
-data class ProductAgentState(
+data class ProductState(
     /** Current task outcome */
     val outcome: Outcome,
     /** Current task being worked on */
@@ -45,7 +45,7 @@ data class ProductAgentState(
      *
      * Uses the perception builder pattern consistent with CodeWriterAgent.
      */
-    fun toPerception(): Perception<ProductAgentState> = perception(this) {
+    fun toPerception(): Perception<ProductState> = perception(this) {
         header("Product Manager Perception State")
         timestamp()
 
@@ -113,7 +113,7 @@ data class ProductAgentState(
         /**
          * Returns an empty perception state.
          */
-        val blank = ProductAgentState(
+        val blank = ProductState(
             outcome = Outcome.Companion.blank,
             task = Task.Blank,
             plan = Plan.Companion.blank,

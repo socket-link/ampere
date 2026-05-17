@@ -34,6 +34,16 @@ sealed class RoleSpark : Spark {
 
         override val name: String = "Role:Code"
 
+        override val agentRole: String = "Code Writer"
+
+        override val requestedToolIds: Set<ToolId> = setOf(
+            "read_code_file",
+            "write_code_file",
+            "run_command",
+            "ask_human",
+            "search_codebase",
+        )
+
         override val promptContribution: String = """
 ## Role: Code
 
@@ -96,6 +106,15 @@ You are operating in a **code-focused** capacity. Your primary responsibilities 
 
         override val name: String = "Role:Research"
 
+        override val agentRole: String = "Researcher"
+
+        override val requestedToolIds: Set<ToolId> = setOf(
+            "web_search",
+            "read_code_file",
+            "ask_human",
+            "search_codebase",
+        )
+
         override val promptContribution: String = """
 ## Role: Research
 
@@ -144,6 +163,15 @@ You are operating in a **research-focused** capacity. Your primary responsibilit
     data object Operations : RoleSpark() {
 
         override val name: String = "Role:Operations"
+
+        override val agentRole: String = "Operations"
+
+        override val requestedToolIds: Set<ToolId> = setOf(
+            "run_command",
+            "read_code_file",
+            "ask_human",
+            "search_codebase",
+        )
 
         override val promptContribution: String = """
 ## Role: Operations
@@ -205,6 +233,17 @@ You are operating in an **operations-focused** capacity. Your primary responsibi
     data object Planning : RoleSpark() {
 
         override val name: String = "Role:Planning"
+
+        override val agentRole: String = "Planner"
+
+        override val requestedToolIds: Set<ToolId> = setOf(
+            "create_issue",
+            "query_issues",
+            "update_issue",
+            "ask_human",
+            "read_code_file",
+            "search_codebase",
+        )
 
         override val promptContribution: String = """
 ## Role: Planning

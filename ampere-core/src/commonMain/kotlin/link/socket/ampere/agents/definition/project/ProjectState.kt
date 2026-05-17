@@ -19,7 +19,7 @@ import link.socket.ampere.agents.domain.task.Task
  * progress across multiple agents.
  */
 @Serializable
-data class ProjectAgentState(
+data class ProjectState(
     /** Current task outcome */
     val outcome: Outcome,
     /** Current task being worked on */
@@ -43,7 +43,7 @@ data class ProjectAgentState(
     /**
      * Converts the state into a structured perception for LLM consumption.
      */
-    fun toPerception(): Perception<ProjectAgentState> = perception(this) {
+    fun toPerception(): Perception<ProjectState> = perception(this) {
         header("Project Manager Perception State")
         timestamp()
 
@@ -110,7 +110,7 @@ data class ProjectAgentState(
         /**
          * Returns an empty state for initialization.
          */
-        val blank = ProjectAgentState(
+        val blank = ProjectState(
             outcome = Outcome.blank,
             task = Task.Blank,
             plan = Plan.blank,

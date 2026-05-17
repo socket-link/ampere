@@ -113,4 +113,94 @@ class PhaseSparkManagerTest {
         manager.enterPhase(CognitivePhase.PERCEIVE)
         assertEquals(0, agent.sparkDepth)
     }
+
+    @Test
+    fun `library is ignored when spike flag is off`() {
+        val sources = listOf(
+            DeclarativePhaseSparkSource(
+                id = "cooking-domain",
+                name = "Cooking Domain",
+                whenToUse = "recipes",
+                body = "Body",
+                phases = setOf(CognitivePhase.PLAN),
+                tags = setOf("cooking"),
+            ),
+        )
+        val library = DefaultPhaseSparkLibrary.fromSources(sources)
+        val agent = TestAgent()
+        val manager = PhaseSparkManager.internalCreate(agent, enabled = true, library = library)
+        // Flag defaults to off.
+        manager.enterPhase(CognitivePhase.PLAN)
+        assertEquals(1, agent.sparkDepth)
+        manager.cleanup()
+    }
+
+    @Test
+    fun `library augments built-in phase spark when spike flag is on and selection matches`() = runBlocking {
+        val sources = listOf(
+            DeclarativePhaseSparkSource(
+                id = "cooking-domain",
+                name = "Cooking Domain",
+                whenToUse = "tasks about recipes and ingredients",
+                body = "Cooking body",
+                phases = setOf(CognitivePhase.PLAN),
+                tags = setOf("cooking"),
+            ),
+        )
+        val library = DefaultPhaseSparkLibrary.fromSources(sources)
+        val agent = TestAgent()
+        val manager = PhaseSparkManager.internalCreate(agent, enabled = true, library = library)
+        try {
+            AmpereSpikeFlags.declarativeSparksEnabled = true
+            manager.enterPhase(
+                CognitivePhase.PLAN,
+                SparkSelectionContext(phase = CognitivePhase.PLAN, text = "draft a recipe"),
+            )
+            assertEquals(2, agent.sparkDepth)
+            assertTrue(agent.cognitiveState.contains("[Phase:Plan]"))
+            assertTrue(agent.cognitiveState.contains("[PhaseSpark:cooking-domain]"))
+
+            manager.cleanup()
+            assertEquals(0, agent.sparkDepth)
+        } finally {
+            AmpereSpikeFlags.declarativeSparksEnabled = false
+        }
+    }
+
+    @Test
+    fun `multi-spark library push and pop preserves order on exit`() = runBlocking {
+        val extraSources = listOf(
+            DeclarativePhaseSparkSource(
+                id = "extra-a",
+                name = "Extra A",
+                whenToUse = "always",
+                body = "Body A",
+                phases = setOf(CognitivePhase.PLAN),
+            ),
+            DeclarativePhaseSparkSource(
+                id = "extra-b",
+                name = "Extra B",
+                whenToUse = "always",
+                body = "Body B",
+                phases = setOf(CognitivePhase.PLAN),
+            ),
+        )
+        val library = DefaultPhaseSparkLibrary.fromSources(extraSources)
+        val agent = TestAgent()
+        val manager = PhaseSparkManager.internalCreate(agent, enabled = true, library = library)
+        try {
+            AmpereSpikeFlags.declarativeSparksEnabled = true
+            manager.enterPhase(CognitivePhase.PLAN)
+            // Built-in Phase:Plan + 2 declarative sparks
+            assertEquals(3, agent.sparkDepth)
+            assertTrue(agent.cognitiveState.contains("[Phase:Plan]"))
+            assertTrue(agent.cognitiveState.contains("[PhaseSpark:extra-a]"))
+            assertTrue(agent.cognitiveState.contains("[PhaseSpark:extra-b]"))
+
+            manager.cleanup()
+            assertEquals(0, agent.sparkDepth)
+        } finally {
+            AmpereSpikeFlags.declarativeSparksEnabled = false
+        }
+    }
 }

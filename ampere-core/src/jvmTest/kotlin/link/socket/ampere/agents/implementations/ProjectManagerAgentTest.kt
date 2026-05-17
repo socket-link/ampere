@@ -11,7 +11,7 @@ import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.ProjectAgent
 import link.socket.ampere.agents.definition.project.Goal
-import link.socket.ampere.agents.definition.project.ProjectAgentState
+import link.socket.ampere.agents.definition.project.ProjectState
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
@@ -247,7 +247,7 @@ class ProjectManagerAgentTest {
 
     @Test
     fun `perceiveState gathers project context`() = kotlinx.coroutines.runBlocking {
-        val currentState = ProjectAgentState.blank
+        val currentState = ProjectState.blank
 
         val perception = projectAgent.perceiveState(currentState)
 
@@ -257,14 +257,14 @@ class ProjectManagerAgentTest {
             "Should have main perception idea",
         )
         assertTrue(
-            perception.currentState is ProjectAgentState,
-            "State should be ProjectAgentState",
+            perception.currentState is ProjectState,
+            "State should be ProjectState",
         )
     }
 
     @Test
     fun `perceiveState creates idea for project status`() = kotlinx.coroutines.runBlocking<Unit> {
-        val currentState = ProjectAgentState.blank
+        val currentState = ProjectState.blank
 
         val perception = projectAgent.perceiveState(currentState)
 
@@ -276,7 +276,7 @@ class ProjectManagerAgentTest {
 
     @Test
     fun `perceiveState incorporates new ideas passed in`() = kotlinx.coroutines.runBlocking {
-        val currentState = ProjectAgentState.blank
+        val currentState = ProjectState.blank
         val customIdea1 = Idea(
             name = "New feature request",
             description = "User requested dark mode",
@@ -292,14 +292,14 @@ class ProjectManagerAgentTest {
         // The important thing is that perception was created successfully
         assertTrue(perception.ideas.isNotEmpty(), "Perception should have ideas")
         assertTrue(
-            perception.currentState is ProjectAgentState,
+            perception.currentState is ProjectState,
             "Should have correct state type",
         )
     }
 
     @Test
     fun `perceiveState updates state with fresh context`() = kotlinx.coroutines.runBlocking {
-        val oldState = ProjectAgentState(
+        val oldState = ProjectState(
             outcome = Outcome.blank,
             task = Task.Blank,
             plan = Plan.blank,
@@ -311,7 +311,7 @@ class ProjectManagerAgentTest {
 
         val perception = projectAgent.perceiveState(oldState)
 
-        val newState = perception.currentState as ProjectAgentState
+        val newState = perception.currentState as ProjectState
         // With stub implementations, these will be empty
         // But we verify the state was refreshed (not the same as old state)
         assertTrue(newState.outcome == oldState.outcome, "Outcome preserved")
@@ -321,7 +321,7 @@ class ProjectManagerAgentTest {
 
     @Test
     fun `perceiveState creates timestamp`() = kotlinx.coroutines.runBlocking {
-        val currentState = ProjectAgentState.blank
+        val currentState = ProjectState.blank
 
         val perception = projectAgent.perceiveState(currentState)
 

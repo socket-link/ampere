@@ -17,6 +17,7 @@ import link.socket.ampere.agents.domain.cognition.SparkStack
 import link.socket.ampere.agents.domain.cognition.ToolId
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
+import link.socket.ampere.agents.domain.cognition.sparks.SparkSelectionContext
 import link.socket.ampere.agents.domain.cognition.sparks.TaskSpark
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.memory.MemoryContext
@@ -162,15 +163,24 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
     }
 
     /**
+     * The cognitive phase the agent is currently executing in, or null when no
+     * phase is active. Updated by [PhaseSparkManager] on phase entry/exit so the
+     * spark stack can include per-phase contributions in the assembled prompt.
+     */
+    @Transient
+    internal var currentCognitivePhase: CognitivePhase? = null
+
+    /**
      * The current system prompt, dynamically built from the SparkStack.
      *
-     * This should be used when making LLM calls to provide the agent with
-     * its full cognitive context.
+     * Includes per-phase Spark contributions corresponding to [currentCognitivePhase]
+     * when set. Used when making LLM calls so the agent's cognitive context reflects
+     * both the role-level sparks and the currently-active phase guidance.
      */
     val currentSystemPrompt: String
         get() {
             ensureSparkStackInitialized()
-            return sparkStack.buildSystemPrompt()
+            return sparkStack.buildSystemPrompt(currentCognitivePhase)
         }
 
     /**
@@ -264,7 +274,22 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
 
     @Transient
     private val phaseSparkManager: PhaseSparkManager<S> by lazy(LazyThreadSafetyMode.NONE) {
+        createPhaseSparkManager()
+    }
+
+    /**
+     * Hook for subclasses to inject a [link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary]
+     * (or other manager configuration) when the phase-spark manager is first
+     * constructed. Default implementation builds a manager without a library —
+     * preserving pre-existing single-built-in-spark behavior.
+     */
+    protected open fun createPhaseSparkManager(): PhaseSparkManager<S> =
         PhaseSparkManager.create(this, agentConfiguration.cognitiveConfig.phaseSparks)
+
+    private fun taskTextFor(task: Task): String {
+        if (task is Task.Blank) return ""
+        val codeDescription = (task as? Task.CodeChange)?.description
+        return codeDescription ?: task.toString()
     }
 
     // ==================== Agent Runtime ====================
@@ -281,7 +306,11 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
                 buildToolAwarenessIdea()?.let { add(it) }
             }
 
-            val statePerception = phaseSparkManager.withPhase(CognitivePhase.PERCEIVE) {
+            val taskText = taskTextFor(currentTask)
+            val statePerception = phaseSparkManager.withPhase(
+                CognitivePhase.PERCEIVE,
+                SparkSelectionContext(phase = CognitivePhase.PERCEIVE, text = taskText),
+            ) {
                 perceiveState(
                     currentState = getCurrentState(),
                     newIdeas = perceptionIdeas.toTypedArray(),
@@ -296,7 +325,10 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
                 knowledge.knowledge.learnings
             }
 
-            val plan = phaseSparkManager.withPhase(CognitivePhase.PLAN) {
+            val plan = phaseSparkManager.withPhase(
+                CognitivePhase.PLAN,
+                SparkSelectionContext(phase = CognitivePhase.PLAN, text = taskText),
+            ) {
                 determinePlanForTask(
                     task = currentTask,
                     relevantKnowledge = relevantKnowledge,
@@ -305,12 +337,18 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
             }
             rememberNewPlan(plan)
 
-            val outcome = phaseSparkManager.withPhase(CognitivePhase.EXECUTE) {
+            val outcome = phaseSparkManager.withPhase(
+                CognitivePhase.EXECUTE,
+                SparkSelectionContext(phase = CognitivePhase.EXECUTE, text = taskText),
+            ) {
                 executePlan(plan)
             }
             rememberNewOutcome(outcome)
 
-            phaseSparkManager.withPhase(CognitivePhase.LEARN) {
+            phaseSparkManager.withPhase(
+                CognitivePhase.LEARN,
+                SparkSelectionContext(phase = CognitivePhase.LEARN, text = taskText),
+            ) {
                 // Extract and store knowledge from this execution
                 extractAndStoreKnowledge(outcome, currentTask, plan)
 
