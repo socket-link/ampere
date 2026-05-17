@@ -140,8 +140,8 @@ class McpToolExecutorTest {
         val outcome = executor.execute(tool, request)
 
         assertIs<Outcome.Failure>(outcome)
-        assertIs<ExecutionOutcome.NoChanges.Failure>(outcome)
-        assertTrue((outcome as ExecutionOutcome.NoChanges.Failure).message.contains("not connected"))
+        val failure = assertIs<ExecutionOutcome.NoChanges.Failure>(outcome)
+        assertTrue(failure.message.contains("not connected"))
     }
 
     /**
@@ -170,8 +170,8 @@ class McpToolExecutorTest {
         val outcome = executor.execute(tool, request)
 
         assertIs<Outcome.Failure>(outcome)
-        assertIs<ExecutionOutcome.NoChanges.Failure>(outcome)
-        assertTrue((outcome as ExecutionOutcome.NoChanges.Failure).message.contains("Permission denied"))
+        val failure = assertIs<ExecutionOutcome.NoChanges.Failure>(outcome)
+        assertTrue(failure.message.contains("Permission denied"))
     }
 
     /**
@@ -197,8 +197,8 @@ class McpToolExecutorTest {
         val outcome = executor.execute(tool, request)
 
         assertIs<Outcome.Failure>(outcome)
-        assertIs<ExecutionOutcome.NoChanges.Failure>(outcome)
-        assertTrue((outcome as ExecutionOutcome.NoChanges.Failure).message.contains("Network timeout"))
+        val failure = assertIs<ExecutionOutcome.NoChanges.Failure>(outcome)
+        assertTrue(failure.message.contains("Network timeout"))
     }
 
     /**
@@ -225,8 +225,8 @@ class McpToolExecutorTest {
         val outcome = executor.execute(tool, request)
 
         assertIs<Outcome.Failure>(outcome)
-        assertIs<ExecutionOutcome.NoChanges.Failure>(outcome)
-        assertTrue((outcome as ExecutionOutcome.NoChanges.Failure).message.contains("no longer active"))
+        val failure = assertIs<ExecutionOutcome.NoChanges.Failure>(outcome)
+        assertTrue(failure.message.contains("no longer active"))
     }
 
     /**
@@ -259,8 +259,8 @@ class McpToolExecutorTest {
         val outcome = executor.execute(tool, request)
 
         assertIs<Outcome.Success>(outcome)
-        assertIs<ExecutionOutcome.NoChanges.Success>(outcome)
-        val message = (outcome as ExecutionOutcome.NoChanges.Success).message
+        val success = assertIs<ExecutionOutcome.NoChanges.Success>(outcome)
+        val message = success.message
         assertTrue(message.contains("Line 1"))
         assertTrue(message.contains("Line 2"))
     }

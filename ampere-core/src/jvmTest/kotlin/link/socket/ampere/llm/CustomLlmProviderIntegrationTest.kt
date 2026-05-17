@@ -3,6 +3,7 @@ package link.socket.ampere.llm
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.config.AgentConfiguration
@@ -68,8 +69,9 @@ class CustomLlmProviderIntegrationTest {
 
         assertTrue(providerCalled, "Custom provider should have been called")
         assertEquals("Mock response from custom provider", response)
-        assertContains(receivedPrompt!!, "You are a calculator.")
-        assertContains(receivedPrompt!!, "What is 2 + 2?")
+        val prompt = assertNotNull(receivedPrompt)
+        assertContains(prompt, "You are a calculator.")
+        assertContains(prompt, "What is 2 + 2?")
     }
 
     /**
@@ -99,8 +101,9 @@ class CustomLlmProviderIntegrationTest {
         )
 
         // Verify format: System: ... \n\n User: ...
-        assertTrue(receivedPrompt!!.startsWith("System: Be helpful"))
-        assertTrue(receivedPrompt!!.contains("\n\nUser: Hello world"))
+        val prompt = assertNotNull(receivedPrompt)
+        assertTrue(prompt.startsWith("System: Be helpful"))
+        assertTrue(prompt.contains("\n\nUser: Hello world"))
     }
 
     /**

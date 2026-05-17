@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package link.socket.ampere.agents.events.meetings
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver

@@ -3,6 +3,7 @@ package link.socket.ampere.cli.watch.presentation
 import kotlinx.datetime.Instant
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -54,10 +55,10 @@ class SparkPresentationTest {
         assertEquals(1, history.size)
         assertEquals(SparkTransitionDirection.REMOVED, history.first().direction)
 
-        val state = collector.getCognitiveState(agentId)
-        assertEquals("OPERATIONAL", state?.affinityName)
-        assertTrue(state?.sparkNames?.isEmpty() == true)
-        assertEquals(0, state?.depth)
+        val state = assertNotNull(collector.getCognitiveState(agentId))
+        assertEquals("OPERATIONAL", state.affinityName)
+        assertTrue(state.sparkNames.isEmpty())
+        assertEquals(0, state.depth)
     }
 
     @Test

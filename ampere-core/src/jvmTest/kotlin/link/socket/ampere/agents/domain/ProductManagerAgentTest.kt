@@ -4,6 +4,7 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -136,9 +137,9 @@ class ProductManagerAgentTest {
 
         val knowledge = productAgent.extractKnowledgeFromOutcome(outcome, task, plan)
 
-        assertTrue(knowledge.approach.isNotEmpty(), "Approach should be captured")
-        assertTrue(knowledge.learnings.contains("Success"), "Learnings should mention success")
-        assertTrue(knowledge is Knowledge.FromOutcome)
+        val fromOutcome = assertIs<Knowledge.FromOutcome>(knowledge)
+        assertTrue(fromOutcome.approach.isNotEmpty(), "Approach should be captured")
+        assertTrue(fromOutcome.learnings.contains("Success"), "Learnings should mention success")
     }
 
     @Test

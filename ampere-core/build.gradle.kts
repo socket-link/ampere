@@ -1,3 +1,4 @@
+@file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 
 import com.vanniktech.maven.publish.JavadocJar
 import com.vanniktech.maven.publish.KotlinMultiplatform
@@ -25,6 +26,7 @@ compose.resources {
 }
 
 val ampereVersion: String by project
+val composeVersion = findProperty("compose.version") as String
 
 group = "link.socket"
 version = ampereVersion
@@ -87,6 +89,10 @@ sqldelight {
 kotlin {
     applyDefaultHierarchyTemplate()
 
+    compilerOptions {
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
     androidTarget {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_21)
@@ -132,19 +138,15 @@ kotlin {
     }
 
     sourceSets {
-        all {
-            languageSettings.enableLanguageFeature("ExpectActualClasses")
-        }
-
         val commonMain by getting {
             dependencies {
                 implementation(kotlin("reflect"))
 
-                implementation(compose.runtime)
-                implementation(compose.foundation)
-                implementation(compose.material)
-                implementation(compose.components.resources)
-                implementation(compose.materialIconsExtended)
+                implementation("org.jetbrains.compose.runtime:runtime:$composeVersion")
+                implementation("org.jetbrains.compose.foundation:foundation:$composeVersion")
+                implementation("org.jetbrains.compose.material:material:$composeVersion")
+                implementation("org.jetbrains.compose.components:components-resources:$composeVersion")
+                implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
 
                 implementation("ai.koog:koog-agents:0.5.4")
                 implementation("app.cash.sqldelight:coroutines-extensions:2.2.1")
@@ -166,7 +168,7 @@ kotlin {
         val androidMain by getting {
             dependencies {
                 implementation(project(":ampere-compose"))
-                implementation(compose.uiTooling)
+                implementation("org.jetbrains.compose.ui:ui-tooling:$composeVersion")
 
                 api("androidx.activity:activity-compose:1.11.0")
                 api("androidx.appcompat:appcompat:1.7.1")
@@ -178,7 +180,7 @@ kotlin {
         }
         val jvmMain by getting {
             dependencies {
-                implementation(compose.desktop.common)
+                implementation("org.jetbrains.compose.desktop:desktop-jvm:$composeVersion")
 
                 implementation("app.cash.sqldelight:sqlite-driver:2.2.1")
                 implementation("com.charleskorn.kaml:kaml:0.72.0")
@@ -224,7 +226,9 @@ kotlin {
 
     // https://kotlinlang.org/docs/native-objc-interop.html#export-of-kdoc-comments-to-generated-objective-c-headers
     targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget> {
-        compilations.get("main").compilerOptions.options.freeCompilerArgs.add("-Xexport-kdoc")
+        compilations.get("main").compileTaskProvider.configure {
+            compilerOptions.freeCompilerArgs.add("-Xexport-kdoc")
+        }
     }
 }
 

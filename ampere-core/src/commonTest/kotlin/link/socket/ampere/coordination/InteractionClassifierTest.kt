@@ -294,9 +294,9 @@ class InteractionClassifierTest {
         val interaction = classifier.classify(event)
 
         assertNotNull(interaction)
-        assertNotNull(interaction.context)
-        assertEquals(100, interaction.context!!.length, "Context should be truncated to 100 chars")
-        assertEquals("...", interaction.context!!.takeLast(3), "Truncated context should end with ...")
+        val context = assertNotNull(interaction.context)
+        assertEquals(100, context.length, "Context should be truncated to 100 chars")
+        assertEquals("...", context.takeLast(3), "Truncated context should end with ...")
     }
 
     @Test

@@ -44,10 +44,10 @@ class McpConfigTest {
 
         val config = ConfigParser.parse(yaml)
 
-        assertNotNull(config.mcp)
-        assertEquals(2, config.mcp!!.servers.size)
+        val mcp = assertNotNull(config.mcp)
+        assertEquals(2, mcp.servers.size)
 
-        val github = config.mcp!!.servers[0]
+        val github = mcp.servers[0]
         assertEquals("github", github.id)
         assertEquals("GitHub CLI", github.name)
         assertEquals("stdio", github.protocol)
@@ -55,7 +55,7 @@ class McpConfigTest {
         assertNull(github.authToken)
         assertEquals("act-with-notification", github.autonomy)
 
-        val database = config.mcp!!.servers[1]
+        val database = mcp.servers[1]
         assertEquals("database", database.id)
         assertEquals("Database Service", database.name)
         assertEquals("http", database.protocol)

@@ -218,7 +218,6 @@ class RunLLMToExecuteToolTest {
         // Verify the function exists and has the correct signature
         val function: (Tool<*>, ExecutionRequest<*>) -> ExecutionOutcome = agent.runLLMToExecuteTool
 
-        // Verify it's not null and is a function
-        assertTrue(function != null, "runLLMToExecuteTool should not be null")
+        assertTrue(function.toString().isNotBlank(), "runLLMToExecuteTool should be callable")
     }
 }

@@ -13,7 +13,6 @@ import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.status.ExecutionStatus
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.bus.EventSerialBus
-import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.agents.execution.tools.Tool
@@ -127,7 +126,7 @@ class McpExecutor(
                     executorId = id,
                     timestamp = Clock.System.now(),
                     result = createFailureOutcome(
-                        request = request as ExecutionRequest<ExecutionContext>,
+                        request = request,
                         startTime = startTime,
                         error = ExecutionError(
                             type = ExecutionError.Type.TOOL_UNAVAILABLE,
@@ -158,7 +157,7 @@ class McpExecutor(
                     executorId = id,
                     timestamp = Clock.System.now(),
                     result = createFailureOutcome(
-                        request = request as ExecutionRequest<ExecutionContext>,
+                        request = request,
                         startTime = startTime,
                         error = ExecutionError(
                             type = ExecutionError.Type.TOOL_UNAVAILABLE,
@@ -181,7 +180,7 @@ class McpExecutor(
                     executorId = id,
                     timestamp = Clock.System.now(),
                     result = createFailureOutcome(
-                        request = request as ExecutionRequest<ExecutionContext>,
+                        request = request,
                         startTime = startTime,
                         error = ExecutionError(
                             type = ExecutionError.Type.TOOL_UNAVAILABLE,
@@ -202,7 +201,7 @@ class McpExecutor(
                     executorId = id,
                     timestamp = Clock.System.now(),
                     result = createFailureOutcome(
-                        request = request as ExecutionRequest<ExecutionContext>,
+                        request = request,
                         startTime = startTime,
                         error = ExecutionError(
                             type = ExecutionError.Type.TOOL_UNAVAILABLE,
@@ -241,7 +240,7 @@ class McpExecutor(
                 // Translate result to outcome
                 val outcome = translateToolCallResultToOutcome(
                     toolCallResult = toolCallResult,
-                    request = request as ExecutionRequest<ExecutionContext>,
+                    request = request,
                     startTime = startTime,
                 )
 
@@ -270,25 +269,7 @@ class McpExecutor(
                             ),
                         )
                     }
-                    else -> {
-                        logger.w { "Unexpected outcome type: ${outcome::class.simpleName}" }
-                        emit(
-                            ExecutionStatus.Failed(
-                                executorId = id,
-                                timestamp = Clock.System.now(),
-                                result = createFailureOutcome(
-                                    request = request as ExecutionRequest<ExecutionContext>,
-                                    startTime = startTime,
-                                    error = ExecutionError(
-                                        type = ExecutionError.Type.UNEXPECTED,
-                                        message = "Unexpected outcome type",
-                                        details = outcome::class.simpleName,
-                                        isRetryable = false,
-                                    ),
-                                ),
-                            ),
-                        )
-                    }
+                    else -> emitUnexpectedOutcomeFailure(request, startTime, outcome)
                 }
             }.onFailure { error ->
                 logger.e(error) { "Failed to invoke MCP tool '${tool.name}'" }
@@ -297,7 +278,7 @@ class McpExecutor(
                         executorId = id,
                         timestamp = Clock.System.now(),
                         result = createFailureOutcome(
-                            request = request as ExecutionRequest<ExecutionContext>,
+                            request = request,
                             startTime = startTime,
                             error = ExecutionError(
                                 type = ExecutionError.Type.UNEXPECTED,
@@ -317,7 +298,7 @@ class McpExecutor(
                     executorId = id,
                     timestamp = Clock.System.now(),
                     result = createFailureOutcome(
-                        request = request as ExecutionRequest<ExecutionContext>,
+                        request = request,
                         startTime = startTime,
                         error = ExecutionError(
                             type = ExecutionError.Type.UNEXPECTED,
@@ -398,7 +379,7 @@ class McpExecutor(
      */
     private fun translateToolCallResultToOutcome(
         toolCallResult: ToolCallResult,
-        request: ExecutionRequest<ExecutionContext>,
+        request: ExecutionRequest<*>,
         startTime: kotlinx.datetime.Instant,
     ): ExecutionOutcome {
         val endTime = Clock.System.now()
@@ -443,7 +424,7 @@ class McpExecutor(
      * different error scenarios.
      */
     private fun createFailureOutcome(
-        request: ExecutionRequest<ExecutionContext>,
+        request: ExecutionRequest<*>,
         startTime: kotlinx.datetime.Instant,
         error: ExecutionError,
     ): ExecutionOutcome.NoChanges.Failure {
@@ -454,6 +435,30 @@ class McpExecutor(
             executionStartTimestamp = startTime,
             executionEndTimestamp = Clock.System.now(),
             message = "${error.message}${error.details?.let { "\n\nDetails: $it" } ?: ""}",
+        )
+    }
+
+    private suspend fun kotlinx.coroutines.flow.FlowCollector<ExecutionStatus>.emitUnexpectedOutcomeFailure(
+        request: ExecutionRequest<*>,
+        startTime: kotlinx.datetime.Instant,
+        outcome: ExecutionOutcome,
+    ) {
+        logger.w { "Unexpected outcome type: ${outcome::class.simpleName}" }
+        emit(
+            ExecutionStatus.Failed(
+                executorId = id,
+                timestamp = Clock.System.now(),
+                result = createFailureOutcome(
+                    request = request,
+                    startTime = startTime,
+                    error = ExecutionError(
+                        type = ExecutionError.Type.UNEXPECTED,
+                        message = "Unexpected outcome type",
+                        details = outcome::class.simpleName,
+                        isRetryable = false,
+                    ),
+                ),
+            ),
         )
     }
 

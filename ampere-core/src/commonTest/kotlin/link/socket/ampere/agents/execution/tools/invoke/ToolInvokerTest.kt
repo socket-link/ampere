@@ -114,8 +114,8 @@ class ToolInvokerTest {
         assertIs<ToolInvocationResult.Success>(result)
         assertEquals("test-tool-1", result.toolId)
         assertIs<Outcome.Success>(result.outcome)
-        assertIs<ExecutionOutcome.NoChanges.Success>(result.outcome)
-        assertEquals("hello world", (result.outcome as ExecutionOutcome.NoChanges.Success).message)
+        val outcome = assertIs<ExecutionOutcome.NoChanges.Success>(result.outcome)
+        assertEquals("hello world", outcome.message)
     }
 
     /**
@@ -324,13 +324,13 @@ class ToolInvokerTest {
         // Verify results are correct and isolated
         assertIs<ToolInvocationResult.Success>(result1)
         assertEquals("test-tool-6a", result1.toolId)
-        assertIs<ExecutionOutcome.NoChanges.Success>(result1.outcome)
-        assertEquals("result-a", (result1.outcome as ExecutionOutcome.NoChanges.Success).message)
+        val outcome1 = assertIs<ExecutionOutcome.NoChanges.Success>(result1.outcome)
+        assertEquals("result-a", outcome1.message)
 
         assertIs<ToolInvocationResult.Success>(result2)
         assertEquals("test-tool-6b", result2.toolId)
-        assertIs<ExecutionOutcome.NoChanges.Success>(result2.outcome)
-        assertEquals("result-b", (result2.outcome as ExecutionOutcome.NoChanges.Success).message)
+        val outcome2 = assertIs<ExecutionOutcome.NoChanges.Success>(result2.outcome)
+        assertEquals("result-b", outcome2.message)
     }
 
     /**
@@ -422,7 +422,7 @@ class ToolInvokerTest {
         val result = invoker.invoke(request)
 
         assertIs<ToolInvocationResult.Success>(result)
-        assertIs<ExecutionOutcome.CodeChanged.Success>(result.outcome)
-        assertEquals(2, (result.outcome as ExecutionOutcome.CodeChanged.Success).changedFiles.size)
+        val outcome = assertIs<ExecutionOutcome.CodeChanged.Success>(result.outcome)
+        assertEquals(2, outcome.changedFiles.size)
     }
 }

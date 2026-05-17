@@ -147,8 +147,8 @@ class OutcomeMemoryRepositoryTest {
         assertEquals(approach, stored.approach)
         assertFalse(stored.success)
         assertEquals(1, stored.filesChanged) // partiallyChangedFiles
-        assertNotNull(stored.errorMessage)
-        assertTrue(stored.errorMessage!!.contains(errorMessage))
+        val storedErrorMessage = assertNotNull(stored.errorMessage)
+        assertTrue(storedErrorMessage.contains(errorMessage))
     }
 
     @Test

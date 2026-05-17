@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
@@ -322,8 +323,7 @@ class ToolInitializerTest {
     @Test
     fun `WriteCode tool execution returns success outcome`() = runTest {
         val tools = createLocalToolSet()
-        val writeCodeTool = tools.find { it.id == "write_code" } as? FunctionTool<ExecutionContext.Code.WriteCode>
-        assertNotNull(writeCodeTool, "WriteCode tool should exist")
+        val writeCodeTool = tools.requireFunctionTool<ExecutionContext.Code.WriteCode>("write_code")
 
         val context = ExecutionContext.Code.WriteCode(
             executorId = "test-executor",
@@ -336,23 +336,24 @@ class ToolInitializerTest {
             instructionsPerFilePath = listOf("test.kt" to "// Test code"),
         )
 
-        val outcome = writeCodeTool!!.execute(
+        val outcome = writeCodeTool.execute(
             ExecutionRequest(
                 context = context,
                 constraints = ExecutionConstraints(),
             ),
         )
 
-        assertTrue(outcome is ExecutionOutcome.CodeChanged.Success, "Should return CodeChanged.Success")
-        val success = outcome as ExecutionOutcome.CodeChanged.Success
+        val success = assertIs<ExecutionOutcome.CodeChanged.Success>(
+            outcome,
+            "Should return CodeChanged.Success",
+        )
         assertTrue(success.changedFiles.isNotEmpty(), "Should have changed files")
     }
 
     @Test
     fun `ReadCode tool execution returns success outcome`() = runTest {
         val tools = createLocalToolSet()
-        val readCodeTool = tools.find { it.id == "read_code" } as? FunctionTool<ExecutionContext.Code.ReadCode>
-        assertNotNull(readCodeTool, "ReadCode tool should exist")
+        val readCodeTool = tools.requireFunctionTool<ExecutionContext.Code.ReadCode>("read_code")
 
         val context = ExecutionContext.Code.ReadCode(
             executorId = "test-executor",
@@ -365,52 +366,61 @@ class ToolInitializerTest {
             filePathsToRead = listOf("test.kt", "main.kt"),
         )
 
-        val outcome = readCodeTool!!.execute(
+        val outcome = readCodeTool.execute(
             ExecutionRequest(
                 context = context,
                 constraints = ExecutionConstraints(),
             ),
         )
 
-        assertTrue(outcome is ExecutionOutcome.CodeReading.Success, "Should return CodeReading.Success")
-        val success = outcome as ExecutionOutcome.CodeReading.Success
+        val success = assertIs<ExecutionOutcome.CodeReading.Success>(
+            outcome,
+            "Should return CodeReading.Success",
+        )
         assertEquals(2, success.readFiles.size, "Should have read 2 files")
     }
 
     @Test
     fun `AskHuman tool execution returns success outcome`() = runTest {
         val tools = createLocalToolSet()
-        val askHumanTool = tools.find { it.id == "ask_human" } as? FunctionTool<ExecutionContext>
-        assertNotNull(askHumanTool, "AskHuman tool should exist")
+        val askHumanTool = tools.requireFunctionTool<ExecutionContext>("ask_human")
 
-        val outcome = askHumanTool!!.execute(createTestExecutionRequest())
+        val outcome = askHumanTool.execute(createTestExecutionRequest())
 
-        assertTrue(outcome is ExecutionOutcome.NoChanges.Success, "Should return NoChanges.Success")
+        assertIs<ExecutionOutcome.NoChanges.Success>(outcome, "Should return NoChanges.Success")
     }
 
     @Test
     fun `CreateTicket tool execution returns success outcome`() = runTest {
         val tools = createLocalToolSet()
-        val createTicketTool = tools.find { it.id == "create_ticket" } as? FunctionTool<ExecutionContext>
-        assertNotNull(createTicketTool, "CreateTicket tool should exist")
+        val createTicketTool = tools.requireFunctionTool<ExecutionContext>("create_ticket")
 
-        val outcome = createTicketTool!!.execute(createTestExecutionRequest())
+        val outcome = createTicketTool.execute(createTestExecutionRequest())
 
-        assertTrue(outcome is ExecutionOutcome.NoChanges.Success, "Should return NoChanges.Success")
+        assertIs<ExecutionOutcome.NoChanges.Success>(outcome, "Should return NoChanges.Success")
     }
 
     @Test
     fun `RunTests tool execution returns success outcome`() = runTest {
         val tools = createLocalToolSet()
-        val runTestsTool = tools.find { it.id == "run_tests" } as? FunctionTool<ExecutionContext>
-        assertNotNull(runTestsTool, "RunTests tool should exist")
+        val runTestsTool = tools.requireFunctionTool<ExecutionContext>("run_tests")
 
-        val outcome = runTestsTool!!.execute(createTestExecutionRequest())
+        val outcome = runTestsTool.execute(createTestExecutionRequest())
 
-        assertTrue(outcome is ExecutionOutcome.NoChanges.Success, "Should return NoChanges.Success")
+        assertIs<ExecutionOutcome.NoChanges.Success>(outcome, "Should return NoChanges.Success")
     }
 
     // ==================== HELPER FUNCTIONS ====================
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <Context : ExecutionContext> List<FunctionTool<*>>.requireFunctionTool(
+        id: String,
+    ): FunctionTool<Context> {
+        return assertNotNull(
+            find { it.id == id },
+            "$id tool should exist",
+        ) as FunctionTool<Context>
+    }
 
     /**
      * Creates a test logger that captures output for verification.

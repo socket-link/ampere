@@ -107,7 +107,6 @@ class ToolInvoker<C : ExecutionContext>(
                     is ExecutionOutcome.NoChanges.Failure -> outcome.message
                     is ExecutionOutcome.CodeReading.Failure -> outcome.error.message
                     is ExecutionOutcome.CodeChanged.Failure -> outcome.error.message
-                    else -> "Tool execution failed"
                 },
                 toolId = tool.id,
                 duration = duration,

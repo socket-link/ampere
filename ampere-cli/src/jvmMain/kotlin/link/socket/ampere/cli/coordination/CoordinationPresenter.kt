@@ -50,6 +50,13 @@ data class CoordinationViewState(
     val focusedAgentId: AgentId?,
 )
 
+private data class PresenterControls(
+    val subMode: CoordinationSubMode,
+    val verbose: Boolean,
+    val focusedAgentId: AgentId?,
+    val selectedMeetingId: String?,
+)
+
 /**
  * Provider interface for coordination state.
  *
@@ -119,28 +126,32 @@ class CoordinationPresenter(
     init {
         // Combine coordination state and agent states to produce view state
         collectJob = scope.launch {
-            combine(
-                coordinationStateProvider.state,
-                agentStateProvider.agentStates,
+            val controls = combine(
                 _subMode,
                 _verbose,
                 _focusedAgentId,
                 _selectedMeetingId,
-            ) { flows: Array<Any?> ->
-                val coordinationState = flows[0] as CoordinationState
-                val agentStates = flows[1] as Map<AgentId, String>
-                val subMode = flows[2] as CoordinationSubMode
-                val verbose = flows[3] as Boolean
-                val focusedAgentId = flows[4] as AgentId?
-                val selectedMeetingId = flows[5] as String?
-
-                updateViewState(
-                    coordinationState = coordinationState,
-                    agentStates = agentStates,
+            ) { subMode, verbose, focusedAgentId, selectedMeetingId ->
+                PresenterControls(
                     subMode = subMode,
                     verbose = verbose,
                     focusedAgentId = focusedAgentId,
                     selectedMeetingId = selectedMeetingId,
+                )
+            }
+
+            combine(
+                coordinationStateProvider.state,
+                agentStateProvider.agentStates,
+                controls,
+            ) { coordinationState, agentStates, controls ->
+                updateViewState(
+                    coordinationState = coordinationState,
+                    agentStates = agentStates,
+                    subMode = controls.subMode,
+                    verbose = controls.verbose,
+                    focusedAgentId = controls.focusedAgentId,
+                    selectedMeetingId = controls.selectedMeetingId,
                 )
             }.collect { newState ->
                 _viewState.value = newState

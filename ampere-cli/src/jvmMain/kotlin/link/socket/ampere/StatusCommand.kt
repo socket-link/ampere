@@ -196,7 +196,7 @@ class StatusCommand(
         terminal.println()
         terminal.println(bold("📁 Workspace"))
         val workspace = link.socket.ampere.agents.environment.workspace.defaultWorkspace()
-        val workspacePath = workspace?.baseDirectory ?: "disabled"
+        val workspacePath = workspace.baseDirectory
         terminal.println("  ${cyan(workspacePath)} ${gray("(watching)")}")
     }
 
