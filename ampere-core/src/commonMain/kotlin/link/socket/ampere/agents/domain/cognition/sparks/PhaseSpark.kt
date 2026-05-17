@@ -31,8 +31,19 @@ sealed class PhaseSpark : Spark {
 
     /**
      * The cognitive phase this Spark represents.
+     *
+     * For built-in sparks this is the single phase they belong to. For declarative
+     * sparks that span multiple phases, this returns the first eligible phase as a
+     * back-compat anchor; prefer [eligiblePhases] when reasoning about applicability.
      */
     abstract val phase: CognitivePhase
+
+    /**
+     * The set of phases for which this Spark should be considered eligible by
+     * selection algorithms. Defaults to the single [phase] for built-in sparks.
+     */
+    open val eligiblePhases: Set<CognitivePhase>
+        get() = setOf(phase)
 
     // PhaseSparks don't restrict tools or file access - they only add context
     override val allowedTools: Set<ToolId>? = null

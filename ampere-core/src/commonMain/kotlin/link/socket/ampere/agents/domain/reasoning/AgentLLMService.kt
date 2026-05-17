@@ -62,6 +62,15 @@ import link.socket.ampere.util.logWith
 class AgentLLMService(
     private val agentConfiguration: AgentConfiguration,
     private val eventApi: AgentEventApi? = null,
+    /**
+     * Optional prompt prefix evaluated at call time and prepended to [systemMessage].
+     *
+     * Used by spark-based agents to inject the current spark stack's prompt into
+     * the LLM payload at the moment of the call (not at construction). Returning
+     * `null` from the provider — or omitting it entirely — leaves [systemMessage]
+     * unchanged.
+     */
+    private val activePromptProvider: (() -> String?)? = null,
 ) {
 
     private val logger: Logger = logWith("AgentLLMService")
@@ -93,10 +102,12 @@ class AgentLLMService(
         maxTokens: Int = DEFAULT_MAX_TOKENS,
         routingContext: RoutingContext? = null,
     ): String {
+        val effectiveSystemMessage = applyActivePromptProvider(systemMessage)
+
         // Route through custom provider if configured (takes precedence over relay)
         agentConfiguration.llmProvider?.let { provider ->
             logger.d { "[LLM] Using custom provider" }
-            val combinedPrompt = buildCombinedPrompt(systemMessage, prompt)
+            val combinedPrompt = buildCombinedPrompt(effectiveSystemMessage, prompt)
             val providerId = resolveCustomProviderId()
             val modelId = resolveCustomModelId()
             emitStartedTelemetry(
@@ -157,7 +168,7 @@ class AgentLLMService(
         val messages = listOf(
             ChatMessage(
                 role = ChatRole.System,
-                content = systemMessage,
+                content = effectiveSystemMessage,
             ),
             ChatMessage(
                 role = ChatRole.User,
@@ -380,6 +391,12 @@ class AgentLLMService(
                 errorType = errorType,
             ),
         )
+    }
+
+    private fun applyActivePromptProvider(systemMessage: String): String {
+        val provider = activePromptProvider ?: return systemMessage
+        val activePrompt = provider.invoke()?.takeIf { it.isNotBlank() } ?: return systemMessage
+        return if (systemMessage.isBlank()) activePrompt else "$activePrompt\n\n$systemMessage"
     }
 
     private fun resolveCustomModelId(): String =

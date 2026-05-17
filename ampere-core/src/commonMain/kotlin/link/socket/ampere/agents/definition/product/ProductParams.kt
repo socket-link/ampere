@@ -30,7 +30,7 @@ object ProductPrompts {
     /**
      * Generates a perception context prompt from the agent's state.
      */
-    fun perceptionContext(state: ProductAgentState): String = buildString {
+    fun perceptionContext(state: ProductState): String = buildString {
         appendLine("# Product Manager State Analysis")
         appendLine()
         appendLine(state.toPerceptionText())

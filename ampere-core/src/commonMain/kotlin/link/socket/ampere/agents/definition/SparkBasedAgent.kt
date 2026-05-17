@@ -8,6 +8,8 @@ import kotlinx.serialization.Transient
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
+import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
+import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
@@ -25,6 +27,7 @@ import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.domain.agent.bundled.AgentDefinition
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
+import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.util.ioDispatcher
 import link.socket.ampere.util.runBlockingCompat
 
@@ -49,7 +52,7 @@ import link.socket.ampere.util.runBlockingCompat
  * @param aiConfiguration Optional AI configuration (uses default if not provided)
  */
 @Serializable
-class SparkBasedAgent(
+open class SparkBasedAgent(
     private val agentId: AgentId,
     private val cognitiveAffinity: CognitiveAffinity,
     @Transient
@@ -59,8 +62,30 @@ class SparkBasedAgent(
     @Transient
     private val _aiConfiguration: AIConfiguration? = null,
     @Transient
+    private val _llmProvider: LlmProvider? = null,
+    @Transient
     private val _observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
 ) : ObservableAgent<CodeState>(_eventApi, _observabilityScope) {
+
+    @Transient
+    private var _phaseSparkLibrary: PhaseSparkLibrary? = null
+
+    /**
+     * Sets the [PhaseSparkLibrary] consulted by the agent's [PhaseSparkManager]
+     * when [link.socket.ampere.agents.domain.cognition.sparks.AmpereSpikeFlags.declarativeSparksEnabled]
+     * is on. Must be called before the agent enters its first cognitive phase
+     * (the manager is constructed lazily on first phase entry).
+     */
+    internal fun setPhaseSparkLibrary(library: PhaseSparkLibrary?) {
+        _phaseSparkLibrary = library
+    }
+
+    override fun createPhaseSparkManager(): PhaseSparkManager<CodeState> =
+        PhaseSparkManager.createWithLibrary(
+            agent = this,
+            phaseConfig = agentConfiguration.cognitiveConfig.phaseSparks,
+            library = _phaseSparkLibrary,
+        )
 
     override val id: AgentId = agentId
 
@@ -82,6 +107,7 @@ class SparkBasedAgent(
                 prompt = currentSystemPrompt,
             ),
             aiConfiguration = effectiveAiConfiguration,
+            llmProvider = _llmProvider,
         )
 
     // Initialize the SparkStack with the configured affinity
@@ -94,7 +120,12 @@ class SparkBasedAgent(
     // ========================================================================
 
     private val reasoning: AgentReasoning by lazy {
-        AgentReasoning.create(agentConfiguration, id, _eventApi) {
+        AgentReasoning.create(
+            config = agentConfiguration,
+            executorId = id,
+            eventApi = _eventApi,
+            activePromptProvider = { currentSystemPrompt },
+        ) {
             agentRole = "Spark-Based Agent (${affinity.name})"
             availableTools = requiredTools
 

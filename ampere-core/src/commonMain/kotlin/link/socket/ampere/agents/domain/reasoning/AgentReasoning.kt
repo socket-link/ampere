@@ -69,8 +69,11 @@ class AgentReasoning private constructor(
     private val settings: ReasoningSettings,
     private val eventApi: AgentEventApi? = null,
     private val mockResponses: MockReasoningResponses? = null,
+    private val activePromptProvider: (() -> String?)? = null,
 ) {
-    private val llmService: AgentLLMService? = config?.let { AgentLLMService(it, eventApi) }
+    private val llmService: AgentLLMService? = config?.let {
+        AgentLLMService(it, eventApi, activePromptProvider)
+    }
     private val perceptionEvaluator: PerceptionEvaluator? = llmService?.let { PerceptionEvaluator(it) }
     private val planGenerator: PlanGenerator? = llmService?.let { PlanGenerator(it) }
     private val outcomeEvaluator: OutcomeEvaluator? = llmService?.let { OutcomeEvaluator(it) }
@@ -275,11 +278,17 @@ class AgentReasoning private constructor(
             config: AgentConfiguration,
             executorId: ExecutorId,
             eventApi: AgentEventApi? = null,
+            activePromptProvider: (() -> String?)? = null,
             configure: ReasoningSettingsBuilder.() -> Unit,
         ): AgentReasoning {
             val builder = ReasoningSettingsBuilder(executorId)
             builder.configure()
-            return AgentReasoning(config, builder.build(), eventApi = eventApi)
+            return AgentReasoning(
+                config = config,
+                settings = builder.build(),
+                eventApi = eventApi,
+                activePromptProvider = activePromptProvider,
+            )
         }
 
         /**

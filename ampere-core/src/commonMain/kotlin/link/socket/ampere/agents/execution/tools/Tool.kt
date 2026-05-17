@@ -5,6 +5,7 @@ import kotlinx.serialization.Transient
 import kotlinx.serialization.json.JsonElement
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.execution.ParameterStrategy
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.tools.mcp.McpToolExecutor
@@ -54,6 +55,21 @@ sealed interface Tool<Context : ExecutionContext> {
      * Built-in tools leave this null and bypass plugin permission checks.
      */
     val pluginManifest: PluginManifest?
+        get() = null
+
+    /**
+     * Optional [ParameterStrategy] describing how this tool's call parameters
+     * should be filled in from an unstructured intent.
+     *
+     * When non-null, the [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine]
+     * will use this strategy to generate a tool-specific sub-LLM prompt, parse the JSON
+     * response, and enrich the execution request before invocation. This co-locates
+     * "how do I fill in this tool's params" with the tool definition itself, so
+     * agents don't need to register strategies per-tool externally.
+     *
+     * Defaults to null (no strategy — fall back to direct execution).
+     */
+    val parameterStrategy: ParameterStrategy?
         get() = null
 
     /**

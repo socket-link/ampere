@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.domain.cognition
 
 import kotlinx.serialization.Serializable
+import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 
 /**
  * The SparkStack manages the accumulation of Spark layers and computes the
@@ -71,15 +72,28 @@ class SparkStack private constructor(
      *
      * The prompt is structured as:
      * 1. Affinity header and prompt fragment
-     * 2. Each Spark's prompt contribution, separated by horizontal rules
+     * 2. Effective role label (concatenated across the stack), if any spark contributes one
+     * 3. Each Spark's [Spark.promptContribution], separated by horizontal rules
+     * 4. For each Spark, its [Spark.phaseContributions] entry for [currentPhase] when present
      *
+     * Brute-force composition — every spark on the stack contributes; nothing is dropped or
+     * overridden. Later sparks appear later in the prompt (closer to the user message).
+     *
+     * @param currentPhase Optional cognitive phase. When non-null, each spark's per-phase
+     *   contribution for that phase is appended after its base contribution. When null,
+     *   only base contributions are included.
      * @return The complete system prompt as markdown
      */
-    fun buildSystemPrompt(): String = buildString {
+    fun buildSystemPrompt(currentPhase: CognitivePhase? = null): String = buildString {
         // Start with affinity
         appendLine("# Cognitive Context")
         appendLine()
         appendLine("**Affinity:** ${affinity.name}")
+
+        val effectiveRole = effectiveAgentRole()
+        if (effectiveRole != null) {
+            appendLine("**Role:** $effectiveRole")
+        }
         appendLine()
         appendLine(affinity.promptFragment)
 
@@ -88,7 +102,52 @@ class SparkStack private constructor(
             appendLine()
             appendLine("---")
             appendLine()
-            appendLine(spark.promptContribution)
+            if (spark.promptContribution.isNotBlank()) {
+                appendLine(spark.promptContribution)
+            }
+            if (currentPhase != null) {
+                val phaseSection = spark.phaseContributions[currentPhase]
+                if (!phaseSection.isNullOrBlank()) {
+                    if (spark.promptContribution.isNotBlank()) {
+                        appendLine()
+                    }
+                    appendLine("### When ${phaseHeader(currentPhase)}")
+                    appendLine()
+                    appendLine(phaseSection)
+                }
+            }
+        }
+    }
+
+    private fun phaseHeader(phase: CognitivePhase): String = when (phase) {
+        CognitivePhase.PERCEIVE -> "Perceiving"
+        CognitivePhase.PLAN -> "Planning"
+        CognitivePhase.EXECUTE -> "Executing"
+        CognitivePhase.LEARN -> "Learning"
+    }
+
+    /**
+     * Concatenates each Spark's [Spark.agentRole] contribution in stack order.
+     *
+     * Sparks that don't contribute a role are skipped. Returns null when no Spark
+     * contributes a role. Example: a Cooking spark stacked on a Project Management
+     * spark yields "Project Manager + Cooking Domain".
+     */
+    fun effectiveAgentRole(): String? {
+        val fragments = sparks.mapNotNull { it.agentRole?.takeIf { role -> role.isNotBlank() } }
+        if (fragments.isEmpty()) return null
+        return fragments.joinToString(" + ")
+    }
+
+    /**
+     * Union of every Spark's [Spark.requestedToolIds]. Use this when deciding which
+     * tools to expose to the LLM; intersect with [effectiveAllowedTools] for narrowing.
+     */
+    fun effectiveRequestedTools(): Set<ToolId> {
+        if (sparks.isEmpty()) return emptySet()
+        return sparks.fold(mutableSetOf<ToolId>()) { acc, spark ->
+            acc += spark.requestedToolIds
+            acc
         }
     }
 

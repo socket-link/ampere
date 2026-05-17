@@ -114,8 +114,9 @@ class ToolExecutionEngine(
             )
         }
 
-        // Get strategy for this tool
-        val strategy = strategies[tool.id]
+        // Get strategy for this tool — prefer the tool's own strategy, fall back to
+        // the externally-registered map for legacy registrations.
+        val strategy = tool.parameterStrategy ?: strategies[tool.id]
         if (strategy == null) {
             // No strategy registered - try generic execution
             return executeGenericTool(tool, request, startTime)
