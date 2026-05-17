@@ -16,8 +16,46 @@ class PhaseSparkLibraryTest {
 
         val ids = sparks.map { it.sparkId }.toSet()
         assertEquals(
-            setOf("cooking-domain", "recipe-arc-task", "minimal-edge"),
+            setOf(
+                "cooking-domain",
+                "recipe-arc-task",
+                "minimal-edge",
+                "code-agent",
+                "product-agent",
+                "project-agent",
+                "quality-agent",
+            ),
             ids,
+        )
+    }
+
+    @Test
+    fun `code-agent spark parses and exposes per-phase contributions`() = runTest {
+        val library = DefaultPhaseSparkLibrary.load()
+
+        val codeAgent = library.byId("code-agent")
+        assertNotNull(codeAgent, "code-agent.spark.md should load via the default library")
+        assertTrue(codeAgent is DeclarativePhaseSpark)
+
+        assertEquals(
+            setOf(
+                CognitivePhase.PERCEIVE,
+                CognitivePhase.PLAN,
+                CognitivePhase.EXECUTE,
+                CognitivePhase.LEARN,
+            ),
+            codeAgent.eligiblePhases.toSet(),
+        )
+        // Planning section delegates the JSON shape to the plan_steps tool.
+        val planContribution = codeAgent.phaseContributions[CognitivePhase.PLAN]
+        assertNotNull(planContribution)
+        assertTrue(
+            planContribution.contains("plan_steps"),
+            "PLAN section should hand the JSON shape off to the plan_steps tool",
+        )
+        assertTrue(
+            !planContribution.contains("estimatedComplexity"),
+            "PLAN section should no longer inline the JSON schema fields",
         )
     }
 

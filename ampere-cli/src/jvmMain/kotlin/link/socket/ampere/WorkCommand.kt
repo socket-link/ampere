@@ -108,7 +108,7 @@ class WorkCommand(
             terminal.println()
 
             // Show what would happen
-            val issues = context.codeAgent.queryAvailableIssues()
+            val issues = context.codeIssueWorkflow.queryAvailableIssues()
             terminal.println("Would work on ${issues.size} available issue(s)")
             issues.take(5).forEach { issue ->
                 terminal.println("  #${issue.number}: ${issue.title}")
@@ -134,7 +134,9 @@ class WorkCommand(
             }
         } else {
             // Work on single issue
-            val issues = context.codeAgent.queryAvailableIssues()
+            val workflow = context.codeIssueWorkflow
+            val agent = context.codeAgent
+            val issues = workflow.queryAvailableIssues()
 
             if (issues.isEmpty()) {
                 terminal.println(yellow("No available issues found"))
@@ -147,13 +149,13 @@ class WorkCommand(
 
             terminal.println("Working on issue #${issue.number}: ${issue.title}")
 
-            val claimed = context.codeAgent.claimIssue(issue.number)
+            val claimed = workflow.claimIssue(issue.number)
             if (claimed.isFailure) {
                 terminal.println(red("Failed to claim issue: ${claimed.exceptionOrNull()?.message}"))
                 return@runBlocking
             }
 
-            val result = context.codeAgent.workOnIssue(issue)
+            val result = workflow.workOnIssue(issue, agent)
             if (result.isSuccess) {
                 terminal.println(green("✓ Successfully completed issue #${issue.number}"))
             } else {

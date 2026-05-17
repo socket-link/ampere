@@ -18,7 +18,8 @@ import kotlinx.datetime.Clock
 import link.socket.ampere.AmpereContext
 import link.socket.ampere.agents.definition.AgentFactory
 import link.socket.ampere.agents.definition.AgentType
-import link.socket.ampere.agents.definition.CodeAgent
+import link.socket.ampere.agents.definition.SparkBasedAgent
+import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
@@ -108,7 +109,7 @@ fun main(escalation: Boolean = false) {
             )
 
             // Create CodeWriterAgent
-            val agent = agentFactory.create<CodeAgent>(AgentType.CODE)
+            val agent = agentFactory.create<SparkBasedAgent<CodeState>>(AgentType.CODE)
 
             println("🤖 CodeWriterAgent created")
             println("   Agent ID: ${agent.id}")
@@ -376,7 +377,7 @@ internal fun findGeneratedFiles(outputDir: File): GeneratedFiles? {
  * Handle ticket assignment by running the cognitive cycle.
  */
 private suspend fun handleTicketAssignment(
-    agent: CodeAgent,
+    agent: SparkBasedAgent<CodeState>,
     ticketId: String,
     context: AmpereContext,
     eventApi: AgentEventApi,

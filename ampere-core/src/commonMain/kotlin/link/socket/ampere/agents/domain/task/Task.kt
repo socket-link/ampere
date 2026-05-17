@@ -24,6 +24,14 @@ sealed interface Task {
         override val status: TaskStatus,
         val description: String,
         val assignedTo: AssignedTo? = null,
+        /**
+         * Tool id this step nominates for execution. Populated by the planning
+         * pipeline from the LLM's `toolToUse` field; `null` denotes a pure
+         * reasoning step that performs no tool invocation.
+         *
+         * The executor routes strictly on this id with no keyword fallback.
+         */
+        val toolId: String? = null,
     ) : Task
 
     companion object {

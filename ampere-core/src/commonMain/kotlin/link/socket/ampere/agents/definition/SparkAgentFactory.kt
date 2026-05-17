@@ -2,6 +2,7 @@ package link.socket.ampere.agents.definition
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.agents.domain.cognition.sparks.LanguageSpark
@@ -54,7 +55,7 @@ class SparkAgentFactory(
         projectSpark: ProjectSpark,
         language: LanguageSpark = LanguageSpark.Kotlin,
         id: AgentId = generateUUID("CodeAgent-${projectSpark.projectId}"),
-    ): SparkBasedAgent {
+    ): SparkBasedAgent<CodeState> {
         val agent = createAgent(id, CognitiveAffinity.ANALYTICAL)
         agent.applySpark(projectSpark)
         agent.applySpark(RoleSpark.Code)
@@ -78,7 +79,7 @@ class SparkAgentFactory(
     fun createResearchAgent(
         projectSpark: ProjectSpark,
         id: AgentId = generateUUID("ResearchAgent-${projectSpark.projectId}"),
-    ): SparkBasedAgent {
+    ): SparkBasedAgent<CodeState> {
         val agent = createAgent(id, CognitiveAffinity.EXPLORATORY)
         agent.applySpark(projectSpark)
         agent.applySpark(RoleSpark.Research)
@@ -101,7 +102,7 @@ class SparkAgentFactory(
     fun createPlanningAgent(
         projectSpark: ProjectSpark,
         id: AgentId = generateUUID("PlanningAgent-${projectSpark.projectId}"),
-    ): SparkBasedAgent {
+    ): SparkBasedAgent<CodeState> {
         val agent = createAgent(id, CognitiveAffinity.INTEGRATIVE)
         agent.applySpark(projectSpark)
         agent.applySpark(RoleSpark.Planning)
@@ -124,7 +125,7 @@ class SparkAgentFactory(
     fun createOpsAgent(
         projectSpark: ProjectSpark,
         id: AgentId = generateUUID("OpsAgent-${projectSpark.projectId}"),
-    ): SparkBasedAgent {
+    ): SparkBasedAgent<CodeState> {
         val agent = createAgent(id, CognitiveAffinity.OPERATIONAL)
         agent.applySpark(projectSpark)
         agent.applySpark(RoleSpark.Operations)
@@ -143,13 +144,14 @@ class SparkAgentFactory(
     fun createAgent(
         id: AgentId,
         affinity: CognitiveAffinity,
-    ): SparkBasedAgent {
+    ): SparkBasedAgent<CodeState> {
         val eventApi = eventApiFactory?.invoke(id)
         val memoryService = memoryServiceFactory?.invoke(id)
 
         return SparkBasedAgent(
             agentId = id,
             cognitiveAffinity = affinity,
+            initialState = CodeState.blank,
             _eventApi = eventApi,
             _memoryService = memoryService,
             _aiConfiguration = defaultAiConfiguration,
@@ -211,8 +213,8 @@ class SparkAgentFactory(
 /**
  * Helper extension to apply a spark with simpler syntax.
  */
-private fun SparkBasedAgent.applySpark(spark: Spark) {
-    this.spark<SparkBasedAgent>(spark)
+private fun SparkBasedAgent<CodeState>.applySpark(spark: Spark) {
+    this.spark<SparkBasedAgent<CodeState>>(spark)
 }
 
 /**
@@ -223,7 +225,7 @@ private fun SparkBasedAgent.applySpark(spark: Spark) {
  * agent.withSparks(projectSpark, roleSpark, languageSpark)
  * ```
  */
-fun SparkBasedAgent.withSparks(vararg sparks: Spark): SparkBasedAgent {
-    sparks.forEach { this.spark<SparkBasedAgent>(it) }
+fun SparkBasedAgent<CodeState>.withSparks(vararg sparks: Spark): SparkBasedAgent<CodeState> {
+    sparks.forEach { this.spark<SparkBasedAgent<CodeState>>(it) }
     return this
 }

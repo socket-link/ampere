@@ -53,7 +53,7 @@ sealed interface RoutingRule {
     /**
      * Routes based on the agent's role name.
      *
-     * Example: "CodeAgent" -> coding-specialized model.
+     * Example: `"Code Writer"` -> coding-specialized model.
      */
     @Serializable
     data class ByRole(

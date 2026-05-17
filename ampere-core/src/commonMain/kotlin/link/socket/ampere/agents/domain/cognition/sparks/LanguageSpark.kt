@@ -2,6 +2,7 @@ package link.socket.ampere.agents.domain.cognition.sparks
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import link.socket.ampere.agents.domain.cognition.FileAccessScope
 import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.agents.domain.cognition.ToolId
@@ -70,7 +71,52 @@ You are working with **Kotlin** code. Follow these idioms and best practices:
 - Use meaningful names that express intent
 - Keep functions small and focused
 - Document public APIs with KDoc
+
+### File and Package Conventions
+
+- Source roots: `src/commonMain/kotlin/`, `src/jvmMain/kotlin/`,
+  `src/main/kotlin/`. The `package` declaration mirrors the path under the
+  source root.
+  - `src/commonMain/kotlin/link/socket/ampere/User.kt` → `package link.socket.ampere`
+  - `src/main/kotlin/com/example/Foo.kt` → `package com.example`
+- Every generated `.kt` file starts with its `package` declaration followed
+  by its imports.
+- Prefer one top-level declaration per file when the file is named after
+  the declaration; multi-declaration files are fine when the declarations
+  are tightly related (e.g. a sealed class and its `data` subclasses).
+
+### When Generating Code
+
+- Generate **complete, compilable** code — no `TODO`s, no placeholders, no
+  partial implementations.
+- Include every necessary import; rely on the package convention above for
+  the `package` line.
+- Add KDoc on public APIs.
         """.trimIndent()
+
+        @Transient
+        override val phaseContributions: Map<CognitivePhase, String> = mapOf(
+            CognitivePhase.PLAN to """
+### Kotlin planning notes
+
+- When a step will produce new files, name them with `.kt` (or `.kts` for
+  Gradle scripts) and place them under the appropriate source root
+  (`commonMain`, `jvmMain`, `androidMain`, etc.) so the `package` line
+  follows from the path.
+- Group related declarations into the same step when they belong in the
+  same file (a sealed class plus its subclasses, an interface plus its
+  default implementations).
+            """.trimIndent(),
+            CognitivePhase.EXECUTE to """
+### Kotlin execution notes
+
+- Compilation-equivalent failure modes you should surface as critical:
+  missing `package` declaration, unresolved imports, signature mismatch
+  against `expect`/`actual` declarations.
+- Treat warnings about unsafe casts (`as`), `!!`, or platform-typed
+  values as something to fix in the same step rather than defer.
+            """.trimIndent(),
+        )
 
         override val allowedTools: Set<ToolId>? = null // Inherits from role
 

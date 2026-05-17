@@ -4,8 +4,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.definition.ProductAgent
-import link.socket.ampere.agents.definition.QualityAgent
+import link.socket.ampere.agents.definition.SparkBasedAgent
 import link.socket.ampere.agents.definition.product.ProductState
 import link.socket.ampere.agents.definition.qa.QualityState
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
@@ -146,14 +145,13 @@ fun stubProductManagerState(
     )
 
 fun stubProductManagerAgent(
-    ticketOrchestrator: TicketOrchestrator,
-    initialState: ProductState = stubProductManagerState(),
+    @Suppress("UNUSED_PARAMETER") ticketOrchestrator: TicketOrchestrator,
+    @Suppress("UNUSED_PARAMETER") initialState: ProductState = stubProductManagerState(),
     agentConfiguration: AgentConfiguration = stubAgentConfiguration(),
-): ProductAgent =
-    ProductAgent(
-        initialState = initialState,
-        agentConfiguration = agentConfiguration,
-        ticketOrchestrator = ticketOrchestrator,
+): SparkBasedAgent<ProductState> =
+    SparkBasedAgent.Product(
+        agentId = "stub-product-agent",
+        aiConfiguration = agentConfiguration.aiConfiguration,
     )
 
 fun stubQualityAssuranceState(
@@ -168,10 +166,10 @@ fun stubQualityAssuranceState(
     )
 
 fun stubQualityAssuranceAgent(
-    initialState: QualityState = stubQualityAssuranceState(),
+    @Suppress("UNUSED_PARAMETER") initialState: QualityState = stubQualityAssuranceState(),
     agentConfiguration: AgentConfiguration = stubAgentConfiguration(),
-): QualityAgent =
-    QualityAgent(
-        initialState = initialState,
-        agentConfiguration = agentConfiguration,
+): SparkBasedAgent<QualityState> =
+    SparkBasedAgent.Quality(
+        agentId = "stub-quality-agent",
+        aiConfiguration = agentConfiguration.aiConfiguration,
     )

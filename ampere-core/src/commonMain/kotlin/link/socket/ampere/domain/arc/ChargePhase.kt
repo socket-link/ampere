@@ -3,6 +3,7 @@ package link.socket.ampere.domain.arc
 import link.socket.ampere.agents.definition.Agent
 import link.socket.ampere.agents.definition.SparkAgentFactory
 import link.socket.ampere.agents.definition.SparkBasedAgent
+import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.agents.domain.cognition.sparks.LanguageSpark
@@ -287,7 +288,7 @@ internal class GoalTreeBuilder {
 internal class ArcAgentSpawner(
     private val agentFactory: SparkAgentFactory = SparkAgentFactory(),
 ) {
-    fun spawn(arcConfig: ArcConfig, projectContext: ProjectContext): List<SparkBasedAgent> {
+    fun spawn(arcConfig: ArcConfig, projectContext: ProjectContext): List<SparkBasedAgent<CodeState>> {
         val projectSpark = projectContext.toProjectSpark()
 
         return arcConfig.agents.map { agentConfig ->
@@ -299,12 +300,12 @@ internal class ArcAgentSpawner(
                 affinity = affinity,
             )
 
-            agent.spark<SparkBasedAgent>(projectSpark)
-            agent.spark<SparkBasedAgent>(roleSpark)
+            agent.spark<SparkBasedAgent<CodeState>>(projectSpark)
+            agent.spark<SparkBasedAgent<CodeState>>(roleSpark)
 
             agentConfig.sparks
                 .map { AdditionalSparkResolver.resolve(it) }
-                .forEach { spark -> agent.spark<SparkBasedAgent>(spark) }
+                .forEach { spark -> agent.spark<SparkBasedAgent<CodeState>>(spark) }
 
             agent
         }

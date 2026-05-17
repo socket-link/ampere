@@ -3,7 +3,7 @@ package link.socket.ampere.agents.definition.code
 import kotlinx.serialization.Serializable
 
 /**
- * Issue workflow status tracking for CodeAgent.
+ * Issue workflow status tracking for the spark-based code agent's issue workflow.
  *
  * Represents the lifecycle of an issue as it moves through the development workflow:
  * 1. CLAIMED - Agent has claimed the issue

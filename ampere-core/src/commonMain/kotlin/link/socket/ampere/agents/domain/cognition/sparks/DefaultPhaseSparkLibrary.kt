@@ -9,6 +9,10 @@ private val DEFAULT_SPARKS: List<String> = listOf(
     "files/sparks/cooking-domain.spark.md",
     "files/sparks/recipe-arc-task.spark.md",
     "files/sparks/minimal-edge.spark.md",
+    "files/sparks/code-agent.spark.md",
+    "files/sparks/product-agent.spark.md",
+    "files/sparks/project-agent.spark.md",
+    "files/sparks/quality-agent.spark.md",
 )
 
 /**

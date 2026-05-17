@@ -8,7 +8,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.definition.CodeAgent
+import link.socket.ampere.agents.definition.SparkBasedAgent
+import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
@@ -16,6 +17,8 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.execution.AutonomousWorkLoop
 import link.socket.ampere.agents.execution.WorkLoopConfig
+import link.socket.ampere.agents.execution.issue.CodeIssueWorkflow
+import link.socket.ampere.integrations.issues.IssueTrackerProvider
 import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.environment.workspace.defaultWorkspace
@@ -225,29 +228,41 @@ class AmpereContext(
     }
 
     /**
-     * CodeAgent instance for autonomous work.
-     * Set when createAutonomousWorkLoop() is called.
+     * The code agent instance for autonomous work. Set when
+     * [createAutonomousWorkLoop] is called.
      */
-    private var _codeAgent: CodeAgent? = null
+    private var _codeAgent: SparkBasedAgent<CodeState>? = null
 
     /**
-     * Access the CodeAgent instance.
-     * Throws an error if not initialized via createAutonomousWorkLoop().
+     * Access the code agent instance.
+     * Throws an error if not initialized via [createAutonomousWorkLoop].
      */
-    val codeAgent: CodeAgent
-        get() = _codeAgent ?: error("CodeAgent not initialized. Call createAutonomousWorkLoop() first.")
+    val codeAgent: SparkBasedAgent<CodeState>
+        get() = _codeAgent ?: error("codeAgent not initialized. Call createAutonomousWorkLoop() first.")
 
     /**
-     * Autonomous work loop for CodeAgent.
-     * Manages continuous polling and processing of GitHub issues.
+     * The issue → task → PR workflow paired with the code agent. Owns the
+     * claim/work-on/update lifecycle that used to live on the legacy
+     * `CodeAgent`. Set when [createAutonomousWorkLoop] is called.
      */
-    private var _autonomousWorkLoop: AutonomousWorkLoop? = null
+    private var _codeIssueWorkflow: CodeIssueWorkflow? = null
+
+    val codeIssueWorkflow: CodeIssueWorkflow
+        get() = _codeIssueWorkflow ?: error(
+            "codeIssueWorkflow not initialized. Call createAutonomousWorkLoop() first.",
+        )
+
+    /**
+     * Autonomous work loop for the code agent. Manages continuous polling
+     * and processing of GitHub issues.
+     */
+    private var _autonomousWorkLoop: AutonomousWorkLoop<CodeState>? = null
 
     /**
      * Access the autonomous work loop.
-     * Throws an error if not initialized via createAutonomousWorkLoop().
+     * Throws an error if not initialized via [createAutonomousWorkLoop].
      */
-    val autonomousWorkLoop: AutonomousWorkLoop
+    val autonomousWorkLoop: AutonomousWorkLoop<CodeState>
         get() = _autonomousWorkLoop ?: error("Autonomous work loop not initialized. Call createAutonomousWorkLoop() first.")
 
     /**
@@ -316,23 +331,34 @@ class AmpereContext(
     }
 
     /**
-     * Create and initialize the autonomous work loop for a CodeAgent.
+     * Create and initialize the autonomous work loop for a code agent.
      *
      * This must be called before attempting to start autonomous work.
      * The work loop is connected to the shared event bus so that work
      * events are visible in the dashboard.
      *
-     * @param codeAgent The CodeAgent instance that will process issues
+     * @param codeAgent The agent instance that will process issues
+     * @param issueTrackerProvider Source of issues (typically GitHub)
+     * @param repository Repository identifier the provider scopes its queries to
      * @param config Optional configuration for work loop behavior
      * @return The created AutonomousWorkLoop instance
      */
     fun createAutonomousWorkLoop(
-        codeAgent: CodeAgent,
+        codeAgent: SparkBasedAgent<CodeState>,
+        issueTrackerProvider: IssueTrackerProvider,
+        repository: String,
         config: WorkLoopConfig = WorkLoopConfig(),
-    ): AutonomousWorkLoop {
+    ): AutonomousWorkLoop<CodeState> {
+        val workflow = CodeIssueWorkflow(
+            issueTrackerProvider = issueTrackerProvider,
+            repository = repository,
+            agentId = codeAgent.id,
+        )
         _codeAgent = codeAgent
+        _codeIssueWorkflow = workflow
         _autonomousWorkLoop = AutonomousWorkLoop(
             agent = codeAgent,
+            workflow = workflow,
             config = config,
             scope = scope,
             eventApiFactory = { agentId -> environmentService.createEventApi(agentId) },

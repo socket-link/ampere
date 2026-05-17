@@ -24,37 +24,26 @@ import link.socket.ampere.plugin.permission.UserGrants
  * Unified reasoning facade that composes all cognitive services.
  *
  * This is the primary interface agents use to access reasoning capabilities.
- * It combines all the individual services (LLM, perception, planning, execution,
- * evaluation, knowledge extraction) into a cohesive API.
+ * It combines all the individual services (LLM, perception, planning,
+ * execution, evaluation, knowledge extraction) into a cohesive API.
  *
- * Agents configure this facade with their specific customizations:
- * - Context builders for perception
- * - Custom prompts for planning
- * - Task factories for plan generation
- * - Parameter strategies for tool execution
- * - Knowledge extraction customizations
+ * Per-phase context builders, planning prompt builders, and custom knowledge
+ * extractors were deleted by AMPR-163 Task 11; spark-based agents now express
+ * that guidance through their stacked `.spark.md` per-phase contributions and
+ * fall through to the generic `KnowledgeExtractor.extractDefault` for
+ * knowledge extraction.
  *
  * Usage:
  * ```kotlin
- * val reasoning = AgentReasoning.create(config) {
- *     agentRole = "Project Manager"
- *     availableTools = setOf(toolCreateIssues, toolAskHuman)
- *
- *     perception {
- *         contextBuilder = { state -> buildPMContext(state) }
- *     }
- *
- *     planning {
- *         taskFactory = PMTaskFactory
- *         customPrompt = { task, ideas, tools, knowledge -> buildPMPrompt(...) }
- *     }
+ * val reasoning = AgentReasoning.create(config, executorId, eventApi, activePromptProvider) {
+ *     agentRole = "Spark-Based Agent (ANALYTICAL)"
+ *     availableTools = requiredTools
  *
  *     execution {
  *         registerStrategy("create_issues", ProjectParams.IssueCreation(...))
  *     }
  * }
  *
- * // Use in agent
  * val idea = reasoning.evaluatePerception(perception)
  * val plan = reasoning.generatePlan(task, ideas)
  * val outcome = reasoning.executeTool(tool, request)
@@ -111,11 +100,7 @@ class AgentReasoning private constructor(
 
         return perceptionEvaluator?.evaluate(
             perception = perception,
-            contextBuilder = { state ->
-                @Suppress("UNCHECKED_CAST")
-                settings.perceptionContextBuilder?.invoke(state as AgentState)
-                    ?: "State: $state"
-            },
+            contextBuilder = { state -> "State: $state" },
             agentRole = settings.agentRole,
             availableTools = settings.availableTools,
         ) ?: throw IllegalStateException("No perception evaluator configured")
@@ -145,7 +130,7 @@ class AgentReasoning private constructor(
             availableTools = settings.availableTools,
             relevantKnowledge = relevantKnowledge,
             taskFactory = settings.taskFactory,
-            customPromptBuilder = settings.planningPromptBuilder,
+            customPromptBuilder = null,
         ) ?: throw IllegalStateException("No plan generator configured")
     }
 
@@ -205,7 +190,7 @@ class AgentReasoning private constructor(
         val result = outcomeEvaluator?.evaluate(
             outcomes = outcomes,
             agentRole = settings.agentRole,
-            contextBuilder = settings.outcomeContextBuilder,
+            contextBuilder = null,
         ) ?: throw IllegalStateException("No outcome evaluator configured")
 
         // Store learnings in memory if available
@@ -219,16 +204,17 @@ class AgentReasoning private constructor(
     }
 
     /**
-     * Extracts knowledge from a single outcome.
+     * Extracts knowledge from a single outcome using the generic
+     * `KnowledgeExtractor.extractDefault`. Per-agent custom extractors were
+     * removed by AMPR-163 Task 11; agents now express role-specific learning
+     * guidance through the `## When Learning` section of their `.spark.md`.
      */
     fun extractKnowledge(
         outcome: Outcome,
         task: Task,
         plan: Plan,
-    ): Knowledge.FromOutcome {
-        return settings.knowledgeExtractor?.invoke(outcome, task, plan)
-            ?: KnowledgeExtractor.extractDefault(outcome, task, plan, settings.agentRole)
-    }
+    ): Knowledge.FromOutcome =
+        KnowledgeExtractor.extractDefault(outcome, task, plan, settings.agentRole)
 
     // ========================================================================
     // Direct LLM Access
@@ -318,13 +304,9 @@ class AgentReasoning private constructor(
                 agentRole = "Test Agent",
                 availableTools = emptySet(),
                 executor = null,
-                perceptionContextBuilder = null,
-                planningPromptBuilder = null,
                 taskFactory = DefaultTaskFactory,
                 parameterStrategies = emptyMap(),
                 userGrantProvider = { UserGrants() },
-                outcomeContextBuilder = null,
-                knowledgeExtractor = null,
             )
             return AgentReasoning(
                 config = null,
@@ -387,59 +369,44 @@ class MockReasoningBuilder {
 }
 
 /**
- * Settings for configuring agent reasoning behavior.
+ * Settings for configuring agent reasoning behaviour.
+ *
+ * AMPR-163 Task 11 removed the per-phase customisation fields
+ * (perceptionContextBuilder, planningPromptBuilder, outcomeContextBuilder,
+ * knowledgeExtractor): role-specific guidance now lives in stacked
+ * `.spark.md` per-phase contributions instead of in agent-side Kotlin
+ * builders.
  */
 data class ReasoningSettings(
     val executorId: ExecutorId,
     val agentRole: String,
     val availableTools: Set<Tool<*>>,
     val executor: Executor?,
-    val perceptionContextBuilder: ((AgentState) -> String)?,
-    val planningPromptBuilder: ((Task, List<Idea>, Set<Tool<*>>, List<KnowledgeWithScore>) -> String)?,
     val taskFactory: TaskFactory,
     val parameterStrategies: Map<String, ParameterStrategy>,
     val userGrantProvider: suspend (PluginManifest) -> UserGrants,
-    val outcomeContextBuilder: ((List<Outcome>) -> String)?,
-    val knowledgeExtractor: ((Outcome, Task, Plan) -> Knowledge.FromOutcome)?,
 )
 
 /**
- * Builder for ReasoningSettings.
+ * Builder for [ReasoningSettings].
+ *
+ * The DSL is intentionally narrow after AMPR-163 Task 11. Only
+ * [execution] survives — it registers parameter strategies and the
+ * user-grant provider. Per-phase prompt/context customisation has moved
+ * to the `.spark.md` artifacts the agent stacks at construction time.
  */
 class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
     var agentRole: String = "Agent"
     var availableTools: Set<Tool<*>> = emptySet()
     var executor: Executor? = null
+    var taskFactory: TaskFactory = DefaultTaskFactory
 
-    private var perceptionContextBuilder: ((AgentState) -> String)? = null
-    private var planningPromptBuilder: ((Task, List<Idea>, Set<Tool<*>>, List<KnowledgeWithScore>) -> String)? = null
-    private var taskFactory: TaskFactory = DefaultTaskFactory
     private val parameterStrategies = mutableMapOf<String, ParameterStrategy>()
     private var userGrantProvider: suspend (PluginManifest) -> UserGrants = { UserGrants() }
-    private var outcomeContextBuilder: ((List<Outcome>) -> String)? = null
-    private var knowledgeExtractor: ((Outcome, Task, Plan) -> Knowledge.FromOutcome)? = null
 
     /**
-     * Configure perception settings.
-     */
-    fun perception(configure: PerceptionSettingsBuilder.() -> Unit) {
-        val builder = PerceptionSettingsBuilder()
-        builder.configure()
-        perceptionContextBuilder = builder.contextBuilder
-    }
-
-    /**
-     * Configure planning settings.
-     */
-    fun planning(configure: PlanningSettingsBuilder.() -> Unit) {
-        val builder = PlanningSettingsBuilder()
-        builder.configure()
-        planningPromptBuilder = builder.customPrompt
-        builder.taskFactory?.let { taskFactory = it }
-    }
-
-    /**
-     * Configure execution settings.
+     * Configure execution settings (parameter strategies + user-grant
+     * provider). The only surviving per-phase DSL after AMPR-163 Task 11.
      */
     fun execution(configure: ExecutionSettingsBuilder.() -> Unit) {
         val builder = ExecutionSettingsBuilder()
@@ -448,48 +415,15 @@ class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
         userGrantProvider = builder.userGrantProvider
     }
 
-    /**
-     * Configure outcome evaluation settings.
-     */
-    fun evaluation(configure: EvaluationSettingsBuilder.() -> Unit) {
-        val builder = EvaluationSettingsBuilder()
-        builder.configure()
-        outcomeContextBuilder = builder.contextBuilder
-    }
-
-    /**
-     * Configure knowledge extraction settings.
-     */
-    fun knowledge(configure: KnowledgeSettingsBuilder.() -> Unit) {
-        val builder = KnowledgeSettingsBuilder()
-        builder.configure()
-        knowledgeExtractor = builder.extractor
-    }
-
-    fun build(): ReasoningSettings {
-        return ReasoningSettings(
-            executorId = executorId,
-            agentRole = agentRole,
-            availableTools = availableTools,
-            executor = executor,
-            perceptionContextBuilder = perceptionContextBuilder,
-            planningPromptBuilder = planningPromptBuilder,
-            taskFactory = taskFactory,
-            parameterStrategies = parameterStrategies.toMap(),
-            userGrantProvider = userGrantProvider,
-            outcomeContextBuilder = outcomeContextBuilder,
-            knowledgeExtractor = knowledgeExtractor,
-        )
-    }
-}
-
-class PerceptionSettingsBuilder {
-    var contextBuilder: ((AgentState) -> String)? = null
-}
-
-class PlanningSettingsBuilder {
-    var customPrompt: ((Task, List<Idea>, Set<Tool<*>>, List<KnowledgeWithScore>) -> String)? = null
-    var taskFactory: TaskFactory? = null
+    fun build(): ReasoningSettings = ReasoningSettings(
+        executorId = executorId,
+        agentRole = agentRole,
+        availableTools = availableTools,
+        executor = executor,
+        taskFactory = taskFactory,
+        parameterStrategies = parameterStrategies.toMap(),
+        userGrantProvider = userGrantProvider,
+    )
 }
 
 class ExecutionSettingsBuilder {
@@ -503,12 +437,4 @@ class ExecutionSettingsBuilder {
     fun userGrants(provider: suspend (PluginManifest) -> UserGrants) {
         userGrantProvider = provider
     }
-}
-
-class EvaluationSettingsBuilder {
-    var contextBuilder: ((List<Outcome>) -> String)? = null
-}
-
-class KnowledgeSettingsBuilder {
-    var extractor: ((Outcome, Task, Plan) -> Knowledge.FromOutcome)? = null
 }

@@ -5,8 +5,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
+import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.cognition.sparks.RoleSpark
+import link.socket.ampere.agents.execution.tools.planning.PLAN_STEPS_TOOL_ID
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModel
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
@@ -34,6 +36,7 @@ class SparkBasedAgentActivePromptProviderTest {
         val agent = SparkBasedAgent(
             agentId = "test-spark-agent",
             cognitiveAffinity = CognitiveAffinity.ANALYTICAL,
+            initialState = CodeState.blank,
             _aiConfiguration = FakeAIConfiguration(),
             _llmProvider = provider,
         )
@@ -45,7 +48,7 @@ class SparkBasedAgentActivePromptProviderTest {
             "expected affinity header in payload, got: $firstPayload",
         )
 
-        agent.spark<SparkBasedAgent>(RoleSpark.Code)
+        agent.spark<SparkBasedAgent<CodeState>>(RoleSpark.Code)
         agent.callLLM("second")
         val secondPayload = captured.last()
         assertTrue(
@@ -54,5 +57,21 @@ class SparkBasedAgentActivePromptProviderTest {
         )
 
         assertEquals(2, captured.size)
+    }
+
+    @Test
+    fun `every SparkBasedAgent ships with the plan_steps tool by default`() {
+        val agent = SparkBasedAgent(
+            agentId = "default-tools-agent",
+            cognitiveAffinity = CognitiveAffinity.ANALYTICAL,
+            initialState = CodeState.blank,
+            _aiConfiguration = FakeAIConfiguration(),
+        )
+
+        val toolIds = agent.requiredTools.map { it.id }.toSet()
+        assertTrue(
+            PLAN_STEPS_TOOL_ID in toolIds,
+            "Spark-based agents should include the plan_steps tool by default; got $toolIds",
+        )
     }
 }

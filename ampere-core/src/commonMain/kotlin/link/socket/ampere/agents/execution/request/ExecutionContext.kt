@@ -2,10 +2,12 @@ package link.socket.ampere.agents.execution.request
 
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.knowledge.Knowledge
+import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.execution.executor.ExecutorId
+import link.socket.ampere.agents.execution.tools.ToolId
 import link.socket.ampere.agents.execution.tools.git.GitOperationRequest
 import link.socket.ampere.agents.execution.tools.issue.BatchIssueCreateRequest
 
@@ -89,4 +91,43 @@ sealed interface ExecutionContext {
         val gitRequest: GitOperationRequest,
         override val knowledgeFromPastMemory: List<Knowledge> = emptyList(),
     ) : ExecutionContext
+
+    /**
+     * Context for the `plan_steps` tool — agent-neutral plan generation.
+     *
+     * Carries everything the tool's strategy needs to produce a structured plan:
+     * the task being planned for, the perceived ideas, recalled knowledge, the
+     * agent's role label, and a minimal description of the tools available so
+     * the LLM can populate `toolToUse` per step.
+     *
+     * The strategy fills [parsedPlan] from its LLM response; the tool's
+     * `execute()` reads it back out and wraps it in an outcome.
+     */
+    @Serializable
+    data class Planning(
+        override val executorId: ExecutorId,
+        override val ticket: Ticket,
+        override val task: Task,
+        override val instructions: String,
+        val agentRole: String,
+        val ideaSummary: String,
+        val knowledgeSummary: String,
+        val availableToolDescriptors: List<ToolDescriptor>,
+        val parsedPlan: Plan? = null,
+        override val knowledgeFromPastMemory: List<Knowledge> = emptyList(),
+    ) : ExecutionContext
+
+    /**
+     * Serializable summary of a tool surfaced to the planning LLM.
+     *
+     * Avoids dragging the full `Tool<*>` hierarchy through the planning context,
+     * which would entangle execution-time tool registration with planning-time
+     * intent generation.
+     */
+    @Serializable
+    data class ToolDescriptor(
+        val id: ToolId,
+        val name: String,
+        val description: String,
+    )
 }

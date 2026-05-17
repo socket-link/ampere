@@ -324,6 +324,7 @@ object DefaultTaskFactory : TaskFactory {
             status = TaskStatus.Pending,
             description = description,
             assignedTo = if (originalTask is Task.CodeChange) originalTask.assignedTo else null,
+            toolId = toolId,
         )
     }
 }

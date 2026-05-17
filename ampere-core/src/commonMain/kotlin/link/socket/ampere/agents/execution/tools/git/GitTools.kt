@@ -2,6 +2,7 @@ package link.socket.ampere.agents.execution.tools.git
 
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.execution.ParameterStrategy
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.FunctionTool
 
@@ -104,6 +105,7 @@ Supports conventional commit format and issue references.
  */
 fun ToolCommit(
     requiredAgentAutonomy: AgentActionAutonomy = AgentActionAutonomy.ACT_WITH_NOTIFICATION,
+    parameterStrategy: ParameterStrategy? = GitParams.Commit(),
 ): FunctionTool<ExecutionContext.GitOperation> {
     return FunctionTool(
         id = COMMIT_ID,
@@ -116,6 +118,7 @@ fun ToolCommit(
             }
             executeGitOperation(executionRequest.context)
         },
+        parameterStrategy = parameterStrategy,
     )
 }
 

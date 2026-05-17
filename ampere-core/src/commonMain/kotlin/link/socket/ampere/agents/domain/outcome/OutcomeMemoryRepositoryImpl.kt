@@ -75,6 +75,12 @@ class OutcomeMemoryRepositoryImpl(
                 is ExecutionOutcome.GitOperation.Failure -> {
                     0 to outcome.error.message
                 }
+                is ExecutionOutcome.Planning.Success -> {
+                    outcome.plan.tasks.size to null
+                }
+                is ExecutionOutcome.Planning.Failure -> {
+                    0 to outcome.error.message
+                }
                 is ExecutionOutcome.Blank -> {
                     0 to null
                 }

@@ -8,9 +8,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import link.socket.ampere.AmpereContext
 import link.socket.ampere.agents.config.AgentActionAutonomy
-import link.socket.ampere.agents.definition.CodeAgent
 import link.socket.ampere.agents.definition.AgentFactory
 import link.socket.ampere.agents.definition.AgentType
+import link.socket.ampere.agents.definition.SparkBasedAgent
+import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
@@ -50,7 +51,7 @@ class GoalHandler(
     private val aiConfiguration: AIConfiguration? = null,
 ) {
     private var currentActivation: GoalActivation? = null
-    private var currentAgent: CodeAgent? = null
+    private var currentAgent: SparkBasedAgent<CodeState>? = null
     private var eventApi: AgentEventApi? = null
 
     /**
@@ -104,8 +105,8 @@ class GoalHandler(
             toolWriteCodeFileOverride = writeCodeTool,
         )
 
-        // Create CodeAgent
-        val agent = agentFactory.create<CodeAgent>(AgentType.CODE)
+        // Create spark-based code agent
+        val agent = agentFactory.create<SparkBasedAgent<CodeState>>(AgentType.CODE)
         currentAgent = agent
 
         // Create event API for this agent to publish events
@@ -170,7 +171,7 @@ class GoalHandler(
      * Handle ticket assignment by running the PROPEL cognitive cycle.
      */
     private suspend fun handleTicketAssignment(
-        agent: CodeAgent,
+        agent: SparkBasedAgent<CodeState>,
         ticketId: String,
     ) {
         val api = eventApi

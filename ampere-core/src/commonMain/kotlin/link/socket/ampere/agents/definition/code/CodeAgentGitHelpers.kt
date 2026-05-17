@@ -3,7 +3,7 @@ package link.socket.ampere.agents.definition.code
 import link.socket.ampere.integrations.issues.ExistingIssue
 
 /**
- * Git workflow helper functions for CodeAgent.
+ * Git workflow helper functions for the spark-based code agent's issue workflow.
  *
  * These functions generate branch names, commit messages, and PR content
  * following conventions and best practices for the issue-to-branch workflow.

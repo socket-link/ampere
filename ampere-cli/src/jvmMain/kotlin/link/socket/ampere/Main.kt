@@ -5,9 +5,10 @@ import java.io.File
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.definition.AgentFactory
 import link.socket.ampere.agents.definition.AgentType
-import link.socket.ampere.agents.definition.CodeAgent
-import link.socket.ampere.agents.definition.ProductAgent
-import link.socket.ampere.agents.definition.QualityAgent
+import link.socket.ampere.agents.definition.SparkBasedAgent
+import link.socket.ampere.agents.definition.code.CodeState
+import link.socket.ampere.agents.definition.product.ProductState
+import link.socket.ampere.agents.definition.qa.QualityState
 import link.socket.ampere.config.AmpereConfig
 import link.socket.ampere.config.ConfigConverter
 import link.socket.ampere.config.ConfigParser
@@ -95,20 +96,27 @@ fun main(args: Array<String>) {
     // Create agents based on team configuration (or defaults if no config)
     val teamRoles = config?.team?.map { it.role } ?: listOf("engineer", "product-manager", "qa-tester")
 
-    val codeAgent: CodeAgent? = if (teamRoles.any { it == "engineer" || it == "code" }) {
-        agentFactory.create<CodeAgent>(AgentType.CODE).also { it.initialize(context.scope) }
+    val codeAgent: SparkBasedAgent<CodeState>? = if (teamRoles.any { it == "engineer" || it == "code" }) {
+        agentFactory.create<SparkBasedAgent<CodeState>>(AgentType.CODE).also { it.initialize(context.scope) }
     } else null
 
-    val productAgent: ProductAgent? = if (teamRoles.any { it == "product-manager" || it == "product" }) {
-        agentFactory.create<ProductAgent>(AgentType.PRODUCT).also { it.initialize(context.scope) }
+    val productAgent: SparkBasedAgent<ProductState>? = if (teamRoles.any { it == "product-manager" || it == "product" }) {
+        agentFactory.create<SparkBasedAgent<ProductState>>(AgentType.PRODUCT).also { it.initialize(context.scope) }
     } else null
 
-    val qualityAgent: QualityAgent? = if (teamRoles.any { it == "qa-tester" || it == "quality" }) {
-        agentFactory.create<QualityAgent>(AgentType.QUALITY).also { it.initialize(context.scope) }
+    val qualityAgent: SparkBasedAgent<QualityState>? = if (teamRoles.any { it == "qa-tester" || it == "quality" }) {
+        agentFactory.create<SparkBasedAgent<QualityState>>(AgentType.QUALITY).also { it.initialize(context.scope) }
     } else null
 
-    // Initialize autonomous work loop for CodeAgent (if present in team)
-    codeAgent?.let { context.createAutonomousWorkLoop(it) }
+    // Initialize autonomous work loop for the code agent (if present in team
+    // and a repository was detected for the issue tracker).
+    if (codeAgent != null && repository != null) {
+        context.createAutonomousWorkLoop(
+            codeAgent = codeAgent,
+            issueTrackerProvider = issueTrackerProvider,
+            repository = repository,
+        )
+    }
 
     try {
         // Start all orchestrator services
