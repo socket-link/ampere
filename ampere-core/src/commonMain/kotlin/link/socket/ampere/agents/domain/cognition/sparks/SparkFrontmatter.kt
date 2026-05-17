@@ -14,10 +14,11 @@ import link.socket.ampere.agents.domain.cognition.FileAccessScope
  * spark frontmatter is capability-bearing, and silently dropping a misspelled
  * `requestedToolIds` would let a spark ship without the tools it expects.
  *
- * The two production variants today are [PhaseSparkFrontmatter] (`"phase"`)
- * and [RoleSparkFrontmatter] (`"role"`). Future variants
- * (`"project"`, `"language"`, `"task"`, `"coordination"`) plug into the same
- * discriminator without touching call sites that consume the sealed type.
+ * The production variants today are [PhaseSparkFrontmatter] (`"phase"`),
+ * [RoleSparkFrontmatter] (`"role"`), [LanguageSparkFrontmatter]
+ * (`"language"`), and [ProjectSparkFrontmatter] (`"project"`). Future
+ * variants (`"task"`, `"coordination"`) plug into the same discriminator
+ * without touching call sites that consume the sealed type.
  */
 @Serializable
 internal sealed interface SparkFrontmatter {
@@ -46,10 +47,10 @@ internal data class PhaseSparkFrontmatter(
 
 /**
  * Frontmatter shape for a role spark — capability-bearing. Carries the tool
- * narrowing and file-access scope that built-in role sparks (e.g.
- * [RoleSpark.Code]) encode in Kotlin today. The body of the spark document
- * becomes the role's `promptContribution` directly; there is no per-phase
- * section extraction for role variants.
+ * narrowing and file-access scope that retired built-in role sparks encoded
+ * in Kotlin. The body of the spark document becomes the role's
+ * `promptContribution` directly; there is no per-phase section extraction
+ * for role variants.
  *
  * `allowedTools = null` preserves the "inherits from parent context" semantics
  * documented on [link.socket.ampere.agents.domain.cognition.Spark.allowedTools];
@@ -68,6 +69,35 @@ internal data class RoleSparkFrontmatter(
 ) : SparkFrontmatter
 
 /**
+ * Frontmatter shape for a language spark. The body is split like phase sparks:
+ * text outside `## When <Phase>` headers is the always-on language guidance,
+ * while matching sections become per-phase prompt contributions.
+ */
+@Serializable
+@SerialName("language")
+internal data class LanguageSparkFrontmatter(
+    override val id: String,
+    override val name: String,
+    val requestedToolIds: Set<String> = emptySet(),
+    val allowedTools: Set<String>? = null,
+    val fileAccessScope: FileAccessScopeFrontmatter? = null,
+) : SparkFrontmatter
+
+/**
+ * Frontmatter shape for a project spark. The body must contain
+ * `## Project Description` and `## Project Conventions` sections, which are
+ * adapted into the existing [ProjectSpark] fields.
+ */
+@Serializable
+@SerialName("project")
+internal data class ProjectSparkFrontmatter(
+    override val id: String,
+    override val name: String,
+    val projectId: String = id,
+    val repositoryRoot: String = ".",
+) : SparkFrontmatter
+
+/**
  * Glob-pattern bundle for [FileAccessScope], shaped for ergonomic JSON
  * authoring (one field per pattern axis).
  *
@@ -80,10 +110,25 @@ internal data class FileAccessScopeFrontmatter(
     val read: Set<String> = emptySet(),
     val write: Set<String> = emptySet(),
     val forbidden: Set<String> = emptySet(),
+    val forbiddenRefs: Set<FileAccessScopePatternRef> = emptySet(),
 ) {
     fun toDomain(): FileAccessScope = FileAccessScope(
         readPatterns = read,
         writePatterns = write,
-        forbiddenPatterns = forbidden,
+        forbiddenPatterns = forbidden + forbiddenRefs.flatMap { it.patterns() },
     )
+}
+
+/**
+ * Named file-access pattern bundles that declarative sparks can include
+ * without repeating central safety lists in every fixture.
+ */
+@Serializable
+internal enum class FileAccessScopePatternRef {
+    @SerialName("sensitive-files")
+    SENSITIVE_FILES,
+}
+
+private fun FileAccessScopePatternRef.patterns(): Set<String> = when (this) {
+    FileAccessScopePatternRef.SENSITIVE_FILES -> FileAccessScope.SensitiveFileForbiddenPatterns
 }

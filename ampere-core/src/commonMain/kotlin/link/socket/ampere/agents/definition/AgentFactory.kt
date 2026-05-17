@@ -8,7 +8,7 @@ import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.agents.domain.cognition.sparks.AmpereProjectSpark
 import link.socket.ampere.agents.domain.cognition.sparks.AmpereSpikeFlags
 import link.socket.ampere.agents.domain.cognition.sparks.DefaultPhaseSparkLibrary
-import link.socket.ampere.agents.domain.cognition.sparks.LanguageSpark
+import link.socket.ampere.agents.domain.cognition.sparks.LanguageSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
@@ -53,7 +53,7 @@ enum class AgentType {
  * Each agent is initialized with a proper Spark stack based on their type:
  * - CognitiveAffinity: Set by the SparkBasedAgent factory (e.g. ANALYTICAL for the Code factory)
  * - ProjectSpark: Applied if provided (defaults to AmpereProjectSpark)
- * - RoleSpark: Applied based on agent type
+ * - Role spark: Applied based on agent type
  * - LanguageSpark: Applied for code agents (defaults to Kotlin)
  *
  * @param scope Coroutine scope for agent async operations (should be shared with EnvironmentService)
@@ -150,7 +150,7 @@ class AgentFactory(
      *
      * The agent is created and then initialized with the following Spark stack:
      * - ProjectSpark (from factory configuration or AmpereProjectSpark default)
-     * - RoleSpark appropriate for the agent type
+     * - Role spark appropriate for the agent type
      * - LanguageSpark for code agents (Kotlin by default)
      *
      * @param agentType The type of agent to create
@@ -228,6 +228,7 @@ class AgentFactory(
             val eventApi = eventApiFactory?.invoke(agentId)
             val memoryService = memoryServiceFactory?.invoke(agentId)
             SparkBasedAgent.Product(
+                sparkRegistry = phaseSparkLibrary,
                 agentId = agentId,
                 aiConfiguration = effectiveAiConfiguration,
                 eventApi = eventApi,
@@ -241,6 +242,7 @@ class AgentFactory(
             val eventApi = eventApiFactory?.invoke(agentId)
             val memoryService = memoryServiceFactory?.invoke(agentId)
             SparkBasedAgent.Project(
+                sparkRegistry = phaseSparkLibrary,
                 agentId = agentId,
                 aiConfiguration = effectiveAiConfiguration,
                 eventApi = eventApi,
@@ -271,23 +273,23 @@ class AgentFactory(
      *
      * The layering follows the cellular differentiation model:
      * 1. ProjectSpark - Establishes project context
-     * 2. RoleSpark - Defines agent's role and capabilities
+     * 2. Role spark - Defines agent's role and capabilities
      * 3. LanguageSpark - For code agents, adds language-specific context
      */
     private fun applySparkStack(agent: AutonomousAgent<*>, agentType: AgentType) {
         // Apply ProjectSpark first
         applySpark(agent, effectiveProjectSpark)
 
-        // Apply appropriate RoleSpark based on agent type.
+        // Apply appropriate role spark based on agent type.
         // Note: the `SparkBasedAgent.<Role>(...)` factories each apply
-        // their own RoleSpark at construction time, so the branches here
+        // their own role spark at construction time, so the branches here
         // only layer additional sparks on top of what the factory already
         // stacked. The CODE branch adds a language spark; the PRODUCT,
         // PROJECT, and QUALITY branches add nothing further (their role
         // sparks are already applied by their respective factories).
         when (agentType) {
             AgentType.CODE -> {
-                applySpark(agent, LanguageSpark.Kotlin)
+                applySpark(agent, requireLanguageSpark(LanguageSparkIds.KOTLIN))
             }
             AgentType.PRODUCT,
             AgentType.PROJECT,
@@ -300,4 +302,8 @@ class AgentFactory(
     private fun applySpark(agent: AutonomousAgent<*>, spark: Spark) {
         (agent as AutonomousAgent<AgentState>).spark<AutonomousAgent<AgentState>>(spark)
     }
+
+    private fun requireLanguageSpark(id: String): Spark =
+        phaseSparkLibrary.languageSparkById(id)
+            ?: error("Bundled language spark '$id' is missing from DefaultPhaseSparkLibrary")
 }

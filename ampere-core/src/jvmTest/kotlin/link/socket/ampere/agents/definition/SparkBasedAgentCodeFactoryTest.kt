@@ -26,7 +26,7 @@ import link.socket.ampere.domain.ai.provider.AIProvider
 /**
  * Verifies the `SparkBasedAgent.Code(...)` factory produces an agent shaped
  * like the legacy `CodeAgent`: ANALYTICAL affinity, `plan_steps` plus any
- * caller-supplied tools, and a spark stack with `RoleSpark.Code` already on
+ * caller-supplied tools, and a spark stack with `Role:Code` already on
  * top of the affinity. Library wiring (for `code-agent.spark.md`) is a
  * separate concern — exercised here via the internal setter.
  */
@@ -53,7 +53,7 @@ class SparkBasedAgentCodeFactoryTest {
 
         assertEquals(CognitiveAffinity.ANALYTICAL, agent.affinity)
         // Role spark id is "code"; declarative fixture's name field is "Role:Code"
-        // (matching the legacy RoleSpark.Code singleton's name).
+        // (matching the retired Kotlin singleton's name).
         assertTrue(
             agent.cognitiveState.endsWith("[Role:Code]"),
             "declarative role-code spark should be the most recently applied spark; got: ${agent.cognitiveState}",
@@ -63,7 +63,7 @@ class SparkBasedAgentCodeFactoryTest {
     @Test
     fun `factory fails fast when the library has no role-code fixture`() {
         // Library loaded with a single non-role fixture: lookup must fail loudly
-        // rather than silently fall back to the legacy RoleSpark.Code singleton.
+        // rather than silently fall back to a Kotlin singleton.
         val emptyLibrary: PhaseSparkLibrary = runBlocking {
             DefaultPhaseSparkLibrary.load(sparkResourcePaths = listOf("files/sparks/minimal-edge.spark.md"))
         }
@@ -105,6 +105,62 @@ class SparkBasedAgentCodeFactoryTest {
     @Test
     fun `factory exposes the canonical code-agent spark id constant`() {
         assertEquals("code-agent", SparkBasedAgent.CODE_AGENT_SPARK_ID)
+    }
+
+    @Test
+    fun `product and project factories use the declarative planning role spark`() {
+        val product = SparkBasedAgent.Product(
+            sparkRegistry = phaseSparkLibrary,
+            agentId = "product-factory-test",
+            aiConfiguration = FakeAIConfiguration(),
+        )
+        val project = SparkBasedAgent.Project(
+            sparkRegistry = phaseSparkLibrary,
+            agentId = "project-factory-test",
+            aiConfiguration = FakeAIConfiguration(),
+        )
+
+        assertEquals(CognitiveAffinity.INTEGRATIVE, product.affinity)
+        assertEquals(CognitiveAffinity.INTEGRATIVE, project.affinity)
+        assertTrue(
+            product.cognitiveState.endsWith("[Role:Planning]"),
+            "product factory should stack role-planning; got: ${product.cognitiveState}",
+        )
+        assertTrue(
+            project.cognitiveState.endsWith("[Role:Planning]"),
+            "project factory should stack role-planning; got: ${project.cognitiveState}",
+        )
+    }
+
+    @Test
+    fun `product and project factories fail fast when planning role fixture is missing`() {
+        val emptyLibrary: PhaseSparkLibrary = runBlocking {
+            DefaultPhaseSparkLibrary.load(sparkResourcePaths = listOf("files/sparks/minimal-edge.spark.md"))
+        }
+
+        val productFailure = assertFailsWith<IllegalStateException> {
+            SparkBasedAgent.Product(
+                sparkRegistry = emptyLibrary,
+                agentId = "product-factory-no-library-test",
+                aiConfiguration = FakeAIConfiguration(),
+            )
+        }
+        assertTrue(
+            productFailure.message?.contains("role-planning") == true,
+            "error should name the missing fixture; got: ${productFailure.message}",
+        )
+
+        val projectFailure = assertFailsWith<IllegalStateException> {
+            SparkBasedAgent.Project(
+                sparkRegistry = emptyLibrary,
+                agentId = "project-factory-no-library-test",
+                aiConfiguration = FakeAIConfiguration(),
+            )
+        }
+        assertTrue(
+            projectFailure.message?.contains("role-planning") == true,
+            "error should name the missing fixture; got: ${projectFailure.message}",
+        )
     }
 
     @Test

@@ -51,7 +51,7 @@ data class SparkAppliedEvent(
     override val stackDescription: String,
     /** Human-readable name of the Spark (e.g., "Project:ampere", "Role:Code"). */
     val sparkName: String,
-    /** Simple class name of the Spark type (e.g., "ProjectSpark", "RoleSpark.Code"). */
+    /** Simple class name or declarative spark bucket (e.g., "ProjectSpark", "Role:Code"). */
     val sparkType: String,
 ) : SparkEvent {
 

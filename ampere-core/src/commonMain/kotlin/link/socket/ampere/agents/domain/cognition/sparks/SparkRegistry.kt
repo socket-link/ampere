@@ -23,4 +23,16 @@ interface SparkRegistry {
      * for `role-code.spark.md`) — not the human-readable `Role:Code` name.
      */
     fun roleSparkById(id: String): Spark?
+
+    /**
+     * Returns the language spark loaded from a `"language"` JSON fixture with
+     * the given canonical [id], or null if no such fixture is bundled.
+     */
+    fun languageSparkById(id: String): Spark?
+
+    /**
+     * Returns the project spark loaded from a `"project"` JSON fixture with
+     * the given canonical [id], or null if no such fixture is bundled.
+     */
+    fun projectSparkById(id: String): ProjectSpark?
 }

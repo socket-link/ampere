@@ -5,9 +5,11 @@ import kotlinx.coroutines.Dispatchers
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.cognition.Spark
-import link.socket.ampere.agents.domain.cognition.sparks.LanguageSpark
+import link.socket.ampere.agents.domain.cognition.sparks.DefaultSparkCatalog
+import link.socket.ampere.agents.domain.cognition.sparks.LanguageSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
-import link.socket.ampere.agents.domain.cognition.sparks.RoleSpark
+import link.socket.ampere.agents.domain.cognition.sparks.RoleSparkIds
+import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
@@ -29,13 +31,18 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
  * @param eventApiFactory Creates per-agent event APIs for publishing events
  * @param memoryServiceFactory Creates per-agent memory services
  * @param defaultAiConfiguration Default AI configuration for agents
+ * @param sparkRegistry Optional declarative spark registry; defaults to bundled fixtures
  */
 class SparkAgentFactory(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default),
     private val eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
     private val memoryServiceFactory: ((AgentId) -> AgentMemoryService)? = null,
     private val defaultAiConfiguration: AIConfiguration? = null,
+    private val sparkRegistry: SparkRegistry? = null,
 ) {
+    private val effectiveSparkRegistry: SparkRegistry
+        get() = sparkRegistry ?: DefaultSparkCatalog.registry
+
     /**
      * Creates a code-focused agent with ANALYTICAL affinity.
      *
@@ -43,7 +50,7 @@ class SparkAgentFactory(
      *
      * Pre-sparked with:
      * - ProjectSpark for project context
-     * - RoleSpark.Code for code capabilities
+     * - declarative role-code spark for code capabilities
      * - LanguageSpark (defaults to Kotlin)
      *
      * @param projectSpark The project context
@@ -53,13 +60,13 @@ class SparkAgentFactory(
      */
     fun createCodeAgent(
         projectSpark: ProjectSpark,
-        language: LanguageSpark = LanguageSpark.Kotlin,
+        language: Spark? = null,
         id: AgentId = generateUUID("CodeAgent-${projectSpark.projectId}"),
     ): SparkBasedAgent<CodeState> {
         val agent = createAgent(id, CognitiveAffinity.ANALYTICAL)
         agent.applySpark(projectSpark)
-        agent.applySpark(RoleSpark.Code)
-        agent.applySpark(language)
+        agent.applySpark(requireRoleSpark(RoleSparkIds.CODE))
+        agent.applySpark(language ?: requireLanguageSpark(LanguageSparkIds.KOTLIN))
         return agent
     }
 
@@ -70,7 +77,7 @@ class SparkAgentFactory(
      *
      * Pre-sparked with:
      * - ProjectSpark for project context
-     * - RoleSpark.Research for research capabilities
+     * - declarative role-research spark for research capabilities
      *
      * @param projectSpark The project context
      * @param id Optional custom agent ID
@@ -82,7 +89,7 @@ class SparkAgentFactory(
     ): SparkBasedAgent<CodeState> {
         val agent = createAgent(id, CognitiveAffinity.EXPLORATORY)
         agent.applySpark(projectSpark)
-        agent.applySpark(RoleSpark.Research)
+        agent.applySpark(requireRoleSpark(RoleSparkIds.RESEARCH))
         return agent
     }
 
@@ -93,7 +100,7 @@ class SparkAgentFactory(
      *
      * Pre-sparked with:
      * - ProjectSpark for project context
-     * - RoleSpark.Planning for planning capabilities
+     * - declarative role-planning spark for planning capabilities
      *
      * @param projectSpark The project context
      * @param id Optional custom agent ID
@@ -105,7 +112,7 @@ class SparkAgentFactory(
     ): SparkBasedAgent<CodeState> {
         val agent = createAgent(id, CognitiveAffinity.INTEGRATIVE)
         agent.applySpark(projectSpark)
-        agent.applySpark(RoleSpark.Planning)
+        agent.applySpark(requireRoleSpark(RoleSparkIds.PLANNING))
         return agent
     }
 
@@ -116,7 +123,7 @@ class SparkAgentFactory(
      *
      * Pre-sparked with:
      * - ProjectSpark for project context
-     * - RoleSpark.Operations for ops capabilities
+     * - declarative role-operations spark for ops capabilities
      *
      * @param projectSpark The project context
      * @param id Optional custom agent ID
@@ -128,9 +135,23 @@ class SparkAgentFactory(
     ): SparkBasedAgent<CodeState> {
         val agent = createAgent(id, CognitiveAffinity.OPERATIONAL)
         agent.applySpark(projectSpark)
-        agent.applySpark(RoleSpark.Operations)
+        agent.applySpark(requireRoleSpark(RoleSparkIds.OPERATIONS))
         return agent
     }
+
+    private fun requireRoleSpark(id: String): Spark =
+        effectiveSparkRegistry.roleSparkById(id)
+            ?: error(
+                "SparkAgentFactory requires role spark '$id', but the configured SparkRegistry " +
+                    "did not provide it.",
+            )
+
+    private fun requireLanguageSpark(id: String): Spark =
+        effectiveSparkRegistry.languageSparkById(id)
+            ?: error(
+                "SparkAgentFactory requires language spark '$id', but the configured SparkRegistry " +
+                    "did not provide it.",
+            )
 
     /**
      * Creates a base agent with the specified affinity and no pre-applied Sparks.
@@ -193,7 +214,7 @@ class SparkAgentFactory(
         private val projectSpark: ProjectSpark,
     ) {
         /** Creates a code agent for this project. */
-        fun codeAgent(language: LanguageSpark = LanguageSpark.Kotlin) =
+        fun codeAgent(language: Spark? = null) =
             factory.createCodeAgent(projectSpark, language)
 
         /** Creates a research agent for this project. */

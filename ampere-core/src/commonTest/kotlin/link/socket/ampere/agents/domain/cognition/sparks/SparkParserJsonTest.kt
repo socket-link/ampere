@@ -106,7 +106,8 @@ class SparkParserJsonTest {
             |  "fileAccessScope": {
             |    "read": ["**/*"],
             |    "write": ["**/*.kt"],
-            |    "forbidden": ["**/.git/**"]
+            |    "forbidden": ["**/.git/**"],
+            |    "forbiddenRefs": ["sensitive-files"]
             |  }
             |}
             |---
@@ -128,6 +129,8 @@ class SparkParserJsonTest {
         assertEquals(setOf("**/*"), scope?.read)
         assertEquals(setOf("**/*.kt"), scope?.write)
         assertEquals(setOf("**/.git/**"), scope?.forbidden)
+        assertEquals(setOf(FileAccessScopePatternRef.SENSITIVE_FILES), scope?.forbiddenRefs)
+        assertTrue("**/.env" in scope?.toDomain()?.forbiddenPatterns.orEmpty())
         assertTrue(source.body.startsWith("## Role: Code"))
     }
 
@@ -180,6 +183,81 @@ class SparkParserJsonTest {
         assertNull(source.frontmatter.allowedTools)
         assertNull(source.frontmatter.fileAccessScope)
         assertEquals(emptySet(), source.frontmatter.requestedToolIds)
+    }
+
+    @Test
+    fun `language variant parses file access and extracts per-phase sections`() {
+        val raw = """
+            |---json
+            |{
+            |  "type": "language",
+            |  "id": "kotlin",
+            |  "name": "Language:Kotlin",
+            |  "fileAccessScope": {
+            |    "read": ["**/*.kt"],
+            |    "write": ["**/*.kt"]
+            |  }
+            |}
+            |---
+            |
+            |Kotlin base guidance.
+            |
+            |## When Planning
+            |
+            |Plan Kotlin files.
+        """.trimMargin()
+
+        val result = parseSpark(raw)
+        assertIs<SparkParseResult.Ok>(result)
+        val source = assertIs<DeclarativeSparkSource.Language>(result.source)
+        assertEquals("kotlin", source.frontmatter.id)
+        assertEquals("Language:Kotlin", source.frontmatter.name)
+        assertEquals(setOf("**/*.kt"), source.frontmatter.fileAccessScope?.read)
+        assertEquals("Kotlin base guidance.", source.body)
+        assertEquals("Plan Kotlin files.", source.phaseContributions[CognitivePhase.PLAN])
+    }
+
+    @Test
+    fun `project variant parses body and resolves repository root fallback`() {
+        val raw = """
+            |---json
+            |{
+            |  "type": "project",
+            |  "id": "ampere",
+            |  "name": "Project:ampere",
+            |  "projectId": "ampere",
+            |  "repositoryRoot": "${'$'}{env:AMPERE_TEST_MISSING_ROOT:-/fallback/root}"
+            |}
+            |---
+            |
+            |## Project Description
+            |
+            |A test project.
+            |
+            |## Project Conventions
+            |
+            |Use tests.
+        """.trimMargin()
+
+        val result = parseSpark(raw)
+        assertIs<SparkParseResult.Ok>(result)
+        val source = assertIs<DeclarativeSparkSource.Project>(result.source)
+        val spark = source.toProjectSpark()
+
+        assertEquals("ampere", spark.projectId)
+        assertEquals("A test project.", spark.projectDescription)
+        assertEquals("/fallback/root", spark.repositoryRoot)
+        assertEquals("Use tests.", spark.conventions)
+    }
+
+    @Test
+    fun `env interpolation supports nested fallback expressions`() {
+        assertEquals(
+            ".",
+            interpolateSparkString(
+                "${'$'}{env:AMPERE_TEST_MISSING_ROOT:-${'$'}{env:AMPERE_TEST_MISSING_PWD:-.}}",
+            ),
+        )
     }
 
     @Test
@@ -263,9 +341,9 @@ class SparkParserJsonTest {
         val raw = """
             |---json
             |{
-            |  "type": "language",
-            |  "id": "kotlin",
-            |  "name": "Kotlin"
+            |  "type": "unknown",
+            |  "id": "mystery",
+            |  "name": "Mystery"
             |}
             |---
             |

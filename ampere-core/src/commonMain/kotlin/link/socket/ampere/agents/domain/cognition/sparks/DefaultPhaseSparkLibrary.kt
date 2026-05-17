@@ -15,13 +15,22 @@ private val DEFAULT_SPARKS: List<String> = listOf(
     "files/sparks/project-agent.spark.md",
     "files/sparks/quality-agent.spark.md",
     "files/sparks/role-code.spark.md",
+    "files/sparks/role-research.spark.md",
+    "files/sparks/role-operations.spark.md",
+    "files/sparks/role-planning.spark.md",
+    "files/sparks/language-kotlin.spark.md",
+    "files/sparks/language-java.spark.md",
+    "files/sparks/language-typescript.spark.md",
+    "files/sparks/language-python.spark.md",
+    "files/sparks/project-ampere.spark.md",
 )
 
 /**
  * In-memory [PhaseSparkLibrary] backed by a pre-parsed set of declarative sparks.
  *
  * Construction takes a fully-resolved list of sparks so the runtime accessors
- * (`all`, `byId`, `selectFor`, `roleSparkById`) are non-suspend. Use
+ * (`all`, `byId`, `selectFor`, `roleSparkById`, `languageSparkById`,
+ * `projectSparkById`) are non-suspend. Use
  * [DefaultPhaseSparkLibrary.load] to read and parse the bundled `.spark.md`
  * resources asynchronously.
  *
@@ -35,6 +44,8 @@ private val DEFAULT_SPARKS: List<String> = listOf(
 internal class DefaultPhaseSparkLibrary internal constructor(
     private val phaseSparks: List<PhaseSpark>,
     private val roleSparks: Map<String, DeclarativeRoleSpark> = emptyMap(),
+    private val languageSparks: Map<String, LanguageSpark> = emptyMap(),
+    private val projectSparks: Map<String, ProjectSpark> = emptyMap(),
 ) : PhaseSparkLibrary {
 
     override fun all(): List<PhaseSpark> = phaseSparks
@@ -43,6 +54,10 @@ internal class DefaultPhaseSparkLibrary internal constructor(
         phaseSparks.firstOrNull { spark -> spark is DeclarativePhaseSpark && spark.sparkId == id }
 
     override fun roleSparkById(id: String): Spark? = roleSparks[id]
+
+    override fun languageSparkById(id: String): Spark? = languageSparks[id]
+
+    override fun projectSparkById(id: String): ProjectSpark? = projectSparks[id]
 
     override fun selectFor(context: SparkSelectionContext): List<PhaseSpark> {
         val phaseMatches = phaseSparks.filterIsInstance<DeclarativePhaseSpark>()
@@ -85,6 +100,8 @@ internal class DefaultPhaseSparkLibrary internal constructor(
             val seenIds = mutableSetOf<String>()
             val phaseSparks = mutableListOf<PhaseSpark>()
             val roleSparks = mutableMapOf<String, DeclarativeRoleSpark>()
+            val languageSparks = mutableMapOf<String, LanguageSpark>()
+            val projectSparks = mutableMapOf<String, ProjectSpark>()
             for (path in sparkResourcePaths) {
                 val raw = readResource(path)
                 if (raw == null) {
@@ -99,11 +116,21 @@ internal class DefaultPhaseSparkLibrary internal constructor(
                                 "[PhaseSparkLibrary] duplicate spark id '${source.id}' from $path — skipping"
                             }
                         } else {
-                            when (source) {
-                                is DeclarativeSparkSource.Phase ->
-                                    phaseSparks += source.toLegacySource().toPhaseSpark()
-                                is DeclarativeSparkSource.Role ->
-                                    roleSparks[source.id] = source.toRoleSpark()
+                            runCatching {
+                                when (source) {
+                                    is DeclarativeSparkSource.Phase ->
+                                        phaseSparks += source.toLegacySource().toPhaseSpark()
+                                    is DeclarativeSparkSource.Role ->
+                                        roleSparks[source.id] = source.toRoleSpark()
+                                    is DeclarativeSparkSource.Language ->
+                                        languageSparks[source.id] = source.toLanguageSpark()
+                                    is DeclarativeSparkSource.Project ->
+                                        projectSparks[source.id] = source.toProjectSpark()
+                                }
+                            }.onFailure { error ->
+                                logger.w(error) {
+                                    "[PhaseSparkLibrary] failed to adapt $path into a runtime spark"
+                                }
                             }
                         }
                     }
@@ -117,6 +144,8 @@ internal class DefaultPhaseSparkLibrary internal constructor(
             return DefaultPhaseSparkLibrary(
                 phaseSparks = phaseSparks.toList(),
                 roleSparks = roleSparks.toMap(),
+                languageSparks = languageSparks.toMap(),
+                projectSparks = projectSparks.toMap(),
             )
         }
 

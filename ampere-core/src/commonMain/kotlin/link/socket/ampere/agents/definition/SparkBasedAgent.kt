@@ -13,7 +13,6 @@ import link.socket.ampere.agents.definition.qa.QualityState
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
-import link.socket.ampere.agents.domain.cognition.sparks.RoleSpark
 import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
@@ -317,6 +316,12 @@ open class SparkBasedAgent<S : AgentState>(
         const val ROLE_CODE_SPARK_ID: String = "code"
 
         /**
+         * Canonical id of the bundled planning role spark fixture
+         * (`role-planning.spark.md`) used by Product and Project agents.
+         */
+        const val ROLE_PLANNING_SPARK_ID: String = "planning"
+
+        /**
          * Resource id of the bundled declarative spark that supplies the
          * Code agent's per-phase guidance. Activated during phase entry
          * when a `PhaseSparkLibrary` containing it has been wired into
@@ -335,10 +340,10 @@ open class SparkBasedAgent<S : AgentState>(
          * without restructuring their dependency graph.
          *
          * Since AMPR-165 the role spark is resolved from
-         * [phaseSparkLibrary] by canonical id ([ROLE_CODE_SPARK_ID])
+         * [sparkRegistry] by canonical id ([ROLE_CODE_SPARK_ID])
          * rather than referenced as a compile-time singleton. Construction
          * fails fast if the library has no matching fixture — there is no
-         * silent fallback to the old `RoleSpark.Code` object.
+         * silent fallback to a Kotlin role singleton.
          *
          * The declarative `code-agent.spark.md` per-phase guidance is
          * **not** applied here. That is the responsibility of the
@@ -350,7 +355,7 @@ open class SparkBasedAgent<S : AgentState>(
          *   `plan_steps` tool (typically a code-writing tool plus the
          *   git tool set). Tool-owned parameter strategies, if any,
          *   travel with the tools themselves.
-         * @param phaseSparkLibrary library that must contain the
+         * @param sparkRegistry registry that must contain the
          *   `role-code` fixture; construction fails fast otherwise.
          */
         fun Code(
@@ -364,7 +369,11 @@ open class SparkBasedAgent<S : AgentState>(
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
         ): SparkBasedAgent<CodeState> {
-            val roleSpark = resolveCodeRoleSpark(sparkRegistry)
+            val roleSpark = resolveRequiredRoleSpark(
+                registry = sparkRegistry,
+                id = ROLE_CODE_SPARK_ID,
+                resourceName = "role-code.spark.md",
+            )
             val agent = SparkBasedAgent(
                 agentId = agentId,
                 cognitiveAffinity = CognitiveAffinity.ANALYTICAL,
@@ -381,13 +390,17 @@ open class SparkBasedAgent<S : AgentState>(
             return agent
         }
 
-        private fun resolveCodeRoleSpark(registry: SparkRegistry) =
-            registry.roleSparkById(ROLE_CODE_SPARK_ID)
+        private fun resolveRequiredRoleSpark(
+            registry: SparkRegistry,
+            id: String,
+            resourceName: String,
+        ) =
+            registry.roleSparkById(id)
                 ?: error(
                     "SparkBasedAgent factory requires the declarative role spark " +
-                        "'$ROLE_CODE_SPARK_ID' (from files/sparks/role-code.spark.md) " +
+                        "'$id' (from files/sparks/$resourceName) " +
                         "in the provided SparkRegistry, but lookup returned null. " +
-                        "Use DefaultPhaseSparkLibrary.load() so the bundled role-code " +
+                        "Use DefaultPhaseSparkLibrary.load() so the bundled role " +
                         "fixture is included.",
                 )
 
@@ -399,7 +412,7 @@ open class SparkBasedAgent<S : AgentState>(
 
         /**
          * Builds a Product-focused [SparkBasedAgent]: `INTEGRATIVE`
-         * affinity, [RoleSpark.Planning] stacked at construction time,
+         * affinity, the declarative `role-planning` spark stacked at construction time,
          * and the `plan_steps` tool already in its toolset.
          *
          * Mirrors the legacy `ProductAgent` shape. Declarative
@@ -407,6 +420,7 @@ open class SparkBasedAgent<S : AgentState>(
          * surrounding `AgentFactory`.
          */
         fun Product(
+            sparkRegistry: SparkRegistry,
             agentId: AgentId = generateUUID("SparkBasedAgent-Product"),
             aiConfiguration: AIConfiguration? = null,
             eventApi: AgentEventApi? = null,
@@ -416,6 +430,11 @@ open class SparkBasedAgent<S : AgentState>(
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
         ): SparkBasedAgent<ProductState> {
+            val roleSpark = resolveRequiredRoleSpark(
+                registry = sparkRegistry,
+                id = ROLE_PLANNING_SPARK_ID,
+                resourceName = "role-planning.spark.md",
+            )
             val agent = SparkBasedAgent(
                 agentId = agentId,
                 cognitiveAffinity = CognitiveAffinity.INTEGRATIVE,
@@ -428,7 +447,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
             )
-            agent.spark<SparkBasedAgent<ProductState>>(RoleSpark.Planning)
+            agent.spark<SparkBasedAgent<ProductState>>(roleSpark)
             return agent
         }
 
@@ -440,7 +459,7 @@ open class SparkBasedAgent<S : AgentState>(
 
         /**
          * Builds a Project-focused [SparkBasedAgent]: `INTEGRATIVE`
-         * affinity, [RoleSpark.Planning] stacked at construction time,
+         * affinity, the declarative `role-planning` spark stacked at construction time,
          * and the `plan_steps` tool already in its toolset.
          *
          * Mirrors the legacy `ProjectAgent` shape. Typical tool stack
@@ -449,6 +468,7 @@ open class SparkBasedAgent<S : AgentState>(
          * strategy.
          */
         fun Project(
+            sparkRegistry: SparkRegistry,
             agentId: AgentId = generateUUID("SparkBasedAgent-Project"),
             aiConfiguration: AIConfiguration? = null,
             eventApi: AgentEventApi? = null,
@@ -458,6 +478,11 @@ open class SparkBasedAgent<S : AgentState>(
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
         ): SparkBasedAgent<ProjectState> {
+            val roleSpark = resolveRequiredRoleSpark(
+                registry = sparkRegistry,
+                id = ROLE_PLANNING_SPARK_ID,
+                resourceName = "role-planning.spark.md",
+            )
             val agent = SparkBasedAgent(
                 agentId = agentId,
                 cognitiveAffinity = CognitiveAffinity.INTEGRATIVE,
@@ -470,7 +495,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
             )
-            agent.spark<SparkBasedAgent<ProjectState>>(RoleSpark.Planning)
+            agent.spark<SparkBasedAgent<ProjectState>>(roleSpark)
             return agent
         }
 
@@ -487,7 +512,7 @@ open class SparkBasedAgent<S : AgentState>(
          * `plan_steps` tool already in its toolset.
          *
          * Mirrors the legacy `QualityAgent` shape. Per AMPR-165, the role
-         * spark is resolved from [phaseSparkLibrary] by canonical id;
+         * spark is resolved from [sparkRegistry] by canonical id;
          * construction fails fast if it isn't present.
          */
         fun Quality(
@@ -501,7 +526,11 @@ open class SparkBasedAgent<S : AgentState>(
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
         ): SparkBasedAgent<QualityState> {
-            val roleSpark = resolveCodeRoleSpark(sparkRegistry)
+            val roleSpark = resolveRequiredRoleSpark(
+                registry = sparkRegistry,
+                id = ROLE_CODE_SPARK_ID,
+                resourceName = "role-code.spark.md",
+            )
             val agent = SparkBasedAgent(
                 agentId = agentId,
                 cognitiveAffinity = CognitiveAffinity.ANALYTICAL,

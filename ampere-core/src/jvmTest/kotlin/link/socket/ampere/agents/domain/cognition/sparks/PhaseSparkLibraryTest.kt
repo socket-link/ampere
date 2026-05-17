@@ -32,20 +32,20 @@ class PhaseSparkLibraryTest {
     }
 
     @Test
-    fun `roleSparkById resolves bundled role-code fixture`() = runTest {
+    fun `roleSparkById resolves bundled role fixtures`() = runTest {
         val library = DefaultPhaseSparkLibrary.load()
 
-        val role = library.roleSparkById("code")
-        assertNotNull(role, "role-code.spark.md should load via the default library")
-        val declarative = assertIs<DeclarativeRoleSpark>(role)
+        RoleSparkFixtureExpectations.all.forEach { expected ->
+            val role = library.roleSparkById(expected.id)
+            assertNotNull(role, "role-${expected.id}.spark.md should load via the default library")
+            val declarative = assertIs<DeclarativeRoleSpark>(role)
 
-        // Capability surface must match the legacy RoleSpark.Code singleton so the
-        // Wave 4 factory migration in AMPR-165 is a behaviour-preserving swap.
-        assertEquals(RoleSpark.Code.name, declarative.name)
-        assertEquals(RoleSpark.Code.agentRole, declarative.agentRole)
-        assertEquals(RoleSpark.Code.allowedTools, declarative.allowedTools)
-        assertEquals(RoleSpark.Code.requestedToolIds, declarative.requestedToolIds)
-        assertEquals(RoleSpark.Code.fileAccessScope, declarative.fileAccessScope)
+            assertEquals(expected.name, declarative.name)
+            assertEquals(expected.agentRole, declarative.agentRole)
+            assertEquals(expected.allowedTools, declarative.allowedTools)
+            assertEquals(expected.requestedToolIds, declarative.requestedToolIds)
+            assertEquals(expected.fileAccessScope, declarative.fileAccessScope)
+        }
     }
 
     @Test
@@ -55,12 +55,58 @@ class PhaseSparkLibraryTest {
     }
 
     @Test
-    fun `byId never returns a role spark`() = runTest {
-        // Role and phase sparks share the catalog but live in distinct lookup
-        // surfaces. `byId` is the phase-only door; routing role ids through it
-        // would let phase-driven code paths accidentally narrow capabilities.
+    fun `languageSparkById resolves bundled language fixtures`() = runTest {
+        val library = DefaultPhaseSparkLibrary.load()
+        val expected = mapOf(
+            LanguageSparkIds.KOTLIN to "Language:Kotlin",
+            LanguageSparkIds.JAVA to "Language:Java",
+            LanguageSparkIds.TYPESCRIPT to "Language:TypeScript",
+            LanguageSparkIds.PYTHON to "Language:Python",
+        )
+
+        expected.forEach { (id, name) ->
+            val language = library.languageSparkById(id)
+            assertNotNull(language, "language-$id.spark.md should load via the default library")
+            val declarative = assertIs<LanguageSpark>(language)
+            assertEquals(id, declarative.languageId)
+            assertEquals(name, declarative.name)
+            assertNotNull(declarative.fileAccessScope)
+        }
+    }
+
+    @Test
+    fun `languageSparkById returns null for unknown id`() = runTest {
+        val library = DefaultPhaseSparkLibrary.load()
+        assertNull(library.languageSparkById("does-not-exist"))
+    }
+
+    @Test
+    fun `projectSparkById resolves bundled ampere fixture`() = runTest {
+        val library = DefaultPhaseSparkLibrary.load()
+
+        val project = library.projectSparkById(ProjectSparkIds.AMPERE)
+        assertNotNull(project, "project-ampere.spark.md should load via the default library")
+        assertEquals("ampere", project.projectId)
+        assertEquals("Project:ampere", project.name)
+        assertTrue(project.projectDescription.contains("Kotlin Multiplatform"))
+        assertTrue(project.conventions.contains("Package Structure"))
+    }
+
+    @Test
+    fun `projectSparkById returns null for unknown id`() = runTest {
+        val library = DefaultPhaseSparkLibrary.load()
+        assertNull(library.projectSparkById("does-not-exist"))
+    }
+
+    @Test
+    fun `byId never returns a capability spark`() = runTest {
+        // Role/language and phase sparks share the catalog but live in distinct
+        // lookup surfaces. `byId` is the phase-only door; routing capability ids
+        // through it would let phase-driven code paths accidentally narrow access.
         val library = DefaultPhaseSparkLibrary.load()
         assertNull(library.byId("code"))
+        assertNull(library.byId("kotlin"))
+        assertNull(library.byId("ampere"))
     }
 
     @Test

@@ -149,6 +149,24 @@ private fun parseJsonSpark(trimmed: String): SparkParseResult {
                 ),
             )
         }
+        is LanguageSparkFrontmatter -> {
+            val (baseBody, phaseContributions) = extractPhaseSections(body)
+            SparkParseResult.Ok(
+                DeclarativeSparkSource.Language(
+                    frontmatter = frontmatter,
+                    body = baseBody,
+                    phaseContributions = phaseContributions,
+                ),
+            )
+        }
+        is ProjectSparkFrontmatter -> {
+            SparkParseResult.Ok(
+                DeclarativeSparkSource.Project(
+                    frontmatter = frontmatter,
+                    body = body,
+                ),
+            )
+        }
     }
 }
 

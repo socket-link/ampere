@@ -3,7 +3,7 @@ package link.socket.ampere.agents.domain.cognition.sparks
 /**
  * Sealed parser output for any `.spark.md` document. Replaces the previous
  * `DeclarativePhaseSparkSource`-only return shape so the parser can speak
- * about phase and role variants under a single naming axis.
+ * about phase, role, language, and project variants under a single naming axis.
  *
  * Each variant carries its decoded [SparkFrontmatter] sibling plus the
  * post-fence body. Adapters (`toPhaseSpark`, `toRoleSpark`) live alongside
@@ -35,6 +35,31 @@ internal sealed interface DeclarativeSparkSource {
      */
     data class Role(
         val frontmatter: RoleSparkFrontmatter,
+        override val body: String,
+    ) : DeclarativeSparkSource {
+        override val id: String get() = frontmatter.id
+        override val name: String get() = frontmatter.name
+    }
+
+    /**
+     * A `"language"` spark: language-specific guidance with optional
+     * per-phase sections extracted from the body.
+     */
+    data class Language(
+        val frontmatter: LanguageSparkFrontmatter,
+        override val body: String,
+        val phaseContributions: Map<CognitivePhase, String>,
+    ) : DeclarativeSparkSource {
+        override val id: String get() = frontmatter.id
+        override val name: String get() = frontmatter.name
+    }
+
+    /**
+     * A `"project"` spark: project context and conventions adapted into a
+     * runtime [ProjectSpark].
+     */
+    data class Project(
+        val frontmatter: ProjectSparkFrontmatter,
         override val body: String,
     ) : DeclarativeSparkSource {
         override val id: String get() = frontmatter.id
