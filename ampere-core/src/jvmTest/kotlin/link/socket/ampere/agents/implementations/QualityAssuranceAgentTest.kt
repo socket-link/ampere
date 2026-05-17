@@ -2,6 +2,7 @@ package link.socket.ampere.agents.implementations
 
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
@@ -70,9 +71,9 @@ class QualityAssuranceAgentTest {
 
         val knowledge = qualityAgent.extractKnowledgeFromOutcome(outcome, task, plan)
 
-        assertTrue(knowledge.approach.isNotEmpty(), "Approach should be captured")
-        assertTrue(knowledge.learnings.contains("Success"), "Learnings should mention success")
-        assertTrue(knowledge is Knowledge.FromOutcome)
+        val fromOutcome = assertIs<Knowledge.FromOutcome>(knowledge)
+        assertTrue(fromOutcome.approach.isNotEmpty(), "Approach should be captured")
+        assertTrue(fromOutcome.learnings.contains("Success"), "Learnings should mention success")
     }
 
     @Test

@@ -243,6 +243,7 @@ fun ChatMessage(
                         }
                     }
 
+                    @Suppress("DEPRECATION")
                     val clipboardManager = LocalClipboardManager.current
 
                     IconButton(

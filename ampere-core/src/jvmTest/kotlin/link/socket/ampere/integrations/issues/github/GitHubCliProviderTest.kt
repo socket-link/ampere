@@ -33,9 +33,9 @@ class GitHubCliProviderTest {
 
     @Test
     fun `provider implements IssueTrackerProvider interface`() {
-        val provider = GitHubCliProvider()
+        val provider: IssueTrackerProvider = GitHubCliProvider()
 
-        assertTrue(provider is IssueTrackerProvider)
+        assertEquals("github-cli", provider.providerId)
     }
 
     @Test

@@ -2,6 +2,8 @@ package link.socket.ampere.agents.implementations
 
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -168,11 +170,11 @@ class ProjectManagerAgentTest {
 
         val knowledge = projectAgent.extractKnowledgeFromOutcome(outcome, task, plan)
 
-        assertTrue(knowledge.approach.isNotEmpty(), "Approach should be captured")
-        assertTrue(knowledge.learnings.contains("succeeded"), "Learnings should mention success")
-        assertTrue(knowledge.learnings.contains("2"), "Learnings should mention number of issues created")
-        assertTrue(knowledge is Knowledge.FromOutcome, "Knowledge should be FromOutcome type")
-        assertTrue(knowledge.outcomeId == outcome.id, "Knowledge should reference the correct outcome ID")
+        val fromOutcome = assertIs<Knowledge.FromOutcome>(knowledge, "Knowledge should be FromOutcome type")
+        assertTrue(fromOutcome.approach.isNotEmpty(), "Approach should be captured")
+        assertTrue(fromOutcome.learnings.contains("succeeded"), "Learnings should mention success")
+        assertTrue(fromOutcome.learnings.contains("2"), "Learnings should mention number of issues created")
+        assertTrue(fromOutcome.outcomeId == outcome.id, "Knowledge should reference the correct outcome ID")
     }
 
     @Test
@@ -204,10 +206,10 @@ class ProjectManagerAgentTest {
 
         val knowledge = projectAgent.extractKnowledgeFromOutcome(outcome, task, plan)
 
-        assertTrue(knowledge.approach.isNotEmpty(), "Approach should be captured")
-        assertTrue(knowledge.learnings.contains("failed"), "Learnings should mention failure")
-        assertTrue(knowledge.learnings.contains("rate limit"), "Learnings should mention the error")
-        assertTrue(knowledge is Knowledge.FromOutcome, "Knowledge should be FromOutcome type")
+        val fromOutcome = assertIs<Knowledge.FromOutcome>(knowledge, "Knowledge should be FromOutcome type")
+        assertTrue(fromOutcome.approach.isNotEmpty(), "Approach should be captured")
+        assertTrue(fromOutcome.learnings.contains("failed"), "Learnings should mention failure")
+        assertTrue(fromOutcome.learnings.contains("rate limit"), "Learnings should mention the error")
     }
 
     @Test
@@ -234,15 +236,15 @@ class ProjectManagerAgentTest {
 
         val knowledge = projectAgent.extractKnowledgeFromOutcome(outcome, task, plan)
 
-        assertTrue(knowledge.approach.isNotEmpty(), "Approach should be captured")
+        val fromOutcome = assertIs<Knowledge.FromOutcome>(knowledge, "Knowledge should be FromOutcome type")
+        assertTrue(fromOutcome.approach.isNotEmpty(), "Approach should be captured")
         // Learnings should contain the outcome message or indicate success
         assertTrue(
-            knowledge.learnings.contains("SUCCEEDED") ||
-                knowledge.learnings.contains("authentication") ||
-                knowledge.learnings.contains("Human"),
-            "Learnings should capture the outcome: ${knowledge.learnings}",
+            fromOutcome.learnings.contains("SUCCEEDED") ||
+                fromOutcome.learnings.contains("authentication") ||
+                fromOutcome.learnings.contains("Human"),
+            "Learnings should capture the outcome: ${fromOutcome.learnings}",
         )
-        assertTrue(knowledge is Knowledge.FromOutcome, "Knowledge should be FromOutcome type")
     }
 
     @Test
@@ -269,9 +271,11 @@ class ProjectManagerAgentTest {
         val perception = projectAgent.perceiveState(currentState)
 
         // With mock reasoning, we get a "Project Manager Perception" idea
-        val perceptionIdea = perception.ideas.find { it.name.contains("Project Manager") }
-        assertTrue(perceptionIdea != null, "Should have perception idea from mock")
-        assertTrue(perceptionIdea!!.description.isNotEmpty(), "Idea should have description")
+        val perceptionIdea = assertNotNull(
+            perception.ideas.find { it.name.contains("Project Manager") },
+            "Should have perception idea from mock",
+        )
+        assertTrue(perceptionIdea.description.isNotEmpty(), "Idea should have description")
     }
 
     @Test

@@ -28,10 +28,3 @@ data class EscalationDecision(
         CRITICAL,
     }
 }
-
-/**
- * Compare urgency levels for ordering.
- */
-internal operator fun EscalationDecision.UrgencyLevel.compareTo(
-    other: EscalationDecision.UrgencyLevel,
-): Int = this.ordinal.compareTo(other.ordinal)

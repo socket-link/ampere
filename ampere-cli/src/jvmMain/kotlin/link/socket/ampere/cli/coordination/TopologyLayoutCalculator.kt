@@ -232,12 +232,11 @@ class TopologyLayoutCalculator {
             val reverseEdge = state.edges.find {
                 it.sourceAgentId == target && it.targetAgentId == source
             }
-
             val isBidirectional = reverseEdge != null
 
             // Combine interaction types from both directions if bidirectional
-            val interactionTypes = if (isBidirectional) {
-                coordinationEdge.interactionTypes + (reverseEdge?.interactionTypes ?: emptySet())
+            val interactionTypes = if (reverseEdge != null) {
+                coordinationEdge.interactionTypes + reverseEdge.interactionTypes
             } else {
                 coordinationEdge.interactionTypes
             }

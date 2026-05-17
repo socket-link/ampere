@@ -7,6 +7,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -535,15 +536,14 @@ class AgentMemoryServiceTest {
             // Verify event was emitted
             assertEquals(1, emittedEvents.size)
             val event = emittedEvents.first()
-            assertTrue(event is MemoryEvent.KnowledgeStored)
 
-            val storedEvent = event as MemoryEvent.KnowledgeStored
+            val storedEvent = assertIs<MemoryEvent.KnowledgeStored>(event)
             assertEquals(stored.id, storedEvent.knowledgeId)
             assertEquals(KnowledgeType.FROM_OUTCOME, storedEvent.knowledgeType)
             assertEquals("test-task", storedEvent.taskType)
             assertEquals(listOf("tag1", "tag2"), storedEvent.tags)
-            assertTrue(storedEvent.eventSource is EventSource.Agent)
-            assertEquals(agentId, (storedEvent.eventSource as EventSource.Agent).agentId)
+            val eventSource = assertIs<EventSource.Agent>(storedEvent.eventSource)
+            assertEquals(agentId, eventSource.agentId)
         }
     }
 
@@ -581,8 +581,8 @@ class AgentMemoryServiceTest {
             assertTrue(recallEvent.resultsFound > 0)
             assertTrue(recallEvent.averageRelevance >= 0.0)
             assertTrue(recallEvent.topKnowledgeIds.isNotEmpty())
-            assertTrue(recallEvent.eventSource is EventSource.Agent)
-            assertEquals(agentId, (recallEvent.eventSource as EventSource.Agent).agentId)
+            val eventSource = assertIs<EventSource.Agent>(recallEvent.eventSource)
+            assertEquals(agentId, eventSource.agentId)
         }
     }
     // ==================== Test 8: Service Method Delegation ====================

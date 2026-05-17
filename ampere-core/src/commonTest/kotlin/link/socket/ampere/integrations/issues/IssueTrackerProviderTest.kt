@@ -3,7 +3,7 @@ package link.socket.ampere.integrations.issues
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.execution.tools.issue.CreatedIssue
 import link.socket.ampere.agents.execution.tools.issue.IssueCreateRequest
@@ -251,12 +251,12 @@ class IssueTrackerProviderTest {
             }
         }
 
-        // Verify interface supports Result return types for error handling
-        assertTrue(mockProvider is IssueTrackerProvider)
+        val provider: IssueTrackerProvider = mockProvider
+        assertEquals("test", provider.providerId)
     }
 
     @Test
-    fun `resolvedDependencies allows dependency injection during batch creation`() {
+    fun `resolvedDependencies allows dependency injection during batch creation`() = runTest {
         // Simulate resolving dependencies
         val dependencies = mapOf(
             "task-1" to 100,
@@ -318,7 +318,14 @@ class IssueTrackerProviderTest {
             dependsOn = listOf("task-1", "task-2"),
         )
 
-        // Verify the interface supports dependency injection
-        assertTrue(mockProvider is IssueTrackerProvider)
+        val provider: IssueTrackerProvider = mockProvider
+        val created = provider.createIssue(
+            repository = "owner/repo",
+            request = request,
+            resolvedDependencies = dependencies,
+        ).getOrThrow()
+
+        assertEquals(102, created.issueNumber)
+        assertEquals(99, created.parentIssueNumber)
     }
 }

@@ -76,8 +76,8 @@ class WaveformCellAdapterTest {
 
         val cell = buffer.getCell(0, 0)
         assertEquals('#', cell.char)
-        assertNotNull(cell.ansiColor)
-        assertTrue(cell.ansiColor!!.contains("38;5;196"))
+        val ansiColor = assertNotNull(cell.ansiColor)
+        assertTrue(ansiColor.contains("38;5;196"))
     }
 
     @Test

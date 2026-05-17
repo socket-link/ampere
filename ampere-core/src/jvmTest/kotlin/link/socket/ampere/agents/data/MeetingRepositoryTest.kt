@@ -205,9 +205,9 @@ class MeetingRepositoryTest {
         val completedStatus = loaded.status
 
         assertEquals(2, completedStatus.attendedBy.size)
-        assertNotNull(completedStatus.outcomes)
-        assertEquals(1, completedStatus.outcomes!!.size)
-        assertIs<MeetingOutcome.DecisionMade>(completedStatus.outcomes!![0])
+        val outcomes = assertNotNull(completedStatus.outcomes)
+        assertEquals(1, outcomes.size)
+        assertIs<MeetingOutcome.DecisionMade>(outcomes[0])
     } }
 
     @Test
@@ -263,12 +263,12 @@ class MeetingRepositoryTest {
 
         val loaded = repo.getMeeting(meeting.id).getOrNull()
         assertNotNull(loaded)
-        assertIs<MeetingStatus.Completed>(loaded.status)
 
-        val status = loaded.status as MeetingStatus.Completed
+        val status = assertIs<MeetingStatus.Completed>(loaded.status)
         assertEquals(2, status.attendedBy.size)
-        assertEquals(1, status.outcomes?.size)
-        assertIs<MeetingOutcome.ActionItem>(status.outcomes!![0])
+        val outcomes = assertNotNull(status.outcomes)
+        assertEquals(1, outcomes.size)
+        assertIs<MeetingOutcome.ActionItem>(outcomes[0])
     } }
 
     @Test

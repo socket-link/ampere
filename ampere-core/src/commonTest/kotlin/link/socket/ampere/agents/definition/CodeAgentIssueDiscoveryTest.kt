@@ -2,6 +2,7 @@ package link.socket.ampere.agents.definition
 
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -152,9 +153,8 @@ class CodeAgentIssueDiscoveryTest {
         val result = agent.queryAssignedIssues()
 
         // Verify query parameters
-        val lastQuery = mockProvider.lastQuery
-        assertTrue(lastQuery != null, "Query should have been called")
-        assertTrue(lastQuery!!.state == IssueState.Open, "Should query for open issues")
+        val lastQuery = assertNotNull(mockProvider.lastQuery, "Query should have been called")
+        assertTrue(lastQuery.state == IssueState.Open, "Should query for open issues")
         assertTrue(lastQuery.assignee == "CodeWriterAgent", "Should query for CodeWriterAgent")
         assertTrue(lastQuery.limit == 20, "Should limit to 20 results")
 
@@ -211,9 +211,8 @@ class CodeAgentIssueDiscoveryTest {
         val result = agent.queryAvailableIssues()
 
         // Verify query parameters
-        val lastQuery = mockProvider.lastQuery
-        assertTrue(lastQuery != null, "Query should have been called")
-        assertTrue(lastQuery!!.state == IssueState.Open, "Should query for open issues")
+        val lastQuery = assertNotNull(mockProvider.lastQuery, "Query should have been called")
+        assertTrue(lastQuery.state == IssueState.Open, "Should query for open issues")
         assertTrue(lastQuery.assignee == null, "Should query for unassigned issues")
         assertTrue(lastQuery.labels.contains("code"), "Should filter by 'code' label")
         assertTrue(lastQuery.labels.contains("task"), "Should filter by 'task' label")

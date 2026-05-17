@@ -4,6 +4,7 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -189,11 +190,11 @@ class AgentLearningLoopIntegrationTest {
         val failureOutcome = stubFailureOutcome()
         val failureKnowledge = productAgent.extractKnowledgeFromOutcome(failureOutcome, task, plan)
 
-        assertTrue(successKnowledge is Knowledge.FromOutcome)
-        assertTrue(failureKnowledge is Knowledge.FromOutcome)
-        assertTrue(successKnowledge.approach.isNotEmpty())
-        assertTrue(failureKnowledge.approach.isNotEmpty())
-        assertTrue(successKnowledge.learnings.contains("Success"))
-        assertTrue(failureKnowledge.learnings.contains("Failure"))
+        val successFromOutcome = assertIs<Knowledge.FromOutcome>(successKnowledge)
+        val failureFromOutcome = assertIs<Knowledge.FromOutcome>(failureKnowledge)
+        assertTrue(successFromOutcome.approach.isNotEmpty())
+        assertTrue(failureFromOutcome.approach.isNotEmpty())
+        assertTrue(successFromOutcome.learnings.contains("Success"))
+        assertTrue(failureFromOutcome.learnings.contains("Failure"))
     }
 }

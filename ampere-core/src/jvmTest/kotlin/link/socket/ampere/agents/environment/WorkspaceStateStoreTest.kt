@@ -2,6 +2,7 @@ package link.socket.ampere.agents.environment
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -204,9 +205,9 @@ class WorkspaceStateStoreTest {
         )
 
         val item = state.items["task-1"]!!
-        assertTrue(item.status is TaskStatus.Completed)
+        val status = assertIs<TaskStatus.Completed>(item.status)
         assertEquals(1f, item.progress)
-        assertEquals(completedAt, (item.status as TaskStatus.Completed).completedAt)
+        assertEquals(completedAt, status.completedAt)
     }
 
     @Test
@@ -238,8 +239,8 @@ class WorkspaceStateStoreTest {
         )
 
         val item = state.items["task-1"]!!
-        assertTrue(item.status is TaskStatus.Blocked)
-        assertEquals("Build failed: missing dependency", (item.status as TaskStatus.Blocked).reason)
+        val status = assertIs<TaskStatus.Blocked>(item.status)
+        assertEquals("Build failed: missing dependency", status.reason)
     }
 
     @Test

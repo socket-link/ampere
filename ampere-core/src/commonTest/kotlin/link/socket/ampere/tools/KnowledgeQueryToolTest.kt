@@ -58,8 +58,8 @@ class KnowledgeQueryToolTest {
         val manifest = manifest("pl-1", PluginPermission.KnowledgeQuery("work"))
         val tool = KnowledgeQueryTool(store = store, pluginManifest = manifest)
 
-        assertNotNull(tool.pluginManifest)
-        assertEquals("pl-1", tool.pluginManifest?.id)
+        val pluginManifest = assertNotNull(tool.pluginManifest)
+        assertEquals("pl-1", pluginManifest.id)
     }
 
     @Test

@@ -90,7 +90,7 @@ class FunctionExecutor(
                     executorId = id,
                     timestamp = Clock.System.now(),
                     result = createFailureOutcome(
-                        request = request as ExecutionRequest<ExecutionContext>,
+                        request = request,
                         startTime = startTime,
                         error = ExecutionError(
                             type = ExecutionError.Type.TOOL_UNAVAILABLE,
@@ -126,11 +126,7 @@ class FunctionExecutor(
             logger.i { "Executing FunctionTool '${tool.name}'" }
 
             // Execute the tool
-            // Cast is safe because we validated tool is FunctionTool above
-            @Suppress("UNCHECKED_CAST")
-            val outcome = (tool as FunctionTool<ExecutionContext>).execute(
-                request as ExecutionRequest<ExecutionContext>,
-            )
+            val outcome = tool.executeWith(request)
 
             // Emit appropriate status based on outcome type
             when (outcome) {
@@ -154,25 +150,7 @@ class FunctionExecutor(
                         ),
                     )
                 }
-                else -> {
-                    logger.w { "Unexpected outcome type: ${outcome::class.simpleName}" }
-                    emit(
-                        ExecutionStatus.Failed(
-                            executorId = id,
-                            timestamp = Clock.System.now(),
-                            result = createFailureOutcome(
-                                request = request as ExecutionRequest<ExecutionContext>,
-                                startTime = startTime,
-                                error = ExecutionError(
-                                    type = ExecutionError.Type.UNEXPECTED,
-                                    message = "Unexpected outcome type",
-                                    details = outcome::class.simpleName,
-                                    isRetryable = false,
-                                ),
-                            ),
-                        ),
-                    )
-                }
+                else -> emitUnexpectedOutcomeFailure(request, startTime, outcome)
             }
         } catch (e: Exception) {
             // Catch any unexpected exceptions and convert to Failed status
@@ -182,7 +160,7 @@ class FunctionExecutor(
                     executorId = id,
                     timestamp = Clock.System.now(),
                     result = createFailureOutcome(
-                        request = request as ExecutionRequest<ExecutionContext>,
+                        request = request,
                         startTime = startTime,
                         error = ExecutionError(
                             type = ExecutionError.Type.UNEXPECTED,
@@ -203,7 +181,7 @@ class FunctionExecutor(
      * different error scenarios.
      */
     private fun createFailureOutcome(
-        request: ExecutionRequest<ExecutionContext>,
+        request: ExecutionRequest<*>,
         startTime: kotlinx.datetime.Instant,
         error: ExecutionError,
     ): ExecutionOutcome.NoChanges.Failure {
@@ -214,6 +192,37 @@ class FunctionExecutor(
             executionStartTimestamp = startTime,
             executionEndTimestamp = Clock.System.now(),
             message = "${error.message}${error.details?.let { "\n\nDetails: $it" } ?: ""}",
+        )
+    }
+
+    private suspend fun FunctionTool<*>.executeWith(
+        request: ExecutionRequest<*>,
+    ): link.socket.ampere.agents.domain.outcome.Outcome {
+        @Suppress("UNCHECKED_CAST")
+        return (this as FunctionTool<ExecutionContext>).execute(request as ExecutionRequest<ExecutionContext>)
+    }
+
+    private suspend fun kotlinx.coroutines.flow.FlowCollector<ExecutionStatus>.emitUnexpectedOutcomeFailure(
+        request: ExecutionRequest<*>,
+        startTime: kotlinx.datetime.Instant,
+        outcome: link.socket.ampere.agents.domain.outcome.Outcome,
+    ) {
+        logger.w { "Unexpected outcome type: ${outcome::class.simpleName}" }
+        emit(
+            ExecutionStatus.Failed(
+                executorId = id,
+                timestamp = Clock.System.now(),
+                result = createFailureOutcome(
+                    request = request,
+                    startTime = startTime,
+                    error = ExecutionError(
+                        type = ExecutionError.Type.UNEXPECTED,
+                        message = "Unexpected outcome type",
+                        details = outcome::class.simpleName,
+                        isRetryable = false,
+                    ),
+                ),
+            ),
         )
     }
 
