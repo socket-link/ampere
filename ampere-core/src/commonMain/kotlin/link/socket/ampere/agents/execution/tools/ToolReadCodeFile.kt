@@ -12,8 +12,8 @@ const val READ_CODE_FILE_TOOL_ID: String = "read_code_file"
  *
  * Wraps the same platform-side `executeReadCodebase` implementation as
  * [ToolReadCodebase] but exposes the tool under the canonical
- * `read_code_file` id that [link.socket.ampere.agents.domain.cognition.sparks.RoleSpark.Code]
- * already references, and ships with the [CodeParams.CodeReading]
+ * `read_code_file` id that the declarative role-code spark references, and
+ * ships with the [CodeParams.CodeReading]
  * parameter strategy attached so an agent that wants the tool does not
  * need to register a strategy separately.
  *

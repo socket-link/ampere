@@ -247,7 +247,7 @@ class AmpereProjectSparkTest {
 
         assertTrue(
             fileAccess.writePatterns.isEmpty(),
-            "ProjectSpark should not enable writes (RoleSparksprovide write access)",
+            "ProjectSpark should not enable writes (role sparks provide write access)",
         )
     }
 

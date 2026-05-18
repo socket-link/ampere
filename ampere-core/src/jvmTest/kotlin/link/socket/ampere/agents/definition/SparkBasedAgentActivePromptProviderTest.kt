@@ -7,7 +7,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
-import link.socket.ampere.agents.domain.cognition.sparks.RoleSpark
+import link.socket.ampere.agents.domain.cognition.sparks.DefaultPhaseSparkLibrary
 import link.socket.ampere.agents.execution.tools.planning.PLAN_STEPS_TOOL_ID
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModel
@@ -48,12 +48,14 @@ class SparkBasedAgentActivePromptProviderTest {
             "expected affinity header in payload, got: $firstPayload",
         )
 
-        agent.spark<SparkBasedAgent<CodeState>>(RoleSpark.Code)
+        val roleCode = DefaultPhaseSparkLibrary.load().roleSparkById(SparkBasedAgent.ROLE_CODE_SPARK_ID)
+            ?: error("role-code fixture missing")
+        agent.spark<SparkBasedAgent<CodeState>>(roleCode)
         agent.callLLM("second")
         val secondPayload = captured.last()
         assertTrue(
-            secondPayload.contains(RoleSpark.Code.promptContribution),
-            "expected RoleSpark.Code contribution in payload after sparking, got: $secondPayload",
+            secondPayload.contains("## Role: Code"),
+            "expected role-code contribution in payload after sparking, got: $secondPayload",
         )
 
         assertEquals(2, captured.size)

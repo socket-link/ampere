@@ -1,12 +1,14 @@
 package link.socket.ampere
 
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.SparkBasedAgent
 import link.socket.ampere.agents.definition.product.ProductState
 import link.socket.ampere.agents.definition.qa.QualityState
+import link.socket.ampere.agents.domain.cognition.sparks.DefaultPhaseSparkLibrary
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
@@ -150,6 +152,7 @@ fun stubProductManagerAgent(
     agentConfiguration: AgentConfiguration = stubAgentConfiguration(),
 ): SparkBasedAgent<ProductState> =
     SparkBasedAgent.Product(
+        sparkRegistry = runBlocking { DefaultPhaseSparkLibrary.load() },
         agentId = "stub-product-agent",
         aiConfiguration = agentConfiguration.aiConfiguration,
     )

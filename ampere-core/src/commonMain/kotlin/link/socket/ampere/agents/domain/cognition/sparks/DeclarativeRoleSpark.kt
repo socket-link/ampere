@@ -8,7 +8,7 @@ import link.socket.ampere.agents.domain.cognition.ToolId
 
 /**
  * A capability-bearing role spark authored as a JSON-frontmatter `.spark.md`
- * document instead of a sealed `RoleSpark.<X>` subclass.
+ * document instead of a sealed Kotlin role singleton.
  *
  * Mirrors [DeclarativePhaseSpark] for the role axis: the runtime spark
  * surfaces its body as a single [promptContribution] block (no
@@ -21,8 +21,8 @@ import link.socket.ampere.agents.domain.cognition.ToolId
  *
  * `name` is delegated to the frontmatter so trace projections keep the
  * historical `Role:<Subtype>` bucket: the seed fixture declares
- * `"name": "Role:Code"`, matching the [RoleSpark.Code] singleton it
- * replaces at the [link.socket.ampere.agents.definition.SparkBasedAgent]
+ * `"name": "Role:Code"`, matching the retired Kotlin singleton's trace
+ * label at the [link.socket.ampere.agents.definition.SparkBasedAgent]
  * factory callsites.
  */
 @Serializable

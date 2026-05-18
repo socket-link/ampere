@@ -6,9 +6,11 @@ import link.socket.ampere.agents.definition.SparkBasedAgent
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.cognition.Spark
-import link.socket.ampere.agents.domain.cognition.sparks.LanguageSpark
+import link.socket.ampere.agents.domain.cognition.sparks.DefaultSparkCatalog
+import link.socket.ampere.agents.domain.cognition.sparks.LanguageSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
-import link.socket.ampere.agents.domain.cognition.sparks.RoleSpark
+import link.socket.ampere.agents.domain.cognition.sparks.RoleSparkIds
+import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.util.systemFileSystem
 import okio.FileSystem
@@ -287,24 +289,27 @@ internal class GoalTreeBuilder {
 
 internal class ArcAgentSpawner(
     private val agentFactory: SparkAgentFactory = SparkAgentFactory(),
+    private val sparkRegistry: SparkRegistry = DefaultSparkCatalog.registry,
 ) {
     fun spawn(arcConfig: ArcConfig, projectContext: ProjectContext): List<SparkBasedAgent<CodeState>> {
         val projectSpark = projectContext.toProjectSpark()
 
         return arcConfig.agents.map { agentConfig ->
-            val roleSpark = RoleSparkResolver.resolve(agentConfig.role)
-            val affinity = RoleSparkResolver.affinityFor(roleSpark)
+            val roleProfile = RoleSparkResolver.resolve(agentConfig.role)
+            val roleSpark = sparkRegistry.roleSparkById(roleProfile.sparkId)
+                ?: error("Missing bundled role spark '${roleProfile.sparkId}' for role '${agentConfig.role}'")
+            val additionalSparkResolver = AdditionalSparkResolver(sparkRegistry)
 
             val agent = agentFactory.createAgent(
                 id = generateUUID("ArcAgent-${agentConfig.role}"),
-                affinity = affinity,
+                affinity = roleProfile.affinity,
             )
 
             agent.spark<SparkBasedAgent<CodeState>>(projectSpark)
             agent.spark<SparkBasedAgent<CodeState>>(roleSpark)
 
             agentConfig.sparks
-                .map { AdditionalSparkResolver.resolve(it) }
+                .map { additionalSparkResolver.resolve(it) }
                 .forEach { spark -> agent.spark<SparkBasedAgent<CodeState>>(spark) }
 
             agent
@@ -312,42 +317,47 @@ internal class ArcAgentSpawner(
     }
 }
 
+internal data class RoleSparkProfile(
+    val sparkId: String,
+    val affinity: CognitiveAffinity,
+)
+
 internal object RoleSparkResolver {
-    private val mapping: Map<String, RoleSpark> = mapOf(
-        "pm" to RoleSpark.Planning,
-        "product" to RoleSpark.Planning,
-        "project" to RoleSpark.Planning,
-        "planner" to RoleSpark.Planning,
-        "code" to RoleSpark.Code,
-        "qa" to RoleSpark.Code,
-        "quality" to RoleSpark.Code,
-        "engineer" to RoleSpark.Code,
-        "validator" to RoleSpark.Code,
-        "remediator" to RoleSpark.Code,
-        "executor" to RoleSpark.Operations,
-        "monitor" to RoleSpark.Operations,
-        "scanner" to RoleSpark.Operations,
-        "ops" to RoleSpark.Operations,
-        "scholar" to RoleSpark.Research,
-        "writer" to RoleSpark.Research,
-        "critic" to RoleSpark.Research,
-        "analyst" to RoleSpark.Research,
-        "researcher" to RoleSpark.Research,
-        "editor" to RoleSpark.Research,
+    private val planning = RoleSparkProfile(RoleSparkIds.PLANNING, CognitiveAffinity.INTEGRATIVE)
+    private val code = RoleSparkProfile(RoleSparkIds.CODE, CognitiveAffinity.ANALYTICAL)
+    private val operations = RoleSparkProfile(RoleSparkIds.OPERATIONS, CognitiveAffinity.OPERATIONAL)
+    private val research = RoleSparkProfile(RoleSparkIds.RESEARCH, CognitiveAffinity.EXPLORATORY)
+
+    private val mapping: Map<String, RoleSparkProfile> = mapOf(
+        "pm" to planning,
+        "product" to planning,
+        "project" to planning,
+        "planner" to planning,
+        "code" to code,
+        "qa" to code,
+        "quality" to code,
+        "engineer" to code,
+        "validator" to code,
+        "remediator" to code,
+        "executor" to operations,
+        "monitor" to operations,
+        "scanner" to operations,
+        "ops" to operations,
+        "scholar" to research,
+        "writer" to research,
+        "critic" to research,
+        "analyst" to research,
+        "researcher" to research,
+        "editor" to research,
     )
 
-    fun resolve(role: String): RoleSpark =
-        mapping[role.lowercase()] ?: RoleSpark.Research
-
-    fun affinityFor(roleSpark: RoleSpark): CognitiveAffinity = when (roleSpark) {
-        RoleSpark.Code -> CognitiveAffinity.ANALYTICAL
-        RoleSpark.Research -> CognitiveAffinity.EXPLORATORY
-        RoleSpark.Operations -> CognitiveAffinity.OPERATIONAL
-        RoleSpark.Planning -> CognitiveAffinity.INTEGRATIVE
-    }
+    fun resolve(role: String): RoleSparkProfile =
+        mapping[role.lowercase()] ?: research
 }
 
-internal object AdditionalSparkResolver {
+internal class AdditionalSparkResolver(
+    private val sparkRegistry: SparkRegistry = DefaultSparkCatalog.registry,
+) {
     fun resolve(name: String): Spark {
         val normalized = name.trim()
         if (normalized.isBlank()) {
@@ -355,13 +365,17 @@ internal object AdditionalSparkResolver {
         }
         val lower = normalized.lowercase()
         return when {
-            lower.contains("kotlin") -> LanguageSpark.Kotlin
-            lower.contains("java") -> LanguageSpark.Java
-            lower.contains("typescript") || lower == "ts" -> LanguageSpark.TypeScript
-            lower.contains("python") -> LanguageSpark.Python
+            lower.contains("kotlin") -> requireLanguageSpark(LanguageSparkIds.KOTLIN)
+            lower.contains("java") -> requireLanguageSpark(LanguageSparkIds.JAVA)
+            lower.contains("typescript") || lower == "ts" -> requireLanguageSpark(LanguageSparkIds.TYPESCRIPT)
+            lower.contains("python") -> requireLanguageSpark(LanguageSparkIds.PYTHON)
             else -> CustomSpark(normalized)
         }
     }
+
+    private fun requireLanguageSpark(id: String): Spark =
+        sparkRegistry.languageSparkById(id)
+            ?: error("Missing bundled language spark '$id'")
 }
 
 internal data class CustomSpark(

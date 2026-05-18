@@ -4,35 +4,34 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.cognition.SparkStack
 import link.socket.ampere.agents.domain.cognition.with
 
 /**
- * Behaviour-equivalence check between the declarative [DeclarativeRoleSpark]
- * loaded from `role-code.spark.md` and the [RoleSpark.Code] singleton it
- * replaces. Asserts that on the same affinity, the two sparks produce
- * identical effective prompt, tool, role, and file-access projections —
- * which is the contract the AMPR-165 Wave 4 factory migration depends on.
+ * Behaviour check for the declarative [DeclarativeRoleSpark] loaded from
+ * `role-code.spark.md`. Asserts that on the same affinity, the fixture
+ * produces the retired singleton's effective prompt, tool, role, and
+ * file-access projections.
  */
 class DeclarativeRoleSparkTest {
 
     @Test
-    fun `declarative role spark mirrors RoleSpark Code on a fixture stack`() {
+    fun `declarative role spark mirrors retired Code role surface on a fixture stack`() {
+        val expected = RoleSparkFixtureExpectations.code
         val declarative = loadDeclarativeRoleCode()
 
         val declarativeStack = SparkStack.withAffinity(CognitiveAffinity.ANALYTICAL).with(declarative)
-        val singletonStack = SparkStack.withAffinity(CognitiveAffinity.ANALYTICAL).with(RoleSpark.Code)
 
-        assertEquals(
-            singletonStack.buildSystemPrompt().trim(),
-            declarativeStack.buildSystemPrompt().trim(),
-            "system prompt diverges between declarative and singleton role-code",
+        assertTrue(
+            declarativeStack.buildSystemPrompt().contains(expected.promptContribution),
+            "system prompt should include role-code prompt contribution",
         )
-        assertEquals(singletonStack.effectiveAgentRole(), declarativeStack.effectiveAgentRole())
-        assertEquals(singletonStack.effectiveRequestedTools(), declarativeStack.effectiveRequestedTools())
-        assertEquals(singletonStack.effectiveAllowedTools(), declarativeStack.effectiveAllowedTools())
-        assertEquals(singletonStack.effectiveFileAccess(), declarativeStack.effectiveFileAccess())
+        assertEquals(expected.agentRole, declarativeStack.effectiveAgentRole())
+        assertEquals(expected.requestedToolIds, declarativeStack.effectiveRequestedTools())
+        assertEquals(expected.allowedTools, declarativeStack.effectiveAllowedTools())
+        assertEquals(expected.fileAccessScope, declarativeStack.effectiveFileAccess())
     }
 
     @Test

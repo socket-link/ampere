@@ -36,16 +36,9 @@
       "**/build/**",
       "**/.gradle/**",
       "**/node_modules/**",
-      "**/.git/**",
-      "**/.env",
-      "**/.env.*",
-      "**/credentials.json",
-      "**/secrets.json",
-      "**/*.pem",
-      "**/*.key",
-      "**/id_rsa*",
-      "**/.git/config"
-    ]
+      "**/.git/**"
+    ],
+    "forbiddenRefs": ["sensitive-files"]
   }
 }
 ---
