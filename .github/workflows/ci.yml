@@ -48,7 +48,7 @@ jobs:
 
       - name: Run JVM + Android tests
         timeout-minutes: 20
-        run: ./gradlew :ampere-core:jvmTest :ampere-core:testDebugUnitTest :ampere-cli:test :ampere-compose:test
+        run: ./gradlew :ampere-core:jvmTest :ampere-core:testDebugUnitTest :ampere-cli:jvmTest :ampere-compose:jvmTest :ampere-compose:testDebugUnitTest
 
       - name: Run iOS simulator tests
         if: ${{ matrix.ios }}
