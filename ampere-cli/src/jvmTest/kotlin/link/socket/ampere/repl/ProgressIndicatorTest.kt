@@ -16,6 +16,13 @@ import kotlin.test.assertTrue
 
 class ProgressIndicatorTest {
 
+    // Indicators render every BaseProgressIndicator.FRAME_INTERVAL_MS (50ms).
+    // Each test waits for at least one frame to land in the output buffer
+    // before asserting. The previous 60ms margin raced the render thread on
+    // loaded CI runners (JVM warmup, GC, scheduling); 500ms gives ~10 frames
+    // of headroom while keeping the suite under ~10s overall.
+    private val RENDER_WAIT_MS: Long = 500L
+
     private lateinit var outputStream: ByteArrayOutputStream
     private lateinit var terminal: Terminal
     private lateinit var writer: PrintWriter
@@ -82,7 +89,7 @@ class ProgressIndicatorTest {
             .build() as SpinnerIndicator
 
         indicator.start()
-        Thread.sleep(60) // Wait for at least one frame
+        Thread.sleep(RENDER_WAIT_MS) // Wait for at least one frame
         indicator.stop()
 
         val output = outputStream.toString()
@@ -106,7 +113,7 @@ class ProgressIndicatorTest {
             .build() as SpinnerIndicator
 
         indicator.start()
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.stop()
 
         val output = outputStream.toString()
@@ -184,7 +191,7 @@ class ProgressIndicatorTest {
 
         indicator.start()
         indicator.update(progress = 0.5f)
-        Thread.sleep(60) // Wait for render
+        Thread.sleep(RENDER_WAIT_MS) // Wait for render
         indicator.stop()
 
         val output = outputStream.toString()
@@ -202,7 +209,7 @@ class ProgressIndicatorTest {
 
         indicator.start()
         indicator.update(progress = 1.5f) // Should clamp to 1.0
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.stop()
 
         val output = outputStream.toString()
@@ -219,7 +226,7 @@ class ProgressIndicatorTest {
             .build()
 
         indicator.start()
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.stop()
 
         val output = outputStream.toString()
@@ -238,7 +245,7 @@ class ProgressIndicatorTest {
             .build() as StateIndicator
 
         indicator.start()
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.stop()
 
         val output = outputStream.toString()
@@ -256,7 +263,7 @@ class ProgressIndicatorTest {
 
         indicator.start()
         indicator.setState(IndicatorState.SUCCESS)
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.stop()
 
         val output = outputStream.toString()
@@ -303,9 +310,9 @@ class ProgressIndicatorTest {
             .build()
 
         indicator.start()
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.update(message = "Updated")
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.stop()
 
         val output = outputStream.toString()
@@ -320,7 +327,7 @@ class ProgressIndicatorTest {
             .build()
 
         indicator.start()
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.stop()
 
         val output = outputStream.toString()
@@ -336,7 +343,7 @@ class ProgressIndicatorTest {
             .build()
 
         indicator.start()
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.stop()
 
         val output = outputStream.toString()
@@ -348,7 +355,7 @@ class ProgressIndicatorTest {
     fun `SimpleSpinner provides backward compatibility`() {
         val spinner = SimpleSpinner(terminal)
         spinner.start("Loading...")
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         spinner.stop()
 
         val output = outputStream.toString()
@@ -405,7 +412,7 @@ class ProgressIndicatorTest {
 
         indicator.setState(IndicatorState.THINKING)
         indicator.start()
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.stop()
 
         val output = outputStream.toString()
@@ -423,7 +430,7 @@ class ProgressIndicatorTest {
 
         indicator.start()
         indicator.update(progress = 0.5f)
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.complete(success = true)
 
         val output = outputStream.toString()
@@ -445,7 +452,7 @@ class ProgressIndicatorTest {
 
         indicator.start()
         indicator.update(progress = 0.5f)
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.stop()
 
         val output = outputStream.toString()
@@ -468,7 +475,7 @@ class ProgressIndicatorTest {
 
         indicator.start()
         indicator.update(progress = 0.25f)
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.stop()
 
         val wideOutput = outputStream.toString()
@@ -479,7 +486,7 @@ class ProgressIndicatorTest {
         terminal.setSize(Size(30, 24))
         indicator.start()
         indicator.update(progress = 0.25f)
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.stop()
 
         val narrowOutput = outputStream.toString()
@@ -497,7 +504,7 @@ class ProgressIndicatorTest {
             .build()
 
         indicator.start()
-        Thread.sleep(60)
+        Thread.sleep(RENDER_WAIT_MS)
         indicator.stop()
 
         val output = outputStream.toString()
