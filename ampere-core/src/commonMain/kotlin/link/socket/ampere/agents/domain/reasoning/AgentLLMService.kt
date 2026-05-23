@@ -20,6 +20,8 @@ import link.socket.ampere.api.model.TokenUsage
 import link.socket.ampere.domain.ai.pricing.ProviderPricingCalculator
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.domain.util.toClientModelId
+import link.socket.ampere.llm.BundledUpstreamLlmClient
+import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.util.ioDispatcher
 import link.socket.ampere.util.logWith
 
@@ -71,6 +73,21 @@ class AgentLLMService(
      * unchanged.
      */
     private val activePromptProvider: (() -> String?)? = null,
+    /**
+     * Injection seam for outbound LLM calls. Defaults to whatever the
+     * [agentConfiguration] carries (which itself defaults to
+     * [BundledUpstreamLlmClient] — the pre-seam direct-call path).
+     * Embedded consumers (e.g. Socket) typically set the client on
+     * [AgentConfiguration.upstreamLlmClient] so it flows through
+     * [link.socket.ampere.agents.domain.reasoning.AgentReasoning];
+     * passing this argument explicitly overrides whatever the config says,
+     * for direct-construction tests that don't want to round-trip through
+     * the config.
+     *
+     * Note: a custom [link.socket.ampere.domain.llm.LlmProvider] configured
+     * on [AgentConfiguration] short-circuits before this client runs.
+     */
+    private val upstreamLlmClient: UpstreamLlmClient = agentConfiguration.upstreamLlmClient,
 ) {
 
     private val logger: Logger = logWith("AgentLLMService")
@@ -162,7 +179,6 @@ class AgentLLMService(
         }
         val effectiveConfig = routingResolution.configuration
 
-        val client = effectiveConfig.provider.client
         val model = effectiveConfig.model
 
         val messages = listOf(
@@ -193,7 +209,7 @@ class AgentLLMService(
         val startedAt = Clock.System.now()
         val completion = try {
             withContext(ioDispatcher) {
-                client.chatCompletion(request)
+                upstreamLlmClient.call(request, effectiveConfig)
             }
         } catch (t: Throwable) {
             emitCompletedTelemetry(

@@ -8,7 +8,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.event.Event
@@ -315,8 +317,14 @@ class McpIntegrationTest {
 
         manager.discoverAndRegisterTools().getOrThrow()
 
-        // Allow event bus to process async events
-        kotlinx.coroutines.delay(200)
+        // The event bus runs on Dispatchers.Default, so delays inside runTest's
+        // virtual-time scheduler don't give it real time to deliver. Poll on a
+        // real dispatcher until the expected events arrive.
+        awaitUntil(description = "2 ToolRegistered events emitted") {
+            synchronized(emittedEvents) {
+                emittedEvents.filterIsInstance<ToolEvent.ToolRegistered>().size >= 2
+            }
+        }
 
         // Verify ToolRegistered events were emitted
         val registeredEvents = synchronized(emittedEvents) {
@@ -366,8 +374,11 @@ class McpIntegrationTest {
 
         manager.discoverAndRegisterTools().getOrThrow()
 
-        // Allow event bus to process async events
-        kotlinx.coroutines.delay(200)
+        awaitUntil(description = "ToolDiscoveryComplete event emitted") {
+            synchronized(emittedEvents) {
+                emittedEvents.any { it is ToolEvent.ToolDiscoveryComplete }
+            }
+        }
 
         val discoveryEvents = synchronized(emittedEvents) {
             emittedEvents.filterIsInstance<ToolEvent.ToolDiscoveryComplete>()
@@ -536,10 +547,38 @@ class McpIntegrationTest {
         // Disconnect
         manager.disconnectAll()
 
-        // Allow async events to process
-        kotlinx.coroutines.delay(200)
+        awaitUntil(description = "tools removed from registry after disconnect") {
+            registry.getAllTools().isEmpty()
+        }
 
         // Verify tools were removed from registry
         assertEquals(0, registry.getAllTools().size)
+    }
+
+    /**
+     * Poll [predicate] on [Dispatchers.Default] until it returns `true` or
+     * [timeoutMs] elapses.
+     *
+     * The event bus under test runs on [Dispatchers.Default]; [runTest]'s
+     * virtual-time scheduler advances `delay(...)` instantly without giving
+     * the real dispatcher any wall-clock time, so a fixed `delay(N)` is a
+     * race. Polling under a real dispatcher gives the event bus actual time
+     * to deliver and is robust against varying CI load.
+     */
+    private suspend fun awaitUntil(
+        timeoutMs: Long = 5_000,
+        pollIntervalMs: Long = 25,
+        description: String = "condition",
+        predicate: suspend () -> Boolean,
+    ) {
+        withContext(Dispatchers.Default) {
+            val deadline = System.currentTimeMillis() + timeoutMs
+            while (!predicate()) {
+                check(System.currentTimeMillis() < deadline) {
+                    "Timed out after ${timeoutMs}ms waiting for: $description"
+                }
+                delay(pollIntervalMs)
+            }
+        }
     }
 }

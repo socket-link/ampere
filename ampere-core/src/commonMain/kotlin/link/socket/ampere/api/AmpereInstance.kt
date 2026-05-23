@@ -8,6 +8,8 @@ import link.socket.ampere.api.service.PricingService
 import link.socket.ampere.api.service.StatusService
 import link.socket.ampere.api.service.ThreadService
 import link.socket.ampere.api.service.TicketService
+import link.socket.ampere.llm.BundledUpstreamLlmClient
+import link.socket.ampere.llm.UpstreamLlmClient
 
 /**
  * A running AMPERE instance. Provides access to all SDK subsystems.
@@ -51,4 +53,18 @@ interface AmpereInstance : AutoCloseable {
 
     /** System-wide status and health */
     val status: StatusService
+
+    /**
+     * Runtime default for outbound LLM calls.
+     *
+     * Set at construction time via [Ampere.fromEnvironment] (or its
+     * platform-specific siblings). Code that constructs agents off this
+     * instance should pass this client into agent factories so every
+     * agent inherits the same upstream routing — Socket's typical pattern.
+     *
+     * Defaults to [BundledUpstreamLlmClient] (direct per-provider OpenAI
+     * call) when not overridden.
+     */
+    val upstreamLlmClient: UpstreamLlmClient
+        get() = BundledUpstreamLlmClient
 }

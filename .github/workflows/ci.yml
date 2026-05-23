@@ -16,8 +16,10 @@ jobs:
         include:
           - os: ubuntu-latest
             java: '17'
+            ios: false
           - os: macos-latest
             java: '21'
+            ios: true
 
     steps:
       - name: Checkout code
@@ -44,6 +46,11 @@ jobs:
         timeout-minutes: 10
         run: ./gradlew ktlintCheck
 
-      - name: Run tests
-        timeout-minutes: 10
-        run: ./gradlew test
+      - name: Run JVM + Android tests
+        timeout-minutes: 20
+        run: ./gradlew :ampere-core:jvmTest :ampere-core:testDebugUnitTest :ampere-cli:jvmTest :ampere-compose:jvmTest :ampere-compose:testDebugUnitTest
+
+      - name: Run iOS simulator tests
+        if: ${{ matrix.ios }}
+        timeout-minutes: 25
+        run: ./gradlew :ampere-core:iosSimulatorArm64Test
