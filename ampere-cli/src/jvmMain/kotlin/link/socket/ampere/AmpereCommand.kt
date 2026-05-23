@@ -239,10 +239,24 @@ class AmpereCommand(
                         ) { status -> systemStatus = status }
                     } else {
                         val effectiveGoal = goal!!
-                        val activationResult = goalHandler.activateGoal(effectiveGoal)
-                        if (activationResult.isFailure) {
-                            jazzPane.setFailed("Failed to activate goal: ${activationResult.exceptionOrNull()?.message}")
-                            systemStatus = StatusBar.SystemStatus.ATTENTION_NEEDED
+                        // Run activation asynchronously so the dashboard renders
+                        // while the agent factory and ticket orchestrator initialize.
+                        // Awaiting it here blocked the launch of the render and
+                        // input jobs below, so --goal showed a completely empty
+                        // terminal until activation completed.
+                        agentScope.launch {
+                            try {
+                                val activationResult = goalHandler.activateGoal(effectiveGoal)
+                                if (activationResult.isFailure) {
+                                    jazzPane.setFailed(
+                                        "Failed to activate goal: ${activationResult.exceptionOrNull()?.message}"
+                                    )
+                                    systemStatus = StatusBar.SystemStatus.ATTENTION_NEEDED
+                                }
+                            } catch (e: Exception) {
+                                jazzPane.setFailed("Goal activation crashed: ${e.message}")
+                                systemStatus = StatusBar.SystemStatus.ATTENTION_NEEDED
+                            }
                         }
                     }
                 }
@@ -280,7 +294,14 @@ class AmpereCommand(
                     if (configGoal != null) {
                         jazzPane.startDemo()
                         systemStatus = StatusBar.SystemStatus.WORKING
-                        goalHandler.activateGoal(configGoal)
+                        agentScope.launch {
+                            try {
+                                goalHandler.activateGoal(configGoal)
+                            } catch (e: Exception) {
+                                jazzPane.setFailed("Goal activation crashed: ${e.message}")
+                                systemStatus = StatusBar.SystemStatus.ATTENTION_NEEDED
+                            }
+                        }
                     }
                     // Otherwise: idle TUI dashboard
                 }
@@ -422,7 +443,7 @@ class AmpereCommand(
                             rightPane = rightPane,
                             statusBar = statusBarStr,
                             viewState = watchState,
-                            deltaSeconds = 0.25f
+                            deltaSeconds = 0.05f
                         )
                     }
 
@@ -431,7 +452,7 @@ class AmpereCommand(
                     out.print(output)
                     out.flush()
 
-                    delay(250) // Render at 4 FPS
+                    delay(50) // Render at 20 FPS
                 }
             }
 

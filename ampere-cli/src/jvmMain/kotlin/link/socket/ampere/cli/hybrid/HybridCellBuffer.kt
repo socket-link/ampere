@@ -11,7 +11,7 @@ data class HybridCell(
     val layer: Int = 0
 )
 
-private const val ANSI_RESET = "\u001B[0m"
+private const val ANSI_RESET = "[0m"
 
 /**
  * Double-buffered cell buffer that supports layer compositing and differential rendering.
@@ -102,7 +102,7 @@ class HybridCellBuffer(
         return buildString {
             for (y in 0 until height) {
                 // Position cursor at start of row (1-based)
-                append("\u001B[${y + 1};1H")
+                append("[${y + 1};1H")
                 var lastColor: String? = null
 
                 for (x in 0 until width) {
@@ -121,15 +121,24 @@ class HybridCellBuffer(
                 if (lastColor != null) {
                     append(ANSI_RESET)
                 }
-                append("\u001B[K") // Clear rest of line
+                append("[K") // Clear rest of line
             }
         }
     }
 
     /**
      * Generate differential ANSI output.
-     * Compares current buffer against previous buffer,
-     * emits cursor-positioned writes only for changed cells.
+     *
+     * Walks the buffer row-by-row, detects contiguous runs of changed cells,
+     * and emits ONE cursor positioning escape per run. Within a run the
+     * current ANSI color is carried across cells — a reset is emitted only
+     * when the color actually changes or the run ends.
+     *
+     * Replaces a per-cell loop that emitted N cursor jumps + N color codes +
+     * N resets for N changed cells. Most terminals (notably macOS
+     * Terminal.app) flush internal state on every cursor positioning escape,
+     * so batching dramatically reduces terminal-side load on
+     * frequently-changing scenes.
      *
      * Falls back to renderFull on first frame or if no previous buffer exists.
      */
@@ -138,20 +147,29 @@ class HybridCellBuffer(
 
         return buildString {
             for (y in 0 until height) {
-                for (x in 0 until width) {
-                    val newCell = currentBuffer[y][x]
-                    val oldCell = prev[y][x]
-
-                    if (newCell != oldCell) {
-                        append("\u001B[${y + 1};${x + 1}H")
-                        if (newCell.ansiColor != null) {
-                            append(newCell.ansiColor)
-                            append(newCell.char)
-                            append(ANSI_RESET)
-                        } else {
-                            append(newCell.char)
-                        }
+                var x = 0
+                while (x < width) {
+                    if (currentBuffer[y][x] == prev[y][x]) {
+                        x++
+                        continue
                     }
+
+                    // Run start: emit one cursor positioning escape, then
+                    // walk forward emitting cells until we hit an unchanged
+                    // cell or the row ends. Color is carried across cells.
+                    append("[${y + 1};${x + 1}H")
+                    var lastColor: String? = null
+                    while (x < width && currentBuffer[y][x] != prev[y][x]) {
+                        val cell = currentBuffer[y][x]
+                        if (cell.ansiColor != lastColor) {
+                            if (lastColor != null) append(ANSI_RESET)
+                            if (cell.ansiColor != null) append(cell.ansiColor)
+                            lastColor = cell.ansiColor
+                        }
+                        append(cell.char)
+                        x++
+                    }
+                    if (lastColor != null) append(ANSI_RESET)
                 }
             }
         }
