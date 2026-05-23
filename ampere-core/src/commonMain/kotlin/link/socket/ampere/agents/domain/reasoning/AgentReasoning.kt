@@ -61,7 +61,7 @@ class AgentReasoning private constructor(
     private val activePromptProvider: (() -> String?)? = null,
 ) {
     private val llmService: AgentLLMService? = config?.let {
-        AgentLLMService(it, eventApi, activePromptProvider)
+        AgentLLMService(it, eventApi, activePromptProvider, it.upstreamLlmClient)
     }
     private val perceptionEvaluator: PerceptionEvaluator? = llmService?.let { PerceptionEvaluator(it) }
     private val planGenerator: PlanGenerator? = llmService?.let { PlanGenerator(it) }

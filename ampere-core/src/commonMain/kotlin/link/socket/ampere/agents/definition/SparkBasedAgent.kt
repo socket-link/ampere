@@ -35,6 +35,8 @@ import link.socket.ampere.domain.agent.bundled.AgentDefinition
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.llm.LlmProvider
+import link.socket.ampere.llm.BundledUpstreamLlmClient
+import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.util.ioDispatcher
 import link.socket.ampere.util.runBlockingCompat
 
@@ -75,6 +77,8 @@ open class SparkBasedAgent<S : AgentState>(
     private val _aiConfiguration: AIConfiguration? = null,
     @Transient
     private val _llmProvider: LlmProvider? = null,
+    @Transient
+    private val _upstreamLlmClient: UpstreamLlmClient = BundledUpstreamLlmClient,
     @Transient
     private val _observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
     @Transient
@@ -130,6 +134,7 @@ open class SparkBasedAgent<S : AgentState>(
             ),
             aiConfiguration = effectiveAiConfiguration,
             llmProvider = _llmProvider,
+            upstreamLlmClient = _upstreamLlmClient,
         )
 
     // Initialize the SparkStack with the configured affinity
@@ -365,6 +370,7 @@ open class SparkBasedAgent<S : AgentState>(
             eventApi: AgentEventApi? = null,
             memoryService: AgentMemoryService? = null,
             llmProvider: LlmProvider? = null,
+            upstreamLlmClient: UpstreamLlmClient = BundledUpstreamLlmClient,
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
@@ -383,6 +389,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _memoryService = memoryService,
                 _aiConfiguration = aiConfiguration,
                 _llmProvider = llmProvider,
+                _upstreamLlmClient = upstreamLlmClient,
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
             )
@@ -426,6 +433,7 @@ open class SparkBasedAgent<S : AgentState>(
             eventApi: AgentEventApi? = null,
             memoryService: AgentMemoryService? = null,
             llmProvider: LlmProvider? = null,
+            upstreamLlmClient: UpstreamLlmClient = BundledUpstreamLlmClient,
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
@@ -444,6 +452,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _memoryService = memoryService,
                 _aiConfiguration = aiConfiguration,
                 _llmProvider = llmProvider,
+                _upstreamLlmClient = upstreamLlmClient,
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
             )
@@ -474,6 +483,7 @@ open class SparkBasedAgent<S : AgentState>(
             eventApi: AgentEventApi? = null,
             memoryService: AgentMemoryService? = null,
             llmProvider: LlmProvider? = null,
+            upstreamLlmClient: UpstreamLlmClient = BundledUpstreamLlmClient,
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
@@ -492,6 +502,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _memoryService = memoryService,
                 _aiConfiguration = aiConfiguration,
                 _llmProvider = llmProvider,
+                _upstreamLlmClient = upstreamLlmClient,
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
             )
@@ -522,6 +533,7 @@ open class SparkBasedAgent<S : AgentState>(
             eventApi: AgentEventApi? = null,
             memoryService: AgentMemoryService? = null,
             llmProvider: LlmProvider? = null,
+            upstreamLlmClient: UpstreamLlmClient = BundledUpstreamLlmClient,
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
@@ -540,6 +552,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _memoryService = memoryService,
                 _aiConfiguration = aiConfiguration,
                 _llmProvider = llmProvider,
+                _upstreamLlmClient = upstreamLlmClient,
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
             )

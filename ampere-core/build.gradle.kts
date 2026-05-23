@@ -195,6 +195,15 @@ kotlin {
                 implementation("com.charleskorn.kaml:kaml:0.72.0")
             }
         }
+        val androidUnitTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+                implementation("org.robolectric:robolectric:4.14")
+                implementation("androidx.test:core:1.6.1")
+                implementation("androidx.test.ext:junit:1.2.1")
+                implementation("junit:junit:4.13.2")
+            }
+        }
         val jsMain by getting {
             dependencies {
                 implementation("io.ktor:ktor-client-js:3.2.2")
@@ -249,6 +258,11 @@ android {
     }
     kotlin {
         jvmToolchain(21)
+    }
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
     }
 }
 
