@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.domain.outcome
 
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.execution.executor.ExecutorId
 
@@ -28,6 +29,7 @@ interface OutcomeMemoryRepository {
      * @param approach Description of what was tried (from ticket + context)
      * @param outcome The execution outcome (success or failure)
      * @param timestamp When this execution completed
+     * @param runId Optional Arc run correlation ID for trace projection
      * @return Result with the created OutcomeMemory or an error
      */
     suspend fun recordOutcome(
@@ -36,6 +38,7 @@ interface OutcomeMemoryRepository {
         approach: String,
         outcome: ExecutionOutcome,
         timestamp: Instant,
+        runId: RunId? = null,
     ): Result<OutcomeMemory>
 
     /**

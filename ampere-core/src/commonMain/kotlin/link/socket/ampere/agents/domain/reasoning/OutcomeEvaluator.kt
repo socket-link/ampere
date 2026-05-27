@@ -3,6 +3,7 @@ package link.socket.ampere.agents.domain.reasoning
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
@@ -47,12 +48,14 @@ class OutcomeEvaluator(
      * @param outcomes List of outcomes from recent executions
      * @param agentRole Description of the agent's role
      * @param contextBuilder Optional custom context builder for outcomes
+     * @param runId Optional Arc run correlation ID for trace projection
      * @return EvaluationResult containing knowledge and summary idea
      */
     suspend fun evaluate(
         outcomes: List<Outcome>,
         agentRole: String,
         contextBuilder: ((List<Outcome>) -> String)? = null,
+        runId: RunId? = null,
     ): EvaluationResult {
         // Handle empty or blank outcomes
         if (outcomes.isEmpty()) {
@@ -89,7 +92,8 @@ class OutcomeEvaluator(
                     phase = CognitivePhase.LEARN,
                     agentId = llmService.agentId,
                     agentRole = agentRole,
-                    workflowId = outcomes.filterIsInstance<ExecutionOutcome>().firstOrNull()?.taskId
+                    workflowId = runId
+                        ?: outcomes.filterIsInstance<ExecutionOutcome>().firstOrNull()?.taskId
                         ?: outcomes.firstOrNull()?.id,
                 ),
             )

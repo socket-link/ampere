@@ -1,5 +1,6 @@
 package link.socket.ampere.api.service
 
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
@@ -31,12 +32,14 @@ interface KnowledgeService {
      * @param tags Optional tags for categorization
      * @param taskType Optional task type for context
      * @param complexityLevel Optional complexity annotation
+     * @param runId Optional Arc run correlation ID for trace projection
      */
     suspend fun store(
         knowledge: Knowledge,
         tags: List<String> = emptyList(),
         taskType: String? = null,
         complexityLevel: String? = null,
+        runId: RunId? = null,
     ): Result<KnowledgeEntry>
 
     /**
