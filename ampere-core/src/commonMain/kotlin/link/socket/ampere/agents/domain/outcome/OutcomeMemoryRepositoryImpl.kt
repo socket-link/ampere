@@ -2,6 +2,7 @@ package link.socket.ampere.agents.domain.outcome
 
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.ExecutorId
@@ -29,6 +30,7 @@ class OutcomeMemoryRepositoryImpl(
         approach: String,
         outcome: ExecutionOutcome,
         timestamp: Instant,
+        runId: RunId?,
     ): Result<OutcomeMemory> = withContext(ioDispatcher) {
         runCatching {
             val id = generateUUID(ticketId, executorId)
@@ -86,17 +88,32 @@ class OutcomeMemoryRepositoryImpl(
                 }
             }
 
-            queries.insertOutcome(
-                id = id,
-                ticket_id = ticketId,
-                executor_id = executorId,
-                approach = approach,
-                success = if (success) 1L else 0L,
-                execution_duration_ms = executionDurationMs,
-                files_changed = filesChanged.toLong(),
-                error_message = errorMessage,
-                timestamp = timestamp.toEpochMilliseconds(),
-            )
+            if (runId != null) {
+                queries.insertOutcomeWithRunId(
+                    id = id,
+                    ticket_id = ticketId,
+                    executor_id = executorId,
+                    approach = approach,
+                    success = if (success) 1L else 0L,
+                    execution_duration_ms = executionDurationMs,
+                    files_changed = filesChanged.toLong(),
+                    error_message = errorMessage,
+                    timestamp = timestamp.toEpochMilliseconds(),
+                    run_id = runId,
+                )
+            } else {
+                queries.insertOutcome(
+                    id = id,
+                    ticket_id = ticketId,
+                    executor_id = executorId,
+                    approach = approach,
+                    success = if (success) 1L else 0L,
+                    execution_duration_ms = executionDurationMs,
+                    files_changed = filesChanged.toLong(),
+                    error_message = errorMessage,
+                    timestamp = timestamp.toEpochMilliseconds(),
+                )
+            }
 
             OutcomeMemory(
                 id = id,

@@ -9,6 +9,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.domain.AgentError
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
@@ -183,12 +184,14 @@ sealed interface Agent<S : AgentState> {
      * @param knowledge The knowledge to persist
      * @param tags Optional tags for categorization
      * @param taskType Optional task type for context-based retrieval
+     * @param runId Optional Arc run correlation ID for trace projection
      * @return Result containing the stored knowledge entry or an error
      */
     suspend fun storeKnowledge(
         knowledge: Knowledge,
         tags: List<String> = emptyList(),
         taskType: String? = null,
+        runId: RunId? = null,
     ): Result<Unit> {
         val service = memoryService
         if (service == null) {
@@ -206,6 +209,7 @@ sealed interface Agent<S : AgentState> {
                 knowledge = knowledge,
                 tags = tags,
                 taskType = taskType,
+                runId = runId,
             ).fold(
                 onSuccess = { entry ->
                     logger.i { "Stored knowledge entry ${entry.id} of type ${entry.knowledgeType}" }

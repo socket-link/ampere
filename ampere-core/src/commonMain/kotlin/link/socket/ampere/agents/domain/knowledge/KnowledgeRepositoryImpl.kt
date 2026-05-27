@@ -2,6 +2,7 @@ package link.socket.ampere.agents.domain.knowledge
 
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.memory.KnowledgeStore
@@ -30,6 +31,7 @@ class KnowledgeRepositoryImpl(
         tags: List<String>,
         taskType: String?,
         complexityLevel: String?,
+        runId: RunId?,
     ): Result<KnowledgeEntry> = withContext(ioDispatcher) {
         runCatching {
             // Generate ID based on knowledge type and source ID
@@ -59,20 +61,38 @@ class KnowledgeRepositoryImpl(
             }
 
             // Insert knowledge entry
-            queries.insertKnowledge(
-                id = id,
-                knowledge_type = knowledgeType.name,
-                approach = knowledge.approach,
-                learnings = knowledge.learnings,
-                timestamp = knowledge.timestamp.toEpochMilliseconds(),
-                idea_id = ideaId,
-                outcome_id = outcomeId,
-                perception_id = perceptionId,
-                plan_id = planId,
-                task_id = taskId,
-                task_type = taskType,
-                complexity_level = complexityLevel,
-            )
+            if (runId != null) {
+                queries.insertKnowledgeWithRunId(
+                    id = id,
+                    knowledge_type = knowledgeType.name,
+                    approach = knowledge.approach,
+                    learnings = knowledge.learnings,
+                    timestamp = knowledge.timestamp.toEpochMilliseconds(),
+                    run_id = runId,
+                    idea_id = ideaId,
+                    outcome_id = outcomeId,
+                    perception_id = perceptionId,
+                    plan_id = planId,
+                    task_id = taskId,
+                    task_type = taskType,
+                    complexity_level = complexityLevel,
+                )
+            } else {
+                queries.insertKnowledge(
+                    id = id,
+                    knowledge_type = knowledgeType.name,
+                    approach = knowledge.approach,
+                    learnings = knowledge.learnings,
+                    timestamp = knowledge.timestamp.toEpochMilliseconds(),
+                    idea_id = ideaId,
+                    outcome_id = outcomeId,
+                    perception_id = perceptionId,
+                    plan_id = planId,
+                    task_id = taskId,
+                    task_type = taskType,
+                    complexity_level = complexityLevel,
+                )
+            }
 
             // Insert tags
             tags.forEach { tag ->

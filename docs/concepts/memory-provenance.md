@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/MemoryEvent.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/memory/**
 related: [PropelLoop, CognitionTrace, EventSerialBus, DreamCycle]
-last_verified: 2026-04-29
+last_verified: 2026-05-27
 ---
 
 # Memory Provenance

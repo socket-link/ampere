@@ -20,8 +20,13 @@ import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
+import link.socket.ampere.agents.domain.knowledge.Knowledge
+import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepositoryImpl
 import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.api.model.TokenUsage
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
@@ -113,6 +118,62 @@ class ArcTraceProjectionTest {
             elapsed.inWholeMilliseconds < 50,
             "Projection took ${elapsed.inWholeMilliseconds}ms",
         )
+    }
+
+    @Test
+    fun `projects memory rows written through repositories with runId`() = runTest {
+        val runId = "run-memory-repository"
+        val timestamp = Instant.fromEpochMilliseconds(2_000)
+        val knowledgeRepository = KnowledgeRepositoryImpl(database)
+        val outcomeRepository = OutcomeMemoryRepositoryImpl(database)
+
+        val storedKnowledge = knowledgeRepository.storeKnowledge(
+            knowledge = Knowledge.FromOutcome(
+                outcomeId = "outcome-memory-repository",
+                approach = "Write through repository",
+                learnings = "Run-attributed rows project into the trace",
+                timestamp = timestamp,
+            ),
+            tags = listOf("trace"),
+            taskType = "trace",
+            runId = runId,
+        ).getOrThrow()
+
+        val executionOutcome = ExecutionOutcome.CodeChanged.Success(
+            executorId = "agent-memory-repository",
+            ticketId = "ticket-memory-repository",
+            taskId = runId,
+            executionStartTimestamp = timestamp,
+            executionEndTimestamp = Instant.fromEpochMilliseconds(2_500),
+            changedFiles = listOf("Trace.kt"),
+            validation = ExecutionResult(
+                codeChanges = null,
+                compilation = null,
+                linting = null,
+                tests = null,
+            ),
+        )
+
+        val storedOutcome = outcomeRepository.recordOutcome(
+            ticketId = executionOutcome.ticketId,
+            executorId = executionOutcome.executorId,
+            approach = "Run tests after writing trace code",
+            outcome = executionOutcome,
+            timestamp = executionOutcome.executionEndTimestamp,
+            runId = runId,
+        ).getOrThrow()
+
+        val trace = projection.project(runId).getOrThrow()
+        val memoryWrites = trace.phases.flatMap { it.memoryWrites }
+
+        val projectedKnowledge = assertNotNull(memoryWrites.firstOrNull { it.id == storedKnowledge.id })
+        assertEquals("LEARN", projectedKnowledge.phaseName)
+        assertEquals("Write through repository", projectedKnowledge.approach)
+        assertEquals(listOf("trace"), projectedKnowledge.tags)
+
+        val projectedOutcome = assertNotNull(memoryWrites.firstOrNull { it.id == storedOutcome.id })
+        assertEquals("EXECUTE", projectedOutcome.phaseName)
+        assertEquals("Run tests after writing trace code", projectedOutcome.approach)
     }
 
     private suspend fun seedTrace(runId: String) {

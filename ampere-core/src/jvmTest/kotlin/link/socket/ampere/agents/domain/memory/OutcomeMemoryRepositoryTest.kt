@@ -32,13 +32,14 @@ import link.socket.ampere.db.Database
 class OutcomeMemoryRepositoryTest {
 
     private lateinit var driver: JdbcSqliteDriver
+    private lateinit var database: Database
     private lateinit var repo: OutcomeMemoryRepository
 
     @BeforeTest
     fun setUp() {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         Database.Schema.create(driver)
-        val database = Database(driver)
+        database = Database(driver)
         repo = OutcomeMemoryRepositoryImpl(database)
     }
 
@@ -99,6 +100,50 @@ class OutcomeMemoryRepositoryTest {
     // =============================================================================
     // RECORD OUTCOME TESTS
     // =============================================================================
+
+    @Test
+    fun `recordOutcome with runId populates run_id column`() = runBlocking {
+        val runId = "run-outcome-1"
+        val outcome = createSuccessfulOutcome()
+
+        val result = repo.recordOutcome(
+            ticketId = ticketId1,
+            executorId = executorId1,
+            approach = "Traceable execution",
+            outcome = outcome,
+            timestamp = outcome.executionEndTimestamp,
+            runId = runId,
+        )
+
+        assertTrue(result.isSuccess)
+        val stored = assertNotNull(result.getOrNull())
+        val row = database.outcomeMemoryStoreQueries
+            .getOutcomeById(stored.id)
+            .executeAsOne()
+
+        assertEquals(runId, row.run_id)
+    }
+
+    @Test
+    fun `recordOutcome without runId leaves run_id column null`() = runBlocking {
+        val outcome = createSuccessfulOutcome()
+
+        val result = repo.recordOutcome(
+            ticketId = ticketId1,
+            executorId = executorId1,
+            approach = "Unattributed execution",
+            outcome = outcome,
+            timestamp = outcome.executionEndTimestamp,
+        )
+
+        assertTrue(result.isSuccess)
+        val stored = assertNotNull(result.getOrNull())
+        val row = database.outcomeMemoryStoreQueries
+            .getOutcomeById(stored.id)
+            .executeAsOne()
+
+        assertNull(row.run_id)
+    }
 
     @Test
     fun `recordOutcome successfully stores and retrieves successful outcome`() = runBlocking {
