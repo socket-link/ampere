@@ -17,7 +17,7 @@ How the agent thinks: the loop, the routing, the memory, the differentiation, th
 
 | Concept | Status | One-line summary |
 |---------|--------|------------------|
-| [PropelLoop](propel-loop.md) | stable | Six-phase autonomous cognitive cycle (Perceive → Recall → Optimize → Plan → Execute → Loop). Recall must precede Plan. |
+| [PropelLoop](propel-loop.md) | stable | Six-phase autonomous cognitive cycle (Perceive → Recall → Observe → Plan → Execute → Learn). Recall must precede Plan. |
 | [CognitiveRelay](cognitive-relay.md) | stable | Provider-agnostic LLM routing: declarative rules pick an `AIConfiguration` per `RoutingContext`. Cognition layer never imports provider SDKs. |
 | [MemoryProvenance](memory-provenance.md) | stable | Episodic (Outcome) and semantic (Knowledge) memory cells. Every cell is timestamped, attributable, and indexed by `run_id` for time-travel. |
 | [SparkSystem](spark-system.md) | stable | Cellular differentiation: Sparks layer onto a single agent class to narrow capability. Sparks can only narrow, never expand. |

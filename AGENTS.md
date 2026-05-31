@@ -77,7 +77,7 @@ See [ampere-cli/README.md](ampere-cli/README.md) for full CLI documentation.
 
 ## Architecture at a Glance
 
-Ampere follows a layered architecture built on the **PROPEL** cognitive loop (Perceive, Recall, Optimize, Plan, Execute, Loop) and six core primitives (Tickets, Tasks, Plans, Meetings, Outcomes, Knowledge).
+Ampere follows a layered architecture built on the **PROPEL** cognitive loop (Perceive, Recall, Observe, Plan, Execute, Learn) and six core primitives (Tickets, Tasks, Plans, Meetings, Outcomes, Knowledge).
 
 | Layer | Location | Purpose |
 |-------|----------|---------|

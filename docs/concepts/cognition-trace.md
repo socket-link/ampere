@@ -23,7 +23,7 @@ The cognition trace is AMPERE's read model for reconstructing one Arc run.
 `ArcTraceProjection.project(runId)` queries `EventStore`, `KnowledgeStore`,
 and `OutcomeMemoryStore` by `run_id` and assembles an `ArcRunTrace`:
 
-- One `PropelPhase` per phase (Perceive / Recall / Optimize / Plan / Execute / Learn / Run).
+- One `PropelPhase` per phase (Perceive / Recall / Observe / Plan / Execute / Learn) plus a synthetic `Run` row for the overall envelope.
 - `ModelInvocationTrace`s joining `ProviderCallStartedEvent` ↔ `ProviderCallCompletedEvent` with `routingReason`, latency, tokens, and estimated cost.
 - `ToolCallTrace`s joining `ToolEvent.ToolExecutionStarted` ↔ `ToolExecutionCompleted` with duration and success.
 - `MemoryWriteTrace`s for `KnowledgeStored` / `OutcomeRecorded`.

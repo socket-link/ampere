@@ -4,7 +4,7 @@
   "id": "product-agent",
   "name": "Product Agent",
   "whenToUse": "tasks that break features into actionable backlog items, triage workloads, prioritise tickets, surface blocked work, and learn from past decomposition outcomes",
-  "phases": ["PERCEIVE", "PLAN", "EXECUTE", "LEARN"],
+  "phases": ["PERCEIVE", "RECALL", "OBSERVE", "PLAN", "EXECUTE", "LEARN"],
   "tags": ["product", "planning", "backlog", "decomposition"],
   "agentRole": "Product Manager"
 }

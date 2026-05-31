@@ -71,7 +71,7 @@ Ampere's naming fuses biological cognition with electrical systems. Neural signa
 |------|----------|-------------------|
 | **Spark** | Context modifier shaping cognitive specialization | Action potential triggering neural differentiation |
 | **Arc** | Defined orchestration pathway | Electrical arc -- current flowing along a defined path |
-| **PROPEL Loop** | Cognitive cycle (Perceive, Recall, Optimize, Plan, Execute, Loop) | Neural firing cycle -- stimulus, integration, response, feedback |
+| **PROPEL Loop** | Cognitive cycle (Perceive, Recall, Observe, Plan, Execute, Learn) | Neural firing cycle -- stimulus, integration, response, feedback |
 | **EventSerializerBus** | Central nervous system carrying signals | Axon bundle -- impulses traveling between brain regions |
 | **Memory Cell** | Persistent knowledge with provenance | Biological memory encoded in synaptic weights |
 | **Escalation** | Uncertainty surfacing to a human | Pain signal -- requesting external intervention |

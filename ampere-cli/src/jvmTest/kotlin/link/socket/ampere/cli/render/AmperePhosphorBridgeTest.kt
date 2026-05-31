@@ -48,6 +48,30 @@ class AmperePhosphorBridgeTest {
     }
 
     @Test
+    fun `each PROPEL phase produces an emitter without crashing`() {
+        // The phase enum became six-member in AMPR-172. Walking the enum verifies
+        // that no `when (phase)` site in the bridge falls through silently and that
+        // every phase yields exactly one emitter instance per call.
+        CognitivePhase.entries.forEach { phase ->
+            val emitterManager = EmitterManager()
+            val bridge = AmperePhosphorBridge(emitterManager)
+            val telemetry = ProviderCallTelemetrySummary(
+                eventId = "evt-$phase",
+                agentId = "agent-$phase",
+                cognitivePhase = phase,
+                latencyMs = 100,
+                estimatedCost = null,
+                totalTokens = null,
+                success = true,
+            )
+
+            bridge.onProviderCallCompleted(telemetry, Vector3.ZERO)
+
+            assertEquals(1, emitterManager.activeCount, "phase=$phase should emit once")
+        }
+    }
+
+    @Test
     fun `provider telemetry without cost still emits latency metadata`() {
         val emitterManager = EmitterManager()
         val bridge = AmperePhosphorBridge(emitterManager)

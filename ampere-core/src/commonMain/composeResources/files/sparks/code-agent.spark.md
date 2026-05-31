@@ -4,7 +4,7 @@
   "id": "code-agent",
   "name": "Code Agent",
   "whenToUse": "tasks that write, read, modify, or commit code in a workspace, including code generation, refactoring, file edits, and surrounding git operations (branching, committing, pushing, opening PRs)",
-  "phases": ["PERCEIVE", "PLAN", "EXECUTE", "LEARN"],
+  "phases": ["PERCEIVE", "RECALL", "OBSERVE", "PLAN", "EXECUTE", "LEARN"],
   "tags": ["code", "implementation"],
   "agentRole": "Code Writer"
 }
