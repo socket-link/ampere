@@ -142,9 +142,9 @@ class PerceptionEvaluator(
             val obj = element.jsonObject
             val observation = obj["observation"]?.jsonPrimitive?.content ?: "No observation"
             val implication = obj["implication"]?.jsonPrimitive?.content ?: "No implication"
-            val confidence = obj["confidence"]?.jsonPrimitive?.content ?: "medium"
+            val confidence = Confidence.parseOrDefault(obj["confidence"]?.jsonPrimitive?.content)
 
-            "$observation → $implication (confidence: $confidence)"
+            "$observation → $implication (confidence: ${confidence.name.lowercase()})"
         }
 
         return Idea(

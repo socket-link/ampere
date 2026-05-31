@@ -15,6 +15,7 @@ import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
+import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.FileSystemEvent
@@ -168,6 +169,9 @@ class EventRenderer(
             // AgentSurface events: native UI surface request/response
             is AgentSurfaceEvent.Requested -> "🪟" to magenta
             is AgentSurfaceEvent.Responded -> "🪟" to blue
+            // Emission events: the unifying CHI primitive (produced/resolved)
+            is EmissionEvent.Produced -> "📡" to magenta
+            is EmissionEvent.Resolved -> "📡" to blue
         }
     }
 

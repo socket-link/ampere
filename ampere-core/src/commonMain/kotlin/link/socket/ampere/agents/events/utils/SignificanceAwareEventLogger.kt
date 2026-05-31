@@ -5,6 +5,7 @@ import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
+import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.EventType
@@ -170,6 +171,11 @@ class SignificanceAwareEventLogger(
         // AgentSurface events - significant; users see them directly via the renderer
         is AgentSurfaceEvent.Requested -> EventSignificance.SIGNIFICANT
         is AgentSurfaceEvent.Responded -> EventSignificance.SIGNIFICANT
+
+        // Emission events - the unifying CHI primitive. Produced is what the
+        // human will see; Resolved is the reply travelling back.
+        is EmissionEvent.Produced -> EventSignificance.SIGNIFICANT
+        is EmissionEvent.Resolved -> EventSignificance.SIGNIFICANT
     }
 
     private fun formatUrgency(urgency: Urgency): String = when (urgency) {
