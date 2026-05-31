@@ -35,6 +35,9 @@ class CognitiveSceneRuntimeAdapter {
     val agents: AgentLayer?
         get() = runtime?.agents
 
+    val scene: CognitiveSceneRuntime?
+        get() = runtime
+
     fun update(
         width: Int,
         height: Int,

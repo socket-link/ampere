@@ -24,7 +24,7 @@ import link.socket.phosphor.choreography.AgentLayer
  */
 class WaveformPaneRenderer(
     private val agentLayer: AgentLayer,
-    private val runtimeAdapter: CognitiveSceneRuntimeAdapter = CognitiveSceneRuntimeAdapter()
+    val runtimeAdapter: CognitiveSceneRuntimeAdapter = CognitiveSceneRuntimeAdapter()
 ) : PaneRenderer {
     private val lighting = SurfaceLighting()
     private val phaseBlender = PhaseBlender(influenceRadius = 8f)
