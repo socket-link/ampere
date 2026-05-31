@@ -33,8 +33,8 @@ The AMPERE choice cluster:
    the bus is a nervous system, knowledge is semantic memory, outcomes
    are episodic memory. The metaphor is not decoration; it is the
    architecture.
-4. **PROPEL loop.** Perceive → Recall → Optimize → Plan → Execute → Loop.
-   Recall before Plan. Loop closes through Knowledge.
+4. **PROPEL loop.** Perceive → Recall → Observe → Plan → Execute → Learn.
+   Recall before Plan. Learn closes the loop through Knowledge.
 5. **Coordination through convergence, not RPC.** Agents publish typed
    events and react; they do not call each other.
 6. **Provider-agnostic cognition.** Cognitive code never imports a

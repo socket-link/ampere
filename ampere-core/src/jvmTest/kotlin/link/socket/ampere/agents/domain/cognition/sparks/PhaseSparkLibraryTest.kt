@@ -120,6 +120,8 @@ class PhaseSparkLibraryTest {
         assertEquals(
             setOf(
                 CognitivePhase.PERCEIVE,
+                CognitivePhase.RECALL,
+                CognitivePhase.OBSERVE,
                 CognitivePhase.PLAN,
                 CognitivePhase.EXECUTE,
                 CognitivePhase.LEARN,

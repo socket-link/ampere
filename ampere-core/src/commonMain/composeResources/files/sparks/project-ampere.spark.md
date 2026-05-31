@@ -20,7 +20,7 @@ AMPERE enables the creation of collaborative AI agent teams that can:
 - Coordinate through meetings and tickets
 
 ## Key Components
-- **Agents**: Autonomous entities with cognitive cycles (PERCEIVE → PLAN → EXECUTE → LEARN)
+- **Agents**: Autonomous entities with cognitive cycles (PERCEIVE → RECALL → OBSERVE → PLAN → EXECUTE → LEARN)
 - **Events**: Typed messages for agent communication (MessagePosted, TicketAssigned, etc.)
 - **Sparks**: Cognitive differentiation layers that specialize agent behavior
 - **Memory**: Knowledge persistence and recall for experiential learning

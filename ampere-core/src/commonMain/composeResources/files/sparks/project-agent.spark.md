@@ -4,7 +4,7 @@
   "id": "project-agent",
   "name": "Project Agent",
   "whenToUse": "tasks that decompose a goal into a structured work breakdown, create or batch-update issues in an external tracker, assign tasks to agents, monitor epic progress, and escalate decisions that exceed an agent's authority",
-  "phases": ["PERCEIVE", "PLAN", "EXECUTE", "LEARN"],
+  "phases": ["PERCEIVE", "RECALL", "OBSERVE", "PLAN", "EXECUTE", "LEARN"],
   "tags": ["project", "coordination", "decomposition", "escalation"],
   "agentRole": "Project Manager"
 }

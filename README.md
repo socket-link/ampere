@@ -165,22 +165,22 @@ This allows you to steer the agent toward an informed decision in real-time, rat
 During each timestep of the environment simulation, each agent executes its own independent cognitive cycle:
 
 ```
-1. Perceive  ──▶  2. Recall  ──▶  3. Optimize
+1. Perceive  ──▶  2. Recall  ──▶  3. Observe
 
        ▲                               │
        │                               ▼
 
-    6. Loop  ◀──  5. Execute  ◀──  4. Plan
+    6. Learn  ◀──  5. Execute  ◀──  4. Plan
 ```
 
 | # | Phase          | Operation                           | Emitted Events                         |
 |---|----------------|-------------------------------------|----------------------------------------|
 | 1 | **(P)erceive** | Ingest signals from the environment | `SignalReceived`, `PerceptionFormed`   |
 | 2 | **(R)ecall**   | Query relevant memory and context   | `MemoryQueried`, `ContextAssembled`    |
-| 3 | **(O)ptimize** | Prioritize competing objectives     | `ObjectivesRanked`, `ConfidenceScored` |
+| 3 | **(O)bserve**  | Read current state and detect drift | `StateObserved`, `DriftDetected`       |
 | 4 | **(P)lan**     | Select and structure actions        | `PlanCreated`, `TasksDecomposed`       |
 | 5 | **(E)xecute**  | Carry out the plan                  | `ActionTaken`, `ResultObserved`        |
-| 6 | **(L)oop**     | Evaluate results, re-enter cycle    | `OutcomeEvaluated`, `CycleRestarted`   |
+| 6 | **(L)earn**    | Extract knowledge, re-enter cycle   | `OutcomeEvaluated`, `KnowledgeStored`  |
 
 Every phase transition is emitted as an event, ensuring every action inside an agent can be audited and traced.
 

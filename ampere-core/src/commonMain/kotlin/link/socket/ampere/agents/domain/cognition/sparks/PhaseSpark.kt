@@ -15,6 +15,8 @@ import link.socket.ampere.agents.domain.cognition.ToolId
  *
  * Each phase has distinct characteristics:
  * - **PERCEIVE**: Exploratory micro-context for information gathering
+ * - **RECALL**: Memory retrieval context for surfacing prior knowledge
+ * - **OBSERVE**: State-monitoring context for tracking environment changes
  * - **PLAN**: Strategic thinking for task breakdown and sequencing
  * - **EXECUTE**: Focused operational context for task completion
  * - **LEARN**: Integrative thinking for reflection and knowledge extraction
@@ -82,6 +84,78 @@ You are in the **perception phase** of your cognitive cycle.
 
 ### Output
 Produce insights that will inform planning and action.
+        """.trimIndent()
+    }
+
+    /**
+     * RECALL phase: Memory retrieval and prior-knowledge surfacing.
+     *
+     * Emphasizes pulling relevant context from memory, past
+     * interactions, and learned patterns before forming a plan.
+     */
+    @Serializable
+    @SerialName("PhaseSpark.Recall")
+    data object Recall : PhaseSpark() {
+
+        override val phase: CognitivePhase = CognitivePhase.RECALL
+
+        override val name: String = "Phase:Recall"
+
+        override val promptContribution: String = """
+## Cognitive Phase: RECALL
+
+You are in the **recall phase** of your cognitive cycle.
+
+### Focus
+- Surface relevant prior knowledge, memory, and past interactions
+- Identify analogous situations you've handled before
+- Retrieve learned patterns, conventions, and project context
+- Distinguish what you know from what you only assume
+
+### Approach
+- Search memory for similar tasks, past decisions, and prior outcomes
+- Cite specific sources when recalling project conventions
+- Note where memory may be stale and needs verification
+- Bring forward only what is load-bearing for the current task
+
+### Output
+Produce a grounded picture of prior knowledge that informs planning.
+        """.trimIndent()
+    }
+
+    /**
+     * OBSERVE phase: State monitoring and change detection.
+     *
+     * Emphasizes tracking ongoing state, watching for drift, and
+     * detecting changes in the environment that demand attention.
+     */
+    @Serializable
+    @SerialName("PhaseSpark.Observe")
+    data object Observe : PhaseSpark() {
+
+        override val phase: CognitivePhase = CognitivePhase.OBSERVE
+
+        override val name: String = "Phase:Observe"
+
+        override val promptContribution: String = """
+## Cognitive Phase: OBSERVE
+
+You are in the **observation phase** of your cognitive cycle.
+
+### Focus
+- Monitor the current state of the environment and the work
+- Detect changes, anomalies, and drift from expected behavior
+- Track the effects of prior actions
+- Distinguish signal from noise
+
+### Approach
+- Compare current state against expectations from PERCEIVE and RECALL
+- Note what changed, what stayed the same, and what is unexpected
+- Quantify deltas where possible; describe them qualitatively otherwise
+- Surface anything that should re-trigger planning
+
+### Output
+Produce a clear read on current state that grounds the next planning step.
         """.trimIndent()
     }
 
@@ -199,6 +273,8 @@ Produce insights and knowledge that improve future performance.
          */
         fun forPhase(phase: CognitivePhase): PhaseSpark = when (phase) {
             CognitivePhase.PERCEIVE -> Perceive
+            CognitivePhase.RECALL -> Recall
+            CognitivePhase.OBSERVE -> Observe
             CognitivePhase.PLAN -> Plan
             CognitivePhase.EXECUTE -> Execute
             CognitivePhase.LEARN -> Learn
@@ -207,11 +283,17 @@ Produce insights and knowledge that improve future performance.
 }
 
 /**
- * Enum representing the four cognitive phases in the PROPEL cycle.
+ * The six canonical cognitive phases of the PROPEL cycle:
+ * **P**erceive → **R**ecall → **O**bserve → **P**lan → **E**xecute → **L**earn.
+ *
+ * Declaration order matches the PROPEL acronym so that
+ * `enumValues<CognitivePhase>().toList()` yields the cycle in canonical order.
  */
 @Serializable
 enum class CognitivePhase {
     PERCEIVE,
+    RECALL,
+    OBSERVE,
     PLAN,
     EXECUTE,
     LEARN,

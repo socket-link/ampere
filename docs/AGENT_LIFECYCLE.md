@@ -1,6 +1,6 @@
 # The Autonomous Agent Lifecycle
 
-This document explains how agents in Ampere autonomously work through tasks using the **PROPEL** cycle: **Perceive → Recall → Optimize → Plan → Execute → Loop**.
+This document explains how agents in Ampere autonomously work through tasks using the **PROPEL** cycle: **Perceive → Recall → Observe → Plan → Execute → Learn**.
 
 ## The Core Loop
 
@@ -22,16 +22,16 @@ Agents in Ampere follow a continuous cycle:
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────┐
-│                     OPTIMIZE APPROACH                   │
-│  Analyze: Ideas, Past Knowledge, Best Approaches        │
-│  Synthesize: Combine insights to optimize strategy      │
-│  Refine: Select optimal approach based on learnings     │
+│                     OBSERVE STATE                       │
+│  Read: Current environment, work-in-progress, drift     │
+│  Compare: Against Ideas (Perceive) and Knowledge (Recall) │
+│  Surface: Deltas that should re-trigger planning        │
 └─────────────────┬───────────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────┐
 │                       PLAN SOLUTION                     │
-│  Input: Ticket, Optimized Approach                      │
+│  Input: Ticket, Observed State, Recalled Knowledge      │
 │  Output: Plan with Task list                            │
 │  Status: Ticket moves InProgress                        │
 └─────────────────┬───────────────────────────────────────┘
@@ -47,11 +47,11 @@ Agents in Ampere follow a continuous cycle:
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────┐
-│            LOOP WITH UPDATED KNOWLEDGE                  │
+│            LEARN FROM OUTCOMES                          │
 │  Analyze: Outcomes, what worked, what didn't            │
 │  Create: Knowledge entries                              │
 │  Store: In KnowledgeRepository with tags                │
-│  Publish: KnowledgeStored events                        │
+│  Publish: KnowledgeStored events; loop re-enters PERCEIVE │
 └─────────────────┬───────────────────────────────────────┘
                   │
                   ▼
@@ -75,8 +75,8 @@ Agents in Ampere follow a continuous cycle:
 ## Phase Sparks (Optional)
 
 PhaseSparks add lightweight, phase-specific guidance to the system prompt during
-PERCEIVE, PLAN, EXECUTE, and LEARN. They are transient: applied at phase entry and
-removed at phase exit.
+PERCEIVE, RECALL, OBSERVE, PLAN, EXECUTE, and LEARN. They are transient: applied
+at phase entry and removed at phase exit.
 
 Enable PhaseSparks in one of two ways:
 - Set `AgentConfiguration.cognitiveConfig.phaseSparks.enabled = true`
@@ -179,24 +179,24 @@ val relevantKnowledge = memoryService.recallRelevantKnowledge(
 
 ---
 
-### 5. Agent Optimizes Approach
+### 5. Agent Observes Current State
 
 ```kotlin
-val optimizedApproach = agent.optimize(
+val observation = agent.observe(
     ideas = perception.ideas,
     knowledge = relevantKnowledge,
     ticket = ticket
 )
-// Analyzes: JWT vs OAuth2, bcrypt vs other hashing
-// Selects: JWT + bcrypt based on past success
-// Refines: Incorporates learnings about token expiry and rate limiting
+// Reads: Current code, recent commits, open PRs, in-flight work
+// Detects: What changed since the last Arc run; drift from expected state
+// Surfaces: Conflicts between recalled Knowledge and current reality
 ```
 
 **What happens:**
-- Agent analyzes multiple potential approaches from Ideas
-- Evaluates each against Past Knowledge and relevance scores
-- Synthesizes insights to select optimal strategy
-- Refines approach based on what worked in similar situations
+- Agent inspects the current state of the environment
+- Compares observed state against Ideas (Perceive) and Knowledge (Recall)
+- Flags drift, anomalies, and contradictions for the planner
+- Refines the working context that Plan will consume
 
 ---
 
@@ -205,7 +205,7 @@ val optimizedApproach = agent.optimize(
 ```kotlin
 val plan = Plan.ForTicket(
     ticket = ticket,
-    optimizedApproach = optimizedApproach,
+    observation = observation,
     tasks = listOf(
         Task.CodeChange("Create User model"),
         Task.CodeChange("Add JWT library"),
@@ -392,7 +392,7 @@ Every action is observable, persistent, and can trigger reactive behavior in oth
 
 ## Key Takeaways
 
-1. **Autonomy:** Agents work independently through the PROPEL loop (Perceive → Recall → Optimize → Plan → Execute → Loop)
+1. **Autonomy:** Agents work independently through the PROPEL loop (Perceive → Recall → Observe → Plan → Execute → Learn)
 2. **Learning:** Every outcome is recorded and turned into searchable knowledge
 3. **Coordination:** Events enable agents to react to each other's work
 4. **Escalation:** Blockers automatically trigger meetings and human notification

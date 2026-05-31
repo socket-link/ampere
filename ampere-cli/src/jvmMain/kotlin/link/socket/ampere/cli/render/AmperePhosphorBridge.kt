@@ -45,12 +45,19 @@ class AmperePhosphorBridge(
 
     private fun effectForPhase(phase: AmperePhase?): EmitterEffect = when (phase) {
         AmperePhase.PERCEIVE -> EmitterEffect.HeightPulse()
+        AmperePhase.RECALL -> EmitterEffect.ColorWash(
+            colorRamp = CognitiveColorRamp.forPhase(PhosphorPhase.RECALL)
+        )
+        // OBSERVE is sensing/state-monitoring — share the PERCEIVE visual until Phosphor adds OBSERVE.
+        AmperePhase.OBSERVE -> EmitterEffect.HeightPulse()
         AmperePhase.PLAN -> EmitterEffect.ColorWash(
             colorRamp = CognitiveColorRamp.forPhase(PhosphorPhase.PLAN)
         )
         AmperePhase.EXECUTE -> EmitterEffect.SparkBurst(
             palette = AsciiLuminancePalette.EXECUTE
         )
+        // Phosphor's enum still uses EVALUATE for the reflection phase that AMPERE calls LEARN.
+        // Follow-up: file a Phosphor ticket to rename PhosphorPhase.EVALUATE -> LEARN.
         AmperePhase.LEARN -> EmitterEffect.ColorWash(
             colorRamp = CognitiveColorRamp.forPhase(PhosphorPhase.EVALUATE)
         )

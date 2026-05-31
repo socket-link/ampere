@@ -121,6 +121,8 @@ class SparkStack private constructor(
 
     private fun phaseHeader(phase: CognitivePhase): String = when (phase) {
         CognitivePhase.PERCEIVE -> "Perceiving"
+        CognitivePhase.RECALL -> "Recalling"
+        CognitivePhase.OBSERVE -> "Observing"
         CognitivePhase.PLAN -> "Planning"
         CognitivePhase.EXECUTE -> "Executing"
         CognitivePhase.LEARN -> "Learning"
