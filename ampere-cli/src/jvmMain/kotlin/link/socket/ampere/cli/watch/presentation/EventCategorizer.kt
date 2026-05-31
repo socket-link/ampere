@@ -1,6 +1,7 @@
 package link.socket.ampere.cli.watch.presentation
 
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
+import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.FileSystemEvent
@@ -53,6 +54,7 @@ object EventCategorizer {
     private fun categorizeInternal(event: Event): EventSignificance = when (event) {
         // Critical events require immediate human awareness
         is Event.QuestionRaised,
+        is CognitiveEvent.EscalationFired,
         is TicketEvent.TicketBlocked,
         is MessageEvent.EscalationRequested,
         is HumanInteractionEvent.InputRequested,

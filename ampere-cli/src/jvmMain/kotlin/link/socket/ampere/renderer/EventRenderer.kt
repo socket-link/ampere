@@ -13,6 +13,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
+import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
@@ -137,6 +138,7 @@ class EventRenderer(
             is Event.CodeSubmitted -> "💻" to cyan
             is Event.QuestionRaised -> "❓" to magenta
             is Event.TaskCreated -> "📋" to green
+            is CognitiveEvent.EscalationFired -> "❓" to red
             is TaskEvent -> "📋" to green
             is FileSystemEvent -> "📄" to cyan
             is GitEvent -> "🪾" to cyan

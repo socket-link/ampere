@@ -3,6 +3,7 @@ package link.socket.ampere.agents.events.utils
 import co.touchlab.kermit.Logger
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
+import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
@@ -96,6 +97,7 @@ class SignificanceAwareEventLogger(
     private fun categorizeEvent(event: Event): EventSignificance = when (event) {
         // Critical events require immediate human awareness
         is Event.QuestionRaised -> EventSignificance.CRITICAL
+        is CognitiveEvent.EscalationFired -> EventSignificance.CRITICAL
         is TicketEvent.TicketBlocked -> EventSignificance.CRITICAL
         is MessageEvent.EscalationRequested -> EventSignificance.CRITICAL
         is PermissionDeniedEvent -> EventSignificance.CRITICAL
