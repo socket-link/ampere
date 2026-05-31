@@ -371,6 +371,13 @@ class WatchPresenter(
                 "\"$content\""
             }
             is MessageEvent.EscalationRequested -> "⚠️ Escalation: ${event.reason.take(50)}"
+            is link.socket.ampere.agents.domain.event.CognitiveEvent.EscalationFired -> {
+                "Uncertainty escalation: ${event.uncertaintyValue} >= ${event.threshold}"
+            }
+            is link.socket.ampere.agents.domain.event.CognitiveEvent.EscalationConsidered -> {
+                val direction = if (event.fired) ">=" else "<"
+                "Uncertainty considered: ${event.uncertaintyValue} $direction ${event.threshold}"
+            }
             is MemoryEvent.KnowledgeRecalled -> {
                 val count = event.resultsFound
                 if (count > 0) "Recalled $count items (relevance: ${String.format("%.0f%%", event.averageRelevance * 100)})"

@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
@@ -156,6 +157,24 @@ fun EventService.completionEvents(
 ): Flow<ProviderCallCompletedEvent> = observe(filters).filterIsInstance<ProviderCallCompletedEvent>()
 
 @link.socket.ampere.api.AmpereStableApi
+fun EventService.escalationFiredEvents(
+    filters: EventRelayFilters = EventRelayFilters(),
+): Flow<CognitiveEvent.EscalationFired> = observe(filters).filterIsInstance<CognitiveEvent.EscalationFired>()
+
+/**
+ * Stream every uncertainty evaluation, including near-misses.
+ *
+ * High-volume telemetry — fires on every evaluation, potentially thousands per agent run.
+ * Subscribe only for telemetry or calibration analysis; for action signals use
+ * [escalationFiredEvents] instead.
+ */
+@link.socket.ampere.api.AmpereStableApi
+fun EventService.escalationConsideredEvents(
+    filters: EventRelayFilters = EventRelayFilters(),
+): Flow<CognitiveEvent.EscalationConsidered> =
+    observe(filters).filterIsInstance<CognitiveEvent.EscalationConsidered>()
+
+@link.socket.ampere.api.AmpereStableApi
 enum class EventStreamFilter {
     ALL,
     TELEMETRY,
@@ -195,6 +214,7 @@ enum class EventStreamFilter {
             is ProductEvent,
             is RoutingEvent,
             is SparkEvent,
+            is CognitiveEvent,
             -> true
             else -> false
         }

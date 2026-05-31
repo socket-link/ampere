@@ -6,6 +6,8 @@ import kotlin.test.assertIs
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
+import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
@@ -93,5 +95,47 @@ class EventSerializationTest {
 
         assertIs<PermissionDeniedEvent>(decoded)
         assertEquals(original, decoded)
+    }
+
+    @Test
+    fun `serialize and deserialize escalation fired event polymorphic`() {
+        val original: Event = CognitiveEvent.EscalationFired(
+            eventId = "55555555-5555-5555-5555-555555555555",
+            timestamp = stubTimestamp,
+            eventSource = stubEventSource,
+            urgency = Urgency.HIGH,
+            agentId = "agent-X",
+            uncertaintyValue = 0.82,
+            threshold = 0.7,
+            prompt = "Which migration path should we use?",
+            cognitivePhase = CognitivePhase.PLAN,
+        )
+
+        val text = json.encodeToString(Event.serializer(), original)
+        val decoded = json.decodeFromString(Event.serializer(), text)
+
+        assertIs<CognitiveEvent.EscalationFired>(decoded)
+        assertEquals(original, decoded)
+    }
+
+    @Test
+    fun `serialize and deserialize escalation considered event polymorphic`() {
+        val original: Event = CognitiveEvent.EscalationConsidered(
+            eventId = "66666666-6666-6666-6666-666666666666",
+            timestamp = stubTimestamp,
+            eventSource = stubEventSource,
+            agentId = "agent-X",
+            uncertaintyValue = 0.42,
+            threshold = 0.7,
+            fired = false,
+            cognitivePhase = CognitivePhase.PERCEIVE,
+        )
+
+        val text = json.encodeToString(Event.serializer(), original)
+        val decoded = json.decodeFromString(Event.serializer(), text)
+
+        assertIs<CognitiveEvent.EscalationConsidered>(decoded)
+        assertEquals(original, decoded)
+        assertEquals(Urgency.LOW, decoded.urgency)
     }
 }

@@ -212,6 +212,38 @@ class AgentMessageApiTest {
     }
 
     @Test
+    fun `discretionary escalateToHuman still publishes EscalationRequested`() {
+        runBlocking {
+            val api = agentMessageApiFactory.create(stubAgentId)
+            val received = mutableListOf<MessageEvent.EscalationRequested>()
+
+            api.onEscalationRequested { event, _ ->
+                received += event
+            }
+
+            val thread = api.createThread(
+                participants = emptySet(),
+                channel = MessageChannel.Public.Engineering,
+                initialMessageContent = "Need a decision",
+            )
+
+            api.escalateToHuman(
+                threadId = thread.id,
+                reason = "Need human input on release timing",
+                context = mapOf("release" to "v1"),
+            )
+
+            delay(200)
+
+            assertEquals(1, received.size)
+            val event = received.single()
+            assertEquals(thread.id, event.threadId)
+            assertEquals("Need human input on release timing", event.reason)
+            assertEquals(mapOf("release" to "v1"), event.context)
+        }
+    }
+
+    @Test
     fun `reopen thread fails when not in WAITING_FOR_HUMAN state`() {
         runBlocking {
             val api = agentMessageApiFactory.create(stubAgentId)
