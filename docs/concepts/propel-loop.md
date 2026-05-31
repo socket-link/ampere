@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/trace/ArcRunTrace.kt
   - docs/AGENT_LIFECYCLE.md
 related: [CognitiveRelay, MemoryProvenance, SparkSystem, CognitionTrace, EventSerialBus]
-last_verified: 2026-05-30
+last_verified: 2026-05-31
 ---
 
 # PROPEL Loop
@@ -65,7 +65,7 @@ single point at which we emit telemetry.
 ## Invariants
 
 - **Recall precedes Plan.** No `Plan` may be generated without first calling `AgentMemoryService.recallRelevantKnowledge` and feeding the result into `PlanGenerator`. Skipping Recall when context "feels obvious" is the canonical failure mode.
-- **Each phase emits its own boundary events.** `ProviderCallStartedEvent` / `ProviderCallCompletedEvent` carry a `cognitivePhase`; memory writes carry the phase that produced them; tool calls are tagged via the active phase. `ArcTraceProjection` relies on this to bucket activity per phase. A phase that runs without emitting boundary events is invisible to the trace, which is equivalent to it not having run.
+- **Each phase emits its own boundary events.** `CognitivePhaseEvent.PhaseEntered` / `PhaseExited` mark phase transitions when the phase manager has a bus; `ProviderCallStartedEvent` / `ProviderCallCompletedEvent` carry a `cognitivePhase`; memory writes carry the phase that produced them; tool calls are tagged via the active phase. `ArcTraceProjection` relies on this to bucket activity per phase. A phase that runs without emitting boundary events is invisible to the trace, which is equivalent to it not having run.
 - **The loop closes through `Knowledge`.** Every successful Arc run ends with `KnowledgeExtractor` writing at least one `Knowledge` entry tagged with the `run_id`. An Arc run that produced outcomes but no Knowledge entry has not closed the loop and will not contribute to future Recall.
 - **Phase order is fixed.** Perceive → Recall → Observe → Plan → Execute → Learn. The declaration order in `CognitivePhase` matches the PROPEL acronym; `enumValues<CognitivePhase>()` yields the cycle. New phases are added by extending the enum and updating every service that switches on it; phases are never reordered or skipped per call site.
 - **Observe is not a side-effect of Plan.** When recalled `Knowledge` contradicts an `Idea` or current state has drifted since the last run, that contradiction must be resolved in Observe and recorded in the Plan's rationale, not silently dropped during Plan generation.
@@ -73,7 +73,7 @@ single point at which we emit telemetry.
 ## Common operations
 
 - **Add a phase** — extend `CognitivePhase` (in `PhaseSpark.kt`), add a corresponding `PhaseSpark` data object with prompt contribution, update `PhaseSpark.forPhase`, add a service implementing the phase transform, wire it through `AgentReasoning`, and update `ArcTraceProjection.phaseNameFor` so the trace knows about the new phase.
-- **Hook into a phase** — subscribe to `SparkAppliedEvent` filtering on `phaseSparkName()`; this tells you exactly when the agent enters/exits a phase. Do not assume `PhaseSpark`s are always enabled — they're gated on `AgentConfiguration.cognitiveConfig.phaseSparks.enabled` or `AMPERE_PHASE_SPARKS=true`.
+- **Hook into a phase** — prefer `CognitivePhaseEvent.PhaseEntered` / `PhaseExited` when an event bus is wired. For older spark-stack consumers, subscribe to `SparkAppliedEvent` filtering on `phaseSparkName()`. Do not assume `PhaseSpark`s are always enabled — they're gated on `AgentConfiguration.cognitiveConfig.phaseSparks.enabled` or `AMPERE_PHASE_SPARKS=true`.
 - **Read what one Arc run did** — `ArcTraceProjection.project(runId)` returns an `ArcRunTrace` with one `PropelPhase` per phase. This is the "playback" of a cognitive cycle. Use this for debugging, not for orchestration.
 - **Validate a change to the loop** — run `./gradlew jvmTest` (the primary gate) and verify the loop still produces a `Knowledge` entry tagged with the run id.
 

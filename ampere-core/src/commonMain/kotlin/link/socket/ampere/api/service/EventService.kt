@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.event.CognitiveEvent
+import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
@@ -213,6 +214,7 @@ enum class EventStreamFilter {
             is PlanEvent,
             is ProductEvent,
             is RoutingEvent,
+            is CognitivePhaseEvent,
             is SparkEvent,
             is CognitiveEvent,
             -> true

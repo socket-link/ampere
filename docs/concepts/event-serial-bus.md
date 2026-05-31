@@ -51,13 +51,14 @@ properties for free:
 
 ## Where it lives
 
-- `ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/events/bus/EventSerialBus.kt` — the bus itself; `publish`, `subscribe`, `unsubscribe`.
+- `ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/events/bus/EventSerialBus.kt` — the bus itself; `publish`, `publishAsync`, `subscribe`, `unsubscribe`.
 - `agents/events/bus/EventSerialBusFactory.kt` — wiring the bus into the application graph.
 - `agents/events/api/AgentEventApi.kt` — the agent-facing facade for emitting events without touching the bus directly.
 - `agents/events/relay/EventRelayService.kt` — out-of-process bridging (e.g., CLI streaming).
 - `agents/events/utils/EventLogger.kt`, `SignificanceAwareEventLogger.kt` — pluggable logging implementations. `Console`, significance-filtered.
 - `agents/events/subscription/EventSubscription.kt`, `Subscription.kt` — the handle returned to subscribers.
 - `agents/domain/event/Event.kt` and the `event/` package — the sealed `Event` hierarchy.
+- `agents/domain/event/CognitivePhaseEvent.kt` — phase transition events emitted by `PhaseSparkManager` when a bus is wired.
 - `ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/events/EventStore.sq` — persistence schema (with `run_id` indexes for trace queries).
 
 ## Invariants
@@ -72,8 +73,10 @@ properties for free:
 ## Common operations
 
 - **Publish an event** — `agentEventApi.publish(SomeEvent(...))`. The api wraps the bus and is the agent-facing entry point.
+- **Publish from a synchronous boundary hook** — use `EventSerialBus.publishAsync(event)` only when the caller cannot suspend, such as phase boundary hooks. Prefer `AgentEventApi.publish` elsewhere.
 - **Subscribe** — `bus.subscribe(eventType, scope) { event, subscription -> ... }`. Hold onto the returned `EventSubscription` so you can `unsubscribe` on shutdown.
 - **Add a new event type** — extend `Event` (or the appropriate sub-sealed family in `agents/domain/event/`), register a `@Serializable` subclass with a stable `@SerialName`, add a CLI display handler, and add a logger summary in `Event.getSummary` if relevant.
+- **Observe phase transitions** — subscribe to `CognitivePhaseEvent.PhaseEntered.EVENT_TYPE` and/or `PhaseExited.EVENT_TYPE`; use `nestingDepth == 0` for outermost phase changes only.
 - **Publish an agent milestone** — call `AgentEventApi.reachMilestone(...)` or, for observable agents, `agent.reachMilestone(...)`. Milestones emit `MemoryEvent.MilestoneReached`, a low-volume sibling event to routine memory writes.
 - **Persist for trace** — events flow into `EventStore` via the configured logger. New event types are picked up automatically; just verify `run_id` is set on the emitter.
 

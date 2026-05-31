@@ -4,13 +4,16 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.config.CognitiveConfig
 import link.socket.ampere.agents.config.PhaseSparkConfig
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.AutonomousAgent
+import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
@@ -19,6 +22,9 @@ import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.bus.subscribe
+import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.stubAgentConfiguration
@@ -56,6 +62,33 @@ class PhaseSparkManagerTest {
         }
     }
 
+    private suspend fun MutableList<CognitivePhaseEvent>.awaitCount(count: Int): List<CognitivePhaseEvent> {
+        withTimeout(1000) {
+            while (size < count) {
+                delay(10)
+            }
+        }
+        return toList()
+    }
+
+    private fun EventSerialBus.collectPhaseEvents(
+        agentId: AgentId,
+        events: MutableList<CognitivePhaseEvent>,
+    ) {
+        subscribe<CognitivePhaseEvent.PhaseEntered, EventSubscription.ByEventClassType>(
+            agentId = agentId,
+            eventType = CognitivePhaseEvent.PhaseEntered.EVENT_TYPE,
+        ) { event, _ ->
+            events += event
+        }
+        subscribe<CognitivePhaseEvent.PhaseExited, EventSubscription.ByEventClassType>(
+            agentId = agentId,
+            eventType = CognitivePhaseEvent.PhaseExited.EVENT_TYPE,
+        ) { event, _ ->
+            events += event
+        }
+    }
+
     @Test
     fun `enterPhase applies and switches phase sparks`() {
         val agent = TestAgent()
@@ -72,6 +105,53 @@ class PhaseSparkManagerTest {
     }
 
     @Test
+    fun `enterPhase publishes PhaseEntered after current phase is assigned`() = runBlocking {
+        val agent = TestAgent()
+        val bus = EventSerialBus(this)
+        val events = mutableListOf<CognitivePhaseEvent>()
+        bus.collectPhaseEvents(agent.id, events)
+        val manager = PhaseSparkManager(agent, enabled = true, eventBus = bus)
+
+        manager.enterPhase(CognitivePhase.PERCEIVE)
+
+        val event = events.awaitCount(1).single()
+        assertEquals(
+            CognitivePhaseEvent.PhaseEntered(
+                eventId = event.eventId,
+                timestamp = event.timestamp,
+                eventSource = event.eventSource,
+                agentId = agent.id,
+                oldPhase = null,
+                newPhase = CognitivePhase.PERCEIVE,
+                nestingDepth = 0,
+            ),
+            event,
+        )
+    }
+
+    @Test
+    fun `sequential transitions publish exit before enter`() = runBlocking {
+        val agent = TestAgent()
+        val bus = EventSerialBus(this)
+        val events = mutableListOf<CognitivePhaseEvent>()
+        bus.collectPhaseEvents(agent.id, events)
+        val manager = PhaseSparkManager(agent, enabled = true, eventBus = bus)
+
+        manager.enterPhase(CognitivePhase.PERCEIVE)
+        manager.enterPhase(CognitivePhase.PLAN)
+
+        val sequence = events.awaitCount(3)
+        assertEquals(CognitivePhaseEvent.PhaseEntered.EVENT_TYPE, sequence[0].eventType)
+        assertEquals(CognitivePhase.PERCEIVE, (sequence[0] as CognitivePhaseEvent.PhaseEntered).newPhase)
+        assertEquals(CognitivePhaseEvent.PhaseExited.EVENT_TYPE, sequence[1].eventType)
+        assertEquals(CognitivePhase.PERCEIVE, (sequence[1] as CognitivePhaseEvent.PhaseExited).exitedPhase)
+        assertEquals(null, (sequence[1] as CognitivePhaseEvent.PhaseExited).restoredToPhase)
+        assertEquals(CognitivePhaseEvent.PhaseEntered.EVENT_TYPE, sequence[2].eventType)
+        assertEquals(CognitivePhase.PERCEIVE, (sequence[2] as CognitivePhaseEvent.PhaseEntered).oldPhase)
+        assertEquals(CognitivePhase.PLAN, (sequence[2] as CognitivePhaseEvent.PhaseEntered).newPhase)
+    }
+
+    @Test
     fun `withPhase restores previous phase spark`() = runBlocking {
         val agent = TestAgent()
         val manager = PhaseSparkManager(agent, enabled = true)
@@ -82,6 +162,46 @@ class PhaseSparkManagerTest {
         }
 
         assertTrue(agent.cognitiveState.contains("[Phase:Perceive]"))
+    }
+
+    @Test
+    fun `nested withPhase publishes depth-aware bracket events`() = runBlocking {
+        val agent = TestAgent()
+        val bus = EventSerialBus(this)
+        val events = mutableListOf<CognitivePhaseEvent>()
+        bus.collectPhaseEvents(agent.id, events)
+        val manager = PhaseSparkManager(agent, enabled = true, eventBus = bus)
+
+        manager.withPhase(CognitivePhase.PERCEIVE) {
+            assertEquals(1, agent.sparkDepth)
+            manager.withPhase(CognitivePhase.PLAN) {
+                assertEquals(2, agent.sparkDepth)
+                assertTrue(agent.cognitiveState.contains("[Phase:Perceive]"))
+                assertTrue(agent.cognitiveState.contains("[Phase:Plan]"))
+            }
+            assertEquals(1, agent.sparkDepth)
+            assertTrue(agent.cognitiveState.contains("[Phase:Perceive]"))
+        }
+
+        assertEquals(0, agent.sparkDepth)
+        val sequence = events.awaitCount(5)
+        assertEquals(
+            listOf(
+                "PhaseEntered:PERCEIVE:null:0",
+                "PhaseEntered:PLAN:PERCEIVE:1",
+                "PhaseExited:PLAN:PERCEIVE:1",
+                "PhaseEntered:PERCEIVE:PLAN:0",
+                "PhaseExited:PERCEIVE:null:0",
+            ),
+            sequence.map { event ->
+                when (event) {
+                    is CognitivePhaseEvent.PhaseEntered ->
+                        "PhaseEntered:${event.newPhase}:${event.oldPhase}:${event.nestingDepth}"
+                    is CognitivePhaseEvent.PhaseExited ->
+                        "PhaseExited:${event.exitedPhase}:${event.restoredToPhase}:${event.nestingDepth}"
+                }
+            },
+        )
     }
 
     @Test
@@ -112,6 +232,21 @@ class PhaseSparkManagerTest {
 
         manager.enterPhase(CognitivePhase.PERCEIVE)
         assertEquals(0, agent.sparkDepth)
+    }
+
+    @Test
+    fun `disabled manager does not publish phase events`() = runBlocking {
+        val agent = TestAgent()
+        val bus = EventSerialBus(this)
+        val events = mutableListOf<CognitivePhaseEvent>()
+        bus.collectPhaseEvents(agent.id, events)
+        val manager = PhaseSparkManager(agent, enabled = false, eventBus = bus)
+
+        manager.enterPhase(CognitivePhase.PERCEIVE)
+        manager.cleanup()
+        delay(100)
+
+        assertEquals(emptyList(), events)
     }
 
     @Test

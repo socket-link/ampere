@@ -2,6 +2,7 @@ package link.socket.ampere.cli.watch.presentation
 
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
+import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
@@ -115,6 +116,7 @@ object EventCategorizer {
         is ToolEvent.ToolExecutionCompleted,
         is ProviderCallStartedEvent,
         is RoutingEvent.RouteSelected,
+        is CognitivePhaseEvent,
         is SparkEvent -> EventSignificance.ROUTINE
 
         is RoutingEvent.RouteFallback -> EventSignificance.SIGNIFICANT

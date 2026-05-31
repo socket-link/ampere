@@ -8,6 +8,7 @@ import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.event.CognitiveEvent
+import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MemoryEvent
@@ -100,9 +101,28 @@ class EventSerializationTest {
     }
 
     @Test
+    fun `serialize and deserialize phase entered event polymorphic`() {
+        val original: Event = CognitivePhaseEvent.PhaseEntered(
+            eventId = "55555555-5555-5555-5555-555555555555",
+            timestamp = stubTimestamp,
+            eventSource = stubEventSource,
+            agentId = "agent-X",
+            oldPhase = null,
+            newPhase = CognitivePhase.PERCEIVE,
+            nestingDepth = 0,
+        )
+
+        val text = json.encodeToString(Event.serializer(), original)
+        val decoded = json.decodeFromString(Event.serializer(), text)
+
+        assertIs<CognitivePhaseEvent.PhaseEntered>(decoded)
+        assertEquals(original, decoded)
+    }
+
+    @Test
     fun `serialize and deserialize milestone reached event polymorphic`() {
         val original: Event = MemoryEvent.MilestoneReached(
-            eventId = "55555555-5555-5555-5555-555555555555",
+            eventId = "77777777-7777-7777-7777-777777777777",
             timestamp = stubTimestamp,
             eventSource = stubEventSource,
             agentId = "agent-X",

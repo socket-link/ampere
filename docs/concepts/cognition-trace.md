@@ -23,7 +23,7 @@ The cognition trace is AMPERE's read model for reconstructing one Arc run.
 `ArcTraceProjection.project(runId)` queries `EventStore`, `KnowledgeStore`,
 and `OutcomeMemoryStore` by `run_id` and assembles an `ArcRunTrace`:
 
-- One `PropelPhase` per phase (Perceive / Recall / Observe / Plan / Execute / Learn) plus a synthetic `Run` row for the overall envelope.
+- One `PropelPhase` per phase (Perceive / Recall / Observe / Plan / Execute / Learn) plus a synthetic `Run` row for the overall envelope. `CognitivePhaseEvent` phase boundaries are used directly when present.
 - `ModelInvocationTrace`s joining `ProviderCallStartedEvent` ↔ `ProviderCallCompletedEvent` with `routingReason`, latency, tokens, and estimated cost.
 - `ToolCallTrace`s joining `ToolEvent.ToolExecutionStarted` ↔ `ToolExecutionCompleted` with duration and success.
 - `MemoryWriteTrace`s for `KnowledgeStored` / `OutcomeRecorded`, with `MilestoneReached` persisted as a queryable checkpoint event rather than a memory write row.
@@ -69,7 +69,7 @@ the projection that makes the run *legible*:
 - **The projection never writes.** It is a read model. A change that has the projection update an event row or a memory row is a layering violation; corrections happen by writing new rows.
 - **Provider call events come in pairs.** `ProviderCallStartedEvent` ↔ `ProviderCallCompletedEvent` keyed by `(workflowId, agentId, providerId, modelId, cognitivePhase)`. A start without a completion appears as a half-trace; a completion without a start is reconstructed from `latencyMs` (lossy — keep both).
 - **Tool events come in pairs by `invocationId`.** `ToolExecutionStarted` ↔ `ToolExecutionCompleted`. The projection retains starts that lack a completion as `pendingCalls` so in-flight work is visible.
-- **Phase names are derived from the event, not assigned by the projector.** `phaseNameFor(event)` reads `cognitivePhase` (or, for spark events, the `Phase:` prefix). The projector does not invent phase membership — events declare it. New event types that should be phase-aware must populate `cognitivePhase` themselves.
+- **Phase names are derived from the event, not assigned by the projector.** `phaseNameFor(event)` reads explicit phase fields (`CognitivePhaseEvent`, telemetry `cognitivePhase`, routing `phase`) or, for spark events, the `Phase:` prefix. The projector does not invent phase membership — events declare it. New event types that should be phase-aware must carry their own phase signal.
 - **`WattCost` is monotone-additive.** `WattCost.plus` only adds; entries are never subtracted. A change that subtracts cost (e.g., to "correct" a previous estimate) breaks the running aggregate.
 - **The schema migration that introduced `run_id` is not reversible without losing trace fidelity.** If the migration is renumbered or dropped, every persisted run before the change becomes opaque.
 

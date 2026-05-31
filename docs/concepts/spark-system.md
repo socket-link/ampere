@@ -7,7 +7,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/SparkRemovedEvent.kt
   - ampere-core/src/commonMain/composeResources/files/sparks/**
 related: [PropelLoop, CognitiveRelay, PluginPermissions, CognitionTrace]
-last_verified: 2026-05-17
+last_verified: 2026-05-31
 ---
 
 > **2026-05-17 (AMPR-165):** Declarative `.spark.md` documents now use JSON
@@ -107,6 +107,10 @@ by eligibility, tag intersection, and keyword match against `whenToUse`;
 `AmpereSpikeFlags.declarativeSparksEnabled` is on; the `SparkBasedAgent`
 role factories consult the role surface at construction time and fail fast
 if the bundled role fixture is missing.
+When an `EventSerialBus` is provided, `PhaseSparkManager` also emits
+`CognitivePhaseEvent.PhaseEntered` / `PhaseExited` at phase boundaries so
+phase changes are observable even when consumers do not inspect Spark stack
+events.
 
 ## Why it exists
 
@@ -152,12 +156,14 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - `agents/domain/cognition/sparks/AmpereSpikeFlags.kt` — `declarativeSparksEnabled: Boolean = false`; gates declarative spark application.
 - `composeResources/files/sparks/*.spark.md` — bundled declarative spark fixtures.
 - `agents/domain/event/SparkAppliedEvent.kt`, `SparkRemovedEvent.kt` — observability.
+- `agents/domain/event/CognitivePhaseEvent.kt` — first-class phase boundary events.
 
 ## Invariants
 
 - **Sparks can only narrow, never expand.** A Spark may set `allowedTools` to a strict subset of the parent context; setting a wider set than the parent is a violation and breaks the recursive safety guarantee.
 - **The system prompt is rebuilt from the live stack on every LLM call.** No caching of the rendered prompt is allowed unless invalidated on every push/pop. Stale prompts cause the active Spark stack to drift from observed prompt content.
 - **Apply/remove are paired and observed.** Every `SparkAppliedEvent` has a matching `SparkRemovedEvent` (or end-of-run cleanup). `ArcTraceProjection` uses these events to reconstruct phase context.
+- **Phase boundaries are explicit when a bus is wired.** `PhaseSparkManager` publishes `PhaseEntered` after `currentCognitivePhase` is assigned and before phase sparks are applied, and publishes `PhaseExited` after phase sparks are removed and the previous phase is restored.
 - **Tool-set composition is intersection.** When two Sparks both specify `allowedTools`, the effective set is `A ∩ B`, not `A ∪ B`. A change that switches to union is a permission expansion and violates the narrowing invariant.
 - **PhaseSparks add context only.** They do not narrow tools (`allowedTools = null`) or file access (`fileAccessScope = null`). Their job is prompt augmentation, not capability gating.
 - **Spark `name` follows `Type:Subtype`.** `Role:Code`, `Phase:Perceive`, `Project:ampere`, `PhaseSpark:cooking-domain`. The trace projection extracts subtype from this prefix; ad-hoc names break trace bucketing. Declarative sparks use `PhaseSpark:<id>` so trace bucketing that keys on `Phase:` still treats built-in phases distinctly.

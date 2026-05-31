@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.events.bus
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -69,6 +70,17 @@ class EventSerialBus(
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * Publish an [event] from a synchronous call site without blocking the
+     * caller. The event is still routed through [publish], so handler snapshot
+     * and dispatch semantics stay centralized.
+     */
+    fun publishAsync(event: Event) {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            publish(event)
         }
     }
 

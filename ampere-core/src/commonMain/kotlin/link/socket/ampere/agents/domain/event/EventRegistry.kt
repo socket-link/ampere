@@ -87,6 +87,10 @@ object EventRegistry {
         SparkRemovedEvent.EVENT_TYPE,
         CognitiveStateSnapshot.EVENT_TYPE,
 
+        // CognitivePhaseEvent types
+        CognitivePhaseEvent.PhaseEntered.EVENT_TYPE,
+        CognitivePhaseEvent.PhaseExited.EVENT_TYPE,
+
         // TaskEvent lifecycle types
         TaskEvent.TaskStarted.EVENT_TYPE,
         TaskEvent.TaskProgressed.EVENT_TYPE,

@@ -103,6 +103,7 @@ open class SparkBasedAgent<S : AgentState>(
             agent = this,
             phaseConfig = agentConfiguration.cognitiveConfig.phaseSparks,
             library = _phaseSparkLibrary,
+            eventBus = _eventApi?.eventSerialBus,
         )
 
     override val id: AgentId = agentId

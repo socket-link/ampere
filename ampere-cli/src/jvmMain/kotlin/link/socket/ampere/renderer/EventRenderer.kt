@@ -14,6 +14,7 @@ import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
+import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.FileSystemEvent
@@ -73,6 +74,8 @@ class EventRenderer(
 
         // Get the event type name
         val eventTypeName = when (event) {
+            is CognitivePhaseEvent.PhaseEntered -> "PhaseEntered"
+            is CognitivePhaseEvent.PhaseExited -> "PhaseExited"
             is SparkAppliedEvent -> "StackApplied"
             is SparkRemovedEvent -> "StackRemoved"
             is CognitiveStateSnapshot -> "StackSnapshot"
@@ -152,6 +155,8 @@ class EventRenderer(
             is ProductEvent -> "💡" to green
             is TicketEvent -> "🎫" to green
             is ToolEvent -> "🔧" to yellow
+            is CognitivePhaseEvent.PhaseEntered -> "↦" to cyan
+            is CognitivePhaseEvent.PhaseExited -> "↤" to gray
             // Routing events
             is RoutingEvent.RouteSelected -> "🔀" to cyan
             is RoutingEvent.RouteFallback -> "🔀" to yellow
@@ -174,6 +179,21 @@ class EventRenderer(
      */
     private fun extractSummary(event: Event): String {
         return when (event) {
+            is CognitivePhaseEvent.PhaseEntered -> buildString {
+                append("Phase enter: ")
+                event.oldPhase?.let { append("${it.name} -> ") }
+                append(event.newPhase.name)
+                append(" (depth: ${event.nestingDepth})")
+                append(" ${formatUrgency(event.urgency)}")
+                append(" from ${formatSource(event.eventSource)}")
+            }
+            is CognitivePhaseEvent.PhaseExited -> buildString {
+                append("Phase exit: ${event.exitedPhase.name}")
+                event.restoredToPhase?.let { append(" -> ${it.name}") }
+                append(" (depth: ${event.nestingDepth})")
+                append(" ${formatUrgency(event.urgency)}")
+                append(" from ${formatSource(event.eventSource)}")
+            }
             is SparkAppliedEvent -> buildString {
                 append("Stack push: ${event.sparkName}")
                 append(" (depth: ${event.stackDepth})")
