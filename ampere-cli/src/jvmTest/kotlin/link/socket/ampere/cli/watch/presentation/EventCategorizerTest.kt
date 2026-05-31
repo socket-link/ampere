@@ -4,6 +4,7 @@ import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
 import link.socket.ampere.agents.domain.status.TicketStatus
+import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MemoryEvent
@@ -61,6 +62,24 @@ class EventCategorizerTest {
             urgency = Urgency.HIGH,
             threadId = "thread-1",
             reason = "Need human input on critical decision"
+        )
+
+        val significance = EventCategorizer.categorize(event)
+        assertEquals(EventSignificance.CRITICAL, significance)
+    }
+
+    @Test
+    fun `CRITICAL - EscalationFired events are critical`() {
+        val event = CognitiveEvent.EscalationFired(
+            eventId = "evt-escalation-fired",
+            timestamp = Clock.System.now(),
+            eventSource = EventSource.Agent("agent-test"),
+            urgency = Urgency.HIGH,
+            agentId = "agent-test",
+            uncertaintyValue = 0.9,
+            threshold = 0.7,
+            prompt = "Need confidence threshold escalation",
+            cognitivePhase = null,
         )
 
         val significance = EventCategorizer.categorize(event)
