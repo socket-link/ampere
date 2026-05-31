@@ -5,6 +5,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.CognitiveStateSnapshot
 import link.socket.ampere.agents.domain.event.EventSource
@@ -209,6 +210,23 @@ class EventRendererTest {
         success = success,
     )
 
+    private fun escalationFiredEvent(
+        eventId: String = "evt-escalation-fired-1",
+        timestamp: Instant = Clock.System.now(),
+        source: EventSource = EventSource.Agent("agent-test"),
+        urgency: Urgency = Urgency.HIGH,
+    ): CognitiveEvent.EscalationFired = CognitiveEvent.EscalationFired(
+        eventId = eventId,
+        timestamp = timestamp,
+        eventSource = source,
+        urgency = urgency,
+        agentId = "agent-test",
+        uncertaintyValue = 0.9,
+        threshold = 0.7,
+        prompt = "Need human decision",
+        cognitivePhase = null,
+    )
+
     @Test
     fun `render TaskCreated event shows task ID, description, and assignment`() {
         val output = captureTerminalOutput { _, renderer ->
@@ -403,6 +421,12 @@ class EventRendererTest {
             renderer.render(codeEvent())
         }
         assertContains(codeOutput, "💻")
+
+        val escalationOutput = captureTerminalOutput { _, renderer ->
+            renderer.render(escalationFiredEvent())
+        }
+        assertContains(escalationOutput, "❓")
+        assertContains(escalationOutput, "EscalationFired")
     }
 
     @Test
