@@ -79,9 +79,9 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                implementation(project(":ampere-core"))
-                implementation("link.socket:phosphor-core:0.5.0")
-                implementation("link.socket:phosphor-lumos:0.5.0")
+                api(project(":ampere-core"))
+                api("link.socket:phosphor-core:0.5.0")
+                api("link.socket:phosphor-lumos:0.5.0")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
             }
         }

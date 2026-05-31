@@ -60,6 +60,15 @@ class AmpereCommandTest {
     }
 
     @Test
+    fun `help text shows headless flag`() {
+        val command = AmpereCommand { lazyContext() }
+        val result = command.test("--help")
+
+        assertContains(result.output, "--headless")
+        assertContains(result.output, "Disable the Lumos TUI dashboard")
+    }
+
+    @Test
     fun `list-arcs flag displays available arcs`() {
         val command = AmpereCommand { lazyContext() }
         val result = command.test("--list-arcs")

@@ -30,6 +30,15 @@ import link.socket.ampere.cli.layout.RichEventPane
 import link.socket.ampere.cli.layout.StatusBar
 import link.socket.ampere.cli.layout.TaskChecklistPane
 import link.socket.ampere.cli.hybrid.HybridDashboardRenderer
+import link.socket.ampere.cli.launch.HeadlessReason
+import link.socket.ampere.cli.launch.TuiDecision
+import link.socket.ampere.cli.launch.decideTuiUsage
+import link.socket.ampere.cli.launch.userMessage
+import link.socket.ampere.cli.render.LumosBridgeController
+import link.socket.ampere.agents.events.api.EventHandler
+import link.socket.ampere.agents.events.subscription.Subscription
+import link.socket.ampere.agents.domain.event.Event
+import kotlinx.coroutines.CompletableDeferred
 import link.socket.ampere.cli.watch.CommandExecutor
 import link.socket.ampere.cli.watch.CommandResult
 import link.socket.ampere.cli.watch.presentation.EventSignificance
@@ -129,6 +138,11 @@ class AmpereCommand(
         help = "Execute goal using Arc phases (Charge -> Flow -> Pulse) instead of direct agent execution"
     ).flag(default = false)
 
+    private val headless: Boolean by option(
+        "--headless",
+        help = "Disable the Lumos TUI dashboard and stream plain-text agent events to stdout (auto-enabled when stdout is not a TTY or the terminal is too small)"
+    ).flag(default = false)
+
     override fun run() = runBlocking {
         // Handle --list-arcs flag (non-TUI, prints and exits)
         if (listArcs) {
@@ -174,12 +188,32 @@ class AmpereCommand(
 
         val context = contextProvider()
         val agentScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+        val tuiDecision = decideTuiUsage(
+            userRequestedHeadless = headless,
+            capabilities = TerminalFactory.getCapabilities(),
+        )
+        if (tuiDecision.useHeadless) {
+            runHeadless(
+                context = context,
+                agentScope = agentScope,
+                selectedArc = selectedArc,
+                hasActiveWork = hasActiveWork,
+                decision = tuiDecision,
+            )
+            return@runBlocking
+        }
+
         val terminal = TerminalFactory.createTerminal()
         val presenter = WatchPresenter(context.eventRelayService)
         val workspaceStateStore = context.environmentService.workspaceStateStore
 
         // Create TUI components
         val hybridRenderer = HybridDashboardRenderer(terminal).also { it.initialize() }
+        val lumosBridgeController = LumosBridgeController(
+            bus = context.environmentService.eventBus,
+            sceneProvider = { hybridRenderer.waveformPane?.runtimeAdapter?.scene },
+        )
         val eventPane = RichEventPane(terminal)
         val jazzPane = CognitiveProgressPane(terminal)
         val memoryPane = AgentMemoryPane(terminal)
@@ -447,6 +481,11 @@ class AmpereCommand(
                         )
                     }
 
+                    // Bridge AMPERE bus → Phosphor atmosphere/glyphs. Lazy-starts once
+                    // the waveform pane has built its CognitiveSceneRuntime; subsequent
+                    // ticks flush coalesced atmosphere targets.
+                    lumosBridgeController.tick()
+
                     // Write every frame (animation state changes even when pane content doesn't)
                     val out = LogCapture.getOriginalOut() ?: System.out
                     out.print(output)
@@ -470,6 +509,7 @@ class AmpereCommand(
             out.flush()
             throw e
         } finally {
+            lumosBridgeController.stop()
             LogCapture.stop()
             presenter.stop()
             inputHandler.close()
@@ -633,6 +673,158 @@ class AmpereCommand(
                 jazzPane.setFailed("Arc execution failed: ${e.message}")
                 updateStatus(StatusBar.SystemStatus.ATTENTION_NEEDED)
             }
+        }
+    }
+
+    /**
+     * Run AMPERE without the Lumos TUI dashboard.
+     *
+     * Streams every event from the bus as a single text line so the run is
+     * usable in CI, pipes, and minimal terminals. Blocks until the user
+     * interrupts (Ctrl+C) — matching the TUI's stay-resident behavior.
+     */
+    private suspend fun runHeadless(
+        context: AmpereContext,
+        agentScope: CoroutineScope,
+        selectedArc: ArcConfig,
+        hasActiveWork: Boolean,
+        decision: TuiDecision,
+    ) {
+        val capabilities = TerminalFactory.getCapabilities()
+        val reason = decision.reason
+        if (reason != null && reason != HeadlessReason.USER_REQUESTED) {
+            System.err.println(reason.userMessage(capabilities))
+        }
+        println("AMPERE headless mode. Press Ctrl+C to exit.")
+
+        context.subscribeToAll(
+            agentId = HEADLESS_AGENT_ID,
+            handler = EventHandler<Event, Subscription> { event, _ ->
+                println(formatHeadlessEvent(event))
+            },
+        )
+
+        // Headless goal activation uses GoalHandler unchanged. The progress and
+        // memory panes only hold internal state when nothing renders them, so a
+        // dangling Terminal here is harmless — we never draw.
+        val unrenderedTerminal = TerminalFactory.createTerminal()
+        val noopProgressPane = CognitiveProgressPane(unrenderedTerminal)
+        val noopMemoryPane = AgentMemoryPane(unrenderedTerminal)
+
+        try {
+            if (autoWork) {
+                context.startAutonomousWork()
+            }
+
+            var isOneShot = false
+            when {
+                goal != null -> {
+                    val effectiveGoal = goal!!
+                    if (useArcPhases) {
+                        executeArcPhasesHeadless(effectiveGoal, selectedArc)
+                        isOneShot = true
+                    } else {
+                        val goalHandler = GoalHandler(
+                            context = context,
+                            agentScope = agentScope,
+                            progressPane = noopProgressPane,
+                            memoryPane = noopMemoryPane,
+                            aiConfiguration = context.aiConfiguration,
+                        )
+                        val result = goalHandler.activateGoal(effectiveGoal)
+                        if (result.isFailure) {
+                            System.err.println(
+                                "Goal activation failed: ${result.exceptionOrNull()?.message}"
+                            )
+                        }
+                    }
+                }
+                issues -> context.startAutonomousWork()
+                issue != null -> {
+                    val availableIssues = context.codeIssueWorkflow.queryAvailableIssues()
+                    val targetIssue = availableIssues.find { it.number == issue }
+                    if (targetIssue == null) {
+                        System.err.println("Issue #$issue not found or not available")
+                    } else {
+                        val issueResult = context.codeIssueWorkflow.workOnIssue(
+                            targetIssue,
+                            context.codeAgent,
+                        )
+                        if (issueResult.isFailure) {
+                            System.err.println("Failed: ${issueResult.exceptionOrNull()?.message}")
+                        }
+                    }
+                    isOneShot = true
+                }
+                else -> {
+                    val configGoal = context.userConfig?.goal
+                    if (configGoal != null) {
+                        val goalHandler = GoalHandler(
+                            context = context,
+                            agentScope = agentScope,
+                            progressPane = noopProgressPane,
+                            memoryPane = noopMemoryPane,
+                            aiConfiguration = context.aiConfiguration,
+                        )
+                        val result = goalHandler.activateGoal(configGoal)
+                        if (result.isFailure) {
+                            System.err.println(
+                                "Goal activation failed: ${result.exceptionOrNull()?.message}"
+                            )
+                        }
+                    }
+                }
+            }
+
+            // `--issue N` and `--use-arc-phases` are synchronous one-shots: exit
+            // after the work returns. All other modes stay resident so the user
+            // can keep observing the event stream (matches TUI behavior).
+            if (!isOneShot) {
+                CompletableDeferred<Unit>().await()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            System.err.println("Error: ${e.message}")
+            throw e
+        } finally {
+            agentScope.cancel()
+            println("AMPERE stopped")
+        }
+    }
+
+    private suspend fun executeArcPhasesHeadless(goal: String, arcConfig: ArcConfig) {
+        val projectDirPath = File(System.getProperty("user.dir")).absolutePath
+        val runtime = AmpereRuntime.create(
+            arcConfig = arcConfig,
+            projectDirPath = projectDirPath,
+        )
+        val chargeResult = runtime.executeChargeOnly(goal)
+        println(
+            "Charge complete. Project: ${chargeResult.projectContext.projectId}, " +
+                "${chargeResult.agents.size} agents"
+        )
+        val result = runtime.execute(goal)
+        println(
+            "Pulse: ${result.pulseResult.evaluationReport.goalsCompleted}/" +
+                "${result.pulseResult.evaluationReport.goalsTotal} goals"
+        )
+        if (!result.success) {
+            System.err.println("Arc completed with failures")
+        }
+    }
+
+    companion object {
+        const val HEADLESS_AGENT_ID: String = "ampere-headless"
+
+        internal fun formatHeadlessEvent(event: Event): String {
+            val summary = runCatching {
+                event.getSummary(
+                    formatUrgency = { it.name },
+                    formatSource = { it.toString() },
+                )
+            }.getOrElse { event.eventType }
+            return "[${event.timestamp}] ${event.eventType}  $summary"
         }
     }
 }

@@ -83,8 +83,28 @@ ampere --auto-work         # Start with background issue work
 
 The TUI shows:
 - **Left pane (35%)**: Event stream (filtered by significance)
-- **Middle pane (40%)**: Cognitive cycle progress / system vitals
+- **Middle pane (40%)**: Cognitive cycle progress / system vitals (Phosphor waveform; atmosphere shifts with the active PROPEL phase)
 - **Right pane (25%)**: Agent memory stats (or logs in verbose mode)
+
+The cognitive scene is driven by an [AMPERE Phosphor bridge](../ampere-phosphor/README.md) that subscribes to the agent's `EventSerialBus`: every PROPEL `PhaseEntered` event re-targets the Lumos atmosphere, `EscalationFired` snaps to `UNCERTAIN`, and `TaskCompleted` / `TaskFailed` / `ToolExecutionCompleted` / `MilestoneReached` queue glyph cues on the runtime.
+
+**Terminal requirements:** the TUI needs at least **40 columns × 15 rows** and a connected TTY. If either condition is missing, the CLI auto-falls-back to headless mode with a one-line notice on stderr.
+
+### Headless mode
+
+Use `--headless` to disable the dashboard and stream plain-text event lines to stdout — useful in CI, log pipes, or environments without a usable terminal:
+
+```bash
+ampere --goal "Implement FizzBuzz" --headless
+ampere --issue 42 --headless
+ampere --headless | tee run.log
+```
+
+Auto-detection enables headless mode in the same conditions:
+- `stdout` is not a TTY (e.g. the output is piped or redirected).
+- The terminal is smaller than 40×15.
+
+In headless mode `ampere` exits after synchronous one-shot work (`--issue N`, `--use-arc-phases`); other modes stay resident streaming events until you `Ctrl+C`.
 
 **Keyboard controls:**
 - `d` - Dashboard mode (system vitals, agent status)
