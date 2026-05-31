@@ -3,6 +3,7 @@ package link.socket.ampere.cli.watch.presentation
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
+import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
@@ -96,7 +97,9 @@ object EventCategorizer {
         is TicketEvent.TicketCompleted,
         is TicketEvent.TicketMeetingScheduled,
         is AgentSurfaceEvent.Requested,
-        is AgentSurfaceEvent.Responded -> EventSignificance.SIGNIFICANT
+        is AgentSurfaceEvent.Responded,
+        is EmissionEvent.Produced,
+        is EmissionEvent.Resolved -> EventSignificance.SIGNIFICANT
 
         // Routine cognitive operations - maintenance work
         is GitEvent.BranchCreated,
