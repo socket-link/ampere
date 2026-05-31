@@ -5,6 +5,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
@@ -45,6 +46,11 @@ class EventTypeParserTest {
         assertNotNull(EventTypeParser.parse("TaskCreated"))
         assertNotNull(EventTypeParser.parse("QuestionRaised"))
         assertNotNull(EventTypeParser.parse("CodeSubmitted"))
+    }
+
+    @Test
+    fun `parse handles CognitiveEvent types`() {
+        assertNotNull(EventTypeParser.parse("EscalationFired"))
     }
 
     @Test
@@ -158,6 +164,7 @@ class EventTypeParserTest {
         assertTrue(allTypes.contains(Event.TaskCreated.EVENT_TYPE))
         assertTrue(allTypes.contains(Event.QuestionRaised.EVENT_TYPE))
         assertTrue(allTypes.contains(Event.CodeSubmitted.EVENT_TYPE))
+        assertTrue(allTypes.contains(CognitiveEvent.EscalationFired.EVENT_TYPE))
 
         // Should have meeting events
         assertTrue(allTypes.contains(MeetingEvent.MeetingScheduled.EVENT_TYPE))

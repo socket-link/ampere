@@ -37,6 +37,14 @@ data class RetrievedKnowledgeSummary(
  */
 sealed interface MemoryEvent : Event {
 
+    // TODO(AMPR-176): Add `ProvenanceCommitted` here when the provenance-chain
+    // surface is promoted from design placeholder to implementation. Design
+    // sketch in docs/design/provenance-event.md covers event shape
+    // (entryId / parentHash / contentHash / signer), hash/signature scheme,
+    // publish-site choice, and the relationship to the OpenAI grant's
+    // formal-verification workstream. Do not implement here without first
+    // satisfying one of the promotion criteria in that doc.
+
     /**
      * Event emitted when a Knowledge entry is successfully stored.
      *

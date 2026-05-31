@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitiveStateSnapshot
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
@@ -371,6 +372,9 @@ class WatchPresenter(
                 "\"$content\""
             }
             is MessageEvent.EscalationRequested -> "⚠️ Escalation: ${event.reason.take(50)}"
+            is CognitiveEvent.EscalationFired -> {
+                "Uncertainty escalation: ${event.uncertaintyValue} >= ${event.threshold}"
+            }
             is MemoryEvent.KnowledgeRecalled -> {
                 val count = event.resultsFound
                 if (count > 0) "Recalled $count items (relevance: ${String.format("%.0f%%", event.averageRelevance * 100)})"

@@ -30,6 +30,9 @@ object EventRegistry {
         Event.QuestionRaised.EVENT_TYPE,
         Event.CodeSubmitted.EVENT_TYPE,
 
+        // CognitiveEvent types
+        CognitiveEvent.EscalationFired.EVENT_TYPE,
+
         // MeetingEvent types
         MeetingEvent.MeetingScheduled.EVENT_TYPE,
         MeetingEvent.MeetingStarted.EVENT_TYPE,
