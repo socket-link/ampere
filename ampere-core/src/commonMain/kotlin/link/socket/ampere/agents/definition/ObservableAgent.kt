@@ -8,9 +8,11 @@ import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.agents.domain.event.CognitiveStateSnapshot
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.MilestoneCategory
 import link.socket.ampere.agents.domain.event.SparkAppliedEvent
 import link.socket.ampere.agents.domain.event.SparkRemovedEvent
 import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.domain.task.TaskId
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 
@@ -111,5 +113,26 @@ abstract class ObservableAgent<S : AgentState>(
                 api.publish(event)
             }
         }
+    }
+
+    /**
+     * Explicitly publish a milestone for externally declared checkpoints.
+     */
+    suspend fun reachMilestone(
+        category: MilestoneCategory,
+        description: String,
+        knowledgeId: String? = null,
+        taskId: TaskId? = null,
+        runId: String? = null,
+        milestoneId: String = generateUUID("milestone", id),
+    ) {
+        eventApi?.reachMilestone(
+            category = category,
+            description = description,
+            knowledgeId = knowledgeId,
+            taskId = taskId,
+            runId = runId,
+            milestoneId = milestoneId,
+        )
     }
 }

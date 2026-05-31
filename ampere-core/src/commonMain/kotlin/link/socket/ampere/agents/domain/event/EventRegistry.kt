@@ -59,6 +59,7 @@ object EventRegistry {
         // MemoryEvent types
         MemoryEvent.KnowledgeStored.EVENT_TYPE,
         MemoryEvent.KnowledgeRecalled.EVENT_TYPE,
+        MemoryEvent.MilestoneReached.EVENT_TYPE,
 
         // ToolEvent types
         ToolEvent.ToolRegistered.EVENT_TYPE,

@@ -11,7 +11,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/**
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/events/**
 related: [PropelLoop, AgentSurface, CognitionTrace, MemoryProvenance]
-last_verified: 2026-04-29
+last_verified: 2026-05-31
 ---
 
 # EventSerialBus
@@ -74,6 +74,7 @@ properties for free:
 - **Publish an event** — `agentEventApi.publish(SomeEvent(...))`. The api wraps the bus and is the agent-facing entry point.
 - **Subscribe** — `bus.subscribe(eventType, scope) { event, subscription -> ... }`. Hold onto the returned `EventSubscription` so you can `unsubscribe` on shutdown.
 - **Add a new event type** — extend `Event` (or the appropriate sub-sealed family in `agents/domain/event/`), register a `@Serializable` subclass with a stable `@SerialName`, add a CLI display handler, and add a logger summary in `Event.getSummary` if relevant.
+- **Publish an agent milestone** — call `AgentEventApi.reachMilestone(...)` or, for observable agents, `agent.reachMilestone(...)`. Milestones emit `MemoryEvent.MilestoneReached`, a low-volume sibling event to routine memory writes.
 - **Persist for trace** — events flow into `EventStore` via the configured logger. New event types are picked up automatically; just verify `run_id` is set on the emitter.
 
 ## Anti-patterns

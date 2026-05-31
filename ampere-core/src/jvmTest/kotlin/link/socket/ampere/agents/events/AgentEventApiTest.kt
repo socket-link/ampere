@@ -16,7 +16,10 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.MemoryEvent
+import link.socket.ampere.agents.domain.event.MilestoneCategory
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
+import link.socket.ampere.agents.events.api.EventFilter
 import link.socket.ampere.agents.events.api.filterForEventsCreatedByMe
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory
@@ -120,6 +123,141 @@ class AgentEventApiTest {
 
             val events = api.getRecentEvents(since)
             assertEquals(true, events.any { it is Event.QuestionRaised })
+        }
+    }
+
+    @Test
+    fun `first task completion for new task type publishes FIRST_SUCCESS milestone`() {
+        runBlocking {
+            val api = agentEventApiFactory.create(stubAgentId)
+            val received = CompletableDeferred<MemoryEvent.MilestoneReached>()
+
+            api.onMilestoneReached { event, _ ->
+                received.complete(event)
+            }
+
+            api.publishTaskCompleted(
+                taskId = "task-1",
+                summary = "Implemented first code change",
+                taskType = "code_change",
+                runId = "run-1",
+            )
+
+            val milestone = received.await()
+            assertEquals(MilestoneCategory.FIRST_SUCCESS, milestone.category)
+            assertEquals("task-1", milestone.taskId)
+            assertEquals("run-1", milestone.runId)
+            assertEquals(stubAgentId, milestone.agentId)
+        }
+    }
+
+    @Test
+    fun `second completion for same task type does not publish another FIRST_SUCCESS milestone`() {
+        runBlocking {
+            val api = agentEventApiFactory.create(stubAgentId)
+            val milestones = mutableListOf<MemoryEvent.MilestoneReached>()
+
+            api.onMilestoneReached { event, _ ->
+                milestones += event
+            }
+
+            api.publishTaskCompleted(
+                taskId = "task-1",
+                summary = "Implemented first code change",
+                taskType = "code_change",
+            )
+            api.publishTaskCompleted(
+                taskId = "task-2",
+                summary = "Implemented another code change",
+                taskType = "code_change",
+            )
+
+            delay(200)
+            val firstSuccesses = milestones.filter { it.category == MilestoneCategory.FIRST_SUCCESS }
+            assertEquals(1, firstSuccesses.size)
+            assertEquals("task-1", firstSuccesses.single().taskId)
+        }
+    }
+
+    @Test
+    fun `task failure followed by successful retry publishes RECOVERY milestone`() {
+        runBlocking {
+            val api = agentEventApiFactory.create(stubAgentId)
+            val received = CompletableDeferred<MemoryEvent.MilestoneReached>()
+
+            api.onMilestoneReached(
+                filter = EventFilter { event -> event.category == MilestoneCategory.RECOVERY },
+            ) { event, _ ->
+                received.complete(event)
+            }
+
+            api.publishTaskFailed(
+                taskId = "task-retry",
+                reason = "Initial attempt failed",
+                runId = "run-2",
+            )
+            api.publishTaskCompleted(
+                taskId = "task-retry",
+                summary = "Retry succeeded",
+                taskType = "retryable_work",
+                runId = "run-2",
+            )
+
+            val milestone = received.await()
+            assertEquals(MilestoneCategory.RECOVERY, milestone.category)
+            assertEquals("task-retry", milestone.taskId)
+            assertEquals("run-2", milestone.runId)
+        }
+    }
+
+    @Test
+    fun `successful task without prior failure does not publish RECOVERY milestone`() {
+        runBlocking {
+            val api = agentEventApiFactory.create(stubAgentId)
+            val milestones = mutableListOf<MemoryEvent.MilestoneReached>()
+
+            api.onMilestoneReached { event, _ ->
+                milestones += event
+            }
+
+            api.publishTaskCompleted(
+                taskId = "task-success",
+                summary = "Succeeded without retry",
+                taskType = "new_work",
+            )
+
+            delay(200)
+            assertEquals(
+                emptyList(),
+                milestones.filter { it.category == MilestoneCategory.RECOVERY },
+            )
+        }
+    }
+
+    @Test
+    fun `explicit reachMilestone API publishes milestone`() {
+        runBlocking {
+            val api = agentEventApiFactory.create(stubAgentId)
+            val received = CompletableDeferred<MemoryEvent.MilestoneReached>()
+
+            api.onMilestoneReached { event, _ ->
+                received.complete(event)
+            }
+
+            api.reachMilestone(
+                category = MilestoneCategory.EXTERNAL,
+                description = "Human approved checkpoint",
+                knowledgeId = "knowledge-1",
+                taskId = "task-approval",
+                runId = "run-3",
+                milestoneId = "milestone-approval",
+            )
+
+            val milestone = received.await()
+            assertEquals(MilestoneCategory.EXTERNAL, milestone.category)
+            assertEquals("Human approved checkpoint", milestone.description)
+            assertEquals("knowledge-1", milestone.knowledgeId)
+            assertEquals("milestone-approval", milestone.milestoneId)
         }
     }
 

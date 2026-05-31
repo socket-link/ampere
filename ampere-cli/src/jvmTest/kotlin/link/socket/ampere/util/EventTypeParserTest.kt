@@ -6,6 +6,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.MeetingEvent
+import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
@@ -81,6 +82,11 @@ class EventTypeParserTest {
     }
 
     @Test
+    fun `parse handles milestone event type`() {
+        assertNotNull(EventTypeParser.parse("MilestoneReached"))
+    }
+
+    @Test
     fun `parseMultiple returns set of EventClassTypes`() {
         val result = EventTypeParser.parseMultiple(
             listOf("TaskCreated", "QuestionRaised", "MeetingScheduled")
@@ -139,6 +145,9 @@ class EventTypeParserTest {
         // Should have notification events
         assertTrue(allNames.contains("notificationtoagent"))
         assertTrue(allNames.contains("notificationtohuman"))
+
+        // Should have milestone events
+        assertTrue(allNames.contains("milestonereached"))
     }
 
     @Test
@@ -158,6 +167,9 @@ class EventTypeParserTest {
 
         // Should have message events
         assertTrue(allTypes.contains(MessageEvent.ThreadCreated.EVENT_TYPE))
+
+        // Should have milestone events
+        assertTrue(allTypes.contains(MemoryEvent.MilestoneReached.EVENT_TYPE))
 
         // Should have notification events
         assertTrue(allTypes.contains(NotificationEvent.ToAgent.EVENT_TYPE))

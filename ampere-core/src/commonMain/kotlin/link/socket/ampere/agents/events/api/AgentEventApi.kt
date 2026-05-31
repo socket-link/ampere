@@ -8,7 +8,9 @@ import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.EventType
+import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
+import link.socket.ampere.agents.domain.event.MilestoneCategory
 import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
 import link.socket.ampere.agents.domain.event.PermissionDeniedReason
 import link.socket.ampere.agents.domain.event.TaskEvent
@@ -56,7 +58,13 @@ class AgentEventApi(
     private val eventRepository: EventRepository,
     private val eventSerialBus: EventSerialBus,
     private val logger: EventLogger = ConsoleEventLogger(),
+    milestoneTrackerState: MilestoneTrackerState = MilestoneTrackerState(),
 ) {
+    private val milestoneTracker = MilestoneTracker(this, milestoneTrackerState)
+
+    init {
+        milestoneTracker.start()
+    }
 
     /** Persist and publish a pre-constructed event. */
     suspend fun publish(event: Event) {
@@ -307,6 +315,8 @@ class AgentEventApi(
     suspend fun publishTaskCompleted(
         taskId: TaskId,
         summary: String,
+        taskType: String? = null,
+        runId: String? = null,
         urgency: Urgency = Urgency.MEDIUM,
     ) {
         val event = TaskEvent.TaskCompleted(
@@ -315,6 +325,8 @@ class AgentEventApi(
             eventSource = EventSource.Agent(agentId),
             timestamp = Clock.System.now(),
             summary = summary,
+            taskType = taskType,
+            runId = runId,
             urgency = urgency,
         )
 
@@ -325,6 +337,7 @@ class AgentEventApi(
     suspend fun publishTaskFailed(
         taskId: TaskId,
         reason: String,
+        runId: String? = null,
         urgency: Urgency = Urgency.HIGH,
     ) {
         val event = TaskEvent.TaskFailed(
@@ -333,6 +346,36 @@ class AgentEventApi(
             eventSource = EventSource.Agent(agentId),
             timestamp = Clock.System.now(),
             reason = reason,
+            runId = runId,
+            urgency = urgency,
+        )
+
+        publish(event)
+    }
+
+    /**
+     * Publish a milestone when an agent or external consumer identifies a significant checkpoint.
+     */
+    suspend fun reachMilestone(
+        category: MilestoneCategory,
+        description: String,
+        knowledgeId: String? = null,
+        taskId: TaskId? = null,
+        runId: String? = null,
+        milestoneId: String = generateUUID("milestone", agentId),
+        urgency: Urgency = Urgency.MEDIUM,
+    ) {
+        val event = MemoryEvent.MilestoneReached(
+            eventId = generateUUID(milestoneId, agentId),
+            timestamp = Clock.System.now(),
+            eventSource = EventSource.Agent(agentId),
+            agentId = agentId,
+            milestoneId = milestoneId,
+            description = description,
+            knowledgeId = knowledgeId,
+            taskId = taskId,
+            runId = runId,
+            category = category,
             urgency = urgency,
         )
 
@@ -435,6 +478,20 @@ class AgentEventApi(
         eventSerialBus.subscribe<TaskEvent.TaskBlocked, EventSubscription.ByEventClassType>(
             agentId = agentId,
             eventType = TaskEvent.TaskBlocked.EVENT_TYPE,
+        ) { event, subscription ->
+            if (filter.execute(event)) {
+                handler(event, subscription)
+            }
+        }
+
+    /** Subscribe to milestone events. */
+    fun onMilestoneReached(
+        filter: EventFilter<MemoryEvent.MilestoneReached> = EventFilter.noFilter(),
+        handler: suspend (MemoryEvent.MilestoneReached, Subscription?) -> Unit,
+    ): Subscription =
+        eventSerialBus.subscribe<MemoryEvent.MilestoneReached, EventSubscription.ByEventClassType>(
+            agentId = agentId,
+            eventType = MemoryEvent.MilestoneReached.EVENT_TYPE,
         ) { event, subscription ->
             if (filter.execute(event)) {
                 handler(event, subscription)
