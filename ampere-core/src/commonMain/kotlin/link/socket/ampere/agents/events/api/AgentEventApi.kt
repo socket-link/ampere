@@ -54,7 +54,7 @@ class EventFilter<E : Event>(
 class AgentEventApi(
     val agentId: AgentId,
     private val eventRepository: EventRepository,
-    private val eventSerialBus: EventSerialBus,
+    internal val eventSerialBus: EventSerialBus,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
 

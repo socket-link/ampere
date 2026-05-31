@@ -3,6 +3,7 @@ package link.socket.ampere.agents.events.utils
 import co.touchlab.kermit.Logger
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
+import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.EventType
@@ -155,6 +156,7 @@ class SignificanceAwareEventLogger(
         is HumanInteractionEvent.RequestTimedOut -> EventSignificance.SIGNIFICANT
 
         // Spark cognitive state events - routine cognitive operations
+        is CognitivePhaseEvent -> EventSignificance.ROUTINE
         is SparkEvent -> EventSignificance.ROUTINE
 
         // Routing events - routine for selection, significant for fallbacks

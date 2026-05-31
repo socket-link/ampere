@@ -4,6 +4,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
@@ -262,6 +263,8 @@ class ArcTraceProjection(
                 .add(decoded.toTraceEvent())
 
             activePhase = when (event) {
+                is CognitivePhaseEvent.PhaseEntered -> event.newPhase.name
+                is CognitivePhaseEvent.PhaseExited -> event.restoredToPhase?.name
                 is SparkAppliedEvent -> event.phaseSparkName() ?: activePhase
                 is SparkRemovedEvent -> null
                 else -> explicitPhase ?: activePhase
@@ -327,6 +330,8 @@ class ArcTraceProjection(
         is ProviderCallCompletedEvent -> event.cognitivePhase?.name
         is RoutingEvent.RouteSelected -> event.phase?.name
         is RoutingEvent.RouteFallback -> event.phase?.name
+        is CognitivePhaseEvent.PhaseEntered -> event.newPhase.name
+        is CognitivePhaseEvent.PhaseExited -> event.exitedPhase.name
         is MemoryEvent.KnowledgeRecalled -> RECALL_PHASE
         is MemoryEvent.KnowledgeStored -> LEARN_PHASE
         is ToolEvent.ToolExecutionStarted -> default ?: EXECUTE_PHASE
