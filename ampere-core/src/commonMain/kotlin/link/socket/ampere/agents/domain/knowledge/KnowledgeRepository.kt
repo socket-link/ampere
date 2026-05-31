@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.domain.knowledge
 
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.RunId
 
 /**
  * Repository for storing and retrieving Knowledge entries to enable agent learning.
@@ -31,6 +32,7 @@ interface KnowledgeRepository {
      * @param tags Optional tags for categorization (e.g., "testing", "database", "validation")
      * @param taskType Optional task type for contextual filtering
      * @param complexityLevel Optional complexity indicator
+     * @param runId Optional Arc run correlation ID for trace projection
      * @return Result with the stored KnowledgeEntry or an error
      */
     suspend fun storeKnowledge(
@@ -38,6 +40,7 @@ interface KnowledgeRepository {
         tags: List<String> = emptyList(),
         taskType: String? = null,
         complexityLevel: String? = null,
+        runId: RunId? = null,
     ): Result<KnowledgeEntry>
 
     /**

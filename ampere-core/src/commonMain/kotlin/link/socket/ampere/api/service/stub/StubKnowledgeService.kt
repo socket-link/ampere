@@ -1,6 +1,7 @@
 package link.socket.ampere.api.service.stub
 
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
@@ -20,6 +21,7 @@ class StubKnowledgeService : KnowledgeService {
         tags: List<String>,
         taskType: String?,
         complexityLevel: String?,
+        runId: RunId?,
     ): Result<KnowledgeEntry> {
         knowledgeCounter++
         return Result.success(

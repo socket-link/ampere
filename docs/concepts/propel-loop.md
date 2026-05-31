@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/trace/ArcRunTrace.kt
   - docs/AGENT_LIFECYCLE.md
 related: [CognitiveRelay, MemoryProvenance, SparkSystem, CognitionTrace, EventSerialBus]
-last_verified: 2026-05-25
+last_verified: 2026-05-30
 ---
 
 # PROPEL Loop

@@ -2,6 +2,7 @@ package link.socket.ampere.agents.domain.reasoning
 
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
@@ -181,22 +182,25 @@ class AgentReasoning private constructor(
     suspend fun evaluateOutcomes(
         outcomes: List<Outcome>,
         memoryService: AgentMemoryService? = null,
+        runId: RunId? = null,
     ): EvaluationResult {
         // Use mock response if available
         mockResponses?.outcomeEvaluator?.let { evaluator ->
             return evaluator(outcomes)
         }
 
+        val effectiveRunId = runId ?: outcomes.firstRunIdOrNull()
         val result = outcomeEvaluator?.evaluate(
             outcomes = outcomes,
             agentRole = settings.agentRole,
             contextBuilder = null,
+            runId = effectiveRunId,
         ) ?: throw IllegalStateException("No outcome evaluator configured")
 
         // Store learnings in memory if available
         if (result.knowledge.isNotEmpty() && memoryService != null) {
             result.knowledge.forEach { knowledge ->
-                memoryService.storeKnowledge(knowledge)
+                memoryService.storeKnowledge(knowledge, runId = effectiveRunId)
             }
         }
 
@@ -317,6 +321,15 @@ class AgentReasoning private constructor(
         }
     }
 }
+
+private fun List<Outcome>.firstRunIdOrNull(): RunId? =
+    filterIsInstance<ExecutionOutcome>()
+        .firstOrNull()
+        ?.taskId
+        ?.takeUnless { it.isBlank() }
+        ?: firstOrNull()
+            ?.id
+            ?.takeUnless { it.isBlank() }
 
 /**
  * Mock responses container for testing AgentReasoning.

@@ -1,5 +1,6 @@
 package link.socket.ampere.api.internal
 
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
@@ -15,11 +16,13 @@ internal class DefaultKnowledgeService(
         tags: List<String>,
         taskType: String?,
         complexityLevel: String?,
+        runId: RunId?,
     ): Result<KnowledgeEntry> = knowledgeRepository.storeKnowledge(
         knowledge = knowledge,
         tags = tags,
         taskType = taskType,
         complexityLevel = complexityLevel,
+        runId = runId,
     )
 
     override suspend fun get(id: String): Result<KnowledgeEntry?> =

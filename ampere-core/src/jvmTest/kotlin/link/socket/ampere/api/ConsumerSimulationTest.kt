@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
@@ -212,6 +213,7 @@ class ConsumerSimulationTest {
             tags: List<String>,
             taskType: String?,
             complexityLevel: String?,
+            runId: RunId?,
         ) =
             Result.success(
                 KnowledgeEntry(

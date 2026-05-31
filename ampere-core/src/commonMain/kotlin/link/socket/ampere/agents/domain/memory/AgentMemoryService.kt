@@ -3,6 +3,7 @@ package link.socket.ampere.agents.domain.memory
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.knowledge.Knowledge
@@ -41,6 +42,7 @@ class AgentMemoryService(
      * @param tags Optional tags for categorization and filtering
      * @param taskType Optional task type for context-based retrieval
      * @param complexityLevel Optional complexity level for similarity matching
+     * @param runId Optional Arc run correlation ID for trace projection
      * @return Result containing the stored KnowledgeEntry or an error
      */
     suspend fun storeKnowledge(
@@ -48,6 +50,7 @@ class AgentMemoryService(
         tags: List<String> = emptyList(),
         taskType: String? = null,
         complexityLevel: ComplexityLevel? = null,
+        runId: RunId? = null,
     ): Result<KnowledgeEntry> = withContext(ioDispatcher) {
         // Store knowledge using the repository
         val result = knowledgeRepository.storeKnowledge(
@@ -55,6 +58,7 @@ class AgentMemoryService(
             tags = tags,
             taskType = taskType,
             complexityLevel = complexityLevel?.name,
+            runId = runId,
         )
 
         // Emit event on success
@@ -79,6 +83,7 @@ class AgentMemoryService(
                 approach = knowledge.approach,
                 learnings = knowledge.learnings,
                 sourceId = sourceId,
+                runId = runId,
             )
 
             eventBus.publish(event)

@@ -40,5 +40,6 @@ How the cognitive substrate meets the user, the platform, and the plugin ecosyst
 | Concept | Status | One-line summary |
 |---------|--------|------------------|
 | [AgentSurface](agent-surface.md) | stable | Typed, serializable UI render request (Form, Choice, Confirmation, Card). Plugins emit; platform renderers translate. No platform types in the contract. |
+| [ChiProtocol](chi.md) | experimental | Computer-Human Interface: the inverse of HCI. Runtime protocol for computer-initiated human contact. Four uncoordinated paths today; target collapse onto `EmissionKind.Decision`. |
 | [PluginPermissions](plugin-permissions.md) | stable | Deterministic gate that runs *before* any plugin tool dispatch. Compares manifest + tool-requested permissions against user grants. |
 | [Ampere](ampere.md) | stable | The meta-concept: what makes a framework an AMPERE framework. Glass brain, AniMA agents, electrical metaphor, event-first coordination. |

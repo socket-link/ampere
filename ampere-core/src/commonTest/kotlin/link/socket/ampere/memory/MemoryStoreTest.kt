@@ -6,6 +6,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
@@ -94,6 +95,7 @@ private class RecordingKnowledgeRepository : KnowledgeRepository {
         tags: List<String>,
         taskType: String?,
         complexityLevel: String?,
+        runId: RunId?,
     ): Result<KnowledgeEntry> {
         stored += knowledge
         return Result.success(
@@ -167,6 +169,7 @@ private class RecordingOutcomeRepository : OutcomeMemoryRepository {
         approach: String,
         outcome: ExecutionOutcome,
         timestamp: kotlinx.datetime.Instant,
+        runId: RunId?,
     ): Result<OutcomeMemory> {
         val memory = OutcomeMemory(
             id = "memory-${recorded.size}",

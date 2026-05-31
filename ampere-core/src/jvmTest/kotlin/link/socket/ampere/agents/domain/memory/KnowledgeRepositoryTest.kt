@@ -30,13 +30,14 @@ import link.socket.ampere.db.Database
 class KnowledgeRepositoryTest {
 
     private lateinit var driver: JdbcSqliteDriver
+    private lateinit var database: Database
     private lateinit var repo: KnowledgeRepository
 
     @BeforeTest
     fun setUp() {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         Database.Schema.create(driver)
-        val database = Database(driver)
+        database = Database(driver)
         repo = KnowledgeRepositoryImpl(database)
     }
 
@@ -122,6 +123,46 @@ class KnowledgeRepositoryTest {
     // =============================================================================
     // REQUIREMENT 1: Insert and retrieve all five Knowledge subtypes by ID
     // =============================================================================
+
+    @Test
+    fun `storeKnowledge with runId populates run_id column`() = runBlocking {
+        val runId = "run-knowledge-1"
+        val knowledge = createKnowledgeFromOutcome()
+
+        val result = repo.storeKnowledge(
+            knowledge = knowledge,
+            tags = listOf("trace"),
+            taskType = "trace",
+            runId = runId,
+        )
+
+        assertTrue(result.isSuccess)
+        val stored = assertNotNull(result.getOrNull())
+        val row = database.knowledgeStoreQueries
+            .getKnowledgeById(stored.id)
+            .executeAsOne()
+
+        assertEquals(runId, row.run_id)
+    }
+
+    @Test
+    fun `storeKnowledge without runId leaves run_id column null`() = runBlocking {
+        val knowledge = createKnowledgeFromOutcome(outcomeId = "outcome-without-run")
+
+        val result = repo.storeKnowledge(
+            knowledge = knowledge,
+            tags = listOf("trace"),
+            taskType = "trace",
+        )
+
+        assertTrue(result.isSuccess)
+        val stored = assertNotNull(result.getOrNull())
+        val row = database.knowledgeStoreQueries
+            .getKnowledgeById(stored.id)
+            .executeAsOne()
+
+        assertNull(row.run_id)
+    }
 
     @Test
     fun `storeKnowledge successfully stores and retrieves FromIdea knowledge`() = runBlocking {

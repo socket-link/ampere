@@ -412,7 +412,12 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
             }
 
             // Store in long-term memory
-            storeKnowledge(knowledge, tags = tags, taskType = taskType)
+            storeKnowledge(
+                knowledge = knowledge,
+                tags = tags,
+                taskType = taskType,
+                runId = task.id.takeUnless { it.isBlank() },
+            )
         } catch (e: Exception) {
             // Logging is handled in storeKnowledge, just catch to prevent loop crash
         }
