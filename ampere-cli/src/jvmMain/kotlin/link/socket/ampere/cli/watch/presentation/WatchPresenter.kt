@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitiveStateSnapshot
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
@@ -371,10 +372,10 @@ class WatchPresenter(
                 "\"$content\""
             }
             is MessageEvent.EscalationRequested -> "⚠️ Escalation: ${event.reason.take(50)}"
-            is link.socket.ampere.agents.domain.event.CognitiveEvent.EscalationFired -> {
+            is CognitiveEvent.EscalationFired -> {
                 "Uncertainty escalation: ${event.uncertaintyValue} >= ${event.threshold}"
             }
-            is link.socket.ampere.agents.domain.event.CognitiveEvent.EscalationConsidered -> {
+            is CognitiveEvent.EscalationConsidered -> {
                 val direction = if (event.fired) ">=" else "<"
                 "Uncertainty considered: ${event.uncertaintyValue} $direction ${event.threshold}"
             }

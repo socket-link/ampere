@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
@@ -17,6 +18,7 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class UncertaintyEscalationEvaluatorTest {
 
     private val fixedClock = object : Clock {
