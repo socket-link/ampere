@@ -12,6 +12,8 @@ class AgentEventApiFactory(
     private val eventSerialBus: EventSerialBus,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
+    private val milestoneTrackerStates = mutableMapOf<AgentId, MilestoneTrackerState>()
+
     /**
      * Create an [AgentEventApi] for the given [agentId].
      */
@@ -21,5 +23,6 @@ class AgentEventApiFactory(
             eventRepository = eventRepository,
             eventSerialBus = eventSerialBus,
             logger = logger,
+            milestoneTrackerState = milestoneTrackerStates.getOrPut(agentId) { MilestoneTrackerState() },
         )
 }

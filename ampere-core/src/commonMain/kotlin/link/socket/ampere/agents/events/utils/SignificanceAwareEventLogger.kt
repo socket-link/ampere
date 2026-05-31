@@ -134,6 +134,7 @@ class SignificanceAwareEventLogger(
         is PlanEvent.PlanStepCompleted -> EventSignificance.SIGNIFICANT
         is PlanEvent.TaskAssigned -> EventSignificance.SIGNIFICANT
         is PlanEvent.MonitoringStarted -> EventSignificance.SIGNIFICANT
+        is MemoryEvent.MilestoneReached -> EventSignificance.SIGNIFICANT
         is GitEvent.BranchCreated -> EventSignificance.SIGNIFICANT
         is GitEvent.Committed -> EventSignificance.SIGNIFICANT
         is GitEvent.Pushed -> EventSignificance.SIGNIFICANT

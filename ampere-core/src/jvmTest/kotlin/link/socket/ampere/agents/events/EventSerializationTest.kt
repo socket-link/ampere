@@ -10,6 +10,8 @@ import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.MemoryEvent
+import link.socket.ampere.agents.domain.event.MilestoneCategory
 import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
 import link.socket.ampere.agents.domain.event.PermissionDeniedReason
 import link.socket.ampere.plugin.permission.PluginPermission
@@ -98,9 +100,32 @@ class EventSerializationTest {
     }
 
     @Test
+    fun `serialize and deserialize milestone reached event polymorphic`() {
+        val original: Event = MemoryEvent.MilestoneReached(
+            eventId = "55555555-5555-5555-5555-555555555555",
+            timestamp = stubTimestamp,
+            eventSource = stubEventSource,
+            agentId = "agent-X",
+            milestoneId = "milestone-1",
+            description = "Recovered after a failed retry",
+            knowledgeId = "knowledge-1",
+            taskId = "task-1",
+            runId = "run-1",
+            category = MilestoneCategory.RECOVERY,
+            urgency = Urgency.MEDIUM,
+        )
+
+        val text = json.encodeToString(Event.serializer(), original)
+        val decoded = json.decodeFromString(Event.serializer(), text)
+
+        assertIs<MemoryEvent.MilestoneReached>(decoded)
+        assertEquals(original, decoded)
+    }
+
+    @Test
     fun `serialize and deserialize escalation fired event polymorphic`() {
         val original: Event = CognitiveEvent.EscalationFired(
-            eventId = "55555555-5555-5555-5555-555555555555",
+            eventId = "66666666-6666-6666-6666-666666666666",
             timestamp = stubTimestamp,
             eventSource = stubEventSource,
             urgency = Urgency.HIGH,

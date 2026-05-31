@@ -85,6 +85,8 @@ sealed interface TaskEvent : Event {
         override val eventSource: EventSource,
         override val timestamp: Instant,
         val summary: String,
+        val taskType: String? = null,
+        val runId: String? = null,
         override val urgency: Urgency = Urgency.MEDIUM,
     ) : TaskEvent {
 
@@ -108,6 +110,7 @@ sealed interface TaskEvent : Event {
         override val eventSource: EventSource,
         override val timestamp: Instant,
         val reason: String,
+        val runId: String? = null,
         override val urgency: Urgency = Urgency.HIGH,
     ) : TaskEvent {
 

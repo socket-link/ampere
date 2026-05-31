@@ -12,7 +12,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/MemoryEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/RoutingEvent.kt
 related: [PropelLoop, EventSerialBus, MemoryProvenance, CognitiveRelay, SparkSystem]
-last_verified: 2026-04-29
+last_verified: 2026-05-31
 ---
 
 # Cognition Trace
@@ -26,7 +26,7 @@ and `OutcomeMemoryStore` by `run_id` and assembles an `ArcRunTrace`:
 - One `PropelPhase` per phase (Perceive / Recall / Observe / Plan / Execute / Learn) plus a synthetic `Run` row for the overall envelope.
 - `ModelInvocationTrace`s joining `ProviderCallStartedEvent` ↔ `ProviderCallCompletedEvent` with `routingReason`, latency, tokens, and estimated cost.
 - `ToolCallTrace`s joining `ToolEvent.ToolExecutionStarted` ↔ `ToolExecutionCompleted` with duration and success.
-- `MemoryWriteTrace`s for `KnowledgeStored` / `OutcomeRecorded`.
+- `MemoryWriteTrace`s for `KnowledgeStored` / `OutcomeRecorded`, with `MilestoneReached` persisted as a queryable checkpoint event rather than a memory write row.
 - `WattCost` per phase and per invocation, aggregated by `WattCostAggregator`.
 
 This is the glass brain made queryable. It is a *read model* — the trace
@@ -61,7 +61,7 @@ the projection that makes the run *legible*:
 - `commonMain/sqldelight/link/socket/ampere/db/memory/KnowledgeStore.sq`, `OutcomeMemoryStore.sq` — memory stores with `run_id`.
 - `agents/domain/event/ProviderCallStartedEvent.kt`, `ProviderCallCompletedEvent.kt` — model-invocation event pair.
 - `agents/domain/event/ToolEvent.kt` — tool-call event pair (`ToolCallTrace` payload).
-- `agents/domain/event/MemoryEvent.kt` — `KnowledgeStored`, `KnowledgeRecalled`, `OutcomeRecorded`.
+- `agents/domain/event/MemoryEvent.kt` — `KnowledgeStored`, `KnowledgeRecalled`, `MilestoneReached`, `OutcomeRecorded`.
 
 ## Invariants
 

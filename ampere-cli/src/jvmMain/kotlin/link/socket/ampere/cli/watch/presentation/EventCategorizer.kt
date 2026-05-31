@@ -87,6 +87,7 @@ object EventCategorizer {
         is ProductEvent.FeatureRequested,
         is ProductEvent.EpicDefined,
         is ProductEvent.PhaseDefined,
+        is MemoryEvent.MilestoneReached,
         is ProviderCallCompletedEvent,
         is TicketEvent.TicketCreated,
         is TicketEvent.TicketStatusChanged,

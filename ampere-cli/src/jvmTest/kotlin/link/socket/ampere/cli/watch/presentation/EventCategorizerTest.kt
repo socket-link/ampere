@@ -9,6 +9,7 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
+import link.socket.ampere.agents.domain.event.MilestoneCategory
 import link.socket.ampere.agents.domain.event.SparkAppliedEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.memory.MemoryContext
@@ -190,6 +191,26 @@ class EventCategorizerTest {
 
         val significance = EventCategorizer.categorize(event)
         assertEquals(EventSignificance.ROUTINE, significance)
+    }
+
+    @Test
+    fun `SIGNIFICANT - MilestoneReached events are significant`() {
+        val event = MemoryEvent.MilestoneReached(
+            eventId = "evt-milestone-1",
+            timestamp = Clock.System.now(),
+            eventSource = EventSource.Agent("agent-test"),
+            urgency = Urgency.MEDIUM,
+            agentId = "agent-test",
+            milestoneId = "milestone-1",
+            description = "First successful code change",
+            knowledgeId = null,
+            taskId = "task-1",
+            runId = "run-1",
+            category = MilestoneCategory.FIRST_SUCCESS,
+        )
+
+        val significance = EventCategorizer.categorize(event)
+        assertEquals(EventSignificance.SIGNIFICANT, significance)
     }
 
     @Test

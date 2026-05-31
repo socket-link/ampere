@@ -385,6 +385,9 @@ class WatchPresenter(
                 val tags = event.tags.take(3).joinToString(", ")
                 if (tags.isNotEmpty()) "Stored $type: $tags" else "Stored $type knowledge"
             }
+            is MemoryEvent.MilestoneReached -> {
+                "Milestone ${event.category.name.lowercase()}: ${event.description.take(50)}"
+            }
             is Event.QuestionRaised -> "Question: ${event.questionText.take(50)}"
             is MeetingEvent.MeetingScheduled -> "Meeting: ${event.meeting.invitation.title.take(50)}"
             is MeetingEvent.MeetingStarted -> "Meeting started (${event.meetingId.takeLast(8)})"

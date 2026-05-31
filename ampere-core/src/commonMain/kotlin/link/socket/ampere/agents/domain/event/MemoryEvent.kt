@@ -3,9 +3,11 @@ package link.socket.ampere.agents.domain.event
 import kotlin.math.roundToInt
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
 import link.socket.ampere.agents.domain.memory.MemoryContext
+import link.socket.ampere.agents.domain.task.TaskId
 
 /** Format a double to 2 decimal places (multiplatform compatible). */
 private fun Double.formatPercent(): String {
@@ -182,4 +184,65 @@ sealed interface MemoryEvent : Event {
             const val EVENT_TYPE: EventType = "KnowledgeRecalled"
         }
     }
+
+    /**
+     * Event emitted when an agent reaches a meaningful checkpoint.
+     *
+     * Milestones are low-volume signals for significant agent progress. They are
+     * intentionally separate from [KnowledgeStored] so consumers can subscribe to
+     * milestone semantics without filtering routine memory writes.
+     */
+    @Serializable
+    data class MilestoneReached(
+        override val eventId: EventId,
+        override val timestamp: Instant,
+        override val eventSource: EventSource,
+        val agentId: AgentId,
+        val milestoneId: String,
+        val description: String,
+        val knowledgeId: String?,
+        val taskId: TaskId?,
+        val runId: String?,
+        val category: MilestoneCategory,
+        override val urgency: Urgency = Urgency.MEDIUM,
+    ) : MemoryEvent {
+
+        override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Milestone reached: ")
+            append(category.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() })
+            append(" - ")
+            append(description)
+            taskId?.let { append(" (task=$it)") }
+            knowledgeId?.let { append(" knowledge=$it") }
+            append(" ${formatUrgency(urgency)}")
+            append(" by ${formatSource(eventSource)}")
+        }
+
+        companion object {
+            const val EVENT_TYPE: EventType = "MilestoneReached"
+        }
+    }
+}
+
+/**
+ * Categories for [MemoryEvent.MilestoneReached].
+ *
+ * [FIRST_SUCCESS] and [RECOVERY] are emitted by the built-in milestone tracker.
+ * [EXTERNAL] is emitted through the explicit milestone API for human-in-the-loop
+ * approvals or external orchestration scripts. [KEY_INSIGHT] and [CHECKPOINT]
+ * are available for future implementation when AMPERE promotes insight and
+ * long-running progress signals into explicit milestone publish sites.
+ */
+@Serializable
+enum class MilestoneCategory {
+    FIRST_SUCCESS,
+    KEY_INSIGHT,
+    RECOVERY,
+    CHECKPOINT,
+    EXTERNAL,
 }
