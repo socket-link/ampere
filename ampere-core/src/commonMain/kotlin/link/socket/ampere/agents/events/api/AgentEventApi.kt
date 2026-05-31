@@ -221,6 +221,26 @@ class AgentEventApi(
             }
         }
 
+    /**
+     * Subscribe to every uncertainty evaluation, including near-misses.
+     *
+     * High-volume telemetry — fires on every evaluation, potentially thousands per agent run.
+     * Subscribe only for telemetry, calibration analysis, or near-miss UI. For action signals
+     * use [onEscalationFired] instead.
+     */
+    fun onEscalationConsidered(
+        filter: EventFilter<CognitiveEvent.EscalationConsidered> = EventFilter.noFilter(),
+        handler: suspend (CognitiveEvent.EscalationConsidered, Subscription?) -> Unit,
+    ): Subscription =
+        eventSerialBus.subscribe<CognitiveEvent.EscalationConsidered, EventSubscription.ByEventClassType>(
+            agentId = agentId,
+            eventType = CognitiveEvent.EscalationConsidered.EVENT_TYPE,
+        ) { event, subscription ->
+            if (filter.execute(event)) {
+                handler(event, subscription)
+            }
+        }
+
     /** Retrieve all events since the provided timestamp, or all if null. */
     suspend fun getRecentEvents(
         since: Instant?,

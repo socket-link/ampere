@@ -55,6 +55,55 @@ sealed interface CognitiveEvent : Event {
             const val EVENT_TYPE: EventType = "EscalationFired"
         }
     }
+
+    /**
+     * Emitted on every uncertainty evaluation, including near-misses that do not trip the threshold.
+     *
+     * Use this event for telemetry — uncertainty trajectory, calibration analysis, "about to fire"
+     * warnings — not for action signals. When an evaluation also fires, an [EscalationFired] is
+     * published immediately after this event (causal order at the publish site; subscribers cannot
+     * assume cross-event handler ordering because bus dispatch is concurrent).
+     *
+     * Volume warning: uncertainty may be evaluated on every LLM call or tool invocation, producing
+     * thousands of events per agent run. Subscribe only if you have a real use for the data;
+     * non-telemetry consumers should filter this event out. Urgency is [Urgency.LOW] for the same
+     * reason.
+     */
+    @Serializable
+    @SerialName("CognitiveEvent.EscalationConsidered")
+    data class EscalationConsidered(
+        override val eventId: EventId,
+        override val timestamp: Instant,
+        override val eventSource: EventSource,
+        override val urgency: Urgency = Urgency.LOW,
+        override val agentId: AgentId,
+        val uncertaintyValue: Double,
+        val threshold: Double,
+        /** True iff this evaluation also produced an [EscalationFired]. */
+        val fired: Boolean,
+        val cognitivePhase: CognitivePhase?,
+    ) : CognitiveEvent {
+
+        override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Escalation considered for $agentId: uncertainty ")
+            append(uncertaintyValue.formatRatio())
+            append(if (fired) " >= threshold " else " < threshold ")
+            append(threshold.formatRatio())
+            cognitivePhase?.let { append(" [${it.name}]") }
+            append(if (fired) " (fired)" else " (near-miss)")
+            append(" ${formatUrgency(urgency)}")
+            append(" from ${formatSource(eventSource)}")
+        }
+
+        companion object {
+            const val EVENT_TYPE: EventType = "EscalationConsidered"
+        }
+    }
 }
 
 private fun Double.formatRatio(): String {

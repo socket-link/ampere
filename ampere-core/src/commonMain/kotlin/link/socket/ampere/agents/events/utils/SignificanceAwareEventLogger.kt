@@ -97,6 +97,7 @@ class SignificanceAwareEventLogger(
         // Critical events require immediate human awareness
         is Event.QuestionRaised -> EventSignificance.CRITICAL
         is CognitiveEvent.EscalationFired -> EventSignificance.CRITICAL
+        is CognitiveEvent.EscalationConsidered -> EventSignificance.ROUTINE
         is TicketEvent.TicketBlocked -> EventSignificance.CRITICAL
         is MessageEvent.EscalationRequested -> EventSignificance.CRITICAL
         is PermissionDeniedEvent -> EventSignificance.CRITICAL

@@ -51,6 +51,7 @@ class EventTypeParserTest {
     @Test
     fun `parse handles CognitiveEvent types`() {
         assertNotNull(EventTypeParser.parse("EscalationFired"))
+        assertNotNull(EventTypeParser.parse("EscalationConsidered"))
     }
 
     @Test
@@ -165,6 +166,7 @@ class EventTypeParserTest {
         assertTrue(allTypes.contains(Event.QuestionRaised.EVENT_TYPE))
         assertTrue(allTypes.contains(Event.CodeSubmitted.EVENT_TYPE))
         assertTrue(allTypes.contains(CognitiveEvent.EscalationFired.EVENT_TYPE))
+        assertTrue(allTypes.contains(CognitiveEvent.EscalationConsidered.EVENT_TYPE))
 
         // Should have meeting events
         assertTrue(allTypes.contains(MeetingEvent.MeetingScheduled.EVENT_TYPE))

@@ -227,6 +227,22 @@ class EventRendererTest {
         cognitivePhase = null,
     )
 
+    private fun escalationConsideredEvent(
+        eventId: String = "evt-escalation-considered-1",
+        timestamp: Instant = Clock.System.now(),
+        source: EventSource = EventSource.Agent("agent-test"),
+        fired: Boolean = false,
+    ): CognitiveEvent.EscalationConsidered = CognitiveEvent.EscalationConsidered(
+        eventId = eventId,
+        timestamp = timestamp,
+        eventSource = source,
+        agentId = "agent-test",
+        uncertaintyValue = 0.42,
+        threshold = 0.7,
+        fired = fired,
+        cognitivePhase = null,
+    )
+
     @Test
     fun `render TaskCreated event shows task ID, description, and assignment`() {
         val output = captureTerminalOutput { _, renderer ->
@@ -427,6 +443,12 @@ class EventRendererTest {
         }
         assertContains(escalationOutput, "❓")
         assertContains(escalationOutput, "EscalationFired")
+
+        val consideredOutput = captureTerminalOutput { _, renderer ->
+            renderer.render(escalationConsideredEvent())
+        }
+        assertContains(consideredOutput, "❔")
+        assertContains(consideredOutput, "EscalationConsidered")
     }
 
     @Test

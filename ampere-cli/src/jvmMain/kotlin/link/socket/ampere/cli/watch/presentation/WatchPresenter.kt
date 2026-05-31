@@ -375,6 +375,10 @@ class WatchPresenter(
             is CognitiveEvent.EscalationFired -> {
                 "Uncertainty escalation: ${event.uncertaintyValue} >= ${event.threshold}"
             }
+            is CognitiveEvent.EscalationConsidered -> {
+                val direction = if (event.fired) ">=" else "<"
+                "Uncertainty considered: ${event.uncertaintyValue} $direction ${event.threshold}"
+            }
             is MemoryEvent.KnowledgeRecalled -> {
                 val count = event.resultsFound
                 if (count > 0) "Recalled $count items (relevance: ${String.format("%.0f%%", event.averageRelevance * 100)})"

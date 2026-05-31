@@ -88,6 +88,23 @@ class EventCategorizerTest {
     }
 
     @Test
+    fun `ROUTINE - EscalationConsidered events are routine telemetry`() {
+        val event = CognitiveEvent.EscalationConsidered(
+            eventId = "evt-escalation-considered",
+            timestamp = Clock.System.now(),
+            eventSource = EventSource.Agent("agent-test"),
+            agentId = "agent-test",
+            uncertaintyValue = 0.42,
+            threshold = 0.7,
+            fired = false,
+            cognitivePhase = null,
+        )
+
+        val significance = EventCategorizer.categorize(event)
+        assertEquals(EventSignificance.ROUTINE, significance)
+    }
+
+    @Test
     fun `SIGNIFICANT - TaskCreated events are significant`() {
         val event = Event.TaskCreated(
             eventId = "evt-4",

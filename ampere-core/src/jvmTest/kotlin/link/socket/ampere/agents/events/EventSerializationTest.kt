@@ -142,4 +142,25 @@ class EventSerializationTest {
         assertIs<CognitiveEvent.EscalationFired>(decoded)
         assertEquals(original, decoded)
     }
+
+    @Test
+    fun `serialize and deserialize escalation considered event polymorphic`() {
+        val original: Event = CognitiveEvent.EscalationConsidered(
+            eventId = "66666666-6666-6666-6666-666666666666",
+            timestamp = stubTimestamp,
+            eventSource = stubEventSource,
+            agentId = "agent-X",
+            uncertaintyValue = 0.42,
+            threshold = 0.7,
+            fired = false,
+            cognitivePhase = CognitivePhase.PERCEIVE,
+        )
+
+        val text = json.encodeToString(Event.serializer(), original)
+        val decoded = json.decodeFromString(Event.serializer(), text)
+
+        assertIs<CognitiveEvent.EscalationConsidered>(decoded)
+        assertEquals(original, decoded)
+        assertEquals(Urgency.LOW, decoded.urgency)
+    }
 }

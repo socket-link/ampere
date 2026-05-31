@@ -161,6 +161,19 @@ fun EventService.escalationFiredEvents(
     filters: EventRelayFilters = EventRelayFilters(),
 ): Flow<CognitiveEvent.EscalationFired> = observe(filters).filterIsInstance<CognitiveEvent.EscalationFired>()
 
+/**
+ * Stream every uncertainty evaluation, including near-misses.
+ *
+ * High-volume telemetry — fires on every evaluation, potentially thousands per agent run.
+ * Subscribe only for telemetry or calibration analysis; for action signals use
+ * [escalationFiredEvents] instead.
+ */
+@link.socket.ampere.api.AmpereStableApi
+fun EventService.escalationConsideredEvents(
+    filters: EventRelayFilters = EventRelayFilters(),
+): Flow<CognitiveEvent.EscalationConsidered> =
+    observe(filters).filterIsInstance<CognitiveEvent.EscalationConsidered>()
+
 @link.socket.ampere.api.AmpereStableApi
 enum class EventStreamFilter {
     ALL,

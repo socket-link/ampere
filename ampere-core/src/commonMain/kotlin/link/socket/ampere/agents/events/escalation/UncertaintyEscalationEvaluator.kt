@@ -10,10 +10,17 @@ import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 
 /**
- * Evaluates uncertainty against an escalation threshold and publishes the threshold-fired signal.
+ * Evaluates uncertainty against an escalation threshold and publishes:
+ * - [CognitiveEvent.EscalationConsidered] on every evaluation (high-volume telemetry)
+ * - [CognitiveEvent.EscalationFired] when the uncertainty meets or exceeds the threshold
+ *
+ * When both events publish, `EscalationConsidered` is emitted first so consumers tracking
+ * near-misses see the causal order at the publish site. Bus dispatch is concurrent, so
+ * subscribers cannot rely on handler-level cross-event ordering.
  */
 class UncertaintyEscalationEvaluator(
     private val agentId: AgentId,
+    private val publishEscalationConsidered: suspend (CognitiveEvent.EscalationConsidered) -> Unit,
     private val publishEscalationFired: suspend (CognitiveEvent.EscalationFired) -> Unit,
     private val clock: Clock = Clock.System,
 ) {
@@ -23,12 +30,14 @@ class UncertaintyEscalationEvaluator(
         clock: Clock = Clock.System,
     ) : this(
         agentId = agentEventApi.agentId,
+        publishEscalationConsidered = { event -> agentEventApi.publish(event) },
         publishEscalationFired = { event -> agentEventApi.publish(event) },
         clock = clock,
     )
 
     /**
      * @return true when the threshold fired and an [CognitiveEvent.EscalationFired] was published.
+     *   An [CognitiveEvent.EscalationConsidered] is always published, regardless of return value.
      */
     suspend fun evaluate(
         uncertaintyValue: Double,
@@ -44,7 +53,24 @@ class UncertaintyEscalationEvaluator(
             "threshold must be in [0.0, 1.0], was $threshold"
         }
 
-        if (uncertaintyValue < threshold) {
+        val fired = uncertaintyValue >= threshold
+        val source = EventSource.Agent(agentId)
+        val consideredTimestamp = clock.now()
+
+        publishEscalationConsidered(
+            CognitiveEvent.EscalationConsidered(
+                eventId = generateUUID(agentId),
+                timestamp = consideredTimestamp,
+                eventSource = source,
+                agentId = agentId,
+                uncertaintyValue = uncertaintyValue,
+                threshold = threshold,
+                fired = fired,
+                cognitivePhase = cognitivePhase,
+            ),
+        )
+
+        if (!fired) {
             return false
         }
 
@@ -52,7 +78,7 @@ class UncertaintyEscalationEvaluator(
             CognitiveEvent.EscalationFired(
                 eventId = generateUUID(agentId),
                 timestamp = clock.now(),
-                eventSource = EventSource.Agent(agentId),
+                eventSource = source,
                 urgency = urgency,
                 agentId = agentId,
                 uncertaintyValue = uncertaintyValue,
