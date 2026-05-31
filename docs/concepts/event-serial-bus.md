@@ -77,6 +77,7 @@ properties for free:
 - **Subscribe** — `bus.subscribe(eventType, scope) { event, subscription -> ... }`. Hold onto the returned `EventSubscription` so you can `unsubscribe` on shutdown.
 - **Add a new event type** — extend `Event` (or the appropriate sub-sealed family in `agents/domain/event/`), register a `@Serializable` subclass with a stable `@SerialName`, add a CLI display handler, and add a logger summary in `Event.getSummary` if relevant.
 - **Observe phase transitions** — subscribe to `CognitivePhaseEvent.PhaseEntered.EVENT_TYPE` and/or `PhaseExited.EVENT_TYPE`; use `nestingDepth == 0` for outermost phase changes only.
+- **Publish an agent milestone** — call `AgentEventApi.reachMilestone(...)` or, for observable agents, `agent.reachMilestone(...)`. Milestones emit `MemoryEvent.MilestoneReached`, a low-volume sibling event to routine memory writes.
 - **Persist for trace** — events flow into `EventStore` via the configured logger. New event types are picked up automatically; just verify `run_id` is set on the emitter.
 
 ## Anti-patterns

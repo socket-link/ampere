@@ -22,6 +22,7 @@ class TeamEventAdapter {
         // Memory events
         is MemoryEvent.KnowledgeRecalled -> adaptKnowledgeRecalled(event)
         is MemoryEvent.KnowledgeStored -> null // Internal, not surfaced to DSL users
+        is MemoryEvent.MilestoneReached -> null // Bridge/runtime signal, not surfaced to DSL users
 
         // Plan events
         is PlanEvent.PlanStepStarted -> adaptPlanStepStarted(event)

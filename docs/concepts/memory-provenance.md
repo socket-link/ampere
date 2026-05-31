@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/MemoryEvent.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/memory/**
 related: [PropelLoop, CognitionTrace, EventSerialBus, DreamCycle]
-last_verified: 2026-05-27
+last_verified: 2026-05-31
 ---
 
 # Memory Provenance
@@ -61,7 +61,7 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 - `agents/domain/knowledge/Knowledge.kt` — sealed knowledge sources.
 - `agents/domain/knowledge/KnowledgeRepository.kt` + `KnowledgeRepositoryImpl.kt` — semantic store.
 - `agents/domain/memory/AgentMemoryService.kt` — the recall facade; scores by similarity, tag overlap, task type, recency, complexity.
-- `agents/domain/event/MemoryEvent.kt` — `KnowledgeStored`, `KnowledgeRecalled`, `OutcomeRecorded` events.
+- `agents/domain/event/MemoryEvent.kt` — `KnowledgeStored`, `KnowledgeRecalled`, `MilestoneReached`, `OutcomeRecorded` events.
 - `commonMain/sqldelight/link/socket/ampere/db/memory/OutcomeMemoryStore.sq`, `KnowledgeStore.sq` — schemas (each carries `run_id`).
 
 ## Invariants
@@ -77,6 +77,7 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 
 - **Record an execution outcome** — your tool returns an `ExecutionResult`; `OutcomeEvaluator` wraps it into the appropriate `ExecutionOutcome` variant; `OutcomeMemoryRepository.recordOutcome` writes it. Don't bypass the evaluator.
 - **Extract knowledge** — Loop phase: `KnowledgeExtractor` reads outcomes from the current run, distils into `Knowledge.FromOutcome` (or `FromPlan`, etc.), and `KnowledgeRepository.storeKnowledge` writes it. `KnowledgeStored` event emitted.
+- **Emit a milestone** — milestone detection is separate from knowledge storage. `MilestoneTracker` listens for per-agent task lifecycle transitions and publishes `MilestoneReached` for first successful task types and recovery after failure; external systems use `AgentEventApi.reachMilestone(...)`.
 - **Recall** — `AgentMemoryService.recallRelevantKnowledge(MemoryContext(...))` for in-loop reasoning. Returns scored entries.
 - **Time-travel a run** — `ArcTraceProjection.project(runId)` reads `EventStore`, `KnowledgeStore`, and `OutcomeMemoryStore` by `run_id` and rebuilds the per-phase trace.
 - **Add a new outcome variant** — extend `ExecutionOutcome`, add a `Success`/`Failure` pair, update `OutcomeEvaluator`, add a CLI display handler.
@@ -86,6 +87,7 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 - **Updating an outcome in place after the fact.** "I'll just patch the error message." No — write a new outcome. The original is the audit trail.
 - **Storing tool-specific shapes in `ExecutionOutcome`.** Once a variant carries a `KafkaPartition` or similar, cross-executor recall stops working. Keep variants tool-agnostic; put tool detail in nested response types.
 - **Calling `KnowledgeRepository.storeKnowledge` from a tool.** Knowledge is the output of cognitive distillation, not a direct write target. Use `OutcomeMemoryRepository` from tools; let the Loop phase produce knowledge.
+- **Using `KnowledgeStored` as a milestone flag.** Routine memory writes are high volume. Publish `MilestoneReached` as a sibling event when the semantic payload represents a meaningful checkpoint.
 - **Recall by ticket id alone.** `MemoryContext` is built from task type, tags, and description for a reason. Ticket-id recall returns *only* this ticket's prior runs, missing the cross-ticket pattern recognition that's the point.
 - **Filtering failures out of recall.** Failures teach what not to do. A "successful approaches only" filter erases that signal.
 - **Stripping `run_id` when persisting.** A common refactoring trap: a helper drops the `run_id` parameter "because it's not used downstream". `ArcTraceProjection` is downstream. Keep it.

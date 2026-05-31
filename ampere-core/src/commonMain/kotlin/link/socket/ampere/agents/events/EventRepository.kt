@@ -252,5 +252,8 @@ private fun Event.runIdOrNull(): String? = when (this) {
     is ToolEvent.ToolExecutionCompleted -> runId
     is MemoryEvent.KnowledgeStored -> runId
     is MemoryEvent.KnowledgeRecalled -> runId
+    is MemoryEvent.MilestoneReached -> runId
+    is link.socket.ampere.agents.domain.event.TaskEvent.TaskCompleted -> runId
+    is link.socket.ampere.agents.domain.event.TaskEvent.TaskFailed -> runId
     else -> null
 }
