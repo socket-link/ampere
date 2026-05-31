@@ -287,7 +287,7 @@ class OutcomeEvaluator(
                 val pattern = obj["pattern"]?.jsonPrimitive?.content ?: return@mapNotNull null
                 val reasoning = obj["reasoning"]?.jsonPrimitive?.content ?: ""
                 val actionableAdvice = obj["actionableAdvice"]?.jsonPrimitive?.content ?: ""
-                val confidence = obj["confidence"]?.jsonPrimitive?.content ?: "medium"
+                val confidence = Confidence.parseOrDefault(obj["confidence"]?.jsonPrimitive?.content)
                 val evidenceCount = obj["evidenceCount"]?.jsonPrimitive?.content?.toIntOrNull() ?: 1
 
                 val outcomeId = outcomes.firstOrNull { it.id.isNotBlank() }?.id
@@ -301,7 +301,7 @@ class OutcomeEvaluator(
                         appendLine()
                         appendLine("Actionable Advice: $actionableAdvice")
                         appendLine()
-                        appendLine("Confidence: $confidence")
+                        appendLine("Confidence: ${confidence.name.lowercase()}")
                         appendLine("Evidence Count: $evidenceCount")
                     },
                     timestamp = now,

@@ -113,6 +113,10 @@ object EventRegistry {
         // AgentSurfaceEvent types
         AgentSurfaceEvent.Requested.EVENT_TYPE,
         AgentSurfaceEvent.Responded.EVENT_TYPE,
+
+        // EmissionEvent types
+        EmissionEvent.Produced.EVENT_TYPE,
+        EmissionEvent.Resolved.EVENT_TYPE,
     )
 
     /**
