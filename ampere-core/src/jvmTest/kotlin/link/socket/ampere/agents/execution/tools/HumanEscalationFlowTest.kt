@@ -21,7 +21,6 @@ import link.socket.ampere.agents.domain.emission.extractFreeText
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
-import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.Task

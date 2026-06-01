@@ -23,7 +23,10 @@ class AgentSystemIntegrationTest {
         val tempDir = Files.createTempDirectory("agent_test").toFile()
         try {
             val tools = mapOf(
-                "ask_human" to ToolAskHuman(AgentActionAutonomy.FULLY_AUTONOMOUS, eventSerialBus = EventSerialBus(scope = scope)),
+                "ask_human" to ToolAskHuman(
+                    AgentActionAutonomy.FULLY_AUTONOMOUS,
+                    eventSerialBus = EventSerialBus(scope = scope),
+                ),
                 "write_code_file" to ToolWriteCodeFile(AgentActionAutonomy.SELF_CORRECTING),
                 "read_codebase" to ToolReadCodebase(AgentActionAutonomy.ASK_BEFORE_ACTION),
                 "run_tests" to ToolRunTests(AgentActionAutonomy.ACT_WITH_NOTIFICATION),
