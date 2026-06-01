@@ -54,7 +54,7 @@ class UpstreamLlmClientTest {
         val captured = assertNotNull(recorder.lastRequest, "Custom client must be invoked")
         assertEquals(AIModel_Claude.Sonnet_4.name, captured.model.id)
         assertEquals(0.7, captured.temperature)
-        assertEquals(256, captured.maxTokens)
+        assertEquals(256, captured.maxCompletionTokens)
         assertEquals(2, captured.messages.size)
         assertEquals(ChatRole.System, captured.messages[0].role)
         assertEquals("You are a database expert.", captured.messages[0].content)

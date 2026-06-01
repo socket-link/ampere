@@ -45,6 +45,7 @@ import link.socket.ampere.util.randomUUID
  * - Subscribers on base EmissionEvent.Produced receive HumanInteractionEvent.InputRequested
  * - GlobalHumanResponseRegistry is NOT referenced (coverage assertion)
  */
+@OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
 class HumanEscalationFlowTest {
 
     private fun newRegistry() = EmissionReplyRegistry()
