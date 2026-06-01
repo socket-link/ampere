@@ -12,14 +12,17 @@ import link.socket.ampere.agents.domain.emission.EmissionId
 /**
  * Bus-level events that carry an [Emission].
  *
- * AMPERE publishes [Produced] when the agent decides to surface an
- * Emission. A consumer (today: Socket) publishes [Resolved] when an
- * affordance reply arrives, causally linking the reply back to the
- * originating Emission and the chosen [AffordanceId].
+ * `EmissionEvent` is a sealed interface with two sub-interfaces — [Produced]
+ * and [Resolved] — that define the lifecycle contract. Concrete base
+ * implementations ([BaseProduced] / [BaseResolved]) serve generic Emissions;
+ * human-interaction specialisations ([HumanInteractionEvent.InputRequested] /
+ * [HumanInteractionEvent.InputProvided]) implement the sub-interfaces directly,
+ * making them polymorphically substitutable everywhere a [Produced] or
+ * [Resolved] is expected.
  *
- * Both event types share the `EmissionEvent` discriminator slot in
- * `EventRegistry.allEventTypes`, so consumers subscribe to exactly the
- * lifecycle they care about.
+ * Bus subscribers registered for [Produced.EVENT_TYPE] receive both
+ * [BaseProduced] and [HumanInteractionEvent.InputRequested] events. Specialised
+ * subscribers can narrow by checking `event is HumanInteractionEvent`.
  */
 @Serializable
 sealed interface EmissionEvent : Event {
@@ -27,20 +30,42 @@ sealed interface EmissionEvent : Event {
     /** The Emission whose lifecycle this event refers to. */
     val emissionId: EmissionId
 
-    /** Published when the agent produces an [Emission]. */
+    /** Contract satisfied by any event that publishes an [Emission]. */
+    interface Produced : EmissionEvent {
+        val emission: Emission
+        override val emissionId: EmissionId get() = emission.id
+
+        companion object {
+            const val EVENT_TYPE: EventType = "EmissionProduced"
+        }
+    }
+
+    /**
+     * Contract satisfied by any event that resolves an [Emission] via an
+     * affordance reply. `replyContext` is the (opaque to AMPERE) payload of
+     * the chosen affordance, or `null` when the resolution carries no payload.
+     */
+    interface Resolved : EmissionEvent {
+        val affordanceId: AffordanceId
+        val replyContext: JsonElement?
+
+        companion object {
+            const val EVENT_TYPE: EventType = "EmissionResolved"
+        }
+    }
+
+    /** Concrete base implementation of [Produced] for generic Emissions. */
     @Serializable
     @SerialName("EmissionEvent.Produced")
-    data class Produced(
+    data class BaseProduced(
         override val eventId: EventId,
         override val timestamp: Instant,
         override val eventSource: EventSource,
         override val urgency: Urgency = Urgency.MEDIUM,
-        val emission: Emission,
-    ) : EmissionEvent {
+        override val emission: Emission,
+    ) : EmissionEvent, Produced {
 
-        override val emissionId: EmissionId = emission.id
-
-        override val eventType: EventType = EVENT_TYPE
+        override val eventType: EventType = Produced.EVENT_TYPE
 
         override fun getSummary(
             formatUrgency: (Urgency) -> String,
@@ -53,31 +78,22 @@ sealed interface EmissionEvent : Event {
             append(" ${formatUrgency(urgency)}")
             append(" from ${formatSource(eventSource)}")
         }
-
-        companion object {
-            const val EVENT_TYPE: EventType = "EmissionProduced"
-        }
     }
 
-    /**
-     * Published when an affordance reply arrives. `replyContext` carries
-     * the (opaque to AMPERE) `signalPayload` of the chosen affordance, or
-     * `null` if the consumer reports a resolution without a payload (for
-     * example, a confirmation accepted by default).
-     */
+    /** Concrete base implementation of [Resolved] for generic Emissions. */
     @Serializable
     @SerialName("EmissionEvent.Resolved")
-    data class Resolved(
+    data class BaseResolved(
         override val eventId: EventId,
         override val timestamp: Instant,
         override val eventSource: EventSource,
         override val urgency: Urgency = Urgency.LOW,
         override val emissionId: EmissionId,
-        val affordanceId: AffordanceId,
-        val replyContext: JsonElement? = null,
-    ) : EmissionEvent {
+        override val affordanceId: AffordanceId,
+        override val replyContext: JsonElement? = null,
+    ) : EmissionEvent, Resolved {
 
-        override val eventType: EventType = EVENT_TYPE
+        override val eventType: EventType = Resolved.EVENT_TYPE
 
         override fun getSummary(
             formatUrgency: (Urgency) -> String,
@@ -86,10 +102,6 @@ sealed interface EmissionEvent : Event {
             append("Emission resolved: $emissionId via $affordanceId")
             append(" ${formatUrgency(urgency)}")
             append(" from ${formatSource(eventSource)}")
-        }
-
-        companion object {
-            const val EVENT_TYPE: EventType = "EmissionResolved"
         }
     }
 }

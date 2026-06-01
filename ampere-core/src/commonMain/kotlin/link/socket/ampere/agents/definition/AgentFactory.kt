@@ -14,6 +14,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.tickets.TicketOrchestrator
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionContext
@@ -78,6 +79,7 @@ class AgentFactory(
     private val toolWriteCodeFileOverride: Tool<ExecutionContext.Code.WriteCode>? = null,
     private val cognitiveConfig: CognitiveConfig = CognitiveConfig(),
     private val llmProvider: LlmProvider? = null,
+    private val eventSerialBus: EventSerialBus? = null,
 ) {
     private val toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode> =
         toolWriteCodeFileOverride ?: ToolWriteCodeFile(AgentActionAutonomy.ASK_BEFORE_ACTION)
@@ -92,13 +94,16 @@ class AgentFactory(
             ),
         )
 
-    private val toolAskHuman: Tool<ExecutionContext.NoChanges> =
-        ToolAskHuman(
-            requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
-            parameterStrategy = link.socket.ampere.agents.definition.project.ProjectParams.HumanEscalation(
-                agentRole = "Project Manager",
-            ),
-        )
+    private val toolAskHuman: Tool<ExecutionContext.NoChanges>? =
+        eventSerialBus?.let {
+            ToolAskHuman(
+                requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
+                eventSerialBus = it,
+                parameterStrategy = link.socket.ampere.agents.definition.project.ProjectParams.HumanEscalation(
+                    agentRole = "Project Manager",
+                ),
+            )
+        }
 
     private val effectiveAiConfiguration: AIConfiguration
         get() = aiConfiguration ?: AIConfigurationFactory.getDefaultConfiguration()
@@ -249,7 +254,7 @@ class AgentFactory(
                 memoryService = memoryService,
                 llmProvider = llmProvider,
                 observabilityScope = scope,
-                tools = setOf(toolCreateIssues, toolAskHuman),
+                tools = setOfNotNull(toolCreateIssues, toolAskHuman),
             )
         }
         AgentType.QUALITY -> {

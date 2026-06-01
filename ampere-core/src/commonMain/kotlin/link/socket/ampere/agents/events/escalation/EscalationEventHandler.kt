@@ -9,25 +9,28 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.subscription.Subscription
 
 /**
- * Listens for `MessageEvent.EscalationRequested` and notifies a human.
- * Uses AgentMessageApi to read the thread for any additional checks.
+ * Listens for [MessageEvent.EscalationRequested] and performs thread-observation
+ * side effects.
+ *
+ * Notification routing (the `humanNotifier` invocation) has been removed: channel
+ * selection is now [Surface][link.socket.ampere.agents.domain.emission.Surface]
+ * policy, handled by the Emission DSL inside
+ * [link.socket.ampere.agents.events.messages.AgentMessageApi.escalateToHuman].
+ * This handler is retained for any thread-observation work that is not Emission-
+ * related (event logging, metrics, etc.).
  *
  * Can be used in two ways:
- * 1. Direct invocation via [invoke] (when wired through MessageRouter)
- * 2. Self-subscription via [start] (standalone mode with EventBus)
+ * 1. Direct invocation via [invoke] (when wired through MessageRouter).
+ * 2. Self-subscription via [start] (standalone mode with EventBus).
  */
 class EscalationEventHandler(
     private val coroutineScope: CoroutineScope,
-    private val humanNotifier: Notifier.Human,
     private val eventSerialBus: EventSerialBus,
     private val agentId: AgentId = "escalation-handler",
 ) : EventHandler<MessageEvent.EscalationRequested, Subscription>() {
 
     /**
      * Start the escalation handler by subscribing to EscalationRequested events.
-     * This enables standalone mode where the handler self-subscribes to the EventBus.
-     *
-     * @throws IllegalStateException if eventBus or scope were not provided in constructor
      */
     fun start() {
         coroutineScope.launch {
@@ -42,25 +45,12 @@ class EscalationEventHandler(
         }
     }
 
-    // Subscribe to EscalationRequested events and send them to Human
     override suspend fun invoke(
         event: MessageEvent.EscalationRequested,
         subscription: Subscription?,
     ) {
         super.invoke(event, subscription)
-        notifyHumanEscalation(event)
-    }
-
-    private suspend fun notifyHumanEscalation(
-        event: MessageEvent.EscalationRequested,
-    ) {
-        // By design, status should already be WAITING_FOR_HUMAN after escalateToHuman()
-        // We rely on AgentMessageApi to enforce the transition; here we just notify.
-        humanNotifier.notifyEscalation(
-            threadId = event.threadId,
-            agentId = event.eventSource.getIdentifier(),
-            reason = event.reason,
-            context = event.context,
-        )
+        // Notification routing is now handled by the Emission DSL's SurfacePolicy.
+        // Add thread-observation side effects here if needed (metrics, tracing, etc.).
     }
 }

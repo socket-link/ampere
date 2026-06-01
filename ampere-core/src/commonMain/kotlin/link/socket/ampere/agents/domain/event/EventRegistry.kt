@@ -114,9 +114,14 @@ object EventRegistry {
         AgentSurfaceEvent.Requested.EVENT_TYPE,
         AgentSurfaceEvent.Responded.EVENT_TYPE,
 
-        // EmissionEvent types
+        // EmissionEvent types (base)
         EmissionEvent.Produced.EVENT_TYPE,
         EmissionEvent.Resolved.EVENT_TYPE,
+
+        // HumanInteractionEvent types (EmissionEvent specialisation)
+        HumanInteractionEvent.InputRequested.EVENT_TYPE,
+        HumanInteractionEvent.InputProvided.EVENT_TYPE,
+        HumanInteractionEvent.RequestTimedOut.EVENT_TYPE,
     )
 
     /**

@@ -3,77 +3,90 @@ package link.socket.ampere
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.help
-import link.socket.ampere.agents.execution.tools.human.GlobalHumanResponseRegistry
+import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.emission.GlobalEmissionReplyRegistry
+import link.socket.ampere.agents.domain.event.EmissionEvent
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.util.randomUUID
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * CLI command to respond to human input requests from agents.
  *
- * When an agent invokes the AskHumanTool, it generates a request ID and
- * blocks execution waiting for a human response. This command allows humans
- * to provide that response through the CLI.
+ * When an agent invokes [ToolAskHuman], it publishes a
+ * [link.socket.ampere.agents.domain.event.HumanInteractionEvent.InputRequested] and
+ * displays the Emission ID (labelled "Emission ID" in the console banner). This
+ * command delivers the human's response by constructing an
+ * [EmissionEvent.BaseResolved] and delivering it directly to
+ * [GlobalEmissionReplyRegistry], resuming the suspended agent coroutine.
  *
  * Usage:
- *   ampere respond <request-id> "<response text>"
- *
- * Example:
- *   ampere respond abc-123 "Yes, proceed with the changes"
+ *   ampere respond <emission-id> "<response text>"
  */
 class RespondCommand : CliktCommand(
     name = "respond",
     help = """
         Provide a response to an agent's human input request.
 
-        When an agent asks for human input, it displays a request ID.
+        When an agent asks for human input it prints an Emission ID.
         Use this command to provide your response and unblock the agent.
 
         Examples:
-          ampere respond abc-123 "Approved"
-          ampere respond def-456 "Use the staging environment instead"
-          ampere respond ghi-789 "No, please revise the approach"
-
-        To see pending requests:
-          ampere status  # Shows all active human interaction requests
-    """.trimIndent()
+          ampere respond <emission-id> "Approved"
+          ampere respond <emission-id> "Use the staging environment instead"
+    """.trimIndent(),
 ) {
 
-    private val requestId by argument()
-        .help("The request ID displayed by the agent")
+    private val emissionId by argument()
+        .help("The Emission ID displayed by the agent")
 
     private val response by argument()
         .help("Your response text (quote if it contains spaces)")
 
     override fun run() {
-        val registry = GlobalHumanResponseRegistry.instance
+        val registry = GlobalEmissionReplyRegistry.instance
 
-        // Check if this request ID exists
-        val pendingIds = registry.getPendingRequestIds()
-
-        if (requestId !in pendingIds) {
-            echo("❌ Error: Request ID '$requestId' not found", err = true)
+        val pending = registry.getPendingEmissionIds()
+        if (emissionId !in pending) {
+            echo("Error: Emission ID '$emissionId' not found", err = true)
             echo("")
-            echo("Pending requests:")
-            if (pendingIds.isEmpty()) {
+            echo("Pending emissions:")
+            if (pending.isEmpty()) {
                 echo("  (none)")
             } else {
-                pendingIds.forEach { id ->
-                    echo("  - $id")
-                }
+                pending.forEach { id -> echo("  - $id") }
             }
             return
         }
 
-        // Provide the response
-        val success = registry.provideResponse(requestId, response)
+        val freeTextPayload = kotlinx.serialization.json.JsonObject(
+            mapOf(
+                "type" to JsonPrimitive("free-text"),
+                "text" to JsonPrimitive(response),
+            ),
+        )
 
-        if (success) {
-            echo("✅ Response delivered successfully!")
+        val resolved = EmissionEvent.BaseResolved(
+            eventId = randomUUID(),
+            timestamp = Clock.System.now(),
+            eventSource = EventSource.Human,
+            urgency = Urgency.HIGH,
+            emissionId = emissionId,
+            affordanceId = "free-text-response",
+            replyContext = freeTextPayload,
+        )
+
+        val delivered = registry.deliver(resolved)
+        if (delivered) {
+            echo("Response delivered successfully!")
             echo("")
-            echo("Request ID: $requestId")
-            echo("Response: $response")
+            echo("Emission ID : $emissionId")
+            echo("Response    : $response")
             echo("")
             echo("The agent will now continue execution with your input.")
         } else {
-            echo("❌ Error: Failed to deliver response (request may have timed out)", err = true)
+            echo("Error: Failed to deliver response (emission may have timed out)", err = true)
         }
     }
 }

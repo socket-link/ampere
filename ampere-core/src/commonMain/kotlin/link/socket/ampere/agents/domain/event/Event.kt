@@ -39,6 +39,16 @@ sealed interface Event {
         formatSource: (EventSource) -> String,
     ): String
 
+    /**
+     * Additional event types this event should be dispatched to on the bus,
+     * enabling polymorphic delivery. For example, [HumanInteractionEvent.InputRequested]
+     * includes [EmissionEvent.Produced.EVENT_TYPE] so subscribers on the base
+     * type automatically receive the specialised event.
+     *
+     * Defaults to empty — most event types are dispatched only to their own subscribers.
+     */
+    val parentEventTypes: Set<EventType> get() = emptySet()
+
     /** Event emitted when a new task is created in the system. */
     @Serializable
     data class TaskCreated(

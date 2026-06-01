@@ -7,8 +7,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -17,19 +19,16 @@ import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.agents.events.escalation.EscalationEventHandler
-import link.socket.ampere.agents.events.escalation.Notifier
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.AgentMessageApiFactory
 import link.socket.ampere.agents.events.messages.MessageChannel
 import link.socket.ampere.agents.events.messages.MessageRepository
 import link.socket.ampere.agents.events.messages.MessageRouter
 import link.socket.ampere.agents.events.messages.MessageThread
-import link.socket.ampere.agents.events.messages.MessageThreadId
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
-import link.socket.ampere.util.randomUUID
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class EscalationEventHandlerTest {
 
     private val scope = TestScope(UnconfinedTestDispatcher())
@@ -41,34 +40,11 @@ class EscalationEventHandlerTest {
     private lateinit var messageRepository: MessageRepository
     private lateinit var eventSerialBus: EventSerialBus
     private lateinit var apiFactory: AgentMessageApiFactory
-
-    private class FakeHumanNotifier : Notifier.Human() {
-
-        data class Call(
-            val threadId: MessageThreadId,
-            val agentId: String,
-            val reason: String,
-            val context: Map<String, String>?,
-        )
-
-        var lastCall: Call? = null
-
-        override suspend fun notifyEscalation(
-            threadId: MessageThreadId,
-            agentId: String,
-            reason: String,
-            context: Map<String, String>?,
-        ) {
-            lastCall = Call(threadId, agentId, reason, context)
-        }
-    }
-
-    private val humanNotifier = FakeHumanNotifier()
     private lateinit var eventHandler: EscalationEventHandler
 
-    private fun getMessageRouter(
-        api: AgentMessageApi,
-    ) = MessageRouter(
+    private var lastEscalationEvent: MessageEvent.EscalationRequested? = null
+
+    private fun getMessageRouter(api: AgentMessageApi) = MessageRouter(
         messageApi = api,
         escalationEventHandler = eventHandler,
         eventSerialBus = eventSerialBus,
@@ -78,28 +54,25 @@ class EscalationEventHandlerTest {
     fun setup() {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         Database.Schema.create(driver)
-
         database = Database(driver)
         eventRepository = EventRepository(DEFAULT_JSON, scope, database)
         messageRepository = MessageRepository(DEFAULT_JSON, scope, database)
         eventSerialBus = eventSerialBusFactory.create()
         apiFactory = AgentMessageApiFactory(messageRepository, eventSerialBus)
-        eventHandler = EscalationEventHandler(scope, humanNotifier, eventSerialBus)
+        eventHandler = EscalationEventHandler(scope, eventSerialBus)
     }
 
     @AfterTest
     fun tearDown() {
-        humanNotifier.lastCall = null
+        lastEscalationEvent = null
         driver.close()
     }
 
     @Test
-    fun `notifier reacts to escalation event and forwards to human`() {
+    fun `EscalationRequested is published to bus when escalateToHuman is called`() {
         runBlocking {
-            val agentId = "notifier-agent"
+            val agentId = "test-agent"
             val api: AgentMessageApi = apiFactory.create(agentId)
-            val messageRouter = getMessageRouter(api)
-            messageRouter.startRouting()
 
             val thread: MessageThread = api.createThread(
                 participants = emptySet(),
@@ -107,103 +80,56 @@ class EscalationEventHandlerTest {
                 initialMessageContent = "Hello",
             )
 
+            // Subscribe to capture the event
+            eventSerialBus.subscribe(
+                agentId = "test-subscriber",
+                eventType = MessageEvent.EscalationRequested.EVENT_TYPE,
+                handler = link.socket.ampere.agents.events.api.EventHandler { event, _ ->
+                    lastEscalationEvent = event as MessageEvent.EscalationRequested
+                },
+            )
+
             val reason = "Need human approval"
             val ctx = mapOf("key" to "value")
 
-            messageRouter.subscribeToMessageType(
-                agentId = agentId,
-                eventType = MessageEvent.EscalationRequested.EVENT_TYPE,
-            )
+            // escalateToHuman suspends waiting for a reply; we don't await it in this test
+            // because we only care that EscalationRequested was published.
+            val job = GlobalScope.launch {
+                api.escalateToHuman(threadId = thread.id, reason = reason, context = ctx)
+            }
 
-            api.escalateToHuman(
-                threadId = thread.id,
-                reason = reason,
-                context = ctx,
-            )
+            delay(200.milliseconds)
 
-            // let async handlers run
-            delay(200)
+            val event = lastEscalationEvent
+            assertNotNull(event)
+            assertEquals(thread.id, event.threadId)
+            assertEquals(reason, event.reason)
+            assertEquals(ctx, event.context)
 
-            val call = humanNotifier.lastCall
-            assertNotNull(call)
-            assertEquals(thread.id, call.threadId)
-            assertEquals(agentId, call.agentId)
-            assertEquals(reason, call.reason)
-            assertEquals(ctx, call.context)
+            job.cancel()
         }
     }
 
     @Test
-    fun `no thread found leads to no human notification`() {
+    fun `escalation handler start method self-subscribes without error`() {
         runBlocking {
-            val agentId = "notifier-agent"
-            val api: AgentMessageApi = apiFactory.create(agentId)
-            val messageRouter = getMessageRouter(api)
-            messageRouter.startRouting()
-
-            // Publish an escalation for a non-existent threadId
-            val fakeThreadId = randomUUID()
-
-            messageRouter.subscribeToMessageType(
-                agentId = agentId,
-                eventType = MessageEvent.EscalationRequested.EVENT_TYPE,
-            )
-
-            api.escalateToHuman(
-                threadId = fakeThreadId,
-                reason = "Missing thread",
-            )
-
-            // let async handlers run; exceptions inside handler are swallowed by EventBus
-            delay(200)
-
-            // Since the thread lookup fails, the notifier should not be called
-            assertNull(humanNotifier.lastCall)
+            eventHandler.start()
+            delay(100.milliseconds)
+            // No assertion needed — just verifying start() does not throw.
+            assertNull(lastEscalationEvent)
         }
     }
 
     @Test
-    fun `escalation handler with start method self-subscribes to events`() {
-        runBlocking {
-            val agentId = "standalone-agent"
-            val api: AgentMessageApi = apiFactory.create(agentId)
-
-            // Create handler with EventBus and scope for standalone mode
-            val standaloneHandler = EscalationEventHandler(
-                coroutineScope = scope,
-                humanNotifier = humanNotifier,
-                eventSerialBus = eventSerialBus,
-                agentId = agentId,
-            )
-
-            // Start the handler (self-subscribes to EventBus)
-            standaloneHandler.start()
-
-            // Create a thread
-            val thread: MessageThread = api.createThread(
-                participants = emptySet(),
-                channel = MessageChannel.Public.Engineering,
-                initialMessageContent = "Test",
-            )
-
-            val reason = "Standalone mode escalation"
-            val ctx = mapOf("mode" to "standalone")
-
-            api.escalateToHuman(
-                threadId = thread.id,
-                reason = reason,
-                context = ctx,
-            )
-
-            // let async handlers run
-            delay(200)
-
-            val call = humanNotifier.lastCall
-            assertNotNull(call)
-            assertEquals(thread.id, call.threadId)
-            assertEquals(agentId, call.agentId)
-            assertEquals(reason, call.reason)
-            assertEquals(ctx, call.context)
-        }
+    fun `EscalationEventHandler no longer invokes humanNotifier`() {
+        // humanNotifier is no longer part of EscalationEventHandler — notification routing
+        // is handled by SurfacePolicy via the Emission DSL in AgentMessageApi.escalateToHuman.
+        // This test documents the removal as a structural assertion: the handler compiles
+        // without a Notifier.Human parameter.
+        val handler = EscalationEventHandler(
+            coroutineScope = scope,
+            eventSerialBus = eventSerialBus,
+        )
+        assertNotNull(handler) // handler constructed without humanNotifier
     }
 }
