@@ -156,7 +156,24 @@ class CognitiveChoreographerTest {
     }
 
     @Test
-    fun `EVALUATE slows particles and creates anchors`() {
+    fun `OBSERVE spawns inward-directed particles`() {
+        val (choreographer, particles, _) = createChoreographer(maxParticles = 100)
+        val substrate = SubstrateState.create(40, 20)
+        val agents = createAgentLayer(
+            40, 20,
+            Triple("agent-1", Vector2(20f, 10f), CognitivePhase.OBSERVE)
+        )
+
+        choreographer.update(agents, substrate, 0.1f)
+
+        // Particles should exist and be near agent position (similar to PERCEIVE)
+        assertTrue(particles.count > 0, "OBSERVE should spawn particles")
+        val nearAgent = particles.getParticlesNear(20, 10, radius = 15f)
+        assertTrue(nearAgent.isNotEmpty(), "Particles should be within range of agent")
+    }
+
+    @Test
+    fun `LEARN slows particles and creates anchors`() {
         val (choreographer, particles, _) = createChoreographer()
         val substrate = SubstrateState.create(40, 20)
 
@@ -168,17 +185,17 @@ class CognitiveChoreographerTest {
         choreographer.update(executeAgents, substrate, 0.1f)
         assertTrue(particles.count > 0)
 
-        // Transition to EVALUATE
-        val evaluateAgents = createAgentLayer(
+        // Transition to LEARN
+        val learnAgents = createAgentLayer(
             40, 20,
-            Triple("agent-1", Vector2(20f, 10f), CognitivePhase.EVALUATE)
+            Triple("agent-1", Vector2(20f, 10f), CognitivePhase.LEARN)
         )
-        choreographer.update(evaluateAgents, substrate, 0.1f)
+        choreographer.update(learnAgents, substrate, 0.1f)
 
         // Some particles should now have attractors (anchored)
         val anchored = particles.getParticles().filter { it.attractor != null }
         // At least some high-life particles get anchored
-        assertTrue(particles.count > 0, "EVALUATE should not despawn all particles")
+        assertTrue(particles.count > 0, "LEARN should not despawn all particles")
     }
 
     @Test

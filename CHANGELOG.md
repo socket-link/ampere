@@ -47,13 +47,15 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
     persist `CognitivePhase` across runs today, so no data migration is
     required.
 
-- **CLI `AmperePhosphorBridge` removes the `LEARN → EVALUATE` paveover.**
-  The bridge now uses `PhosphorPhase.RECALL` for AMPERE's `RECALL`,
-  reuses the `PERCEIVE` height-pulse for `OBSERVE` (until Phosphor adds
-  an `OBSERVE` ramp of its own), and continues to map `LEARN` to
-  Phosphor's `EVALUATE` only as an interop bridge until Phosphor's enum
-  is renamed in a sibling ticket. The `LEARN → EVALUATE` mapping is now
-  documented as a known interop gap rather than a silent rename.
+- **CLI `AmperePhosphorBridge` removes the `LEARN → EVALUATE` paveover
+  ([AMPR-182](https://linear.app/miley/issue/AMPR-182)).**
+  Phosphor 0.6.2 ships with [PHO-28](https://linear.app/miley/issue/PHO-28),
+  adding `OBSERVE` and renaming `EVALUATE → LEARN` to align with the
+  canonical PROPEL phases. The bridge now maps directly:
+  `PERCEIVE → PERCEIVE`, `RECALL → RECALL`, `OBSERVE → OBSERVE`,
+  `PLAN → PLAN`, `EXECUTE → EXECUTE`, `LEARN → LEARN`.
+  The `CognitiveChoreographer`, `CognitivePalette`, and related rendering
+  surfaces updated to reference the canonical phases.
 
 ### Added
 
@@ -64,12 +66,8 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
 
 ### Notes
 
-- Phosphor's own `CognitivePhase` enum (in
-  `link.socket.phosphor.signal.CognitivePhase`) still uses
-  `PERCEIVE / RECALL / PLAN / EXECUTE / EVALUATE / LOOP / NONE` and is
-  out of scope for this change. A sibling Phosphor ticket should add
-  `OBSERVE` and rename `EVALUATE → LEARN` to bring Phosphor onto the
-  canonical PROPEL acronym.
+- Phosphor 0.6.2 ([PHO-28](https://linear.app/miley/issue/PHO-28)) now
+  aligns with canonical PROPEL phases: `PERCEIVE / RECALL / OBSERVE / PLAN / EXECUTE / LEARN / LOOP / NONE`.
 
 ## [0.6.0] — 2026-05
 
