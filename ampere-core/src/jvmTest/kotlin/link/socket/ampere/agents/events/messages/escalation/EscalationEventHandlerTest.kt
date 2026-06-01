@@ -9,9 +9,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -95,7 +95,7 @@ class EscalationEventHandlerTest {
 
     @Test
     fun `notifier reacts to escalation event and forwards to human`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val agentId = "notifier-agent"
             val api: AgentMessageApi = apiFactory.create(agentId)
             val messageRouter = getMessageRouter(api)
@@ -135,7 +135,7 @@ class EscalationEventHandlerTest {
 
     @Test
     fun `no thread found leads to no human notification`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val agentId = "notifier-agent"
             val api: AgentMessageApi = apiFactory.create(agentId)
             val messageRouter = getMessageRouter(api)
@@ -164,7 +164,7 @@ class EscalationEventHandlerTest {
 
     @Test
     fun `escalation handler with start method self-subscribes to events`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val agentId = "standalone-agent"
             val api: AgentMessageApi = apiFactory.create(agentId)
 

@@ -12,9 +12,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.Urgency
@@ -86,7 +86,7 @@ class EventStreamServiceTest {
 
     @Test
     fun `subscribeToLiveEvents emits events published to EventBus`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val events = mutableListOf<Event>()
 
             // Start collecting events
@@ -114,7 +114,7 @@ class EventStreamServiceTest {
 
     @Test
     fun `subscribeToLiveEvents with event type filter only emits matching events`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val events = mutableListOf<Event>()
             val filter = EventRelayFilters(
                 eventTypes = setOf(Event.TaskCreated.EVENT_TYPE),
@@ -142,7 +142,7 @@ class EventStreamServiceTest {
 
     @Test
     fun `subscribeToLiveEvents with source filter only emits matching events`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val events = mutableListOf<Event>()
             val filter = EventRelayFilters(eventSources = setOf(stubSourceA))
 
@@ -167,7 +167,7 @@ class EventStreamServiceTest {
 
     @Test
     fun `subscribeToLiveEvents with urgency filter only emits matching events`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val events = mutableListOf<Event>()
             val filter = EventRelayFilters(urgencies = setOf(Urgency.HIGH))
 
@@ -191,7 +191,7 @@ class EventStreamServiceTest {
 
     @Test
     fun `replayEvents returns events within time range`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val now = Clock.System.now()
             val past = now - 1000.milliseconds
             val future = now + 1000.milliseconds
@@ -221,7 +221,7 @@ class EventStreamServiceTest {
 
     @Test
     fun `replayEvents returns empty flow when no events in range`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val now = Clock.System.now()
             val past = now - 2000.milliseconds
             val wayPast = now - 3000.milliseconds
@@ -243,7 +243,7 @@ class EventStreamServiceTest {
 
     @Test
     fun `replayEvents with filter only returns matching events`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val now = Clock.System.now()
 
             // Save events of different types
@@ -273,7 +273,7 @@ class EventStreamServiceTest {
 
     @Test
     fun `replayEvents returns events in chronological order`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val now = Clock.System.now()
             val t1 = now - 500.milliseconds
             val t2 = now
@@ -305,7 +305,7 @@ class EventStreamServiceTest {
 
     @Test
     fun `replayEvents with combined filters uses AND logic`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val now = Clock.System.now()
 
             // Save various events

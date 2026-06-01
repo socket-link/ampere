@@ -8,9 +8,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
@@ -88,7 +88,7 @@ class EventBusLoggingAndErrorsTest {
 
     @Test
     fun `subscriber exceptions do not affect others and are logged`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val logger = TestLogger()
             val repo = EventRepository(json, scope, db)
             val bus = EventSerialBus(scope, logger)
@@ -119,7 +119,7 @@ class EventBusLoggingAndErrorsTest {
 
     @Test
     fun `database write failures are logged but do not crash`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val logger = TestLogger()
             val repo = EventRepository(json, scope, db)
             val bus = EventSerialBus(scope, logger)
@@ -150,7 +150,7 @@ class EventBusLoggingAndErrorsTest {
 
     @Test
     fun `malformed JSON in database is handled gracefully`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val logger = TestLogger()
             val repo = EventRepository(json, scope, db)
             val bus = EventSerialBus(scope, logger)

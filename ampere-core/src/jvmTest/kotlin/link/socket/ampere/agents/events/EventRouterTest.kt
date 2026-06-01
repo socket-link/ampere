@@ -8,9 +8,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
@@ -49,7 +49,7 @@ class EventRouterTest {
     }
 
     @Test
-    fun `routes TaskCreated to subscribed agents as NotificationEvent`() = runBlocking {
+    fun `routes TaskCreated to subscribed agents as NotificationEvent`() = runTest(scope.testScheduler) {
         val routerApi = agentEventApiFactory.create("router-agent")
         val router = EventRouter(routerApi, eventSerialBus)
 

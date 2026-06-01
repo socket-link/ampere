@@ -10,9 +10,9 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.AgentId
@@ -300,7 +300,7 @@ class MinimalAutonomousAgentTest {
     }
 
     @Test
-    fun `task spark removed after task completes`() = runBlocking {
+    fun `task spark removed after task completes`() = runTest(UnconfinedTestDispatcher()) {
         val initialDepth = agent.sparkDepth
 
         agent.testRememberTask(stubTask)
@@ -389,7 +389,7 @@ class MinimalAutonomousAgentTest {
 
     @Test
     fun `initialize starts agent without error`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             agent.initialize(testScope)
 
             // Wait for loop to start executing
@@ -402,7 +402,7 @@ class MinimalAutonomousAgentTest {
 
     @Test
     fun `pauseAgent stops the runtime loop and resets working memory`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Add some state before initializing
             agent.testRememberIdea(stubIdea)
 
@@ -424,7 +424,7 @@ class MinimalAutonomousAgentTest {
 
     @Test
     fun `resumeAgent can be called after pause`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             agent.initialize(testScope)
             delay(20)
 
@@ -440,7 +440,7 @@ class MinimalAutonomousAgentTest {
 
     @Test
     fun `shutdownAgent stops loop and clears all memory`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             agent.testRememberIdea(stubIdea)
 
             val idea1 = stubIdea.copy(name = "Idea 1")

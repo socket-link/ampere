@@ -9,7 +9,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.status.TicketStatus
@@ -76,7 +77,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `createTicket successfully inserts and returns ticket`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket()
 
             val result = repo.createTicket(ticket)
@@ -98,7 +99,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `createTicket preserves all ticket fields`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val dueDate = Clock.System.now()
             val ticket = createTicket(
                 id = "ticket-full",
@@ -127,7 +128,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `createTicket returns error for duplicate id`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket()
             repo.createTicket(ticket)
 
@@ -146,7 +147,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `getTicket returns null for non-existent id without throwing`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val result = repo.getTicket("nonexistent-id")
 
             assertTrue(result.isSuccess)
@@ -156,7 +157,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `getTicket returns ticket for existing id`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket()
             repo.createTicket(ticket)
 
@@ -174,7 +175,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `updateStatus accepts valid transition BACKLOG to READY`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket(status = TicketStatus.Backlog)
             repo.createTicket(ticket)
 
@@ -190,7 +191,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `updateStatus accepts valid transition READY to IN_PROGRESS`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket(status = TicketStatus.Ready)
             repo.createTicket(ticket)
 
@@ -204,7 +205,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `updateStatus accepts valid transition IN_PROGRESS to DONE`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket(status = TicketStatus.InProgress)
             repo.createTicket(ticket)
 
@@ -218,7 +219,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `updateStatus rejects invalid transition BACKLOG to IN_PROGRESS`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket(status = TicketStatus.Backlog)
             repo.createTicket(ticket)
 
@@ -234,7 +235,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `updateStatus rejects invalid transition READY to DONE`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket(status = TicketStatus.Ready)
             repo.createTicket(ticket)
 
@@ -250,7 +251,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `updateStatus rejects invalid transition DONE to any status`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket(status = TicketStatus.Done)
             repo.createTicket(ticket)
 
@@ -264,7 +265,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `updateStatus returns TicketNotFound for nonexistent ticket`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val result = repo.updateStatus("nonexistent", TicketStatus.Ready)
 
             assertTrue(result.isFailure)
@@ -276,7 +277,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `updateStatus updates the updatedAt timestamp`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket(status = TicketStatus.Backlog)
             repo.createTicket(ticket)
 
@@ -297,7 +298,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `assignTicket assigns agent to ticket`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket()
             repo.createTicket(ticket)
 
@@ -311,7 +312,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `assignTicket can unassign ticket with null`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket(assignedAgentId = assigneeAgentId)
             repo.createTicket(ticket)
 
@@ -325,7 +326,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `assignTicket returns TicketNotFound for nonexistent ticket`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val result = repo.assignTicket("nonexistent", assigneeAgentId)
 
             assertTrue(result.isFailure)
@@ -340,7 +341,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `getTicketsByStatus returns tickets with matching status`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             repo.createTicket(createTicket(id = "t1", status = TicketStatus.Backlog))
             repo.createTicket(createTicket(id = "t2", status = TicketStatus.Backlog))
             repo.createTicket(createTicket(id = "t3", status = TicketStatus.Ready))
@@ -356,7 +357,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `getTicketsByStatus returns empty list when no matches`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             repo.createTicket(createTicket(status = TicketStatus.Backlog))
 
             val result = repo.getTicketsByStatus(TicketStatus.Done)
@@ -368,7 +369,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `getTicketsByStatus orders by priority DESC then createdAt ASC`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val baseTime = Clock.System.now()
             val older = baseTime
             val newer = baseTime + kotlin.time.Duration.parse("1h")
@@ -393,7 +394,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `getTicketsByAgent returns tickets assigned to agent`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             repo.createTicket(createTicket(id = "t1", assignedAgentId = "agent-1"))
             repo.createTicket(createTicket(id = "t2", assignedAgentId = "agent-1"))
             repo.createTicket(createTicket(id = "t3", assignedAgentId = "agent-2"))
@@ -409,7 +410,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `getTicketsByAgent returns empty list for unassigned agent`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             repo.createTicket(createTicket(assignedAgentId = "agent-1"))
 
             val result = repo.getTicketsByAgent("agent-unknown")
@@ -425,7 +426,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `getAllTickets returns all tickets`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             repo.createTicket(createTicket(id = "t1"))
             repo.createTicket(createTicket(id = "t2"))
             repo.createTicket(createTicket(id = "t3"))
@@ -439,7 +440,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `getAllTickets returns empty list when no tickets exist`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val result = repo.getAllTickets()
 
             assertTrue(result.isSuccess)
@@ -453,7 +454,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `getTicketsByPriority returns tickets with matching priority`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             repo.createTicket(createTicket(id = "t1", priority = TicketPriority.CRITICAL))
             repo.createTicket(createTicket(id = "t2", priority = TicketPriority.CRITICAL))
             repo.createTicket(createTicket(id = "t3", priority = TicketPriority.LOW))
@@ -473,7 +474,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `getTicketsByType returns tickets with matching type`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             repo.createTicket(createTicket(id = "t1", type = TicketType.BUG))
             repo.createTicket(createTicket(id = "t2", type = TicketType.BUG))
             repo.createTicket(createTicket(id = "t3", type = TicketType.FEATURE))
@@ -493,7 +494,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `getTicketsByCreator returns tickets created by agent`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             repo.createTicket(createTicket(id = "t1", createdByAgentId = "creator-1"))
             repo.createTicket(createTicket(id = "t2", createdByAgentId = "creator-1"))
             repo.createTicket(createTicket(id = "t3", createdByAgentId = "creator-2"))
@@ -513,7 +514,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `updateTicketDetails updates specified fields only`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket(
                 title = "Original Title",
                 description = "Original Description",
@@ -537,7 +538,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `updateTicketDetails returns TicketNotFound for nonexistent ticket`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val result = repo.updateTicketDetails(
                 ticketId = "nonexistent",
                 title = "New Title",
@@ -555,7 +556,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `deleteTicket removes ticket from database`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket()
             repo.createTicket(ticket)
 
@@ -568,7 +569,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `deleteTicket succeeds even for nonexistent ticket`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val result = repo.deleteTicket("nonexistent")
 
             assertTrue(result.isSuccess)
@@ -581,7 +582,7 @@ class TicketRepositoryTest {
 
     @Test
     fun `InvalidStateTransition error message contains states`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val ticket = createTicket(status = TicketStatus.Backlog)
             repo.createTicket(ticket)
 

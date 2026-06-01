@@ -11,7 +11,8 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
@@ -123,7 +124,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `createTicket creates ticket and thread and publishes event`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val result = ticketOrchestrator.createTicket(
                 title = "Test Ticket",
                 description = "Test description",
@@ -166,7 +167,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `createTicket fails with blank title`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val result = ticketOrchestrator.createTicket(
                 title = "",
                 description = "Test description",
@@ -184,7 +185,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `createTicket sets correct urgency based on priority`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create a CRITICAL priority ticket
             ticketOrchestrator.createTicket(
                 title = "Critical Ticket",
@@ -206,7 +207,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `transitionTicketStatus with valid transition publishes event and updates thread`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create a ticket first
             val createResult = ticketOrchestrator.createTicket(
                 title = "Transition Test",
@@ -243,7 +244,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `transitionTicketStatus fails with invalid state transition`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create a ticket
             val createResult = ticketOrchestrator.createTicket(
                 title = "Invalid Transition",
@@ -269,7 +270,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `transitionTicketStatus fails for non-existent ticket`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val result = ticketOrchestrator.transitionTicketStatus(
                 ticketId = "non-existent-id",
                 newStatus = TicketStatus.Ready,
@@ -284,7 +285,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `transitionTicketStatus rejects unauthorized agent`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create a ticket
             val createResult = ticketOrchestrator.createTicket(
                 title = "Unauthorized Test",
@@ -311,7 +312,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `transitionTicketStatus allows assigned agent to modify`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create and assign a ticket
             val createResult = ticketOrchestrator.createTicket(
                 title = "Assigned Agent Test",
@@ -345,7 +346,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `assignTicket assigns ticket and publishes event`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create a ticket
             val createResult = ticketOrchestrator.createTicket(
                 title = "Assignment Test",
@@ -382,7 +383,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `assignTicket rejects assignment by unauthorized agent`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create a ticket
             val createResult = ticketOrchestrator.createTicket(
                 title = "Unauthorized Assignment",
@@ -409,7 +410,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `assignTicket allows unassignment`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create and assign a ticket
             val createResult = ticketOrchestrator.createTicket(
                 title = "Unassignment Test",
@@ -450,7 +451,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `blockTicket creates thread message requesting human intervention`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create a ticket and transition to IN_PROGRESS
             val createResult = ticketOrchestrator.createTicket(
                 title = "Block Test",
@@ -493,7 +494,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `blockTicket fails for invalid state transition`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create a ticket in BACKLOG status
             val createResult = ticketOrchestrator.createTicket(
                 title = "Invalid Block",
@@ -522,7 +523,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `full ticket lifecycle from creation to completion`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create ticket
             val createResult = ticketOrchestrator.createTicket(
                 title = "Full Lifecycle Test",
@@ -568,7 +569,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `ticket lifecycle with blocking and unblocking`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create and progress ticket to IN_PROGRESS
             val createResult = ticketOrchestrator.createTicket(
                 title = "Block Lifecycle",
@@ -607,7 +608,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `multiple events are published for complex workflows`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             publishedEvents.clear()
 
             // Create ticket
@@ -643,7 +644,7 @@ class TicketOrchestratorTest {
 
     @Test
     fun `permission validation works correctly across different agents`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create ticket as creator
             val createResult = ticketOrchestrator.createTicket(
                 title = "Permission Test",

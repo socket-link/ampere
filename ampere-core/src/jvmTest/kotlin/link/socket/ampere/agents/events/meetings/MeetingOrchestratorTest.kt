@@ -12,7 +12,8 @@ import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
@@ -149,7 +150,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `scheduleMeeting creates meeting and publishes event`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val meeting = createTestMeeting()
 
             val result = orchestrator.scheduleMeeting(meeting, stubScheduledBy)
@@ -176,7 +177,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `scheduleMeeting fails for past scheduled time`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val pastTime = Clock.System.now() - 1.hours
             val meeting = createTestMeeting(scheduledFor = pastTime)
 
@@ -191,7 +192,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `scheduleMeeting fails for meeting with no participants`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val meeting = createTestMeeting(requiredParticipants = emptyList())
 
             val result = orchestrator.scheduleMeeting(meeting, stubScheduledBy)
@@ -205,7 +206,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `scheduleMeeting fails for non-scheduled status`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val meeting = Meeting(
                 id = randomUUID(),
                 type = MeetingType.AdHoc("Test"),
@@ -227,7 +228,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `startMeeting transitions meeting to in progress`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // First schedule a meeting
             val meeting = createTestMeeting()
             orchestrator.scheduleMeeting(meeting, stubScheduledBy)
@@ -255,7 +256,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `startMeeting fails for non-existent meeting`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val result = orchestrator.startMeeting("non-existent-id")
 
             assertTrue(result.isFailure)
@@ -267,7 +268,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `startMeeting fails for meeting not in scheduled status`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create and start a meeting
             val meeting = createTestMeeting()
             orchestrator.scheduleMeeting(meeting, stubScheduledBy)
@@ -287,7 +288,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `advanceAgenda returns next pending agenda item`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Schedule and start meeting
             val agendaItems = listOf(
                 AgendaItem(
@@ -328,7 +329,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `advanceAgenda returns null when all items complete`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create meeting with no agenda items
             val meeting = createTestMeeting(agendaItems = emptyList())
             orchestrator.scheduleMeeting(meeting, stubScheduledBy)
@@ -343,7 +344,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `advanceAgenda fails for meeting not in progress`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val meeting = createTestMeeting()
             orchestrator.scheduleMeeting(meeting, stubScheduledBy)
             // Don't start the meeting
@@ -361,7 +362,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `completeMeeting transitions meeting to completed with outcomes`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Schedule and start meeting
             val meeting = createTestMeeting()
             orchestrator.scheduleMeeting(meeting, stubScheduledBy)
@@ -406,7 +407,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `completeMeeting works with empty outcomes`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val meeting = createTestMeeting()
             orchestrator.scheduleMeeting(meeting, stubScheduledBy)
             orchestrator.startMeeting(meeting.id)
@@ -423,7 +424,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `completeMeeting fails for meeting not in progress`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val meeting = createTestMeeting()
             orchestrator.scheduleMeeting(meeting, stubScheduledBy)
             // Don't start the meeting
@@ -439,7 +440,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `completeMeeting fails for non-existent meeting`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val result = orchestrator.completeMeeting("non-existent-id", emptyList())
 
             assertTrue(result.isFailure)
@@ -450,7 +451,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `full meeting lifecycle from schedule to complete`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create meeting
             val agendaItems = listOf(
                 AgendaItem(
@@ -520,7 +521,7 @@ class MeetingOrchestratorTest {
 
     @Test
     fun `state transitions are validated correctly`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val meeting = createTestMeeting()
             orchestrator.scheduleMeeting(meeting, stubScheduledBy)
 

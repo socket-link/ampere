@@ -5,8 +5,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.config.CognitiveConfig
@@ -105,7 +106,7 @@ class PhaseSparkManagerTest {
     }
 
     @Test
-    fun `enterPhase publishes PhaseEntered after current phase is assigned`() = runBlocking {
+    fun `enterPhase publishes PhaseEntered after current phase is assigned`() = runTest(UnconfinedTestDispatcher()) {
         val agent = TestAgent()
         val bus = EventSerialBus(this)
         val events = mutableListOf<CognitivePhaseEvent>()
@@ -130,7 +131,7 @@ class PhaseSparkManagerTest {
     }
 
     @Test
-    fun `sequential transitions publish exit before enter`() = runBlocking {
+    fun `sequential transitions publish exit before enter`() = runTest(UnconfinedTestDispatcher()) {
         val agent = TestAgent()
         val bus = EventSerialBus(this)
         val events = mutableListOf<CognitivePhaseEvent>()
@@ -152,7 +153,7 @@ class PhaseSparkManagerTest {
     }
 
     @Test
-    fun `withPhase restores previous phase spark`() = runBlocking {
+    fun `withPhase restores previous phase spark`() = runTest(UnconfinedTestDispatcher()) {
         val agent = TestAgent()
         val manager = PhaseSparkManager(agent, enabled = true)
 
@@ -165,7 +166,7 @@ class PhaseSparkManagerTest {
     }
 
     @Test
-    fun `nested withPhase publishes depth-aware bracket events`() = runBlocking {
+    fun `nested withPhase publishes depth-aware bracket events`() = runTest(UnconfinedTestDispatcher()) {
         val agent = TestAgent()
         val bus = EventSerialBus(this)
         val events = mutableListOf<CognitivePhaseEvent>()
@@ -235,7 +236,7 @@ class PhaseSparkManagerTest {
     }
 
     @Test
-    fun `disabled manager does not publish phase events`() = runBlocking {
+    fun `disabled manager does not publish phase events`() = runTest(UnconfinedTestDispatcher()) {
         val agent = TestAgent()
         val bus = EventSerialBus(this)
         val events = mutableListOf<CognitivePhaseEvent>()
@@ -271,7 +272,7 @@ class PhaseSparkManagerTest {
     }
 
     @Test
-    fun `library augments built-in phase spark when spike flag is on and selection matches`() = runBlocking {
+    fun `library augments built-in phase spark when spike flag is on and selection matches`() = runTest(UnconfinedTestDispatcher()) {
         val sources = listOf(
             DeclarativePhaseSparkSource(
                 id = "cooking-domain",
@@ -303,7 +304,7 @@ class PhaseSparkManagerTest {
     }
 
     @Test
-    fun `multi-spark library push and pop preserves order on exit`() = runBlocking {
+    fun `multi-spark library push and pop preserves order on exit`() = runTest(UnconfinedTestDispatcher()) {
         val extraSources = listOf(
             DeclarativePhaseSparkSource(
                 id = "extra-a",

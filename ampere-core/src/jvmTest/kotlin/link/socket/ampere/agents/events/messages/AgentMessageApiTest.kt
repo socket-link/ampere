@@ -9,9 +9,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.status.EventStatus
 import link.socket.ampere.agents.events.EventRepository
@@ -54,7 +54,7 @@ class AgentMessageApiTest {
 
     @Test
     fun `create thread, escalate status, then resolve`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val api = agentMessageApiFactory.create(stubAgentId)
             val received = mutableListOf<MessageEvent>()
 
@@ -145,7 +145,7 @@ class AgentMessageApiTest {
 
     @Test
     fun `reopen thread allows posting after escalation`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val api = agentMessageApiFactory.create(stubAgentId)
             val received = mutableListOf<MessageEvent>()
 
@@ -213,7 +213,7 @@ class AgentMessageApiTest {
 
     @Test
     fun `discretionary escalateToHuman still publishes EscalationRequested`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val api = agentMessageApiFactory.create(stubAgentId)
             val received = mutableListOf<MessageEvent.EscalationRequested>()
 
@@ -245,7 +245,7 @@ class AgentMessageApiTest {
 
     @Test
     fun `reopen thread fails when not in WAITING_FOR_HUMAN state`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val api = agentMessageApiFactory.create(stubAgentId)
 
             // Create thread (starts in OPEN state)

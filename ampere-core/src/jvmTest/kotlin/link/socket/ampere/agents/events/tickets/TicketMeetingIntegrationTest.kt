@@ -11,7 +11,8 @@ import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.Event
@@ -120,7 +121,7 @@ class TicketMeetingIntegrationTest {
 
     @Test
     fun `scheduleTicketMeeting creates meeting and links to ticket`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create a ticket first
             val createResult = ticketOrchestrator.createTicket(
                 title = "Meeting Test Ticket",
@@ -187,7 +188,7 @@ class TicketMeetingIntegrationTest {
 
     @Test
     fun `blockTicket with decision keyword automatically schedules meeting`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create a ticket and assign it
             val createTicketResult = ticketOrchestrator.createTicket(
                 title = "Auto Meeting Test",
@@ -248,7 +249,7 @@ class TicketMeetingIntegrationTest {
 
     @Test
     fun `blockTicket with human keyword includes human in meeting participants`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create a ticket and assign it
             val createTicketResult = ticketOrchestrator.createTicket(
                 title = "Human Approval Test",
@@ -299,7 +300,7 @@ class TicketMeetingIntegrationTest {
 
     @Test
     fun `blockTicket without decision keywords does not schedule meeting`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create a ticket and assign it
             val createTicketResult = ticketOrchestrator.createTicket(
                 title = "No Meeting Test",
@@ -356,7 +357,7 @@ class TicketMeetingIntegrationTest {
 
     @Test
     fun `getMeetingsForTicket returns all associated meetings`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create a ticket
             val createTicketResult = ticketOrchestrator.createTicket(
                 title = "Multiple Meetings Test",
@@ -406,7 +407,7 @@ class TicketMeetingIntegrationTest {
 
     @Test
     fun `getTicketsForMeeting returns associated ticket`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Create a ticket
             val createTicketResult = ticketOrchestrator.createTicket(
                 title = "Reverse Lookup Test",

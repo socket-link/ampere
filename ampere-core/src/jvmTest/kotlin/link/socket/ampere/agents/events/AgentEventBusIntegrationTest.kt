@@ -8,9 +8,9 @@ import kotlin.test.assertEquals
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
@@ -49,7 +49,7 @@ class AgentEventBusIntegrationTest {
 
     @Test
     fun `complete agent communication flow`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             // Setup: Three agents with one shared event bus
             val api1 = agentEventApiFactory.create("code-writer")
             val api2 = agentEventApiFactory.create("code-reviewer")

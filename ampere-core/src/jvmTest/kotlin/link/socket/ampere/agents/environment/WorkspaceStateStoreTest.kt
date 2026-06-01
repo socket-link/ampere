@@ -8,9 +8,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.Urgency
@@ -515,7 +515,7 @@ class WorkspaceStateStoreTest {
 
     @Test
     fun `store reacts to events published on the bus`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val scope = TestScope(UnconfinedTestDispatcher())
             val bus = EventSerialBus(scope)
             val store = WorkspaceStateStore(
@@ -566,7 +566,7 @@ class WorkspaceStateStoreTest {
 
     @Test
     fun `full task lifecycle through bus`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val scope = TestScope(UnconfinedTestDispatcher())
             val bus = EventSerialBus(scope)
             val store = WorkspaceStateStore(

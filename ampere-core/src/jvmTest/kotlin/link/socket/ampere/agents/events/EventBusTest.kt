@@ -8,10 +8,10 @@ import kotlin.test.assertEquals
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
@@ -64,7 +64,7 @@ class EventBusTest {
 
     @Test
     fun `subscriber receives only matching events`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val bus = EventSerialBus(scope)
             val receivedTask = CompletableDeferred<Event.TaskCreated>()
             var nonMatchingCalled: Boolean
@@ -95,7 +95,7 @@ class EventBusTest {
 
     @Test
     fun `multiple subscribers receive event`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val bus = EventSerialBus(scope)
             val s1 = CompletableDeferred<Boolean>()
             val s2 = CompletableDeferred<Boolean>()
@@ -123,7 +123,7 @@ class EventBusTest {
 
     @Test
     fun `unsubscribe prevents further delivery`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             var count = 0
 
             val bus = EventSerialBus(scope)

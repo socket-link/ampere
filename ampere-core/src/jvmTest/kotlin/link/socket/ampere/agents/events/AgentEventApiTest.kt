@@ -10,9 +10,9 @@ import kotlin.test.assertNotEquals
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
@@ -58,7 +58,7 @@ class AgentEventApiTest {
 
     @Test
     fun `agent can publish and subscribe to TaskCreated`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val api = agentEventApiFactory.create(stubAgentId)
 
             val received = CompletableDeferred<Event.TaskCreated>()
@@ -84,7 +84,7 @@ class AgentEventApiTest {
 
     @Test
     fun `multiple subscribers receive same event`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val api1 = agentEventApiFactory.create(stubAgentId)
             val api2 = agentEventApiFactory.create(stubAgentId2)
 
@@ -107,7 +107,7 @@ class AgentEventApiTest {
 
     @Test
     fun `events persist and can be queried historically`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val api = agentEventApiFactory.create(stubAgentId)
 
             val since = Clock.System.now()
@@ -128,7 +128,7 @@ class AgentEventApiTest {
 
     @Test
     fun `first task completion for new task type publishes FIRST_SUCCESS milestone`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val api = agentEventApiFactory.create(stubAgentId)
             val received = CompletableDeferred<MemoryEvent.MilestoneReached>()
 
@@ -153,7 +153,7 @@ class AgentEventApiTest {
 
     @Test
     fun `second completion for same task type does not publish another FIRST_SUCCESS milestone`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val api = agentEventApiFactory.create(stubAgentId)
             val milestones = mutableListOf<MemoryEvent.MilestoneReached>()
 
@@ -181,7 +181,7 @@ class AgentEventApiTest {
 
     @Test
     fun `task failure followed by successful retry publishes RECOVERY milestone`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val api = agentEventApiFactory.create(stubAgentId)
             val received = CompletableDeferred<MemoryEvent.MilestoneReached>()
 
@@ -212,7 +212,7 @@ class AgentEventApiTest {
 
     @Test
     fun `successful task without prior failure does not publish RECOVERY milestone`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val api = agentEventApiFactory.create(stubAgentId)
             val milestones = mutableListOf<MemoryEvent.MilestoneReached>()
 
@@ -236,7 +236,7 @@ class AgentEventApiTest {
 
     @Test
     fun `explicit reachMilestone API publishes milestone`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val api = agentEventApiFactory.create(stubAgentId)
             val received = CompletableDeferred<MemoryEvent.MilestoneReached>()
 
@@ -263,7 +263,7 @@ class AgentEventApiTest {
 
     @Test
     fun `multiple AgentEventApi instances can coexist and observe their own agentId's events`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val api1 = agentEventApiFactory.create(stubAgentId)
             val receivedA = CompletableDeferred<Event.TaskCreated>()
 
@@ -298,7 +298,7 @@ class AgentEventApiTest {
 
     @Test
     fun `code submitted event can be published and subscribed`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val api = agentEventApiFactory.create(stubAgentId)
             val received = CompletableDeferred<Event.CodeSubmitted>()
 

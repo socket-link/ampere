@@ -7,9 +7,9 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MessageEvent
@@ -72,7 +72,7 @@ class MessageRouterTest {
 
     @Test
     fun `routes thread and channel events to subscribed agents`() {
-        runBlocking {
+        runTest(UnconfinedTestDispatcher()) {
             val routerApi = agentMessageApiFactory.create("router-agent")
             val router = MessageRouter(routerApi, escalationEventHandler, eventSerialBus)
 

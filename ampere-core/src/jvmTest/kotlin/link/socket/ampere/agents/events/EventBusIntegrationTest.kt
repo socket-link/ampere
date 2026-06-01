@@ -15,10 +15,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.Urgency
@@ -80,7 +80,7 @@ class EventBusIntegrationTest {
 
     @Test
     fun `events persist and can be replayed`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val dir = createTempDirectory(prefix = "events-bus-db")
             val dbFile = dir / "bus.sqlite"
 
@@ -137,7 +137,7 @@ class EventBusIntegrationTest {
 
     @Test
     fun `publish failures do not crash bus`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val bus = eventSerialBusFactory.create()
 
             var goodHandlerCalled = false
@@ -163,7 +163,7 @@ class EventBusIntegrationTest {
 
     @Test
     fun `concurrent publishing is safe and persists all events`() {
-        runBlocking {
+        runTest(scope.testScheduler) {
             val bus = eventSerialBusFactory.create()
 
             val n = 25
