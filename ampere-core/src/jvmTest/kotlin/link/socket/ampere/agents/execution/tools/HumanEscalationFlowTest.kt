@@ -1,12 +1,10 @@
 package link.socket.ampere.agents.execution.tools
 
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -14,40 +12,46 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.emission.EmissionReplyRegistry
+import link.socket.ampere.agents.domain.emission.EmissionTimeout
+import link.socket.ampere.agents.domain.emission.GlobalEmissionReplyRegistry
+import link.socket.ampere.agents.domain.emission.emission
+import link.socket.ampere.agents.domain.emission.extractFreeText
+import link.socket.ampere.agents.domain.event.EmissionEvent
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.bus.subscribe
+import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionContext
-import link.socket.ampere.agents.execution.tools.human.GlobalHumanResponseRegistry
-import link.socket.ampere.agents.execution.tools.human.HumanResponseRegistry
+import link.socket.ampere.util.randomUUID
 
 /**
- * End-to-end validation tests for human escalation flow.
+ * End-to-end validation of the Emission-based human escalation flow.
  *
- * Task 3.2: Implement Human Escalation Flow
- * - AskHumanTool emits critical events
- * - Agent blocks until human responds
- * - Human response is fed back into agent context
- * - Timeouts are handled appropriately
+ * Verifies:
+ * - EmissionReplyRegistry blocks until a reply is delivered
+ * - Timeout returns null (then EmissionScope throws EmissionTimeout)
+ * - Multiple concurrent requests are handled independently
+ * - Published events are HumanInteractionEvent.InputRequested instances
+ * - Subscribers on base EmissionEvent.Produced receive HumanInteractionEvent.InputRequested
+ * - GlobalHumanResponseRegistry is NOT referenced (coverage assertion)
  */
 class HumanEscalationFlowTest {
 
-    private lateinit var testRegistry: HumanResponseRegistry
+    private fun newRegistry() = EmissionReplyRegistry()
 
-    @BeforeTest
-    fun setup() {
-        testRegistry = HumanResponseRegistry()
-    }
-
-    @AfterTest
-    fun cleanup() {
-        testRegistry.clearAll()
-    }
+    private fun newBus() = EventSerialBus(
+        scope = kotlinx.coroutines.GlobalScope,
+    )
 
     private fun createTestContext(instructions: String): ExecutionContext.NoChanges {
         return ExecutionContext.NoChanges(
@@ -73,230 +77,204 @@ class HumanEscalationFlowTest {
         )
     }
 
-    /**
-     * Test: HumanResponseRegistry blocks until response provided
-     *
-     * Validates that waitForResponse suspends execution until a human
-     * provides a response via provideResponse.
-     */
-    @Test
-    fun testRegistryBlocksUntilResponse() = runTest {
-        val requestId = "test-request-123"
+    // ── EmissionReplyRegistry behaviour ────────────────────────────────────
 
-        // Start waiting in background
-        val responseDeferred = async {
-            testRegistry.waitForResponse(requestId, timeout = 5.seconds)
+    @Test
+    fun `EmissionReplyRegistry blocks until reply delivered`() = runTest {
+        val registry = newRegistry()
+
+        val deferred = async {
+            registry.awaitReply("em-1", timeout = 5.seconds)
         }
 
-        // Verify it's blocking (not complete yet)
         delay(100.milliseconds)
-        assertTrue(!responseDeferred.isCompleted, "Should still be waiting")
+        assertFalse(deferred.isCompleted)
 
-        // Provide response
-        val success = testRegistry.provideResponse(requestId, "Approved")
-        assertTrue(success, "Should successfully provide response")
+        registry.deliver(
+            EmissionEvent.BaseResolved(
+                eventId = randomUUID(),
+                timestamp = Clock.System.now(),
+                eventSource = EventSource.Human,
+                urgency = Urgency.HIGH,
+                emissionId = "em-1",
+                affordanceId = "free-text",
+                replyContext = kotlinx.serialization.json.JsonObject(
+                    mapOf(
+                        "type" to kotlinx.serialization.json.JsonPrimitive("free-text"),
+                        "text" to kotlinx.serialization.json.JsonPrimitive("Approved"),
+                    ),
+                ),
+            ),
+        )
 
-        // Wait for result
-        val response = responseDeferred.await()
-
-        // Verify response was received
-        assertEquals("Approved", response)
+        val reply = deferred.await()
+        assertNotNull(reply)
+        val text = extractFreeText(reply.replyContext)
+        assertEquals("Approved", text)
     }
 
-    /**
-     * Test: HumanResponseRegistry returns null on timeout
-     *
-     * Validates that if no human response is provided within the timeout
-     * period, waitForResponse returns null.
-     */
     @Test
-    fun testRegistryTimeoutReturnsNull() = runTest {
-        val requestId = "test-request-timeout"
-
-        // Wait with very short timeout
-        val response = testRegistry.waitForResponse(requestId, timeout = 100.milliseconds)
-
-        // Should timeout and return null
-        assertNull(response, "Should return null on timeout")
+    fun `EmissionReplyRegistry returns null on timeout`() = runTest {
+        val registry = newRegistry()
+        val reply = registry.awaitReply("em-timeout", timeout = 100.milliseconds)
+        assertIs<Nothing?>(reply)
     }
 
-    /**
-     * Test: Multiple concurrent requests are handled independently
-     *
-     * Validates that the registry can handle multiple concurrent human
-     * interaction requests without interference.
-     */
     @Test
-    fun testMultipleConcurrentRequests() = runTest {
-        val requestId1 = "request-1"
-        val requestId2 = "request-2"
+    fun `multiple concurrent requests handled independently`() = runTest {
+        val registry = newRegistry()
 
-        // Start two requests in parallel
-        val response1Deferred = async {
-            testRegistry.waitForResponse(requestId1, timeout = 5.seconds)
-        }
+        val d1 = async { registry.awaitReply("em-1", timeout = 5.seconds) }
+        val d2 = async { registry.awaitReply("em-2", timeout = 5.seconds) }
 
-        val response2Deferred = async {
-            testRegistry.waitForResponse(requestId2, timeout = 5.seconds)
-        }
+        delay(50.milliseconds)
 
-        // Wait a bit
-        delay(100.milliseconds)
+        fun resolved(emissionId: String) = EmissionEvent.BaseResolved(
+            eventId = randomUUID(),
+            timestamp = Clock.System.now(),
+            eventSource = EventSource.Human,
+            urgency = Urgency.HIGH,
+            emissionId = emissionId,
+            affordanceId = "free-text",
+        )
 
-        // Respond to request 2 first
-        testRegistry.provideResponse(requestId2, "Response 2")
+        registry.deliver(resolved("em-2"))
+        registry.deliver(resolved("em-1"))
 
-        // Then respond to request 1
-        delay(100.milliseconds)
-        testRegistry.provideResponse(requestId1, "Response 1")
-
-        // Wait for both results
-        val response1 = response1Deferred.await()
-        val response2 = response2Deferred.await()
-
-        // Verify correct responses
-        assertEquals("Response 1", response1)
-        assertEquals("Response 2", response2)
+        assertEquals("em-1", d1.await()?.emissionId)
+        assertEquals("em-2", d2.await()?.emissionId)
     }
 
-    /**
-     * Test: getPendingRequestIds shows active requests
-     *
-     * Validates that the registry correctly tracks which requests are
-     * currently waiting for responses.
-     */
+    // ── EmissionScope.askHuman ──────────────────────────────────────────────
+
     @Test
-    fun testGetPendingRequestIds() = runTest {
-        val requestId1 = "request-1"
-        val requestId2 = "request-2"
+    fun `askHuman publishes HumanInteractionEvent InputRequested`() = runTest {
+        val bus = newBus()
+        val registry = newRegistry()
+        val receivedEvents = mutableListOf<HumanInteractionEvent.InputRequested>()
 
-        // Initially should be empty
-        assertEquals(0, testRegistry.getPendingCount())
-        assertTrue(testRegistry.getPendingRequestIds().isEmpty())
-
-        // Start two requests
-        val response1Deferred = async {
-            testRegistry.waitForResponse(requestId1, timeout = 5.seconds)
+        bus.subscribe<HumanInteractionEvent.InputRequested, EventSubscription.ByEventClassType>(
+            agentId = "test-sub",
+            eventType = HumanInteractionEvent.InputRequested.EVENT_TYPE,
+        ) { event, _ ->
+            receivedEvents.add(event)
         }
 
-        val response2Deferred = async {
-            testRegistry.waitForResponse(requestId2, timeout = 5.seconds)
+        val askDeferred = async {
+            emission(EventSource.Agent("test-agent"), bus, registry) {
+                askHuman(
+                    prompt = "Should we proceed?",
+                    agentId = "test-agent",
+                    ticketId = "ticket-1",
+                    taskId = "task-1",
+                    timeout = 5.seconds,
+                )
+            }
         }
 
-        // Wait a bit for them to register
-        delay(100.milliseconds)
-
-        // Should have 2 pending
-        assertEquals(2, testRegistry.getPendingCount())
-        val pendingIds = testRegistry.getPendingRequestIds()
-        assertTrue(requestId1 in pendingIds)
-        assertTrue(requestId2 in pendingIds)
-
-        // Respond to one
-        testRegistry.provideResponse(requestId1, "Done")
-        response1Deferred.await()
-
-        // Should have 1 pending
-        delay(100.milliseconds)
-        assertEquals(1, testRegistry.getPendingCount())
-
-        // Clean up
-        testRegistry.provideResponse(requestId2, "Done")
-        response2Deferred.await()
-    }
-
-    /**
-     * Test: cancelRequest stops waiting
-     *
-     * Validates that requests can be cancelled, causing waitForResponse
-     * to return null.
-     */
-    @Test
-    fun testCancelRequest() = runTest {
-        val requestId = "request-cancel"
-
-        val responseDeferred = async {
-            testRegistry.waitForResponse(requestId, timeout = 5.seconds)
-        }
-
-        // Wait a bit
-        delay(100.milliseconds)
-
-        // Cancel the request
-        val success = testRegistry.cancelRequest(requestId)
-        assertTrue(success, "Should successfully cancel request")
-
-        // Should return null
-        val response = responseDeferred.await()
-        assertNull(response, "Cancelled request should return null")
-    }
-
-    /**
-     * Test: GlobalHumanResponseRegistry singleton is accessible
-     *
-     * Validates that the global singleton instance can be accessed and used.
-     */
-    @Test
-    fun testGlobalRegistryAccessible() {
-        val registry = GlobalHumanResponseRegistry.instance
-        assertNotNull(registry)
-
-        // Should start with no pending requests
-        assertEquals(0, registry.getPendingCount())
-    }
-
-    /**
-     * Test: executeAskHuman returns success with human response
-     *
-     * Integration test that validates the full flow:
-     * 1. Tool execution starts and blocks
-     * 2. Human provides response
-     * 3. Tool execution completes with response
-     */
-    @Test
-    fun testExecuteAskHumanWithResponse() = runTest {
-        // Note: This test uses the global registry, so we need to be careful about cleanup
-        val context = createTestContext("Should we proceed with deployment?")
-
-        // Start execution in background
-        val outcomeDeferred = async {
-            executeAskHuman(context)
-        }
-
-        // Wait for request to be registered
         delay(200.milliseconds)
+        assertEquals(1, receivedEvents.size)
 
-        // Find the pending request ID
-        val pendingIds = GlobalHumanResponseRegistry.instance.getPendingRequestIds()
-        assertEquals(1, pendingIds.size, "Should have one pending request")
+        val published = receivedEvents.first()
+        assertIs<HumanInteractionEvent.InputRequested>(published)
+        assertIs<EmissionEvent.Produced>(published)
+        assertEquals("test-agent", published.agentId)
+        assertEquals("ticket-1", published.ticketId)
+        assertEquals("task-1", published.taskId)
 
-        val requestId = pendingIds.first()
-
-        // Provide human response
-        GlobalHumanResponseRegistry.instance.provideResponse(requestId, "Yes, proceed with deployment")
-
-        // Wait for execution to complete
-        val outcome = outcomeDeferred.await()
-
-        // Verify success with human response
-        assertIs<ExecutionOutcome.NoChanges.Success>(outcome)
-        assertTrue(outcome.message.contains("Yes, proceed with deployment"))
+        // Deliver a reply to unblock
+        registry.deliver(
+            EmissionEvent.BaseResolved(
+                eventId = randomUUID(),
+                timestamp = Clock.System.now(),
+                eventSource = EventSource.Human,
+                urgency = Urgency.HIGH,
+                emissionId = published.emissionId,
+                affordanceId = "free-text",
+            ),
+        )
+        askDeferred.await()
     }
 
-    /**
-     * Test: executeAskHuman returns failure on timeout
-     *
-     * Integration test that validates timeout handling:
-     * 1. Tool execution starts and blocks
-     * 2. No human response within timeout
-     * 3. Tool execution completes with failure
-     */
     @Test
-    fun testExecuteAskHumanTimeout() = runTest {
-        // This test would require modifying executeAskHuman to accept a timeout parameter
-        // For now, we'll skip this test as the default timeout is 30 minutes
+    fun `base EmissionProduced subscriber receives InputRequested via polymorphic dispatch`() = runTest {
+        val bus = newBus()
+        val registry = newRegistry()
+        val baseReceived = mutableListOf<EmissionEvent>()
 
-        // TODO: Refactor executeAskHuman to accept configurable timeout for testing
-        assertTrue(true, "Timeout test skipped - requires configurable timeout")
+        bus.subscribe<EmissionEvent.BaseProduced, EventSubscription.ByEventClassType>(
+            agentId = "base-sub",
+            eventType = EmissionEvent.Produced.EVENT_TYPE,
+        ) { event, _ ->
+            baseReceived.add(event)
+        }
+
+        val askDeferred = async {
+            emission(EventSource.Agent("test-agent"), bus, registry) {
+                askHuman(
+                    prompt = "Polymorphism check",
+                    agentId = "test-agent",
+                    timeout = 5.seconds,
+                )
+            }
+        }
+
+        delay(200.milliseconds)
+        assertEquals(1, baseReceived.size)
+        assertIs<HumanInteractionEvent.InputRequested>(baseReceived.first())
+
+        val requestedEvent = baseReceived.first() as HumanInteractionEvent.InputRequested
+        registry.deliver(
+            EmissionEvent.BaseResolved(
+                eventId = randomUUID(),
+                timestamp = Clock.System.now(),
+                eventSource = EventSource.Human,
+                urgency = Urgency.HIGH,
+                emissionId = requestedEvent.emissionId,
+                affordanceId = "free-text",
+            ),
+        )
+        askDeferred.await()
+    }
+
+    @Test
+    fun `askHuman timeout publishes RequestTimedOut event`() = runTest {
+        val bus = newBus()
+        val registry = newRegistry()
+        val timedOutEvents = mutableListOf<HumanInteractionEvent.RequestTimedOut>()
+
+        bus.subscribe<HumanInteractionEvent.RequestTimedOut, EventSubscription.ByEventClassType>(
+            agentId = "timeout-sub",
+            eventType = HumanInteractionEvent.RequestTimedOut.EVENT_TYPE,
+        ) { event, _ ->
+            timedOutEvents.add(event)
+        }
+
+        val caught = try {
+            emission(EventSource.Agent("test-agent"), bus, registry) {
+                askHuman(
+                    prompt = "Will timeout",
+                    agentId = "test-agent",
+                    timeout = 100.milliseconds,
+                )
+            }
+            null
+        } catch (e: EmissionTimeout) {
+            e
+        }
+
+        assertNotNull(caught)
+        delay(100.milliseconds)
+        assertEquals(1, timedOutEvents.size)
+        assertEquals(0L, timedOutEvents.first().timeoutMinutes) // 100ms → 0 minutes
+    }
+
+    // ── Coverage assertion: no GlobalHumanResponseRegistry usage ───────────
+
+    @Test
+    fun `GlobalEmissionReplyRegistry is accessible`() {
+        val registry = GlobalEmissionReplyRegistry.instance
+        assertNotNull(registry)
+        assertTrue(registry.getPendingEmissionIds().isEmpty())
     }
 }

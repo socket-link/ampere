@@ -46,28 +46,39 @@ class EventSerialBus(
      * - Any individual handler failures are swallowed to avoid impacting other subscribers.
      */
     suspend fun publish(event: Event) {
-        // Snapshot handlers under lock to maintain ordering and thread-safety
-        val handlers: List<EventHandler<Event, Subscription>> = mutex.withLock {
-            handlerMap[event.eventType].orEmpty()
+        // Collect all event types to dispatch to: own type + parent types for polymorphic delivery.
+        val dispatchTypes = buildSet {
+            add(event.eventType)
+            addAll(event.parentEventTypes)
         }
 
-        if (handlers.isEmpty()) {
+        // Snapshot handlers under lock to maintain ordering and thread-safety.
+        val handlerPairs: List<Pair<EventType, List<EventHandler<Event, Subscription>>>> = mutex.withLock {
+            dispatchTypes.mapNotNull { type ->
+                val handlers = handlerMap[type]
+                if (handlers.isNullOrEmpty()) null else type to handlers
+            }
+        }
+
+        if (handlerPairs.isEmpty()) {
             return
         }
 
         logger.logPublish(event)
 
-        for (handler in handlers) {
-            scope.launch {
-                try {
-                    val subscription = subscriptionMap[event.eventType]
-                    handler(event, subscription)
-                } catch (throwable: Throwable) {
-                    // Swallow exceptions from handlers to avoid impacting other subscribers, but still log them.
-                    logger.logError(
-                        message = "Subscriber handler failure for ${event.eventType}(id=${event.eventId})",
-                        throwable = throwable,
-                    )
+        for ((type, handlers) in handlerPairs) {
+            for (handler in handlers) {
+                scope.launch {
+                    try {
+                        val subscription = subscriptionMap[type]
+                        handler(event, subscription)
+                    } catch (throwable: Throwable) {
+                        // Swallow exceptions from handlers to avoid impacting other subscribers, but still log them.
+                        logger.logError(
+                            message = "Subscriber handler failure for ${event.eventType}(id=${event.eventId})",
+                            throwable = throwable,
+                        )
+                    }
                 }
             }
         }

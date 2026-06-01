@@ -10,7 +10,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
@@ -20,7 +19,6 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.escalation.EscalationEventHandler
-import link.socket.ampere.agents.events.escalation.Notifier
 import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
@@ -38,18 +36,6 @@ class MessageRouterTest {
     private lateinit var agentMessageApiFactory: AgentMessageApiFactory
     private lateinit var agentEventApiFactory: AgentEventApiFactory
 
-    // TODO: Test this functionality
-    private val fakeHumanNotifier = object : Notifier.Human() {
-        override suspend fun notifyEscalation(
-            threadId: MessageThreadId,
-            agentId: AgentId,
-            reason: String,
-            context: Map<String, String>?,
-        ) {
-            TODO("Not yet implemented")
-        }
-    }
-
     private lateinit var escalationEventHandler: EscalationEventHandler
 
     @BeforeTest
@@ -62,7 +48,7 @@ class MessageRouterTest {
         eventSerialBus = eventSerialBusFactory.create()
         agentMessageApiFactory = AgentMessageApiFactory(messageRepository, eventSerialBus)
         agentEventApiFactory = AgentEventApiFactory(eventRepository, eventSerialBus)
-        escalationEventHandler = EscalationEventHandler(scope, fakeHumanNotifier, eventSerialBus)
+        escalationEventHandler = EscalationEventHandler(scope, eventSerialBus)
     }
 
     @AfterTest

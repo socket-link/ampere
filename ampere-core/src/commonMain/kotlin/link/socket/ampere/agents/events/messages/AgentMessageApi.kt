@@ -1,7 +1,12 @@
 package link.socket.ampere.agents.events.messages
 
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.emission.EmissionReplyRegistry
+import link.socket.ampere.agents.domain.emission.GlobalEmissionReplyRegistry
+import link.socket.ampere.agents.domain.emission.emission
+import link.socket.ampere.agents.domain.emission.extractFreeText
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.status.EventStatus
@@ -21,6 +26,7 @@ class AgentMessageApi(
     val agentId: AgentId,
     private val messageRepository: MessageRepository,
     private val eventSerialBus: EventSerialBus,
+    private val emissionReplyRegistry: EmissionReplyRegistry = GlobalEmissionReplyRegistry.instance,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
 
@@ -147,7 +153,20 @@ class AgentMessageApi(
         return message
     }
 
-    /** Escalate a thread to human, blocking further agent activity. */
+    /**
+     * Escalate a thread to human using the Emission protocol (CHI invariant: Q2).
+     *
+     * Orchestration order per the CHI cell invariant:
+     * 1. Transition thread to [EventStatus.WaitingForHuman] **before** Emission publishes.
+     * 2. Publish [MessageEvent.EscalationRequested] as a side-effect bus event for thread
+     *    observers (preserved for backward compatibility; not the primary CHI path).
+     * 3. Produce a [HumanInteractionEvent.InputRequested] via the Emission DSL and suspend
+     *    until the human replies.
+     * 4. Transition thread back to [EventStatus.Open] and post the reply.
+     *
+     * Thread state transitions are owned exclusively by this method — handlers must not
+     * re-transition (CHI cell invariant).
+     */
     suspend fun escalateToHuman(
         threadId: MessageThreadId,
         reason: String,
@@ -164,52 +183,96 @@ class AgentMessageApi(
             .getOrNull()
 
         if (thread == null) {
-            logger.logError(
-                message = "Thread not found: $threadId",
-            )
+            logger.logError(message = "Thread not found: $threadId")
             return
         }
 
-        require(thread.status != EventStatus.Resolved) {
-            "Cannot escalate a resolved thread"
-        }
+        require(thread.status != EventStatus.Resolved) { "Cannot escalate a resolved thread" }
 
         val oldStatus = thread.status
         val newStatus = EventStatus.WaitingForHuman
 
+        // Step 1: Transition FIRST — the CHI invariant's load-bearing constraint.
         messageRepository
             .updateStatus(threadId, newStatus)
-            .onSuccess {
-                val now = Clock.System.now()
-
-                eventSerialBus.publish(
-                    MessageEvent.EscalationRequested(
-                        eventId = randomUUID(),
-                        timestamp = now,
-                        eventSource = EventSource.Agent(agentId),
-                        threadId = threadId,
-                        reason = reason,
-                        context = context,
-                    ),
-                )
-
-                eventSerialBus.publish(
-                    MessageEvent.ThreadStatusChanged(
-                        eventId = randomUUID(),
-                        timestamp = now,
-                        eventSource = EventSource.Agent(agentId),
-                        threadId = threadId,
-                        oldStatus = oldStatus,
-                        newStatus = newStatus,
-                    ),
-                )
-            }
             .onFailure { throwable ->
                 logger.logError(
-                    message = "Failed to update thread status to $newStatus for thread with id $threadId",
+                    message = "Failed to update thread status to $newStatus for thread $threadId",
                     throwable = throwable,
                 )
+                return
             }
+
+        val now = Clock.System.now()
+
+        // Step 2: Side-effect bus event for thread observers (backward-compat).
+        eventSerialBus.publish(
+            MessageEvent.EscalationRequested(
+                eventId = randomUUID(),
+                timestamp = now,
+                eventSource = EventSource.Agent(agentId),
+                threadId = threadId,
+                reason = reason,
+                context = context,
+            ),
+        )
+        eventSerialBus.publish(
+            MessageEvent.ThreadStatusChanged(
+                eventId = randomUUID(),
+                timestamp = now,
+                eventSource = EventSource.Agent(agentId),
+                threadId = threadId,
+                oldStatus = oldStatus,
+                newStatus = newStatus,
+            ),
+        )
+
+        // Step 3: Produce the Emission and suspend for reply.
+        val contextString = context.entries.joinToString("\n") { "${it.key}: ${it.value}" }
+            .ifEmpty { null }
+
+        try {
+            val reply = emission(
+                eventSource = EventSource.Agent(agentId),
+                eventSerialBus = eventSerialBus,
+                replyRegistry = emissionReplyRegistry,
+            ) {
+                askHuman(
+                    prompt = reason,
+                    agentId = agentId,
+                    context = contextString,
+                    ticketId = null,
+                    taskId = null,
+                    timeout = 30.minutes,
+                )
+            }
+
+            // Step 4: Transition back after reply arrives.
+            messageRepository.updateStatus(threadId, EventStatus.Open)
+                .onFailure { throwable ->
+                    logger.logError(
+                        message = "Failed to restore thread $threadId to Active after escalation reply",
+                        throwable = throwable,
+                    )
+                }
+
+            val responseText = extractFreeText(reply.replyContext)
+                ?: reply.replyContext?.toString()
+                ?: ""
+
+            if (responseText.isNotEmpty()) {
+                postMessage(threadId, responseText)
+            }
+        } catch (e: link.socket.ampere.agents.domain.emission.EmissionTimeout) {
+            logger.logError(message = "Escalation for thread $threadId timed out: ${e.message}")
+            messageRepository.updateStatus(threadId, EventStatus.Open)
+                .onFailure { throwable ->
+                    logger.logError(
+                        message = "Failed to restore thread $threadId to Active after escalation timeout",
+                        throwable = throwable,
+                    )
+                }
+        }
     }
 
     /** Resolve an escalated thread. */

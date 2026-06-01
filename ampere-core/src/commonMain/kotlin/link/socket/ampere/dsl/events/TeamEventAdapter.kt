@@ -89,10 +89,12 @@ class TeamEventAdapter {
     }
 
     private fun adaptInputRequested(event: HumanInteractionEvent.InputRequested): Escalated {
+        val payload = event.emission.payload as? link.socket.ampere.agents.domain.emission.EmissionPayload.Decision
+        val contextMap = payload?.context?.let { mapOf("context" to it) } ?: emptyMap()
         return Escalated(
             agent = event.agentId,
-            reason = event.question,
-            context = event.context,
+            reason = payload?.prompt ?: "Human input requested",
+            context = contextMap,
             timestamp = event.timestamp,
         )
     }

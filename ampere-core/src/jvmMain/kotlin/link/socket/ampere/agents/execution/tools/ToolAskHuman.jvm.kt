@@ -1,60 +1,59 @@
 package link.socket.ampere.agents.execution.tools
 
-import kotlin.time.Duration.Companion.minutes
-import kotlinx.datetime.Clock
-import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
-import link.socket.ampere.agents.events.utils.generateUUID
-import link.socket.ampere.agents.execution.request.ExecutionContext
-import link.socket.ampere.agents.execution.tools.human.GlobalHumanResponseRegistry
+import link.socket.ampere.agents.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.emission.EmissionReplyRegistry
+import link.socket.ampere.agents.domain.emission.GlobalEmissionReplyRegistry
+import link.socket.ampere.agents.domain.event.HumanInteractionEvent
+import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.execution.ParameterStrategy
 
-actual suspend fun executeAskHuman(
-    context: ExecutionContext.NoChanges,
-): ExecutionOutcome.NoChanges {
-    val executionStartTimestamp = Clock.System.now()
-    val requestId = generateUUID()
+/**
+ * Creates a JVM / CLI-aware [ToolAskHuman] that prints a console banner when
+ * human input is needed. This is the [Surface.Console] floor-surface implementation
+ * preserved from the legacy `ToolAskHuman.jvm.kt` behaviour.
+ *
+ * The banner displays the emission ID (the key humans use with `ampere respond`),
+ * ticket, task, and the question text. After the banner is printed the coroutine
+ * suspends until [GlobalEmissionReplyRegistry] delivers a reply or the 30-minute
+ * timeout fires.
+ *
+ * On non-JVM platforms the default [ToolAskHuman] factory (no console callback) is used.
+ */
+fun ToolAskHumanJvm(
+    requiredAgentAutonomy: AgentActionAutonomy,
+    eventSerialBus: EventSerialBus,
+    replyRegistry: EmissionReplyRegistry = GlobalEmissionReplyRegistry.instance,
+    parameterStrategy: ParameterStrategy? = null,
+): FunctionTool<link.socket.ampere.agents.execution.request.ExecutionContext.NoChanges> = ToolAskHuman(
+    requiredAgentAutonomy = requiredAgentAutonomy,
+    eventSerialBus = eventSerialBus,
+    replyRegistry = replyRegistry,
+    parameterStrategy = parameterStrategy,
+    onInputRequested = { event ->
+        printConsoleHumanInputBanner(event)
+    },
+)
 
-    // Display the question to console (will also be visible in CLI dashboard through events)
+private fun printConsoleHumanInputBanner(event: HumanInteractionEvent.InputRequested) {
+    val payload = event.emission.payload as? link.socket.ampere.agents.domain.emission.EmissionPayload.Decision
+    val question = payload?.prompt ?: "(no prompt)"
+
     println(
         """
         ════════════════════════════════════════
-        🤔 HUMAN INPUT REQUIRED
+        HUMAN INPUT REQUIRED
         ════════════════════════════════════════
-        Request ID: $requestId
-        Executor: ${context.executorId}
-        Ticket: ${context.ticket.id}
-        Task: ${context.task.id}
+        Emission ID : ${event.emission.id}
+        Request ID  : ${event.requestId}
+        Agent       : ${event.agentId}
+        Ticket      : ${event.ticketId ?: "n/a"}
+        Task        : ${event.taskId ?: "n/a"}
 
-        Question: ${context.instructions}
+        Question: $question
 
         To respond, use:
-        ./ampere-cli/ampere respond $requestId "<your response>"
+          ./ampere-cli/ampere respond ${event.emission.id} "<your response>"
         ════════════════════════════════════════
         """.trimIndent(),
     )
-
-    // Wait for human response (blocks agent execution)
-    val humanResponse = GlobalHumanResponseRegistry.instance.waitForResponse(
-        requestId = requestId,
-        timeout = 30.minutes,
-    )
-
-    return if (humanResponse != null) {
-        ExecutionOutcome.NoChanges.Success(
-            executorId = context.executorId,
-            ticketId = context.ticket.id,
-            taskId = context.task.id,
-            executionStartTimestamp = executionStartTimestamp,
-            executionEndTimestamp = Clock.System.now(),
-            message = "Human response: $humanResponse",
-        )
-    } else {
-        ExecutionOutcome.NoChanges.Failure(
-            executorId = context.executorId,
-            ticketId = context.ticket.id,
-            taskId = context.task.id,
-            executionStartTimestamp = executionStartTimestamp,
-            executionEndTimestamp = Clock.System.now(),
-            message = "Human input request timed out after 30 minutes",
-        )
-    }
 }

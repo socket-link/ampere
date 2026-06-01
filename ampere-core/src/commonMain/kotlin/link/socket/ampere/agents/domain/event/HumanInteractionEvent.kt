@@ -1,92 +1,111 @@
 package link.socket.ampere.agents.domain.event
 
 import kotlinx.datetime.Instant
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.emission.AffordanceId
+import link.socket.ampere.agents.domain.emission.Emission
+import link.socket.ampere.agents.domain.emission.EmissionId
+import link.socket.ampere.agents.domain.emission.EmissionPayload
 
 /**
- * Events related to human interaction requests from agents.
+ * Named human-interaction specialisation of [EmissionEvent].
  *
- * These events are emitted when agents need human guidance, approval, or
- * input to continue execution. They represent critical decision points where
- * agent autonomy is insufficient.
+ * `HumanInteractionEvent` extends [EmissionEvent] so every variant is
+ * polymorphically an `EmissionEvent`. [InputRequested] additionally implements
+ * [EmissionEvent.Produced] and [InputProvided] implements [EmissionEvent.Resolved],
+ * so bus subscribers registered for the base event types automatically receive
+ * specialised instances. Human-specific subscribers can narrow further by
+ * checking `event is HumanInteractionEvent`.
+ *
+ * The attribution fields ([ticketId], [InputRequested.ticketId],
+ * [InputRequested.taskId], [InputProvided.respondedBy]) are the load-bearing
+ * fields that justify the specialisation over plain [EmissionEvent] — they
+ * must survive the full request→response lifecycle.
  */
 @Serializable
-sealed interface HumanInteractionEvent : Event {
+sealed interface HumanInteractionEvent : EmissionEvent {
+
+    val requestId: String
+    val agentId: AgentId
 
     /**
-     * An agent is requesting human input to continue execution.
+     * An agent is requesting human input.
      *
-     * Emitted when:
-     * - Agent encounters ambiguity or uncertainty beyond its confidence threshold
-     * - Tool execution requires human approval (e.g., AskHumanTool)
-     * - Critical decision needs human oversight
+     * Implements [EmissionEvent.Produced] so subscribers on base
+     * [EmissionEvent.Produced.EVENT_TYPE] ("EmissionProduced") also receive
+     * these events polymorphically.
      *
-     * The requesting agent will block execution until a human provides a response.
-     *
-     * @property requestId Unique identifier for this human interaction request
+     * @property requestId Unique identifier pairing this request with its response
      * @property agentId The agent requesting human input
-     * @property question The question or prompt for the human
-     * @property context Additional context to help the human understand the situation
-     * @property ticketId Optional ticket ID if this request is part of ticket work
-     * @property taskId Optional task ID if this request is part of a specific task
+     * @property ticketId Optional ticket this request is part of
+     * @property taskId Optional task this request is part of
      */
     @Serializable
+    @SerialName("HumanInteractionEvent.InputRequested")
     data class InputRequested(
         override val eventId: EventId,
         override val timestamp: Instant,
         override val eventSource: EventSource,
         override val urgency: Urgency,
-        val requestId: String,
-        val agentId: AgentId,
-        val question: String,
-        val context: Map<String, String> = emptyMap(),
+        override val emission: Emission,
+        override val requestId: String,
+        override val agentId: AgentId,
         val ticketId: String? = null,
         val taskId: String? = null,
-    ) : HumanInteractionEvent {
+    ) : HumanInteractionEvent, EmissionEvent.Produced {
 
         override val eventType: EventType = EVENT_TYPE
+
+        override val parentEventTypes: Set<EventType> = setOf(EmissionEvent.Produced.EVENT_TYPE)
 
         override fun getSummary(
             formatUrgency: (Urgency) -> String,
             formatSource: (EventSource) -> String,
         ): String = buildString {
             append("Human input requested by $agentId")
-            append(" - $question")
+            val prompt = (emission.payload as? EmissionPayload.Decision)?.prompt
+            prompt?.let { append(": $it") }
             append(" ${formatUrgency(urgency)}")
         }
 
         companion object {
-            const val EVENT_TYPE: EventType = "HumanInputRequested"
+            const val EVENT_TYPE: EventType = "HumanInteractionRequested"
         }
     }
 
     /**
      * A human has provided a response to an agent's input request.
      *
-     * Emitted when:
-     * - Human provides input through CLI, UI, or API
-     * - Response is delivered to the waiting agent
+     * Implements [EmissionEvent.Resolved] so subscribers on base
+     * [EmissionEvent.Resolved.EVENT_TYPE] ("EmissionResolved") also receive
+     * these events polymorphically.
      *
-     * @property requestId The ID of the original InputRequested event
+     * @property requestId The ID of the original [InputRequested] event
      * @property agentId The agent that requested input
-     * @property response The human's response text
      * @property respondedBy Optional identifier of the human who responded
      */
     @Serializable
+    @SerialName("HumanInteractionEvent.InputProvided")
     data class InputProvided(
         override val eventId: EventId,
         override val timestamp: Instant,
         override val eventSource: EventSource,
         override val urgency: Urgency,
-        val requestId: String,
-        val agentId: AgentId,
-        val response: String,
+        override val emissionId: EmissionId,
+        override val affordanceId: AffordanceId,
+        override val replyContext: JsonElement? = null,
+        override val requestId: String,
+        override val agentId: AgentId,
         val respondedBy: String? = null,
-    ) : HumanInteractionEvent {
+    ) : HumanInteractionEvent, EmissionEvent.Resolved {
 
         override val eventType: EventType = EVENT_TYPE
+
+        override val parentEventTypes: Set<EventType> = setOf(EmissionEvent.Resolved.EVENT_TYPE)
 
         override fun getSummary(
             formatUrgency: (Urgency) -> String,
@@ -98,29 +117,32 @@ sealed interface HumanInteractionEvent : Event {
         }
 
         companion object {
-            const val EVENT_TYPE: EventType = "HumanInputProvided"
+            const val EVENT_TYPE: EventType = "HumanInteractionProvided"
         }
     }
 
     /**
      * A human input request timed out without receiving a response.
      *
-     * Emitted when:
-     * - Request timeout expires before human responds
-     * - Agent may continue with fallback behavior or fail the operation
+     * Emitted by the DSL's timeout path when the suspended Emission was
+     * produced as a [HumanInteractionEvent.InputRequested]. Plain
+     * [EmissionEvent] timeouts throw [link.socket.ampere.agents.domain.emission.EmissionTimeout]
+     * without publishing this specialised event.
      *
-     * @property requestId The ID of the original InputRequested event
+     * @property requestId The ID of the original [InputRequested] event
      * @property agentId The agent that requested input
-     * @property timeoutMinutes How long the agent waited
+     * @property timeoutMinutes How long the agent waited before timing out
      */
     @Serializable
+    @SerialName("HumanInteractionEvent.RequestTimedOut")
     data class RequestTimedOut(
         override val eventId: EventId,
         override val timestamp: Instant,
         override val eventSource: EventSource,
         override val urgency: Urgency,
-        val requestId: String,
-        val agentId: AgentId,
+        override val emissionId: EmissionId,
+        override val requestId: String,
+        override val agentId: AgentId,
         val timeoutMinutes: Long,
     ) : HumanInteractionEvent {
 
@@ -136,7 +158,7 @@ sealed interface HumanInteractionEvent : Event {
         }
 
         companion object {
-            const val EVENT_TYPE: EventType = "HumanInputRequestTimedOut"
+            const val EVENT_TYPE: EventType = "HumanInteractionTimedOut"
         }
     }
 }
