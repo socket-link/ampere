@@ -40,8 +40,13 @@ class CognitivePaletteTest {
     }
 
     @Test
-    fun forPhase_evaluate_returns_aquamarine() {
-        assertEquals(CognitivePalette.evaluate, CognitivePalette.forPhase(CognitivePhase.EVALUATE))
+    fun forPhase_observe_mirrors_perceive() {
+        assertEquals(CognitivePalette.perceive, CognitivePalette.forPhase(CognitivePhase.OBSERVE))
+    }
+
+    @Test
+    fun forPhase_learn_returns_aquamarine() {
+        assertEquals(CognitivePalette.learn, CognitivePalette.forPhase(CognitivePhase.LEARN))
     }
 
     @Test
@@ -79,7 +84,8 @@ class CognitivePaletteTest {
     fun each_phase_maps_to_distinct_color() {
         val phases = CognitivePhase.entries.filter { it != CognitivePhase.NONE }
         val colors = phases.map { CognitivePalette.forPhase(it) }.toSet()
-        assertEquals(phases.size, colors.size, "Each cognitive phase should have a distinct color")
+        // OBSERVE mirrors PERCEIVE per Wave 3 mapping convention, so expect phases.size - 1 distinct colors
+        assertEquals(phases.size - 1, colors.size, "Each cognitive phase should have a distinct color (OBSERVE mirrors PERCEIVE)")
     }
 
     @Test
@@ -96,7 +102,7 @@ class CognitivePaletteTest {
             CognitivePalette.recall,
             CognitivePalette.plan,
             CognitivePalette.execute,
-            CognitivePalette.evaluate,
+            CognitivePalette.learn,
             CognitivePalette.loop,
         )
         for (color in colors) {

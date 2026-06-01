@@ -34,7 +34,7 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                implementation("link.socket:phosphor-core:0.4.0")
+                implementation("link.socket:phosphor-core:0.6.2")
                 implementation(compose.runtime)
                 implementation(compose.foundation)
                 implementation(compose.ui)

@@ -80,8 +80,8 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 api(project(":ampere-core"))
-                api("link.socket:phosphor-core:0.5.0")
-                api("link.socket:phosphor-lumos:0.5.0")
+                api("link.socket:phosphor-core:0.6.2")
+                api("link.socket:phosphor-lumos:0.6.2")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
             }
         }

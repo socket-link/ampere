@@ -66,15 +66,15 @@ class WaveformCanvasRendererTest {
     fun dominantPhaseAt_exact_position_dominates() {
         val agents = listOf(
             Triple(0f, 0f, CognitivePhase.RECALL),
-            Triple(5f, 5f, CognitivePhase.EVALUATE),
+            Triple(5f, 5f, CognitivePhase.LEARN),
         )
-        // Query at exact position of EVALUATE agent
+        // Query at exact position of LEARN agent
         val result = WaveformCanvasRenderer.dominantPhaseAt(
             worldX = 5f,
             worldZ = 5f,
             agentPositions = agents
         )
-        assertEquals(CognitivePhase.EVALUATE, result)
+        assertEquals(CognitivePhase.LEARN, result)
     }
 
     @Test

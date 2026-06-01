@@ -49,7 +49,7 @@ object CognitivePalette {
     val recall = toComposeColor(composeColorAdapter.adapt(colorModel.phaseColorFor(CognitivePhase.RECALL)))
     val plan = toComposeColor(composeColorAdapter.adapt(colorModel.phaseColorFor(CognitivePhase.PLAN)))
     val execute = toComposeColor(composeColorAdapter.adapt(colorModel.phaseColorFor(CognitivePhase.EXECUTE)))
-    val evaluate = toComposeColor(composeColorAdapter.adapt(colorModel.phaseColorFor(CognitivePhase.EVALUATE)))
+    val learn = toComposeColor(composeColorAdapter.adapt(colorModel.phaseColorFor(CognitivePhase.LEARN)))
     val loop = toComposeColor(composeColorAdapter.adapt(colorModel.phaseColorFor(CognitivePhase.LOOP)))
 
     fun forDensity(density: Float): Color = when {
@@ -61,9 +61,10 @@ object CognitivePalette {
     fun forPhase(phase: CognitivePhase): Color = when (phase) {
         CognitivePhase.PERCEIVE -> perceive
         CognitivePhase.RECALL -> recall
+        CognitivePhase.OBSERVE -> perceive
         CognitivePhase.PLAN -> plan
         CognitivePhase.EXECUTE -> execute
-        CognitivePhase.EVALUATE -> evaluate
+        CognitivePhase.LEARN -> learn
         CognitivePhase.LOOP -> loop
         CognitivePhase.NONE -> agentIdle
     }

@@ -21,7 +21,7 @@ kotlin {
                 implementation(project(":ampere-core"))
                 implementation(project(":ampere-compose"))
                 implementation(project(":ampere-cli"))
-                implementation("link.socket:phosphor-core:0.4.0")
+                implementation("link.socket:phosphor-core:0.6.2")
                 implementation(compose.desktop.currentOs)
             }
         }

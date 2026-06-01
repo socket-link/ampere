@@ -24,9 +24,10 @@ import kotlin.math.sin
  * Each PROPEL phase has a distinct visual signature:
  * - PERCEIVE: Particles drift inward from edges toward the agent (sensory gathering)
  * - RECALL: Existing particles near agent brighten and cluster (memory activation)
+ * - OBSERVE: Particles drift inward, similar to perceive (state monitoring)
  * - PLAN: Particles form tentative structures, testing arrangements (strategy formation)
  * - EXECUTE: Particles align and accelerate outward (discharge/committed action)
- * - EVALUATE: Particles slow, some fade, some persist as new anchors (reflection)
+ * - LEARN: Particles slow, some fade, some persist as new anchors (reflection)
  * - LOOP: Brief stillness, then subtle pulse (cycle reset)
  *
  * The choreographer observes phase transitions on agents and orchestrates particle
@@ -67,8 +68,8 @@ class CognitiveChoreographer(
         /** Radius for LOOP despawn area */
         private const val LOOP_DESPAWN_RADIUS = 3f
 
-        /** Radius for EVALUATE fade effect */
-        private const val EVALUATE_FADE_RADIUS = 10f
+        /** Radius for LEARN fade effect */
+        private const val LEARN_FADE_RADIUS = 10f
 
         /** Particle count per PERCEIVE stream direction */
         private const val PERCEIVE_PARTICLES_PER_DIR = 2
@@ -148,8 +149,8 @@ class CognitiveChoreographer(
             spawnSparkBurst(agent.position, TRANSITION_SPARK_COUNT)
         }
 
-        // EXECUTE → EVALUATE: Trail particles along the executed flow connection
-        if (from == CognitivePhase.EXECUTE && to == CognitivePhase.EVALUATE) {
+        // EXECUTE → LEARN: Trail particles along the executed flow connection
+        if (from == CognitivePhase.EXECUTE && to == CognitivePhase.LEARN) {
             spawnTrailFromAgent(agent.position)
         }
 
@@ -174,9 +175,10 @@ class CognitiveChoreographer(
         return when (phase) {
             CognitivePhase.PERCEIVE -> applyPerceive(agent, substrate, deltaTime)
             CognitivePhase.RECALL -> applyRecall(agent, substrate, deltaTime)
+            CognitivePhase.OBSERVE -> applyObserve(agent, substrate, deltaTime)
             CognitivePhase.PLAN -> applyPlan(agent, substrate, deltaTime)
             CognitivePhase.EXECUTE -> applyExecute(agent, substrate, deltaTime)
-            CognitivePhase.EVALUATE -> applyEvaluate(agent, substrate, deltaTime)
+            CognitivePhase.LEARN -> applyLearn(agent, substrate, deltaTime)
             CognitivePhase.LOOP -> applyLoop(agent, substrate, deltaTime)
             CognitivePhase.NONE -> substrate
         }
@@ -234,7 +236,7 @@ class CognitiveChoreographer(
         val nearbyParticles = particles.getParticlesNear(
             agent.position.x.roundToInt(),
             agent.position.y.roundToInt(),
-            radius = EVALUATE_FADE_RADIUS
+            radius = LEARN_FADE_RADIUS
         )
         nearbyParticles.forEach { p ->
             p.life = (p.life + 0.3f * deltaTime).coerceAtMost(1f)
@@ -243,6 +245,43 @@ class CognitiveChoreographer(
         // Substrate: warm pulse at agent position
         val center = Point(agent.position.x.roundToInt(), agent.position.y.roundToInt())
         return substrateAnimator.pulse(substrate, center, intensity = 0.3f * deltaTime, radius = 5f)
+    }
+
+    // ── OBSERVE: Particles drift inward (state monitoring) ──
+
+    private fun applyObserve(
+        agent: AgentVisualState,
+        substrate: SubstrateState,
+        deltaTime: Float
+    ): SubstrateState {
+        // Similar to PERCEIVE: particles drift inward from edges
+        if (canSpawn(agent.id)) {
+            val angleStep = 2 * PI / PERCEIVE_DIRECTIONS
+            for (i in 0 until PERCEIVE_DIRECTIONS) {
+                val angle = i * angleStep
+                val spawnPos = Vector2(
+                    agent.position.x + cos(angle).toFloat() * PERCEIVE_SPAWN_RADIUS,
+                    agent.position.y + sin(angle).toFloat() * PERCEIVE_SPAWN_RADIUS
+                )
+
+                val inwardAngle = angle + PI
+                val emitter = StreamEmitter()
+                val config = EmitterConfig(
+                    type = ParticleType.MOTE,
+                    speed = 1.2f,
+                    speedVariance = 0.4f,
+                    life = 1.0f,
+                    lifeVariance = 0.2f,
+                    spread = 15f,
+                    direction = (inwardAngle * 180.0 / PI).toFloat()
+                )
+                particles.spawn(emitter, PERCEIVE_PARTICLES_PER_DIR, spawnPos, config)
+            }
+            markSpawned(agent.id)
+        }
+
+        val center = Point(agent.position.x.roundToInt(), agent.position.y.roundToInt())
+        return substrateAnimator.flowToward(substrate, center, strength = 0.25f)
     }
 
     // ── PLAN: Tentative structures testing formations ──
@@ -336,9 +375,9 @@ class CognitiveChoreographer(
         )
     }
 
-    // ── EVALUATE: Afterglow, particles slow and persist (reflection) ──
+    // ── LEARN: Afterglow, particles slow and persist (reflection) ──
 
-    private fun applyEvaluate(
+    private fun applyLearn(
         agent: AgentVisualState,
         substrate: SubstrateState,
         deltaTime: Float
@@ -347,7 +386,7 @@ class CognitiveChoreographer(
         val nearbyParticles = particles.getParticlesNear(
             agent.position.x.roundToInt(),
             agent.position.y.roundToInt(),
-            radius = EVALUATE_FADE_RADIUS
+            radius = LEARN_FADE_RADIUS
         )
         nearbyParticles.forEach { p ->
             // Slow particles down (drag effect)

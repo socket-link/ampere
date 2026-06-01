@@ -31,9 +31,10 @@ class SceneSnapshotController(
     private val phaseCycle = listOf(
         CognitivePhase.PERCEIVE,
         CognitivePhase.RECALL,
+        CognitivePhase.OBSERVE,
         CognitivePhase.PLAN,
         CognitivePhase.EXECUTE,
-        CognitivePhase.EVALUATE,
+        CognitivePhase.LEARN,
         CognitivePhase.LOOP
     )
     private var phaseIndex = 0

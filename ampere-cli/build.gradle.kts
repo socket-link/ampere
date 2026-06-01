@@ -85,7 +85,7 @@ kotlin {
             dependencies {
                 implementation(project(":ampere-core"))
                 implementation(project(":ampere-phosphor"))
-                implementation("link.socket:phosphor-core:0.5.0")
+                implementation("link.socket:phosphor-core:0.6.2")
 
                 // CLI argument parsing
                 implementation("com.github.ajalt.clikt:clikt:4.4.0")
