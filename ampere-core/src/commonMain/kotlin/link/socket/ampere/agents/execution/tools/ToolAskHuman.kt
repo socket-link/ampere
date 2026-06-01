@@ -8,9 +8,9 @@ import link.socket.ampere.agents.domain.emission.EmissionTimeout
 import link.socket.ampere.agents.domain.emission.GlobalEmissionReplyRegistry
 import link.socket.ampere.agents.domain.emission.emission
 import link.socket.ampere.agents.domain.emission.extractFreeText
-import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.execution.ParameterStrategy
 import link.socket.ampere.agents.execution.request.ExecutionContext

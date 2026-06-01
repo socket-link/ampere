@@ -9,6 +9,7 @@ import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.emission.AffordanceId
 import link.socket.ampere.agents.domain.emission.Emission
 import link.socket.ampere.agents.domain.emission.EmissionId
+import link.socket.ampere.agents.domain.emission.EmissionPayload
 
 /**
  * Named human-interaction specialisation of [EmissionEvent].
@@ -66,7 +67,7 @@ sealed interface HumanInteractionEvent : EmissionEvent {
             formatSource: (EventSource) -> String,
         ): String = buildString {
             append("Human input requested by $agentId")
-            val prompt = (emission.payload as? link.socket.ampere.agents.domain.emission.EmissionPayload.Decision)?.prompt
+            val prompt = (emission.payload as? EmissionPayload.Decision)?.prompt
             prompt?.let { append(": $it") }
             append(" ${formatUrgency(urgency)}")
         }
