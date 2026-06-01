@@ -32,6 +32,7 @@ import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.util.randomUUID
 
+@OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
 class ToolAskHumanTest {
 
     private fun makeContext(instructions: String) = ExecutionContext.NoChanges(
@@ -158,7 +159,7 @@ class ToolAskHumanTest {
                 timestamp = Clock.System.now(),
                 eventSource = EventSource.Human,
                 urgency = Urgency.HIGH,
-                emissionId = callbackEvent!!.emissionId,
+                emissionId = callbackEvent.emissionId,
                 affordanceId = "free-text",
             ),
         )

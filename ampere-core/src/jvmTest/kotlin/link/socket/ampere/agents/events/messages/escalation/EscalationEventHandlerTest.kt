@@ -28,7 +28,7 @@ import link.socket.ampere.agents.events.messages.MessageThread
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 
-@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, kotlinx.coroutines.DelicateCoroutinesApi::class)
 class EscalationEventHandlerTest {
 
     private val scope = TestScope(UnconfinedTestDispatcher())
