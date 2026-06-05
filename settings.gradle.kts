@@ -6,6 +6,7 @@ include(":ampere-compose")
 include(":ampere-desktop")
 include(":ampere-cli")
 include(":ampere-phosphor")
+include(":ampere-eval")
 
 pluginManagement {
     repositories {
