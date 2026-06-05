@@ -1,0 +1,45 @@
+-- Single-row-per-trace persistence for ampere-eval.
+--
+-- v1 stores the ordered event stream as a serialized JSON blob (`events_json`)
+-- alongside queryable metadata. This is intentional over normalized per-event
+-- rows: a trace is written atomically on recording stop, and replay always
+-- reads the whole stream back, so there is no query that benefits from
+-- per-event rows in v1.
+
+CREATE TABLE trace (
+  id          TEXT NOT NULL PRIMARY KEY,
+  run_id      TEXT NOT NULL,
+  arc_id      TEXT NOT NULL,
+  created_at  INTEGER NOT NULL,
+  event_count INTEGER NOT NULL,
+  events_json TEXT NOT NULL
+);
+
+CREATE INDEX idx_trace_arc_id ON trace(arc_id);
+CREATE INDEX idx_trace_run_id ON trace(run_id);
+CREATE INDEX idx_trace_created_at ON trace(created_at);
+
+-- Persist (or overwrite) a full trace.
+upsertTrace:
+INSERT OR REPLACE INTO trace(id, run_id, arc_id, created_at, event_count, events_json)
+VALUES (?, ?, ?, ?, ?, ?);
+
+-- Load a full trace (blob included) by id.
+selectById:
+SELECT id, run_id, arc_id, created_at, event_count, events_json
+FROM trace
+WHERE id = ?
+LIMIT 1;
+
+-- Metadata-only listing (no blob) of all traces, newest first.
+selectSummaries:
+SELECT id, run_id, arc_id, created_at, event_count
+FROM trace
+ORDER BY created_at DESC;
+
+-- Metadata-only listing (no blob) filtered by arc, newest first.
+selectSummariesByArcId:
+SELECT id, run_id, arc_id, created_at, event_count
+FROM trace
+WHERE arc_id = ?
+ORDER BY created_at DESC;
