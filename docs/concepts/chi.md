@@ -10,7 +10,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/pause/AgentPause.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/HumanInteractionEvent.kt
 related: [Emission, AgentPause, MessageEvent, EventSerialBus]
-last_verified: 2026-05-27
+last_verified: 2026-06-04
 ---
 
 # CHI (Computer-Human Interface)
@@ -65,11 +65,11 @@ The four current CHI paths:
   - **Shape:** blocking suspend, no bus emission, console-only surface, 30-min hard-coded timeout.
 
 - **Path 2 — `MessageEvent.EscalationRequested` (thread escalation).**
-  - `ampere-core/.../agents/events/messages/AgentMessageApi.kt:151` — `escalateToHuman(threadId, reason, context)` transitions the thread to `EventStatus.WaitingForHuman` and publishes `EscalationRequested` + `ThreadStatusChanged`.
+  - `ampere-core/.../agents/events/messages/AgentMessageApi.kt:151` — `escalateToHuman(threadId, reason, context, awaitReply)` transitions the thread to `EventStatus.WaitingForHuman` and publishes `EscalationRequested` + `ThreadStatusChanged`.
   - `ampere-core/.../agents/domain/event/MessageEvent.kt:86` — the event itself (`threadId`, `reason`, `context`, `urgency`).
   - `ampere-core/.../agents/events/escalation/EscalationEventHandler.kt` — subscribes to `EscalationRequested` and calls `humanNotifier.notifyEscalation(...)`.
   - `ampere-core/.../agents/events/escalation/DefaultEscalationPolicy.kt` — keyword-based classification into the `Escalation` sealed hierarchy.
-  - **Shape:** fire-and-forget bus emission, thread-scoped, no response pairing on the publishing side, status transition is the durable record.
+  - **Shape:** explicit lifecycle. `awaitReply = false` is the legacy fire-and-forget thread escalation where status transition is the durable record; the default `awaitReply = true` also emits `HumanInteractionEvent.InputRequested` and suspends for the paired reply.
 
 - **Path 3 — `AgentPause` (typed pause contract).**
   - `ampere-core/.../pause/AgentPause.kt` — `correlationId: PauseCorrelationId`, `reason`, `urgency: PauseUrgency` (`Routine` | `Important` | `Critical`), `suggestedChannels: List<EscalationChannel>` (ordered fallback), `timeoutMillis`, optional `fallbackUrl`.
@@ -79,13 +79,13 @@ The four current CHI paths:
 
 - **Path 4 — `HumanInteractionEvent` (request/response event pair).**
   - `ampere-core/.../agents/domain/event/HumanInteractionEvent.kt` — sealed interface with `InputRequested(requestId, agentId, question, context, ticketId?, taskId?)`, `InputProvided(requestId, agentId, response, respondedBy?)`, `RequestTimedOut(requestId, agentId, timeoutMinutes)`.
-  - **Shape:** event types defined and ready for bus dispatch — but **not currently emitted** by `ToolAskHuman` or `AgentMessageApi.escalateToHuman`. Pairing is by `requestId`.
+  - **Shape:** emitted by `EmissionScope.askHuman`; `AgentMessageApi.escalateToHuman(awaitReply = true)` uses this path. Pairing is by `requestId` plus the Emission id.
 
 ### Path comparison
 
 | Dimension          | `ToolAskHuman`                    | `MessageEvent.EscalationRequested` | `AgentPause`                          | `HumanInteractionEvent`            |
 |--------------------|-----------------------------------|------------------------------------|---------------------------------------|------------------------------------|
-| Entry point        | Tool dispatch                     | `AgentMessageApi.escalateToHuman`  | (W0.3: contract only)                 | (defined, no emitter)              |
+| Entry point        | Tool dispatch                     | `AgentMessageApi.escalateToHuman`  | (W0.3: contract only)                 | `EmissionScope.askHuman`           |
 | Payload            | `instructions` string             | `reason` + `context: Map`          | `reason` + `urgency` + channels       | `question` + `context: Map`        |
 | Correlation field  | `requestId` (UUID)                | `threadId` + `eventId`             | `correlationId: PauseCorrelationId`   | `requestId` (UUID)                 |
 | Persistence        | In-memory registry (singleton)    | `EventStore` + thread status row   | None yet                              | `EventStore` (when emitted)        |
@@ -93,7 +93,7 @@ The four current CHI paths:
 | Timeout            | `30.minutes` hard-coded           | None                               | `timeoutMillis` per pause             | `timeoutMinutes` per event         |
 | Channel selection  | Console only                      | `humanNotifier` (single sink)      | Ordered `suggestedChannels` fallback  | None — surface decides             |
 | Response delivery  | `provideResponse(requestId, ...)` | None (out-of-band human action)    | `AgentPauseResponse` (target)         | `InputProvided` event (paired)     |
-| Calling-side block | Blocks calling coroutine          | Fire-and-forget                    | Suspends agent (target)               | Fire-and-forget (target)           |
+| Calling-side block | Blocks calling coroutine          | Explicit: default suspend-until-response; `awaitReply = false` fire-and-forget | Suspends agent (target)               | Fire-and-forget (target)           |
 
 ## Invariants
 
@@ -102,14 +102,14 @@ The four current CHI paths:
 - **A CHI request must declare its timeout posture.** A missing timeout is not the same as an infinite timeout; both differ from a fixed 30-minute wall. The current paths span all three.
 - **Channel selection is policy, not payload.** `AgentPause.suggestedChannels` is an *ordered preference*; the channel selector (W1.5) decides what actually fires. CHI requests must not assume any specific surface — adding "send a Slack message" inside `ToolAskHuman` is the canonical violation.
 - **Thread state transitions on `EscalationRequested` are owned by `AgentMessageApi.escalateToHuman`, not by handlers.** `EscalationEventHandler` only notifies; the `EventStatus.WaitingForHuman` transition is committed inside the API before the event is published. Handlers must not re-transition.
-- **`HumanInteractionEvent` is the future bus-side contract; its non-emission today is a gap, not a design choice.** Treating `InputRequested` / `InputProvided` as deprecated would break the target unification before it ships.
+- **`HumanInteractionEvent` is the bus-side CHI contract for human input.** Treating `InputRequested` / `InputProvided` as deprecated would break the target unification.
 
 ## Common operations
 
 Today (use the path that fits the lifecycle, do not mix them):
 
 - **Block an executing tool waiting on a person** — call `ToolAskHuman` from a tool definition with `requiredAgentAutonomy` set; the JVM `actual` will print to console and block on `GlobalHumanResponseRegistry`. Respond out-of-band with `./ampere-cli/ampere respond <requestId> "<text>"`.
-- **Escalate a conversational thread** — `agentMessageApi.escalateToHuman(threadId, reason, context)`. Status transitions to `WaitingForHuman`, two events publish, and `EscalationEventHandler` fires `humanNotifier.notifyEscalation(...)`.
+- **Escalate a conversational thread** — `agentMessageApi.escalateToHuman(threadId, reason, context, awaitReply)`. Status transitions to `WaitingForHuman`, two message events publish, and `EscalationEventHandler` fires `humanNotifier.notifyEscalation(...)`. With the default `awaitReply = true`, the API also emits `HumanInteractionEvent.InputRequested` and suspends for the paired reply; use `awaitReply = false` when the caller must return after the durable transition.
 - **Construct a typed pause descriptor** — build an `AgentPause(correlationId, reason, urgency, suggestedChannels, timeoutMillis, fallbackUrl?)`. The dispatching infrastructure ships in a later wave; for now the contract is consumed by per-Arc override UI and unit tests.
 - **Classify an escalation reason** — `DefaultEscalationPolicy` maps free-text reasons into the `Escalation` sealed hierarchy (`Discussion`, `Decision`, `Budget`, `Priorities`, `Scope`, `External`) and an `EscalationProcess`.
 

@@ -164,6 +164,9 @@ class AgentMessageApi(
      *    until the human replies.
      * 4. Transition thread back to [EventStatus.Open] and post the reply.
      *
+     * Set [awaitReply] to `false` for legacy fire-and-forget thread escalation
+     * where the caller only needs the durable status transition and bus events.
+     *
      * Thread state transitions are owned exclusively by this method — handlers must not
      * re-transition (CHI cell invariant).
      */
@@ -171,6 +174,7 @@ class AgentMessageApi(
         threadId: MessageThreadId,
         reason: String,
         context: Map<String, String> = emptyMap(),
+        awaitReply: Boolean = true,
     ) {
         val thread = messageRepository
             .findThreadById(threadId)
@@ -226,6 +230,10 @@ class AgentMessageApi(
                 newStatus = newStatus,
             ),
         )
+
+        if (!awaitReply) {
+            return
+        }
 
         // Step 3: Produce the Emission and suspend for reply.
         val contextString = context.entries.joinToString("\n") { "${it.key}: ${it.value}" }

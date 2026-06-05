@@ -202,7 +202,7 @@ class HumanEscalationFlowTest {
         val registry = newRegistry()
         val baseReceived = mutableListOf<EmissionEvent>()
 
-        bus.subscribe<EmissionEvent.BaseProduced, EventSubscription.ByEventClassType>(
+        bus.subscribe<EmissionEvent, EventSubscription.ByEventClassType>(
             agentId = "base-sub",
             eventType = EmissionEvent.Produced.EVENT_TYPE,
         ) { event, _ ->
