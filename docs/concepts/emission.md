@@ -9,7 +9,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/emission/EmissionProvenance.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/EmissionEvent.kt
 related: [ChiProtocol, EventSerialBus, AgentSurface, PropelLoop, EmissionDedup]
-last_verified: 2026-05-27
+last_verified: 2026-06-04
 ---
 
 # Emission

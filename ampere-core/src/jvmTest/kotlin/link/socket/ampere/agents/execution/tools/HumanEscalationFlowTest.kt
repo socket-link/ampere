@@ -8,9 +8,12 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.emission.EmissionReplyRegistry
@@ -49,8 +52,8 @@ class HumanEscalationFlowTest {
 
     private fun newRegistry() = EmissionReplyRegistry()
 
-    private fun newBus() = EventSerialBus(
-        scope = kotlinx.coroutines.GlobalScope,
+    private fun newBus(scope: CoroutineScope) = EventSerialBus(
+        scope = scope,
     )
 
     private fun createTestContext(instructions: String): ExecutionContext.NoChanges {
@@ -149,15 +152,17 @@ class HumanEscalationFlowTest {
 
     @Test
     fun `askHuman publishes HumanInteractionEvent InputRequested`() = runTest {
-        val bus = newBus()
+        val bus = newBus(backgroundScope)
         val registry = newRegistry()
-        val receivedEvents = mutableListOf<HumanInteractionEvent.InputRequested>()
+        val receivedEvent = CompletableDeferred<HumanInteractionEvent.InputRequested>()
 
         bus.subscribe<HumanInteractionEvent.InputRequested, EventSubscription.ByEventClassType>(
             agentId = "test-sub",
             eventType = HumanInteractionEvent.InputRequested.EVENT_TYPE,
         ) { event, _ ->
-            receivedEvents.add(event)
+            if (!receivedEvent.isCompleted) {
+                receivedEvent.complete(event)
+            }
         }
 
         val askDeferred = async {
@@ -172,10 +177,7 @@ class HumanEscalationFlowTest {
             }
         }
 
-        delay(200.milliseconds)
-        assertEquals(1, receivedEvents.size)
-
-        val published = receivedEvents.first()
+        val published = withTimeout(5.seconds) { receivedEvent.await() }
         assertIs<HumanInteractionEvent.InputRequested>(published)
         assertIs<EmissionEvent.Produced>(published)
         assertEquals("test-agent", published.agentId)
@@ -198,15 +200,17 @@ class HumanEscalationFlowTest {
 
     @Test
     fun `base EmissionProduced subscriber receives InputRequested via polymorphic dispatch`() = runTest {
-        val bus = newBus()
+        val bus = newBus(backgroundScope)
         val registry = newRegistry()
-        val baseReceived = mutableListOf<EmissionEvent>()
+        val baseReceived = CompletableDeferred<EmissionEvent>()
 
-        bus.subscribe<EmissionEvent.BaseProduced, EventSubscription.ByEventClassType>(
+        bus.subscribe<EmissionEvent, EventSubscription.ByEventClassType>(
             agentId = "base-sub",
             eventType = EmissionEvent.Produced.EVENT_TYPE,
         ) { event, _ ->
-            baseReceived.add(event)
+            if (!baseReceived.isCompleted) {
+                baseReceived.complete(event)
+            }
         }
 
         val askDeferred = async {
@@ -219,11 +223,9 @@ class HumanEscalationFlowTest {
             }
         }
 
-        delay(200.milliseconds)
-        assertEquals(1, baseReceived.size)
-        assertIs<HumanInteractionEvent.InputRequested>(baseReceived.first())
-
-        val requestedEvent = baseReceived.first() as HumanInteractionEvent.InputRequested
+        val requestedEvent = withTimeout(5.seconds) {
+            assertIs<HumanInteractionEvent.InputRequested>(baseReceived.await())
+        }
         registry.deliver(
             EmissionEvent.BaseResolved(
                 eventId = randomUUID(),
@@ -239,15 +241,17 @@ class HumanEscalationFlowTest {
 
     @Test
     fun `askHuman timeout publishes RequestTimedOut event`() = runTest {
-        val bus = newBus()
+        val bus = newBus(backgroundScope)
         val registry = newRegistry()
-        val timedOutEvents = mutableListOf<HumanInteractionEvent.RequestTimedOut>()
+        val timedOutEvent = CompletableDeferred<HumanInteractionEvent.RequestTimedOut>()
 
         bus.subscribe<HumanInteractionEvent.RequestTimedOut, EventSubscription.ByEventClassType>(
             agentId = "timeout-sub",
             eventType = HumanInteractionEvent.RequestTimedOut.EVENT_TYPE,
         ) { event, _ ->
-            timedOutEvents.add(event)
+            if (!timedOutEvent.isCompleted) {
+                timedOutEvent.complete(event)
+            }
         }
 
         val caught = try {
@@ -264,9 +268,8 @@ class HumanEscalationFlowTest {
         }
 
         assertNotNull(caught)
-        delay(100.milliseconds)
-        assertEquals(1, timedOutEvents.size)
-        assertEquals(0L, timedOutEvents.first().timeoutMinutes) // 100ms → 0 minutes
+        val timeoutEvent = withTimeout(5.seconds) { timedOutEvent.await() }
+        assertEquals(0L, timeoutEvent.timeoutMinutes) // 100ms → 0 minutes
     }
 
     // ── Coverage assertion: no GlobalHumanResponseRegistry usage ───────────

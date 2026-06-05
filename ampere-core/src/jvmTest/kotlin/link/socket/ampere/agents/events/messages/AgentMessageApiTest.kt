@@ -8,7 +8,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -102,42 +104,50 @@ class AgentMessageApiTest {
             assertEquals(2, fetchedThread2.messages.size)
 
             // Escalate -> WAITING_FOR_HUMAN
-            api.escalateToHuman(
-                threadId = thread.id,
-                reason = "Need approval",
-            )
-            val fetchedThread3 = api.getThread(thread.id).getOrNull()
-            assertNotNull(fetchedThread3)
-            assertEquals(EventStatus.WaitingForHuman, fetchedThread3.status)
-
-            // Posting now should fail, since the thread is waiting for human
-            var threw = false
-            try {
-                api.postMessage(
+            val escalationJob = launch {
+                api.escalateToHuman(
                     threadId = thread.id,
-                    content = "Should fail",
+                    reason = "Need approval",
                 )
-            } catch (e: IllegalArgumentException) {
-                threw = true
-            } catch (e: IllegalStateException) {
-                threw = true
             }
-            assertTrue(threw)
 
-            // Resolve
-            api.resolveThread(thread.id)
-            val fetched4 = api.getThread(thread.id).getOrNull()
-            assertNotNull(fetched4)
-            assertEquals(EventStatus.Resolved, fetched4.status)
+            try {
+                delay(200)
+                val fetchedThread3 = api.getThread(thread.id).getOrNull()
+                assertNotNull(fetchedThread3)
+                assertEquals(EventStatus.WaitingForHuman, fetchedThread3.status)
 
-            // allow async event handlers to run
-            delay(200)
+                // Posting now should fail, since the thread is waiting for human
+                var threw = false
+                try {
+                    api.postMessage(
+                        threadId = thread.id,
+                        content = "Should fail",
+                    )
+                } catch (e: IllegalArgumentException) {
+                    threw = true
+                } catch (e: IllegalStateException) {
+                    threw = true
+                }
+                assertTrue(threw)
 
-            // Events were published (at least 1 create, 2 posts, 1 escalation, 2 status changes)
-            assertTrue(received.any { it is MessageEvent.ThreadCreated })
-            assertTrue(received.count { it is MessageEvent.MessagePosted } >= 2)
-            assertTrue(received.any { it is MessageEvent.EscalationRequested })
-            assertTrue(received.count { it is MessageEvent.ThreadStatusChanged } >= 2)
+                // Resolve
+                api.resolveThread(thread.id)
+                val fetched4 = api.getThread(thread.id).getOrNull()
+                assertNotNull(fetched4)
+                assertEquals(EventStatus.Resolved, fetched4.status)
+
+                // allow async event handlers to run
+                delay(200)
+
+                // Events were published (at least 1 create, 2 posts, 1 escalation, 2 status changes)
+                assertTrue(received.any { it is MessageEvent.ThreadCreated })
+                assertTrue(received.count { it is MessageEvent.MessagePosted } >= 2)
+                assertTrue(received.any { it is MessageEvent.EscalationRequested })
+                assertTrue(received.count { it is MessageEvent.ThreadStatusChanged } >= 2)
+            } finally {
+                escalationJob.cancelAndJoin()
+            }
 
             // ** TODO: Test subscriptions can be unsubscribed from. */
         }
@@ -166,48 +176,56 @@ class AgentMessageApiTest {
             assertEquals(EventStatus.Open, fetchedThread1.status)
 
             // Escalate to WAITING_FOR_HUMAN
-            api.escalateToHuman(
-                threadId = thread.id,
-                reason = "Need human input",
-            )
-
-            val fetchedThread2 = api.getThread(thread.id).getOrNull()
-            assertNotNull(fetchedThread2)
-            assertEquals(EventStatus.WaitingForHuman, fetchedThread2.status)
-
-            // Verify posting is blocked
-            var blocked = false
-            try {
-                api.postMessage(thread.id, "Should fail")
-            } catch (e: IllegalArgumentException) {
-                blocked = true
+            val escalationJob = launch {
+                api.escalateToHuman(
+                    threadId = thread.id,
+                    reason = "Need human input",
+                )
             }
-            assertTrue(blocked, "Posting should be blocked when waiting for human")
 
-            // Reopen the thread
-            api.reopenThread(thread.id)
+            try {
+                delay(200)
 
-            val fetchedThread3 = api.getThread(thread.id).getOrNull()
-            assertNotNull(fetchedThread3)
-            assertEquals(EventStatus.Open, fetchedThread3.status)
+                val fetchedThread2 = api.getThread(thread.id).getOrNull()
+                assertNotNull(fetchedThread2)
+                assertEquals(EventStatus.WaitingForHuman, fetchedThread2.status)
 
-            // Now posting should succeed
-            val newMessage = api.postMessage(thread.id, "Human intervention complete")
-            assertEquals("Human intervention complete", newMessage.content)
+                // Verify posting is blocked
+                var blocked = false
+                try {
+                    api.postMessage(thread.id, "Should fail")
+                } catch (e: IllegalArgumentException) {
+                    blocked = true
+                }
+                assertTrue(blocked, "Posting should be blocked when waiting for human")
 
-            // Verify thread has the new message
-            val fetchedThread4 = api.getThread(thread.id).getOrNull()
-            assertNotNull(fetchedThread4)
-            assertEquals(2, fetchedThread4.messages.size)
+                // Reopen the thread
+                api.reopenThread(thread.id)
 
-            // Allow async handlers to run
-            delay(200)
+                val fetchedThread3 = api.getThread(thread.id).getOrNull()
+                assertNotNull(fetchedThread3)
+                assertEquals(EventStatus.Open, fetchedThread3.status)
 
-            // Verify status change events
-            val statusChanges = received.filterIsInstance<MessageEvent.ThreadStatusChanged>()
-            assertTrue(statusChanges.size >= 2)
-            assertTrue(statusChanges.any { it.newStatus == EventStatus.WaitingForHuman })
-            assertTrue(statusChanges.any { it.newStatus == EventStatus.Open })
+                // Now posting should succeed
+                val newMessage = api.postMessage(thread.id, "Human intervention complete")
+                assertEquals("Human intervention complete", newMessage.content)
+
+                // Verify thread has the new message
+                val fetchedThread4 = api.getThread(thread.id).getOrNull()
+                assertNotNull(fetchedThread4)
+                assertEquals(2, fetchedThread4.messages.size)
+
+                // Allow async handlers to run
+                delay(200)
+
+                // Verify status change events
+                val statusChanges = received.filterIsInstance<MessageEvent.ThreadStatusChanged>()
+                assertTrue(statusChanges.size >= 2)
+                assertTrue(statusChanges.any { it.newStatus == EventStatus.WaitingForHuman })
+                assertTrue(statusChanges.any { it.newStatus == EventStatus.Open })
+            } finally {
+                escalationJob.cancelAndJoin()
+            }
         }
     }
 
@@ -227,19 +245,25 @@ class AgentMessageApiTest {
                 initialMessageContent = "Need a decision",
             )
 
-            api.escalateToHuman(
-                threadId = thread.id,
-                reason = "Need human input on release timing",
-                context = mapOf("release" to "v1"),
-            )
+            val escalationJob = launch {
+                api.escalateToHuman(
+                    threadId = thread.id,
+                    reason = "Need human input on release timing",
+                    context = mapOf("release" to "v1"),
+                )
+            }
 
-            delay(200)
+            try {
+                delay(200)
 
-            assertEquals(1, received.size)
-            val event = received.single()
-            assertEquals(thread.id, event.threadId)
-            assertEquals("Need human input on release timing", event.reason)
-            assertEquals(mapOf("release" to "v1"), event.context)
+                assertEquals(1, received.size)
+                val event = received.single()
+                assertEquals(thread.id, event.threadId)
+                assertEquals("Need human input on release timing", event.reason)
+                assertEquals(mapOf("release" to "v1"), event.context)
+            } finally {
+                escalationJob.cancelAndJoin()
+            }
         }
     }
 

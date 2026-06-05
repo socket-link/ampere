@@ -5,7 +5,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/emission/EmissionDigest.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/emission/Emission.kt
 related: [Emission, ChiProtocol]
-last_verified: 2026-05-27
+last_verified: 2026-06-04
 ---
 
 # EmissionDedup

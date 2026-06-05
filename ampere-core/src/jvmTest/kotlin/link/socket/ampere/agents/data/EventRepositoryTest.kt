@@ -15,7 +15,16 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.serialization.json.JsonPrimitive
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.emission.Affordance
+import link.socket.ampere.agents.domain.emission.DangerLevel
+import link.socket.ampere.agents.domain.emission.Emission
+import link.socket.ampere.agents.domain.emission.EmissionKind
+import link.socket.ampere.agents.domain.emission.EmissionPayload
+import link.socket.ampere.agents.domain.emission.EmissionProvenance
+import link.socket.ampere.agents.domain.emission.inputDigest
+import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.EventRepository
@@ -32,13 +41,14 @@ class EventRepositoryTest {
     private val stubEventSourceB = EventSource.Agent("agent-B")
 
     private lateinit var driver: JdbcSqliteDriver
+    private lateinit var database: Database
     private lateinit var repo: EventRepository
 
     @BeforeTest
     fun setUp() {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         Database.Schema.create(driver)
-        val database = Database.Companion(driver)
+        database = Database.Companion(driver)
         repo = EventRepository(stubJson, testScope, database)
     }
 
@@ -82,6 +92,52 @@ class EventRepositoryTest {
             assertNotNull(loaded)
             assertIs<Event.TaskCreated>(loaded)
             assertEquals("task-123", loaded.taskId)
+        }
+    }
+
+    @Test
+    fun `saveEvent stores emission produced provenance run id`() {
+        runBlocking {
+            val payload = EmissionPayload.Confirmation(
+                action = "deploy production",
+                preview = "Release v2",
+                dangerLevel = DangerLevel.HIGH,
+            )
+            val digest = inputDigest(payload)
+            val event = EmissionEvent.BaseProduced(
+                eventId = "evt-emission-produced",
+                timestamp = Instant.fromEpochSeconds(1_000),
+                eventSource = stubEventSourceA,
+                urgency = Urgency.HIGH,
+                emission = Emission(
+                    id = "emission-1",
+                    kind = EmissionKind.Confirmation,
+                    payload = payload,
+                    affordances = listOf(
+                        Affordance(
+                            id = "approve",
+                            label = "Approve",
+                            signalPayload = JsonPrimitive("approve"),
+                        ),
+                    ),
+                    provenance = EmissionProvenance(
+                        runId = "run-emission-1",
+                        workflowId = "workflow-1",
+                        sourceEventId = "source-event-1",
+                        toolInvocationId = "tool-1",
+                        pluginId = "plugin-1",
+                        modelId = "model-1",
+                        inputDigest = digest,
+                    ),
+                    dedupKey = digest,
+                    producedAt = Instant.fromEpochSeconds(1_000),
+                ),
+            )
+
+            repo.saveEvent(event).getOrThrow()
+
+            val row = database.eventStoreQueries.getEventById("evt-emission-produced").executeAsOne()
+            assertEquals("run-emission-1", row.run_id)
         }
     }
 

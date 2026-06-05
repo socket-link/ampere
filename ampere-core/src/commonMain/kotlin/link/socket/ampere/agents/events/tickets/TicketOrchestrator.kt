@@ -436,6 +436,7 @@ class TicketOrchestrator(
                     "reportedBy" to reportedByAgentId,
                     "priority" to updatedTicket.priority.name,
                 ),
+                awaitReply = false,
             )
         }
 

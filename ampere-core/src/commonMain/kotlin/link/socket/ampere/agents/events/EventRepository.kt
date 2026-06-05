@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.domain.event.EventType
@@ -255,5 +256,6 @@ private fun Event.runIdOrNull(): String? = when (this) {
     is MemoryEvent.MilestoneReached -> runId
     is link.socket.ampere.agents.domain.event.TaskEvent.TaskCompleted -> runId
     is link.socket.ampere.agents.domain.event.TaskEvent.TaskFailed -> runId
+    is EmissionEvent.Produced -> emission.provenance.runId
     else -> null
 }
