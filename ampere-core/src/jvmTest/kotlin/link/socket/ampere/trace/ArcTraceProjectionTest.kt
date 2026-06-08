@@ -25,11 +25,17 @@ import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepositoryImpl
+import link.socket.ampere.agents.domain.routing.capability.CostPolicy
+import link.socket.ampere.agents.domain.routing.capability.InMemoryProviderDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.ProviderCapability
+import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptor
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.api.model.TokenUsage
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
+import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
+import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ArcTraceProjectionTest {
@@ -82,6 +88,56 @@ class ArcTraceProjectionTest {
         assertEquals(1, learn.memoryWrites.size)
         assertEquals("knowledge-1", learn.memoryWrites.single().id)
         assertEquals("Use trace projections", learn.memoryWrites.single().approach)
+    }
+
+    @Test
+    fun `call routed to a Free descriptor records zero Watts`() = runTest {
+        val runId = "run-free-provider"
+        val registry = InMemoryProviderDescriptorRegistry(
+            seed = listOf(
+                ProviderDescriptor(
+                    providerId = "local",
+                    capabilities = setOf(ProviderCapability.WORLD_KNOWLEDGE),
+                    reasoning = RelativeReasoning.NORMAL,
+                    maxContextTokens = 8_000,
+                    supportedInputs = SupportedInputs.TEXT,
+                    cost = CostPolicy.Free,
+                    availabilityGated = true,
+                ),
+            ),
+        )
+        val freeAwareProjection = ArcTraceProjection(
+            database = database,
+            providerDescriptorRegistry = registry,
+        )
+
+        eventRepository.saveEvent(
+            ProviderCallCompletedEvent(
+                eventId = "free-complete",
+                timestamp = Instant.fromEpochMilliseconds(1_000),
+                eventSource = EventSource.Agent("planner-agent"),
+                workflowId = runId,
+                agentId = "planner-agent",
+                cognitivePhase = CognitivePhase.PLAN,
+                providerId = "local",
+                modelId = "local-llm",
+                usage = TokenUsage(
+                    inputTokens = 1_000,
+                    outputTokens = 500,
+                ),
+                latencyMs = 250,
+                success = true,
+            ),
+        ).getOrThrow()
+
+        val trace = freeAwareProjection.project(runId).getOrThrow()
+        val plan = assertNotNull(trace.phases.firstOrNull { it.name == "PLAN" })
+
+        val invocation = plan.modelInvocations.single()
+        assertEquals(0.0, invocation.wattCost.watts, absoluteTolerance = 0.0000001)
+        assertEquals(1_000, invocation.wattCost.inputTokens)
+        assertEquals(500, invocation.wattCost.outputTokens)
+        assertEquals(0.0, plan.wattCost.watts, absoluteTolerance = 0.0000001)
     }
 
     @Test
