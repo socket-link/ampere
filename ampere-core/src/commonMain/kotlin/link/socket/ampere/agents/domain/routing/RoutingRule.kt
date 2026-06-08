@@ -3,6 +3,8 @@ package link.socket.ampere.agents.domain.routing
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
+import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.satisfies
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeSpeed
@@ -18,6 +20,16 @@ sealed interface RoutingRule {
 
     /** Returns true if this rule applies to the given context. */
     fun matches(context: RoutingContext): Boolean
+
+    /**
+     * Registry-aware match. Rules that need provider descriptors (e.g.
+     * [ByCapability]) consult [registry]; all other rules ignore it and defer
+     * to the pure [matches]. Suspends because the registry is mutex-guarded.
+     */
+    suspend fun matches(
+        context: RoutingContext,
+        registry: ProviderDescriptorRegistry?,
+    ): Boolean = matches(context)
 
     /** The AIConfiguration to use when this rule matches. */
     val configuration: AIConfiguration
@@ -95,6 +107,32 @@ sealed interface RoutingRule {
         override fun matches(context: RoutingContext): Boolean =
             tag in context.tags
     }
+
+    /**
+     * Routes based on capability requirements carried by the step.
+     *
+     * The requirement flows from [RoutingContext.requirements]; this rule
+     * matches only when the target provider's descriptor (looked up in the
+     * registry) satisfies it. Operators order these local-first; the relay's
+     * first-match semantics then pick the first capable provider.
+     *
+     * Requires the registry, so the pure [matches] always returns false.
+     */
+    @Serializable
+    data class ByCapability(
+        override val configuration: AIConfiguration,
+    ) : RoutingRule {
+        override fun matches(context: RoutingContext): Boolean = false
+
+        override suspend fun matches(
+            context: RoutingContext,
+            registry: ProviderDescriptorRegistry?,
+        ): Boolean {
+            val req = context.requirements ?: return false
+            val descriptor = registry?.descriptorFor(configuration.provider.id) ?: return false
+            return descriptor.satisfies(req)
+        }
+    }
 }
 
 /**
@@ -111,4 +149,5 @@ fun RoutingRule.describeRule(): String = when (this) {
         speed?.let { append("speed=$it") }
     }
     is RoutingRule.ByTag -> "tag:$tag"
+    is RoutingRule.ByCapability -> "capability:${configuration.provider.id}"
 }

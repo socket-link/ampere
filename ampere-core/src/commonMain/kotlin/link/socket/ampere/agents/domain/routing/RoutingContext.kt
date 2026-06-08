@@ -3,6 +3,7 @@ package link.socket.ampere.agents.domain.routing
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeSpeed
 
@@ -20,6 +21,9 @@ import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeSpeed
  * @property preferredReasoning Hint for desired reasoning level.
  * @property preferredSpeed Hint for desired speed.
  * @property tags Free-form tags for task-based routing (e.g., "code-generation", "summarization").
+ * @property requirements Capability requirements the step needs; matched by
+ *   [RoutingRule.ByCapability] against a candidate provider's descriptor. Null
+ *   means no capability constraint (backward compatible).
  */
 @Serializable
 data class RoutingContext(
@@ -30,4 +34,5 @@ data class RoutingContext(
     val preferredReasoning: RelativeReasoning? = null,
     val preferredSpeed: RelativeSpeed? = null,
     val tags: Set<String> = emptySet(),
+    val requirements: CapabilityRequirement? = null,
 )
