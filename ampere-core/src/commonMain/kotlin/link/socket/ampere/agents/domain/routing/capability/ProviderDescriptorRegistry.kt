@@ -78,7 +78,7 @@ class InMemoryProviderDescriptorRegistry(
 
         private fun cloudDescriptor(
             providerId: ProviderId,
-            usdPerWatt: Double,
+            costPerWatt: Double,
         ): ProviderDescriptor =
             ProviderDescriptor(
                 providerId = providerId,
@@ -86,7 +86,8 @@ class InMemoryProviderDescriptorRegistry(
                 reasoning = RelativeReasoning.HIGH,
                 maxContextTokens = 200_000,
                 supportedInputs = SupportedInputs.TEXT_AND_IMAGE,
-                cost = CostPolicy.Metered(usdPerWatt = usdPerWatt),
+                cost = CostPolicy.Metered,
+                costPerWatt = costPerWatt,
                 availabilityGated = false,
             )
 

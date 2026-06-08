@@ -9,7 +9,7 @@ import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.routing.capability.CheapestCapableFirst
 import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptor
 import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptorRegistry
-import link.socket.ampere.agents.domain.routing.capability.costPerWatt
+import link.socket.ampere.agents.domain.routing.capability.routingCostPerWatt
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
@@ -177,12 +177,12 @@ class CognitiveRelayImpl(
                 phase = context.phase,
                 decision = decision,
                 tier = selection.chosen.reasoning,
-                estimatedWattCost = selection.chosen.costPerWatt,
+                estimatedWattCost = selection.chosen.routingCostPerWatt,
                 candidateCount = selection.candidateCount,
                 runnerUpProvider = selection.runnerUpProvider,
-                runnerUpWattCost = selection.runnerUp?.costPerWatt,
+                runnerUpWattCost = selection.runnerUp?.routingCostPerWatt,
                 savingsVsRunnerUp = selection.runnerUp
-                    ?.let { it.costPerWatt - selection.chosen.costPerWatt },
+                    ?.let { it.routingCostPerWatt - selection.chosen.routingCostPerWatt },
             ),
         )
     }

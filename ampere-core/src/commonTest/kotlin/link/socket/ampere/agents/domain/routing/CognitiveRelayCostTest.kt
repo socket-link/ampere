@@ -110,8 +110,8 @@ class CognitiveRelayCostTest {
         // Anthropic stands in for a local 0W provider; Google is metered.
         val registry = InMemoryProviderDescriptorRegistry(
             seed = listOf(
-                capableDescriptor(AIProvider_Anthropic.id, CostPolicy.Free),
-                capableDescriptor(AIProvider_Google.id, CostPolicy.Metered(usdPerWatt = 0.001)),
+                capableDescriptor(AIProvider_Anthropic.id, cost = CostPolicy.Free),
+                capableDescriptor(AIProvider_Google.id, costPerWatt = 0.001),
             ),
         )
         val relay = CognitiveRelayImpl(
@@ -138,7 +138,7 @@ class CognitiveRelayCostTest {
         val registry = InMemoryProviderDescriptorRegistry(
             seed = listOf(
                 textOnlyDescriptor(AIProvider_Anthropic.id),
-                capableDescriptor(AIProvider_Google.id, CostPolicy.Metered(usdPerWatt = 0.014)),
+                capableDescriptor(AIProvider_Google.id, costPerWatt = 0.014),
             ),
         )
         val relay = CognitiveRelayImpl(
@@ -218,7 +218,7 @@ class CognitiveRelayCostTest {
         val registry = InMemoryProviderDescriptorRegistry(
             seed = listOf(
                 textOnlyDescriptor(AIProvider_Anthropic.id),
-                capableDescriptor(AIProvider_Google.id, CostPolicy.Metered(usdPerWatt = 0.014)),
+                capableDescriptor(AIProvider_Google.id, costPerWatt = 0.014),
             ),
         )
         val scope = CoroutineScope(Dispatchers.Default)
@@ -252,7 +252,11 @@ class CognitiveRelayCostTest {
         assertNull(event.savingsVsRunnerUp)
     }
 
-    private fun capableDescriptor(providerId: String, cost: CostPolicy) = ProviderDescriptor(
+    private fun capableDescriptor(
+        providerId: String,
+        cost: CostPolicy = CostPolicy.Metered,
+        costPerWatt: Double = 0.014,
+    ) = ProviderDescriptor(
         providerId = providerId,
         capabilities = setOf(
             ProviderCapability.WORLD_KNOWLEDGE,
@@ -263,10 +267,11 @@ class CognitiveRelayCostTest {
         maxContextTokens = 200_000,
         supportedInputs = SupportedInputs.TEXT_AND_IMAGE,
         cost = cost,
+        costPerWatt = costPerWatt,
     )
 
     private fun tiedDescriptor(providerId: String) =
-        capableDescriptor(providerId, CostPolicy.Metered(usdPerWatt = 0.01))
+        capableDescriptor(providerId, costPerWatt = 0.01)
 
     private fun textOnlyDescriptor(providerId: String) = ProviderDescriptor(
         providerId = providerId,

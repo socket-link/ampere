@@ -1,13 +1,13 @@
 package link.socket.ampere.agents.domain.routing.capability
 
 /**
- * Orders providers cheapest-first: by [costPerWatt] ascending, then by
+ * Orders providers cheapest-first: by [routingCostPerWatt] ascending, then by
  * [ProviderDescriptor.providerId] ascending as a stable, deterministic
  * tie-break. Shared by the relay and the dry-run cost report so both rank
  * candidates identically (AMPR-210).
  */
 val CheapestCapableFirst: Comparator<ProviderDescriptor> =
-    compareBy({ it.costPerWatt }, { it.providerId })
+    compareBy({ it.routingCostPerWatt }, { it.providerId })
 
 /**
  * The outcome of ranking a set of equally-eligible providers by cost: the
@@ -25,14 +25,14 @@ data class CostRanking(
 ) {
     /** The chosen provider's cost-per-Watt — what this route is estimated to cost. */
     val estimatedWattCost: Double
-        get() = chosen.costPerWatt
+        get() = chosen.routingCostPerWatt
 
     /**
      * How much per Watt the chosen provider saves over the runner-up, or `null`
      * when there was no runner-up to compare against. Never negative.
      */
     val savingsVsRunnerUp: Double?
-        get() = runnerUp?.let { it.costPerWatt - chosen.costPerWatt }
+        get() = runnerUp?.let { it.routingCostPerWatt - chosen.routingCostPerWatt }
 }
 
 /**

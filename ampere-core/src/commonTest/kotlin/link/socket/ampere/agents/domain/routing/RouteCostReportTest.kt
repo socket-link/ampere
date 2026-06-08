@@ -62,7 +62,8 @@ class RouteCostReportTest {
                     reasoning = RelativeReasoning.HIGH,
                     maxContextTokens = 200_000,
                     supportedInputs = SupportedInputs.TEXT_AND_IMAGE,
-                    cost = CostPolicy.Metered(usdPerWatt = 0.007),
+                    cost = CostPolicy.Metered,
+                    costPerWatt = 0.007,
                 ),
             ),
         )
@@ -103,7 +104,8 @@ class RouteCostReportTest {
                     reasoning = RelativeReasoning.LOW,
                     maxContextTokens = 8_192,
                     supportedInputs = SupportedInputs.TEXT,
-                    cost = CostPolicy.Metered(usdPerWatt = 0.007),
+                    cost = CostPolicy.Metered,
+                    costPerWatt = 0.007,
                 ),
             ),
         )
