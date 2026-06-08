@@ -83,7 +83,7 @@ class DispatchingUpstreamLlmClientTest {
     }
 
     @Test
-    fun `routes to bundled when no engine is bound, even for a free provider`() = runTest {
+    fun `routes to bundled when no engine is bound even for a free provider`() = runTest {
         val bundled = RecordingClient("cloud-answer")
         val client = DispatchingUpstreamLlmClient(registry(), localEngine = null, bundled = bundled)
 

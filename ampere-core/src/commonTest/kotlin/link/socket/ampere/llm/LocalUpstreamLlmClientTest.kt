@@ -62,7 +62,7 @@ class LocalUpstreamLlmClientTest {
     }
 
     @Test
-    fun `engine failure surfaces as LocalInferenceException, no silent fallback`() = runTest {
+    fun `engine failure surfaces as LocalInferenceException without silent fallback`() = runTest {
         val boom = IllegalStateException("model-not-loaded")
         val engine = FakeLocalInferenceEngine(
             respond = { Result.failure(boom) },
