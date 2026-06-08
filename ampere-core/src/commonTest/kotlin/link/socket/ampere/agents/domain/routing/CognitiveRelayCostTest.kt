@@ -66,7 +66,7 @@ class CognitiveRelayCostTest {
     )
 
     @Test
-    fun `selects cheapest capable provider — Google under OpenAI under Anthropic`() = runTest {
+    fun `selects cheapest capable provider Google then OpenAI then Anthropic`() = runTest {
         val result = defaultRelay().resolveWithMetadata(
             context = RoutingContext(requirements = worldKnowledge),
             fallbackConfiguration = anthropicConfig,
@@ -106,7 +106,7 @@ class CognitiveRelayCostTest {
     }
 
     @Test
-    fun `local Free provider always wins on price — the 0W unification`() = runTest {
+    fun `local Free provider always wins on price the 0W unification`() = runTest {
         // Anthropic stands in for a local 0W provider; Google is metered.
         val registry = InMemoryProviderDescriptorRegistry(
             seed = listOf(
@@ -161,7 +161,7 @@ class CognitiveRelayCostTest {
     }
 
     @Test
-    fun `non-capability first match keeps pure first-match — cost-aware does not engage`() = runTest {
+    fun `non-capability first match keeps pure first-match without cost-aware`() = runTest {
         // A phase rule matches before any capability rule, so it wins untouched.
         val relay = CognitiveRelayImpl(
             initialConfig = RelayConfig(
@@ -186,7 +186,7 @@ class CognitiveRelayCostTest {
     }
 
     @Test
-    fun `emits RouteResolved with chosen, runner-up and savings`() = runBlocking {
+    fun `emits RouteResolved with chosen runner-up and savings`() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Default)
         val eventBus = EventSerialBus(scope)
         val received = mutableListOf<Event>()
