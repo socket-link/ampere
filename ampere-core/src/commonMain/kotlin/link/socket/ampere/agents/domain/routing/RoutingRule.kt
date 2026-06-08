@@ -116,6 +116,11 @@ sealed interface RoutingRule {
      * registry) satisfies it. Operators order these local-first; the relay's
      * first-match semantics then pick the first capable provider.
      *
+     * For an `availabilityGated` descriptor the rule additionally requires the
+     * context's [local.LocalCapacity] snapshot to report that provider available; a
+     * capable-but-unavailable local provider is skipped (see [evaluate]) so the
+     * relay can fall through to the grid and emit a fallback.
+     *
      * Requires the registry, so the pure [matches] always returns false.
      */
     @Serializable
@@ -127,12 +132,63 @@ sealed interface RoutingRule {
         override suspend fun matches(
             context: RoutingContext,
             registry: ProviderDescriptorRegistry?,
-        ): Boolean {
-            val req = context.requirements ?: return false
-            val descriptor = registry?.descriptorFor(configuration.provider.id) ?: return false
-            return descriptor.satisfies(req)
+        ): Boolean = evaluate(context, registry) is CapabilityEvaluation.Matched
+
+        /**
+         * Resolves this rule against [context] and [registry], distinguishing a
+         * plain non-match from a capable provider skipped by a closed
+         * availability gate. The relay reads [CapabilityEvaluation.Skipped] to
+         * emit a fallback while still selecting a later rule.
+         */
+        suspend fun evaluate(
+            context: RoutingContext,
+            registry: ProviderDescriptorRegistry?,
+        ): CapabilityEvaluation {
+            val req = context.requirements ?: return CapabilityEvaluation.NoMatch
+            val descriptor = registry?.descriptorFor(configuration.provider.id)
+                ?: return CapabilityEvaluation.NoMatch
+            if (!descriptor.satisfies(req)) return CapabilityEvaluation.NoMatch
+
+            if (descriptor.availabilityGated) {
+                val capacity = context.localCapacity
+                val available = capacity?.available == true &&
+                    capacity.providerId == descriptor.providerId
+                if (!available) {
+                    return CapabilityEvaluation.Skipped(
+                        reason = capacity?.reason ?: DEFAULT_UNAVAILABLE_REASON,
+                    )
+                }
+            }
+            return CapabilityEvaluation.Matched
+        }
+
+        companion object {
+            /** Reason recorded when a gated provider is skipped without a stated cause. */
+            const val DEFAULT_UNAVAILABLE_REASON: String = "local_capacity_unavailable"
         }
     }
+}
+
+/**
+ * Outcome of evaluating a [RoutingRule.ByCapability] against a context.
+ *
+ * Separates "this provider can't serve the requirement" ([NoMatch]) from "this
+ * provider could, but its availability gate is closed" ([Skipped]) so the relay
+ * can emit a fallback only for the latter.
+ */
+sealed interface CapabilityEvaluation {
+
+    /** The provider satisfies the requirement and any availability gate. */
+    data object Matched : CapabilityEvaluation
+
+    /** No requirement/registry, or the provider does not satisfy the requirement. */
+    data object NoMatch : CapabilityEvaluation
+
+    /**
+     * The provider satisfies the requirement but its availability gate is
+     * closed; [reason] explains why (surfaced as the fallback's `failureReason`).
+     */
+    data class Skipped(val reason: String) : CapabilityEvaluation
 }
 
 /**

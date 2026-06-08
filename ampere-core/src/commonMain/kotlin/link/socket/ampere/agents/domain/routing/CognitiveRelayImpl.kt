@@ -25,7 +25,11 @@ import link.socket.ampere.util.logWith
  * When the first match is capability-based, selection is cost-aware (AMPR-210):
  * among all capable [RoutingRule.ByCapability] candidates the relay resolves to
  * the cheapest by cost-per-Watt (stable tie-break by `providerId`) and emits a
- * [RoutingEvent.RouteResolved]. Every other rule keeps pure first-match.
+ * [RoutingEvent.RouteResolved]. A capability rule whose provider is capable but
+ * gated out by local availability (AMPR-207) is skipped — it does not match and
+ * is not a cost candidate — and the relay emits [RoutingEvent.RouteFallback] for
+ * the local-preferred route it routed around. Every other rule keeps pure
+ * first-match.
  *
  * Thread-safe: config updates are guarded by a [Mutex].
  *
@@ -60,7 +64,10 @@ class CognitiveRelayImpl(
     ): RoutingResolution {
         val currentConfig = mutex.withLock { _config }
 
-        // First-match wins (D2): the first rule whose predicate holds.
+        // First-match wins (D2): the first rule whose predicate holds. A
+        // capability rule whose provider is capable but gated out by local
+        // availability (AMPR-207) does not match, so it neither wins nor counts
+        // as a cost candidate.
         val firstMatch = firstMatchingRule(currentConfig.rules, context)
 
         // Cost-aware selection generalises capability routing (AMPR-210): when
@@ -73,6 +80,11 @@ class CognitiveRelayImpl(
 
         val matchedRule = costSelection?.rule ?: firstMatch
 
+        // Availability fallback (AMPR-207): the first capability rule whose
+        // provider satisfies the requirement but is gated out by local
+        // unavailability — the local-preferred route the relay routed around.
+        val skip = firstAvailabilitySkip(currentConfig.rules, context)
+
         val selectedConfig = matchedRule?.configuration
             ?: currentConfig.defaultConfiguration
             ?: fallbackConfiguration
@@ -83,6 +95,7 @@ class CognitiveRelayImpl(
             providerName = selectedConfig.provider.name,
             modelName = selectedConfig.model.name,
             matchedRule = ruleDescription,
+            isFallback = skip != null,
         )
 
         logger.d {
@@ -90,6 +103,8 @@ class CognitiveRelayImpl(
                 (context.phase?.let { " [${it.name}]" } ?: "")
         }
 
+        // The fallback causally precedes the selection it forced; emit it first.
+        skip?.let { emitRouteFallback(context, it.configuration, decision, it.reason) }
         emitRouteSelected(context, decision)
         costSelection?.let { emitRouteResolved(context, decision, it) }
 
@@ -138,6 +153,26 @@ class CognitiveRelayImpl(
         )
     }
 
+    /**
+     * The first [RoutingRule.ByCapability] whose provider satisfies the
+     * requirement but is gated out by local unavailability, or `null` if none.
+     * Drives the [RoutingEvent.RouteFallback] emitted when the relay routes
+     * around an unavailable local-preferred provider.
+     */
+    private suspend fun firstAvailabilitySkip(
+        rules: List<RoutingRule>,
+        context: RoutingContext,
+    ): AvailabilitySkip? {
+        for (rule in rules) {
+            if (rule !is RoutingRule.ByCapability) continue
+            val evaluation = rule.evaluate(context, registry)
+            if (evaluation is CapabilityEvaluation.Skipped) {
+                return AvailabilitySkip(rule.configuration, evaluation.reason)
+            }
+        }
+        return null
+    }
+
     override suspend fun updateConfig(newConfig: RelayConfig) {
         mutex.withLock {
             _config = newConfig
@@ -158,6 +193,33 @@ class CognitiveRelayImpl(
                 agentId = context.agentId,
                 phase = context.phase,
                 decision = decision,
+            ),
+        )
+    }
+
+    /**
+     * Emits [RoutingEvent.RouteFallback] for a capable local provider that was
+     * skipped because its availability gate was closed, reporting the provider
+     * and model that lost the route and the [fallbackDecision] that replaced it.
+     */
+    private suspend fun emitRouteFallback(
+        context: RoutingContext,
+        skippedConfig: AIConfiguration,
+        fallbackDecision: RoutingDecision,
+        failureReason: String,
+    ) {
+        eventBus?.publish(
+            RoutingEvent.RouteFallback(
+                eventId = generateUUID("routing"),
+                timestamp = Clock.System.now(),
+                eventSource = context.agentId?.let { EventSource.Agent(it) }
+                    ?: EventSource.Human,
+                agentId = context.agentId,
+                phase = context.phase,
+                failedProvider = skippedConfig.provider.id,
+                failedModel = skippedConfig.model.name,
+                fallbackDecision = fallbackDecision,
+                failureReason = failureReason,
             ),
         )
     }
@@ -186,6 +248,12 @@ class CognitiveRelayImpl(
             ),
         )
     }
+
+    /** A capable local provider skipped for unavailability, and why. */
+    private data class AvailabilitySkip(
+        val configuration: AIConfiguration,
+        val reason: String,
+    )
 
     /**
      * The outcome of cost-aware selection: the winning [rule] and its

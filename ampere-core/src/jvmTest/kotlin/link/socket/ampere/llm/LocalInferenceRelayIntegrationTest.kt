@@ -29,6 +29,7 @@ import link.socket.ampere.agents.domain.routing.capability.InMemoryProviderDescr
 import link.socket.ampere.agents.domain.routing.capability.ProviderCapability
 import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptor
 import link.socket.ampere.agents.domain.routing.local.FakeLocalInferenceEngine
+import link.socket.ampere.agents.domain.routing.local.LocalCapacity
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
@@ -127,6 +128,12 @@ class LocalInferenceRelayIntegrationTest {
             systemMessage = "You are a text transformer.",
             routingContext = RoutingContext(
                 requirements = CapabilityRequirement(inputs = SupportedInputs.TEXT),
+                // The device-gated local provider's availability gate (AMPR-207)
+                // must be open for the relay to select it.
+                localCapacity = LocalCapacity(
+                    available = true,
+                    providerId = AIProvider_Anthropic.id,
+                ),
             ),
         )
 
