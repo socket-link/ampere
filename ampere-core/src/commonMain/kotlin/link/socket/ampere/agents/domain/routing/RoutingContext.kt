@@ -24,6 +24,10 @@ import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeSpeed
  * @property requirements Capability requirements the step needs; matched by
  *   [RoutingRule.ByCapability] against a candidate provider's descriptor. Null
  *   means no capability constraint (backward compatible).
+ * @property localCapacity Runtime snapshot of local-provider availability. A
+ *   [RoutingRule.ByCapability] targeting an `availabilityGated` provider only
+ *   matches when this reports that provider available. Null leaves gated
+ *   providers closed.
  */
 @Serializable
 data class RoutingContext(
@@ -35,4 +39,5 @@ data class RoutingContext(
     val preferredSpeed: RelativeSpeed? = null,
     val tags: Set<String> = emptySet(),
     val requirements: CapabilityRequirement? = null,
+    val localCapacity: LocalCapacity? = null,
 )

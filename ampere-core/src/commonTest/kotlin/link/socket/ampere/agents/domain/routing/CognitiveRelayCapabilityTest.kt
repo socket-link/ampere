@@ -2,6 +2,7 @@ package link.socket.ampere.agents.domain.routing
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +73,13 @@ class CognitiveRelayCapabilityTest {
         ),
     )
 
+    // Anthropic's descriptor is availabilityGated, so a capacity snapshot must
+    // report it available before the gate opens.
+    private val localAvailable = LocalCapacity(
+        available = true,
+        providerId = AIProvider_Anthropic.id,
+    )
+
     // Local-first ordering: the relay's first-match picks the first capable provider.
     private fun relay(eventBus: EventSerialBus? = null) = CognitiveRelayImpl(
         initialConfig = RelayConfig(
@@ -85,15 +93,46 @@ class CognitiveRelayCapabilityTest {
     )
 
     @Test
-    fun `text-transform requirement selects local provider`() = runTest {
+    fun `text-transform requirement selects available local provider`() = runTest {
         val context = RoutingContext(
             requirements = CapabilityRequirement(inputs = SupportedInputs.TEXT),
+            localCapacity = localAvailable,
         )
 
         val result = relay().resolveWithMetadata(context, agentFallback)
 
         assertEquals(AIModel_Claude.Sonnet_4, result.configuration.model)
         assertEquals("capability:${AIProvider_Anthropic.id}", result.reason)
+    }
+
+    @Test
+    fun `unavailable local provider is skipped and grid is selected`() = runTest {
+        val context = RoutingContext(
+            requirements = CapabilityRequirement(inputs = SupportedInputs.TEXT),
+            localCapacity = LocalCapacity(
+                available = false,
+                providerId = AIProvider_Anthropic.id,
+                reason = "apple_intelligence_unavailable",
+            ),
+        )
+
+        val result = relay().resolveWithMetadata(context, agentFallback)
+
+        assertEquals(AIModel_Gemini.Flash_2_5, result.configuration.model)
+        assertEquals("capability:${AIProvider_Google.id}", result.reason)
+    }
+
+    @Test
+    fun `null localCapacity leaves the availability gate closed`() = runTest {
+        // Capable local provider, but no capacity snapshot -> gate stays shut.
+        val context = RoutingContext(
+            requirements = CapabilityRequirement(inputs = SupportedInputs.TEXT),
+        )
+
+        val result = relay().resolveWithMetadata(context, agentFallback)
+
+        assertEquals(AIModel_Gemini.Flash_2_5, result.configuration.model)
+        assertEquals("capability:${AIProvider_Google.id}", result.reason)
     }
 
     @Test
@@ -129,6 +168,59 @@ class CognitiveRelayCapabilityTest {
         assertEquals("Anthropic", decision.providerName)
         assertEquals(AIModel_Claude.Sonnet_4.name, decision.modelName)
         assertEquals("capability:${AIProvider_Anthropic.id}", decision.matchedRule)
+        assertFalse(decision.isFallback)
+    }
+
+    @Test
+    fun `emits RouteFallback when available local provider is gated out`() = runBlocking {
+        val events = resolveCapturingEvents(
+            requirements = CapabilityRequirement(inputs = SupportedInputs.TEXT),
+            localCapacity = LocalCapacity(
+                available = false,
+                providerId = AIProvider_Anthropic.id,
+                reason = "thermal_throttle",
+            ),
+        )
+
+        val fallback = events.filterIsInstance<RoutingEvent.RouteFallback>().single()
+        assertEquals(AIProvider_Anthropic.id, fallback.failedProvider)
+        assertEquals(AIModel_Claude.Sonnet_4.name, fallback.failedModel)
+        assertEquals("thermal_throttle", fallback.failureReason)
+        assertEquals("Google", fallback.fallbackDecision.providerName)
+        assertEquals(AIModel_Gemini.Flash_2_5.name, fallback.fallbackDecision.modelName)
+
+        // The grid pick is still announced, marked as a fallback.
+        val selected = events.filterIsInstance<RoutingEvent.RouteSelected>().single()
+        assertEquals("Google", selected.decision.providerName)
+        assertTrue(selected.decision.isFallback)
+    }
+
+    @Test
+    fun `emits no RouteFallback when local provider is available`() = runBlocking {
+        val events = resolveCapturingEvents(
+            requirements = CapabilityRequirement(inputs = SupportedInputs.TEXT),
+            localCapacity = localAvailable,
+        )
+
+        assertTrue(events.filterIsInstance<RoutingEvent.RouteFallback>().isEmpty())
+
+        val selected = events.filterIsInstance<RoutingEvent.RouteSelected>().single()
+        assertEquals("Anthropic", selected.decision.providerName)
+        assertFalse(selected.decision.isFallback)
+    }
+
+    @Test
+    fun `uses default reason when unavailable snapshot states none`() = runBlocking {
+        val events = resolveCapturingEvents(
+            requirements = CapabilityRequirement(inputs = SupportedInputs.TEXT),
+            localCapacity = LocalCapacity(available = false, providerId = AIProvider_Anthropic.id),
+        )
+
+        val fallback = events.filterIsInstance<RoutingEvent.RouteFallback>().single()
+        assertEquals(
+            RoutingRule.ByCapability.DEFAULT_UNAVAILABLE_REASON,
+            fallback.failureReason,
+        )
     }
 
     @Test
@@ -147,22 +239,41 @@ class CognitiveRelayCapabilityTest {
 
     private suspend fun resolveCapturingDecision(
         requirements: CapabilityRequirement,
+        localCapacity: LocalCapacity? = localAvailable,
     ): RoutingDecision {
+        val selected = resolveCapturingEvents(requirements, localCapacity)
+            .filterIsInstance<RoutingEvent.RouteSelected>()
+        assertTrue(selected.isNotEmpty(), "Expected a RouteSelected event")
+        return selected.first().decision
+    }
+
+    private suspend fun resolveCapturingEvents(
+        requirements: CapabilityRequirement,
+        localCapacity: LocalCapacity? = localAvailable,
+    ): List<Event> {
         val scope = CoroutineScope(Dispatchers.Default)
         val eventBus = EventSerialBus(scope)
         val received = mutableListOf<Event>()
+        val handler = EventHandler { event, _ -> received.add(event) }
 
         eventBus.subscribe(
-            agentId = "test-subscriber",
+            agentId = "selected-subscriber",
             eventType = RoutingEvent.RouteSelected.EVENT_TYPE,
-            handler = EventHandler { event, _ -> received.add(event) },
+            handler = handler,
+        )
+        eventBus.subscribe(
+            agentId = "fallback-subscriber",
+            eventType = RoutingEvent.RouteFallback.EVENT_TYPE,
+            handler = handler,
         )
 
-        relay(eventBus).resolve(RoutingContext(requirements = requirements), agentFallback)
+        relay(eventBus).resolve(
+            RoutingContext(requirements = requirements, localCapacity = localCapacity),
+            agentFallback,
+        )
 
         delay(100)
 
-        assertTrue(received.isNotEmpty(), "Expected a RouteSelected event")
-        return (received.first() as RoutingEvent.RouteSelected).decision
+        return received.toList()
     }
 }

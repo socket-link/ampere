@@ -52,8 +52,32 @@ class CognitiveRelayImpl(
     ): RoutingResolution {
         val currentConfig = mutex.withLock { _config }
 
-        val matchedRule = currentConfig.rules.firstOrNull { rule ->
-            rule.matches(context, registry)
+        // First-match over the ordered rules, but a capable local provider whose
+        // availability gate is closed is recorded as a skip (not a match) so we
+        // can fall through to the grid and emit RouteFallback for the first skip.
+        var matchedRule: RoutingRule? = null
+        var skippedConfig: AIConfiguration? = null
+        var skipReason: String? = null
+
+        for (rule in currentConfig.rules) {
+            if (rule is RoutingRule.ByCapability) {
+                when (val evaluation = rule.evaluate(context, registry)) {
+                    CapabilityEvaluation.Matched -> {
+                        matchedRule = rule
+                        break
+                    }
+                    is CapabilityEvaluation.Skipped -> {
+                        if (skippedConfig == null) {
+                            skippedConfig = rule.configuration
+                            skipReason = evaluation.reason
+                        }
+                    }
+                    CapabilityEvaluation.NoMatch -> Unit
+                }
+            } else if (rule.matches(context, registry)) {
+                matchedRule = rule
+                break
+            }
         }
 
         val selectedConfig = matchedRule?.configuration
@@ -61,11 +85,13 @@ class CognitiveRelayImpl(
             ?: fallbackConfiguration
 
         val ruleDescription = matchedRule?.describeRule() ?: "default"
+        val isFallback = skippedConfig != null
 
         val decision = RoutingDecision(
             providerName = selectedConfig.provider.name,
             modelName = selectedConfig.model.name,
             matchedRule = ruleDescription,
+            isFallback = isFallback,
         )
 
         logger.d {
@@ -73,6 +99,10 @@ class CognitiveRelayImpl(
                 (context.phase?.let { " [${it.name}]" } ?: "")
         }
 
+        // The fallback causally precedes the selection it forced; emit it first.
+        if (skippedConfig != null && skipReason != null) {
+            emitRouteFallback(context, skippedConfig, decision, skipReason)
+        }
         emitRouteSelected(context, decision)
 
         return RoutingResolution(
@@ -101,6 +131,33 @@ class CognitiveRelayImpl(
                 agentId = context.agentId,
                 phase = context.phase,
                 decision = decision,
+            ),
+        )
+    }
+
+    /**
+     * Emits [RoutingEvent.RouteFallback] for a capable local provider that was
+     * skipped because its availability gate was closed, reporting the provider
+     * and model that lost the route and the [fallbackDecision] that replaced it.
+     */
+    private suspend fun emitRouteFallback(
+        context: RoutingContext,
+        skippedConfig: AIConfiguration,
+        fallbackDecision: RoutingDecision,
+        failureReason: String,
+    ) {
+        eventBus?.publish(
+            RoutingEvent.RouteFallback(
+                eventId = generateUUID("routing"),
+                timestamp = Clock.System.now(),
+                eventSource = context.agentId?.let { EventSource.Agent(it) }
+                    ?: EventSource.Human,
+                agentId = context.agentId,
+                phase = context.phase,
+                failedProvider = skippedConfig.provider.id,
+                failedModel = skippedConfig.model.name,
+                fallbackDecision = fallbackDecision,
+                failureReason = failureReason,
             ),
         )
     }
