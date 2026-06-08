@@ -1,5 +1,6 @@
 package link.socket.ampere.trace
 
+import link.socket.ampere.agents.domain.routing.capability.CostPolicy
 import link.socket.ampere.api.model.TokenUsage
 import link.socket.ampere.domain.ai.UsageTier
 
@@ -12,26 +13,46 @@ import link.socket.ampere.domain.ai.UsageTier
 class WattCostAggregator(
     private val usageTier: UsageTier = UsageTier.TIER_1,
 ) {
-    fun costFor(usage: TokenUsage): WattCost {
+    /**
+     * Watt cost for [usage] under the provider's [cost] policy.
+     *
+     * A [CostPolicy.Free] provider (e.g. local on-device inference) accrues no
+     * Watts regardless of how many tokens it reports — the declared cost is
+     * honored before the token×tier path. [CostPolicy.Metered] (the default)
+     * keeps the existing token accounting unchanged.
+     */
+    fun costFor(
+        usage: TokenUsage,
+        cost: CostPolicy = CostPolicy.Metered,
+    ): WattCost {
         val inputTokens = usage.inputTokens ?: 0
         val outputTokens = usage.outputTokens ?: 0
-        val totalTokens = inputTokens + outputTokens
+
+        val watts = if (cost is CostPolicy.Free) {
+            0.0
+        } else {
+            (inputTokens + outputTokens).toDouble() / TOKENS_PER_WATT * multiplierFor(usageTier)
+        }
 
         return WattCost(
             inputTokens = inputTokens,
             outputTokens = outputTokens,
             estimatedUsd = usage.estimatedCost,
-            watts = totalTokens.toDouble() / TOKENS_PER_WATT * multiplierFor(usageTier),
+            watts = watts,
         )
     }
 
-    fun costFor(invocation: ModelInvocationTrace): WattCost =
+    fun costFor(
+        invocation: ModelInvocationTrace,
+        cost: CostPolicy = CostPolicy.Metered,
+    ): WattCost =
         costFor(
             TokenUsage(
                 inputTokens = invocation.inputTokens,
                 outputTokens = invocation.outputTokens,
                 estimatedCost = invocation.estimatedUsd,
             ),
+            cost,
         )
 
     fun aggregate(invocations: List<ModelInvocationTrace>): WattCost =

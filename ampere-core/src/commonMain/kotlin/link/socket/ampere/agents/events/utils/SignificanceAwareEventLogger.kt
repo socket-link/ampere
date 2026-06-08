@@ -166,6 +166,7 @@ class SignificanceAwareEventLogger(
 
         // Routing events - routine for selection, significant for fallbacks
         is RoutingEvent.RouteSelected -> EventSignificance.ROUTINE
+        is RoutingEvent.RouteResolved -> EventSignificance.ROUTINE
         is RoutingEvent.RouteFallback -> EventSignificance.SIGNIFICANT
 
         // AgentSurface events - significant; users see them directly via the renderer

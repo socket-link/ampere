@@ -13,6 +13,8 @@ import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.event.SparkAppliedEvent
 import link.socket.ampere.agents.domain.event.SparkRemovedEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
+import link.socket.ampere.agents.domain.routing.capability.CostPolicy
+import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptorRegistry
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.events.EventStore
@@ -24,6 +26,7 @@ class ArcTraceProjection(
     private val database: Database,
     private val json: Json = DEFAULT_JSON,
     private val wattCostAggregator: WattCostAggregator = WattCostAggregator(),
+    private val providerDescriptorRegistry: ProviderDescriptorRegistry? = null,
 ) {
     suspend fun project(runId: ArcRunId): Result<ArcRunTrace> =
         project(runId = runId, arcId = runId)
@@ -49,7 +52,8 @@ class ArcTraceProjection(
                 error("No trace data found for runId=$runId")
             }
 
-            val modelInvocations = buildModelInvocations(events)
+            val costByProvider = resolveCostPolicies(events)
+            val modelInvocations = buildModelInvocations(events, costByProvider)
             val toolCalls = buildToolCalls(events)
             val memoryWrites = buildMemoryWrites(events, knowledgeRows, outcomeRows)
             val phases = buildPhases(events, modelInvocations, memoryWrites, toolCalls)
@@ -84,7 +88,30 @@ class ArcTraceProjection(
         }
     }
 
-    private fun buildModelInvocations(events: List<DecodedEvent>): List<ModelInvocationTrace> {
+    /**
+     * Resolves each completed call's provider to its declared [CostPolicy] via
+     * the [providerDescriptorRegistry]. Providers without a registered
+     * descriptor (or when no registry is wired) fall back to
+     * [CostPolicy.Metered], preserving the existing token×tier accounting.
+     */
+    private suspend fun resolveCostPolicies(events: List<DecodedEvent>): Map<String, CostPolicy> {
+        val registry = providerDescriptorRegistry ?: return emptyMap()
+        val providerIds = events
+            .map { it.event }
+            .filterIsInstance<ProviderCallCompletedEvent>()
+            .map { it.providerId }
+            .distinct()
+        return buildMap {
+            for (providerId in providerIds) {
+                put(providerId, registry.descriptorFor(providerId)?.cost ?: CostPolicy.Metered)
+            }
+        }
+    }
+
+    private fun buildModelInvocations(
+        events: List<DecodedEvent>,
+        costByProvider: Map<String, CostPolicy>,
+    ): List<ModelInvocationTrace> {
         val starts = events
             .map { it.event }
             .filterIsInstance<ProviderCallStartedEvent>()
@@ -126,7 +153,8 @@ class ArcTraceProjection(
                     errorType = completed.errorType,
                 )
 
-                invocation.copy(wattCost = wattCostAggregator.costFor(invocation))
+                val cost = costByProvider[completed.providerId] ?: CostPolicy.Metered
+                invocation.copy(wattCost = wattCostAggregator.costFor(invocation, cost))
             }
     }
 
@@ -330,6 +358,7 @@ class ArcTraceProjection(
         is ProviderCallCompletedEvent -> event.cognitivePhase?.name
         is RoutingEvent.RouteSelected -> event.phase?.name
         is RoutingEvent.RouteFallback -> event.phase?.name
+        is RoutingEvent.RouteResolved -> event.phase?.name
         is CognitivePhaseEvent.PhaseEntered -> event.newPhase.name
         is CognitivePhaseEvent.PhaseExited -> event.exitedPhase.name
         is MemoryEvent.KnowledgeRecalled -> RECALL_PHASE

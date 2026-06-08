@@ -117,7 +117,7 @@ sealed interface RoutingRule {
      * first-match semantics then pick the first capable provider.
      *
      * For an `availabilityGated` descriptor the rule additionally requires the
-     * context's [LocalCapacity] snapshot to report that provider available; a
+     * context's [local.LocalCapacity] snapshot to report that provider available; a
      * capable-but-unavailable local provider is skipped (see [evaluate]) so the
      * relay can fall through to the grid and emit a fallback.
      *

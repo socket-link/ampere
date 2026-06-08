@@ -16,6 +16,7 @@ import link.socket.ampere.agents.domain.routing.capability.CostPolicy
 import link.socket.ampere.agents.domain.routing.capability.InMemoryProviderDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.ProviderCapability
 import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptor
+import link.socket.ampere.agents.domain.routing.local.LocalCapacity
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
@@ -69,6 +70,7 @@ class CognitiveRelayCapabilityTest {
                 maxContextTokens = 200_000,
                 supportedInputs = SupportedInputs.TEXT_AND_IMAGE,
                 cost = CostPolicy.Metered,
+                costPerWatt = 0.007,
             ),
         ),
     )

@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
+import link.socket.ampere.agents.domain.routing.local.LocalCapacity
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeSpeed
 
