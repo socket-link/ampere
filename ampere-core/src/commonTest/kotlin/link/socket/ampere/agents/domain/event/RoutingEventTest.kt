@@ -143,6 +143,7 @@ class RoutingEventTest {
         fun handle(event: RoutingEvent): String = when (event) {
             is RoutingEvent.RouteSelected -> "selected"
             is RoutingEvent.RouteFallback -> "fallback"
+            is RoutingEvent.RouteResolved -> "resolved"
         }
 
         val decision = RoutingDecision("P", "M", "rule")

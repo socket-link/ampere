@@ -20,7 +20,8 @@ import link.socket.ampere.domain.ai.provider.ProviderId
  * @property reasoning Reasoning level the provider's models offer.
  * @property maxContextTokens Largest context window the provider supports.
  * @property supportedInputs Input modalities the provider accepts.
- * @property cost How the provider charges (defaults to [CostPolicy.Metered]).
+ * @property cost How the provider charges (defaults to metered at the neutral
+ *   [CostPolicy.DEFAULT_USD_PER_WATT] rate).
  * @property availabilityGated `true` for device-gated local providers (read in T4).
  */
 @Serializable
@@ -30,9 +31,16 @@ data class ProviderDescriptor(
     val reasoning: RelativeReasoning,
     val maxContextTokens: Int,
     val supportedInputs: SupportedInputs,
-    val cost: CostPolicy = CostPolicy.Metered,
+    val cost: CostPolicy = CostPolicy.Metered(),
     val availabilityGated: Boolean = false,
 )
+
+/**
+ * This provider's comparable generation cost in USD per normalized Watt — the
+ * total order cost-aware routing minimises (see [CostPolicy.usdPerWatt]).
+ */
+val ProviderDescriptor.costPerWatt: Double
+    get() = cost.usdPerWatt
 
 /**
  * Whether this descriptor can serve the given [req]. A null/empty constraint

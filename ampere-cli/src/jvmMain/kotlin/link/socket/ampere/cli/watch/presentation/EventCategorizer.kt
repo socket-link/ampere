@@ -119,6 +119,7 @@ object EventCategorizer {
         is ToolEvent.ToolExecutionCompleted,
         is ProviderCallStartedEvent,
         is RoutingEvent.RouteSelected,
+        is RoutingEvent.RouteResolved,
         is CognitivePhaseEvent,
         is SparkEvent -> EventSignificance.ROUTINE
 
