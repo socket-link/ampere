@@ -254,17 +254,16 @@ class CognitiveRelayCapabilityTest {
         val scope = CoroutineScope(Dispatchers.Default)
         val eventBus = EventSerialBus(scope)
         val received = mutableListOf<Event>()
-        val handler = EventHandler { event, _ -> received.add(event) }
 
         eventBus.subscribe(
             agentId = "selected-subscriber",
             eventType = RoutingEvent.RouteSelected.EVENT_TYPE,
-            handler = handler,
+            handler = EventHandler { event, _ -> received.add(event) },
         )
         eventBus.subscribe(
             agentId = "fallback-subscriber",
             eventType = RoutingEvent.RouteFallback.EVENT_TYPE,
-            handler = handler,
+            handler = EventHandler { event, _ -> received.add(event) },
         )
 
         relay(eventBus).resolve(
