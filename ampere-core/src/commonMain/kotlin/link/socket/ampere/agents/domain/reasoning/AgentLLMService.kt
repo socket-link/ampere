@@ -84,6 +84,13 @@ class AgentLLMService(
      * for direct-construction tests that don't want to round-trip through
      * the config.
      *
+     * Local, on-device execution flows through this same seam: a
+     * [link.socket.ampere.llm.DispatchingUpstreamLlmClient] supplied here (or on
+     * the config) routes a relay-selected local configuration to a
+     * [link.socket.ampere.llm.LocalUpstreamLlmClient], or to the bundled cloud
+     * path otherwise — so [call] is unchanged whether the resolved provider is
+     * local or cloud.
+     *
      * Note: a custom [link.socket.ampere.domain.llm.LlmProvider] configured
      * on [AgentConfiguration] short-circuits before this client runs.
      */
