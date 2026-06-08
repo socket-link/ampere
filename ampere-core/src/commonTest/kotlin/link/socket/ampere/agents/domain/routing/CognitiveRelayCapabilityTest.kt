@@ -68,6 +68,7 @@ class CognitiveRelayCapabilityTest {
                 maxContextTokens = 200_000,
                 supportedInputs = SupportedInputs.TEXT_AND_IMAGE,
                 cost = CostPolicy.Metered,
+                costPerWatt = 0.007,
             ),
         ),
     )

@@ -358,6 +358,7 @@ class ArcTraceProjection(
         is ProviderCallCompletedEvent -> event.cognitivePhase?.name
         is RoutingEvent.RouteSelected -> event.phase?.name
         is RoutingEvent.RouteFallback -> event.phase?.name
+        is RoutingEvent.RouteResolved -> event.phase?.name
         is CognitivePhaseEvent.PhaseEntered -> event.newPhase.name
         is CognitivePhaseEvent.PhaseExited -> event.exitedPhase.name
         is MemoryEvent.KnowledgeRecalled -> RECALL_PHASE

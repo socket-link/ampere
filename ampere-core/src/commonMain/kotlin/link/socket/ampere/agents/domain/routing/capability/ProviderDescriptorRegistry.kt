@@ -64,7 +64,22 @@ class InMemoryProviderDescriptorRegistry(
             ProviderCapability.LONG_CONTEXT,
         )
 
-        private fun cloudDescriptor(providerId: ProviderId): ProviderDescriptor =
+        /**
+         * Representative blended large-tier generation cost in USD per
+         * normalized Watt (1 Watt = 1000 tokens), from June 2026 provider rates.
+         * Google is cheapest and Anthropic priciest — a ~3.7× spread at the
+         * large tier (the widest tier, per the AMPR-210 unit-economics
+         * analysis). These are provider *data*; cost-aware selection reads them
+         * and never hardcodes them.
+         */
+        private const val GOOGLE_USD_PER_WATT: Double = 0.007
+        private const val OPENAI_USD_PER_WATT: Double = 0.014
+        private const val ANTHROPIC_USD_PER_WATT: Double = 0.026
+
+        private fun cloudDescriptor(
+            providerId: ProviderId,
+            costPerWatt: Double,
+        ): ProviderDescriptor =
             ProviderDescriptor(
                 providerId = providerId,
                 capabilities = CLOUD_CAPABILITIES,
@@ -72,14 +87,15 @@ class InMemoryProviderDescriptorRegistry(
                 maxContextTokens = 200_000,
                 supportedInputs = SupportedInputs.TEXT_AND_IMAGE,
                 cost = CostPolicy.Metered,
+                costPerWatt = costPerWatt,
                 availabilityGated = false,
             )
 
         /** Descriptors for the three bundled cloud providers. */
         val DEFAULT_CLOUD_DESCRIPTORS: List<ProviderDescriptor> = listOf(
-            cloudDescriptor(AIProvider_Anthropic.id),
-            cloudDescriptor(AIProvider_Google.id),
-            cloudDescriptor(AIProvider_OpenAI.id),
+            cloudDescriptor(AIProvider_Anthropic.id, ANTHROPIC_USD_PER_WATT),
+            cloudDescriptor(AIProvider_Google.id, GOOGLE_USD_PER_WATT),
+            cloudDescriptor(AIProvider_OpenAI.id, OPENAI_USD_PER_WATT),
         )
     }
 }
