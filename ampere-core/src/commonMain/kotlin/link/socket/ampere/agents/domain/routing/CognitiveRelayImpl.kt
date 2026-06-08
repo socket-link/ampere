@@ -6,6 +6,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.RoutingEvent
+import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptorRegistry
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
@@ -22,10 +23,14 @@ import link.socket.ampere.util.logWith
  *
  * @param initialConfig The initial relay configuration.
  * @param eventBus Optional EventSerialBus for routing event emission.
+ * @param registry Optional provider descriptor registry consulted by
+ *   capability-based rules (e.g. [RoutingRule.ByCapability]). When null,
+ *   capability rules never match and routing behaves exactly as before.
  */
 class CognitiveRelayImpl(
     initialConfig: RelayConfig = RelayConfig(),
     private val eventBus: EventSerialBus? = null,
+    private val registry: ProviderDescriptorRegistry? = null,
 ) : CognitiveRelay {
 
     private val logger: Logger = logWith("CognitiveRelay")
@@ -48,7 +53,7 @@ class CognitiveRelayImpl(
         val currentConfig = mutex.withLock { _config }
 
         val matchedRule = currentConfig.rules.firstOrNull { rule ->
-            rule.matches(context)
+            rule.matches(context, registry)
         }
 
         val selectedConfig = matchedRule?.configuration

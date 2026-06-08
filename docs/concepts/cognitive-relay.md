@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/ProviderCallStartedEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/ProviderCallCompletedEvent.kt
 related: [PropelLoop, EventSerialBus, CognitionTrace]
-last_verified: 2026-04-29
+last_verified: 2026-06-08
 ---
 
 # CognitiveRelay
@@ -54,8 +54,9 @@ change.
 - `agents/domain/routing/CognitiveRelayPassthrough.kt` — test/dev helper that always returns the fallback.
 - `agents/domain/routing/RelayConfig.kt` — the rule set.
 - `agents/domain/routing/RoutingRule.kt` — predicate + target configuration.
-- `agents/domain/routing/RoutingContext.kt` — what rules match against (`CognitivePhase`, `agentId`, hints).
+- `agents/domain/routing/RoutingContext.kt` — what rules match against (`CognitivePhase`, `agentId`, hints, optional `requirements`).
 - `agents/domain/routing/RoutingDecision.kt` — the event payload.
+- `agents/domain/routing/capability/` — provider capability vocabulary (`ProviderCapability`, `CapabilityRequirement`) and the SDK-free `ProviderDescriptor` + `ProviderDescriptorRegistry` the `ByCapability` rule matches against. Parallel to `domain/ai/provider/AIProvider` (left untouched).
 - `agents/domain/reasoning/AgentLLMService.kt` — the only legitimate caller.
 - `agents/domain/event/RoutingEvent.kt`, `ProviderCallStartedEvent.kt`, `ProviderCallCompletedEvent.kt` — observability events.
 
@@ -72,6 +73,7 @@ change.
 
 - **Add a routing rule** — extend `RelayConfig.rules` with a new `RoutingRule` whose predicate examines `RoutingContext`. Order matters; more specific rules earlier.
 - **Route by phase** — `RoutingContext.phase` is a `CognitivePhase`; rules can switch on it directly.
+- **Route by capability** — set `RoutingContext.requirements` (a `CapabilityRequirement`) on the step and add `RoutingRule.ByCapability` rules ordered most-preferred-first. Each matches only when its target provider's `ProviderDescriptor` (looked up in the injected `ProviderDescriptorRegistry`) `satisfies` the requirement; first-match then picks the first capable provider. The registry-aware `RoutingRule.matches(context, registry)` overload is `suspend` (the registry is mutex-guarded) and defaults to the pure `matches`, so the five non-capability rules are unaffected.
 - **Inspect a routing decision in tests** — call `resolveWithMetadata` instead of `resolve`. The returned `RoutingResolution.reason` is a free-form tag describing which rule matched ("phase=PLAN" / "default fallback").
 - **Trace which model handled a phase** — `ArcTraceProjection.project(runId)` returns `ModelInvocationTrace`s keyed by phase, with `routingReason` populated from the routing event.
 
