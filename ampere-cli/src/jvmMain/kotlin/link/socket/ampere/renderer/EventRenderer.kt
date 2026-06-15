@@ -162,6 +162,7 @@ class EventRenderer(
             is RoutingEvent.RouteSelected -> "🔀" to cyan
             is RoutingEvent.RouteFallback -> "🔀" to yellow
             is RoutingEvent.RouteResolved -> "🔀" to green
+            is RoutingEvent.RouteFloorUnmet -> "🔀" to red
             // Spark events have distinct icons based on type
             is SparkAppliedEvent -> SparkColors.SparkIcons.APPLIED to cyan
             is SparkRemovedEvent -> SparkColors.SparkIcons.REMOVED to gray

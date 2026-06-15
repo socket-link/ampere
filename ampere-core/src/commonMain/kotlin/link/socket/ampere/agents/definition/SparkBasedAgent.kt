@@ -23,6 +23,8 @@ import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.reasoning.StepResult
+import link.socket.ampere.agents.domain.routing.CognitiveRelay
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.api.AgentEventApi
@@ -83,6 +85,23 @@ open class SparkBasedAgent<S : AgentState>(
     private val _observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
     @Transient
     private val _reasoningOverride: AgentReasoning? = null,
+    /**
+     * Provider-agnostic routing seam (AMPR-219). When set, the agent's
+     * [AgentConfiguration.cognitiveRelay] is populated so every LLM call routes
+     * through the relay's capability/cost-aware selection rather than using the
+     * static [AIConfiguration] directly. Null keeps the pre-activation behavior
+     * (no relay), which is the default for callers that don't opt in.
+     */
+    @Transient
+    private val _cognitiveRelay: CognitiveRelay? = null,
+    /**
+     * Per-agent capability-rung floor (AMPR-219). Threaded onto the agent's
+     * [AgentDefinition] so [AgentLLMService][link.socket.ampere.agents.domain.reasoning.AgentLLMService]
+     * merges it into the [RoutingContext][link.socket.ampere.agents.domain.routing.RoutingContext]
+     * and the relay refuses to route below it. Null declares no floor.
+     */
+    @Transient
+    private val _minimumRung: CapabilityRung? = null,
 ) : ObservableAgent<S>(_eventApi, _observabilityScope) {
 
     @Transient
@@ -132,9 +151,11 @@ open class SparkBasedAgent<S : AgentState>(
                 name = "SparkBasedAgent-$id",
                 description = "A Spark-based agent with affinity: ${affinity.name}",
                 prompt = currentSystemPrompt,
+                minimumRung = _minimumRung,
             ),
             aiConfiguration = effectiveAiConfiguration,
             llmProvider = _llmProvider,
+            cognitiveRelay = _cognitiveRelay,
             upstreamLlmClient = _upstreamLlmClient,
         )
 
@@ -375,6 +396,8 @@ open class SparkBasedAgent<S : AgentState>(
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
+            cognitiveRelay: CognitiveRelay? = null,
+            minimumRung: CapabilityRung? = null,
         ): SparkBasedAgent<CodeState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -393,6 +416,8 @@ open class SparkBasedAgent<S : AgentState>(
                 _upstreamLlmClient = upstreamLlmClient,
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
+                _cognitiveRelay = cognitiveRelay,
+                _minimumRung = minimumRung,
             )
             agent.spark<SparkBasedAgent<CodeState>>(roleSpark)
             return agent

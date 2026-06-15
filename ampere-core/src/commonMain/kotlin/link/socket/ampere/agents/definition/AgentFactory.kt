@@ -12,6 +12,12 @@ import link.socket.ampere.agents.domain.cognition.sparks.LanguageSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
+import link.socket.ampere.agents.domain.routing.CapabilityRoutingDefaults
+import link.socket.ampere.agents.domain.routing.CognitiveRelay
+import link.socket.ampere.agents.domain.routing.CognitiveRelayImpl
+import link.socket.ampere.agents.domain.routing.RelayConfig
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
+import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -80,6 +86,20 @@ class AgentFactory(
     private val cognitiveConfig: CognitiveConfig = CognitiveConfig(),
     private val llmProvider: LlmProvider? = null,
     private val eventSerialBus: EventSerialBus? = null,
+    /**
+     * Relay override for the activated CODE path (AMPR-219). Null builds the
+     * default cloud relay ([effectiveCognitiveRelay]); tests inject a custom
+     * relay (e.g. one whose catalog tops out below the floor) to exercise the
+     * floor-unmet path without standing up the full bundled catalog.
+     */
+    private val cognitiveRelay: CognitiveRelay? = null,
+    /**
+     * Capability-rung floor declared on the activated CODE agent (AMPR-219).
+     * Defaults to [DEFAULT_CODE_AGENT_RUNG]; pass an unsatisfiable rung to
+     * verify the relay returns a typed floor-unmet failure rather than
+     * downgrading.
+     */
+    private val codeAgentMinimumRung: CapabilityRung? = DEFAULT_CODE_AGENT_RUNG,
 ) {
     private val toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode> =
         toolWriteCodeFileOverride ?: ToolWriteCodeFile(AgentActionAutonomy.ASK_BEFORE_ACTION)
@@ -107,6 +127,27 @@ class AgentFactory(
 
     private val effectiveAiConfiguration: AIConfiguration
         get() = aiConfiguration ?: AIConfigurationFactory.getDefaultConfiguration()
+
+    /**
+     * The live [CognitiveRelay] wired into the activated CODE path (AMPR-219).
+     *
+     * This is the production seam the relay was built for: a real
+     * [CognitiveRelayImpl] over the bundled cloud catalog
+     * ([CapabilityRoutingDefaults.cloudCapabilityRules] +
+     * [InMemoryModelDescriptorRegistry]'s default seed), publishing routing
+     * events on the shared [eventSerialBus]. Selection stays cost-aware; the
+     * agent's declared [codeAgentMinimumRung] is the floor it must clear.
+     *
+     * Built lazily and cached so a single relay (and registry) is shared across
+     * every CODE agent this factory makes. Tests override it via [cognitiveRelay].
+     */
+    private val effectiveCognitiveRelay: CognitiveRelay by lazy {
+        cognitiveRelay ?: CognitiveRelayImpl(
+            initialConfig = RelayConfig(rules = CapabilityRoutingDefaults.cloudCapabilityRules()),
+            eventBus = eventSerialBus,
+            registry = InMemoryModelDescriptorRegistry(),
+        )
+    }
 
     private val agentConfiguration: AgentConfiguration
         get() = AgentConfiguration(
@@ -216,6 +257,11 @@ class AgentFactory(
                 memoryService = memoryService,
                 llmProvider = llmProvider,
                 observabilityScope = scope,
+                // AMPR-219: the CODE path is the one activated production agent.
+                // Only this branch wires the relay + rung floor; PRODUCT,
+                // PROJECT, and QUALITY keep the dormant (null relay) behavior.
+                cognitiveRelay = effectiveCognitiveRelay,
+                minimumRung = codeAgentMinimumRung,
                 tools = buildSet {
                     add(toolWriteCodeFile)
                     add(ToolReadCodeFile(AgentActionAutonomy.FULLY_AUTONOMOUS))
@@ -311,4 +357,14 @@ class AgentFactory(
     private fun requireLanguageSpark(id: String): Spark =
         phaseSparkLibrary.languageSparkById(id)
             ?: error("Bundled language spark '$id' is missing from DefaultPhaseSparkLibrary")
+
+    companion object {
+        /**
+         * Default capability-rung floor for the activated CODE agent (AMPR-219).
+         * THREE ("advanced") keeps code work off entry/standard tiers while
+         * staying satisfiable by the bundled cloud catalog (e.g. Gemini 2.5 Pro,
+         * Claude Sonnet, GPT-4.1 all sit at THREE or above).
+         */
+        val DEFAULT_CODE_AGENT_RUNG: CapabilityRung = CapabilityRung.THREE
+    }
 }
