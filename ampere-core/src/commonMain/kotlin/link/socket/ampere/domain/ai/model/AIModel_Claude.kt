@@ -462,16 +462,22 @@ sealed class AIModel_Claude(
 
         // ---- Models ----
 
-        val ALL_MODELS = listOf(
-            Opus_4_1,
-            Opus_4,
-            Opus_4_5,
-            Sonnet_4,
-            Sonnet_3_7,
-            Sonnet_4_5,
-            Haiku_3_5,
-            Haiku_3,
-            Haiku_4_5,
-        )
+        // Lazy to avoid the JVM class-init cycle: if any data object (Opus_4_1, etc.)
+        // is accessed before this companion finishes initializing, the companion's
+        // <clinit> would see that object's INSTANCE as null and commit a list with
+        // null entries. Lazy defers evaluation until the companion is fully set up.
+        val ALL_MODELS by lazy {
+            listOf(
+                Opus_4_1,
+                Opus_4,
+                Opus_4_5,
+                Sonnet_4,
+                Sonnet_3_7,
+                Sonnet_4_5,
+                Haiku_3_5,
+                Haiku_3,
+                Haiku_4_5,
+            )
+        }
     }
 }

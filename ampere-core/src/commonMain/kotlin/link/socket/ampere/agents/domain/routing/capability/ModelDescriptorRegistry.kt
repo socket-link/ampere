@@ -116,14 +116,13 @@ class InMemoryModelDescriptorRegistry(
          * One descriptor per model across the three bundled cloud providers,
          * each projected from the model's own metadata.
          *
-         * Computed on demand (not as a class-load constant) so the bundled
-         * `AIProvider`/`AIModel` data-object graph is fully initialized before it
-         * is read. The model lists are taken straight from each `AIModel.*`
-         * companion rather than via `AIProvider.availableModels`: reading the
-         * list through a provider data object initializes it reentrantly
-         * (`AIProvider_*.<clinit>` -> `AIModel_*.<clinit>`), which yields null
-         * model entries. Touching the model companions first sidesteps that
-         * cycle.
+         * Computed on demand (not as a class-load constant). The model lists in
+         * each `AIModel.*` companion are declared `by lazy` to break the JVM
+         * class-init cycle: without lazy, if any data object (e.g.
+         * `AIModel_Gemini.Flash_2_5`) were accessed before its companion
+         * finished initializing, `<clinit>` would observe the object's `INSTANCE`
+         * as null and permanently commit a list with null entries — causing an NPE
+         * here. See the `ALL_MODELS` declarations in `AIModel_Claude` et al.
          */
         fun defaultModelDescriptors(): List<ModelDescriptor> {
             val modelsByProvider = listOf(
