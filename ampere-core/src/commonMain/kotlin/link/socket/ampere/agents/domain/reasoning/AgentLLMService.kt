@@ -14,6 +14,7 @@ import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.routing.RoutingResolution
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.api.model.TokenUsage
@@ -169,10 +170,18 @@ class AgentLLMService(
             }
         }
 
+        // Thread per-agent rung floor into requirements before relay resolves
+        val effectiveRoutingContext = agentConfiguration.agentDefinition.minimumRung?.let { rung ->
+            routingContext?.let { ctx ->
+                val mergedRequirements = (ctx.requirements ?: CapabilityRequirement()).copy(minRung = rung)
+                ctx.copy(requirements = mergedRequirements)
+            } ?: RoutingContext(requirements = CapabilityRequirement(minRung = rung))
+        } ?: routingContext
+
         // Resolve configuration through CognitiveRelay if available
-        val routingResolution = if (routingContext != null) {
+        val routingResolution = if (effectiveRoutingContext != null) {
             agentConfiguration.cognitiveRelay?.resolveWithMetadata(
-                context = routingContext,
+                context = effectiveRoutingContext,
                 fallbackConfiguration = agentConfiguration.aiConfiguration,
             ) ?: RoutingResolution(
                 configuration = agentConfiguration.aiConfiguration,
