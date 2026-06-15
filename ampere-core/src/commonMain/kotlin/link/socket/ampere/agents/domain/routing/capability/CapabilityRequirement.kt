@@ -19,6 +19,7 @@ import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs
  * @property minReasoning Minimum reasoning level the model must offer, if any.
  * @property minContextTokens Minimum context window the model must provide, if any.
  * @property inputs Input modalities the model must accept, if any.
+ * @property minRung Minimum capability rung the model must be at, if any.
  */
 @Serializable
 data class CapabilityRequirement(
@@ -26,4 +27,5 @@ data class CapabilityRequirement(
     val minReasoning: RelativeReasoning? = null,
     val minContextTokens: Int? = null,
     val inputs: SupportedInputs? = null,
+    val minRung: CapabilityRung? = null,
 )

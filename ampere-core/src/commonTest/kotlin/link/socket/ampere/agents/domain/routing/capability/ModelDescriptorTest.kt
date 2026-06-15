@@ -94,6 +94,49 @@ class ModelDescriptorTest {
     }
 
     @Test
+    fun satisfiesRejectsModelBelowMinRung() {
+        val lowRung = opus.copy(rung = CapabilityRung.TWO)
+        assertFalse(lowRung.satisfies(CapabilityRequirement(minRung = CapabilityRung.THREE)))
+    }
+
+    @Test
+    fun satisfiesAcceptsModelAtMinRung() {
+        val atRung = opus.copy(rung = CapabilityRung.THREE)
+        assertTrue(atRung.satisfies(CapabilityRequirement(minRung = CapabilityRung.THREE)))
+    }
+
+    @Test
+    fun satisfiesAcceptsModelAboveMinRung() {
+        val highRung = opus.copy(rung = CapabilityRung.FOUR)
+        assertTrue(highRung.satisfies(CapabilityRequirement(minRung = CapabilityRung.THREE)))
+    }
+
+    @Test
+    fun absentMinRungMatchesAnyRung() {
+        val lowestRung = opus.copy(rung = CapabilityRung.ONE)
+        assertTrue(lowestRung.satisfies(CapabilityRequirement()))
+    }
+
+    @Test
+    fun rung3ExcludesRung1And2IncludesRung3And4() {
+        val req = CapabilityRequirement(minRung = CapabilityRung.THREE)
+        assertFalse(opus.copy(rung = CapabilityRung.ONE).satisfies(req))
+        assertFalse(opus.copy(rung = CapabilityRung.TWO).satisfies(req))
+        assertTrue(opus.copy(rung = CapabilityRung.THREE).satisfies(req))
+        assertTrue(opus.copy(rung = CapabilityRung.FOUR).satisfies(req))
+    }
+
+    @Test
+    fun capabilityRungRoundTrips() {
+        val withRung = opus.copy(rung = CapabilityRung.THREE)
+        val decoded = json.decodeFromString<ModelDescriptor>(
+            json.encodeToString(ModelDescriptor.serializer(), withRung),
+        )
+        assertEquals(withRung, decoded)
+        assertEquals(CapabilityRung.THREE, decoded.rung)
+    }
+
+    @Test
     fun defaultRegistrySeedsOneDescriptorPerModel() = runTest {
         val registry = InMemoryModelDescriptorRegistry()
 
