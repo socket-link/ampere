@@ -7,6 +7,7 @@ import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.routing.RoutingDecision
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
 
 /**
@@ -150,6 +151,49 @@ sealed interface RoutingEvent : Event {
 
         companion object {
             const val EVENT_TYPE: EventType = "RouteResolved"
+        }
+    }
+
+    /**
+     * Emitted when the routing requirement specifies a [CapabilityRung] floor
+     * that no registered model meets. This is a terminal routing failure: no
+     * [AIConfiguration] is produced and the resolution must not silently
+     * downgrade to a sub-floor model.
+     *
+     * @property requestedFloor The minimum rung declared by the requirement.
+     * @property bestAvailableRung The highest rung present in the registry among
+     *   the configured [RoutingRule.ByCapability] rules, or null if none could be
+     *   looked up. Surfaced for diagnostics so the operator can see the gap.
+     */
+    @Serializable
+    @SerialName("RoutingEvent.RouteFloorUnmet")
+    data class RouteFloorUnmet(
+        override val eventId: EventId,
+        override val timestamp: Instant,
+        override val eventSource: EventSource,
+        override val urgency: Urgency = Urgency.HIGH,
+        override val agentId: AgentId?,
+        override val phase: CognitivePhase?,
+        val requestedFloor: CapabilityRung,
+        val bestAvailableRung: CapabilityRung?,
+    ) : RoutingEvent {
+
+        override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("FloorUnmet: requested rung ${requestedFloor.ordinal}")
+            bestAvailableRung?.let { append(", best available ${it.ordinal}") }
+                ?: append(", no capable model found")
+            phase?.let { append(" [${it.name}]") }
+            append(" ${formatUrgency(urgency)}")
+            append(" from ${formatSource(eventSource)}")
+        }
+
+        companion object {
+            const val EVENT_TYPE: EventType = "RouteFloorUnmet"
         }
     }
 }

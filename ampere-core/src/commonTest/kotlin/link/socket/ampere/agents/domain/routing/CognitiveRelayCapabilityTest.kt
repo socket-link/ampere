@@ -104,7 +104,7 @@ class CognitiveRelayCapabilityTest {
             localCapacity = localAvailable,
         )
 
-        val result = relay().resolveWithMetadata(context, agentFallback)
+        val result = relay().resolveWithMetadata(context, agentFallback) as RoutingResolution.Success
 
         assertEquals(AIModel_Claude.Sonnet_4, result.configuration.model)
         assertEquals("capability:${AIProvider_Anthropic.id}", result.reason)
@@ -121,7 +121,7 @@ class CognitiveRelayCapabilityTest {
             ),
         )
 
-        val result = relay().resolveWithMetadata(context, agentFallback)
+        val result = relay().resolveWithMetadata(context, agentFallback) as RoutingResolution.Success
 
         assertEquals(AIModel_Gemini.Flash_2_5, result.configuration.model)
         assertEquals("capability:${AIProvider_Google.id}", result.reason)
@@ -134,7 +134,7 @@ class CognitiveRelayCapabilityTest {
             requirements = CapabilityRequirement(inputs = SupportedInputs.TEXT),
         )
 
-        val result = relay().resolveWithMetadata(context, agentFallback)
+        val result = relay().resolveWithMetadata(context, agentFallback) as RoutingResolution.Success
 
         assertEquals(AIModel_Gemini.Flash_2_5, result.configuration.model)
         assertEquals("capability:${AIProvider_Google.id}", result.reason)
@@ -149,7 +149,7 @@ class CognitiveRelayCapabilityTest {
             ),
         )
 
-        val result = relay().resolveWithMetadata(context, agentFallback)
+        val result = relay().resolveWithMetadata(context, agentFallback) as RoutingResolution.Success
 
         assertEquals(AIModel_Gemini.Flash_2_5, result.configuration.model)
         assertEquals("capability:${AIProvider_Google.id}", result.reason)
@@ -158,7 +158,7 @@ class CognitiveRelayCapabilityTest {
     @Test
     fun `no requirements falls back to agent config`() = runTest {
         // ByCapability never matches without requirements, so no rule applies.
-        val result = relay().resolveWithMetadata(RoutingContext(), agentFallback)
+        val result = relay().resolveWithMetadata(RoutingContext(), agentFallback) as RoutingResolution.Success
 
         assertEquals(AIModel_OpenAI.GPT_4_1, result.configuration.model)
         assertEquals("default", result.reason)
@@ -215,7 +215,7 @@ class CognitiveRelayCapabilityTest {
                 requirements = CapabilityRequirement(minReasoning = RelativeReasoning.HIGH),
             ),
             fallbackConfiguration = agentFallback,
-        )
+        ) as RoutingResolution.Success
 
         assertEquals(AIModel_Claude.Opus_4_5, result.configuration.model)
         assertFalse(result.configuration.model == AIModel_Claude.Haiku_3)

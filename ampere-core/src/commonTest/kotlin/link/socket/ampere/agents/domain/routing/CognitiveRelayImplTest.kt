@@ -233,7 +233,7 @@ class CognitiveRelayImplTest {
         val result = relay.resolveWithMetadata(
             context = RoutingContext(phase = CognitivePhase.PERCEIVE),
             fallbackConfiguration = openaiConfig,
-        )
+        ) as RoutingResolution.Success
 
         assertEquals(AIModel_Gemini.Flash_2_5, result.configuration.model)
         assertEquals("phase:PERCEIVE", result.reason)
