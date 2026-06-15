@@ -48,6 +48,7 @@ data class ModelDescriptor(
     val cost: CostPolicy = CostPolicy.Metered,
     val costPerWatt: Double = DEFAULT_COST_PER_WATT,
     val availabilityGated: Boolean = false,
+    val rung: CapabilityRung = CapabilityRung.ONE,
 ) {
     companion object {
         /**
@@ -76,7 +77,8 @@ fun ModelDescriptor.satisfies(req: CapabilityRequirement): Boolean =
     req.required.all { it in capabilities } &&
         (req.minReasoning == null || reasoning >= req.minReasoning) &&
         (req.minContextTokens == null || maxContextTokens >= req.minContextTokens) &&
-        (req.inputs == null || supportedInputs.covers(req.inputs))
+        (req.inputs == null || supportedInputs.covers(req.inputs)) &&
+        (req.minRung == null || rung >= req.minRung)
 
 /**
  * Whether these inputs cover everything [required] asks for: for each modality
