@@ -168,6 +168,7 @@ class SignificanceAwareEventLogger(
         is RoutingEvent.RouteSelected -> EventSignificance.ROUTINE
         is RoutingEvent.RouteResolved -> EventSignificance.ROUTINE
         is RoutingEvent.RouteFallback -> EventSignificance.SIGNIFICANT
+        is RoutingEvent.RouteFloorUnmet -> EventSignificance.SIGNIFICANT
 
         // AgentSurface events - significant; users see them directly via the renderer
         is AgentSurfaceEvent.Requested -> EventSignificance.SIGNIFICANT

@@ -70,7 +70,7 @@ class CognitiveRelayCostTest {
         val result = defaultRelay().resolveWithMetadata(
             context = RoutingContext(requirements = worldKnowledge),
             fallbackConfiguration = anthropicConfig,
-        )
+        ) as RoutingResolution.Success
 
         assertEquals(AIModel_Gemini.Flash_2_5, result.configuration.model)
         assertEquals("capability:${AIProvider_Google.id}", result.reason)
@@ -100,7 +100,7 @@ class CognitiveRelayCostTest {
         val result = relay.resolveWithMetadata(
             context = RoutingContext(requirements = worldKnowledge),
             fallbackConfiguration = openaiConfig,
-        )
+        ) as RoutingResolution.Success
 
         assertEquals(AIModel_Claude.Sonnet_4, result.configuration.model)
         assertEquals("capability:${AIProvider_Anthropic.id}", result.reason)
@@ -155,7 +155,7 @@ class CognitiveRelayCostTest {
         val result = relay.resolveWithMetadata(
             context = RoutingContext(requirements = worldKnowledge),
             fallbackConfiguration = openaiConfig,
-        )
+        ) as RoutingResolution.Success
 
         assertEquals(AIModel_Gemini.Flash_2_5, result.configuration.model)
         assertEquals("capability:${AIProvider_Google.id}", result.reason)
@@ -180,7 +180,7 @@ class CognitiveRelayCostTest {
                 requirements = worldKnowledge,
             ),
             fallbackConfiguration = openaiConfig,
-        )
+        ) as RoutingResolution.Success
 
         assertEquals(AIModel_Claude.Sonnet_4, result.configuration.model)
         assertEquals("phase:PERCEIVE", result.reason)

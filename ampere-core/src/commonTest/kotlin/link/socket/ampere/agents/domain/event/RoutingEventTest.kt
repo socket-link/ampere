@@ -144,6 +144,7 @@ class RoutingEventTest {
             is RoutingEvent.RouteSelected -> "selected"
             is RoutingEvent.RouteFallback -> "fallback"
             is RoutingEvent.RouteResolved -> "resolved"
+            is RoutingEvent.RouteFloorUnmet -> "floor-unmet"
         }
 
         val decision = RoutingDecision("P", "M", "rule")

@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.domain.routing
 
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 
 /**
@@ -40,7 +41,7 @@ interface CognitiveRelay {
     suspend fun resolveWithMetadata(
         context: RoutingContext,
         fallbackConfiguration: AIConfiguration,
-    ): RoutingResolution = RoutingResolution(
+    ): RoutingResolution = RoutingResolution.Success(
         configuration = resolve(context, fallbackConfiguration),
         reason = "relay",
     )
@@ -53,7 +54,21 @@ interface CognitiveRelay {
     suspend fun updateConfig(newConfig: RelayConfig)
 }
 
-data class RoutingResolution(
-    val configuration: AIConfiguration,
-    val reason: String,
-)
+sealed interface RoutingResolution {
+
+    /** Routing succeeded; [configuration] is ready for use. */
+    data class Success(
+        val configuration: AIConfiguration,
+        val reason: String,
+    ) : RoutingResolution
+
+    /**
+     * Routing failed because no registered model meets the declared rung floor.
+     * This is a terminal result — callers must not silently downgrade to a
+     * sub-floor model.
+     */
+    data class FloorUnmet(
+        val requestedFloor: CapabilityRung,
+        val bestAvailableRung: CapabilityRung?,
+    ) : RoutingResolution
+}

@@ -13,6 +13,7 @@ import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.routing.RoutingContext
+import link.socket.ampere.agents.domain.routing.RoutingFloorUnmetException
 import link.socket.ampere.agents.domain.routing.RoutingResolution
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.events.api.AgentEventApi
@@ -183,17 +184,23 @@ class AgentLLMService(
             agentConfiguration.cognitiveRelay?.resolveWithMetadata(
                 context = effectiveRoutingContext,
                 fallbackConfiguration = agentConfiguration.aiConfiguration,
-            ) ?: RoutingResolution(
+            ) ?: RoutingResolution.Success(
                 configuration = agentConfiguration.aiConfiguration,
                 reason = "agent_configuration",
             )
         } else {
-            RoutingResolution(
+            RoutingResolution.Success(
                 configuration = agentConfiguration.aiConfiguration,
                 reason = "agent_configuration",
             )
         }
-        val effectiveConfig = routingResolution.configuration
+        val effectiveConfig = when (routingResolution) {
+            is RoutingResolution.Success -> routingResolution.configuration
+            is RoutingResolution.FloorUnmet -> throw RoutingFloorUnmetException(
+                requestedFloor = routingResolution.requestedFloor,
+                bestAvailableRung = routingResolution.bestAvailableRung,
+            )
+        }
 
         val model = effectiveConfig.model
 

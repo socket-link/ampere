@@ -6,6 +6,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.RoutingEvent
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.agents.domain.routing.capability.CheapestCapableFirst
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorRegistry
@@ -56,7 +57,13 @@ class CognitiveRelayImpl(
         context: RoutingContext,
         fallbackConfiguration: AIConfiguration,
     ): AIConfiguration =
-        resolveWithMetadata(context, fallbackConfiguration).configuration
+        when (val resolution = resolveWithMetadata(context, fallbackConfiguration)) {
+            is RoutingResolution.Success -> resolution.configuration
+            is RoutingResolution.FloorUnmet -> throw RoutingFloorUnmetException(
+                requestedFloor = resolution.requestedFloor,
+                bestAvailableRung = resolution.bestAvailableRung,
+            )
+        }
 
     override suspend fun resolveWithMetadata(
         context: RoutingContext,
@@ -85,6 +92,20 @@ class CognitiveRelayImpl(
         // unavailability — the local-preferred route the relay routed around.
         val skip = firstAvailabilitySkip(currentConfig.rules, context)
 
+        // Floor-unmet check: when a rung floor is requested but no ByCapability
+        // rule's model meets it, resolution is terminal — never silently downgrade.
+        val minRung = context.requirements?.minRung
+        if (matchedRule == null && minRung != null) {
+            val bestAvailableRung = bestRungAmongCapabilityRules(currentConfig.rules)
+            if (bestAvailableRung == null || bestAvailableRung < minRung) {
+                emitRouteFloorUnmet(context, minRung, bestAvailableRung)
+                return RoutingResolution.FloorUnmet(
+                    requestedFloor = minRung,
+                    bestAvailableRung = bestAvailableRung,
+                )
+            }
+        }
+
         val selectedConfig = matchedRule?.configuration
             ?: currentConfig.defaultConfiguration
             ?: fallbackConfiguration
@@ -108,10 +129,25 @@ class CognitiveRelayImpl(
         emitRouteSelected(context, decision)
         costSelection?.let { emitRouteResolved(context, decision, it) }
 
-        return RoutingResolution(
+        return RoutingResolution.Success(
             configuration = selectedConfig,
             reason = ruleDescription,
         )
+    }
+
+    /**
+     * The highest [CapabilityRung] among all [RoutingRule.ByCapability] rules
+     * whose model can be looked up in the registry, or null if none exist. Used
+     * to populate [RoutingEvent.RouteFloorUnmet.bestAvailableRung] for diagnostics.
+     */
+    private suspend fun bestRungAmongCapabilityRules(
+        rules: List<RoutingRule>,
+    ): CapabilityRung? {
+        val reg = registry ?: return null
+        return rules
+            .filterIsInstance<RoutingRule.ByCapability>()
+            .mapNotNull { reg.descriptorFor(it.configuration.model.name)?.rung }
+            .maxOrNull()
     }
 
     /** The first rule whose registry-aware predicate matches [context], if any. */
@@ -220,6 +256,25 @@ class CognitiveRelayImpl(
                 failedModel = skippedConfig.model.name,
                 fallbackDecision = fallbackDecision,
                 failureReason = failureReason,
+            ),
+        )
+    }
+
+    private suspend fun emitRouteFloorUnmet(
+        context: RoutingContext,
+        requestedFloor: CapabilityRung,
+        bestAvailableRung: CapabilityRung?,
+    ) {
+        eventBus?.publish(
+            RoutingEvent.RouteFloorUnmet(
+                eventId = generateUUID("routing"),
+                timestamp = Clock.System.now(),
+                eventSource = context.agentId?.let { EventSource.Agent(it) }
+                    ?: EventSource.Human,
+                agentId = context.agentId,
+                phase = context.phase,
+                requestedFloor = requestedFloor,
+                bestAvailableRung = bestAvailableRung,
             ),
         )
     }

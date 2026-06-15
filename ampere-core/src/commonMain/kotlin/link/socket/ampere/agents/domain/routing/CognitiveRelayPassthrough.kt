@@ -20,7 +20,7 @@ object CognitiveRelayPassthrough : CognitiveRelay {
     override suspend fun resolveWithMetadata(
         context: RoutingContext,
         fallbackConfiguration: AIConfiguration,
-    ): RoutingResolution = RoutingResolution(
+    ): RoutingResolution = RoutingResolution.Success(
         configuration = fallbackConfiguration,
         reason = "passthrough",
     )
