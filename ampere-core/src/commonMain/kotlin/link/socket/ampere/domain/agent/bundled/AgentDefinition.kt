@@ -51,6 +51,12 @@ sealed interface AgentDefinition {
     companion object {
         /**
          * Creates a custom agent definition with minimal configuration.
+         *
+         * @param minimumRung Optional capability-rung floor for this agent. When
+         *   set, [AgentLLMService][link.socket.ampere.agents.domain.reasoning.AgentLLMService]
+         *   threads it into the [RoutingContext][link.socket.ampere.agents.domain.routing.RoutingContext]
+         *   so the relay refuses to route below it (AMPR-219). Defaults to `null`
+         *   (no floor), preserving the prior behavior for existing callers.
          */
         fun Custom(
             name: String,
@@ -58,6 +64,7 @@ sealed interface AgentDefinition {
             prompt: String,
             requiredInputs: List<AgentInput> = emptyList(),
             optionalInputs: List<AgentInput> = emptyList(),
+            minimumRung: CapabilityRung? = null,
             aiConfigurationBuilder: (AIConfigurationFactory) -> AIConfiguration = { it.getDefaultConfiguration() },
         ): AgentDefinition = object : Custom(
             name = name,
@@ -66,6 +73,8 @@ sealed interface AgentDefinition {
             prompt = prompt,
             requiredInputs = requiredInputs,
             optionalInputs = optionalInputs,
-        ) {}
+        ) {
+            override val minimumRung: CapabilityRung? = minimumRung
+        }
     }
 }
