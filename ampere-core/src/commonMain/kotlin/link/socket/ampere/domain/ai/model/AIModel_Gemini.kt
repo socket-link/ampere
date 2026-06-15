@@ -417,13 +417,19 @@ sealed class AIModel_Gemini(
 
         // ---- Models ----
 
-        val ALL_MODELS = listOf(
-            Pro_2_5,
-            Flash_2_5,
-            Flash_Lite_2_5,
-            Flash_2_0,
-            Flash_Lite_2_0,
-            Pro_3_0,
-        )
+        // Lazy to avoid the JVM class-init cycle: if any data object (Pro_2_5, etc.)
+        // is accessed before this companion finishes initializing, the companion's
+        // <clinit> would see that object's INSTANCE as null and commit a list with
+        // null entries. Lazy defers evaluation until the companion is fully set up.
+        val ALL_MODELS by lazy {
+            listOf(
+                Pro_2_5,
+                Flash_2_5,
+                Flash_Lite_2_5,
+                Flash_2_0,
+                Flash_Lite_2_0,
+                Pro_3_0,
+            )
+        }
     }
 }

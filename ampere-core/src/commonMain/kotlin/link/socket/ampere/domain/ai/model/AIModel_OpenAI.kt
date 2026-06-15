@@ -667,20 +667,26 @@ sealed class AIModel_OpenAI(
 
         // ---- Models ----
 
-        val ALL_MODELS = listOf(
-            GPT_5,
-            GPT_5_mini,
-            GPT_5_nano,
-            GPT_5_1,
-            GPT_5_1_Chat_Latest,
-            GPT_5_1_Codex_Max,
-            GPT_4_1,
-            GPT_4_1_mini,
-            GPT_4o,
-            GPT_4o_mini,
-            o4_mini,
-            o3,
-            o3_mini,
-        )
+        // Lazy to avoid the JVM class-init cycle: if any data object (GPT_4_1, etc.)
+        // is accessed before this companion finishes initializing, the companion's
+        // <clinit> would see that object's INSTANCE as null and commit a list with
+        // null entries. Lazy defers evaluation until the companion is fully set up.
+        val ALL_MODELS by lazy {
+            listOf(
+                GPT_5,
+                GPT_5_mini,
+                GPT_5_nano,
+                GPT_5_1,
+                GPT_5_1_Chat_Latest,
+                GPT_5_1_Codex_Max,
+                GPT_4_1,
+                GPT_4_1_mini,
+                GPT_4o,
+                GPT_4o_mini,
+                o4_mini,
+                o3,
+                o3_mini,
+            )
+        }
     }
 }
