@@ -3,8 +3,8 @@ package link.socket.ampere.llm
 import com.aallam.openai.api.chat.ChatCompletion
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import link.socket.ampere.agents.domain.routing.capability.CostPolicy
-import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptor
-import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine
 import link.socket.ampere.api.AmpereStableApi
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
@@ -12,15 +12,15 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
 /**
  * [UpstreamLlmClient] that dispatches each call to either a [LocalUpstreamLlmClient]
  * or the [BundledUpstreamLlmClient] (cloud) path, based on the relay-selected
- * configuration's [ProviderDescriptor].
+ * configuration's [ModelDescriptor].
  *
  * This is the composition root of AMPR-203's execution surface. The relay has
  * already *selected* a configuration (post-`RouteSelected`); this client decides
  * *how* to execute it:
  *
- * - If the selected provider's descriptor declares [CostPolicy.Free] **or** is
- *   [availabilityGated][ProviderDescriptor.availabilityGated] — the markers of a
- *   local, on-device provider — and a [localEngine] is bound, the call runs
+ * - If the selected model's descriptor declares [CostPolicy.Free] **or** is
+ *   [availabilityGated][ModelDescriptor.availabilityGated] — the markers of a
+ *   local, on-device model — and a [localEngine] is bound, the call runs
  *   through the [LocalUpstreamLlmClient].
  * - Otherwise it runs through [bundled], i.e. the existing per-provider OpenAI
  *   client. This includes the case where no descriptor is registered, preserving
@@ -41,7 +41,7 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
  */
 @AmpereStableApi
 class DispatchingUpstreamLlmClient(
-    private val registry: ProviderDescriptorRegistry,
+    private val registry: ModelDescriptorRegistry,
     localEngine: LocalInferenceEngine?,
     private val bundled: UpstreamLlmClient = BundledUpstreamLlmClient,
 ) : UpstreamLlmClient {
@@ -53,7 +53,7 @@ class DispatchingUpstreamLlmClient(
         configuration: AIConfiguration,
     ): ChatCompletion {
         val localClient = local
-        val descriptor = registry.descriptorFor(configuration.provider.id)
+        val descriptor = registry.descriptorFor(configuration.model.name)
 
         return if (localClient != null && descriptor != null && descriptor.prefersLocalExecution()) {
             localClient.call(request, configuration)
@@ -63,9 +63,9 @@ class DispatchingUpstreamLlmClient(
     }
 
     /**
-     * Whether this descriptor designates a provider that should execute locally:
+     * Whether this descriptor designates a model that should execute locally:
      * a free (0-Watt) cost policy or a device-gated availability flag.
      */
-    private fun ProviderDescriptor.prefersLocalExecution(): Boolean =
+    private fun ModelDescriptor.prefersLocalExecution(): Boolean =
         cost is CostPolicy.Free || availabilityGated
 }

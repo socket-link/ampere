@@ -2,8 +2,8 @@ package link.socket.ampere.agents.domain.routing
 
 import kotlin.math.roundToLong
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
-import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptor
-import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.cheapestCapable
 import link.socket.ampere.domain.ai.provider.ProviderId
 import link.socket.ampere.domain.arc.ArcAgentConfig
@@ -99,7 +99,7 @@ data class RouteCostReport(
  *   the report shows the unconditional cheapest provider per step.
  */
 class RouteCostReporter(
-    private val registry: ProviderDescriptorRegistry,
+    private val registry: ModelDescriptorRegistry,
     private val requirementFor: (ArcConfig, ArcAgentConfig) -> CapabilityRequirement =
         { _, _ -> CapabilityRequirement() },
 ) {
@@ -118,7 +118,7 @@ class RouteCostReporter(
     private fun stepCost(
         arc: ArcConfig,
         agent: ArcAgentConfig,
-        descriptors: List<ProviderDescriptor>,
+        descriptors: List<ModelDescriptor>,
     ): RouteStepCost {
         val ranking = descriptors.cheapestCapable(requirementFor(arc, agent))
             ?: return RouteStepCost(

@@ -10,8 +10,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.domain.routing.capability.CostPolicy
-import link.socket.ampere.agents.domain.routing.capability.InMemoryProviderDescriptorRegistry
-import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptor
+import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.local.FakeLocalInferenceEngine
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
@@ -35,11 +35,11 @@ class DispatchingUpstreamLlmClientTest {
     // OpenAI stands in for a gated-but-metered provider (availability flag alone routes local).
     private val gatedConfig = AIConfiguration_Default(AIProvider_OpenAI, AIModel_OpenAI.GPT_4_1)
 
-    private fun registry() = InMemoryProviderDescriptorRegistry(
+    private fun registry() = InMemoryModelDescriptorRegistry(
         seed = listOf(
-            descriptor(AIProvider_Anthropic.id, cost = CostPolicy.Free, gated = true),
-            descriptor(AIProvider_Google.id, cost = CostPolicy.Metered, gated = false),
-            descriptor(AIProvider_OpenAI.id, cost = CostPolicy.Metered, gated = true),
+            descriptor(AIModel_Claude.Sonnet_4.name, AIProvider_Anthropic.id, cost = CostPolicy.Free, gated = true),
+            descriptor(AIModel_Gemini.Flash_2_5.name, AIProvider_Google.id, cost = CostPolicy.Metered, gated = false),
+            descriptor(AIModel_OpenAI.GPT_4_1.name, AIProvider_OpenAI.id, cost = CostPolicy.Metered, gated = true),
         ),
     )
 
@@ -99,7 +99,7 @@ class DispatchingUpstreamLlmClientTest {
         val bundled = RecordingClient("cloud-answer")
         // Empty registry: descriptorFor() returns null for everything.
         val client = DispatchingUpstreamLlmClient(
-            InMemoryProviderDescriptorRegistry(seed = emptyList()),
+            InMemoryModelDescriptorRegistry(seed = emptyList()),
             engine,
             bundled,
         )
@@ -111,10 +111,12 @@ class DispatchingUpstreamLlmClientTest {
     }
 
     private fun descriptor(
+        modelName: String,
         providerId: String,
         cost: CostPolicy,
         gated: Boolean,
-    ) = ProviderDescriptor(
+    ) = ModelDescriptor(
+        modelName = modelName,
         providerId = providerId,
         capabilities = emptySet(),
         reasoning = RelativeReasoning.LOW,

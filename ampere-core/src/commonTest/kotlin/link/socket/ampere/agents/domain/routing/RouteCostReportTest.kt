@@ -6,14 +6,15 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.routing.capability.CostPolicy
-import link.socket.ampere.agents.domain.routing.capability.InMemoryProviderDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.capability.ProviderCapability
-import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptor
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs
+import link.socket.ampere.domain.ai.model.AIModel_Claude
+import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.domain.ai.provider.AIProvider_Google
-import link.socket.ampere.domain.ai.provider.AIProvider_OpenAI
 import link.socket.ampere.domain.arc.ArcAgentConfig
 import link.socket.ampere.domain.arc.ArcConfig
 import link.socket.ampere.domain.arc.ArcRegistry
@@ -22,19 +23,21 @@ class RouteCostReportTest {
 
     @Test
     fun `default report routes every built-in Arc step to the cheapest provider`() = runTest {
-        val report = RouteCostReporter(InMemoryProviderDescriptorRegistry()).report()
+        val report = RouteCostReporter(InMemoryModelDescriptorRegistry()).report()
 
         val builtInArcs = ArcRegistry.list()
         assertEquals(builtInArcs.size, report.arcs.size)
 
-        // With no requirement every provider qualifies, so Google (cheapest in
-        // the default seed) wins every step at 0.007 USD/W.
+        // With no requirement every model qualifies, so a Google model (cheapest
+        // in the default seed at 0.007 USD/W) wins every step. The runner-up is
+        // now another Google model — selection is model-granular, and every
+        // Google model shares the provider's rate.
         for (arc in report.arcs) {
             assertTrue(arc.steps.isNotEmpty())
             for (step in arc.steps) {
                 assertEquals(AIProvider_Google.id, step.chosenProvider)
                 assertEquals(0.007, step.estimatedWattCost, absoluteTolerance = 1e-9)
-                assertEquals(AIProvider_OpenAI.id, step.runnerUpProvider)
+                assertEquals(AIProvider_Google.id, step.runnerUpProvider)
             }
         }
 
@@ -45,10 +48,11 @@ class RouteCostReportTest {
 
     @Test
     fun `text-only steps fall to the Free local provider while knowledge steps stay cloud`() = runTest {
-        // Anthropic stands in for a local 0W provider that lacks world knowledge.
-        val registry = InMemoryProviderDescriptorRegistry(
+        // A free local model that lacks world knowledge vs. a metered cloud model.
+        val registry = InMemoryModelDescriptorRegistry(
             seed = listOf(
-                ProviderDescriptor(
+                ModelDescriptor(
+                    modelName = AIModel_Claude.Sonnet_4.name,
                     providerId = AIProvider_Anthropic.id,
                     capabilities = emptySet(),
                     reasoning = RelativeReasoning.LOW,
@@ -56,7 +60,8 @@ class RouteCostReportTest {
                     supportedInputs = SupportedInputs.TEXT,
                     cost = CostPolicy.Free,
                 ),
-                ProviderDescriptor(
+                ModelDescriptor(
+                    modelName = AIModel_Gemini.Flash_2_5.name,
                     providerId = AIProvider_Google.id,
                     capabilities = setOf(ProviderCapability.WORLD_KNOWLEDGE),
                     reasoning = RelativeReasoning.HIGH,
@@ -96,9 +101,10 @@ class RouteCostReportTest {
 
     @Test
     fun `steps with no capable provider are reported as unmet`() = runTest {
-        val registry = InMemoryProviderDescriptorRegistry(
+        val registry = InMemoryModelDescriptorRegistry(
             seed = listOf(
-                ProviderDescriptor(
+                ModelDescriptor(
+                    modelName = AIModel_Gemini.Flash_2_5.name,
                     providerId = AIProvider_Google.id,
                     capabilities = emptySet(),
                     reasoning = RelativeReasoning.LOW,
@@ -122,7 +128,7 @@ class RouteCostReportTest {
 
     @Test
     fun `render produces a deterministic non-empty table`() = runTest {
-        val report = RouteCostReporter(InMemoryProviderDescriptorRegistry())
+        val report = RouteCostReporter(InMemoryModelDescriptorRegistry())
             .report(listOf(ArcConfig(name = "demo", agents = listOf(ArcAgentConfig(role = "pm")))))
 
         val rendered = report.render()

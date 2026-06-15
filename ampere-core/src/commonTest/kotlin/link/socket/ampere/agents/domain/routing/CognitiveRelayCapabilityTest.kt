@@ -13,9 +13,9 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.routing.capability.CostPolicy
-import link.socket.ampere.agents.domain.routing.capability.InMemoryProviderDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.capability.ProviderCapability
-import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptor
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -48,9 +48,11 @@ class CognitiveRelayCapabilityTest {
         model = AIModel_OpenAI.GPT_4_1,
     )
 
-    private val registry = InMemoryProviderDescriptorRegistry(
+    // Descriptors are keyed by the model each config selects, not by provider.
+    private val registry = InMemoryModelDescriptorRegistry(
         seed = listOf(
-            ProviderDescriptor(
+            ModelDescriptor(
+                modelName = AIModel_Claude.Sonnet_4.name,
                 providerId = AIProvider_Anthropic.id,
                 capabilities = emptySet(),
                 reasoning = RelativeReasoning.LOW,
@@ -59,7 +61,8 @@ class CognitiveRelayCapabilityTest {
                 cost = CostPolicy.Free,
                 availabilityGated = true,
             ),
-            ProviderDescriptor(
+            ModelDescriptor(
+                modelName = AIModel_Gemini.Flash_2_5.name,
                 providerId = AIProvider_Google.id,
                 capabilities = setOf(
                     ProviderCapability.WORLD_KNOWLEDGE,
@@ -159,6 +162,63 @@ class CognitiveRelayCapabilityTest {
 
         assertEquals(AIModel_OpenAI.GPT_4_1, result.configuration.model)
         assertEquals("default", result.reason)
+    }
+
+    @Test
+    fun `HIGH reasoning requirement skips a sub-HIGH model from a capable provider`() = runTest {
+        // Regression for the provider-keyed latent bug (AMPR-214): both rules
+        // target Anthropic, but the first selects a LOW-reasoning model. When
+        // selection was provider-keyed, the provider's HIGH descriptor let the
+        // LOW model ride in and finalize. Model-keyed selection evaluates each
+        // model's own tier, so the LOW model is skipped and the HIGH one wins.
+        val lowModelConfig = AIConfiguration_Default(
+            provider = AIProvider_Anthropic,
+            model = AIModel_Claude.Haiku_3,
+        )
+        val highModelConfig = AIConfiguration_Default(
+            provider = AIProvider_Anthropic,
+            model = AIModel_Claude.Opus_4_5,
+        )
+        val tierRegistry = InMemoryModelDescriptorRegistry(
+            seed = listOf(
+                ModelDescriptor(
+                    modelName = AIModel_Claude.Haiku_3.name,
+                    providerId = AIProvider_Anthropic.id,
+                    capabilities = emptySet(),
+                    reasoning = RelativeReasoning.LOW,
+                    maxContextTokens = 200_000,
+                    supportedInputs = SupportedInputs.TEXT,
+                ),
+                ModelDescriptor(
+                    modelName = AIModel_Claude.Opus_4_5.name,
+                    providerId = AIProvider_Anthropic.id,
+                    capabilities = emptySet(),
+                    reasoning = RelativeReasoning.HIGH,
+                    maxContextTokens = 200_000,
+                    supportedInputs = SupportedInputs.TEXT,
+                ),
+            ),
+        )
+        val tierRelay = CognitiveRelayImpl(
+            initialConfig = RelayConfig(
+                // LOW model listed first; only the HIGH model satisfies the requirement.
+                rules = listOf(
+                    RoutingRule.ByCapability(lowModelConfig),
+                    RoutingRule.ByCapability(highModelConfig),
+                ),
+            ),
+            registry = tierRegistry,
+        )
+
+        val result = tierRelay.resolveWithMetadata(
+            context = RoutingContext(
+                requirements = CapabilityRequirement(minReasoning = RelativeReasoning.HIGH),
+            ),
+            fallbackConfiguration = agentFallback,
+        )
+
+        assertEquals(AIModel_Claude.Opus_4_5, result.configuration.model)
+        assertFalse(result.configuration.model == AIModel_Claude.Haiku_3)
     }
 
     @Test

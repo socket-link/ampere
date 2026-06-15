@@ -14,9 +14,9 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.routing.capability.CostPolicy
-import link.socket.ampere.agents.domain.routing.capability.InMemoryProviderDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.capability.ProviderCapability
-import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptor
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
@@ -62,7 +62,7 @@ class CognitiveRelayCostTest {
             ),
         ),
         eventBus = eventBus,
-        registry = InMemoryProviderDescriptorRegistry(),
+        registry = InMemoryModelDescriptorRegistry(),
     )
 
     @Test
@@ -77,13 +77,14 @@ class CognitiveRelayCostTest {
     }
 
     @Test
-    fun `tie-break is stable by providerId regardless of rule order`() = runTest {
-        // Both providers priced identically; Anthropic must win on id ("anthropic"
-        // < "google") even though the Google rule is listed first.
-        val registry = InMemoryProviderDescriptorRegistry(
+    fun `tie-break is stable by modelName regardless of rule order`() = runTest {
+        // Both models priced identically; Sonnet 4 must win on model name
+        // ("claude-sonnet-4-0" < "gemini-2.5-flash") even though the Google rule
+        // is listed first.
+        val registry = InMemoryModelDescriptorRegistry(
             seed = listOf(
-                tiedDescriptor(AIProvider_Anthropic.id),
-                tiedDescriptor(AIProvider_Google.id),
+                tiedDescriptor(AIModel_Claude.Sonnet_4.name, AIProvider_Anthropic.id),
+                tiedDescriptor(AIModel_Gemini.Flash_2_5.name, AIProvider_Google.id),
             ),
         )
         val relay = CognitiveRelayImpl(
@@ -108,10 +109,10 @@ class CognitiveRelayCostTest {
     @Test
     fun `local Free provider always wins on price the 0W unification`() = runTest {
         // Anthropic stands in for a local 0W provider; Google is metered.
-        val registry = InMemoryProviderDescriptorRegistry(
+        val registry = InMemoryModelDescriptorRegistry(
             seed = listOf(
-                capableDescriptor(AIProvider_Anthropic.id, cost = CostPolicy.Free),
-                capableDescriptor(AIProvider_Google.id, costPerWatt = 0.001),
+                capableDescriptor(AIModel_Claude.Sonnet_4.name, AIProvider_Anthropic.id, cost = CostPolicy.Free),
+                capableDescriptor(AIModel_Gemini.Flash_2_5.name, AIProvider_Google.id, costPerWatt = 0.001),
             ),
         )
         val relay = CognitiveRelayImpl(
@@ -135,10 +136,10 @@ class CognitiveRelayCostTest {
     @Test
     fun `single capable candidate behaves exactly like first-match`() = runTest {
         // Only Google advertises world knowledge, so there is nothing to compare.
-        val registry = InMemoryProviderDescriptorRegistry(
+        val registry = InMemoryModelDescriptorRegistry(
             seed = listOf(
-                textOnlyDescriptor(AIProvider_Anthropic.id),
-                capableDescriptor(AIProvider_Google.id, costPerWatt = 0.014),
+                textOnlyDescriptor(AIModel_Claude.Sonnet_4.name, AIProvider_Anthropic.id),
+                capableDescriptor(AIModel_Gemini.Flash_2_5.name, AIProvider_Google.id, costPerWatt = 0.014),
             ),
         )
         val relay = CognitiveRelayImpl(
@@ -170,7 +171,7 @@ class CognitiveRelayCostTest {
                     RoutingRule.ByCapability(googleConfig),
                 ),
             ),
-            registry = InMemoryProviderDescriptorRegistry(),
+            registry = InMemoryModelDescriptorRegistry(),
         )
 
         val result = relay.resolveWithMetadata(
@@ -210,15 +211,17 @@ class CognitiveRelayCostTest {
         assertEquals("OpenAI", event.runnerUpProvider)
         assertEquals(0.014, event.runnerUpWattCost!!, absoluteTolerance = 1e-9)
         assertEquals(0.007, event.savingsVsRunnerUp!!, absoluteTolerance = 1e-9)
-        assertEquals(RelativeReasoning.HIGH, event.tier)
+        // tier is now the chosen *model's* reasoning (Gemini 2.5 Flash = NORMAL),
+        // not the provider-level HIGH the old provider-keyed descriptor reported.
+        assertEquals(RelativeReasoning.NORMAL, event.tier)
     }
 
     @Test
     fun `single candidate RouteResolved reports no runner-up`() = runBlocking {
-        val registry = InMemoryProviderDescriptorRegistry(
+        val registry = InMemoryModelDescriptorRegistry(
             seed = listOf(
-                textOnlyDescriptor(AIProvider_Anthropic.id),
-                capableDescriptor(AIProvider_Google.id, costPerWatt = 0.014),
+                textOnlyDescriptor(AIModel_Claude.Sonnet_4.name, AIProvider_Anthropic.id),
+                capableDescriptor(AIModel_Gemini.Flash_2_5.name, AIProvider_Google.id, costPerWatt = 0.014),
             ),
         )
         val scope = CoroutineScope(Dispatchers.Default)
@@ -253,10 +256,12 @@ class CognitiveRelayCostTest {
     }
 
     private fun capableDescriptor(
+        modelName: String,
         providerId: String,
         cost: CostPolicy = CostPolicy.Metered,
         costPerWatt: Double = 0.014,
-    ) = ProviderDescriptor(
+    ) = ModelDescriptor(
+        modelName = modelName,
         providerId = providerId,
         capabilities = setOf(
             ProviderCapability.WORLD_KNOWLEDGE,
@@ -270,10 +275,11 @@ class CognitiveRelayCostTest {
         costPerWatt = costPerWatt,
     )
 
-    private fun tiedDescriptor(providerId: String) =
-        capableDescriptor(providerId, costPerWatt = 0.01)
+    private fun tiedDescriptor(modelName: String, providerId: String) =
+        capableDescriptor(modelName, providerId, costPerWatt = 0.01)
 
-    private fun textOnlyDescriptor(providerId: String) = ProviderDescriptor(
+    private fun textOnlyDescriptor(modelName: String, providerId: String) = ModelDescriptor(
+        modelName = modelName,
         providerId = providerId,
         capabilities = emptySet(),
         reasoning = RelativeReasoning.LOW,

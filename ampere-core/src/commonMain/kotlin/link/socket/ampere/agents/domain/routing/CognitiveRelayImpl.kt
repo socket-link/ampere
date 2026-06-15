@@ -7,8 +7,8 @@ import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.routing.capability.CheapestCapableFirst
-import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptor
-import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.routingCostPerWatt
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.utils.generateUUID
@@ -42,7 +42,7 @@ import link.socket.ampere.util.logWith
 class CognitiveRelayImpl(
     initialConfig: RelayConfig = RelayConfig(),
     private val eventBus: EventSerialBus? = null,
-    private val registry: ProviderDescriptorRegistry? = null,
+    private val registry: ModelDescriptorRegistry? = null,
 ) : CognitiveRelay {
 
     private val logger: Logger = logWith("CognitiveRelay")
@@ -121,9 +121,9 @@ class CognitiveRelayImpl(
     ): RoutingRule? = rules.firstOrNull { it.matches(context, registry) }
 
     /**
-     * Among the [RoutingRule.ByCapability] rules whose target provider satisfies
+     * Among the [RoutingRule.ByCapability] rules whose target model satisfies
      * [context]'s requirement, the cheapest by cost-per-Watt (stable tie-break by
-     * `providerId`). Returns `null` when no registry is wired or nothing matches.
+     * `modelName`). Returns `null` when no registry is wired or nothing matches.
      */
     private suspend fun selectCheapestCapable(
         rules: List<RoutingRule>,
@@ -135,7 +135,7 @@ class CognitiveRelayImpl(
             .filterIsInstance<RoutingRule.ByCapability>()
             .mapNotNull { rule ->
                 if (!rule.matches(context, registry)) return@mapNotNull null
-                val descriptor = registry.descriptorFor(rule.configuration.provider.id)
+                val descriptor = registry.descriptorFor(rule.configuration.model.name)
                     ?: return@mapNotNull null
                 rule to descriptor
             }
@@ -262,9 +262,9 @@ class CognitiveRelayImpl(
      */
     private data class CostSelection(
         val rule: RoutingRule,
-        val chosen: ProviderDescriptor,
+        val chosen: ModelDescriptor,
         val runnerUpProvider: String?,
-        val runnerUp: ProviderDescriptor?,
+        val runnerUp: ModelDescriptor?,
         val candidateCount: Int,
     )
 }

@@ -26,9 +26,9 @@ import link.socket.ampere.agents.domain.knowledge.KnowledgeType
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepositoryImpl
 import link.socket.ampere.agents.domain.routing.capability.CostPolicy
-import link.socket.ampere.agents.domain.routing.capability.InMemoryProviderDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.capability.ProviderCapability
-import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptor
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.api.model.TokenUsage
@@ -93,9 +93,12 @@ class ArcTraceProjectionTest {
     @Test
     fun `call routed to a Free descriptor records zero Watts`() = runTest {
         val runId = "run-free-provider"
-        val registry = InMemoryProviderDescriptorRegistry(
+        // Keyed by the completed call's model id, since cost resolution is now
+        // model-granular (AMPR-214).
+        val registry = InMemoryModelDescriptorRegistry(
             seed = listOf(
-                ProviderDescriptor(
+                ModelDescriptor(
+                    modelName = "local-llm",
                     providerId = "local",
                     capabilities = setOf(ProviderCapability.WORLD_KNOWLEDGE),
                     reasoning = RelativeReasoning.NORMAL,
@@ -108,7 +111,7 @@ class ArcTraceProjectionTest {
         )
         val freeAwareProjection = ArcTraceProjection(
             database = database,
-            providerDescriptorRegistry = registry,
+            modelDescriptorRegistry = registry,
         )
 
         eventRepository.saveEvent(
