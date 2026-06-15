@@ -3,7 +3,7 @@ package link.socket.ampere.agents.domain.routing
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
-import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.satisfies
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
@@ -28,7 +28,7 @@ sealed interface RoutingRule {
      */
     suspend fun matches(
         context: RoutingContext,
-        registry: ProviderDescriptorRegistry?,
+        registry: ModelDescriptorRegistry?,
     ): Boolean = matches(context)
 
     /** The AIConfiguration to use when this rule matches. */
@@ -131,21 +131,25 @@ sealed interface RoutingRule {
 
         override suspend fun matches(
             context: RoutingContext,
-            registry: ProviderDescriptorRegistry?,
+            registry: ModelDescriptorRegistry?,
         ): Boolean = evaluate(context, registry) is CapabilityEvaluation.Matched
 
         /**
          * Resolves this rule against [context] and [registry], distinguishing a
-         * plain non-match from a capable provider skipped by a closed
-         * availability gate. The relay reads [CapabilityEvaluation.Skipped] to
-         * emit a fallback while still selecting a later rule.
+         * plain non-match from a capable model skipped by a closed availability
+         * gate. The relay reads [CapabilityEvaluation.Skipped] to emit a
+         * fallback while still selecting a later rule.
+         *
+         * The descriptor is looked up by the configuration's *model* name, so
+         * the capability gate evaluates the actual model's tier — a sub-tier
+         * model no longer rides in on its provider's best model (AMPR-214).
          */
         suspend fun evaluate(
             context: RoutingContext,
-            registry: ProviderDescriptorRegistry?,
+            registry: ModelDescriptorRegistry?,
         ): CapabilityEvaluation {
             val req = context.requirements ?: return CapabilityEvaluation.NoMatch
-            val descriptor = registry?.descriptorFor(configuration.provider.id)
+            val descriptor = registry?.descriptorFor(configuration.model.name)
                 ?: return CapabilityEvaluation.NoMatch
             if (!descriptor.satisfies(req)) return CapabilityEvaluation.NoMatch
 

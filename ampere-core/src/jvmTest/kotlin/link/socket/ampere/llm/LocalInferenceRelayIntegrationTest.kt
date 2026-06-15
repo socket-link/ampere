@@ -25,9 +25,9 @@ import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.routing.RoutingRule
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.routing.capability.CostPolicy
-import link.socket.ampere.agents.domain.routing.capability.InMemoryProviderDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.capability.ProviderCapability
-import link.socket.ampere.agents.domain.routing.capability.ProviderDescriptor
 import link.socket.ampere.agents.domain.routing.local.FakeLocalInferenceEngine
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
 import link.socket.ampere.agents.events.api.EventHandler
@@ -66,9 +66,10 @@ class LocalInferenceRelayIntegrationTest {
     // The agent's static fallback, used only when no rule matches.
     private val agentFallback = AIConfiguration_Default(AIProvider_OpenAI, AIModel_OpenAI.GPT_4_1)
 
-    private fun registry() = InMemoryProviderDescriptorRegistry(
+    private fun registry() = InMemoryModelDescriptorRegistry(
         seed = listOf(
-            ProviderDescriptor(
+            ModelDescriptor(
+                modelName = AIModel_Claude.Sonnet_4.name,
                 providerId = AIProvider_Anthropic.id,
                 capabilities = emptySet(),
                 reasoning = RelativeReasoning.LOW,
@@ -77,7 +78,8 @@ class LocalInferenceRelayIntegrationTest {
                 cost = CostPolicy.Free,
                 availabilityGated = true,
             ),
-            ProviderDescriptor(
+            ModelDescriptor(
+                modelName = AIModel_Gemini.Flash_2_5.name,
                 providerId = AIProvider_Google.id,
                 capabilities = setOf(
                     ProviderCapability.WORLD_KNOWLEDGE,

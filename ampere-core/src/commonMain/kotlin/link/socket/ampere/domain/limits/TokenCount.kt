@@ -48,3 +48,53 @@ enum class TokenCount(val label: String) {
     _1b("1 billion"),
     _5b("50 billion"),
 }
+
+/**
+ * The approximate token count this enum stands for, as a number. Lets callers
+ * reason numerically about a [TokenCount] (e.g. projecting a model's context
+ * window into a comparable `Int`) instead of parsing [label].
+ */
+val TokenCount.numericValue: Long
+    get() = when (this) {
+        TokenCount._4k -> 4_000L
+        TokenCount._5k -> 5_000L
+        TokenCount._4096 -> 4_096L
+        TokenCount._8k -> 8_000L
+        TokenCount._8192 -> 8_192L
+        TokenCount._10k -> 10_000L
+        TokenCount._15k -> 15_000L
+        TokenCount._16k -> 16_000L
+        TokenCount._20k -> 20_000L
+        TokenCount._25k -> 25_000L
+        TokenCount._30k -> 30_000L
+        TokenCount._32k -> 32_000L
+        TokenCount._35k -> 35_000L
+        TokenCount._40k -> 40_000L
+        TokenCount._50k -> 50_000L
+        TokenCount._64k -> 64_000L
+        TokenCount._80k -> 80_000L
+        TokenCount._90k -> 90_000L
+        TokenCount._100k -> 100_000L
+        TokenCount._128k -> 128_000L
+        TokenCount._160k -> 160_000L
+        TokenCount._200k -> 200_000L
+        TokenCount._250k -> 250_000L
+        TokenCount._400k -> 400_000L
+        TokenCount._450k -> 450_000L
+        TokenCount._800k -> 800_000L
+        TokenCount._1m -> 1_000_000L
+        TokenCount._2m -> 2_000_000L
+        TokenCount._3m -> 3_000_000L
+        TokenCount._4m -> 4_000_000L
+        TokenCount._5m -> 5_000_000L
+        TokenCount._8m -> 8_000_000L
+        TokenCount._10m -> 10_000_000L
+        TokenCount._30m -> 30_000_000L
+        TokenCount._40m -> 40_000_000L
+        TokenCount._150m -> 150_000_000L
+        TokenCount._180m -> 180_000_000L
+        TokenCount._400m -> 400_000_000L
+        TokenCount._500m -> 500_000_000L
+        TokenCount._1b -> 1_000_000_000L
+        TokenCount._5b -> 5_000_000_000L
+    }
