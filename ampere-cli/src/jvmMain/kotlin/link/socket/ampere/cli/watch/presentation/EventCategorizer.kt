@@ -124,6 +124,10 @@ object EventCategorizer {
         is SparkEvent -> EventSignificance.ROUTINE
 
         is RoutingEvent.RouteFallback -> EventSignificance.SIGNIFICANT
+
+        // A rung floor with no satisfying model is a terminal routing failure:
+        // the call cannot proceed, so it warrants immediate human awareness.
+        is RoutingEvent.RouteFloorUnmet -> EventSignificance.CRITICAL
     }.let { significance ->
         if (event is ProviderCallCompletedEvent && !event.success) {
             EventSignificance.SIGNIFICANT
