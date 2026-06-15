@@ -90,10 +90,57 @@ class InMemoryModelDescriptorRegistry(
         private const val ANTHROPIC_USD_PER_WATT: Double = 0.026
 
         /**
+         * Rung assignments for every model in the bundled cloud catalogs.
+         * Update this map when a new frontier model ships — no other file needs to change.
+         *
+         * Rungs are assigned by generation and capability tier, consistent with
+         * each model's [AIModelFeatures.reasoningLevel] (no LOW-reasoning model
+         * exceeds TWO; no FOUR-rung model is below HIGH).
+         *
+         * ONE  — entry/cheap (LOW reasoning, nano/lite variants)
+         * TWO  — standard (NORMAL reasoning, fast mid-tier)
+         * THREE — advanced (capable HIGH or premium NORMAL)
+         * FOUR — frontier (flagship HIGH, latest generation)
+         */
+        private val MODEL_RUNGS: Map<String, CapabilityRung> = mapOf(
+            // ── Anthropic / Claude ────────────────────────────────────────────
+            "claude-3-haiku-20240307" to CapabilityRung.ONE,
+            "claude-3-5-haiku-latest" to CapabilityRung.TWO,
+            "claude-haiku-4-5" to CapabilityRung.TWO,
+            "claude-sonnet-4-0" to CapabilityRung.THREE,
+            "claude-3-7-sonnet-latest" to CapabilityRung.THREE,
+            "claude-sonnet-4-5-20250929" to CapabilityRung.THREE,
+            "claude-opus-4-0" to CapabilityRung.FOUR,
+            "claude-opus-4-1" to CapabilityRung.FOUR,
+            "claude-opus-4-5-20251101" to CapabilityRung.FOUR,
+            // ── OpenAI / GPT ──────────────────────────────────────────────────
+            "gpt-5-nano" to CapabilityRung.ONE,
+            "gpt-4o-mini" to CapabilityRung.ONE,
+            "gpt-5-mini" to CapabilityRung.TWO,
+            "gpt-4.1-mini" to CapabilityRung.TWO,
+            "gpt-4o" to CapabilityRung.TWO,
+            "o3-mini" to CapabilityRung.TWO,
+            "gpt-4.1" to CapabilityRung.THREE,
+            "o4-mini" to CapabilityRung.THREE,
+            "gpt-5" to CapabilityRung.FOUR,
+            "gpt-5.1" to CapabilityRung.FOUR,
+            "gpt-5.1-chat-latest" to CapabilityRung.FOUR,
+            "gpt-5.1-codex-max" to CapabilityRung.FOUR,
+            "o3" to CapabilityRung.FOUR,
+            // ── Google / Gemini ───────────────────────────────────────────────
+            "gemini-2.0-flash-lite" to CapabilityRung.ONE,
+            "gemini-2.5-flash-lite" to CapabilityRung.ONE,
+            "gemini-2.0-flash" to CapabilityRung.TWO,
+            "gemini-2.5-flash" to CapabilityRung.TWO,
+            "gemini-2.5-pro" to CapabilityRung.THREE,
+            "gemini-3-pro-latest" to CapabilityRung.FOUR,
+        )
+
+        /**
          * Projects an [AIModel] into a [ModelDescriptor] from its own metadata:
          * reasoning and inputs come from [AIModelFeatures][link.socket.ampere.domain.ai.model.AIModelFeatures],
          * the context window from [ModelLimits][link.socket.ampere.domain.limits.ModelLimits],
-         * and cost from the owning provider.
+         * cost from the owning provider, and the rung from [MODEL_RUNGS].
          */
         private fun AIModel.toModelDescriptor(
             providerId: ProviderId,
@@ -110,6 +157,7 @@ class InMemoryModelDescriptorRegistry(
             cost = CostPolicy.Metered,
             costPerWatt = costPerWatt,
             availabilityGated = false,
+            rung = MODEL_RUNGS[name] ?: CapabilityRung.ONE,
         )
 
         /**
