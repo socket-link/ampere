@@ -1,5 +1,6 @@
 package link.socket.ampere.domain.agent.bundled
 
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.domain.agent.AgentInput
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
@@ -14,6 +15,9 @@ sealed interface AgentDefinition {
     val prompt: String
     val requiredInputs: List<AgentInput>
     val optionalInputs: List<AgentInput>
+
+    val minimumRung: CapabilityRung?
+        get() = null
 
     val instructions: Instructions
         get() = Instructions(
