@@ -17,7 +17,7 @@ class TraceCursorTest {
     )
 
     @Test
-    fun `replayTo(n) returns exactly events 0 through n`() {
+    fun `replayTo n returns exactly events 0 through n`() {
         val cursor = TraceCursor(trace(5))
         val result = cursor.replayTo(2)
         assertEquals(3, result.size)
@@ -25,7 +25,7 @@ class TraceCursorTest {
     }
 
     @Test
-    fun `replayTo(size-1) returns all events`() {
+    fun `replayTo size-1 returns all events`() {
         val t = trace(5)
         val cursor = TraceCursor(t)
         assertEquals(t.events, cursor.replayTo(t.size - 1))
@@ -58,7 +58,7 @@ class TraceCursorTest {
     }
 
     @Test
-    fun `branchAfter at last index replays everything (degenerate eval case)`() {
+    fun `branchAfter at last index replays everything - the degenerate eval case`() {
         val t = trace(5)
         val branch = TraceCursor(t).branchAfter(t.size - 1)
         assertEquals(5, branch.branchIndex)
@@ -66,7 +66,7 @@ class TraceCursorTest {
     }
 
     @Test
-    fun `branchAfter(-1) branches from the start`() {
+    fun `branchAfter -1 branches from the start`() {
         val branch = TraceCursor(trace(5)).branchAfter(-1)
         assertEquals(0, branch.branchIndex)
         assertTrue(branch.replayed.isEmpty())

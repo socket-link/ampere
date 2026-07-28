@@ -38,7 +38,7 @@ jobs:
 
       - name: Build all modules
         timeout-minutes: 20
-        run: ./gradlew build -x test -x testDebugUnitTest -x testReleaseUnitTest -x iosSimulatorArm64Test
+        run: ./gradlew build -x test -x testDebugUnitTest -x testReleaseUnitTest -x iosSimulatorArm64Test -x compileTestKotlinJs -x compileTestKotlinWasmJs
 
       - name: Run JVM + Android tests
         timeout-minutes: 20

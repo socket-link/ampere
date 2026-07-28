@@ -29,8 +29,15 @@ actual class StdioProcessHandler {
             reader = BufferedReader(InputStreamReader(process!!.inputStream))
             writer = BufferedWriter(OutputStreamWriter(process!!.outputStream))
 
-            // Verify process started successfully
-            if (!process!!.isAlive) {
+            // Verify process started successfully. Process#isAlive needs API 26; exitValue()
+            // throwing IllegalThreadStateException while running works back to API 1.
+            val alive = try {
+                process!!.exitValue()
+                false
+            } catch (_: IllegalThreadStateException) {
+                true
+            }
+            if (!alive) {
                 throw McpConnectionException("Process failed to start: $executablePath")
             }
         }
