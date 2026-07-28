@@ -5,7 +5,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/events/surface/**
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/AgentSurfaceEvent.kt
   - docs/ampere/agent-surface.md
-related: [EventSerialBus, PluginPermissions]
+related: [EventSerialBus, PlugPermissions]
 last_verified: 2026-04-29
 ---
 
@@ -14,7 +14,7 @@ last_verified: 2026-04-29
 ## What it is
 
 `AgentSurface` is a typed, serializable description of a UI render request
-emitted by a plugin (or an agent) when it needs human input or wants to
+emitted by a plug (or an agent) when it needs human input or wants to
 display a structured result. Variants are sealed: `Form` (multi-field
 input), `Choice` (single/multi-select picker), `Confirmation` (accept /
 reject with severity), `Card` (slot-based rich content). Every variant
@@ -28,24 +28,24 @@ or framework types.
 
 ## Why it exists
 
-A plugin running in commonMain code cannot know what the host platform is.
+A plug running in commonMain code cannot know what the host platform is.
 If the contract for "show the user a confirm dialog" leaked any Compose,
-SwiftUI, or terminal-rendering reference, plugins would either need to
+SwiftUI, or terminal-rendering reference, plugs would either need to
 import it (impossible across platforms) or every platform would need a
-parallel plugin API (combinatorial). Instead, the plugin describes *what
+parallel plug API (combinatorial). Instead, the plug describes *what
 it wants the user to do* and the platform decides *how to render that*.
 
 Three design pressures:
 
-1. **Plugins must be platform-agnostic.** Treat the surface contract as
-   the entire plugin↔host UI vocabulary. New surface kinds require a
+1. **Plugs must be platform-agnostic.** Treat the surface contract as
+   the entire plug↔host UI vocabulary. New surface kinds require a
    commonMain change followed by per-platform renderer changes — never
    one without the other.
 2. **The model can't draw UI.** An LLM can't render pixels, but it can
    choose which surface to emit and fill in the fields. Sealed variants
    constrain the choice to four well-understood shapes.
 3. **Responses are paired, not pushed.** `correlationId` makes a request
-   and its response a transactional unit. Plugins use
+   and its response a transactional unit. Plugs use
    `awaitSurfaceResponse(correlationId)` to suspend until the user replies.
    Without correlation, async UI events would race.
 
@@ -62,8 +62,8 @@ Three design pressures:
 
 - **No platform types in the contract.** `AgentSurface` and its variants reference only `kotlinx.serialization`, `commonMain` types, and primitives. A `Composable`, `UIView`, `View`, or terminal type appearing in this package is a violation.
 - **`correlationId` pairs request and response.** Every variant requires one; every `AgentSurfaceResponse` carries the same id. Renderers must propagate it. Generating new ids on the response side defeats the pairing.
-- **Variants are sealed.** New surface kinds extend the sealed hierarchy; plugins can't define their own. This is what makes per-platform renderers exhaustively switchable.
-- **Surfaces are emitted via the bus, not direct method calls.** `AgentSurfaceEvent` carries the surface to the platform layer. A plugin reaching directly into a renderer skips logging, replay, and trace.
+- **Variants are sealed.** New surface kinds extend the sealed hierarchy; plugs can't define their own. This is what makes per-platform renderers exhaustively switchable.
+- **Surfaces are emitted via the bus, not direct method calls.** `AgentSurfaceEvent` carries the surface to the platform layer. A plug reaching directly into a renderer skips logging, replay, and trace.
 - **Field constraints in `Form` are validated by the renderer, then again by the response handler.** Don't trust the response; validate twice.
 - **`Card.Slot` is sealed.** New slot kinds add a sealed variant — they don't introduce a `Custom(any)` escape hatch.
 

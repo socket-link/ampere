@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 /**
  * Correlation identifier used to pair a [AgentPause] request with its
- * matching [AgentPauseResponse]. Plugins generate one per pause they emit.
+ * matching [AgentPauseResponse]. Plugs generate one per pause they emit.
  */
 typealias PauseCorrelationId = String
 
@@ -13,7 +13,7 @@ typealias PauseCorrelationId = String
  * is awaiting human input.
  *
  * `AgentPause` is the OS-native escalation primitive. Where [link.socket.ampere
- * .agents.events.surface.AgentSurface] models a Plugin asking the platform to
+ * .agents.events.surface.AgentSurface] models a Plug asking the platform to
  * render UI, `AgentPause` models the higher-level *intent* of "I am stuck and
  * need a person." Channel selection (push notification → voice prompt →
  * in-app card → public link) is handled by the W1.5 channel-selector against

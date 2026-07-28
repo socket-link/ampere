@@ -1,6 +1,6 @@
 # AgentSurface.Form
 
-A **Form** is a multi-field input. The Plugin describes the fields it needs;
+A **Form** is a multi-field input. The Plug describes the fields it needs;
 the renderer presents them in order; the response carries a typed value per
 field. Use it whenever you need more than a single yes/no, a single pick from
 a list, or a static piece of content.
@@ -131,7 +131,7 @@ Reuses `AgentSurface.Choice.Option`.
 ### `Secret`
 
 A masked input. Same length validations as `Text`. Renderers must not log,
-echo, or persist the value beyond the originating Plugin's scope.
+echo, or persist the value beyond the originating Plug's scope.
 
 | Prop | Type | Default |
 | --- | --- | --- |
@@ -158,7 +158,7 @@ you three things:
 
 1. Renderers can validate before publishing `Submitted`. The contract says
    they **must** — submission with invalid values is a contract violation.
-2. The Plugin can re-validate on receipt without trusting the wire. Don't
+2. The Plug can re-validate on receipt without trusting the wire. Don't
    skip this. Validation runs twice by design.
 3. Tests share the predicates with the production path. There's no "test
    helper" copy of the rules to drift.
@@ -243,7 +243,7 @@ when (response) {
 ## Constraints
 
 - **Field order is the contract.** Don't sort, group, or reorder fields in
-  the renderer. The Plugin chose the order for a reason.
+  the renderer. The Plug chose the order for a reason.
 - **Field ids are stable.** They appear in `Submitted.values` and they
   appear in tests. Treat them like serialised wire keys: you can add new
   ones, but renaming is a breaking change.

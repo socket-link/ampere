@@ -12,19 +12,19 @@ import link.socket.ampere.knowledge.KnowledgeQueryResult
 import link.socket.ampere.knowledge.KnowledgeScope
 import link.socket.ampere.knowledge.KnowledgeStore
 import link.socket.ampere.knowledge.QueryMode
-import link.socket.ampere.plugin.PluginManifest
+import link.socket.ampere.plug.PlugManifest
 
 /**
- * Plugin-callable knowledge query primitive (W2.3 / AMPR-156).
+ * Plug-callable knowledge query primitive (W2.3 / AMPR-156).
  *
- * Wraps the on-device [KnowledgeStore] as a [FunctionTool] that plugins may
- * invoke to retrieve ranked chunks for a free-form query. The [PluginManifest]
+ * Wraps the on-device [KnowledgeStore] as a [FunctionTool] that plugs may
+ * invoke to retrieve ranked chunks for a free-form query. The [PlugManifest]
  * threaded through here is the same manifest the
- * [PluginPermissionGate][link.socket.ampere.plugin.permission.PluginPermissionGate]
+ * [PlugPermissionGate][link.socket.ampere.plug.permission.PlugPermissionGate]
  * checks before the
  * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine]
  * dispatches the tool, so the gate can deny on a missing
- * [PluginPermission.KnowledgeQuery][link.socket.ampere.plugin.permission.PluginPermission.KnowledgeQuery]
+ * [PlugPermission.KnowledgeQuery][link.socket.ampere.plug.permission.PlugPermission.KnowledgeQuery]
  * grant before any store I/O.
  *
  * Inputs ([KnowledgeQueryRequest]) and outputs ([KnowledgeQueryResponse])
@@ -46,7 +46,7 @@ data class KnowledgeQueryRequest(
 /**
  * One ranked chunk returned by [KnowledgeQueryTool].
  *
- * Keeps just the fields a plugin caller actually needs — the underlying
+ * Keeps just the fields a plug caller actually needs — the underlying
  * [KnowledgeQueryResult] is not exposed verbatim because [KnowledgeQueryResult]
  * is intentionally store-shaped (it carries the full chunk record).
  */
@@ -98,16 +98,16 @@ suspend fun executeKnowledgeQuery(
 }
 
 /**
- * Build a [FunctionTool] that exposes [KnowledgeStore.query] to plugins.
+ * Build a [FunctionTool] that exposes [KnowledgeStore.query] to plugs.
  *
  * Hybrid scoring lives inside the store
  * ([HybridQueryRanker][link.socket.ampere.knowledge.HybridQueryRanker]) so
  * the tool stays a thin permission-gated facade.
  *
- * @param store The on-device knowledge store. Same instance per plugin.
- * @param pluginManifest Manifest of the plugin that owns this tool. The
+ * @param store The on-device knowledge store. Same instance per plug.
+ * @param plugManifest Manifest of the plug that owns this tool. The
  *        manifest's `requiredPermissions` should include at least one
- *        [PluginPermission.KnowledgeQuery][link.socket.ampere.plugin.permission.PluginPermission.KnowledgeQuery]
+ *        [PlugPermission.KnowledgeQuery][link.socket.ampere.plug.permission.PlugPermission.KnowledgeQuery]
  *        so the gate can match the requested scope.
  * @param requiredAgentAutonomy Minimum autonomy level. Defaults to
  *        [AgentActionAutonomy.FULLY_AUTONOMOUS] because the tool reads only
@@ -116,7 +116,7 @@ suspend fun executeKnowledgeQuery(
 @Suppress("FunctionName")
 fun KnowledgeQueryTool(
     store: KnowledgeStore,
-    pluginManifest: PluginManifest? = null,
+    plugManifest: PlugManifest? = null,
     requiredAgentAutonomy: AgentActionAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
     json: Json = knowledgeQueryToolJson,
 ): FunctionTool<ExecutionContext.NoChanges> {
@@ -125,7 +125,7 @@ fun KnowledgeQueryTool(
         name = NAME,
         description = DESCRIPTION,
         requiredAgentAutonomy = requiredAgentAutonomy,
-        pluginManifest = pluginManifest,
+        plugManifest = plugManifest,
         executionFunction = { executionRequest ->
             executeAsOutcome(
                 store = store,
@@ -200,4 +200,4 @@ private const val DESCRIPTION =
     "Searches the on-device knowledge store for chunks relevant to a query. " +
         "Inputs: query text, optional scope set (e.g., 'work', 'personal'), and a result limit. " +
         "Output: ranked chunks with text, source URI, and similarity score. " +
-        "Scope-restricted plugins must hold the matching KnowledgeQuery permission grant."
+        "Scope-restricted plugs must hold the matching KnowledgeQuery permission grant."

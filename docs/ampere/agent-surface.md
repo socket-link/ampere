@@ -1,13 +1,13 @@
 # AgentSurface
 
-`AgentSurface` is Ampere's primitive for **Plugin-emitted UI render requests**. It is the common contract that Plugin code (commonMain) and platform renderers (iOS, Android Compose Multiplatform, Desktop) build against. This document is the source of truth for the W1.3 / W1.4 platform renderers and the W2.1 reference Plugins.
+`AgentSurface` is Ampere's primitive for **Plug-emitted UI render requests**. It is the common contract that Plug code (commonMain) and platform renderers (iOS, Android Compose Multiplatform, Desktop) build against. This document is the source of truth for the W1.3 / W1.4 platform renderers and the W2.1 reference Plugs.
 
 ## Design goals
 
 - **Typed and serializable.** Every variant is `@Serializable`; surface requests can be persisted, replayed, and shipped over a wire.
 - **commonMain-only.** No iOS, Android, or Compose imports leak into the type definitions. Renderers translate the contract into native UI.
 - **No reactive framework dependencies.** `kotlinx.coroutines.flow` is acceptable; Compose, SwiftUI, and React are not.
-- **Stable correlation.** Every surface and every response carries a `correlationId` so a Plugin can `awaitSurfaceResponse` without coupling to bus internals.
+- **Stable correlation.** Every surface and every response carries a `correlationId` so a Plug can `awaitSurfaceResponse` without coupling to bus internals.
 
 ## Type hierarchy
 
@@ -24,7 +24,7 @@
 ## Lifecycle
 
 ```
-Plugin                          EventSerialBus                       Renderer
+Plug                          EventSerialBus                       Renderer
   |                                    |                                |
   | bus.emitSurfaceRequest(surface)    |                                |
   |----------------------------------->|                                |
@@ -39,14 +39,14 @@ Plugin                          EventSerialBus                       Renderer
   |<================ AgentSurfaceResponse                               |
 ```
 
-1. **Emit.** The Plugin calls `bus.emitSurfaceRequest(surface, eventSource)` (or constructs `AgentSurfaceEvent.Requested` directly and publishes it).
+1. **Emit.** The Plug calls `bus.emitSurfaceRequest(surface, eventSource)` (or constructs `AgentSurfaceEvent.Requested` directly and publishes it).
 2. **Render.** A platform-specific subscriber to `AgentSurfaceEvent.Requested` translates the surface into native UI.
 3. **Respond.** When the user submits, cancels, or the renderer's own timeout elapses, the renderer publishes `AgentSurfaceEvent.Responded` with the same `correlationId`.
 4. **Resume.** `awaitSurfaceResponse(awaiterAgentId, correlationId, timeout)` returns the `AgentSurfaceResponse`. If `timeout` elapses first, the helper returns an `AgentSurfaceResponse.TimedOut` rather than throwing.
 
 ## Validation
 
-Field validation is the canonical responsibility of `AgentSurfaceField.validate(value)`. It runs in pure Kotlin so renderers, Plugin code, and integration tests share the exact same predicates.
+Field validation is the canonical responsibility of `AgentSurfaceField.validate(value)`. It runs in pure Kotlin so renderers, Plug code, and integration tests share the exact same predicates.
 
 | Field | Rules |
 | --- | --- |
@@ -55,7 +55,7 @@ Field validation is the canonical responsibility of `AgentSurfaceField.validate(
 | `Toggle` | `required` means the toggle must be `true` to pass. |
 | `DateTime` | `required`, `notBefore`, `notAfter`. |
 | `Selection` | `required`, `minSelections`, `maxSelections`, unknown ids rejected. |
-| `Secret` | `required`, `minLength`, `maxLength`. Renderers must avoid logging the value beyond the originating Plugin. |
+| `Secret` | `required`, `minLength`, `maxLength`. Renderers must avoid logging the value beyond the originating Plug. |
 
 `validate` returns `FieldValidationResult.Valid` or `FieldValidationResult.Invalid(errors)` with human-readable messages. Renderers may surface failures inline, but they must not submit a response that fails validation.
 
@@ -77,7 +77,7 @@ Renderers **must not**:
 - Reference Compose, SwiftUI, or other UI types from the `commonMain` contract.
 - Drop a `Requested` silently — if no renderer is registered, the bus simply has no subscribers and the awaiter will time out, which is the intended degradation.
 
-## Plugin example
+## Plug example
 
 ```kotlin
 suspend fun choosePullRequestBranch(

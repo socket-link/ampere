@@ -57,7 +57,7 @@ class HumanInteractionEventSpecializationTest {
             workflowId = null,
             sourceEventId = null,
             toolInvocationId = null,
-            pluginId = null,
+            plugId = null,
             modelId = null,
             inputDigest = "deadbeefdeadbeef",
         ),

@@ -57,7 +57,7 @@ There is no field-level validation. The user accepts or rejects.
 - `AgentSurfaceResponse.TimedOut` — the renderer didn't reply within the
   awaiter's timeout window.
 
-In practice, the Plugin treats `Cancelled` and `TimedOut` the same way:
+In practice, the Plug treats `Cancelled` and `TimedOut` the same way:
 *don't proceed*. They differ only in what you can tell the user about why
 the next step didn't happen.
 

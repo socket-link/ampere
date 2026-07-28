@@ -17,7 +17,7 @@ import kotlinx.serialization.Serializable
 value class LinkId(val value: String)
 
 /**
- * Credential material a plugin's [McpClient] surfaces into its connection
+ * Credential material a plug's [McpClient] surfaces into its connection
  * layer when calling an MCP server.
  *
  * Today only [authToken] is captured; future fields (refresh token, OAuth
@@ -29,7 +29,7 @@ data class McpCredential(
 )
 
 /**
- * Storage contract for credentials a plugin uses to talk to an MCP server.
+ * Storage contract for credentials a plug uses to talk to an MCP server.
  *
  * Implementations are scoped per Link so credentials revocations follow the
  * Link lifecycle. The interface intentionally avoids leaking implementation

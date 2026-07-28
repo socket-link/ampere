@@ -59,7 +59,7 @@ The renderer enforces selection counts before publishing `Submitted`:
 | unknown ids | a selected id isn't present in `options` |
 
 Disabled options are not selectable; if a renderer somehow submits one, treat
-the response as malformed and reject it on the Plugin side.
+the response as malformed and reject it on the Plug side.
 
 ## Response shape
 
@@ -141,7 +141,7 @@ bus.emitSurfaceRequest(
 ## Constraints
 
 - **Option order is the contract.** Don't sort by label in the renderer.
-  The Plugin chose the order; if there's a "primary" option, it's first.
+  The Plug chose the order; if there's a "primary" option, it's first.
 - **Option ids are stable.** They appear in `selectedIds` and in tests.
   Renaming is a breaking change.
 - **Disabled is not the same as absent.** A disabled option still renders;

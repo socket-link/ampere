@@ -10,10 +10,10 @@ import link.socket.ampere.agents.events.surface.CorrelationId
 /**
  * Bus-level events that carry [AgentSurface] traffic.
  *
- * Plugin code emits a [Requested] when it needs to render UI; the platform
+ * Plug code emits a [Requested] when it needs to render UI; the platform
  * renderer replies with a [Responded] carrying the same correlation id. The
  * matching [link.socket.ampere.agents.events.surface.awaitSurfaceResponse]
- * helper consumes [Responded] and resumes the Plugin coroutine.
+ * helper consumes [Responded] and resumes the Plug coroutine.
  */
 @Serializable
 sealed interface AgentSurfaceEvent : Event {
@@ -21,7 +21,7 @@ sealed interface AgentSurfaceEvent : Event {
     /** Echo of [AgentSurface.correlationId] for routing replies. */
     val correlationId: CorrelationId
 
-    /** A Plugin is asking the platform to render an [AgentSurface]. */
+    /** A Plug is asking the platform to render an [AgentSurface]. */
     @Serializable
     data class Requested(
         override val eventId: EventId,

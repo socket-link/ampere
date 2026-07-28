@@ -7,7 +7,7 @@ tracked_sources:
   - docs/CORE_CONCEPTS.md
   - docs/AGENT_LIFECYCLE.md
   - docs/ARCS.md
-related: [PropelLoop, EventSerialBus, CognitiveRelay, MemoryProvenance, SparkSystem, AgentSurface, PluginPermissions, CognitionTrace]
+related: [PropelLoop, EventSerialBus, CognitiveRelay, MemoryProvenance, SparkSystem, AgentSurface, PlugPermissions, CognitionTrace]
 last_verified: 2026-04-29
 ---
 
@@ -42,7 +42,7 @@ The AMPERE choice cluster:
 7. **Read-model observability.** State is reconstructed from append-only
    stores via projections (`ArcTraceProjection`), not maintained as
    live mutable objects.
-8. **Permissions enforced before LLM dispatch, not after.** The plugin
+8. **Permissions enforced before LLM dispatch, not after.** The plug
    permission gate is deterministic and runs ahead of the model.
 
 A framework that satisfies these is an AMPERE framework. A framework that
@@ -93,7 +93,7 @@ property cluster?".
 - **Recall before Plan.** The PROPEL ordering is fixed. See
   [`PropelLoop`](propel-loop.md).
 - **Permissions are deterministic and pre-LLM.** See
-  [`PluginPermissions`](plugin-permissions.md).
+  [`PlugPermissions`](plug-permissions.md).
 - **The AMPERE/AMP/AniMA layering is not optional.** Code that mixes
   layers (e.g., a "quick" provider import in a Spark) collapses the
   stack into provider-coupled goo.

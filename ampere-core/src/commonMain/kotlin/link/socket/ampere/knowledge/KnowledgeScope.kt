@@ -6,15 +6,15 @@ import kotlinx.serialization.Serializable
  * A named scope tag that partitions [KnowledgeDocument]s for permission gating
  * and filtered retrieval.
  *
- * Plugins request `knowledge.query(text, scope)` and the on-device
+ * Plugs request `knowledge.query(text, scope)` and the on-device
  * [KnowledgeStore] only surfaces chunks whose document is tagged with at least
  * one of the requested scopes.
- * [PluginPermission.KnowledgeQuery][link.socket.ampere.plugin.permission.PluginPermission.KnowledgeQuery]
- * gates which scope strings a plugin may even request.
+ * [PlugPermission.KnowledgeQuery][link.socket.ampere.plug.permission.PlugPermission.KnowledgeQuery]
+ * gates which scope strings a plug may even request.
  *
  * Scopes are open-ended strings — platform import pipelines own which scopes
  * apply to which documents. The [companion object][Companion] exposes the
- * well-known names the AMPERE default plugin tool registry references.
+ * well-known names the AMPERE default plug tool registry references.
  *
  * Documents persisted before the W2.3 scope schema landed have no scope rows.
  * They are returned for unfiltered queries (matching W0.5 behaviour) and

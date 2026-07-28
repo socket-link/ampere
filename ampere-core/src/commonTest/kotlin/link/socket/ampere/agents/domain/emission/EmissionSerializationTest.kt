@@ -22,7 +22,7 @@ class EmissionSerializationTest {
         workflowId = "wf-1",
         sourceEventId = "evt-1",
         toolInvocationId = "tool-inv-1",
-        pluginId = "plugin-x",
+        plugId = "plug-x",
         modelId = "claude-sonnet-4-0",
         inputDigest = "abcdef0123456789",
     )
@@ -125,7 +125,7 @@ class EmissionSerializationTest {
 
         assertEquals(baseProvenance, decoded.provenance)
         assertEquals("run-1", decoded.provenance.runId)
-        assertEquals("plugin-x", decoded.provenance.pluginId)
+        assertEquals("plug-x", decoded.provenance.plugId)
         assertEquals("abcdef0123456789", decoded.provenance.inputDigest)
     }
 }

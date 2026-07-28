@@ -1,8 +1,8 @@
 # AgentPause
 
-`AgentPause` is Ampere's primitive for **paused-and-awaiting-human-input state**. It is the OS-native escalation contract that Plugin code (commonMain), the channel-selector (W1.5), and per-Arc override UI (W2.2) all build against.
+`AgentPause` is Ampere's primitive for **paused-and-awaiting-human-input state**. It is the OS-native escalation contract that Plug code (commonMain), the channel-selector (W1.5), and per-Arc override UI (W2.2) all build against.
 
-Where [`AgentSurface`](agent-surface.md) models a Plugin asking the platform to render a specific UI, `AgentPause` models the higher-level intent: *"this agent is stuck and needs a person."* The pause primitive carries channel preferences; the channel-selector consumes the preferences plus runtime availability and decides how to actually reach the user.
+Where [`AgentSurface`](agent-surface.md) models a Plug asking the platform to render a specific UI, `AgentPause` models the higher-level intent: *"this agent is stuck and needs a person."* The pause primitive carries channel preferences; the channel-selector consumes the preferences plus runtime availability and decides how to actually reach the user.
 
 ## Design goals
 
@@ -32,11 +32,11 @@ Where [`AgentSurface`](agent-surface.md) models a Plugin asking the platform to 
 
 If no channel in `suggestedChannels` is reachable, the selector falls through to `EscalationChannel.PublicLink(url = AgentPause.fallbackUrl)` if `fallbackUrl` is non-null. If `fallbackUrl` is null, the pause is treated as unrouteable and resolves as `AgentPauseResponse.TimedOut` once `timeoutMillis` elapses.
 
-The fallback ordering is deliberately *channel-priority-first, not urgency-first*. A `Routine` pause that lists `Voice` first will still attempt voice before the in-app card — urgency only sets defaults; the Plugin author always has the final say on ordering.
+The fallback ordering is deliberately *channel-priority-first, not urgency-first*. A `Routine` pause that lists `Voice` first will still attempt voice before the in-app card — urgency only sets defaults; the Plug author always has the final say on ordering.
 
 ## Urgency-to-default-channel mapping
 
-When a Plugin author does not provide explicit `suggestedChannels`, the channel-selector synthesises a default list from `urgency`. These defaults are intended for the channel-selector implementation in W1.5; the type system does not enforce them.
+When a Plug author does not provide explicit `suggestedChannels`, the channel-selector synthesises a default list from `urgency`. These defaults are intended for the channel-selector implementation in W1.5; the type system does not enforce them.
 
 | `PauseUrgency` | Default channel order |
 | --- | --- |
@@ -49,7 +49,7 @@ When a Plugin author does not provide explicit `suggestedChannels`, the channel-
 ## Lifecycle
 
 ```
-Plugin                       Channel selector (W1.5)               Renderer
+Plug                       Channel selector (W1.5)               Renderer
   |                                    |                                |
   | emitPause(AgentPause)              |                                |
   |----------------------------------->|                                |
@@ -74,11 +74,11 @@ W0.3 ships only the type contract on the left and right of the diagram. The chan
 
 - `ConsentRepository` continues to store *whether* a user has granted standing consent for a class of operation. The pause primitive does not duplicate this storage.
 - `ConsentAwarePromptService` continues to gate prompts against consent state. When that gate trips and a fresh decision is needed, the service should now emit an `AgentPause` instead of inlining its own escalation logic.
-- An `AgentPauseResponse.Approved` may be persisted as a one-shot consent grant; an `AgentPauseResponse.Rejected` may be persisted as a one-shot denial. The `payload` field on `Approved` is opaque to the pause primitive — Plugin code converts it into the consent record that `ConsentRepository` needs.
+- An `AgentPauseResponse.Approved` may be persisted as a one-shot consent grant; an `AgentPauseResponse.Rejected` may be persisted as a one-shot denial. The `payload` field on `Approved` is opaque to the pause primitive — Plug code converts it into the consent record that `ConsentRepository` needs.
 
 This split keeps consent storage and escalation routing as separate concerns: the consent layer answers *"does the user already say yes?"*, the pause primitive answers *"how do we ask?"*.
 
-## Plugin example
+## Plug example
 
 ```kotlin
 val pause = AgentPause(

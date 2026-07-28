@@ -25,12 +25,12 @@ import link.socket.ampere.knowledge.InMemoryKnowledgeStore
 import link.socket.ampere.knowledge.KnowledgeDocument
 import link.socket.ampere.knowledge.KnowledgeScope
 import link.socket.ampere.knowledge.QueryMode
-import link.socket.ampere.plugin.PluginManifest
-import link.socket.ampere.plugin.permission.GateResult
-import link.socket.ampere.plugin.permission.PluginPermission
-import link.socket.ampere.plugin.permission.PluginPermissionGate
-import link.socket.ampere.plugin.permission.PluginToolCall
-import link.socket.ampere.plugin.permission.UserGrants
+import link.socket.ampere.plug.PlugManifest
+import link.socket.ampere.plug.permission.GateResult
+import link.socket.ampere.plug.permission.PlugPermission
+import link.socket.ampere.plug.permission.PlugPermissionGate
+import link.socket.ampere.plug.permission.PlugToolCall
+import link.socket.ampere.plug.permission.UserGrants
 
 class KnowledgeQueryToolTest {
 
@@ -47,19 +47,19 @@ class KnowledgeQueryToolTest {
         assertTrue(tool.description.contains("knowledge"), "Description should mention knowledge")
         assertTrue(
             tool.description.contains("scope"),
-            "Description should mention scope so plugin authors know it is gated",
+            "Description should mention scope so plug authors know it is gated",
         )
         assertIs<FunctionTool<*>>(tool)
     }
 
     @Test
-    fun `factory threads pluginManifest through to the tool`() {
+    fun `factory threads plugManifest through to the tool`() {
         val store = InMemoryKnowledgeStore()
-        val manifest = manifest("pl-1", PluginPermission.KnowledgeQuery("work"))
-        val tool = KnowledgeQueryTool(store = store, pluginManifest = manifest)
+        val manifest = manifest("pl-1", PlugPermission.KnowledgeQuery("work"))
+        val tool = KnowledgeQueryTool(store = store, plugManifest = manifest)
 
-        val pluginManifest = assertNotNull(tool.pluginManifest)
-        assertEquals("pl-1", pluginManifest.id)
+        val plugManifest = assertNotNull(tool.plugManifest)
+        assertEquals("pl-1", plugManifest.id)
     }
 
     @Test
@@ -154,17 +154,17 @@ class KnowledgeQueryToolTest {
     fun `permission gate denies when the matching scope grant is missing`() {
         val tool = KnowledgeQueryTool(
             store = InMemoryKnowledgeStore(),
-            pluginManifest = manifest("pl-1", PluginPermission.KnowledgeQuery("work")),
+            plugManifest = manifest("pl-1", PlugPermission.KnowledgeQuery("work")),
         )
 
-        val gateResult = PluginPermissionGate.check(
-            toolCall = PluginToolCall(pluginId = "pl-1", toolId = tool.id),
-            manifest = tool.pluginManifest!!,
+        val gateResult = PlugPermissionGate.check(
+            toolCall = PlugToolCall(plugId = "pl-1", toolId = tool.id),
+            manifest = tool.plugManifest!!,
             userGrants = UserGrants(),
         )
 
         assertEquals(
-            GateResult.DenyMissing(PluginPermission.KnowledgeQuery("work")),
+            GateResult.DenyMissing(PlugPermission.KnowledgeQuery("work")),
             gateResult,
         )
     }
@@ -173,18 +173,18 @@ class KnowledgeQueryToolTest {
     fun `permission gate denies when the wrong scope is granted`() {
         val tool = KnowledgeQueryTool(
             store = InMemoryKnowledgeStore(),
-            pluginManifest = manifest("pl-1", PluginPermission.KnowledgeQuery("work")),
+            plugManifest = manifest("pl-1", PlugPermission.KnowledgeQuery("work")),
         )
 
-        val gateResult = PluginPermissionGate.check(
-            toolCall = PluginToolCall(pluginId = "pl-1", toolId = tool.id),
-            manifest = tool.pluginManifest!!,
+        val gateResult = PlugPermissionGate.check(
+            toolCall = PlugToolCall(plugId = "pl-1", toolId = tool.id),
+            manifest = tool.plugManifest!!,
             // User granted "personal" — not the "work" the manifest requires.
-            userGrants = UserGrants.granted(PluginPermission.KnowledgeQuery("personal")),
+            userGrants = UserGrants.granted(PlugPermission.KnowledgeQuery("personal")),
         )
 
         assertEquals(
-            GateResult.DenyMissing(PluginPermission.KnowledgeQuery("work")),
+            GateResult.DenyMissing(PlugPermission.KnowledgeQuery("work")),
             gateResult,
         )
     }
@@ -193,13 +193,13 @@ class KnowledgeQueryToolTest {
     fun `permission gate allows when the required scope is granted`() {
         val tool = KnowledgeQueryTool(
             store = InMemoryKnowledgeStore(),
-            pluginManifest = manifest("pl-1", PluginPermission.KnowledgeQuery("work")),
+            plugManifest = manifest("pl-1", PlugPermission.KnowledgeQuery("work")),
         )
 
-        val gateResult = PluginPermissionGate.check(
-            toolCall = PluginToolCall(pluginId = "pl-1", toolId = tool.id),
-            manifest = tool.pluginManifest!!,
-            userGrants = UserGrants.granted(PluginPermission.KnowledgeQuery("work")),
+        val gateResult = PlugPermissionGate.check(
+            toolCall = PlugToolCall(plugId = "pl-1", toolId = tool.id),
+            manifest = tool.plugManifest!!,
+            userGrants = UserGrants.granted(PlugPermission.KnowledgeQuery("work")),
         )
 
         assertEquals(GateResult.Allow, gateResult)
@@ -238,10 +238,10 @@ class KnowledgeQueryToolTest {
 
     private fun manifest(
         id: String,
-        vararg permissions: PluginPermission,
-    ): PluginManifest = PluginManifest(
+        vararg permissions: PlugPermission,
+    ): PlugManifest = PlugManifest(
         id = id,
-        name = "Test plugin $id",
+        name = "Test plug $id",
         version = "1.0.0",
         requiredPermissions = permissions.toList(),
     )

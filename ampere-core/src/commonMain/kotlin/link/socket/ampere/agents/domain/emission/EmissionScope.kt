@@ -88,7 +88,7 @@ class EmissionScope(
             workflowId = null,
             sourceEventId = null,
             toolInvocationId = null,
-            pluginId = null,
+            plugId = null,
             modelId = null,
             inputDigest = inputDigest(payload),
         )

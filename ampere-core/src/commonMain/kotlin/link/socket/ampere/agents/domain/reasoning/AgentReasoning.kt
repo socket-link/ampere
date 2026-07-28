@@ -18,8 +18,8 @@ import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
-import link.socket.ampere.plugin.PluginManifest
-import link.socket.ampere.plugin.permission.UserGrants
+import link.socket.ampere.plug.PlugManifest
+import link.socket.ampere.plug.permission.UserGrants
 
 /**
  * Unified reasoning facade that composes all cognitive services.
@@ -397,7 +397,7 @@ data class ReasoningSettings(
     val executor: Executor?,
     val taskFactory: TaskFactory,
     val parameterStrategies: Map<String, ParameterStrategy>,
-    val userGrantProvider: suspend (PluginManifest) -> UserGrants,
+    val userGrantProvider: suspend (PlugManifest) -> UserGrants,
 )
 
 /**
@@ -415,7 +415,7 @@ class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
     var taskFactory: TaskFactory = DefaultTaskFactory
 
     private val parameterStrategies = mutableMapOf<String, ParameterStrategy>()
-    private var userGrantProvider: suspend (PluginManifest) -> UserGrants = { UserGrants() }
+    private var userGrantProvider: suspend (PlugManifest) -> UserGrants = { UserGrants() }
 
     /**
      * Configure execution settings (parameter strategies + user-grant
@@ -441,13 +441,13 @@ class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
 
 class ExecutionSettingsBuilder {
     internal val strategies = mutableMapOf<String, ParameterStrategy>()
-    internal var userGrantProvider: suspend (PluginManifest) -> UserGrants = { UserGrants() }
+    internal var userGrantProvider: suspend (PlugManifest) -> UserGrants = { UserGrants() }
 
     fun registerStrategy(toolId: String, strategy: ParameterStrategy) {
         strategies[toolId] = strategy
     }
 
-    fun userGrants(provider: suspend (PluginManifest) -> UserGrants) {
+    fun userGrants(provider: suspend (PlugManifest) -> UserGrants) {
         userGrantProvider = provider
     }
 }

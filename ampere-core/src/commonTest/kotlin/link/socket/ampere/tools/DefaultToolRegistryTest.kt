@@ -7,20 +7,20 @@ import kotlin.test.assertNotNull
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.knowledge.InMemoryKnowledgeStore
-import link.socket.ampere.plugin.PluginManifest
-import link.socket.ampere.plugin.permission.GateResult
-import link.socket.ampere.plugin.permission.PluginPermission
-import link.socket.ampere.plugin.permission.PluginPermissionGate
-import link.socket.ampere.plugin.permission.PluginToolCall
-import link.socket.ampere.plugin.permission.UserGrants
+import link.socket.ampere.plug.PlugManifest
+import link.socket.ampere.plug.permission.GateResult
+import link.socket.ampere.plug.permission.PlugPermission
+import link.socket.ampere.plug.permission.PlugPermissionGate
+import link.socket.ampere.plug.permission.PlugToolCall
+import link.socket.ampere.plug.permission.UserGrants
 
 class DefaultToolRegistryTest {
 
     @Test
-    fun `default plugin tool list contains the knowledge query tool`() {
-        val tools = DefaultToolRegistry.createDefaultPluginTools(
+    fun `default plug tool list contains the knowledge query tool`() {
+        val tools = DefaultToolRegistry.createDefaultPlugTools(
             store = InMemoryKnowledgeStore(),
-            manifest = manifest("pl-1", PluginPermission.KnowledgeQuery("work")),
+            manifest = manifest("pl-1", PlugPermission.KnowledgeQuery("work")),
         )
 
         val tool = tools.single()
@@ -30,23 +30,23 @@ class DefaultToolRegistryTest {
 
     @Test
     fun `default tool stamps the manifest so the gate can attribute calls`() {
-        val manifest = manifest("pl-1", PluginPermission.KnowledgeQuery("work"))
-        val tool = DefaultToolRegistry.createDefaultPluginTools(
+        val manifest = manifest("pl-1", PlugPermission.KnowledgeQuery("work"))
+        val tool = DefaultToolRegistry.createDefaultPlugTools(
             store = InMemoryKnowledgeStore(),
             manifest = manifest,
         ).single()
 
-        assertNotNull(tool.pluginManifest)
-        assertEquals(manifest.id, tool.pluginManifest?.id)
+        assertNotNull(tool.plugManifest)
+        assertEquals(manifest.id, tool.plugManifest?.id)
         assertEquals(
-            listOf(PluginPermission.KnowledgeQuery("work")),
-            tool.pluginManifest?.requiredPermissions,
+            listOf(PlugPermission.KnowledgeQuery("work")),
+            tool.plugManifest?.requiredPermissions,
         )
     }
 
     @Test
     fun `default registry honours the requested autonomy override`() {
-        val tool = DefaultToolRegistry.createDefaultPluginTools(
+        val tool = DefaultToolRegistry.createDefaultPlugTools(
             store = InMemoryKnowledgeStore(),
             manifest = manifest("pl-1"),
             requiredAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
@@ -57,36 +57,36 @@ class DefaultToolRegistryTest {
 
     @Test
     fun `gate denies a missing scope grant for a tool from the default registry`() {
-        val manifest = manifest("pl-1", PluginPermission.KnowledgeQuery("work"))
-        val tool = DefaultToolRegistry.createDefaultPluginTools(
+        val manifest = manifest("pl-1", PlugPermission.KnowledgeQuery("work"))
+        val tool = DefaultToolRegistry.createDefaultPlugTools(
             store = InMemoryKnowledgeStore(),
             manifest = manifest,
         ).single()
 
-        val gateResult = PluginPermissionGate.check(
-            toolCall = PluginToolCall(pluginId = manifest.id, toolId = tool.id),
+        val gateResult = PlugPermissionGate.check(
+            toolCall = PlugToolCall(plugId = manifest.id, toolId = tool.id),
             manifest = manifest,
             userGrants = UserGrants(),
         )
 
         assertEquals(
-            GateResult.DenyMissing(PluginPermission.KnowledgeQuery("work")),
+            GateResult.DenyMissing(PlugPermission.KnowledgeQuery("work")),
             gateResult,
         )
     }
 
     @Test
     fun `gate allows when the matching scope grant is present`() {
-        val manifest = manifest("pl-1", PluginPermission.KnowledgeQuery("work"))
-        val tool = DefaultToolRegistry.createDefaultPluginTools(
+        val manifest = manifest("pl-1", PlugPermission.KnowledgeQuery("work"))
+        val tool = DefaultToolRegistry.createDefaultPlugTools(
             store = InMemoryKnowledgeStore(),
             manifest = manifest,
         ).single()
 
-        val gateResult = PluginPermissionGate.check(
-            toolCall = PluginToolCall(pluginId = manifest.id, toolId = tool.id),
+        val gateResult = PlugPermissionGate.check(
+            toolCall = PlugToolCall(plugId = manifest.id, toolId = tool.id),
             manifest = manifest,
-            userGrants = UserGrants.granted(PluginPermission.KnowledgeQuery("work")),
+            userGrants = UserGrants.granted(PlugPermission.KnowledgeQuery("work")),
         )
 
         assertEquals(GateResult.Allow, gateResult)
@@ -94,10 +94,10 @@ class DefaultToolRegistryTest {
 
     private fun manifest(
         id: String,
-        vararg permissions: PluginPermission,
-    ): PluginManifest = PluginManifest(
+        vararg permissions: PlugPermission,
+    ): PlugManifest = PlugManifest(
         id = id,
-        name = "Test plugin $id",
+        name = "Test plug $id",
         version = "1.0.0",
         requiredPermissions = permissions.toList(),
     )

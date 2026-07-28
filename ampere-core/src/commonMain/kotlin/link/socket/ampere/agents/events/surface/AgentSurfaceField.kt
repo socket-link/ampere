@@ -167,7 +167,7 @@ sealed interface AgentSurfaceField {
     /**
      * A masked/secret input. Carries the same validation primitives as [Text]
      * but renderers must avoid logging or persisting the value beyond the
-     * scope of the originating Plugin.
+     * scope of the originating Plug.
      */
     @Serializable
     data class Secret(

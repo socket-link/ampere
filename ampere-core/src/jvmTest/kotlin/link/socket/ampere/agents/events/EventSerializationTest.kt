@@ -15,7 +15,7 @@ import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MilestoneCategory
 import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
 import link.socket.ampere.agents.domain.event.PermissionDeniedReason
-import link.socket.ampere.plugin.permission.PluginPermission
+import link.socket.ampere.plug.permission.PlugPermission
 
 class EventSerializationTest {
 
@@ -86,10 +86,10 @@ class EventSerializationTest {
             timestamp = stubTimestamp,
             eventSource = stubEventSource,
             urgency = Urgency.HIGH,
-            pluginId = "example-plugin",
+            plugId = "example-plug",
             toolId = "fetch-example",
             toolName = "Fetch Example",
-            permission = PluginPermission.NetworkDomain("api.example.com"),
+            permission = PlugPermission.NetworkDomain("api.example.com"),
             reason = PermissionDeniedReason.MISSING_GRANT,
         )
 

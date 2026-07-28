@@ -6,7 +6,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/SparkAppliedEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/SparkRemovedEvent.kt
   - ampere-core/src/commonMain/composeResources/files/sparks/**
-related: [PropelLoop, CognitiveRelay, PluginPermissions, CognitionTrace]
+related: [PropelLoop, CognitiveRelay, PlugPermissions, CognitionTrace]
 last_verified: 2026-05-31
 ---
 

@@ -5,21 +5,21 @@ import kotlinx.serialization.Serializable
 /**
  * A correlation identifier used to pair a surface request with its response.
  *
- * Plugins generate one of these per [AgentSurface] they emit and pass it to
+ * Plugs generate one of these per [AgentSurface] they emit and pass it to
  * [link.socket.ampere.agents.events.surface.awaitSurfaceResponse] to receive
  * the [AgentSurfaceResponse] produced by the platform renderer.
  */
 typealias CorrelationId = String
 
 /**
- * A typed, serializable description of a UI render request emitted by a Plugin.
+ * A typed, serializable description of a UI render request emitted by a Plug.
  *
  * Platform renderers (iOS, Android Compose Multiplatform, Desktop) translate each
  * variant into native UI. This contract lives in commonMain and intentionally
  * carries no platform or framework references so it can be expressed across
  * every Ampere target.
  *
- * Every variant carries a [correlationId] so the emitting Plugin can wait for
+ * Every variant carries a [correlationId] so the emitting Plug can wait for
  * the matching [AgentSurfaceResponse] without coupling to bus internals.
  */
 @Serializable
