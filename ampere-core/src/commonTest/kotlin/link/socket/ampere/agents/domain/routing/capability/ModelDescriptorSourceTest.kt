@@ -132,7 +132,7 @@ class ModelDescriptorSourceTest {
     }
 
     @Test
-    fun `a source that throws is caught as a failure, not propagated`() = runTest {
+    fun `a source that throws is caught as a failure rather than propagated`() = runTest {
         val seed = listOf(descriptor("survivor", CapabilityRung.THREE))
         val registry = InMemoryModelDescriptorRegistry(
             seed = seed,
@@ -146,7 +146,7 @@ class ModelDescriptorSourceTest {
     }
 
     @Test
-    fun `a catalog with duplicate model names is rejected, not silently deduplicated`() = runTest {
+    fun `a catalog with duplicate model names is rejected rather than silently deduplicated`() = runTest {
         // AMPR-233 rejects duplicates in the seed; a consumer-supplied catalog is
         // held to the same rule, but surfaces as a failure rather than a throw so
         // the live catalog survives a bad load.
