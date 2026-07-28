@@ -3,6 +3,7 @@ package link.socket.ampere.agents.events.utils
 import co.touchlab.kermit.Logger
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
+import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.EmissionEvent
@@ -178,6 +179,11 @@ class SignificanceAwareEventLogger(
         // human will see; Resolved is the reply travelling back.
         is EmissionEvent.Produced -> EventSignificance.SIGNIFICANT
         is EmissionEvent.Resolved -> EventSignificance.SIGNIFICANT
+
+        // Bench (eval) lifecycle events - routine progress, significant on completion
+        is BenchEvent.BenchRunStarted -> EventSignificance.ROUTINE
+        is BenchEvent.ProbeGraded -> EventSignificance.ROUTINE
+        is BenchEvent.BenchRunCompleted -> EventSignificance.SIGNIFICANT
     }
 
     private fun formatUrgency(urgency: Urgency): String = when (urgency) {

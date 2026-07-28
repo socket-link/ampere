@@ -29,6 +29,7 @@ import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
@@ -102,6 +103,14 @@ open class SparkBasedAgent<S : AgentState>(
      */
     @Transient
     private val _minimumRung: CapabilityRung? = null,
+    /**
+     * Tool executor seam (AMPR-186). When set, tool calls dispatch through this
+     * [Executor] (e.g. a `NoOpExecutor` for effect-free eval Bench runs) instead
+     * of leaving the tool-execution engine unconfigured. Null preserves the
+     * pre-existing behavior (no executor, tool calls fail as "not configured").
+     */
+    @Transient
+    private val _executor: Executor? = null,
 ) : ObservableAgent<S>(_eventApi, _observabilityScope) {
 
     @Transient
@@ -177,6 +186,7 @@ open class SparkBasedAgent<S : AgentState>(
         ) {
             agentRole = "Spark-Based Agent (${affinity.name})"
             availableTools = requiredTools
+            executor = _executor
         }
     }
 

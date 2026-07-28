@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.domain.routing.RelayConfig
 import link.socket.ampere.agents.domain.routing.RoutingContext
+import link.socket.ampere.agents.domain.routing.RoutingFloorUnmetException
 import link.socket.ampere.agents.domain.routing.RoutingResolution
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
@@ -112,7 +113,14 @@ class PlaybackRelay(
     override suspend fun resolve(
         context: RoutingContext,
         fallbackConfiguration: AIConfiguration,
-    ): AIConfiguration = resolveWithMetadata(context, fallbackConfiguration).configuration
+    ): AIConfiguration =
+        when (val resolution = resolveWithMetadata(context, fallbackConfiguration)) {
+            is RoutingResolution.Success -> resolution.configuration
+            is RoutingResolution.FloorUnmet -> throw RoutingFloorUnmetException(
+                requestedFloor = resolution.requestedFloor,
+                bestAvailableRung = resolution.bestAvailableRung,
+            )
+        }
 
     override suspend fun resolveWithMetadata(
         context: RoutingContext,
@@ -139,7 +147,7 @@ class PlaybackRelay(
         return when {
             index >= branchIndex -> delegate(context, fallbackConfiguration, index)
             index < recordedCalls.size -> Result.success(
-                RoutingResolution(configuration = fallbackConfiguration, reason = PLAYBACK_REASON),
+                RoutingResolution.Success(configuration = fallbackConfiguration, reason = PLAYBACK_REASON),
             )
             missPolicy == MissPolicy.Delegate -> delegate(context, fallbackConfiguration, index)
             else -> Result.failure(PlaybackMiss(index, recordedCalls.size))

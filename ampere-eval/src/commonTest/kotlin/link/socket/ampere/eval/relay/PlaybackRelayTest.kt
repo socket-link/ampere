@@ -185,6 +185,10 @@ class PlaybackRelayTest {
 
     // region — fixtures
 
+    /** All resolutions in this test are [RoutingResolution.Success] — floor-unmet isn't exercised here. */
+    private val RoutingResolution.reason: String get() = (this as RoutingResolution.Success).reason
+    private val RoutingResolution.configuration: AIConfiguration get() = (this as RoutingResolution.Success).configuration
+
     /** Counts invocations and stamps a fixed reason; stands in for a live relay. */
     private class SpyRelay(private val reason: String = "live") : CognitiveRelay {
         var calls: Int = 0
@@ -195,14 +199,14 @@ class PlaybackRelayTest {
         override suspend fun resolve(
             context: RoutingContext,
             fallbackConfiguration: AIConfiguration,
-        ): AIConfiguration = resolveWithMetadata(context, fallbackConfiguration).configuration
+        ): AIConfiguration = (resolveWithMetadata(context, fallbackConfiguration) as RoutingResolution.Success).configuration
 
         override suspend fun resolveWithMetadata(
             context: RoutingContext,
             fallbackConfiguration: AIConfiguration,
         ): RoutingResolution {
             calls++
-            return RoutingResolution(configuration = fallbackConfiguration, reason = reason)
+            return RoutingResolution.Success(configuration = fallbackConfiguration, reason = reason)
         }
 
         override suspend fun updateConfig(newConfig: RelayConfig) = Unit

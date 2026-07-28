@@ -11,8 +11,10 @@ import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
 import link.socket.ampere.agents.domain.cognition.sparks.RoleSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
+import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 
 /**
@@ -32,6 +34,8 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
  * @param memoryServiceFactory Creates per-agent memory services
  * @param defaultAiConfiguration Default AI configuration for agents
  * @param sparkRegistry Optional declarative spark registry; defaults to bundled fixtures
+ * @param cognitiveRelay Optional relay injected into created agents (e.g. a `PlaybackRelay` for eval Bench runs)
+ * @param executor Optional tool executor injected into created agents (e.g. a `NoOpExecutor` for effect-free Bench runs)
  */
 class SparkAgentFactory(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default),
@@ -39,6 +43,8 @@ class SparkAgentFactory(
     private val memoryServiceFactory: ((AgentId) -> AgentMemoryService)? = null,
     private val defaultAiConfiguration: AIConfiguration? = null,
     private val sparkRegistry: SparkRegistry? = null,
+    private val cognitiveRelay: CognitiveRelay? = null,
+    private val executor: Executor? = null,
 ) {
     private val effectiveSparkRegistry: SparkRegistry
         get() = sparkRegistry ?: DefaultSparkCatalog.registry
@@ -177,6 +183,8 @@ class SparkAgentFactory(
             _memoryService = memoryService,
             _aiConfiguration = defaultAiConfiguration,
             _observabilityScope = scope,
+            _cognitiveRelay = cognitiveRelay,
+            _executor = executor,
         )
     }
 
