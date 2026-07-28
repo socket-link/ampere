@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/ProviderCallStartedEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/ProviderCallCompletedEvent.kt
 related: [PropelLoop, EventSerialBus, CognitionTrace]
-last_verified: 2026-06-08
+last_verified: 2026-07-28
 ---
 
 # CognitiveRelay
@@ -56,7 +56,8 @@ change.
 - `agents/domain/routing/RoutingRule.kt` — predicate + target configuration.
 - `agents/domain/routing/RoutingContext.kt` — what rules match against (`CognitivePhase`, `agentId`, hints, optional `requirements`).
 - `agents/domain/routing/RoutingDecision.kt` — the event payload.
-- `agents/domain/routing/capability/` — provider capability vocabulary (`ProviderCapability`, `CapabilityRequirement`) and the SDK-free `ProviderDescriptor` + `ProviderDescriptorRegistry` the `ByCapability` rule matches against. Parallel to `domain/ai/provider/AIProvider` (left untouched).
+- `agents/domain/routing/capability/` — capability vocabulary (`ProviderCapability`, `CapabilityRequirement`, `CapabilityRung`) and the SDK-free `ModelDescriptor` + `ModelDescriptorRegistry` the `ByCapability` rule matches against, keyed per *model* rather than per provider (AMPR-214). Parallel to `domain/ai/model/AIModel` (left untouched).
+- `agents/domain/routing/capability/ModelDescriptorSource.kt` — where a registry's catalog comes from. The framework ships the interface and `DefaultModelDescriptorSource` (the bundled cloud catalog); a consumer supplies its own.
 - `agents/domain/reasoning/AgentLLMService.kt` — the only legitimate caller.
 - `agents/domain/event/RoutingEvent.kt`, `ProviderCallStartedEvent.kt`, `ProviderCallCompletedEvent.kt` — observability events.
 
@@ -66,7 +67,8 @@ change.
 - **All LLM calls go through the relay.** `AgentLLMService` is the single entry point. Direct construction of an `AIConfiguration` and a model client in domain code bypasses routing, observability, and rule precedence.
 - **Routing rules are evaluated in declared order; first match wins.** Reordering rules changes routing behaviour. The relay is intentionally not "best match" — it is "first match", because predictability beats cleverness. The one principled exception is cost: when the first match is a `ByCapability`, selection is cheapest-capable across the capable candidates (still deterministic — a total order on cost-per-Watt with a `providerId` tie-break, not a scoring engine).
 - **Every resolved call emits `ProviderCallStartedEvent` and `ProviderCallCompletedEvent`.** With `cognitivePhase`, `providerId`, `modelId`, and `routingReason` populated. `ArcTraceProjection` joins these to build `ModelInvocationTrace`; missing events produce gaps in the trace.
-- **Hot-swap goes through `updateConfig`.** Mutating a `RelayConfig` field in place is not supported. `updateConfig` exists so changes can be observed by long-running reasoning sessions.
+- **Hot-swap goes through `updateConfig`.** Mutating a `RelayConfig` field in place is not supported. `updateConfig` exists so changes can be observed by long-running reasoning sessions. `updateConfig` swaps *rules*; `ModelDescriptorRegistry.refresh` swaps the *catalog*. They are separate seams and neither substitutes for the other.
+- **A failed catalog load never empties the registry.** `refresh` replaces the catalog atomically or not at all: a `Result.failure` from the source leaves the previous catalog fully intact and surfaces the error. A registry that silently emptied itself would turn a transient network blip into blanket `FloorUnmet` — the exact silent downgrade the rung floor exists to prevent. A source that cannot produce a catalog must return `failure`, not an empty list.
 - **The fallback is not optional.** A relay that can return null on no-match would make every `AgentLLMService` caller responsible for a fallback decision, defeating the point. Every call must produce some `AIConfiguration`.
 
 ## Common operations
@@ -75,6 +77,7 @@ change.
 - **Route by phase** — `RoutingContext.phase` is a `CognitivePhase`; rules can switch on it directly.
 - **Route by capability** — set `RoutingContext.requirements` (a `CapabilityRequirement`) on the step and add `RoutingRule.ByCapability` rules ordered most-preferred-first. Each matches only when its target provider's `ProviderDescriptor` (looked up in the injected `ProviderDescriptorRegistry`) `satisfies` the requirement. The registry-aware `RoutingRule.matches(context, registry)` overload is `suspend` (the registry is mutex-guarded) and defaults to the pure `matches`, so the five non-capability rules are unaffected.
 - **Route by cost (cheapest-capable)** — when the first matching rule is a `ByCapability`, the relay does not stop at first-match: it ranks *all* capable `ByCapability` candidates by `CostPolicy.usdPerWatt` (cost-per-Watt) and resolves to the cheapest, breaking ties stably by `providerId`. "Prefer on-device" is the limiting case — a local provider priced `CostPolicy.Free` (0W) always wins. The choice is observable via `RoutingEvent.RouteResolved` (chosen / runner-up / `savingsVsRunnerUp`), a sibling to `RouteFallback`. Single-candidate matches and all non-capability rules keep pure first-match. Rates are provider *data* in the registry; selection never hardcodes them. `RouteCostReporter` prints a deterministic dry-run of cheapest route + Watt cost per step across the launch Arcs.
+- **Supply your own model catalog** — implement `ModelDescriptorSource` (a `fun interface`; `suspend fun load(): Result<List<ModelDescriptor>>`) and either build the registry from it up front with `InMemoryModelDescriptorRegistry.from(source)`, or pass it alongside a seed so routing works from the bundled catalog until the first load lands. Calling `refresh()` re-reads the source, so model→rung assignments change while the process runs — no relay reconstruction, no framework release.
 - **Inspect a routing decision in tests** — call `resolveWithMetadata` instead of `resolve`. The returned `RoutingResolution.reason` is a free-form tag describing which rule matched ("phase=PLAN" / "default fallback").
 - **Trace which model handled a phase** — `ArcTraceProjection.project(runId)` returns `ModelInvocationTrace`s keyed by phase, with `routingReason` populated from the routing event.
 
@@ -85,3 +88,4 @@ change.
 - **Importing a provider SDK from cognition code.** Even "temporarily" or "for a quick test" — the import lingers, and now `agents/domain/...` is provider-coupled.
 - **Treating `routingReason` as an internal detail.** It is read by the trace and displayed to humans debugging cognitive runs. A blank or unhelpful reason ("matched") is a regression in observability.
 - **Mutating `RelayConfig` fields directly to "hot-update" rules.** The `updateConfig` path emits the changes; direct mutation is invisible to subscribers and to the trace.
+- **Rebuilding the relay to change a model's rung.** The registry is the mutable surface — `refresh()` (whole catalog) or `register()` (one descriptor). Tearing down a live relay drops the rule set and every in-flight reasoning session along with it.

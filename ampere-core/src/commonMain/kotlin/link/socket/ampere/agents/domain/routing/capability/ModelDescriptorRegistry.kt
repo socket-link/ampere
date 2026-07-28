@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.domain.routing.capability
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import link.socket.ampere.domain.ai.model.AIModel
@@ -32,6 +33,17 @@ interface ModelDescriptorRegistry {
 
     /** Register (or replace) the descriptor for its `modelName`. */
     suspend fun register(descriptor: ModelDescriptor)
+
+    /**
+     * Reload the catalog from this registry's [ModelDescriptorSource], replacing
+     * it wholesale. This is how a consumer changes model→rung assignments at
+     * runtime — no relay reconstruction, no framework release.
+     *
+     * A load that fails returns that failure with the previous catalog
+     * untouched; it never leaves the registry empty. Defaults to a no-op
+     * success, because a registry with a fixed catalog has nothing to reload.
+     */
+    suspend fun refresh(): Result<Unit> = Result.success(Unit)
 }
 
 /**
@@ -40,20 +52,30 @@ interface ModelDescriptorRegistry {
  *
  * Seeded by default with one descriptor per model across the bundled cloud
  * providers, each projected from the model's own metadata.
+ *
+ * The catalog is not frozen at construction: [source] is where [refresh] reads
+ * a replacement from. Left unset, the source echoes [seed], so a registry built
+ * with no arguments holds the bundled catalog and reloads that same catalog —
+ * identical to [DefaultModelDescriptorSource]. Pass a [source] to hand catalog
+ * ownership to the consumer while [seed] keeps routing working until the first
+ * [refresh] lands; or use [from] to load once before the registry exists.
+ *
+ * @param seed The catalog the registry starts with.
+ * @param source Where [refresh] reads the replacement catalog from.
  */
 class InMemoryModelDescriptorRegistry(
     seed: List<ModelDescriptor> = defaultModelDescriptors(),
+    private val source: ModelDescriptorSource = ModelDescriptorSource { Result.success(seed) },
 ) : ModelDescriptorRegistry {
 
     private val mutex = Mutex()
-    private val descriptors: MutableMap<String, ModelDescriptor> = run {
-        val duplicates = seed.groupingBy { it.modelName }.eachCount().filterValues { it > 1 }.keys
-        require(duplicates.isEmpty()) {
-            "Duplicate modelName(s) in registry seed (two providers exposing the same model " +
-                "name would silently drop one): $duplicates"
-        }
-        seed.associateByTo(mutableMapOf()) { it.modelName }
-    }
+
+    /**
+     * An immutable snapshot, swapped whole rather than mutated in place. Every
+     * read and every write takes [mutex], so a reader observes the catalog
+     * either before a [refresh] or after it — never a half-replaced map.
+     */
+    private var descriptors: Map<String, ModelDescriptor> = indexCatalog(seed)
 
     override suspend fun descriptorFor(modelName: String): ModelDescriptor? =
         mutex.withLock { descriptors[modelName] }
@@ -62,10 +84,55 @@ class InMemoryModelDescriptorRegistry(
         mutex.withLock { descriptors.values.toList() }
 
     override suspend fun register(descriptor: ModelDescriptor) {
-        mutex.withLock { descriptors[descriptor.modelName] = descriptor }
+        mutex.withLock { descriptors = descriptors + (descriptor.modelName to descriptor) }
+    }
+
+    override suspend fun refresh(): Result<Unit> {
+        // Loaded and indexed outside the lock — including the duplicate check,
+        // which arrives here as a failure rather than a throw because a bad
+        // catalog must leave the live one alone, not tear the registry down.
+        val next = try {
+            source.load().map(::indexCatalog)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+
+        return next.map { catalog -> mutex.withLock { descriptors = catalog } }
     }
 
     companion object {
+
+        /**
+         * A registry whose catalog comes entirely from [source], loaded before
+         * the registry is handed back. A failed load surfaces as a failure
+         * rather than as a registry with nothing in it.
+         */
+        suspend fun from(source: ModelDescriptorSource): Result<InMemoryModelDescriptorRegistry> {
+            val registry = InMemoryModelDescriptorRegistry(seed = emptyList(), source = source)
+            return registry.refresh().map { registry }
+        }
+
+        /**
+         * Keys a catalog by `modelName`, rejecting duplicates rather than
+         * silently dropping one (AMPR-233) — two providers exposing the same
+         * model name is a catalog bug, and swallowing it would hide a model
+         * that routing was told it had.
+         *
+         * Shared by seeding and [refresh] so a consumer-supplied catalog is held
+         * to the same rule as the bundled one; the two paths differ only in how
+         * the rejection surfaces (a throw at construction, a failed [Result] on
+         * refresh).
+         */
+        private fun indexCatalog(catalog: List<ModelDescriptor>): Map<String, ModelDescriptor> {
+            val duplicates = catalog.groupingBy { it.modelName }.eachCount().filterValues { it > 1 }.keys
+            require(duplicates.isEmpty()) {
+                "Duplicate modelName(s) in model catalog (two providers exposing the same model " +
+                    "name would silently drop one): $duplicates"
+            }
+            return catalog.associateBy { it.modelName }
+        }
 
         /**
          * Default capability set projected onto the bundled cloud models.
