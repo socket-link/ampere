@@ -5,6 +5,7 @@ import com.aallam.openai.api.chat.ChatCompletionRequest
 import link.socket.ampere.agents.domain.routing.capability.CostPolicy
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.local.LocalCapacity
 import link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine
 import link.socket.ampere.api.AmpereStableApi
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
@@ -42,11 +43,22 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
 @AmpereStableApi
 class DispatchingUpstreamLlmClient(
     private val registry: ModelDescriptorRegistry,
-    localEngine: LocalInferenceEngine?,
+    private val localEngine: LocalInferenceEngine?,
     private val bundled: UpstreamLlmClient = BundledUpstreamLlmClient,
 ) : UpstreamLlmClient {
 
     private val local: LocalUpstreamLlmClient? = localEngine?.let(::LocalUpstreamLlmClient)
+
+    /**
+     * Probes the bound [localEngine], if any, so a caller (e.g.
+     * [link.socket.ampere.agents.domain.reasoning.AgentLLMService]) can populate
+     * [link.socket.ampere.agents.domain.routing.RoutingContext.localCapacity]
+     * before asking the relay to resolve — the relay's availability gate
+     * (AMPR-207/225) only opens for a gated on-device rule when this snapshot
+     * reports it available. Returns `null` when no engine is bound, exactly
+     * like the existing `:ampere-core` (no platform module) default.
+     */
+    suspend fun probeLocalCapacity(): LocalCapacity? = localEngine?.probe()
 
     override suspend fun call(
         request: ChatCompletionRequest,

@@ -26,6 +26,19 @@ class ModelDescriptorRegistryRungTest {
     // ── Spot-checks by rung ───────────────────────────────────────────────────
 
     @Test
+    fun rungZeroModels() {
+        // AMPR-225: the on-device floor is always 0W, always availability-gated.
+        val descriptor = descriptors["apple-foundation-models-on-device"]
+        assertEquals(CapabilityRung.ZERO, descriptor?.rung, "on-device model should be rung ZERO")
+        assertEquals(CostPolicy.Free, descriptor?.cost, "on-device model should be 0W")
+        assertEquals(true, descriptor?.availabilityGated, "on-device model must be availability-gated")
+        assertTrue(
+            descriptor?.capabilities?.contains(ProviderCapability.STRUCTURED_OUTPUT) == true,
+            "on-device model should advertise STRUCTURED_OUTPUT",
+        )
+    }
+
+    @Test
     fun rungOneModels() {
         val expected = listOf(
             "claude-3-haiku-20240307",

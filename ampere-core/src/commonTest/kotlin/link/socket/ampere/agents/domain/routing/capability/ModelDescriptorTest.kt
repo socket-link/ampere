@@ -13,6 +13,7 @@ import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
+import link.socket.ampere.domain.ai.model.AIModel_OnDevice
 import link.socket.ampere.domain.ai.provider.AIProvider
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 
@@ -165,8 +166,12 @@ class ModelDescriptorTest {
     fun defaultRegistrySeedsOneDescriptorPerModel() = runTest {
         val registry = InMemoryModelDescriptorRegistry()
 
-        // One descriptor per model across every bundled provider.
-        val expectedCount = AIProvider.ALL_PROVIDERS.sumOf { it.availableModels.size }
+        // One descriptor per model across every bundled cloud provider, plus
+        // one per on-device (Rung 0) model — AIProvider.ALL_PROVIDERS only
+        // lists the bundled cloud providers (AIProvider_OnDevice isn't a real
+        // dial-out provider), so it's counted separately.
+        val expectedCount = AIProvider.ALL_PROVIDERS.sumOf { it.availableModels.size } +
+            AIModel_OnDevice.ALL_MODELS.size
         assertEquals(expectedCount, registry.all().size)
 
         // Each is keyed by model name and projects that model's own tier.
