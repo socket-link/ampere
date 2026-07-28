@@ -11,7 +11,9 @@ import link.socket.ampere.agents.domain.cognition.sparks.LanguageSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
 import link.socket.ampere.agents.domain.cognition.sparks.RoleSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
+import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.util.systemFileSystem
 import okio.FileSystem
 import okio.Path
@@ -68,6 +70,8 @@ class ChargePhase(
     private val arcConfig: ArcConfig,
     private val projectDir: Path,
     private val fileSystem: FileSystem = systemFileSystem,
+    private val cognitiveRelay: CognitiveRelay? = null,
+    private val executor: Executor? = null,
 ) {
     suspend fun execute(userGoal: String): ChargeResult {
         require(userGoal.isNotBlank()) { "ChargePhase requires a non-empty user goal." }
@@ -82,7 +86,9 @@ class ChargePhase(
             "ChargePhase produced invalid goal tree for goal: $userGoal"
         }
 
-        val agents = ArcAgentSpawner().spawn(arcConfig, projectContext)
+        val agents = ArcAgentSpawner(
+            agentFactory = SparkAgentFactory(cognitiveRelay = cognitiveRelay, executor = executor),
+        ).spawn(arcConfig, projectContext)
 
         return ChargeResult(
             projectContext = projectContext,
