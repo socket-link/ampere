@@ -28,6 +28,13 @@ data class Emission(
     val provenance: EmissionProvenance,
     val dedupKey: String? = null,
     val producedAt: Instant,
+    /**
+     * Ordered surface-delivery intent, highest priority first. Empty means
+     * "no opinion" — the host's `SurfacePolicy` falls back to its own
+     * default (typically [Surface.Console]). AMPERE never interprets this
+     * list itself; it only carries it for the host to consult.
+     */
+    val surfaces: List<Surface> = emptyList(),
 )
 
 /**
