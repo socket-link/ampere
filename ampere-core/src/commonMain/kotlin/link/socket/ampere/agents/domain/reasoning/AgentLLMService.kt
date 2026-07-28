@@ -171,10 +171,16 @@ class AgentLLMService(
             }
         }
 
-        // Thread per-agent rung floor into requirements before relay resolves
+        // Thread per-agent rung floor into requirements before relay resolves.
+        // Floors compose as the stricter of the two (AMPR-229): a call site asking
+        // for FOUR through an agent declaring THREE stays at FOUR. Replacing the
+        // call-site floor with the agent's would be a silent downgrade.
         val effectiveRoutingContext = agentConfiguration.agentDefinition.minimumRung?.let { rung ->
             routingContext?.let { ctx ->
-                val mergedRequirements = (ctx.requirements ?: CapabilityRequirement()).copy(minRung = rung)
+                val existing = ctx.requirements ?: CapabilityRequirement()
+                val mergedRequirements = existing.copy(
+                    minRung = existing.minRung?.let { maxOf(it, rung) } ?: rung,
+                )
                 ctx.copy(requirements = mergedRequirements)
             } ?: RoutingContext(requirements = CapabilityRequirement(minRung = rung))
         } ?: routingContext
