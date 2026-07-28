@@ -36,6 +36,10 @@ import link.socket.ampere.domain.ai.provider.ProviderId
  *   minimises (AMPR-210). Ignored for [CostPolicy.Free] models, which always
  *   route at 0 — see [routingCostPerWatt].
  * @property availabilityGated `true` for device-gated local models (read in T4).
+ * @property rung The model's capability tier, or `null` if the model has not
+ *   been rated (AMPR-233). Unrated is distinct from [CapabilityRung.ONE]: a
+ *   `ONE` rung is a deliberate assignment, `null` means nobody has rated the
+ *   model yet. See [satisfies] for the gate policy this implies.
  */
 @Serializable
 data class ModelDescriptor(
@@ -48,7 +52,7 @@ data class ModelDescriptor(
     val cost: CostPolicy = CostPolicy.Metered,
     val costPerWatt: Double = DEFAULT_COST_PER_WATT,
     val availabilityGated: Boolean = false,
-    val rung: CapabilityRung = CapabilityRung.ONE,
+    val rung: CapabilityRung? = null,
 ) {
     companion object {
         /**
@@ -72,13 +76,17 @@ val ModelDescriptor.routingCostPerWatt: Double
 /**
  * Whether this descriptor can serve the given [req]. A null/empty constraint
  * imposes nothing; every present constraint must hold.
+ *
+ * Gate policy for an unrated model ([rung] is `null`): it does not silently
+ * satisfy a declared floor (an unrated model is not known to meet it) and does
+ * not silently fail when no floor is declared (there is nothing to fail).
  */
 fun ModelDescriptor.satisfies(req: CapabilityRequirement): Boolean =
     req.required.all { it in capabilities } &&
         (req.minReasoning == null || reasoning >= req.minReasoning) &&
         (req.minContextTokens == null || maxContextTokens >= req.minContextTokens) &&
         (req.inputs == null || supportedInputs.covers(req.inputs)) &&
-        (req.minRung == null || rung >= req.minRung)
+        (req.minRung == null || (rung != null && rung >= req.minRung))
 
 /**
  * Whether these inputs cover everything [required] asks for: for each modality

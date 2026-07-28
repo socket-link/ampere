@@ -2,6 +2,7 @@ package link.socket.ampere.agents.domain.routing.capability
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -136,6 +137,30 @@ class ModelDescriptorTest {
         assertEquals(CapabilityRung.THREE, decoded.rung)
     }
 
+    // ── Unrated (rung == null) gate policy (AMPR-233) ─────────────────────────
+
+    @Test
+    fun unratedModelDoesNotSatisfyADeclaredFloor() {
+        val unrated = opus.copy(rung = null)
+        assertFalse(unrated.satisfies(CapabilityRequirement(minRung = CapabilityRung.ONE)))
+    }
+
+    @Test
+    fun unratedModelSatisfiesWhenNoFloorIsDeclared() {
+        val unrated = opus.copy(rung = null)
+        assertTrue(unrated.satisfies(CapabilityRequirement()))
+    }
+
+    @Test
+    fun unratedRungRoundTrips() {
+        val unrated = opus.copy(rung = null)
+        val decoded = json.decodeFromString<ModelDescriptor>(
+            json.encodeToString(ModelDescriptor.serializer(), unrated),
+        )
+        assertEquals(unrated, decoded)
+        assertNull(decoded.rung)
+    }
+
     @Test
     fun defaultRegistrySeedsOneDescriptorPerModel() = runTest {
         val registry = InMemoryModelDescriptorRegistry()
@@ -171,5 +196,13 @@ class ModelDescriptorTest {
         registry.register(updated)
         assertEquals(updated, registry.descriptorFor(opus.modelName))
         assertEquals(1, registry.all().size)
+    }
+
+    @Test
+    fun duplicateModelNameInSeedIsRejectedRatherThanSilentlyDropped() {
+        val fromAnotherProvider = opus.copy(providerId = link.socket.ampere.domain.ai.provider.AIProvider_OpenAI.id)
+        assertFailsWith<IllegalArgumentException> {
+            InMemoryModelDescriptorRegistry(seed = listOf(opus, fromAnotherProvider))
+        }
     }
 }
