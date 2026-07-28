@@ -17,6 +17,7 @@ import link.socket.ampere.data.createJvmDriver
 import link.socket.ampere.domain.koog.KoogAgentFactory
 import link.socket.ampere.integrations.git.RepositoryDetector
 import link.socket.ampere.integrations.issues.github.GitHubCliProvider
+import link.socket.ampere.llm.BundledUpstreamLlmClient
 import link.socket.ampere.util.LoggingConfiguration
 import link.socket.ampere.util.configureLogging
 
@@ -91,6 +92,9 @@ fun main(args: Array<String>) {
         repository = repository,
         aiConfiguration = aiConfiguration,
         llmProvider = context.llmProvider,
+        // The CLI is a first-party tool talking to providers with the
+        // operator's own keys, so it opts into the direct-provider call.
+        upstreamLlmClient = BundledUpstreamLlmClient,
     )
 
     // Create agents based on team configuration (or defaults if no config)

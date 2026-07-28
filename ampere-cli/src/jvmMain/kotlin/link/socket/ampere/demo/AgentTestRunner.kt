@@ -40,6 +40,7 @@ import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
+import link.socket.ampere.llm.BundledUpstreamLlmClient
 
 /** Default timeout for escalation prompts */
 private const val ESCALATION_TIMEOUT_SECONDS = 30L
@@ -106,6 +107,7 @@ fun main(escalation: Boolean = false) {
                     model = AIModel_Claude.Sonnet_4
                 ),
                 toolWriteCodeFileOverride = writeCodeTool,
+                upstreamLlmClient = BundledUpstreamLlmClient,
             )
 
             // Create CodeWriterAgent

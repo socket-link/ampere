@@ -8,8 +8,9 @@ import com.aallam.openai.api.chat.ChatRole
 import com.aallam.openai.api.model.ModelId
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
-import kotlin.test.assertSame
+import kotlin.test.assertNull
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.domain.reasoning.AgentLLMService
@@ -74,10 +75,13 @@ class UpstreamLlmClientRuntimePlumbingTest {
     }
 
     @Test
-    fun `default config carries BundledUpstreamLlmClient`() {
-        // The Wave 0 contract: callers who don't touch the new field get
-        // the pre-seam direct-call behavior preserved.
-        assertSame(BundledUpstreamLlmClient, baseConfig.upstreamLlmClient)
+    fun `default config carries no upstream client`() = runTest {
+        // AMPR-236: omitting the field no longer means "call the provider
+        // directly" — it means no transport was chosen, and the call fails.
+        assertNull(baseConfig.upstreamLlmClient)
+        assertFailsWith<MissingUpstreamLlmClientException> {
+            AgentLLMService(agentConfiguration = baseConfig).call(prompt = "no transport")
+        }
     }
 }
 

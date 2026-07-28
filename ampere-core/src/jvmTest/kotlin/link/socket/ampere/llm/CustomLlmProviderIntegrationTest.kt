@@ -3,6 +3,7 @@ package link.socket.ampere.llm
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
@@ -187,11 +188,12 @@ class CustomLlmProviderIntegrationTest {
     }
 
     /**
-     * Test that null provider falls back to built-in (would fail without real API).
-     * This test verifies the code path, not the actual API call.
+     * With no custom provider *and* no upstream client, there is no transport
+     * to call. AMPR-236 turned that state into a hard failure instead of a
+     * silent direct-provider call.
      */
     @Test
-    fun `null provider attempts to use built-in provider`() = runTest {
+    fun `no provider and no upstream client fails instead of calling the provider`() = runTest {
         val config = AgentConfiguration(
             agentDefinition = WriteCodeAgent,
             aiConfiguration = FakeAIConfiguration(),
@@ -201,14 +203,31 @@ class CustomLlmProviderIntegrationTest {
 
         val llmService = AgentLLMService(config)
 
-        // This will throw because FakeAIConfiguration throws on provider access
-        // This verifies the fallback path is taken
-        try {
+        assertFailsWith<MissingUpstreamLlmClientException> {
             llmService.call("Test prompt")
-            assertTrue(false, "Should have thrown when accessing fake provider")
-        } catch (e: NotImplementedError) {
-            // Expected - the fake provider throws this
-            assertContains(e.message ?: "", "Provider should not be called")
         }
+    }
+
+    /**
+     * Naming [BundledUpstreamLlmClient] explicitly opts back into the direct
+     * per-provider call — verified here by the fake provider blowing up on
+     * access, which only happens if that path is taken.
+     */
+    @Test
+    fun `explicit BundledUpstreamLlmClient opts into the direct provider path`() = runTest {
+        val config = AgentConfiguration(
+            agentDefinition = WriteCodeAgent,
+            aiConfiguration = FakeAIConfiguration(),
+            cognitiveConfig = CognitiveConfig(),
+            llmProvider = null,
+            upstreamLlmClient = BundledUpstreamLlmClient,
+        )
+
+        val llmService = AgentLLMService(config)
+
+        val error = assertFailsWith<NotImplementedError> {
+            llmService.call("Test prompt")
+        }
+        assertContains(error.message ?: "", "Provider should not be called")
     }
 }

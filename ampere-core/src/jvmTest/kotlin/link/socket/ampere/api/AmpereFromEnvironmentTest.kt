@@ -11,7 +11,9 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -19,18 +21,22 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import link.socket.ampere.agents.definition.AgentType
+import link.socket.ampere.agents.definition.SparkBasedAgent
+import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.cognition.sparks.DefaultPhaseSparkLibrary
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepositoryImpl
+import link.socket.ampere.agents.domain.reasoning.AgentLLMService
 import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.db.Database
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
-import link.socket.ampere.llm.BundledUpstreamLlmClient
+import link.socket.ampere.llm.MissingUpstreamLlmClientException
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.memory.MemoryStore
 import link.socket.ampere.memory.memoryStoreOf
@@ -130,7 +136,7 @@ class AmpereFromEnvironmentTest {
     }
 
     @Test
-    fun `fromEnvironment exposes the supplied upstreamLlmClient as the runtime default`() {
+    fun `fromEnvironment exposes the supplied upstreamLlmClient`() {
         val recorder = RecordingUpstream()
         val instance = Ampere.fromEnvironment(
             environmentService = environmentService,
@@ -138,24 +144,47 @@ class AmpereFromEnvironmentTest {
             upstreamLlmClient = recorder,
         )
 
-        // The runtime default on the instance is the one the caller passed.
-        // Callers constructing agents off this instance read this property
-        // and pass it into the agent factory so every agent shares the
-        // same upstream routing.
         assertSame(recorder, instance.upstreamLlmClient)
     }
 
     @Test
-    fun `fromEnvironment defaults upstreamLlmClient to BundledUpstreamLlmClient when omitted`() {
+    fun `fromEnvironment leaves upstreamLlmClient unset when omitted`() {
         val instance = Ampere.fromEnvironment(
             environmentService = environmentService,
             knowledgeRepository = knowledgeRepository,
         )
-        assertSame(BundledUpstreamLlmClient, instance.upstreamLlmClient)
+        // AMPR-236: omission no longer means "call the provider directly".
+        assertNull(instance.upstreamLlmClient)
     }
 
     @Test
-    fun `runtime default flows through SparkBasedAgent factory to AgentLLMService`() {
+    fun `injected client governs agents built off the instance factory`() {
+        val recorder = RecordingUpstream()
+        val instance = Ampere.fromEnvironment(
+            environmentService = environmentService,
+            knowledgeRepository = knowledgeRepository,
+            upstreamLlmClient = recorder,
+            agentScope = scope,
+        )
+
+        // No re-plumbing: the agent is built through the instance's own
+        // factory, which already carries the injected transport.
+        val factory = assertNotNull(instance.agentFactory)
+        val agent = factory.create<SparkBasedAgent<CodeState>>(AgentType.CODE)
+
+        assertSame(recorder, agent.agentConfiguration.upstreamLlmClient)
+
+        // Drive an LLM call via a fresh AgentLLMService built from the
+        // agent's config to verify the seam end-to-end (does not start the
+        // full PROPEL loop; that's exercised in the smoke tests).
+        val llmService = AgentLLMService(agentConfiguration = agent.agentConfiguration)
+        val response = runBlocking { llmService.call(prompt = "ping") }
+        assertEquals("from-runtime-client", response)
+        assertNotNull(recorder.lastRequest)
+    }
+
+    @Test
+    fun `injected client reaches hand-constructed agents via the instance property`() {
         val recorder = RecordingUpstream()
         val instance = Ampere.fromEnvironment(
             environmentService = environmentService,
@@ -163,11 +192,10 @@ class AmpereFromEnvironmentTest {
             upstreamLlmClient = recorder,
         )
 
-        // Stamp the instance's runtime default onto the agent — the call
-        // site Socket replicates for each agent it constructs off the
-        // shared AmpereInstance.
+        // Consumers that build agents by hand still read the instance
+        // property; this keeps that path covered alongside the factory one.
         val agent = runBlocking {
-            link.socket.ampere.agents.definition.SparkBasedAgent.Code(
+            SparkBasedAgent.Code(
                 sparkRegistry = DefaultPhaseSparkLibrary.load(),
                 aiConfiguration = AIConfiguration_Default(
                     provider = AIProvider_Anthropic,
@@ -177,19 +205,25 @@ class AmpereFromEnvironmentTest {
             )
         }
 
-        // The agent's computed AgentConfiguration must carry the runtime
-        // default forward, so AgentReasoning + AgentLLMService both see it.
         assertSame(recorder, agent.agentConfiguration.upstreamLlmClient)
+    }
 
-        // Drive an LLM call via a fresh AgentLLMService built from the
-        // agent's config to verify the seam end-to-end (does not start the
-        // full PROPEL loop; that's exercised in the smoke tests).
-        val llmService = link.socket.ampere.agents.domain.reasoning.AgentLLMService(
-            agentConfiguration = agent.agentConfiguration,
+    @Test
+    fun `agents built with no injected client fail loudly instead of calling the provider`() {
+        val instance = Ampere.fromEnvironment(
+            environmentService = environmentService,
+            knowledgeRepository = knowledgeRepository,
+            agentScope = scope,
         )
-        val response = runBlocking { llmService.call(prompt = "ping") }
-        assertEquals("from-runtime-client", response)
-        assertNotNull(recorder.lastRequest)
+
+        val factory = assertNotNull(instance.agentFactory)
+        val agent = factory.create<SparkBasedAgent<CodeState>>(AgentType.CODE)
+        assertNull(agent.agentConfiguration.upstreamLlmClient)
+
+        val llmService = AgentLLMService(agentConfiguration = agent.agentConfiguration)
+        assertFailsWith<MissingUpstreamLlmClientException> {
+            runBlocking { llmService.call(prompt = "ping") }
+        }
     }
 
     @Test

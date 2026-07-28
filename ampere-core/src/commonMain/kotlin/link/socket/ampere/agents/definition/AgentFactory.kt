@@ -40,6 +40,7 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.integrations.issues.IssueTrackerProvider
+import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.util.runBlockingCompat
 
 enum class AgentType {
@@ -100,6 +101,18 @@ class AgentFactory(
      * downgrading.
      */
     private val codeAgentMinimumRung: CapabilityRung? = DEFAULT_CODE_AGENT_RUNG,
+    /**
+     * Outbound LLM transport handed to every agent this factory builds
+     * (AMPR-236). `Ampere.fromEnvironment(upstreamLlmClient = ...)` supplies
+     * it via [link.socket.ampere.api.AmpereInstance.agentFactory] so an
+     * injected client governs factory-built agents too. Null leaves the
+     * agents without a transport, which turns their first LLM call into a
+     * [MissingUpstreamLlmClientException][link.socket.ampere.llm.MissingUpstreamLlmClientException]
+     * instead of a silent direct-provider call; pass
+     * [BundledUpstreamLlmClient][link.socket.ampere.llm.BundledUpstreamLlmClient]
+     * to opt into that call.
+     */
+    private val upstreamLlmClient: UpstreamLlmClient? = null,
 ) {
     private val toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode> =
         toolWriteCodeFileOverride ?: ToolWriteCodeFile(AgentActionAutonomy.ASK_BEFORE_ACTION)
@@ -161,6 +174,7 @@ class AgentFactory(
             aiConfiguration = effectiveAiConfiguration,
             cognitiveConfig = cognitiveConfig,
             llmProvider = llmProvider,
+            upstreamLlmClient = upstreamLlmClient,
         )
 
     /**
@@ -263,6 +277,7 @@ class AgentFactory(
                 memoryService = memoryService,
                 llmProvider = llmProvider,
                 observabilityScope = scope,
+                upstreamLlmClient = upstreamLlmClient,
                 // AMPR-219: the CODE path is the one activated production agent.
                 // Only this branch wires the relay + rung floor; PRODUCT,
                 // PROJECT, and QUALITY keep the dormant (null relay) behavior.
@@ -292,6 +307,7 @@ class AgentFactory(
                 memoryService = memoryService,
                 llmProvider = llmProvider,
                 observabilityScope = scope,
+                upstreamLlmClient = upstreamLlmClient,
             )
         }
         AgentType.PROJECT -> {
@@ -306,6 +322,7 @@ class AgentFactory(
                 memoryService = memoryService,
                 llmProvider = llmProvider,
                 observabilityScope = scope,
+                upstreamLlmClient = upstreamLlmClient,
                 tools = setOfNotNull(toolCreateIssues, toolAskHuman),
             )
         }
@@ -321,6 +338,7 @@ class AgentFactory(
                 memoryService = memoryService,
                 llmProvider = llmProvider,
                 observabilityScope = scope,
+                upstreamLlmClient = upstreamLlmClient,
             )
         }
     }

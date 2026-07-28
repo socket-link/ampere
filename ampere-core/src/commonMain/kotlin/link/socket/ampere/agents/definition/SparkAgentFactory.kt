@@ -16,6 +16,7 @@ import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
+import link.socket.ampere.llm.UpstreamLlmClient
 
 /**
  * Factory for creating agents with Spark-based cognitive differentiation.
@@ -36,6 +37,9 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
  * @param sparkRegistry Optional declarative spark registry; defaults to bundled fixtures
  * @param cognitiveRelay Optional relay injected into created agents (e.g. a `PlaybackRelay` for eval Bench runs)
  * @param executor Optional tool executor injected into created agents (e.g. a `NoOpExecutor` for effect-free Bench runs)
+ * @param upstreamLlmClient Outbound LLM transport handed to created agents (AMPR-236). Null leaves them without a
+ *   transport, so their first LLM call throws rather than calling a provider directly; pass
+ *   [link.socket.ampere.llm.BundledUpstreamLlmClient] to opt into the direct call.
  */
 class SparkAgentFactory(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default),
@@ -45,6 +49,7 @@ class SparkAgentFactory(
     private val sparkRegistry: SparkRegistry? = null,
     private val cognitiveRelay: CognitiveRelay? = null,
     private val executor: Executor? = null,
+    private val upstreamLlmClient: UpstreamLlmClient? = null,
 ) {
     private val effectiveSparkRegistry: SparkRegistry
         get() = sparkRegistry ?: DefaultSparkCatalog.registry
@@ -185,6 +190,7 @@ class SparkAgentFactory(
             _observabilityScope = scope,
             _cognitiveRelay = cognitiveRelay,
             _executor = executor,
+            _upstreamLlmClient = upstreamLlmClient,
         )
     }
 

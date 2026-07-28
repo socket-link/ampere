@@ -14,6 +14,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
+import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.util.systemFileSystem
 import okio.FileSystem
 import okio.Path
@@ -72,6 +73,7 @@ class ChargePhase(
     private val fileSystem: FileSystem = systemFileSystem,
     private val cognitiveRelay: CognitiveRelay? = null,
     private val executor: Executor? = null,
+    private val upstreamLlmClient: UpstreamLlmClient? = null,
 ) {
     suspend fun execute(userGoal: String): ChargeResult {
         require(userGoal.isNotBlank()) { "ChargePhase requires a non-empty user goal." }
@@ -87,7 +89,11 @@ class ChargePhase(
         }
 
         val agents = ArcAgentSpawner(
-            agentFactory = SparkAgentFactory(cognitiveRelay = cognitiveRelay, executor = executor),
+            agentFactory = SparkAgentFactory(
+                cognitiveRelay = cognitiveRelay,
+                executor = executor,
+                upstreamLlmClient = upstreamLlmClient,
+            ),
         ).spawn(arcConfig, projectContext)
 
         return ChargeResult(

@@ -34,11 +34,15 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
  * the natural seam for Socket's backend proxy: same request shape, same
  * response shape, just a different network endpoint.
  *
- * ## Default behavior
+ * ## No implicit default
  *
- * The bundled default ([BundledUpstreamLlmClient]) calls
- * `configuration.provider.client.chatCompletion(request)` — exactly what
- * Ampere did before this seam existed. Existing callers see no change.
+ * There is deliberately no default implementation. A configuration that
+ * reaches [link.socket.ampere.agents.domain.reasoning.AgentLLMService] without
+ * a client fails with [MissingUpstreamLlmClientException] rather than falling
+ * back to the direct-provider path — a transport is something a caller opts
+ * into, never something it inherits by omission (AMPR-236). Callers that do
+ * want the direct per-provider call name [BundledUpstreamLlmClient]
+ * explicitly.
  *
  * ## Streaming
  *
@@ -81,8 +85,10 @@ interface UpstreamLlmClient {
  * `OpenAI` client constructed by
  * [link.socket.ampere.domain.ai.provider.AIProvider].
  *
- * This is Ampere's default; using it is byte-equivalent to the pre-seam
- * direct `provider.client.chatCompletion(request)` call.
+ * Using it is byte-equivalent to the pre-seam direct
+ * `provider.client.chatCompletion(request)` call — prompt content leaves the
+ * device straight to the provider's endpoint. It is **not** wired in by
+ * default: callers that want it must name it (AMPR-236).
  */
 @AmpereStableApi
 object BundledUpstreamLlmClient : UpstreamLlmClient {
@@ -91,3 +97,28 @@ object BundledUpstreamLlmClient : UpstreamLlmClient {
         configuration: AIConfiguration,
     ): ChatCompletion = configuration.provider.client.chatCompletion(request)
 }
+
+/**
+ * Raised when an agent reaches the outbound LLM call with no
+ * [UpstreamLlmClient] configured.
+ *
+ * Ampere used to fall back to [BundledUpstreamLlmClient] here, which meant an
+ * embedded consumer that forgot to inject a transport — or injected one at a
+ * seam that was never read — silently egressed prompt content to the
+ * provider. The transport is now mandatory: supply one on
+ * [link.socket.ampere.agents.config.AgentConfiguration.upstreamLlmClient]
+ * (typically via the agent factory or
+ * [Ampere.fromEnvironment][link.socket.ampere.api.fromEnvironment]), or name
+ * [BundledUpstreamLlmClient] to opt into the direct-provider call.
+ */
+@AmpereStableApi
+class MissingUpstreamLlmClientException(
+    agentName: String?,
+) : IllegalStateException(
+    "No UpstreamLlmClient configured for " +
+        (agentName?.let { "agent '$it'" } ?: "this agent") +
+        ". Ampere no longer falls back to the direct-provider call. Pass an " +
+        "UpstreamLlmClient into the agent factory (or " +
+        "Ampere.fromEnvironment(upstreamLlmClient = ...)), or explicitly pass " +
+        "BundledUpstreamLlmClient to opt into calling the provider directly.",
+)
