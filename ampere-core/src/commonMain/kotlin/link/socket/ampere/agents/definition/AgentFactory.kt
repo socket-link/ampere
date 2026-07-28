@@ -132,18 +132,24 @@ class AgentFactory(
      * The live [CognitiveRelay] wired into the activated CODE path (AMPR-219).
      *
      * This is the production seam the relay was built for: a real
-     * [CognitiveRelayImpl] over the bundled cloud catalog
-     * ([CapabilityRoutingDefaults.cloudCapabilityRules] +
+     * [CognitiveRelayImpl] over the on-device Rung 0 floor plus the bundled
+     * cloud catalog ([CapabilityRoutingDefaults.defaultCapabilityRules] +
      * [InMemoryModelDescriptorRegistry]'s default seed), publishing routing
      * events on the shared [eventSerialBus]. Selection stays cost-aware; the
-     * agent's declared [codeAgentMinimumRung] is the floor it must clear.
+     * agent's declared [codeAgentMinimumRung] is the floor it must clear. No
+     * [link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine] is
+     * bound here (AMPR-203/225: `:ampere-core` binds none), so the on-device
+     * rule can never actually be selected from this factory yet — it stays
+     * inert (its `availabilityGated` descriptor has no
+     * [link.socket.ampere.agents.domain.routing.local.LocalCapacity] reporting
+     * it available) until a platform module binds a real engine.
      *
      * Built lazily and cached so a single relay (and registry) is shared across
      * every CODE agent this factory makes. Tests override it via [cognitiveRelay].
      */
     private val effectiveCognitiveRelay: CognitiveRelay by lazy {
         cognitiveRelay ?: CognitiveRelayImpl(
-            initialConfig = RelayConfig(rules = CapabilityRoutingDefaults.cloudCapabilityRules()),
+            initialConfig = RelayConfig(rules = CapabilityRoutingDefaults.defaultCapabilityRules()),
             eventBus = eventSerialBus,
             registry = InMemoryModelDescriptorRegistry(),
         )

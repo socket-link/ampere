@@ -5,9 +5,11 @@ import kotlinx.coroutines.sync.withLock
 import link.socket.ampere.domain.ai.model.AIModel
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
+import link.socket.ampere.domain.ai.model.AIModel_OnDevice
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.domain.ai.provider.AIProvider_Google
+import link.socket.ampere.domain.ai.provider.AIProvider_OnDevice
 import link.socket.ampere.domain.ai.provider.AIProvider_OpenAI
 import link.socket.ampere.domain.ai.provider.ProviderId
 import link.socket.ampere.domain.limits.numericValue
@@ -79,6 +81,16 @@ class InMemoryModelDescriptorRegistry(
             ProviderCapability.WORLD_KNOWLEDGE,
             ProviderCapability.TOOL_CALLING,
             ProviderCapability.LONG_CONTEXT,
+        )
+
+        /**
+         * What the Rung 0 on-device backend actually offers today: guided/
+         * constrained structured generation (AMPR-225), and nothing else — no
+         * tool calling, no long context (its window is much smaller than any
+         * cloud model's), no broad world knowledge, no streaming yet.
+         */
+        private val ON_DEVICE_MODEL_CAPABILITIES = setOf(
+            ProviderCapability.STRUCTURED_OUTPUT,
         )
 
         /**
@@ -174,8 +186,34 @@ class InMemoryModelDescriptorRegistry(
         )
 
         /**
+         * Rung 0 (AMPR-225): the on-device model is always the ordinal floor,
+         * always [CostPolicy.Free], and always [availabilityGated] — the relay
+         * must probe [link.socket.ampere.agents.domain.routing.local.LocalCapacity]
+         * before routing to it, honoring the same fallback path an unavailable
+         * gated cloud provider would (AMPR-207).
+         */
+        private fun onDeviceModelDescriptors(): List<ModelDescriptor> =
+            AIModel_OnDevice.ALL_MODELS.map { model ->
+                ModelDescriptor(
+                    modelName = model.name,
+                    providerId = AIProvider_OnDevice.id,
+                    capabilities = ON_DEVICE_MODEL_CAPABILITIES,
+                    reasoning = model.features.reasoningLevel,
+                    maxContextTokens = model.limits.token.contextWindow.numericValue
+                        .coerceAtMost(Int.MAX_VALUE.toLong())
+                        .toInt(),
+                    supportedInputs = model.features.supportedInputs,
+                    cost = CostPolicy.Free,
+                    costPerWatt = 0.0,
+                    availabilityGated = true,
+                    rung = CapabilityRung.ZERO,
+                )
+            }
+
+        /**
          * One descriptor per model across the three bundled cloud providers,
-         * each projected from the model's own metadata.
+         * each projected from the model's own metadata, plus one per on-device
+         * (Rung 0) model.
          *
          * Computed on demand (not as a class-load constant). The model lists in
          * each `AIModel.*` companion are declared `by lazy` to break the JVM
@@ -191,9 +229,10 @@ class InMemoryModelDescriptorRegistry(
                 Triple(AIProvider_Google.id, AIModel_Gemini.ALL_MODELS, GOOGLE_USD_PER_WATT),
                 Triple(AIProvider_OpenAI.id, AIModel_OpenAI.ALL_MODELS, OPENAI_USD_PER_WATT),
             )
-            return modelsByProvider.flatMap { (providerId, models, costPerWatt) ->
+            val cloudDescriptors = modelsByProvider.flatMap { (providerId, models, costPerWatt) ->
                 models.map { model -> model.toModelDescriptor(providerId, costPerWatt) }
             }
+            return cloudDescriptors + onDeviceModelDescriptors()
         }
     }
 }

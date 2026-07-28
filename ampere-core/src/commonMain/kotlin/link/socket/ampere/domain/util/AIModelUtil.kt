@@ -8,6 +8,7 @@ import com.aallam.openai.api.model.ModelId as ClientModelId
 import link.socket.ampere.domain.ai.model.AIModel
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
+import link.socket.ampere.domain.ai.model.AIModel_OnDevice
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 fun AIModel.toClientModelId(): ClientModelId =
@@ -50,4 +51,5 @@ fun AIModel.toKoogLLMModel(): LLModel? = when (this) {
         is AIModel_Claude.Haiku_4_5 -> null // TODO: Add to koog-agents
         else -> null
     }
+    is AIModel_OnDevice -> null // On-device models run via LocalInferenceEngine, not koog-agents.
 }

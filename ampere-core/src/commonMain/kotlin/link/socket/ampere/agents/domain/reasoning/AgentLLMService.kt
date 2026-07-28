@@ -23,6 +23,7 @@ import link.socket.ampere.domain.ai.pricing.ProviderPricingCalculator
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.domain.util.toClientModelId
 import link.socket.ampere.llm.BundledUpstreamLlmClient
+import link.socket.ampere.llm.DispatchingUpstreamLlmClient
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.util.ioDispatcher
 import link.socket.ampere.util.logWith
@@ -171,6 +172,17 @@ class AgentLLMService(
             }
         }
 
+        // Probe the bound local engine (if any) so the relay's on-device
+        // availability gate (AMPR-207/225) can see whether Rung 0 is usable
+        // right now. Never overwrites a caller-supplied localCapacity.
+        val probedLocalCapacity = (upstreamLlmClient as? DispatchingUpstreamLlmClient)?.probeLocalCapacity()
+        fun RoutingContext.withProbedLocalCapacity(): RoutingContext =
+            if (probedLocalCapacity != null && localCapacity == null) {
+                copy(localCapacity = probedLocalCapacity)
+            } else {
+                this
+            }
+
         // Thread per-agent rung floor into requirements before relay resolves.
         // Floors compose as the stricter of the two (AMPR-229): a call site asking
         // for FOUR through an agent declaring THREE stays at FOUR. Replacing the
@@ -181,9 +193,9 @@ class AgentLLMService(
                 val mergedRequirements = existing.copy(
                     minRung = existing.minRung?.let { maxOf(it, rung) } ?: rung,
                 )
-                ctx.copy(requirements = mergedRequirements)
-            } ?: RoutingContext(requirements = CapabilityRequirement(minRung = rung))
-        } ?: routingContext
+                ctx.copy(requirements = mergedRequirements).withProbedLocalCapacity()
+            } ?: RoutingContext(requirements = CapabilityRequirement(minRung = rung)).withProbedLocalCapacity()
+        } ?: routingContext?.withProbedLocalCapacity()
 
         // Resolve configuration through CognitiveRelay if available
         val routingResolution = if (effectiveRoutingContext != null) {

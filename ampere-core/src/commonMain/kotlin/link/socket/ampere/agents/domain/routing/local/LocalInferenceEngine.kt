@@ -1,5 +1,9 @@
 package link.socket.ampere.agents.domain.routing.local
 
+import link.socket.ampere.agents.domain.emission.EmissionKind
+import link.socket.ampere.agents.domain.emission.EmissionPayload
+import link.socket.ampere.agents.domain.emission.ProseFormat
+
 /**
  * On-device inference contract for local, 0-Watt generation.
  *
@@ -49,4 +53,31 @@ interface LocalInferenceEngine {
      * decision kept out of this seam.
      */
     suspend fun generate(prompt: String): Result<String>
+
+    /**
+     * Generate a structured [EmissionPayload] shaped like [kind] directly —
+     * the point of guided/constrained on-device generation (AMPR-225; e.g.
+     * Apple's `@Generable`): the returned payload is produced under a
+     * generation-time shape constraint, not parsed out of free text after the
+     * fact — no parse-and-pray.
+     *
+     * Additive to [generate]: an engine that only implements the text-shaped
+     * path (e.g. a first-cut Gemini Nano binding) need not override this at
+     * all. The default here can only honor [EmissionKind.Prose] — the one
+     * payload a raw string already represents without guessing structure —
+     * and fails for every other [kind], so callers never silently receive an
+     * ill-shaped payload from an engine that hasn't implemented real guided
+     * generation.
+     */
+    suspend fun generateStructured(kind: EmissionKind, prompt: String): Result<EmissionPayload> =
+        when (kind) {
+            EmissionKind.Prose ->
+                generate(prompt).map { text -> EmissionPayload.Prose(text = text, format = ProseFormat.PLAIN) }
+            else ->
+                Result.failure(
+                    UnsupportedOperationException(
+                        "This engine does not support structured generation for $kind",
+                    ),
+                )
+        }
 }

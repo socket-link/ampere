@@ -39,11 +39,20 @@ data class CostRanking(
  * Ranks the models in this collection that [satisfies] the given [req] by cost
  * (cheapest-capable), or returns `null` when none qualify.
  *
+ * Excludes [ModelDescriptor.availabilityGated] models: unlike the live relay
+ * (which reads a [link.socket.ampere.agents.domain.routing.local.LocalCapacity]
+ * snapshot to confirm a gated model is actually usable before counting it as a
+ * candidate — see [link.socket.ampere.agents.domain.routing.RoutingRule.ByCapability]),
+ * this dry-run has no live capacity signal, so a gated model (e.g. Rung 0's
+ * on-device floor) would otherwise always "win" on price without any
+ * confirmation it's really available — reporting a route that live routing
+ * might never actually pick.
+ *
  * Deterministic: equal cost-per-Watt is broken by `modelName`, so the same
  * inputs always yield the same winner.
  */
 fun Iterable<ModelDescriptor>.cheapestCapable(req: CapabilityRequirement): CostRanking? {
-    val ranked = filter { it.satisfies(req) }.sortedWith(CheapestCapableFirst)
+    val ranked = filter { it.satisfies(req) && !it.availabilityGated }.sortedWith(CheapestCapableFirst)
     val chosen = ranked.firstOrNull() ?: return null
     return CostRanking(
         chosen = chosen,

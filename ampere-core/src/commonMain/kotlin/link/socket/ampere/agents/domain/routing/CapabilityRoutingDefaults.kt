@@ -4,9 +4,11 @@ import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescript
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
+import link.socket.ampere.domain.ai.model.AIModel_OnDevice
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.domain.ai.provider.AIProvider_Google
+import link.socket.ampere.domain.ai.provider.AIProvider_OnDevice
 import link.socket.ampere.domain.ai.provider.AIProvider_OpenAI
 
 /**
@@ -43,4 +45,28 @@ object CapabilityRoutingDefaults {
                 RoutingRule.ByCapability(AIConfiguration_Default(provider, model))
             }
         }
+
+    /**
+     * One [RoutingRule.ByCapability] per on-device (Rung 0) model (AMPR-225).
+     * Its descriptor is [link.socket.ampere.agents.domain.routing.capability.CostPolicy.Free]
+     * and `availabilityGated`, so [RoutingRule.ByCapability.evaluate] only
+     * matches when [RoutingContext.localCapacity] reports the on-device engine
+     * available — otherwise it reports [CapabilityEvaluation.Skipped] and the
+     * relay falls through to [cloudCapabilityRules] (AMPR-207's honor-and-eat
+     * fallback), exactly as an unavailable gated cloud provider would.
+     */
+    fun onDeviceCapabilityRules(): List<RoutingRule.ByCapability> =
+        AIModel_OnDevice.ALL_MODELS.map { model ->
+            RoutingRule.ByCapability(AIConfiguration_Default(AIProvider_OnDevice, model))
+        }
+
+    /**
+     * The full default rule set: on-device (Rung 0) rules first, then the
+     * bundled cloud catalog. List position doesn't decide the winner once
+     * cost-aware selection engages (see [cloudCapabilityRules] doc), but
+     * ordering on-device first keeps the declared intent — prefer the free
+     * floor — legible in the config itself.
+     */
+    fun defaultCapabilityRules(): List<RoutingRule.ByCapability> =
+        onDeviceCapabilityRules() + cloudCapabilityRules()
 }

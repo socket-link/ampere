@@ -7,8 +7,12 @@ import kotlinx.serialization.Serializable
  * Ordinal capability tier for a model, independent of billing/quota tiers
  * ([link.socket.ampere.domain.billing.Tier] et al.). Higher ordinal = higher rung.
  *
- * Four rungs are defined as companion constants. Names carry no quality adjectives
+ * Five rungs are defined as companion constants. Names carry no quality adjectives
  * so they remain stable as the landscape evolves.
+ *
+ * [ZERO] is the ordinal floor: 0W, on-device generation (e.g. Apple Foundation
+ * Models), always the cheapest candidate via [ModelDescriptor.routingCostPerWatt]
+ * when its [ModelDescriptor.cost] is [CostPolicy.Free].
  */
 @Serializable
 @JvmInline
@@ -18,6 +22,7 @@ value class CapabilityRung(val ordinal: Int) : Comparable<CapabilityRung> {
         ordinal.compareTo(other.ordinal)
 
     companion object {
+        val ZERO = CapabilityRung(0)
         val ONE = CapabilityRung(1)
         val TWO = CapabilityRung(2)
         val THREE = CapabilityRung(3)
