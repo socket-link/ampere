@@ -9,6 +9,7 @@ import link.socket.ampere.agents.domain.reasoning.AgentLLMService
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.domain.routing.RelayConfig
 import link.socket.ampere.agents.domain.routing.RoutingContext
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.domain.agent.bundled.AgentDefinition
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
@@ -135,6 +136,79 @@ class AgentDefinitionRungThreadingTest {
         } catch (_: Throwable) {}
 
         assertEquals(CapabilityRung.FOUR, relay.capturedContext?.requirements?.minRung)
+    }
+
+    @Test
+    fun `a stricter call-site floor survives an agent declaring a lower one`() = runTest {
+        val relay = CapturingRelay()
+        val definition = makeDefinition(CapabilityRung.THREE)
+        val config = AgentConfiguration(
+            agentDefinition = definition,
+            aiConfiguration = FakeAIConfiguration(),
+            cognitiveRelay = relay,
+        )
+        val service = AgentLLMService(agentConfiguration = config)
+
+        try {
+            service.call(
+                prompt = "test",
+                routingContext = RoutingContext(
+                    agentId = "agent-1",
+                    requirements = CapabilityRequirement(minRung = CapabilityRung.FOUR),
+                ),
+            )
+        } catch (_: Throwable) {}
+
+        assertEquals(CapabilityRung.FOUR, relay.capturedContext?.requirements?.minRung)
+    }
+
+    @Test
+    fun `the agent floor wins when it is stricter than the call-site floor`() = runTest {
+        val relay = CapturingRelay()
+        val definition = makeDefinition(CapabilityRung.THREE)
+        val config = AgentConfiguration(
+            agentDefinition = definition,
+            aiConfiguration = FakeAIConfiguration(),
+            cognitiveRelay = relay,
+        )
+        val service = AgentLLMService(agentConfiguration = config)
+
+        try {
+            service.call(
+                prompt = "test",
+                routingContext = RoutingContext(
+                    agentId = "agent-1",
+                    requirements = CapabilityRequirement(minRung = CapabilityRung.TWO),
+                ),
+            )
+        } catch (_: Throwable) {}
+
+        assertEquals(CapabilityRung.THREE, relay.capturedContext?.requirements?.minRung)
+    }
+
+    @Test
+    fun `merging the agent floor preserves the call-site's other requirement axes`() = runTest {
+        val relay = CapturingRelay()
+        val definition = makeDefinition(CapabilityRung.THREE)
+        val config = AgentConfiguration(
+            agentDefinition = definition,
+            aiConfiguration = FakeAIConfiguration(),
+            cognitiveRelay = relay,
+        )
+        val service = AgentLLMService(agentConfiguration = config)
+
+        try {
+            service.call(
+                prompt = "test",
+                routingContext = RoutingContext(
+                    agentId = "agent-1",
+                    requirements = CapabilityRequirement(minContextTokens = 128_000),
+                ),
+            )
+        } catch (_: Throwable) {}
+
+        assertEquals(CapabilityRung.THREE, relay.capturedContext?.requirements?.minRung)
+        assertEquals(128_000, relay.capturedContext?.requirements?.minContextTokens)
     }
 
     @Test

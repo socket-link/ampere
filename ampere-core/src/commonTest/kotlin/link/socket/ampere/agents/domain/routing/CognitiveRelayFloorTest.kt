@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
@@ -221,6 +222,133 @@ class CognitiveRelayFloorTest {
         delay(100)
 
         assertEquals(0, selected.size, "RouteSelected must not be emitted when floor is unmet")
+    }
+
+    // --- AMPR-229 Gap A: a non-capability rule must not bypass the floor ---
+
+    @Test
+    fun `a matching ByPhase rule below the floor resolves to FloorUnmet, not to its model`() = runTest {
+        val relay = CognitiveRelayImpl(
+            initialConfig = RelayConfig(
+                rules = listOf(
+                    // Matches on phase alone and points at a rung ONE model.
+                    RoutingRule.ByPhase(CognitivePhase.EXECUTE, lowRungConfig),
+                    RoutingRule.ByCapability(highRungConfig),
+                ),
+            ),
+            registry = lowRungRegistry,
+        )
+
+        val result = relay.resolveWithMetadata(
+            context = RoutingContext(
+                phase = CognitivePhase.EXECUTE,
+                requirements = CapabilityRequirement(minRung = CapabilityRung.THREE),
+            ),
+            fallbackConfiguration = agentFallback,
+        )
+
+        assertIs<RoutingResolution.FloorUnmet>(result)
+        assertEquals(CapabilityRung.THREE, result.requestedFloor)
+        assertEquals(CapabilityRung.TWO, result.bestAvailableRung)
+    }
+
+    @Test
+    fun `the floor stays terminal for a ByPhase match even when a capable model exists`() = runTest {
+        val relay = CognitiveRelayImpl(
+            initialConfig = RelayConfig(
+                rules = listOf(
+                    RoutingRule.ByPhase(CognitivePhase.EXECUTE, lowRungConfig),
+                    RoutingRule.ByCapability(highRungConfig),
+                ),
+            ),
+            registry = highRungRegistry,
+        )
+
+        val result = relay.resolveWithMetadata(
+            context = RoutingContext(
+                phase = CognitivePhase.EXECUTE,
+                requirements = CapabilityRequirement(minRung = CapabilityRung.THREE),
+            ),
+            fallbackConfiguration = agentFallback,
+        )
+
+        assertIs<RoutingResolution.FloorUnmet>(result)
+    }
+
+    @Test
+    fun `a matching ByPhase rule at or above the floor still resolves normally`() = runTest {
+        val relay = CognitiveRelayImpl(
+            initialConfig = RelayConfig(
+                rules = listOf(RoutingRule.ByPhase(CognitivePhase.EXECUTE, highRungConfig)),
+            ),
+            registry = highRungRegistry,
+        )
+
+        val result = relay.resolveWithMetadata(
+            context = RoutingContext(
+                phase = CognitivePhase.EXECUTE,
+                requirements = CapabilityRequirement(minRung = CapabilityRung.THREE),
+            ),
+            fallbackConfiguration = agentFallback,
+        )
+
+        assertIs<RoutingResolution.Success>(result)
+        assertEquals(AIModel_Gemini.Flash_2_5, result.configuration.model)
+    }
+
+    // --- AMPR-229 Gap B: fall-through configs must be checked against the requirement ---
+
+    @Test
+    fun `defaultConfiguration is not routed to unchecked when a non-rung axis is unsatisfiable`() = runTest {
+        val relay = CognitiveRelayImpl(
+            initialConfig = RelayConfig(
+                rules = listOf(
+                    RoutingRule.ByCapability(lowRungConfig),
+                    RoutingRule.ByCapability(highRungConfig),
+                ),
+                defaultConfiguration = lowRungConfig,
+            ),
+            registry = highRungRegistry,
+        )
+
+        // minRung THREE is satisfiable (Gemini is rung THREE), so the floor check alone
+        // passes — but no model has a 1M-token context, so no capability rule matches
+        // and control falls through to defaultConfiguration, which is rung ONE.
+        val result = relay.resolveWithMetadata(
+            context = RoutingContext(
+                requirements = CapabilityRequirement(
+                    minRung = CapabilityRung.THREE,
+                    minContextTokens = 1_000_000,
+                ),
+            ),
+            fallbackConfiguration = agentFallback,
+        )
+
+        assertIs<RoutingResolution.FloorUnmet>(result)
+        assertEquals(CapabilityRung.THREE, result.requestedFloor)
+    }
+
+    @Test
+    fun `fallbackConfiguration is not routed to unchecked when a non-rung axis is unsatisfiable`() = runTest {
+        val relay = CognitiveRelayImpl(
+            initialConfig = RelayConfig(
+                rules = listOf(RoutingRule.ByCapability(highRungConfig)),
+            ),
+            registry = highRungRegistry,
+        )
+
+        val result = relay.resolveWithMetadata(
+            context = RoutingContext(
+                requirements = CapabilityRequirement(
+                    minRung = CapabilityRung.THREE,
+                    minContextTokens = 1_000_000,
+                ),
+            ),
+            fallbackConfiguration = agentFallback,
+        )
+
+        assertIs<RoutingResolution.FloorUnmet>(result)
+        assertEquals(CapabilityRung.THREE, result.requestedFloor)
     }
 
     @Test

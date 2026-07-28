@@ -6,11 +6,13 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.RoutingEvent
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.agents.domain.routing.capability.CheapestCapableFirst
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.routingCostPerWatt
+import link.socket.ampere.agents.domain.routing.capability.satisfies
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
@@ -25,7 +27,7 @@ import link.socket.ampere.util.logWith
  *
  * When the first match is capability-based, selection is cost-aware (AMPR-210):
  * among all capable [RoutingRule.ByCapability] candidates the relay resolves to
- * the cheapest by cost-per-Watt (stable tie-break by `providerId`) and emits a
+ * the cheapest by cost-per-Watt (stable tie-break by `modelName`) and emits a
  * [RoutingEvent.RouteResolved]. A capability rule whose provider is capable but
  * gated out by local availability (AMPR-207) is skipped — it does not match and
  * is not a cost candidate — and the relay emits [RoutingEvent.RouteFallback] for
@@ -92,23 +94,29 @@ class CognitiveRelayImpl(
         // unavailability — the local-preferred route the relay routed around.
         val skip = firstAvailabilitySkip(currentConfig.rules, context)
 
-        // Floor-unmet check: when a rung floor is requested but no ByCapability
-        // rule's model meets it, resolution is terminal — never silently downgrade.
-        val minRung = context.requirements?.minRung
-        if (matchedRule == null && minRung != null) {
-            val bestAvailableRung = bestRungAmongCapabilityRules(currentConfig.rules)
-            if (bestAvailableRung == null || bestAvailableRung < minRung) {
-                emitRouteFloorUnmet(context, minRung, bestAvailableRung)
-                return RoutingResolution.FloorUnmet(
-                    requestedFloor = minRung,
-                    bestAvailableRung = bestAvailableRung,
-                )
-            }
-        }
-
         val selectedConfig = matchedRule?.configuration
             ?: currentConfig.defaultConfiguration
             ?: fallbackConfiguration
+
+        // Floor-unmet check (AMPR-229): a requested rung floor is terminal for
+        // *every* route, not just the no-rule-matched one — never silently
+        // downgrade. The route actually about to be returned is validated against
+        // the whole requirement, which closes three downgrade paths: a
+        // ByPhase/ByAgent/ByRole/ByFeatures/ByTag rule matching on its own axis
+        // and bypassing the floor, and the fall-through to defaultConfiguration
+        // or fallbackConfiguration, neither of which was ever checked. A
+        // ByCapability match already passed `satisfies`, so it re-validates
+        // trivially.
+        val requirement = context.requirements
+        val minRung = requirement?.minRung
+        if (requirement != null && minRung != null && !satisfiesRequirement(selectedConfig, requirement)) {
+            val bestAvailableRung = bestRungAmongCapabilityRules(currentConfig.rules)
+            emitRouteFloorUnmet(context, minRung, bestAvailableRung)
+            return RoutingResolution.FloorUnmet(
+                requestedFloor = minRung,
+                bestAvailableRung = bestAvailableRung,
+            )
+        }
 
         val ruleDescription = matchedRule?.describeRule() ?: "default"
 
@@ -133,6 +141,20 @@ class CognitiveRelayImpl(
             configuration = selectedConfig,
             reason = ruleDescription,
         )
+    }
+
+    /**
+     * Whether the model behind [configuration] can serve [requirement], per the
+     * registry. A model the registry cannot describe is not provably capable, so
+     * it does not satisfy: an unverifiable route is treated as sub-floor rather
+     * than waved through (AMPR-229).
+     */
+    private suspend fun satisfiesRequirement(
+        configuration: AIConfiguration,
+        requirement: CapabilityRequirement,
+    ): Boolean {
+        val descriptor = registry?.descriptorFor(configuration.model.name) ?: return false
+        return descriptor.satisfies(requirement)
     }
 
     /**
