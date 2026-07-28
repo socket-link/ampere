@@ -76,8 +76,8 @@ class PlaybackRelayTest {
     fun `replays recorded selections in order with playback reason`() = runTest {
         val relay = PlaybackRelay(traceOfCalls(2))
 
-        val first = relay.resolveWithMetadata(ctx, fallback)
-        val second = relay.resolveWithMetadata(ctx, fallback)
+        val first = relay.resolveWithMetadata(ctx, fallback) as RoutingResolution.Success
+        val second = relay.resolveWithMetadata(ctx, fallback) as RoutingResolution.Success
 
         assertEquals(PlaybackRelay.PLAYBACK_REASON, first.reason)
         assertEquals(PlaybackRelay.PLAYBACK_REASON, second.reason)
@@ -109,7 +109,10 @@ class PlaybackRelayTest {
     fun `strict miss returns a typed PlaybackMiss`() = runTest {
         val relay = PlaybackRelay(traceOfCalls(1), missPolicy = MissPolicy.Error)
 
-        assertEquals(PlaybackRelay.PLAYBACK_REASON, relay.replay(ctx, fallback).getOrThrow().reason)
+        assertEquals(
+            PlaybackRelay.PLAYBACK_REASON,
+            (relay.replay(ctx, fallback).getOrThrow() as RoutingResolution.Success).reason,
+        )
 
         val miss = relay.replay(ctx, fallback)
         assertTrue(miss.isFailure)
@@ -132,8 +135,8 @@ class PlaybackRelayTest {
         val spy = SpyRelay(reason = "live")
         val relay = PlaybackRelay(traceOfCalls(1), missPolicy = MissPolicy.Delegate, liveDelegate = spy)
 
-        val replayed = relay.resolveWithMetadata(ctx, fallback)
-        val delegated = relay.resolveWithMetadata(ctx, fallback)
+        val replayed = relay.resolveWithMetadata(ctx, fallback) as RoutingResolution.Success
+        val delegated = relay.resolveWithMetadata(ctx, fallback) as RoutingResolution.Success
 
         assertEquals(PlaybackRelay.PLAYBACK_REASON, replayed.reason)
         assertEquals("live", delegated.reason)
@@ -161,9 +164,9 @@ class PlaybackRelayTest {
         val relay = PlaybackRelay(traceOfCalls(3), liveDelegate = spy, branchIndex = 2)
 
         val reasons = listOf(
-            relay.resolveWithMetadata(ctx, fallback).reason, // 0 -> replay
-            relay.resolveWithMetadata(ctx, fallback).reason, // 1 -> replay
-            relay.resolveWithMetadata(ctx, fallback).reason, // 2 -> delegate
+            (relay.resolveWithMetadata(ctx, fallback) as RoutingResolution.Success).reason, // 0 -> replay
+            (relay.resolveWithMetadata(ctx, fallback) as RoutingResolution.Success).reason, // 1 -> replay
+            (relay.resolveWithMetadata(ctx, fallback) as RoutingResolution.Success).reason, // 2 -> delegate
         )
 
         assertEquals(listOf(PlaybackRelay.PLAYBACK_REASON, PlaybackRelay.PLAYBACK_REASON, "live"), reasons)

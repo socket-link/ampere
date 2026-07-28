@@ -46,7 +46,7 @@ class MeterTest {
     // region — task 3.5: failure discipline
 
     @Test
-    fun `meter handed a malformed (empty) trace returns typed failure`() = runTest {
+    fun `meter handed a malformed empty trace returns typed failure`() = runTest {
         val meter = OutcomeMeter(
             meterId = "outcome",
             tolerance = Tolerance(1.0),

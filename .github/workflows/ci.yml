@@ -36,9 +36,13 @@ jobs:
         timeout-minutes: 10
         run: ./gradlew ktlintCheck
 
+      - name: Build all modules
+        timeout-minutes: 20
+        run: ./gradlew build -x test -x testDebugUnitTest -x testReleaseUnitTest -x iosSimulatorArm64Test -x compileTestKotlinJs -x compileTestKotlinWasmJs
+
       - name: Run JVM + Android tests
         timeout-minutes: 20
-        run: ./gradlew :ampere-core:jvmTest :ampere-core:testDebugUnitTest :ampere-cli:jvmTest :ampere-compose:jvmTest :ampere-compose:testDebugUnitTest
+        run: ./gradlew :ampere-core:jvmTest :ampere-core:testDebugUnitTest :ampere-cli:jvmTest :ampere-compose:jvmTest :ampere-compose:testDebugUnitTest :ampere-eval:jvmTest
 
   ios-tests:
     name: iOS Simulator Tests (macos, JDK 21)
