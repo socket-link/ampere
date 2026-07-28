@@ -227,7 +227,7 @@ class CognitiveRelayFloorTest {
     // --- AMPR-229 Gap A: a non-capability rule must not bypass the floor ---
 
     @Test
-    fun `a matching ByPhase rule below the floor resolves to FloorUnmet, not to its model`() = runTest {
+    fun `a matching ByPhase rule below the floor resolves to FloorUnmet — not to its model`() = runTest {
         val relay = CognitiveRelayImpl(
             initialConfig = RelayConfig(
                 rules = listOf(
