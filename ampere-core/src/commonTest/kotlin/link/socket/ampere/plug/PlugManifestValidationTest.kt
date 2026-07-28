@@ -4,6 +4,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import link.socket.ampere.canon.CanonType
+import link.socket.ampere.link.LinkDirection
+import link.socket.ampere.link.LinkRequirement
+import link.socket.ampere.link.Transport
 import link.socket.ampere.plug.permission.PlugPermission
 
 class PlugManifestValidationTest {
@@ -119,5 +123,94 @@ class PlugManifestValidationTest {
             .map { it.uri }
         assertTrue("mcp://b" in missingUris)
         assertTrue("mcp://a" !in missingUris)
+    }
+
+    // -----------------------------------------------------------------
+    // Link requirements
+    // -----------------------------------------------------------------
+
+    private fun linkRequirement(
+        name: String,
+        scope: Set<CanonType> = setOf(CanonType.CALENDAR_EVENT),
+    ) = LinkRequirement(
+        name = name,
+        transport = Transport.OAUTH_REST,
+        direction = LinkDirection.READ,
+        minimumScope = scope,
+    )
+
+    @Test
+    fun `a manifest declaring well-formed link requirements validates`() {
+        val manifest = PlugManifest(
+            id = "calendar-plug",
+            name = "Calendar Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(
+                linkRequirement("calendar"),
+                linkRequirement("mail", setOf(CanonType.EMAIL_MESSAGE)),
+            ),
+            emits = setOf(CanonType.CALENDAR_EVENT),
+            consumes = setOf(CanonType.PERSON),
+        )
+
+        assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
+    }
+
+    @Test
+    fun `two link requirements sharing a name are rejected`() {
+        // Both would collapse onto one key in ResolvedLinks, so one Link would
+        // be silently unreachable at execution time.
+        val manifest = PlugManifest(
+            id = "calendar-plug",
+            name = "Calendar Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(
+                linkRequirement("calendar"),
+                linkRequirement("calendar", setOf(CanonType.EMAIL_MESSAGE)),
+            ),
+        )
+
+        val invalid = assertIs<ManifestValidationResult.Invalid>(
+            PlugManifestValidator.validate(manifest),
+        )
+
+        assertEquals(
+            listOf("calendar"),
+            invalid.reasons
+                .filterIsInstance<ManifestValidationReason.DuplicateLinkRequirementName>()
+                .map { it.name },
+        )
+    }
+
+    @Test
+    fun `a link requirement with an empty scope is rejected`() {
+        val manifest = PlugManifest(
+            id = "calendar-plug",
+            name = "Calendar Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(linkRequirement("calendar", emptySet())),
+        )
+
+        val invalid = assertIs<ManifestValidationResult.Invalid>(
+            PlugManifestValidator.validate(manifest),
+        )
+
+        assertEquals(
+            listOf("calendar"),
+            invalid.reasons
+                .filterIsInstance<ManifestValidationReason.EmptyLinkRequirementScope>()
+                .map { it.name },
+        )
+    }
+
+    @Test
+    fun `a manifest written before link requirements existed still decodes`() {
+        // The defaults are what keep pre-AMPR-223 manifests valid.
+        val manifest = PlugManifest(id = "legacy", name = "Legacy", version = "0.1.0")
+
+        assertTrue(manifest.requiredLinks.isEmpty())
+        assertTrue(manifest.emits.isEmpty())
+        assertTrue(manifest.consumes.isEmpty())
+        assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
     }
 }

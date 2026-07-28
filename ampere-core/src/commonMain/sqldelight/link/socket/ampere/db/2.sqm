@@ -1,0 +1,18 @@
+CREATE TABLE IF NOT EXISTS Links (
+  link_id TEXT NOT NULL PRIMARY KEY,
+  transport TEXT NOT NULL,
+  link_json TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_links_transport ON Links(transport);
+
+CREATE TABLE IF NOT EXISTS LinkGrants (
+  plug_id TEXT NOT NULL,
+  link_id TEXT NOT NULL,
+  granted_at INTEGER NOT NULL,
+  revoked_at INTEGER,
+  PRIMARY KEY (plug_id, link_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_link_grants_link_id ON LinkGrants(link_id);

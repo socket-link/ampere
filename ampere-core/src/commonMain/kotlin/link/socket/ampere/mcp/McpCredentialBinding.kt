@@ -1,20 +1,9 @@
 package link.socket.ampere.mcp
 
-import kotlin.jvm.JvmInline
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
-
-/**
- * Identifier for a Link — the user-bound authorization scope under which
- * an MCP credential is stored.
- *
- * The Link concept is upcoming work; modeling it as a value class lets the
- * eventual store interface match without a churn cycle.
- */
-@JvmInline
-@Serializable
-value class LinkId(val value: String)
+import link.socket.ampere.link.LinkId
 
 /**
  * Credential material a plug's [McpClient] surfaces into its connection

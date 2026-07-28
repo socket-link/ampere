@@ -9,6 +9,7 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
+import link.socket.ampere.agents.domain.event.LinkEvent
 import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
@@ -61,6 +62,8 @@ object EventCategorizer {
         is MessageEvent.EscalationRequested,
         is HumanInteractionEvent.InputRequested,
         is PermissionDeniedEvent,
+        is LinkEvent.LinkRevoked,
+        is LinkEvent.LinkResolutionFailed,
         is TaskEvent.TaskFailed -> EventSignificance.CRITICAL
 
         // Significant events represent state changes worth noting
@@ -100,6 +103,7 @@ object EventCategorizer {
         is AgentSurfaceEvent.Requested,
         is AgentSurfaceEvent.Responded,
         is EmissionEvent.Produced,
+        is LinkEvent.LinkGranted,
         is EmissionEvent.Resolved -> EventSignificance.SIGNIFICANT
 
         // Routine cognitive operations - maintenance work
@@ -124,6 +128,7 @@ object EventCategorizer {
         is CognitivePhaseEvent,
         is SparkEvent,
         is BenchEvent.BenchRunStarted,
+        is LinkEvent.LinkResolved,
         is BenchEvent.ProbeGraded -> EventSignificance.ROUTINE
 
         is RoutingEvent.RouteFallback,

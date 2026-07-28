@@ -22,6 +22,7 @@ import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
+import link.socket.ampere.agents.domain.event.LinkEvent
 import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
@@ -177,6 +178,11 @@ class EventRenderer(
             is EmissionEvent.Resolved -> "📡" to blue
             // Bench (eval) lifecycle events
             is BenchEvent -> "🧪" to cyan
+            // Link lifecycle: the wire a Plug runs over
+            is LinkEvent.LinkResolved -> "🔌" to green
+            is LinkEvent.LinkGranted -> "🔌" to blue
+            is LinkEvent.LinkRevoked -> "🔌" to red
+            is LinkEvent.LinkResolutionFailed -> "🔌" to red
         }
     }
 

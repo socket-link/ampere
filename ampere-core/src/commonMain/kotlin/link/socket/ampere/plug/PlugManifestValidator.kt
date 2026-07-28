@@ -42,11 +42,43 @@ object PlugManifestValidator {
             }
         }
 
+        reasons += validateLinkRequirements(manifest)
+
         return if (reasons.isEmpty()) {
             ManifestValidationResult.Valid
         } else {
             ManifestValidationResult.Invalid(reasons)
         }
+    }
+
+    /**
+     * Structural checks on [PlugManifest.requiredLinks].
+     *
+     * Both rules exist because the failure they catch is silent otherwise: a
+     * duplicate requirement name means one of the two Links is unreachable
+     * through [link.socket.ampere.link.ResolvedLinks], and an empty scope means
+     * a wire that resolves successfully and then may carry nothing.
+     */
+    private fun validateLinkRequirements(
+        manifest: PlugManifest,
+    ): List<ManifestValidationReason> {
+        val reasons = mutableListOf<ManifestValidationReason>()
+
+        manifest.requiredLinks
+            .groupBy { it.name }
+            .filterValues { it.size > 1 }
+            .keys
+            .forEach { name ->
+                reasons += ManifestValidationReason.DuplicateLinkRequirementName(name)
+            }
+
+        manifest.requiredLinks
+            .filter { it.minimumScope.isEmpty() }
+            .forEach { requirement ->
+                reasons += ManifestValidationReason.EmptyLinkRequirementScope(requirement.name)
+            }
+
+        return reasons
     }
 }
 
@@ -74,5 +106,21 @@ sealed interface ManifestValidationReason {
     data class DependencyPermissionNotLifted(
         val dependencyName: String,
         val permission: PlugPermission,
+    ) : ManifestValidationReason
+
+    /**
+     * Two [link.socket.ampere.link.LinkRequirement]s share a name, so only one
+     * of them can ever be looked up after resolution.
+     */
+    data class DuplicateLinkRequirementName(
+        val name: String,
+    ) : ManifestValidationReason
+
+    /**
+     * A Link requirement declares no minimum scope, which would resolve to a
+     * wire permitted to carry nothing.
+     */
+    data class EmptyLinkRequirementScope(
+        val name: String,
     ) : ManifestValidationReason
 }

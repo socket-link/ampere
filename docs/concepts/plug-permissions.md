@@ -6,8 +6,8 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/plug/PlugManifest.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/PlugGrants.sq
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/ToolExecutionEngine.kt
-related: [SparkSystem, AgentSurface, EventSerialBus]
-last_verified: 2026-04-29
+related: [SparkSystem, AgentSurface, EventSerialBus, LinkLayer]
+last_verified: 2026-07-28
 ---
 
 # Plug Permissions
@@ -53,7 +53,7 @@ Two design pressures shaped the gate:
 - `plug/permission/PlugPermission.kt` — the sealed permission types.
 - `plug/permission/PlugPermissionGate.kt` — `check(toolCall, manifest, userGrants): GateResult`.
 - `plug/permission/UserGrantStore.kt` — persistence facade.
-- `plug/PlugManifest.kt` — declares `requiredPermissions`.
+- `plug/PlugManifest.kt` — declares `requiredPermissions`, plus the `requiredLinks` / `emits` / `consumes` declarations owned by [LinkLayer](link-layer.md).
 - `commonMain/sqldelight/link/socket/ampere/db/PlugGrants.sq` — schema for user grants.
 - `agents/execution/ToolExecutionEngine.kt` — the call site that gates dispatch.
 - `agents/domain/event/PermissionDeniedEvent.kt` — emitted on `Deny*` results.

@@ -111,6 +111,12 @@ object EventRegistry {
         // PermissionEvent types
         PermissionDeniedEvent.EVENT_TYPE,
 
+        // LinkEvent types
+        LinkEvent.LinkGranted.EVENT_TYPE,
+        LinkEvent.LinkRevoked.EVENT_TYPE,
+        LinkEvent.LinkResolved.EVENT_TYPE,
+        LinkEvent.LinkResolutionFailed.EVENT_TYPE,
+
         // AgentSurfaceEvent types
         AgentSurfaceEvent.Requested.EVENT_TYPE,
         AgentSurfaceEvent.Responded.EVENT_TYPE,

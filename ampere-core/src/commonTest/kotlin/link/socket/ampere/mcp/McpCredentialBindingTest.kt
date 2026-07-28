@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlinx.coroutines.test.runTest
+import link.socket.ampere.link.LinkId
 
 class McpCredentialBindingTest {
 

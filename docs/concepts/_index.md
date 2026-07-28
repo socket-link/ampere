@@ -44,4 +44,6 @@ How the cognitive substrate meets the user, the platform, and the plug ecosystem
 | [Emission](emission.md) | experimental | The unifying CHI primitive. Typed domain object + `EmissionEvent` family on the bus. Four kinds (Prose, Decision, Confirmation, Sensor). AMPERE owns the noun; Socket owns rendering. |
 | [EmissionDedup](emission-dedup.md) | experimental | Content-based dedup via `dedupKey` (SHA-256, 16 hex chars). Optional and never overloaded onto `EmissionId`. Window length is a consumer-side policy. |
 | [PlugPermissions](plug-permissions.md) | stable | Deterministic gate that runs *before* any plug tool dispatch. Compares manifest + tool-requested permissions against user grants. |
+| [LinkLayer](link-layer.md) | stable | A Plug connects through a Link and powers Arcs. Transport belongs to the Link; Links are directional, shared across Plugs, and resolved at Arc execution time. |
+| [DomainCanon](domain-canon.md) | stable | Closed catalogue of provenance-carrying domain types in three rings. The IR Arc logic compiles against. Write-back preserves-and-merges by construction. |
 | [Ampere](ampere.md) | stable | The meta-concept: what makes a framework an AMPERE framework. Glass brain, AniMA agents, electrical metaphor, event-first coordination. |
