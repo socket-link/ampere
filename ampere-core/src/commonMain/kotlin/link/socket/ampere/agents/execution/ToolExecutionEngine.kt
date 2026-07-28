@@ -19,12 +19,12 @@ import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.agents.execution.tools.Tool
-import link.socket.ampere.plugin.PluginManifest
-import link.socket.ampere.plugin.permission.GateResult
-import link.socket.ampere.plugin.permission.PluginPermission
-import link.socket.ampere.plugin.permission.PluginPermissionGate
-import link.socket.ampere.plugin.permission.PluginToolCall
-import link.socket.ampere.plugin.permission.UserGrants
+import link.socket.ampere.plug.PlugManifest
+import link.socket.ampere.plug.permission.GateResult
+import link.socket.ampere.plug.permission.PlugPermission
+import link.socket.ampere.plug.permission.PlugPermissionGate
+import link.socket.ampere.plug.permission.PlugToolCall
+import link.socket.ampere.plug.permission.UserGrants
 
 /**
  * Engine for executing tools with LLM-generated parameters.
@@ -62,7 +62,7 @@ class ToolExecutionEngine(
     private val executor: Executor,
     private val executorId: ExecutorId,
     private val eventApi: AgentEventApi? = null,
-    private val userGrantProvider: suspend (PluginManifest) -> UserGrants = { UserGrants() },
+    private val userGrantProvider: suspend (PlugManifest) -> UserGrants = { UserGrants() },
 ) {
 
     private val strategies = mutableMapOf<String, ParameterStrategy>()
@@ -100,7 +100,7 @@ class ToolExecutionEngine(
             )
         }
 
-        val permissionFailure = checkPluginPermissions(tool, request, startTime)
+        val permissionFailure = checkPlugPermissions(tool, request, startTime)
         if (permissionFailure != null) {
             return permissionFailure
         }
@@ -229,16 +229,16 @@ class ToolExecutionEngine(
         )
     }
 
-    private suspend fun checkPluginPermissions(
+    private suspend fun checkPlugPermissions(
         tool: Tool<*>,
         request: ExecutionRequest<*>,
         startTime: Instant,
     ): ExecutionOutcome? {
-        val manifest = tool.pluginManifest ?: return null
+        val manifest = tool.plugManifest ?: return null
         val userGrants = userGrantProvider(manifest)
-        val gateResult = PluginPermissionGate.check(
-            toolCall = PluginToolCall(
-                pluginId = manifest.id,
+        val gateResult = PlugPermissionGate.check(
+            toolCall = PlugToolCall(
+                plugId = manifest.id,
                 toolId = tool.id,
             ),
             manifest = manifest,
@@ -270,8 +270,8 @@ class ToolExecutionEngine(
         request: ExecutionRequest<*>,
         startTime: Instant,
         tool: Tool<*>,
-        manifest: PluginManifest,
-        permission: PluginPermission,
+        manifest: PlugManifest,
+        permission: PlugPermission,
         reason: PermissionDeniedReason,
     ): ExecutionOutcome {
         eventApi?.publish(
@@ -280,7 +280,7 @@ class ToolExecutionEngine(
                 timestamp = Clock.System.now(),
                 eventSource = EventSource.Agent(eventApi.agentId),
                 urgency = Urgency.HIGH,
-                pluginId = manifest.id,
+                plugId = manifest.id,
                 toolId = tool.id,
                 toolName = tool.name,
                 permission = permission,
@@ -291,7 +291,7 @@ class ToolExecutionEngine(
         return createFailure(
             request = request,
             startTime = startTime,
-            message = "Permission denied for plugin '${manifest.id}' tool '${tool.id}': " +
+            message = "Permission denied for plug '${manifest.id}' tool '${tool.id}': " +
                 "$reason for $permission",
         )
     }

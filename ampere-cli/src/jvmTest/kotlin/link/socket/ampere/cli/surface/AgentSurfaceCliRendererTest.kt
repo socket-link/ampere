@@ -414,14 +414,14 @@ class AgentSurfaceCliRendererTest {
 
             val first = async {
                 harness.bus.awaitSurfaceResponse(
-                    awaiterAgentId = "plugin-a",
+                    awaiterAgentId = "plug-a",
                     correlationId = "first",
                     timeout = 5.seconds,
                 )
             }
             val second = async {
                 harness.bus.awaitSurfaceResponse(
-                    awaiterAgentId = "plugin-b",
+                    awaiterAgentId = "plug-b",
                     correlationId = "second",
                     timeout = 5.seconds,
                 )
@@ -429,11 +429,11 @@ class AgentSurfaceCliRendererTest {
 
             harness.bus.emitSurfaceRequest(
                 surface = AgentSurface.Confirmation(correlationId = "first", prompt = "?"),
-                eventSource = EventSource.Agent("plugin-a"),
+                eventSource = EventSource.Agent("plug-a"),
             )
             harness.bus.emitSurfaceRequest(
                 surface = AgentSurface.Confirmation(correlationId = "second", prompt = "?"),
-                eventSource = EventSource.Agent("plugin-b"),
+                eventSource = EventSource.Agent("plug-b"),
             )
 
             val firstResponse = first.await()
@@ -467,17 +467,17 @@ class AgentSurfaceCliRendererTest {
         private val outBuffer: StringWriter,
     ) {
         suspend fun driveTo(surface: AgentSurface): AgentSurfaceResponse = coroutineScope {
-            val plugin = "plugin-driver"
+            val plug = "plug-driver"
             val deferred = async {
                 bus.awaitSurfaceResponse(
-                    awaiterAgentId = plugin,
+                    awaiterAgentId = plug,
                     correlationId = surface.correlationId,
                     timeout = 5.seconds,
                 )
             }
             bus.emitSurfaceRequest(
                 surface = surface,
-                eventSource = EventSource.Agent(plugin),
+                eventSource = EventSource.Agent(plug),
             )
             deferred.await()
         }

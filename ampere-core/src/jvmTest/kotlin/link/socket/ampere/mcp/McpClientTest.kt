@@ -15,7 +15,7 @@ import link.socket.ampere.agents.tools.mcp.protocol.McpToolDescriptor
 import link.socket.ampere.agents.tools.mcp.protocol.ServerCapabilities
 import link.socket.ampere.agents.tools.mcp.protocol.ServerInfo
 import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
-import link.socket.ampere.plugin.McpServerDependency
+import link.socket.ampere.plug.McpServerDependency
 
 class McpClientTest {
 

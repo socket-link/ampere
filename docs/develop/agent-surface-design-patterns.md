@@ -80,7 +80,7 @@ event itself (Low, Medium, High) and `Severity` on `Confirmation` (and on
 
 **Urgency** is about *when* the user sees it. A high-urgency surface should
 interrupt; a low-urgency one can sit in a queue. The bus carries the urgency;
-the platform layer decides what to do with it. From the Plugin's side, the
+the platform layer decides what to do with it. From the Plug's side, the
 rule is: only emit `HIGH` for things that genuinely cannot wait.
 
 **Severity** is about *what the next click means*. `Destructive` says "this
@@ -198,7 +198,7 @@ the form without re-confirming each time.
 
 ## What renderers will do
 
-The contract is `commonMain`-only by design — Plugins describe the surface,
+The contract is `commonMain`-only by design — Plugs describe the surface,
 renderers translate it. That means you don't get pixel-level control, and
 that's the point. A `Confirmation` with `Destructive` severity will look
 *right* on Android, on iOS, in a desktop window, in a CLI — because each

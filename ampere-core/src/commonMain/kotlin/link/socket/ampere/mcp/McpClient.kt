@@ -10,13 +10,13 @@ import link.socket.ampere.agents.tools.mcp.connection.HttpMcpConnection
 import link.socket.ampere.agents.tools.mcp.connection.McpServerConnection
 import link.socket.ampere.agents.tools.mcp.protocol.McpToolDescriptor
 import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
-import link.socket.ampere.plugin.McpServerDependency
+import link.socket.ampere.plug.McpServerDependency
 
 /**
- * Plugin-facing facade over an MCP server connection.
+ * Plug-facing facade over an MCP server connection.
  *
  * Wraps an [McpServerConnection] (default [HttpMcpConnection]) with the
- * dependency declaration plus credential resolution, so plugin call sites
+ * dependency declaration plus credential resolution, so plug call sites
  * stay free of transport details. JSON-RPC framing remains in
  * [link.socket.ampere.agents.tools.mcp.protocol.McpClient]; this class
  * doesn't reimplement it.

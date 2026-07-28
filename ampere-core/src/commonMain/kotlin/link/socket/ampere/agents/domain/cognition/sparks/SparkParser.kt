@@ -57,7 +57,7 @@ private const val JSON_OPEN_FENCE = "---json"
  * Dedicated [Json] instance for spark frontmatter.
  *
  * - `classDiscriminator = "type"` matches the convention used by sibling
- *   discriminated unions in this codebase (e.g. repository / plugin bundle).
+ *   discriminated unions in this codebase (e.g. repository / plug bundle).
  * - `ignoreUnknownKeys = false` — spark frontmatter is capability-bearing, so a
  *   misspelled `requestedToolIds` must fail loudly rather than silently drop.
  * - `encodeDefaults = true` keeps round-trip serialization stable, which the

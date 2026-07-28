@@ -33,7 +33,7 @@ class AgentSurfaceDocSamplesTest {
     fun `getting-started Confirmation sample compiles and round-trips`() = runTest {
         coroutineScope {
             val bus = EventSerialBus(scope = this)
-            val agentId = "plugin-agent"
+            val agentId = "plug-agent"
             val rendererAgent = "renderer-stub"
             val correlationId = generateUUID(agentId, "delete-branch", "feature/old")
 
@@ -184,7 +184,7 @@ class AgentSurfaceDocSamplesTest {
     fun `Confirmation reference sample preserves severity through the bus`() = runTest {
         coroutineScope {
             val bus = EventSerialBus(scope = this)
-            val agentId = "plugin-agent"
+            val agentId = "plug-agent"
             val rendererAgent = "renderer-stub"
             val correlationId = generateUUID(agentId, "force-push", "feature/x")
 
@@ -353,7 +353,7 @@ class AgentSurfaceDocSamplesTest {
     fun `getting-started end-to-end function returns true on Submitted`() = runTest {
         coroutineScope {
             val bus = EventSerialBus(scope = this)
-            val agentId = "plugin-agent"
+            val agentId = "plug-agent"
             val rendererAgent = "renderer-stub"
             val branchName = "feature/old"
 

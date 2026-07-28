@@ -27,7 +27,7 @@ import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
 import link.socket.ampere.agents.events.utils.generateUUID
-import link.socket.ampere.plugin.permission.PluginPermission
+import link.socket.ampere.plug.permission.PlugPermission
 
 open class EventHandler<E : Event, S : Subscription>(
     private val executeOverride: (suspend (E, S?) -> Unit)? = null,
@@ -648,19 +648,19 @@ class AgentEventApi(
         }
 
     suspend fun publishPermissionDenied(
-        pluginId: String,
+        plugId: String,
         toolId: String,
         toolName: String,
-        permission: PluginPermission,
+        permission: PlugPermission,
         reason: PermissionDeniedReason,
         urgency: Urgency = Urgency.HIGH,
     ) {
         val event = PermissionDeniedEvent(
-            eventId = generateUUID("permission-denied", pluginId, toolId, agentId),
+            eventId = generateUUID("permission-denied", plugId, toolId, agentId),
             timestamp = Clock.System.now(),
             eventSource = EventSource.Agent(agentId),
             urgency = urgency,
-            pluginId = pluginId,
+            plugId = plugId,
             toolId = toolId,
             toolName = toolName,
             permission = permission,

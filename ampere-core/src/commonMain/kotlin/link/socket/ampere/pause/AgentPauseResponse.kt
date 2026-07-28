@@ -18,7 +18,7 @@ sealed interface AgentPauseResponse {
     /**
      * The user approved the paused operation. [payload] carries any
      * additional structured data the responder supplied (e.g., a confirmation
-     * note, a chosen option). It is opaque to the pause primitive — Plugin
+     * note, a chosen option). It is opaque to the pause primitive — Plug
      * code parses it.
      */
     @Serializable

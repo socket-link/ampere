@@ -40,7 +40,7 @@ class EmissionEventTest {
         workflowId = "wf-1",
         sourceEventId = "src-1",
         toolInvocationId = null,
-        pluginId = "plugin-x",
+        plugId = "plug-x",
         modelId = "claude-sonnet-4-0",
         inputDigest = "deadbeefdeadbeef",
     )

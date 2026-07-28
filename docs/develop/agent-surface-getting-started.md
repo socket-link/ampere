@@ -1,23 +1,23 @@
 # Getting started with AgentSurface
 
-Plugins running on AMPERE never draw pixels. They describe what they want the
+Plugs running on AMPERE never draw pixels. They describe what they want the
 user to see and let the platform decide how to render it. The piece of the SDK
-that carries that description from your Plugin to the platform is
+that carries that description from your Plug to the platform is
 `AgentSurface`.
 
-This guide walks from an empty Plugin to one that asks a person to confirm a
+This guide walks from an empty Plug to one that asks a person to confirm a
 destructive action and then handles the reply. It takes about five minutes,
 and every code sample is valid against the `AgentSurface` contract that ships
 with `ampere-core`.
 
-> **Audience.** Third-party Plugin developers building on AMPERE. You should
+> **Audience.** Third-party Plug developers building on AMPERE. You should
 > already be comfortable with `commonMain`, suspending functions, and the
 > `EventSerialBus` (the same bus that carries every other typed event in the
 > system).
 
 ## What you're going to build
 
-A Plugin that, before doing something irreversible, emits a typed
+A Plug that, before doing something irreversible, emits a typed
 `Confirmation` surface, suspends until the user responds, and decides what to
 do based on whether the user approved, rejected, or never replied.
 
@@ -34,19 +34,19 @@ inside Form — same shape, different payload.
 
 ## Prerequisites
 
-Your Plugin module needs:
+Your Plug module needs:
 
 - A reference to `EventSerialBus` (the bus you publish to and subscribe from).
-- An `AgentId` that identifies the Plugin's owning agent. This is what the
+- An `AgentId` that identifies the Plug's owning agent. This is what the
   bus uses to scope subscriptions.
 
-Both are part of the standard Plugin runtime. If you can already publish an
+Both are part of the standard Plug runtime. If you can already publish an
 `Event`, you can already use `AgentSurface`.
 
 ## Step 1 — Generate a correlation id
 
 A `correlationId` is what makes a surface request and its response a single
-transactional unit. The Plugin generates it; the renderer echoes it back
+transactional unit. The Plug generates it; the renderer echoes it back
 verbatim. Without it, an asynchronous reply has no idea which request it
 belongs to.
 
@@ -59,7 +59,7 @@ val correlationId: CorrelationId = generateUUID(agentId, "delete-branch")
 
 `generateUUID` is deterministic given its inputs. Use a label that's unique to
 the *thing the user is deciding about* — not to the moment in time. If the
-Plugin retries the same decision, the same id pairs the new request with the
+Plug retries the same decision, the same id pairs the new request with the
 new response.
 
 ## Step 2 — Build the surface
@@ -191,14 +191,14 @@ suspend fun confirmDeleteBranch(
 }
 ```
 
-That function is the smallest meaningful Plugin↔user interaction. Substitute
+That function is the smallest meaningful Plug↔user interaction. Substitute
 a different surface variant and a different response branch and you have the
-shape of every UI request a Plugin will ever make.
+shape of every UI request a Plug will ever make.
 
 ## What you can rely on
 
 The `AgentSurface` contract is `commonMain` Kotlin. It carries no Compose,
-SwiftUI, UIKit, or terminal-rendering types. Your Plugin compiles on every
+SwiftUI, UIKit, or terminal-rendering types. Your Plug compiles on every
 target AMPERE supports without per-platform shims. When platform renderers
 ship, they translate the same typed values into whatever native UI the host
 provides.

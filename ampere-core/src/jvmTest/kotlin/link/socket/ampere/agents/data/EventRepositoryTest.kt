@@ -125,7 +125,7 @@ class EventRepositoryTest {
                         workflowId = "workflow-1",
                         sourceEventId = "source-event-1",
                         toolInvocationId = "tool-1",
-                        pluginId = "plugin-1",
+                        plugId = "plug-1",
                         modelId = "model-1",
                         inputDigest = digest,
                     ),

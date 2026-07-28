@@ -27,7 +27,7 @@ class AgentSurfaceEventTest {
         val event = AgentSurfaceEvent.Requested(
             eventId = "evt-1",
             timestamp = Clock.System.now(),
-            eventSource = EventSource.Agent("plugin-x"),
+            eventSource = EventSource.Agent("plug-x"),
             urgency = Urgency.MEDIUM,
             surface = AgentSurface.Confirmation(
                 correlationId = "c-1",
@@ -69,10 +69,10 @@ class AgentSurfaceEventTest {
     }
 
     @Test
-    fun `plugin can emit a surface request and receive a stub response via the bus`() = runTest {
+    fun `plug can emit a surface request and receive a stub response via the bus`() = runTest {
         coroutineScope {
             val bus = EventSerialBus(scope = this)
-            val pluginAgent = "plugin-agent"
+            val plugAgent = "plug-agent"
             val rendererAgent = "renderer-stub"
             val correlationId = "corr-flow-1"
             val seenRequest = CompletableDeferred<AgentSurface>()
@@ -102,7 +102,7 @@ class AgentSurfaceEventTest {
 
             val awaiter = async {
                 bus.awaitSurfaceResponse(
-                    awaiterAgentId = pluginAgent,
+                    awaiterAgentId = plugAgent,
                     correlationId = correlationId,
                     timeout = 5.seconds,
                 )
@@ -116,7 +116,7 @@ class AgentSurfaceEventTest {
                         AgentSurfaceField.Text(id = "branchName", label = "Branch name", required = true),
                     ),
                 ),
-                eventSource = EventSource.Agent(pluginAgent),
+                eventSource = EventSource.Agent(plugAgent),
             )
 
             val rendered = seenRequest.await()
@@ -136,7 +136,7 @@ class AgentSurfaceEventTest {
         coroutineScope {
             val bus = EventSerialBus(scope = this)
             val response = bus.awaitSurfaceResponse(
-                awaiterAgentId = "plugin-agent",
+                awaiterAgentId = "plug-agent",
                 correlationId = "missing",
                 timeout = 50.milliseconds,
             )

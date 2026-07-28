@@ -53,7 +53,7 @@ Three design pressures shape the Wave 0 cut:
    `dedupKey`. See the [EmissionDedup](emission-dedup.md) cell.
 3. **Provenance is a first-class field, not metadata.** Every Emission
    must be attributable to the `runId`, `workflowId`, source event,
-   tool invocation, plugin, and model that produced it.
+   tool invocation, plug, and model that produced it.
 
 ## Where it lives
 
