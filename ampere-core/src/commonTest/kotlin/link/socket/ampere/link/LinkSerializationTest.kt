@@ -184,7 +184,7 @@ class LinkSerializationTest {
     }
 
     @Test
-    fun `summaries name the plug, the link, and the reason`() {
+    fun `summaries name the plug and the link and the reason`() {
         val failed = LinkEvent.LinkResolutionFailed(
             eventId = "e4",
             timestamp = now,

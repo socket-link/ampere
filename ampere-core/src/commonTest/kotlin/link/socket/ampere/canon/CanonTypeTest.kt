@@ -103,7 +103,7 @@ class CanonTypeTest {
     }
 
     @Test
-    fun `Person and Place bind through system value types, not entity schemas`() {
+    fun `Person and Place bind through system value types rather than entity schemas`() {
         val person = CanonType.PERSON.binding.apple
         val place = CanonType.PLACE.binding.apple
 

@@ -29,7 +29,7 @@ class TransportCapabilityTest {
     }
 
     @Test
-    fun `iOS app-to-app runs through UriScheme, not AppFunction`() {
+    fun `iOS app-to-app runs through UriScheme rather than AppFunction`() {
         assertFalse(Transport.APP_FUNCTION.capability(PlatformTarget.IOS).canConsume)
         assertTrue(Transport.URI_SCHEME.capability(PlatformTarget.IOS).canConsume)
     }
@@ -71,7 +71,7 @@ class TransportCapabilityTest {
     }
 
     @Test
-    fun `APNS sends from the server side, not from the handset`() {
+    fun `APNS sends from the server side rather than from the handset`() {
         assertTrue(Transport.APNS.capability(PlatformTarget.JVM_DESKTOP).canConsume)
         assertEquals(TransportCapability.NONE, Transport.APNS.capability(PlatformTarget.IOS))
     }

@@ -67,7 +67,7 @@ class LinkResolutionServiceTest {
     }
 
     @Test
-    fun `a missing Link is a Result failure, never a throw`() = runTest {
+    fun `a missing Link is a Result failure and never a throw`() = runTest {
         val store = InMemoryLinkStore()
 
         val result = service(store).resolve("calendar-plug", manifest(calendarRequirement))
@@ -78,7 +78,7 @@ class LinkResolutionServiceTest {
     }
 
     @Test
-    fun `every failure is reported, not just the first`() = runTest {
+    fun `every failure is reported rather than just the first`() = runTest {
         val store = InMemoryLinkStore(listOf(googleLink))
         store.grant("calendar-plug", googleLink.id, Instant.fromEpochMilliseconds(1))
 

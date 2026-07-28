@@ -104,7 +104,7 @@ class CanonAdapterTest {
     }
 
     @Test
-    fun `a missing required field is a typed failure, never a throw`() {
+    fun `a missing required field is a typed failure and never a throw`() {
         val adapter = MailMessageAdapter(FakeNativeStore())
         val empty = NativePayload("MailMessageEntity", JsonObject(emptyMap()))
 
@@ -282,7 +282,7 @@ class CanonAdapterTest {
     // -----------------------------------------------------------------
 
     @Test
-    fun `reference adapter coverage of Ring 1 is stated, not assumed`() {
+    fun `reference adapter coverage of Ring 1 is stated rather than assumed`() {
         // AMPR-222 ships the SPI; concrete adapters land per-Plug with each
         // transport. This test names which Ring 1 types have a reference
         // adapter today so the gap is visible instead of silently absent.

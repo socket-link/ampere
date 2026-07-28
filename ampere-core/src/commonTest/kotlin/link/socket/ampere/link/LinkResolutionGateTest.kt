@@ -72,7 +72,7 @@ class LinkResolutionGateTest {
     }
 
     @Test
-    fun `a Link the Plug was never granted is invisible, not rejected`() {
+    fun `a Link the Plug was never granted is invisible rather than rejected`() {
         val result = LinkResolutionGate.resolve(
             requirement = requirement(),
             candidates = listOf(googleLink),
@@ -173,7 +173,7 @@ class LinkResolutionGateTest {
     // -----------------------------------------------------------------
 
     @Test
-    fun `a revoked Link reports LINK scope, not the Plug grant`() {
+    fun `a revoked Link reports LINK scope rather than the Plug grant`() {
         val result = LinkResolutionGate.resolve(
             requirement = requirement(),
             candidates = listOf(googleLink.copy(revokedAt = revokedAt)),
@@ -304,7 +304,7 @@ class LinkResolutionGateTest {
     // -----------------------------------------------------------------
 
     @Test
-    fun `an optional requirement with no candidate is skipped, not failed`() {
+    fun `an optional requirement with no candidate is skipped rather than failed`() {
         val result = LinkResolutionGate.resolve(
             requirement = requirement(optional = true),
             candidates = emptyList(),
