@@ -1,0 +1,75 @@
+-- Links are Socket's data-link layer: the binding between a capability and its
+-- concrete medium. `link_json` is the source of truth; `transport` is a
+-- denormalized index column so resolution can narrow candidates without
+-- decoding every row. Keeping revocation inside `link_json` (rather than in a
+-- second column) means there is exactly one place that answers "is this Link
+-- revoked".
+CREATE TABLE Links (
+  link_id TEXT NOT NULL PRIMARY KEY,
+  transport TEXT NOT NULL,
+  link_json TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX idx_links_transport ON Links(transport);
+
+-- Grants are per-(Plug, Link) because Links are shared: granting Gmail access
+-- to a Google Link says nothing about Calendar's access to the same Link.
+CREATE TABLE LinkGrants (
+  plug_id TEXT NOT NULL,
+  link_id TEXT NOT NULL,
+  granted_at INTEGER NOT NULL,
+  revoked_at INTEGER,
+  PRIMARY KEY (plug_id, link_id)
+);
+
+CREATE INDEX idx_link_grants_link_id ON LinkGrants(link_id);
+
+upsertLink:
+INSERT OR REPLACE INTO Links(link_id, transport, link_json, updated_at)
+VALUES (?, ?, ?, ?);
+
+selectLink:
+SELECT link_json
+FROM Links
+WHERE link_id = ?;
+
+selectAllLinks:
+SELECT link_json
+FROM Links
+ORDER BY link_id ASC;
+
+selectLinksByTransport:
+SELECT link_json
+FROM Links
+WHERE transport = ?
+ORDER BY link_id ASC;
+
+deleteLink:
+DELETE FROM Links
+WHERE link_id = ?;
+
+upsertLinkGrant:
+INSERT OR REPLACE INTO LinkGrants(plug_id, link_id, granted_at, revoked_at)
+VALUES (?, ?, ?, ?);
+
+selectGrantsForPlug:
+SELECT plug_id, link_id, granted_at, revoked_at
+FROM LinkGrants
+WHERE plug_id = ?
+ORDER BY granted_at ASC;
+
+selectGrantsForLink:
+SELECT plug_id, link_id, granted_at, revoked_at
+FROM LinkGrants
+WHERE link_id = ?
+ORDER BY plug_id ASC;
+
+revokeGrantsForLink:
+UPDATE LinkGrants
+SET revoked_at = ?
+WHERE link_id = ? AND revoked_at IS NULL;
+
+deleteGrantsForLink:
+DELETE FROM LinkGrants
+WHERE link_id = ?;

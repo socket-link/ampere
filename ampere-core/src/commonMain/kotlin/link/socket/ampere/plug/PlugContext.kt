@@ -4,7 +4,7 @@ import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.tools.mcp.connection.McpServerConnection
-import link.socket.ampere.mcp.LinkId
+import link.socket.ampere.link.LinkId
 import link.socket.ampere.mcp.McpClient
 import link.socket.ampere.mcp.McpCredential
 import link.socket.ampere.mcp.McpCredentialBinding

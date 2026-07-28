@@ -10,8 +10,8 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/events/subscription/**
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/**
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/events/**
-related: [PropelLoop, AgentSurface, CognitionTrace, MemoryProvenance]
-last_verified: 2026-06-04
+related: [PropelLoop, AgentSurface, CognitionTrace, MemoryProvenance, LinkLayer]
+last_verified: 2026-07-28
 ---
 
 # EventSerialBus
@@ -59,6 +59,7 @@ properties for free:
 - `agents/events/subscription/EventSubscription.kt`, `Subscription.kt` — the handle returned to subscribers.
 - `agents/domain/event/Event.kt` and the `event/` package — the sealed `Event` hierarchy.
 - `agents/domain/event/CognitivePhaseEvent.kt` — phase transition events emitted by `PhaseSparkManager` when a bus is wired.
+- `agents/domain/event/LinkEvent.kt` — Link lifecycle (granted, revoked, resolved, resolution failed); see [LinkLayer](link-layer.md).
 - `ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/events/EventStore.sq` — persistence schema (with `run_id` indexes for trace queries).
 
 ## Invariants

@@ -13,8 +13,8 @@ import link.socket.ampere.agents.tools.mcp.protocol.McpToolDescriptor
 import link.socket.ampere.agents.tools.mcp.protocol.ServerCapabilities
 import link.socket.ampere.agents.tools.mcp.protocol.ServerInfo
 import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
+import link.socket.ampere.link.LinkId
 import link.socket.ampere.mcp.InMemoryMcpCredentialBinding
-import link.socket.ampere.mcp.LinkId
 import link.socket.ampere.plug.permission.PlugPermission
 import link.socket.ampere.plug.permission.UserGrants
 import link.socket.ampere.propel.ExecuteResult

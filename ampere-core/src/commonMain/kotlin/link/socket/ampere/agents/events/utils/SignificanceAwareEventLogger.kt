@@ -13,6 +13,7 @@ import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
+import link.socket.ampere.agents.domain.event.LinkEvent
 import link.socket.ampere.agents.domain.event.MeetingEvent
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
@@ -184,6 +185,13 @@ class SignificanceAwareEventLogger(
         is BenchEvent.BenchRunStarted -> EventSignificance.ROUTINE
         is BenchEvent.ProbeGraded -> EventSignificance.ROUTINE
         is BenchEvent.BenchRunCompleted -> EventSignificance.SIGNIFICANT
+
+        // Link lifecycle - resolution is routine, but anything that changes or
+        // denies a Plug's access to a wire is a consent-visible fact.
+        is LinkEvent.LinkResolved -> EventSignificance.ROUTINE
+        is LinkEvent.LinkGranted -> EventSignificance.SIGNIFICANT
+        is LinkEvent.LinkRevoked -> EventSignificance.CRITICAL
+        is LinkEvent.LinkResolutionFailed -> EventSignificance.CRITICAL
     }
 
     private fun formatUrgency(urgency: Urgency): String = when (urgency) {

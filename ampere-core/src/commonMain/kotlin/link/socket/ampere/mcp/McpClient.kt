@@ -10,6 +10,7 @@ import link.socket.ampere.agents.tools.mcp.connection.HttpMcpConnection
 import link.socket.ampere.agents.tools.mcp.connection.McpServerConnection
 import link.socket.ampere.agents.tools.mcp.protocol.McpToolDescriptor
 import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
+import link.socket.ampere.link.LinkId
 import link.socket.ampere.plug.McpServerDependency
 
 /**
