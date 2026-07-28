@@ -3,8 +3,12 @@ package link.socket.ampere.agents.events.messages
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.emission.ConsoleSurfaceIO
+import link.socket.ampere.agents.domain.emission.DefaultSurfacePolicy
 import link.socket.ampere.agents.domain.emission.EmissionReplyRegistry
 import link.socket.ampere.agents.domain.emission.GlobalEmissionReplyRegistry
+import link.socket.ampere.agents.domain.emission.Surface
+import link.socket.ampere.agents.domain.emission.SurfacePolicy
 import link.socket.ampere.agents.domain.emission.emission
 import link.socket.ampere.agents.domain.emission.extractFreeText
 import link.socket.ampere.agents.domain.event.EventSource
@@ -27,6 +31,7 @@ class AgentMessageApi(
     private val messageRepository: MessageRepository,
     private val eventSerialBus: EventSerialBus,
     private val emissionReplyRegistry: EmissionReplyRegistry = GlobalEmissionReplyRegistry.instance,
+    private val surfacePolicy: SurfacePolicy = DefaultSurfacePolicy(),
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
 
@@ -252,6 +257,12 @@ class AgentMessageApi(
                     ticketId = null,
                     taskId = null,
                     timeout = 30.minutes,
+                    onProduced = { requested ->
+                        val resolution = surfacePolicy.resolve(requested.emission, requested.urgency)
+                        if (resolution.surface == Surface.Console) {
+                            ConsoleSurfaceIO.printPrompt(requested.emission)
+                        }
+                    },
                 )
             }
 

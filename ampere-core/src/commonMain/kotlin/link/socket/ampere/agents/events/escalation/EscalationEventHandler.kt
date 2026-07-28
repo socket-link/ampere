@@ -13,8 +13,11 @@ import link.socket.ampere.agents.events.subscription.Subscription
  * side effects.
  *
  * Notification routing (the `humanNotifier` invocation) has been removed: channel
- * selection is now [Surface][link.socket.ampere.agents.domain.emission.Surface]
- * policy, handled by the Emission DSL inside
+ * selection is now owned by
+ * [SurfacePolicy][link.socket.ampere.agents.domain.emission.SurfacePolicy] (default
+ * implementation:
+ * [DefaultSurfacePolicy][link.socket.ampere.agents.domain.emission.DefaultSurfacePolicy]),
+ * consulted from the Emission DSL inside
  * [link.socket.ampere.agents.events.messages.AgentMessageApi.escalateToHuman].
  * This handler is retained for any thread-observation work that is not Emission-
  * related (event logging, metrics, etc.).
@@ -50,7 +53,8 @@ class EscalationEventHandler(
         subscription: Subscription?,
     ) {
         super.invoke(event, subscription)
-        // Notification routing is now handled by the Emission DSL's SurfacePolicy.
-        // Add thread-observation side effects here if needed (metrics, tracing, etc.).
+        // Notification routing is now handled by SurfacePolicy via the Emission DSL
+        // (see AgentMessageApi.escalateToHuman). Add thread-observation side effects
+        // here if needed (metrics, tracing, etc.).
     }
 }
