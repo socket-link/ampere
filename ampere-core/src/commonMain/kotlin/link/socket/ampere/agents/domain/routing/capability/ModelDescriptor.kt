@@ -21,8 +21,8 @@ import link.socket.ampere.domain.ai.provider.ProviderId
  * longer the selection key.
  *
  * Because no live client is held here, a descriptor round-trips cleanly through
- * serialization — the foundation for a future declarative-config story (no
- * loader is built yet).
+ * serialization — which is what lets a [ModelDescriptorSource] carry a catalog
+ * across an I/O boundary into a live [ModelDescriptorRegistry].
  *
  * @property modelName Matches the corresponding `AIModel.name`; the selection key.
  * @property providerId The owning provider's `AIProvider.id`.
