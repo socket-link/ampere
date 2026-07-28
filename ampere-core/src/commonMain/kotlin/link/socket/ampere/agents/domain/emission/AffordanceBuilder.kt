@@ -45,7 +45,8 @@ class AffordanceBuilder {
         return Affordance(id, prompt, payload).also { affordances.add(it) }
     }
 
-    internal fun build(): List<Affordance> = affordances.toList()
+    /** Returns the affordances assembled so far, in the order they were added. */
+    fun build(): List<Affordance> = affordances.toList()
 }
 
 /** Extracts free-text reply from a [replyContext] produced by [AffordanceBuilder.freeTextAffordance]. */

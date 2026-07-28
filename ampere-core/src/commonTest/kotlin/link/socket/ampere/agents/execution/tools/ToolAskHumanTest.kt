@@ -166,9 +166,7 @@ class ToolAskHumanTest {
     }
 
     @Test
-    fun `GlobalHumanResponseRegistry is not referenced in tool execution`() {
-        // Structural test: ToolAskHuman now requires EventSerialBus, not GlobalHumanResponseRegistry.
-        // This test verifies the factory signature.
+    fun `ToolAskHuman requires EventSerialBus and EmissionReplyRegistry`() {
         val tool = ToolAskHuman(
             requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
             eventSerialBus = EventSerialBus(scope = kotlinx.coroutines.GlobalScope),
