@@ -46,7 +46,7 @@ import link.socket.ampere.util.randomUUID
  * - Multiple concurrent requests are handled independently
  * - Published events are HumanInteractionEvent.InputRequested instances
  * - Subscribers on base EmissionEvent.Produced receive HumanInteractionEvent.InputRequested
- * - GlobalHumanResponseRegistry is NOT referenced (coverage assertion)
+ * - GlobalEmissionReplyRegistry is reachable as the shared registry singleton
  */
 class HumanEscalationFlowTest {
 
@@ -272,7 +272,7 @@ class HumanEscalationFlowTest {
         assertEquals(0L, timeoutEvent.timeoutMinutes) // 100ms → 0 minutes
     }
 
-    // ── Coverage assertion: no GlobalHumanResponseRegistry usage ───────────
+    // ── GlobalEmissionReplyRegistry singleton ───────────────────────────────
 
     @Test
     fun `GlobalEmissionReplyRegistry is accessible`() {
