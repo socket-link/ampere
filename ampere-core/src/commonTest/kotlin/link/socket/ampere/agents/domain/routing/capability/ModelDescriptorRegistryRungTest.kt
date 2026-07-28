@@ -95,7 +95,7 @@ class ModelDescriptorRegistryRungTest {
     fun noLowReasoningModelExceedsRungTwo() {
         val violations = descriptors.values.filter { d ->
             d.reasoning == link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning.LOW &&
-                d.rung > CapabilityRung.TWO
+                (d.rung ?: CapabilityRung.ONE) > CapabilityRung.TWO
         }
         assertTrue(violations.isEmpty(), "LOW-reasoning models above rung TWO: ${violations.map { it.modelName }}")
     }

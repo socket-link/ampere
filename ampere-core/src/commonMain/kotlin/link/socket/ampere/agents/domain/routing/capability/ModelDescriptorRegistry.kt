@@ -46,8 +46,14 @@ class InMemoryModelDescriptorRegistry(
 ) : ModelDescriptorRegistry {
 
     private val mutex = Mutex()
-    private val descriptors: MutableMap<String, ModelDescriptor> =
+    private val descriptors: MutableMap<String, ModelDescriptor> = run {
+        val duplicates = seed.groupingBy { it.modelName }.eachCount().filterValues { it > 1 }.keys
+        require(duplicates.isEmpty()) {
+            "Duplicate modelName(s) in registry seed (two providers exposing the same model " +
+                "name would silently drop one): $duplicates"
+        }
         seed.associateByTo(mutableMapOf()) { it.modelName }
+    }
 
     override suspend fun descriptorFor(modelName: String): ModelDescriptor? =
         mutex.withLock { descriptors[modelName] }
@@ -101,8 +107,14 @@ class InMemoryModelDescriptorRegistry(
          * TWO  — standard (NORMAL reasoning, fast mid-tier)
          * THREE — advanced (capable HIGH or premium NORMAL)
          * FOUR — frontier (flagship HIGH, latest generation)
+         *
+         * A model in `AIModel_*.ALL_MODELS` with no entry here projects with
+         * `rung = null` (unrated), not a silent `ONE` — see
+         * [ModelDescriptorRegistryDriftGuardTest] for the guard against this map
+         * drifting out of sync with `ALL_MODELS` in either direction. `internal`
+         * so that test can check both directions of drift directly.
          */
-        private val MODEL_RUNGS: Map<String, CapabilityRung> = mapOf(
+        internal val MODEL_RUNGS: Map<String, CapabilityRung> = mapOf(
             // ── Anthropic / Claude ────────────────────────────────────────────
             "claude-3-haiku-20240307" to CapabilityRung.ONE,
             "claude-3-5-haiku-latest" to CapabilityRung.TWO,
@@ -140,7 +152,8 @@ class InMemoryModelDescriptorRegistry(
          * Projects an [AIModel] into a [ModelDescriptor] from its own metadata:
          * reasoning and inputs come from [AIModelFeatures][link.socket.ampere.domain.ai.model.AIModelFeatures],
          * the context window from [ModelLimits][link.socket.ampere.domain.limits.ModelLimits],
-         * cost from the owning provider, and the rung from [MODEL_RUNGS].
+         * cost from the owning provider, and the rung from [MODEL_RUNGS] — `null`
+         * (unrated) if [name] has no entry, never a silent default.
          */
         private fun AIModel.toModelDescriptor(
             providerId: ProviderId,
@@ -157,7 +170,7 @@ class InMemoryModelDescriptorRegistry(
             cost = CostPolicy.Metered,
             costPerWatt = costPerWatt,
             availabilityGated = false,
-            rung = MODEL_RUNGS[name] ?: CapabilityRung.ONE,
+            rung = MODEL_RUNGS[name],
         )
 
         /**
