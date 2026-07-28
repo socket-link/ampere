@@ -13,6 +13,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
+import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.EmissionEvent
@@ -174,6 +175,8 @@ class EventRenderer(
             // Emission events: the unifying CHI primitive (produced/resolved)
             is EmissionEvent.Produced -> "📡" to magenta
             is EmissionEvent.Resolved -> "📡" to blue
+            // Bench (eval) lifecycle events
+            is BenchEvent -> "🧪" to cyan
         }
     }
 

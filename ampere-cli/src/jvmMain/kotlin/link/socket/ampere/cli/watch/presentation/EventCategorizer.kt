@@ -1,6 +1,7 @@
 package link.socket.ampere.cli.watch.presentation
 
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
+import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.EmissionEvent
@@ -121,9 +122,12 @@ object EventCategorizer {
         is RoutingEvent.RouteSelected,
         is RoutingEvent.RouteResolved,
         is CognitivePhaseEvent,
-        is SparkEvent -> EventSignificance.ROUTINE
+        is SparkEvent,
+        is BenchEvent.BenchRunStarted,
+        is BenchEvent.ProbeGraded -> EventSignificance.ROUTINE
 
-        is RoutingEvent.RouteFallback -> EventSignificance.SIGNIFICANT
+        is RoutingEvent.RouteFallback,
+        is BenchEvent.BenchRunCompleted -> EventSignificance.SIGNIFICANT
 
         // A rung floor with no satisfying model is a terminal routing failure:
         // the call cannot proceed, so it warrants immediate human awareness.
