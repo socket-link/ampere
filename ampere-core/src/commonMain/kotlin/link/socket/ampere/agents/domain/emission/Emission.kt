@@ -35,6 +35,12 @@ data class Emission(
      * list itself; it only carries it for the host to consult.
      */
     val surfaces: List<Surface> = emptyList(),
+    /**
+     * Browser-openable link a [SurfacePolicy] resolution can carry alongside
+     * [Surface.Push] for renderers without a live push transport. Mirrors
+     * [link.socket.ampere.pause.AgentPause.fallbackUrl].
+     */
+    val fallbackUrl: String? = null,
 )
 
 /**
