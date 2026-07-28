@@ -1,5 +1,8 @@
 package link.socket.ampere.api
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import link.socket.ampere.agents.definition.AgentFactory
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.events.messages.DefaultThreadViewService
@@ -41,12 +44,19 @@ import link.socket.ampere.memory.MemoryStore
  *   [EnvironmentService.outcomeMemoryRepository]. Embedded consumers (e.g.
  *   Socket) pass this to route durable agent memory through their own
  *   on-device store while reusing Ampere's other infrastructure.
- * @param upstreamLlmClient Runtime default for outbound LLM calls. Exposed
- *   on the returned [AmpereInstance.upstreamLlmClient] property so callers
- *   constructing agents off this instance can pass it into agent factories
- *   (e.g. [link.socket.ampere.agents.definition.SparkBasedAgent.Code]) and
- *   have every agent share the same upstream routing. Defaults to
- *   [BundledUpstreamLlmClient] (direct per-provider OpenAI call).
+ * @param upstreamLlmClient Transport for outbound LLM calls. Wired into the
+ *   returned [AmpereInstance.agentFactory], so every agent built off this
+ *   instance routes its LLM calls through it without per-construction-site
+ *   plumbing, and exposed on [AmpereInstance.upstreamLlmClient] for callers
+ *   that construct agents by hand (e.g.
+ *   [link.socket.ampere.agents.definition.SparkBasedAgent.Code]). Omitting it
+ *   leaves agents without a transport: their first LLM call throws
+ *   [MissingUpstreamLlmClientException][link.socket.ampere.llm.MissingUpstreamLlmClientException]
+ *   rather than calling a provider directly (AMPR-236). Pass
+ *   [BundledUpstreamLlmClient] to opt into the direct per-provider call.
+ * @param agentScope Coroutine scope the instance's [AmpereInstance.agentFactory]
+ *   hands to the agents it builds. Defaults to a fresh `Dispatchers.Default`
+ *   scope; pass the environment's own scope to share cancellation.
  */
 @AmpereStableApi
 fun Ampere.fromEnvironment(
@@ -54,7 +64,8 @@ fun Ampere.fromEnvironment(
     knowledgeRepository: KnowledgeRepository,
     workspace: String? = null,
     memoryStore: MemoryStore? = null,
-    upstreamLlmClient: UpstreamLlmClient = BundledUpstreamLlmClient,
+    upstreamLlmClient: UpstreamLlmClient? = null,
+    agentScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
 ): AmpereInstance {
     val sdkEventApi = environmentService.createEventApi("sdk-cli")
 
@@ -115,6 +126,17 @@ fun Ampere.fromEnvironment(
         workspace = workspace,
     )
 
+    // The seam that makes the injected transport actually govern agent LLM
+    // calls (AMPR-236): agents built off this instance inherit the client
+    // instead of falling through to the direct-provider default.
+    val boundAgentFactory = AgentFactory(
+        scope = agentScope,
+        ticketOrchestrator = environmentService.ticketOrchestrator,
+        eventApiFactory = { agentId -> environmentService.createEventApi(agentId) },
+        eventSerialBus = environmentService.eventBus,
+        upstreamLlmClient = upstreamLlmClient,
+    )
+
     return object : AmpereInstance {
         override val agents = agentService
         override val tickets = ticketService
@@ -124,7 +146,8 @@ fun Ampere.fromEnvironment(
         override val pricing = pricingService
         override val knowledge = knowledgeService
         override val status = statusService
-        override val upstreamLlmClient: UpstreamLlmClient = upstreamLlmClient
+        override val upstreamLlmClient: UpstreamLlmClient? = upstreamLlmClient
+        override val agentFactory: AgentFactory = boundAgentFactory
         override fun close() {
             // No-op: caller owns the lifecycle of shared resources
         }

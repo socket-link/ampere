@@ -1,5 +1,6 @@
 package link.socket.ampere.api
 
+import link.socket.ampere.agents.definition.AgentFactory
 import link.socket.ampere.api.service.AgentService
 import link.socket.ampere.api.service.EventService
 import link.socket.ampere.api.service.KnowledgeService
@@ -55,16 +56,31 @@ interface AmpereInstance : AutoCloseable {
     val status: StatusService
 
     /**
-     * Runtime default for outbound LLM calls.
+     * Runtime transport for outbound LLM calls.
      *
      * Set at construction time via [Ampere.fromEnvironment] (or its
-     * platform-specific siblings). Code that constructs agents off this
-     * instance should pass this client into agent factories so every
-     * agent inherits the same upstream routing — Socket's typical pattern.
+     * platform-specific siblings) and already wired into [agentFactory], so
+     * every agent built off this instance shares it — no per-construction-site
+     * re-plumbing required.
      *
-     * Defaults to [BundledUpstreamLlmClient] (direct per-provider OpenAI
-     * call) when not overridden.
+     * `null` means no transport was supplied. Agents built in that state throw
+     * [MissingUpstreamLlmClientException][link.socket.ampere.llm.MissingUpstreamLlmClientException]
+     * on their first LLM call rather than silently egressing to a provider
+     * (AMPR-236). Pass [BundledUpstreamLlmClient] to opt into the direct
+     * per-provider call.
      */
-    val upstreamLlmClient: UpstreamLlmClient
-        get() = BundledUpstreamLlmClient
+    val upstreamLlmClient: UpstreamLlmClient?
+        get() = null
+
+    /**
+     * Agent factory bound to this instance's environment and
+     * [upstreamLlmClient].
+     *
+     * Constructing agents through this factory is what makes the injected
+     * transport govern their LLM calls. `null` on instances that carry no
+     * agent-capable environment (e.g. the stub instance); the
+     * [Ampere.fromEnvironment] path always supplies one.
+     */
+    val agentFactory: AgentFactory?
+        get() = null
 }

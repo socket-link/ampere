@@ -20,6 +20,13 @@ import link.socket.ampere.domain.ai.provider.AIProvider
 
 class AgentDefinitionRungThreadingTest {
 
+    private object UnreachableUpstream : UpstreamLlmClient {
+        override suspend fun call(
+            request: com.aallam.openai.api.chat.ChatCompletionRequest,
+            configuration: AIConfiguration,
+        ) = throw NotImplementedError("These tests never get as far as the transport")
+    }
+
     private class FakeAIConfiguration : AIConfiguration {
         override val provider: AIProvider<*, *>
             get() = throw NotImplementedError()
@@ -83,6 +90,9 @@ class AgentDefinitionRungThreadingTest {
             agentDefinition = definition,
             aiConfiguration = FakeAIConfiguration(),
             cognitiveRelay = relay,
+            // A transport must be present for `call` to reach the relay at
+            // all (AMPR-236); the FakeAIConfiguration is what blows up after.
+            upstreamLlmClient = UnreachableUpstream,
         )
         val service = AgentLLMService(agentConfiguration = config)
 
@@ -104,6 +114,9 @@ class AgentDefinitionRungThreadingTest {
             agentDefinition = definition,
             aiConfiguration = FakeAIConfiguration(),
             cognitiveRelay = relay,
+            // A transport must be present for `call` to reach the relay at
+            // all (AMPR-236); the FakeAIConfiguration is what blows up after.
+            upstreamLlmClient = UnreachableUpstream,
         )
         val service = AgentLLMService(agentConfiguration = config)
 
@@ -125,6 +138,9 @@ class AgentDefinitionRungThreadingTest {
             agentDefinition = definition,
             aiConfiguration = FakeAIConfiguration(),
             cognitiveRelay = relay,
+            // A transport must be present for `call` to reach the relay at
+            // all (AMPR-236); the FakeAIConfiguration is what blows up after.
+            upstreamLlmClient = UnreachableUpstream,
         )
         val service = AgentLLMService(agentConfiguration = config)
 
@@ -146,6 +162,9 @@ class AgentDefinitionRungThreadingTest {
             agentDefinition = definition,
             aiConfiguration = FakeAIConfiguration(),
             cognitiveRelay = relay,
+            // A transport must be present for `call` to reach the relay at
+            // all (AMPR-236); the FakeAIConfiguration is what blows up after.
+            upstreamLlmClient = UnreachableUpstream,
         )
         val service = AgentLLMService(agentConfiguration = config)
 
@@ -170,6 +189,9 @@ class AgentDefinitionRungThreadingTest {
             agentDefinition = definition,
             aiConfiguration = FakeAIConfiguration(),
             cognitiveRelay = relay,
+            // A transport must be present for `call` to reach the relay at
+            // all (AMPR-236); the FakeAIConfiguration is what blows up after.
+            upstreamLlmClient = UnreachableUpstream,
         )
         val service = AgentLLMService(agentConfiguration = config)
 
@@ -194,6 +216,9 @@ class AgentDefinitionRungThreadingTest {
             agentDefinition = definition,
             aiConfiguration = FakeAIConfiguration(),
             cognitiveRelay = relay,
+            // A transport must be present for `call` to reach the relay at
+            // all (AMPR-236); the FakeAIConfiguration is what blows up after.
+            upstreamLlmClient = UnreachableUpstream,
         )
         val service = AgentLLMService(agentConfiguration = config)
 
@@ -219,6 +244,9 @@ class AgentDefinitionRungThreadingTest {
             agentDefinition = definition,
             aiConfiguration = FakeAIConfiguration(),
             cognitiveRelay = relay,
+            // A transport must be present for `call` to reach the relay at
+            // all (AMPR-236); the FakeAIConfiguration is what blows up after.
+            upstreamLlmClient = UnreachableUpstream,
         )
         val service = AgentLLMService(agentConfiguration = config)
 

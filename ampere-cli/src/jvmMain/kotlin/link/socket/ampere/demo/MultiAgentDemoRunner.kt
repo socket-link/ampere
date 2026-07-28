@@ -33,6 +33,7 @@ import link.socket.ampere.cli.layout.CognitiveProgressPane
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
+import link.socket.ampere.llm.BundledUpstreamLlmClient
 
 /**
  * Multi-agent demo runner that coordinates two agents for the handoff demonstration.
@@ -81,6 +82,7 @@ class MultiAgentDemoRunner(
                 provider = AIProvider_Anthropic,
                 model = AIModel_Claude.Sonnet_4
             ),
+            upstreamLlmClient = BundledUpstreamLlmClient,
         )
         val coordinator = coordinatorFactory.create<SparkBasedAgent<ProjectState>>(AgentType.PROJECT)
         val coordinatorEventApi = context.environmentService.createEventApi(coordinator.id)
@@ -97,6 +99,7 @@ class MultiAgentDemoRunner(
                 model = AIModel_Claude.Sonnet_4
             ),
             toolWriteCodeFileOverride = writeCodeTool,
+            upstreamLlmClient = BundledUpstreamLlmClient,
         )
         val worker = workerFactory.create<SparkBasedAgent<CodeState>>(AgentType.CODE)
         val workerEventApi = context.environmentService.createEventApi(worker.id)

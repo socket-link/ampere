@@ -24,6 +24,7 @@ import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.domain.util.toClientModelId
 import link.socket.ampere.llm.BundledUpstreamLlmClient
 import link.socket.ampere.llm.DispatchingUpstreamLlmClient
+import link.socket.ampere.llm.MissingUpstreamLlmClientException
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.util.ioDispatcher
 import link.socket.ampere.util.logWith
@@ -78,14 +79,18 @@ class AgentLLMService(
     private val activePromptProvider: (() -> String?)? = null,
     /**
      * Injection seam for outbound LLM calls. Defaults to whatever the
-     * [agentConfiguration] carries (which itself defaults to
-     * [BundledUpstreamLlmClient] — the pre-seam direct-call path).
-     * Embedded consumers (e.g. Socket) typically set the client on
-     * [AgentConfiguration.upstreamLlmClient] so it flows through
+     * [agentConfiguration] carries. Embedded consumers (e.g. Socket)
+     * typically set the client on [AgentConfiguration.upstreamLlmClient] so
+     * it flows through
      * [link.socket.ampere.agents.domain.reasoning.AgentReasoning];
      * passing this argument explicitly overrides whatever the config says,
      * for direct-construction tests that don't want to round-trip through
      * the config.
+     *
+     * When neither is supplied, [call] throws
+     * [MissingUpstreamLlmClientException] instead of falling back to
+     * [BundledUpstreamLlmClient] — a direct provider call is opt-in
+     * (AMPR-236).
      *
      * Local, on-device execution flows through this same seam: a
      * [link.socket.ampere.llm.DispatchingUpstreamLlmClient] supplied here (or on
@@ -97,7 +102,7 @@ class AgentLLMService(
      * Note: a custom [link.socket.ampere.domain.llm.LlmProvider] configured
      * on [AgentConfiguration] short-circuits before this client runs.
      */
-    private val upstreamLlmClient: UpstreamLlmClient = agentConfiguration.upstreamLlmClient,
+    private val upstreamLlmClient: UpstreamLlmClient? = agentConfiguration.upstreamLlmClient,
 ) {
 
     private val logger: Logger = logWith("AgentLLMService")
@@ -172,10 +177,16 @@ class AgentLLMService(
             }
         }
 
+        // No custom provider: an outbound transport is required. Resolve it
+        // before any relay work or telemetry so an unconfigured agent fails
+        // loudly instead of falling through to the direct-provider call.
+        val client = upstreamLlmClient
+            ?: throw MissingUpstreamLlmClientException(agentConfiguration.agentDefinition.name)
+
         // Probe the bound local engine (if any) so the relay's on-device
         // availability gate (AMPR-207/225) can see whether Rung 0 is usable
         // right now. Never overwrites a caller-supplied localCapacity.
-        val probedLocalCapacity = (upstreamLlmClient as? DispatchingUpstreamLlmClient)?.probeLocalCapacity()
+        val probedLocalCapacity = (client as? DispatchingUpstreamLlmClient)?.probeLocalCapacity()
         fun RoutingContext.withProbedLocalCapacity(): RoutingContext =
             if (probedLocalCapacity != null && localCapacity == null) {
                 copy(localCapacity = probedLocalCapacity)
@@ -250,7 +261,7 @@ class AgentLLMService(
         val startedAt = Clock.System.now()
         val completion = try {
             withContext(ioDispatcher) {
-                upstreamLlmClient.call(request, effectiveConfig)
+                client.call(request, effectiveConfig)
             }
         } catch (t: Throwable) {
             emitCompletedTelemetry(

@@ -30,6 +30,7 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.llm.BundledUpstreamLlmClient
 
 /**
  * Orchestrates goal activation, agent creation, and task execution.
@@ -103,6 +104,7 @@ class GoalHandler(
             eventApiFactory = { agentId -> context.environmentService.createEventApi(agentId) },
             aiConfiguration = effectiveAiConfig,
             toolWriteCodeFileOverride = writeCodeTool,
+            upstreamLlmClient = BundledUpstreamLlmClient,
         )
 
         // Create spark-based code agent

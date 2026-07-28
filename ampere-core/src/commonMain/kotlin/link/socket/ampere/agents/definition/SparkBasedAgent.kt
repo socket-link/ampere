@@ -38,7 +38,6 @@ import link.socket.ampere.domain.agent.bundled.AgentDefinition
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.llm.LlmProvider
-import link.socket.ampere.llm.BundledUpstreamLlmClient
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.util.ioDispatcher
 import link.socket.ampere.util.runBlockingCompat
@@ -80,8 +79,16 @@ open class SparkBasedAgent<S : AgentState>(
     private val _aiConfiguration: AIConfiguration? = null,
     @Transient
     private val _llmProvider: LlmProvider? = null,
+    /**
+     * Outbound LLM transport (AMPR-236). Null declares no transport: the
+     * agent's first LLM call throws
+     * [MissingUpstreamLlmClientException][link.socket.ampere.llm.MissingUpstreamLlmClientException]
+     * rather than falling back to the direct-provider call. Pass
+     * [BundledUpstreamLlmClient][link.socket.ampere.llm.BundledUpstreamLlmClient]
+     * to opt into that fallback.
+     */
     @Transient
-    private val _upstreamLlmClient: UpstreamLlmClient = BundledUpstreamLlmClient,
+    private val _upstreamLlmClient: UpstreamLlmClient? = null,
     @Transient
     private val _observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
     @Transient
@@ -402,7 +409,7 @@ open class SparkBasedAgent<S : AgentState>(
             eventApi: AgentEventApi? = null,
             memoryService: AgentMemoryService? = null,
             llmProvider: LlmProvider? = null,
-            upstreamLlmClient: UpstreamLlmClient = BundledUpstreamLlmClient,
+            upstreamLlmClient: UpstreamLlmClient? = null,
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
@@ -469,7 +476,7 @@ open class SparkBasedAgent<S : AgentState>(
             eventApi: AgentEventApi? = null,
             memoryService: AgentMemoryService? = null,
             llmProvider: LlmProvider? = null,
-            upstreamLlmClient: UpstreamLlmClient = BundledUpstreamLlmClient,
+            upstreamLlmClient: UpstreamLlmClient? = null,
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
@@ -519,7 +526,7 @@ open class SparkBasedAgent<S : AgentState>(
             eventApi: AgentEventApi? = null,
             memoryService: AgentMemoryService? = null,
             llmProvider: LlmProvider? = null,
-            upstreamLlmClient: UpstreamLlmClient = BundledUpstreamLlmClient,
+            upstreamLlmClient: UpstreamLlmClient? = null,
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
@@ -569,7 +576,7 @@ open class SparkBasedAgent<S : AgentState>(
             eventApi: AgentEventApi? = null,
             memoryService: AgentMemoryService? = null,
             llmProvider: LlmProvider? = null,
-            upstreamLlmClient: UpstreamLlmClient = BundledUpstreamLlmClient,
+            upstreamLlmClient: UpstreamLlmClient? = null,
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,

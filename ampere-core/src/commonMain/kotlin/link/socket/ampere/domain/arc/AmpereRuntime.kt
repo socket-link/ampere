@@ -2,6 +2,7 @@ package link.socket.ampere.domain.arc
 
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.execution.executor.Executor
+import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.util.systemFileSystem
 import okio.FileSystem
 import okio.Path
@@ -42,6 +43,7 @@ class AmpereRuntime(
     private val maxFlowTicks: Int = 100,
     private val cognitiveRelay: CognitiveRelay? = null,
     private val executor: Executor? = null,
+    private val upstreamLlmClient: UpstreamLlmClient? = null,
 ) {
     private var chargeResult: ChargeResult? = null
     private var flowResult: FlowResult? = null
@@ -96,6 +98,7 @@ class AmpereRuntime(
             fileSystem = fileSystem,
             cognitiveRelay = cognitiveRelay,
             executor = executor,
+            upstreamLlmClient = upstreamLlmClient,
         )
         return chargePhase.execute(userGoal)
     }
@@ -107,6 +110,7 @@ class AmpereRuntime(
             fileSystem = fileSystem,
             cognitiveRelay = cognitiveRelay,
             executor = executor,
+            upstreamLlmClient = upstreamLlmClient,
         )
         return chargePhase.execute(userGoal)
     }
