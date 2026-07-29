@@ -34,7 +34,7 @@ jobs:
 
       - name: Lint and build JVM/Android modules
         timeout-minutes: 20
-        run: ./gradlew ktlintCheck :ampere-core:build :ampere-cli:build :ampere-compose:build :ampere-eval:build -x test -x testDebugUnitTest -x testReleaseUnitTest -x iosSimulatorArm64Test -x compileTestKotlinJs -x compileTestKotlinWasmJs
+        run: ./gradlew ktlintCheck :ampere-core:assemble :ampere-cli:assemble :ampere-compose:assemble :ampere-eval:assemble
 
   jvm-test:
     name: JVM + Android Tests (${{ matrix.module }}, JDK 21)
