@@ -81,6 +81,21 @@ jobs:
         timeout-minutes: 20
         run: ./gradlew ${{ matrix.tasks }}
 
+  jvm-tests-status:
+    name: JVM + Android Tests (ubuntu, JDK 21)
+    needs: [ jvm-lint-build, jvm-test ]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check required jobs succeeded
+        run: |
+          if [ "${{ needs.jvm-lint-build.result }}" != "success" ] || [ "${{ needs.jvm-test.result }}" != "success" ]; then
+            echo "jvm-lint-build: ${{ needs.jvm-lint-build.result }}"
+            echo "jvm-test: ${{ needs.jvm-test.result }}"
+            exit 1
+          fi
+
   ios-tests:
     name: iOS Simulator Tests (macos, JDK 21)
     runs-on: macos-latest
