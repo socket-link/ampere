@@ -9,3 +9,9 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint").version("12.2.0").apply(false)
     id("com.vanniktech.maven.publish").apply(false)
 }
+
+allprojects {
+    tasks.withType<Test>().configureEach {
+        maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+    }
+}
