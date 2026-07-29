@@ -3,6 +3,7 @@ package link.socket.ampere.agents.definition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import link.socket.ampere.agents.definition.code.CodeState
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.agents.domain.cognition.sparks.DefaultSparkCatalog
@@ -45,6 +46,8 @@ import link.socket.ampere.llm.UpstreamLlmClient
  * @param upstreamLlmClient Outbound LLM transport handed to created agents (AMPR-236). Null leaves them without a
  *   transport, so their first LLM call throws rather than calling a provider directly; pass
  *   [link.socket.ampere.llm.BundledUpstreamLlmClient] to opt into the direct call.
+ * @param runId Ambient Arc-run identity (AMPR-240) handed to created agents so their LLM calls carry it as
+ *   `RoutingContext.workflowId` and therefore reach `ProviderCallStartedEvent`/`ProviderCallCompletedEvent`.
  */
 class SparkAgentFactory(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default),
@@ -55,6 +58,7 @@ class SparkAgentFactory(
     private val cognitiveRelay: CognitiveRelay? = null,
     private val executor: Executor? = null,
     private val upstreamLlmClient: UpstreamLlmClient? = null,
+    private val runId: RunId? = null,
 ) {
     private val effectiveSparkRegistry: SparkRegistry
         get() = sparkRegistry ?: DefaultSparkCatalog.registry
@@ -226,6 +230,7 @@ class SparkAgentFactory(
             _minimumRung = minimumRung,
             _executor = executor,
             _upstreamLlmClient = upstreamLlmClient,
+            _runId = runId,
         )
     }
 

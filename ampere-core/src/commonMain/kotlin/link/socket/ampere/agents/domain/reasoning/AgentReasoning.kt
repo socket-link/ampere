@@ -61,6 +61,7 @@ class AgentReasoning private constructor(
     private val eventApi: AgentEventApi? = null,
     private val mockResponses: MockReasoningResponses? = null,
     private val activePromptProvider: (() -> String?)? = null,
+    private val runId: RunId? = null,
 ) {
     private val llmService: AgentLLMService? = config?.let {
         AgentLLMService(it, eventApi, activePromptProvider, it.upstreamLlmClient)
@@ -105,6 +106,7 @@ class AgentReasoning private constructor(
             contextBuilder = { state -> "State: $state" },
             agentRole = settings.agentRole,
             availableTools = settings.availableTools,
+            runId = runId,
         ) ?: throw IllegalStateException("No perception evaluator configured")
     }
 
@@ -133,6 +135,7 @@ class AgentReasoning private constructor(
             relevantKnowledge = relevantKnowledge,
             taskFactory = settings.taskFactory,
             customPromptBuilder = null,
+            runId = runId,
         ) ?: throw IllegalStateException("No plan generator configured")
     }
 
@@ -190,7 +193,7 @@ class AgentReasoning private constructor(
             return evaluator(outcomes)
         }
 
-        val effectiveRunId = runId ?: outcomes.firstRunIdOrNull()
+        val effectiveRunId = runId ?: this.runId ?: outcomes.firstRunIdOrNull()
         val result = outcomeEvaluator?.evaluate(
             outcomes = outcomes,
             agentRole = settings.agentRole,
@@ -276,6 +279,7 @@ class AgentReasoning private constructor(
             agentId = settings.executorId,
             agentRole = settings.agentRole,
             requirements = requirements,
+            workflowId = runId,
         )
 
     companion object {
@@ -287,6 +291,7 @@ class AgentReasoning private constructor(
             executorId: ExecutorId,
             eventApi: AgentEventApi? = null,
             activePromptProvider: (() -> String?)? = null,
+            runId: RunId? = null,
             configure: ReasoningSettingsBuilder.() -> Unit,
         ): AgentReasoning {
             val builder = ReasoningSettingsBuilder(executorId)
@@ -296,6 +301,7 @@ class AgentReasoning private constructor(
                 settings = builder.build(),
                 eventApi = eventApi,
                 activePromptProvider = activePromptProvider,
+                runId = runId,
             )
         }
 

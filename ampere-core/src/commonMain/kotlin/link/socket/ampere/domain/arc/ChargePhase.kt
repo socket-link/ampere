@@ -1,6 +1,7 @@
 package link.socket.ampere.domain.arc
 
 import link.socket.ampere.agents.definition.Agent
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.SparkAgentFactory
 import link.socket.ampere.agents.definition.SparkBasedAgent
 import link.socket.ampere.agents.definition.code.CodeState
@@ -12,9 +13,11 @@ import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
 import link.socket.ampere.agents.domain.cognition.sparks.RoleSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.trace.ArcRunId
 import link.socket.ampere.util.systemFileSystem
 import okio.FileSystem
 import okio.Path
@@ -74,6 +77,10 @@ class ChargePhase(
     private val cognitiveRelay: CognitiveRelay? = null,
     private val executor: Executor? = null,
     private val upstreamLlmClient: UpstreamLlmClient? = null,
+    /** Ambient Arc-run identity (AMPR-240), threaded into spawned agents. */
+    private val runId: ArcRunId? = null,
+    /** Optional per-agent [AgentEventApi] factory (AMPR-240), threaded into spawned agents. */
+    private val eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
 ) {
     suspend fun execute(userGoal: String): ChargeResult {
         require(userGoal.isNotBlank()) { "ChargePhase requires a non-empty user goal." }
@@ -93,6 +100,8 @@ class ChargePhase(
                 cognitiveRelay = cognitiveRelay,
                 executor = executor,
                 upstreamLlmClient = upstreamLlmClient,
+                runId = runId,
+                eventApiFactory = eventApiFactory,
             ),
         ).spawn(arcConfig, projectContext)
 

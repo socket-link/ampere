@@ -164,6 +164,25 @@ class EmissionScopeTest {
     }
 
     @Test
+    fun `ambient runId is injected into default provenance`() = runTest {
+        coroutineScope {
+            val bus = EventSerialBus(scope = this)
+            val registry = EmissionReplyRegistry()
+
+            val result = emission(
+                eventSource = EventSource.Agent("test-agent"),
+                eventSerialBus = bus,
+                replyRegistry = registry,
+                runId = "ambient-run-id",
+            ) {
+                sense(label = "cpu", value = "42")
+            }
+
+            assertEquals("ambient-run-id", result.provenance.runId)
+        }
+    }
+
+    @Test
     fun `askHuman defaults provenance to digest-only when none supplied`() = runTest {
         coroutineScope {
             val bus = EventSerialBus(scope = this)

@@ -9,7 +9,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/emission/EmissionProvenance.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/EmissionEvent.kt
 related: [ChiProtocol, EventSerialBus, AgentSurface, PropelLoop, EmissionDedup]
-last_verified: 2026-06-04
+last_verified: 2026-07-28
 ---
 
 # Emission
@@ -70,7 +70,7 @@ Three design pressures shape the Wave 0 cut:
 
 - **Immutable once published.** Treat `dedupKey`, `provenance`, and `id` as fixed at construction time. Subscribers may copy, never mutate.
 - **Dedup is content-based, never identity-based.** `dedupKey` is the dedup signal. `EmissionId` is a random UUID — using it as a dedup key is a category error.
-- **Every Emission carries provenance.** `EmissionProvenance` is non-nullable on the data class. An Emission without `inputDigest` cannot exist.
+- **Every Emission carries provenance.** `EmissionProvenance` is non-nullable on the data class. An Emission without `inputDigest` cannot exist. Since AMPR-240, `EmissionScope` accepts an ambient `runId` and injects it into `EmissionProvenance.runId` for every Emission it builds a default provenance for (previously always `null` — digest-only). Callers that supply their own `EmissionProvenance` still override this default.
 - **`EmissionEvent.Resolved` references the originating Emission by id and the chosen affordance by id.** Both ids are stable for the lifetime of the Emission.
 - **`@SerialName`s are wire format.** Every sealed variant carries a stable `@SerialName`. Renames are a wire-format change that must be co-ordinated with consumers.
 - **No platform types in this package.** Emissions live in `commonMain`; rendering, surface arbitration, and push delivery are Socket-side concerns.
