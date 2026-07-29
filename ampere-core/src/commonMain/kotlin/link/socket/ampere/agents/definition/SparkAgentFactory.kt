@@ -11,7 +11,12 @@ import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
 import link.socket.ampere.agents.domain.cognition.sparks.RoleSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
+import link.socket.ampere.agents.domain.routing.CapabilityRoutingDefaults
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
+import link.socket.ampere.agents.domain.routing.CognitiveRelayImpl
+import link.socket.ampere.agents.domain.routing.RelayConfig
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
+import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
@@ -53,6 +58,30 @@ class SparkAgentFactory(
 ) {
     private val effectiveSparkRegistry: SparkRegistry
         get() = sparkRegistry ?: DefaultSparkCatalog.registry
+
+    /**
+     * Fallback relay used only for agents that declare a rung floor (AMPR-232).
+     *
+     * A floor is enforced by the relay, so an agent carrying one but no relay
+     * would have its floor silently ignored —
+     * [AgentLLMService][link.socket.ampere.agents.domain.reasoning.AgentLLMService]
+     * merges the floor into the `RoutingContext` and then, with no relay, resolves
+     * straight to the agent's static configuration. Rather than accept that, a
+     * declared floor gets a real [CognitiveRelayImpl] over the bundled catalog —
+     * the same construction [AgentFactory] uses for the activated CODE path.
+     *
+     * Built lazily and shared across every agent this factory makes. Routing events
+     * are not published here (no bus is available at this seam); inject
+     * [cognitiveRelay] with a bus-backed relay when the Arc run needs them.
+     *
+     * Floorless agents keep the pre-AMPR-232 behavior (relay only if injected).
+     */
+    private val floorEnforcingRelay: CognitiveRelay by lazy {
+        CognitiveRelayImpl(
+            initialConfig = RelayConfig(rules = CapabilityRoutingDefaults.defaultCapabilityRules()),
+            registry = InMemoryModelDescriptorRegistry(),
+        )
+    }
 
     /**
      * Creates a code-focused agent with ANALYTICAL affinity.
@@ -171,11 +200,16 @@ class SparkAgentFactory(
      *
      * @param id Agent ID
      * @param affinity The cognitive affinity for this agent
+     * @param minimumRung Capability-rung floor for this agent (AMPR-232). Threaded onto the agent's
+     *   `AgentDefinition` so the relay refuses to route below it; an agent declaring one is given
+     *   [floorEnforcingRelay] when no relay was injected, so the floor is enforced rather than ignored.
+     *   Null declares no floor and leaves the agent unconstrained.
      * @return A bare agent ready for custom Spark configuration
      */
     fun createAgent(
         id: AgentId,
         affinity: CognitiveAffinity,
+        minimumRung: CapabilityRung? = null,
     ): SparkBasedAgent<CodeState> {
         val eventApi = eventApiFactory?.invoke(id)
         val memoryService = memoryServiceFactory?.invoke(id)
@@ -188,7 +222,8 @@ class SparkAgentFactory(
             _memoryService = memoryService,
             _aiConfiguration = defaultAiConfiguration,
             _observabilityScope = scope,
-            _cognitiveRelay = cognitiveRelay,
+            _cognitiveRelay = cognitiveRelay ?: minimumRung?.let { floorEnforcingRelay },
+            _minimumRung = minimumRung,
             _executor = executor,
             _upstreamLlmClient = upstreamLlmClient,
         )

@@ -315,6 +315,9 @@ internal class ArcAgentSpawner(
             val agent = agentFactory.createAgent(
                 id = generateUUID("ArcAgent-${agentConfig.role}"),
                 affinity = roleProfile.affinity,
+                // AMPR-232: the step's floor, raised by the Arc-wide one if it is
+                // stricter. Null leaves the step unconstrained, as before.
+                minimumRung = arcConfig.minimumRungFor(agentConfig),
             )
 
             agent.spark<SparkBasedAgent<CodeState>>(projectSpark)

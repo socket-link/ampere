@@ -9,6 +9,7 @@ import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.routing.RoutingContext
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.api.AgentEventApi
@@ -226,10 +227,21 @@ class AgentReasoning private constructor(
 
     /**
      * Calls the LLM directly with a prompt.
+     *
+     * @param requirements Per-call capability requirement (AMPR-232). A caller that
+     *   knows this particular call needs more than the agent's standing contract —
+     *   a stricter [CapabilityRequirement.minRung], a longer context window — supplies
+     *   it here and it lands on the [RoutingContext] the relay resolves against.
+     *   Rung floors compose as the stricter of this and the agent's declared
+     *   `AgentDefinition.minimumRung` (AMPR-229), so a per-call floor only ever
+     *   *raises* the bar: agent `THREE` + call-site `FOUR` resolves against `FOUR`,
+     *   and agent `FOUR` + call-site `THREE` still resolves against `FOUR`. Neither
+     *   direction downgrades. Null keeps the agent's own floor.
      */
     suspend fun callLLM(
         prompt: String,
         systemMessage: String? = null,
+        requirements: CapabilityRequirement? = null,
     ): String {
         // Use mock response if available
         mockResponses?.llmCall?.let { call ->
@@ -239,26 +251,32 @@ class AgentReasoning private constructor(
         return llmService?.call(
             prompt = prompt,
             systemMessage = systemMessage ?: "You are a ${settings.agentRole} agent.",
-            routingContext = RoutingContext(
-                agentId = settings.executorId,
-                agentRole = settings.agentRole,
-            ),
+            routingContext = routingContext(requirements),
         ) ?: throw IllegalStateException("No LLM service configured")
     }
 
     /**
      * Calls the LLM expecting a JSON response.
+     *
+     * @param requirements Per-call capability requirement (AMPR-232); see [callLLM].
      */
-    suspend fun callLLMForJson(prompt: String): LLMJsonResponse {
+    suspend fun callLLMForJson(
+        prompt: String,
+        requirements: CapabilityRequirement? = null,
+    ): LLMJsonResponse {
         return llmService?.callForJson(
             prompt = prompt,
-            routingContext = RoutingContext(
-                agentId = settings.executorId,
-                agentRole = settings.agentRole,
-            ),
+            routingContext = routingContext(requirements),
         )
             ?: throw IllegalStateException("No LLM service configured")
     }
+
+    private fun routingContext(requirements: CapabilityRequirement?): RoutingContext =
+        RoutingContext(
+            agentId = settings.executorId,
+            agentRole = settings.agentRole,
+            requirements = requirements,
+        )
 
     companion object {
         /**
