@@ -2,16 +2,35 @@ package link.socket.ampere.domain.arc
 
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeText
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.job
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import link.socket.ampere.agents.definition.SparkBasedAgent
 import okio.Path.Companion.toPath
 
 class AmpereRuntimeTest {
+
+    /** For tests that construct a runtime but never execute it. */
+    private val idleScope = CoroutineScope(SupervisorJob())
+
+    @AfterTest
+    fun cancelIdleScope() {
+        idleScope.cancel()
+    }
 
     @Test
     fun `runtime executes full arc lifecycle`() = runTest {
@@ -54,10 +73,11 @@ class AmpereRuntimeTest {
         val runtime = AmpereRuntime(
             arcConfig = arcConfig,
             projectDir = tempDir.toString().toPath(),
+            agentScope = backgroundScope,
             maxFlowTicks = 5,
         )
 
-        val result = runtime.execute("Implement user login")
+        val result = assertIs<ArcOutcome.Completed>(runtime.execute("Implement user login"))
 
         // Verify Charge phase results
         assertNotNull(result.chargeResult)
@@ -114,6 +134,7 @@ class AmpereRuntimeTest {
         val runtime = AmpereRuntime(
             arcConfig = arcConfig,
             projectDir = tempDir.toString().toPath(),
+            agentScope = backgroundScope,
         )
 
         val chargeResult = runtime.executeChargeOnly("Build API endpoint")
@@ -131,6 +152,7 @@ class AmpereRuntimeTest {
         val runtime = AmpereRuntime.fromTeamConfig(
             teamRoles = teamRoles,
             projectDir = tempDir.toString().toPath(),
+            agentScope = idleScope,
         )
 
         val arcConfig = runtime.getArcConfig()
@@ -192,6 +214,7 @@ class AmpereRuntimeTest {
         val runtime = AmpereRuntime(
             arcConfig = arcConfig,
             projectDir = tempDir.toString().toPath(),
+            agentScope = backgroundScope,
             maxFlowTicks = 1,
         )
 
@@ -218,6 +241,7 @@ class AmpereRuntimeTest {
         val runtime = AmpereRuntime(
             arcConfig = arcConfig,
             projectDir = tempDir.toString().toPath(),
+            agentScope = idleScope,
         )
 
         val retrieved = runtime.getArcConfig()
@@ -236,6 +260,7 @@ class AmpereRuntimeTest {
         val runtime = AmpereRuntime(
             arcConfig = ArcRegistry.getDefault(),
             projectDir = tempDir.toString().toPath(),
+            agentScope = backgroundScope,
         )
 
         val exception = runCatching { runtime.execute("") }.exceptionOrNull()
@@ -270,10 +295,11 @@ class AmpereRuntimeTest {
         val runtime = AmpereRuntime(
             arcConfig = devopsArc,
             projectDir = tempDir.toString().toPath(),
+            agentScope = backgroundScope,
             maxFlowTicks = 1,
         )
 
-        val result = runtime.execute("Deploy to staging")
+        val result = assertIs<ArcOutcome.Completed>(runtime.execute("Deploy to staging"))
 
         assertEquals(3, result.chargeResult.agents.size)
         assertTrue(
@@ -281,5 +307,143 @@ class AmpereRuntimeTest {
                 it.cognitiveState.contains("Role:Operations")
             },
         )
+    }
+
+    /**
+     * Real dispatchers on purpose: the cancel has to race a Flow loop that is genuinely running
+     * on another thread, which a single-threaded test dispatcher cannot express.
+     */
+    @Test
+    fun `cancelling mid flow yields a Cancelled outcome and leaves no live coroutines`() =
+        runBlocking {
+            val tempDir = arcProjectDir("runtime-cancel")
+
+            val arcConfig = ArcConfig(
+                name = "cancel-arc",
+                agents = listOf(ArcAgentConfig(role = "code")),
+                orchestration = OrchestrationConfig(
+                    type = OrchestrationType.SEQUENTIAL,
+                    order = listOf("code"),
+                ),
+            )
+
+            val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+            try {
+                val runtime = AmpereRuntime(
+                    arcConfig = arcConfig,
+                    projectDir = tempDir.toString().toPath(),
+                    agentScope = callerScope,
+                    // Large enough that Flow cannot finish before the cancel lands.
+                    maxFlowTicks = Int.MAX_VALUE,
+                )
+
+                val run = callerScope.async { runtime.execute("Implement a very long running goal") }
+
+                // Cancel only once Flow is demonstrably underway, so this is a mid-Flow cancel
+                // rather than a cancel that happened to beat the Charge phase.
+                withTimeout(60_000) {
+                    while ((runtime.flowPhase?.getCurrentTick() ?: 0) < 1) {
+                        delay(5)
+                    }
+                }
+
+                runtime.cancel()
+
+                val outcome = withTimeout(60_000) { assertIs<ArcOutcome.Cancelled>(run.await()) }
+
+                assertNotNull(outcome.chargeResult, "Charge finished, so it should be reported")
+                assertEquals(
+                    TerminationReason.CANCELLED,
+                    outcome.flowResult?.terminationReason,
+                    "A cancelled Flow must report CANCELLED, not a fallback reason",
+                )
+                assertFalse(runtime.isRunning())
+
+                // The per-run scope is cancelled and joined before execute() returns, so the
+                // caller-owned scope is back to holding nothing but the finished `run` itself.
+                assertEquals(
+                    emptyList(),
+                    callerScope.coroutineContext.job.children.filter { it != run }.toList(),
+                    "The Arc run must leave no live coroutines in the caller-owned scope",
+                )
+            } finally {
+                callerScope.cancel()
+            }
+        }
+
+    @Test
+    fun `stop between ticks yields a completed outcome with MANUAL_STOP`() = runBlocking {
+        val tempDir = arcProjectDir("runtime-stop")
+
+        val arcConfig = ArcConfig(
+            name = "stop-arc",
+            agents = listOf(ArcAgentConfig(role = "code")),
+            orchestration = OrchestrationConfig(
+                type = OrchestrationType.SEQUENTIAL,
+                order = listOf("code"),
+            ),
+        )
+
+        val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        try {
+            val runtime = AmpereRuntime(
+                arcConfig = arcConfig,
+                projectDir = tempDir.toString().toPath(),
+                agentScope = callerScope,
+                maxFlowTicks = Int.MAX_VALUE,
+            )
+
+            val run = callerScope.async { runtime.execute("Implement a very long running goal") }
+
+            withTimeout(60_000) {
+                while ((runtime.flowPhase?.getCurrentTick() ?: 0) < 1) {
+                    delay(5)
+                }
+            }
+
+            runtime.stop()
+
+            // Unlike cancel(), a graceful stop still runs Pulse, so the Arc completes.
+            val outcome = withTimeout(60_000) { assertIs<ArcOutcome.Completed>(run.await()) }
+
+            assertEquals(TerminationReason.MANUAL_STOP, outcome.flowResult.terminationReason)
+        } finally {
+            callerScope.cancel()
+        }
+    }
+
+    @Test
+    fun `runtime is reusable after a run finishes`() = runTest {
+        val runtime = AmpereRuntime(
+            arcConfig = ArcRegistry.getDefault(),
+            projectDir = arcProjectDir("runtime-reentrant").toString().toPath(),
+            agentScope = backgroundScope,
+            maxFlowTicks = 1,
+        )
+
+        // The `isRunning` guard must reset in the finally, so a second call is accepted.
+        assertIs<ArcOutcome.Completed>(runtime.execute("First goal"))
+        assertIs<ArcOutcome.Completed>(runtime.execute("Second goal"))
+    }
+
+    /** A temp dir with the AGENTS.md/README.md that ChargePhase requires to produce a context. */
+    private fun arcProjectDir(prefix: String): java.nio.file.Path {
+        val tempDir = createTempDirectory(prefix)
+        tempDir.resolve("README.md").writeText("# CancelProject\n\nA long running test project.")
+        tempDir.resolve("AGENTS.md").writeText(
+            """
+            # AGENTS
+
+            ## Dependencies
+            - Kotlin
+
+            ## Conventions
+            - Use suspend functions
+
+            ## Architecture
+            - Clean architecture
+            """.trimIndent(),
+        )
+        return tempDir
     }
 }

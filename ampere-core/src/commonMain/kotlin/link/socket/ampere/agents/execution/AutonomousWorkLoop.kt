@@ -4,6 +4,7 @@ import kotlin.math.pow
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -77,56 +78,62 @@ class AutonomousWorkLoop<S : AgentState>(
             _isRunning.value = true
             var consecutiveNoWork = 0
 
-            while (_isRunning.value) {
-                try {
-                    if (shouldThrottleForRateLimit()) {
-                        delay(config.backoffInterval)
-                        continue
-                    }
+            try {
+                while (_isRunning.value) {
+                    try {
+                        if (shouldThrottleForRateLimit()) {
+                            delay(config.backoffInterval)
+                            continue
+                        }
 
-                    val issues = workflow.queryAvailableIssues()
-                    if (issues.isEmpty()) {
-                        consecutiveNoWork++
-                        delay(calculateBackoff(consecutiveNoWork))
-                        continue
-                    }
-                    consecutiveNoWork = 0
+                        val issues = workflow.queryAvailableIssues()
+                        if (issues.isEmpty()) {
+                            consecutiveNoWork++
+                            delay(calculateBackoff(consecutiveNoWork))
+                            continue
+                        }
+                        consecutiveNoWork = 0
 
-                    val issue = issues.first()
-                    val claimed = workflow.claimIssue(issue.number)
-                    if (claimed.isFailure) {
-                        delay(config.pollingInterval)
-                        continue
-                    }
+                        val issue = issues.first()
+                        val claimed = workflow.claimIssue(issue.number)
+                        if (claimed.isFailure) {
+                            delay(config.pollingInterval)
+                            continue
+                        }
 
-                    eventApi?.publishTaskCreated(
-                        taskId = "issue-${issue.number}",
-                        urgency = Urgency.MEDIUM,
-                        description = "Working on issue #${issue.number}: ${issue.title}",
-                        assignedTo = agent.id,
-                    )
-
-                    val result = workflow.workOnIssue(issue, agent)
-                    issuesProcessedThisHour++
-
-                    if (result.isSuccess) {
-                        eventApi?.publishCodeSubmitted(
-                            urgency = Urgency.LOW,
-                            filePath = "issue-${issue.number}",
-                            changeDescription = "Completed issue #${issue.number}: ${result.getOrNull()}",
-                            reviewRequired = true,
-                            assignedTo = null,
+                        eventApi?.publishTaskCreated(
+                            taskId = "issue-${issue.number}",
+                            urgency = Urgency.MEDIUM,
+                            description = "Working on issue #${issue.number}: ${issue.title}",
+                            assignedTo = agent.id,
                         )
+
+                        val result = workflow.workOnIssue(issue, agent)
+                        issuesProcessedThisHour++
+
+                        if (result.isSuccess) {
+                            eventApi?.publishCodeSubmitted(
+                                urgency = Urgency.LOW,
+                                filePath = "issue-${issue.number}",
+                                changeDescription = "Completed issue #${issue.number}: ${result.getOrNull()}",
+                                reviewRequired = true,
+                                assignedTo = null,
+                            )
+                        }
+
+                        delay(config.pollingInterval)
+                    } catch (e: CancellationException) {
+                        // Never back off and retry on cancellation — that would keep a stopped
+                        // loop alive. Let it unwind to the `finally` below.
+                        throw e
+                    } catch (e: Exception) {
+                        println("Error in autonomous work loop: ${e.message}")
+                        delay(config.backoffInterval)
                     }
-
-                    delay(config.pollingInterval)
-                } catch (e: Exception) {
-                    println("Error in autonomous work loop: ${e.message}")
-                    delay(config.backoffInterval)
                 }
+            } finally {
+                _isRunning.value = false
             }
-
-            _isRunning.value = false
         }
     }
 

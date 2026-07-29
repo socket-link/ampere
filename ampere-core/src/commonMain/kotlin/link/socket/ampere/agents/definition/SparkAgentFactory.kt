@@ -1,7 +1,6 @@
 package link.socket.ampere.agents.definition
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
@@ -36,7 +35,10 @@ import link.socket.ampere.llm.UpstreamLlmClient
  * 2. Pre-sparks it with common Spark configurations
  * 3. Returns the agent ready for tasks
  *
- * @param scope CoroutineScope for agent async operations
+ * @param scope Caller-owned CoroutineScope for agent async operations. Required on purpose: a
+ *   default like `CoroutineScope(Dispatchers.Default)` would hand every created agent a detached
+ *   scope with no parent Job, no owner, and no cancellation path — a `GlobalScope` in all but
+ *   name. Pass the scope whose lifetime the agents should share.
  * @param eventApiFactory Creates per-agent event APIs for publishing events
  * @param memoryServiceFactory Creates per-agent memory services
  * @param defaultAiConfiguration Default AI configuration for agents
@@ -50,7 +52,7 @@ import link.socket.ampere.llm.UpstreamLlmClient
  *   `RoutingContext.workflowId` and therefore reach `ProviderCallStartedEvent`/`ProviderCallCompletedEvent`.
  */
 class SparkAgentFactory(
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default),
+    private val scope: CoroutineScope,
     private val eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
     private val memoryServiceFactory: ((AgentId) -> AgentMemoryService)? = null,
     private val defaultAiConfiguration: AIConfiguration? = null,

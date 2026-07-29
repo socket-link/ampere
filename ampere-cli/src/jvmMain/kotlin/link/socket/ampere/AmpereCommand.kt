@@ -47,6 +47,7 @@ import link.socket.ampere.cli.watch.presentation.WatchViewState
 import link.socket.ampere.renderer.HelpOverlayRenderer
 import link.socket.ampere.domain.arc.AmpereRuntime
 import link.socket.ampere.domain.arc.ArcConfig
+import link.socket.ampere.domain.arc.ArcOutcome
 import link.socket.ampere.domain.arc.ArcRegistry
 import link.socket.ampere.repl.TerminalFactory
 
@@ -641,34 +642,48 @@ class AmpereCommand(
                 val runtime = AmpereRuntime.create(
                     arcConfig = arcConfig,
                     projectDirPath = projectDirPath,
+                    agentScope = agentScope,
                 )
 
                 jazzPane.setPhase(CognitiveProgressPane.Phase.INITIALIZING, "Charging: Analyzing project...")
                 updateStatus(StatusBar.SystemStatus.THINKING)
 
-                val chargeResult = runtime.executeChargeOnly(goal)
-                jazzPane.setPhase(
-                    CognitiveProgressPane.Phase.PERCEIVE,
-                    "Project: ${chargeResult.projectContext.projectId}, ${chargeResult.agents.size} agents"
-                )
-
+                // A single `execute()` runs Charge internally; calling `executeChargeOnly` first
+                // would scan the project and spawn a whole second set of agents per goal.
                 jazzPane.setPhase(CognitiveProgressPane.Phase.PLAN, "Flow: Executing agent loop...")
                 updateStatus(StatusBar.SystemStatus.WORKING)
 
-                val result = runtime.execute(goal)
+                when (val outcome = runtime.execute(goal)) {
+                    is ArcOutcome.Completed -> {
+                        val charge = outcome.chargeResult
+                        jazzPane.setPhase(
+                            CognitiveProgressPane.Phase.PERCEIVE,
+                            "Project: ${charge.projectContext.projectId}, ${charge.agents.size} agents"
+                        )
+                        jazzPane.setPhase(
+                            CognitiveProgressPane.Phase.LEARN,
+                            "Pulse: ${outcome.pulseResult.evaluationReport.goalsCompleted}/${outcome.pulseResult.evaluationReport.goalsTotal} goals"
+                        )
 
-                jazzPane.setPhase(
-                    CognitiveProgressPane.Phase.LEARN,
-                    "Pulse: ${result.pulseResult.evaluationReport.goalsCompleted}/${result.pulseResult.evaluationReport.goalsTotal} goals"
-                )
-
-                if (result.success) {
-                    jazzPane.setPhase(CognitiveProgressPane.Phase.COMPLETED)
-                    updateStatus(StatusBar.SystemStatus.COMPLETED)
-                } else {
-                    jazzPane.setFailed("Arc completed with failures")
-                    updateStatus(StatusBar.SystemStatus.ATTENTION_NEEDED)
+                        if (outcome.success) {
+                            jazzPane.setPhase(CognitiveProgressPane.Phase.COMPLETED)
+                            updateStatus(StatusBar.SystemStatus.COMPLETED)
+                        } else {
+                            jazzPane.setFailed("Arc completed with failures")
+                            updateStatus(StatusBar.SystemStatus.ATTENTION_NEEDED)
+                        }
+                    }
+                    is ArcOutcome.Cancelled -> {
+                        jazzPane.setFailed("Arc cancelled at tick ${outcome.flowResult?.finalTick ?: 0}")
+                        updateStatus(StatusBar.SystemStatus.ATTENTION_NEEDED)
+                    }
+                    is ArcOutcome.Failed -> {
+                        jazzPane.setFailed("Arc execution failed: ${outcome.cause.message}")
+                        updateStatus(StatusBar.SystemStatus.ATTENTION_NEEDED)
+                    }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 jazzPane.setFailed("Arc execution failed: ${e.message}")
                 updateStatus(StatusBar.SystemStatus.ATTENTION_NEEDED)
@@ -721,7 +736,7 @@ class AmpereCommand(
                 goal != null -> {
                     val effectiveGoal = goal!!
                     if (useArcPhases) {
-                        executeArcPhasesHeadless(effectiveGoal, selectedArc)
+                        executeArcPhasesHeadless(effectiveGoal, selectedArc, agentScope)
                         isOneShot = true
                     } else {
                         val goalHandler = GoalHandler(
@@ -793,24 +808,39 @@ class AmpereCommand(
         }
     }
 
-    private suspend fun executeArcPhasesHeadless(goal: String, arcConfig: ArcConfig) {
+    private suspend fun executeArcPhasesHeadless(
+        goal: String,
+        arcConfig: ArcConfig,
+        agentScope: CoroutineScope,
+    ) {
         val projectDirPath = File(System.getProperty("user.dir")).absolutePath
         val runtime = AmpereRuntime.create(
             arcConfig = arcConfig,
             projectDirPath = projectDirPath,
+            agentScope = agentScope,
         )
-        val chargeResult = runtime.executeChargeOnly(goal)
-        println(
-            "Charge complete. Project: ${chargeResult.projectContext.projectId}, " +
-                "${chargeResult.agents.size} agents"
-        )
-        val result = runtime.execute(goal)
-        println(
-            "Pulse: ${result.pulseResult.evaluationReport.goalsCompleted}/" +
-                "${result.pulseResult.evaluationReport.goalsTotal} goals"
-        )
-        if (!result.success) {
-            System.err.println("Arc completed with failures")
+
+        // `execute()` runs Charge itself; a preceding `executeChargeOnly` would double the
+        // project scan and spawn a second full set of agents for the same goal.
+        when (val outcome = runtime.execute(goal)) {
+            is ArcOutcome.Completed -> {
+                val charge = outcome.chargeResult
+                println(
+                    "Charge complete. Project: ${charge.projectContext.projectId}, " +
+                        "${charge.agents.size} agents"
+                )
+                println(
+                    "Pulse: ${outcome.pulseResult.evaluationReport.goalsCompleted}/" +
+                        "${outcome.pulseResult.evaluationReport.goalsTotal} goals"
+                )
+                if (!outcome.success) {
+                    System.err.println("Arc completed with failures")
+                }
+            }
+            is ArcOutcome.Cancelled ->
+                System.err.println("Arc cancelled at tick ${outcome.flowResult?.finalTick ?: 0}")
+            is ArcOutcome.Failed ->
+                System.err.println("Arc execution failed: ${outcome.cause.message}")
         }
     }
 
