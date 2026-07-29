@@ -1,9 +1,12 @@
 package link.socket.ampere.agents.domain.reasoning
 
 import co.touchlab.kermit.Logger
+import com.aallam.openai.api.chat.ChatCompletion
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonArray
@@ -163,6 +166,20 @@ class AgentLLMService(
                     startedAt = startedAt,
                 )
                 response
+            } catch (cancellation: CancellationException) {
+                // A custom provider is a prompt-in/text-out test seam that reports no
+                // usage even on success, so there is no input floor to book here — only
+                // the mechanical fix applies: settle the row, then propagate unchanged.
+                emitCompletedTelemetry(
+                    routingContext = routingContext,
+                    providerId = providerId,
+                    modelId = modelId,
+                    usage = TokenUsage(),
+                    success = false,
+                    startedAt = startedAt,
+                    errorType = CANCELLED_ERROR_TYPE,
+                )
+                throw cancellation
             } catch (t: Throwable) {
                 emitCompletedTelemetry(
                     routingContext = routingContext,
@@ -259,10 +276,35 @@ class AgentLLMService(
         )
 
         val startedAt = Clock.System.now()
+        // Held outside the `try` so the cancellation handler can tell "cancelled before
+        // the provider answered" from "cancelled after it answered but before we settled"
+        // — the latter has real actuals and must not be downgraded to an estimate.
+        var upstreamCompletion: ChatCompletion? = null
         val completion = try {
             withContext(ioDispatcher) {
-                client.call(request, effectiveConfig)
+                client.call(request, effectiveConfig).also { upstreamCompletion = it }
             }
+        } catch (cancellation: CancellationException) {
+            // AMPR-242: cancellation must still settle a cost record. `NonCancellable` is
+            // what makes the write survive — without it every suspension point below
+            // throws immediately on the cancelled Job and no row is ever inserted.
+            withContext(NonCancellable) {
+                emitCompletedTelemetry(
+                    routingContext = routingContext,
+                    providerId = effectiveConfig.provider.id,
+                    modelId = model.name,
+                    usage = cancelledUsage(
+                        providerId = effectiveConfig.provider.id,
+                        modelId = model.name,
+                        messages = messages,
+                        completion = upstreamCompletion,
+                    ),
+                    success = false,
+                    startedAt = startedAt,
+                    errorType = CANCELLED_ERROR_TYPE,
+                )
+            }
+            throw cancellation
         } catch (t: Throwable) {
             emitCompletedTelemetry(
                 routingContext = routingContext,
@@ -381,6 +423,17 @@ class AgentLLMService(
         const val DEFAULT_TEMPERATURE = 0.3
         const val DEFAULT_MAX_TOKENS = 4000
 
+        /**
+         * `errorType` stamped on the [ProviderCallCompletedEvent] of a cancelled call.
+         *
+         * Fixed rather than derived from `Throwable::simpleName` because cancellation
+         * arrives as several concrete types (`JobCancellationException`,
+         * `TimeoutCancellationException`, a bare `CancellationException`) that all mean
+         * the same thing to a cost consumer. Marks rows whose usage is an estimated
+         * input floor rather than provider-reported actuals (AMPR-242).
+         */
+        const val CANCELLED_ERROR_TYPE = "Cancelled"
+
         const val DEFAULT_SYSTEM_MESSAGE =
             "You are an autonomous agent component. Respond clearly and concisely."
 
@@ -410,6 +463,15 @@ class AgentLLMService(
         }
     }
 
+    /**
+     * Emits the start row for a provider call.
+     *
+     * Runs under [NonCancellable] (AMPR-242). Every hop below this — [AgentEventApi.publish]
+     * → `EventRepository.saveEvent` → `withContext(ioDispatcher)` — is a suspension point,
+     * and `withContext` on an already-cancelled Job throws *without running its block*. A
+     * cancellation arriving here would otherwise drop the start row that
+     * `ArcTraceProjection.buildModelInvocations` correlates completions against.
+     */
     private suspend fun emitStartedTelemetry(
         routingContext: RoutingContext?,
         providerId: String,
@@ -417,21 +479,31 @@ class AgentLLMService(
         routingReason: String,
     ) {
         val publishingAgentId = eventApi?.agentId ?: return
-        eventApi.publish(
-            ProviderCallStartedEvent(
-                eventId = generateUUID("llm-start", publishingAgentId),
-                timestamp = Clock.System.now(),
-                eventSource = EventSource.Agent(publishingAgentId),
-                workflowId = routingContext?.workflowId,
-                agentId = routingContext?.agentId ?: publishingAgentId,
-                cognitivePhase = routingContext?.phase,
-                providerId = providerId,
-                modelId = modelId,
-                routingReason = routingReason,
-            ),
-        )
+        withContext(NonCancellable) {
+            eventApi.publish(
+                ProviderCallStartedEvent(
+                    eventId = generateUUID("llm-start", publishingAgentId),
+                    timestamp = Clock.System.now(),
+                    eventSource = EventSource.Agent(publishingAgentId),
+                    workflowId = routingContext?.workflowId,
+                    agentId = routingContext?.agentId ?: publishingAgentId,
+                    cognitivePhase = routingContext?.phase,
+                    providerId = providerId,
+                    modelId = modelId,
+                    routingReason = routingReason,
+                ),
+            )
+        }
     }
 
+    /**
+     * Emits the completion row for a provider call.
+     *
+     * Runs under [NonCancellable] for the same reason as [emitStartedTelemetry]: on the
+     * success path the provider has already returned real tokens, so a cancellation
+     * landing between the call returning and this write would lose a call that was
+     * genuinely spent.
+     */
     private suspend fun emitCompletedTelemetry(
         routingContext: RoutingContext?,
         providerId: String,
@@ -443,21 +515,55 @@ class AgentLLMService(
     ) {
         val publishingAgentId = eventApi?.agentId ?: return
         val completedAt = Clock.System.now()
-        eventApi.publish(
-            ProviderCallCompletedEvent(
-                eventId = generateUUID("llm-complete", publishingAgentId),
-                timestamp = completedAt,
-                eventSource = EventSource.Agent(publishingAgentId),
-                workflowId = routingContext?.workflowId,
-                agentId = routingContext?.agentId ?: publishingAgentId,
-                cognitivePhase = routingContext?.phase,
-                providerId = providerId,
-                modelId = modelId,
-                usage = usage,
-                latencyMs = (completedAt - startedAt).inWholeMilliseconds,
-                success = success,
-                errorType = errorType,
-            ),
+        withContext(NonCancellable) {
+            eventApi.publish(
+                ProviderCallCompletedEvent(
+                    eventId = generateUUID("llm-complete", publishingAgentId),
+                    timestamp = completedAt,
+                    eventSource = EventSource.Agent(publishingAgentId),
+                    workflowId = routingContext?.workflowId,
+                    agentId = routingContext?.agentId ?: publishingAgentId,
+                    cognitivePhase = routingContext?.phase,
+                    providerId = providerId,
+                    modelId = modelId,
+                    usage = usage,
+                    latencyMs = (completedAt - startedAt).inWholeMilliseconds,
+                    success = success,
+                    errorType = errorType,
+                ),
+            )
+        }
+    }
+
+    /**
+     * Settles a cancelled call to the best actuals available (AMPR-242).
+     *
+     * If [completion] is non-null the provider did answer — cancellation merely landed
+     * before the success-path write — so its reported counts are used verbatim. Otherwise
+     * the call is booked at its honest floor: the input tokens the prompt demonstrably put
+     * on the wire, with zero output.
+     *
+     * Output is `0` rather than `null` deliberately — [ProviderPricingCalculator] returns
+     * `null` for a null count, which would silently drop the cost back to nothing.
+     */
+    private suspend fun cancelledUsage(
+        providerId: String,
+        modelId: String,
+        messages: List<ChatMessage>,
+        completion: ChatCompletion?,
+    ): TokenUsage {
+        val usage = completion?.usage?.let(TokenUsageExtractor::fromOpenAiUsage)
+            ?: TokenUsage(
+                inputTokens = PromptTokenEstimator.estimateInputTokens(
+                    messages.map { it.content.orEmpty() },
+                ),
+                outputTokens = 0,
+            )
+
+        return enrichUsageWithEstimatedCost(
+            providerId = providerId,
+            modelId = modelId,
+            usage = usage,
         )
     }
 
