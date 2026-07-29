@@ -43,12 +43,11 @@ actual suspend fun executeReadCodebase(
             )
         }
 
-        @Suppress("UNCHECKED_CAST")
         val content = NSString.stringWithContentsOfFile(
             fullPath,
             NSUTF8StringEncoding,
             null,
-        ) as? String ?: ""
+        ) ?: ""
 
         ExecutionOutcome.CodeReading.Success(
             executorId = context.executorId,

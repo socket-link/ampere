@@ -15,7 +15,7 @@ typealias RunId = String
 
 /**
  * Correlation id for a broader reasoning unit (a perception, a plan, a task)
- * that spans multiple [Event]s.
+ * that spans multiple [link.socket.ampere.agents.domain.event.Event]s.
  *
  * AMPR-240 resolved the historical ambiguity between this and [RunId]: for
  * the duration of one Arc execution, `WorkflowId` collapses into [RunId] —
