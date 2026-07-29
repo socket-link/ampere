@@ -7,8 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  jvm-tests:
-    name: JVM + Android Tests (ubuntu, JDK 21)
+  jvm-lint-build:
+    name: JVM Lint + Build (ubuntu, JDK 21)
     runs-on: ubuntu-latest
 
     steps:
@@ -32,17 +32,69 @@ jobs:
           openai_api_key=placeholder
           EOF
 
-      - name: Run ktlint
-        timeout-minutes: 10
-        run: ./gradlew ktlintCheck
-
-      - name: Build all modules
+      - name: Lint and build JVM/Android modules
         timeout-minutes: 20
-        run: ./gradlew build -x test -x testDebugUnitTest -x testReleaseUnitTest -x iosSimulatorArm64Test -x compileTestKotlinJs -x compileTestKotlinWasmJs
+        run: ./gradlew ktlintCheck :ampere-core:assemble :ampere-cli:assemble :ampere-compose:assemble :ampere-eval:assemble
+
+  jvm-test:
+    name: JVM + Android Tests (${{ matrix.module }}, JDK 21)
+    needs: jvm-lint-build
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - module: ampere-core
+            tasks: ":ampere-core:jvmTest :ampere-core:testDebugUnitTest"
+          - module: ampere-cli
+            tasks: ":ampere-cli:jvmTest"
+          - module: ampere-compose
+            tasks: ":ampere-compose:jvmTest :ampere-compose:testDebugUnitTest"
+          - module: ampere-eval
+            tasks: ":ampere-eval:jvmTest"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+
+      - name: Create local.properties
+        run: |
+          cat > local.properties << 'EOF'
+          anthropic_api_key=placeholder
+          google_api_key=placeholder
+          openai_api_key=placeholder
+          EOF
 
       - name: Run JVM + Android tests
         timeout-minutes: 20
-        run: ./gradlew :ampere-core:jvmTest :ampere-core:testDebugUnitTest :ampere-cli:jvmTest :ampere-compose:jvmTest :ampere-compose:testDebugUnitTest :ampere-eval:jvmTest
+        run: ./gradlew ${{ matrix.tasks }}
+
+  jvm-tests-status:
+    name: JVM + Android Tests (ubuntu, JDK 21)
+    needs: [ jvm-lint-build, jvm-test ]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check required jobs succeeded
+        run: |
+          if [ "${{ needs.jvm-lint-build.result }}" != "success" ] || [ "${{ needs.jvm-test.result }}" != "success" ]; then
+            echo "jvm-lint-build: ${{ needs.jvm-lint-build.result }}"
+            echo "jvm-test: ${{ needs.jvm-test.result }}"
+            exit 1
+          fi
 
   ios-tests:
     name: iOS Simulator Tests (macos, JDK 21)
