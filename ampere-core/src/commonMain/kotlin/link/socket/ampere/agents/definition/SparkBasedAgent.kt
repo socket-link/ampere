@@ -24,6 +24,7 @@ import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.reasoning.StepResult
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
@@ -343,9 +344,21 @@ open class SparkBasedAgent<S : AgentState>(
         plan: Plan,
     ): Knowledge = reasoning.extractKnowledge(outcome, task, plan)
 
-    override fun callLLM(prompt: String): String = runBlockingCompat(ioDispatcher) {
+    override fun callLLM(prompt: String): String = callLLM(prompt, requirements = null)
+
+    /**
+     * Calls the LLM with a per-call capability requirement (AMPR-232).
+     *
+     * The requirement's [CapabilityRequirement.minRung] composes with the agent's
+     * declared [_minimumRung] as the stricter of the two, so a call site can raise
+     * the floor for one call without ever lowering the agent's own.
+     */
+    fun callLLM(
+        prompt: String,
+        requirements: CapabilityRequirement?,
+    ): String = runBlockingCompat(ioDispatcher) {
         withTimeout(60000) {
-            reasoning.callLLM(prompt)
+            reasoning.callLLM(prompt, requirements = requirements)
         }
     }
 
