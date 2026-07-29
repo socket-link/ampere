@@ -45,7 +45,7 @@ class AmperePhosphorBridge(
 ) {
     private val mutex = Mutex()
     private var pendingAtmosphere: AtmosphereState? = null
-    private val subscribedEventTypes: MutableList<EventType> = mutableListOf()
+    private val subscriptions: MutableList<Subscription> = mutableListOf()
     private var started: Boolean = false
 
     /** Register handlers on the bus. Subsequent calls while started are no-ops. */
@@ -71,29 +71,26 @@ class AmperePhosphorBridge(
     /**
      * Unsubscribe the bridge's handlers from the bus.
      *
-     * Note: [EventSerialBus.unsubscribe] removes every handler registered for
-     * the affected event types, not just the bridge's. Consumers that share
-     * those event types with other subscribers should defer [stop] until those
-     * subscribers are also being torn down.
+     * Released per subscription, so other subscribers on the same event types keep
+     * receiving events after the bridge stops.
      */
     fun stop() {
         if (!started) return
         started = false
-        for (eventType in subscribedEventTypes) {
-            bus.unsubscribe(eventType)
+        for (subscription in subscriptions) {
+            bus.unsubscribe(subscription)
         }
-        subscribedEventTypes.clear()
+        subscriptions.clear()
     }
 
     private fun register(eventType: EventType, dispatch: suspend (Event) -> Unit) {
-        bus.subscribe(
+        subscriptions += bus.subscribe(
             agentId = agentId,
             eventType = eventType,
             handler = EventHandler<Event, Subscription> { event, _ ->
                 if (started) dispatch(event)
             },
         )
-        subscribedEventTypes += eventType
     }
 
     /**

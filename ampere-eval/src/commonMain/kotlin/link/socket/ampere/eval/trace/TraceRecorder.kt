@@ -46,7 +46,7 @@ class TraceRecorder(
         val buffer = Channel<Event>(Channel.UNLIMITED)
         val agentId = "trace-recorder/$runId/${idGenerator()}"
 
-        eventTypes.forEach { eventType ->
+        val subscriptions = eventTypes.map { eventType ->
             bus.subscribe(
                 agentId = agentId,
                 eventType = eventType,
@@ -62,7 +62,7 @@ class TraceRecorder(
             arcId = arcId,
             createdAt = clockMillis(),
             buffer = buffer,
-            subscribedTypes = eventTypes,
+            subscriptions = subscriptions,
             bus = bus,
             traceService = traceService,
             json = json,
@@ -79,7 +79,7 @@ class RecordingHandle internal constructor(
     private val arcId: String,
     private val createdAt: Long,
     private val buffer: Channel<Event>,
-    private val subscribedTypes: List<EventType>,
+    private val subscriptions: List<Subscription>,
     private val bus: EventSerialBus,
     private val traceService: TraceService,
     private val json: Json,
@@ -92,10 +92,9 @@ class RecordingHandle internal constructor(
      * channel is drained once; call exactly once.
      */
     suspend fun stop(): Result<Trace> {
-        // Stop receiving new events. NOTE: EventSerialBus.unsubscribe removes ALL
-        // handlers for a type (see RECON-trace.md §1) — fine for eval-controlled
-        // runs where the recorder is the sole subscriber.
-        subscribedTypes.forEach { bus.unsubscribe(it) }
+        // Stop receiving new events. Released per subscription, so a recorder running
+        // alongside other bus subscribers takes only its own handlers with it.
+        subscriptions.forEach { bus.unsubscribe(it) }
         buffer.close()
 
         // Dedup by eventId: an event with parentEventTypes is dispatched to more

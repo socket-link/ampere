@@ -33,7 +33,7 @@ class EventRelayServiceImpl(
 
         // Create subscriptions for each event type
         val subscriptions = eventTypes.map { eventType ->
-            eventSerialBus.subscribe(
+            eventSerialBus.subscribeSuspending(
                 agentId = "event-stream-${generateUUID()}",
                 eventType = eventType,
                 handler = EventHandler { event: Event, _: Subscription? ->
@@ -47,9 +47,11 @@ class EventRelayServiceImpl(
 
         // Keep the flow alive until canceled
         awaitClose {
-            // Unsubscribe from all event types when the flow is canceled
-            eventTypes.forEach { eventType ->
-                eventSerialBus.unsubscribe(eventType)
+            // Release only this collector's handlers. Unsubscribing by event type would remove
+            // every other subscriber's handlers too — with no filters that is every type in
+            // EventRegistry, including the emission reply routers the Arc depends on.
+            subscriptions.forEach { subscription ->
+                eventSerialBus.unsubscribe(subscription)
             }
         }
     }
