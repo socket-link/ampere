@@ -3,6 +3,7 @@ package link.socket.ampere.agents.domain.reasoning
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.expectation.Expectations
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
@@ -63,6 +64,7 @@ class PlanGenerator(
         relevantKnowledge: List<KnowledgeWithScore> = emptyList(),
         taskFactory: TaskFactory = DefaultTaskFactory,
         customPromptBuilder: ((Task, List<Idea>, Set<Tool<*>>, List<KnowledgeWithScore>) -> String)? = null,
+        runId: RunId? = null,
     ): Plan {
         // Handle blank task
         if (task is Task.Blank) {
@@ -91,7 +93,7 @@ class PlanGenerator(
                     phase = CognitivePhase.PLAN,
                     agentId = llmService.agentId,
                     agentRole = agentRole,
-                    workflowId = task.id,
+                    workflowId = runId ?: task.id,
                 ),
             )
             parsePlanFromResponse(jsonResponse.rawJson, task, taskFactory)

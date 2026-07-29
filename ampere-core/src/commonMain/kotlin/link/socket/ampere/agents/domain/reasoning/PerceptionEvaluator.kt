@@ -2,6 +2,7 @@ package link.socket.ampere.agents.domain.reasoning
 
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.state.AgentState
@@ -50,6 +51,7 @@ class PerceptionEvaluator(
         contextBuilder: (S) -> String,
         agentRole: String,
         availableTools: Set<Tool<*>> = emptySet(),
+        runId: RunId? = null,
     ): Idea {
         val state = perception.currentState
         val contextDescription = contextBuilder(state)
@@ -69,7 +71,7 @@ class PerceptionEvaluator(
                     phase = CognitivePhase.PERCEIVE,
                     agentId = llmService.agentId,
                     agentRole = agentRole,
-                    workflowId = perception.id,
+                    workflowId = runId ?: perception.id,
                 ),
             )
             parseInsightsIntoIdea(jsonResponse.rawJson, agentRole)

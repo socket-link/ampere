@@ -4,6 +4,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
@@ -40,6 +41,13 @@ class EmissionScope(
     private val eventSerialBus: EventSerialBus,
     private val replyRegistry: EmissionReplyRegistry,
     private val publish: suspend (Event) -> Unit = eventSerialBus::publish,
+    /**
+     * Ambient Arc-run identity (AMPR-240), used to populate
+     * [EmissionProvenance.runId] on every Emission built by this scope that
+     * doesn't supply its own `provenance`. Null preserves digest-only
+     * provenance for callers outside an Arc run.
+     */
+    private val runId: RunId? = null,
 ) {
 
     /**
@@ -194,9 +202,9 @@ class EmissionScope(
         return emission
     }
 
-    /** Provenance for callers that don't supply their own — digest only, no attribution. */
+    /** Provenance for callers that don't supply their own — carries the ambient [runId], if any. */
     private fun defaultProvenance(payload: EmissionPayload): EmissionProvenance =
-        EmissionProvenance(inputDigest = inputDigest(payload))
+        EmissionProvenance(runId = runId, inputDigest = inputDigest(payload))
 
     /**
      * Publish a human-interaction [Emission] and suspend until the reply arrives.
@@ -298,6 +306,7 @@ suspend fun <T> emission(
     eventSerialBus: EventSerialBus,
     replyRegistry: EmissionReplyRegistry = GlobalEmissionReplyRegistry.instance,
     publish: suspend (Event) -> Unit = eventSerialBus::publish,
+    runId: RunId? = null,
     block: suspend EmissionScope.() -> T,
 ): T {
     eventSerialBus.subscribe<EmissionEvent.BaseResolved, EventSubscription.ByEventClassType>(
@@ -314,5 +323,5 @@ suspend fun <T> emission(
         replyRegistry.deliver(event)
     }
 
-    return EmissionScope(eventSource, eventSerialBus, replyRegistry, publish).block()
+    return EmissionScope(eventSource, eventSerialBus, replyRegistry, publish, runId).block()
 }

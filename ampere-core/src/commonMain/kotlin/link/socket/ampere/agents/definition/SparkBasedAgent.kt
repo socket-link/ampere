@@ -10,6 +10,7 @@ import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.definition.product.ProductState
 import link.socket.ampere.agents.definition.project.ProjectState
 import link.socket.ampere.agents.definition.qa.QualityState
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
@@ -119,6 +120,15 @@ open class SparkBasedAgent<S : AgentState>(
      */
     @Transient
     private val _executor: Executor? = null,
+    /**
+     * Ambient Arc-run identity (AMPR-240). Threaded into [AgentReasoning] so
+     * every `RoutingContext` this agent builds carries it as `workflowId`,
+     * reaching `ProviderCallStartedEvent`/`ProviderCallCompletedEvent` and
+     * therefore `ArcTraceProjection`. Null preserves pre-existing behavior
+     * (no run correlation) for callers that don't construct through an Arc.
+     */
+    @Transient
+    private val _runId: RunId? = null,
 ) : ObservableAgent<S>(_eventApi, _observabilityScope) {
 
     @Transient
@@ -191,6 +201,7 @@ open class SparkBasedAgent<S : AgentState>(
             executorId = id,
             eventApi = _eventApi,
             activePromptProvider = { currentSystemPrompt },
+            runId = _runId,
         ) {
             agentRole = "Spark-Based Agent (${affinity.name})"
             availableTools = requiredTools

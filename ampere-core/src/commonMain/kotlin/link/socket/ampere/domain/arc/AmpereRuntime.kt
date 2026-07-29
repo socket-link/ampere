@@ -1,8 +1,12 @@
 package link.socket.ampere.domain.arc
 
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
+import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.trace.ArcRunId
 import link.socket.ampere.util.systemFileSystem
 import okio.FileSystem
 import okio.Path
@@ -12,6 +16,7 @@ import okio.Path.Companion.toPath
  * Result of a complete Arc lifecycle execution.
  */
 data class ArcExecutionResult(
+    val runId: ArcRunId,
     val chargeResult: ChargeResult,
     val flowResult: FlowResult,
     val pulseResult: PulseResult,
@@ -44,6 +49,15 @@ class AmpereRuntime(
     private val cognitiveRelay: CognitiveRelay? = null,
     private val executor: Executor? = null,
     private val upstreamLlmClient: UpstreamLlmClient? = null,
+    /**
+     * Optional factory for a per-agent [AgentEventApi] (AMPR-240). When
+     * supplied, spawned agents publish `ProviderCallStartedEvent`/
+     * `ProviderCallCompletedEvent` (and other telemetry) through it, which is
+     * what lets [link.socket.ampere.trace.ArcTraceProjection] see this run's
+     * model invocations. Null preserves the pre-existing behavior (no event
+     * API, no persisted telemetry).
+     */
+    private val eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
 ) {
     private var chargeResult: ChargeResult? = null
     private var flowResult: FlowResult? = null
@@ -53,11 +67,15 @@ class AmpereRuntime(
      * Execute the full Arc lifecycle for a given goal.
      *
      * @param userGoal The goal to accomplish
+     * @param runId Ambient identity for this Arc execution (AMPR-240). Threaded down into every
+     *   spawned agent so their `RoutingContext.workflowId` — and therefore
+     *   `ProviderCallStartedEvent`/`ProviderCallCompletedEvent` — carries this run's id. Defaults to a
+     *   freshly generated id so existing callers keep working unchanged.
      * @return ArcExecutionResult containing results from all three phases
      * @throws IllegalStateException if already running
      * @throws IllegalArgumentException if goal is blank
      */
-    suspend fun execute(userGoal: String): ArcExecutionResult {
+    suspend fun execute(userGoal: String, runId: ArcRunId = generateUUID("arc-run")): ArcExecutionResult {
         require(!isRunning) { "Runtime is already executing" }
         require(userGoal.isNotBlank()) { "User goal cannot be blank" }
 
@@ -65,7 +83,7 @@ class AmpereRuntime(
 
         try {
             // Phase 1: Charge - Initialize project context and spawn agents
-            val charge = executeCharge(userGoal)
+            val charge = executeCharge(userGoal, runId)
             chargeResult = charge
 
             // Phase 2: Flow - Execute agent loop
@@ -76,6 +94,7 @@ class AmpereRuntime(
             val pulse = executePulse(charge, flow)
 
             return ArcExecutionResult(
+                runId = runId,
                 chargeResult = charge,
                 flowResult = flow,
                 pulseResult = pulse,
@@ -89,7 +108,7 @@ class AmpereRuntime(
      * Execute only the Charge phase.
      * Useful for testing or when you need to inspect the project context before proceeding.
      */
-    suspend fun executeChargeOnly(userGoal: String): ChargeResult {
+    suspend fun executeChargeOnly(userGoal: String, runId: ArcRunId = generateUUID("arc-run")): ChargeResult {
         require(userGoal.isNotBlank()) { "User goal cannot be blank" }
 
         val chargePhase = ChargePhase(
@@ -99,11 +118,13 @@ class AmpereRuntime(
             cognitiveRelay = cognitiveRelay,
             executor = executor,
             upstreamLlmClient = upstreamLlmClient,
+            runId = runId,
+            eventApiFactory = eventApiFactory,
         )
         return chargePhase.execute(userGoal)
     }
 
-    private suspend fun executeCharge(userGoal: String): ChargeResult {
+    private suspend fun executeCharge(userGoal: String, runId: ArcRunId): ChargeResult {
         val chargePhase = ChargePhase(
             arcConfig = arcConfig,
             projectDir = projectDir,
@@ -111,6 +132,8 @@ class AmpereRuntime(
             cognitiveRelay = cognitiveRelay,
             executor = executor,
             upstreamLlmClient = upstreamLlmClient,
+            runId = runId,
+            eventApiFactory = eventApiFactory,
         )
         return chargePhase.execute(userGoal)
     }

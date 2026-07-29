@@ -2,8 +2,12 @@ package link.socket.ampere.trace
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import link.socket.ampere.agents.domain.RunId
 
-typealias ArcRunId = String
+/** The identity of one Arc execution. Alias of [RunId] (see AMPR-240) — same value, trace-package name. */
+typealias ArcRunId = RunId
+
+/** The Arc *configuration* identity (e.g. `"startup-saas"`) — distinct from a run instance. */
 typealias ArcId = String
 
 @Serializable
