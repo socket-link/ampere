@@ -87,6 +87,13 @@ class AmpereRuntime(
     @Volatile
     private var stopRequested = false
 
+    /**
+     * Sticky record of a [cancel] call, so one that lands in the window between a run being
+     * marked running and its job existing is not lost. Checked once the job is in hand.
+     */
+    @Volatile
+    private var cancelRequested = false
+
     /** Set for the duration of [execute] so [cancel] has something to cancel. */
     @Volatile
     private var runJob: CompletableJob? = null
@@ -117,11 +124,15 @@ class AmpereRuntime(
         require(!isRunning) { "Runtime is already executing" }
         require(userGoal.isNotBlank()) { "User goal cannot be blank" }
 
-        isRunning = true
         stopRequested = false
+        cancelRequested = false
         chargeResult = null
         flowResult = null
         flowPhase = null
+
+        // Published last, and read by callers as the signal that this run's state is reset —
+        // so a `cancel()` that observes `isRunning` cannot have its flag wiped by the lines above.
+        isRunning = true
 
         // A per-run child of the caller-owned scope: cancellable on its own (so `cancel()` does
         // not touch the caller), and cancelled + joined in the `finally` below so the run leaves
@@ -130,6 +141,11 @@ class AmpereRuntime(
         val job = SupervisorJob(agentScope.coroutineContext[Job])
         val runScope = CoroutineScope(agentScope.coroutineContext + job)
         runJob = job
+
+        // A `cancel()` that raced this setup had no job to act on. It left its flag behind.
+        if (cancelRequested) {
+            job.cancel(CancellationException(CANCELLATION_MESSAGE))
+        }
 
         try {
             return runScope.async { runArc(userGoal, runId, runScope) }.await()
@@ -259,9 +275,14 @@ class AmpereRuntime(
      * Cancels the run's coroutine scope, so the Flow tick loop stops at its next cancellation
      * point and every agent coroutine spawned by the run is torn down. [execute] returns
      * [ArcOutcome.Cancelled] carrying whatever partial phase results exist.
+     *
+     * Sticky within a run: a call that arrives after [isRunning] goes true but before the run's
+     * job exists is applied by [execute] as soon as it has one. A call made while no run is in
+     * flight is discarded — the next [execute] starts clean.
      */
     fun cancel() {
-        runJob?.cancel(CancellationException("Arc execution cancelled"))
+        cancelRequested = true
+        runJob?.cancel(CancellationException(CANCELLATION_MESSAGE))
     }
 
     /**
@@ -275,6 +296,8 @@ class AmpereRuntime(
     fun getArcConfig(): ArcConfig = arcConfig
 
     companion object {
+        internal const val CANCELLATION_MESSAGE = "Arc execution cancelled"
+
         /**
          * Create a runtime from an Arc configuration and a project directory path string.
          *

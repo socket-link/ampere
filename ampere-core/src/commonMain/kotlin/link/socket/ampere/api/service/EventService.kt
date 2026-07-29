@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
+import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
@@ -156,6 +157,22 @@ fun EventService.routingEvents(
 fun EventService.completionEvents(
     filters: EventRelayFilters = EventRelayFilters(),
 ): Flow<ProviderCallCompletedEvent> = observe(filters).filterIsInstance<ProviderCallCompletedEvent>()
+
+/**
+ * Stream every Emission produced anywhere in the system, as the bus event that carries it.
+ *
+ * Polymorphic: `EmissionEvent.Produced` covers both `BaseProduced` and
+ * [HumanInteractionEvent.InputRequested], so a subscriber sees generic Emissions and human-input
+ * requests through one stream. Read `event.emission.provenance.runId` to attribute one to an Arc.
+ *
+ * For a single Arc run, prefer [link.socket.ampere.domain.arc.bridge.ArcRunHandle.observe] or
+ * [link.socket.ampere.agents.events.relay.emissions] — both filter by run and carry an explicit
+ * overflow policy, which this general-purpose stream inherits from the relay.
+ */
+@link.socket.ampere.api.AmpereStableApi
+fun EventService.emissionEvents(
+    filters: EventRelayFilters = EventRelayFilters(),
+): Flow<EmissionEvent.Produced> = observe(filters).filterIsInstance<EmissionEvent.Produced>()
 
 @link.socket.ampere.api.AmpereStableApi
 fun EventService.escalationFiredEvents(

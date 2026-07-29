@@ -51,7 +51,8 @@ properties for free:
 
 ## Where it lives
 
-- `ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/events/bus/EventSerialBus.kt` — the bus itself; `publish`, `publishAsync`, `subscribe`, `unsubscribe`.
+- `ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/events/bus/EventSerialBus.kt` — the bus itself; `publish`, `publishAsync`, `subscribe`/`subscribeSuspending`, `unsubscribe`/`unsubscribeSuspending`.
+- `agents/events/relay/EmissionStream.kt` — `EventSerialBus.emissions(runId)`, the per-run Emission Flow the Swift Arc bridge streams progress through.
 - `agents/events/bus/EventSerialBusFactory.kt` — wiring the bus into the application graph.
 - `agents/events/api/AgentEventApi.kt` — the agent-facing facade for emitting events without touching the bus directly.
 - `agents/events/relay/EventRelayService.kt` — out-of-process bridging (e.g., CLI streaming).
@@ -70,12 +71,17 @@ properties for free:
 - **The bus does not persist; loggers and stores do.** A change that makes `EventSerialBus.publish` write to a database directly violates the layering — persistence belongs to `EventStore` invoked by an event-aware logger or projector.
 - **`run_id` is propagated through the event chain.** Events emitted within an Arc run carry the originating `run_id` so trace projection can find them. Lossy event handlers that strip `run_id` break time-travel.
 - **No mutex held across handler invocation.** The bus snapshots handlers under the mutex and releases before launching coroutines. A change that holds `mutex` while running handlers would serialize the entire system.
+- **A subscription is a handle, not a label.** `unsubscribe(subscription)` removes exactly the handler that subscription was minted for, matched by object identity. Identity, not equality: two subscribers with the same `agentId` on the same event type produce equal `subscriptionId`s, so a value comparison would release both. The `unsubscribe(eventType)` overload is the blunt instrument — it removes every handler for that type — and exists only for callers that genuinely own the type.
+- **A Flow built on the bus tears down only itself.** Any adapter that turns bus callbacks into a `Flow` must release per subscription on cancellation. Unsubscribing by event type from a cancelled collector silences every other subscriber on those types — with no filters, every type in `EventRegistry`, including the emission reply routers an Arc depends on to receive replies.
+- **Overflow is a policy, never an accident.** A bus→Flow adapter buffers with an explicit `BufferOverflow` and reports what it dropped. A bare `trySend` into a default-capacity channel discards its own return value, so a slow consumer loses events with no signal at all.
 
 ## Common operations
 
 - **Publish an event** — `agentEventApi.publish(SomeEvent(...))`. The api wraps the bus and is the agent-facing entry point.
 - **Publish from a synchronous boundary hook** — use `EventSerialBus.publishAsync(event)` only when the caller cannot suspend, such as phase boundary hooks. Prefer `AgentEventApi.publish` elsewhere.
-- **Subscribe** — `bus.subscribe(eventType, scope) { event, subscription -> ... }`. Hold onto the returned `EventSubscription` so you can `unsubscribe` on shutdown.
+- **Subscribe** — `bus.subscribe(eventType, scope) { event, subscription -> ... }`. Hold onto the returned `EventSubscription` and pass *that instance* to `unsubscribe` on shutdown.
+- **Subscribe from a coroutine** — `bus.subscribeSuspending(...)` / `unsubscribeSuspending(...)`. The non-suspending overloads take the bus mutex under `runBlockingCompat`, which blocks the calling thread and throws outright on JS/WasmJS. Anything that can suspend — every Flow builder, every Swift-facing bridge — uses the suspending pair.
+- **Stream one Arc's Emissions** — `bus.emissions(runId, capacity, onDropped)` in `events/relay/EmissionStream.kt`. Per-collector subscription, `DROP_OLDEST`, and a running count of what was lost.
 - **Add a new event type** — extend `Event` (or the appropriate sub-sealed family in `agents/domain/event/`), register a `@Serializable` subclass with a stable `@SerialName`, add a CLI display handler, and add a logger summary in `Event.getSummary` if relevant.
 - **Observe phase transitions** — subscribe to `CognitivePhaseEvent.PhaseEntered.EVENT_TYPE` and/or `PhaseExited.EVENT_TYPE`; use `nestingDepth == 0` for outermost phase changes only.
 - **Publish an agent milestone** — call `AgentEventApi.reachMilestone(...)` or, for observable agents, `agent.reachMilestone(...)`. Milestones emit `MemoryEvent.MilestoneReached`, a low-volume sibling event to routine memory writes.
@@ -88,3 +94,5 @@ properties for free:
 - **Using `runBlocking` inside a handler.** Handlers run on the bus's `CoroutineScope`. Blocking that scope blocks the next dispatch loop. Suspend functions only.
 - **Emitting events outside an agent's `AgentEventApi`.** Direct `bus.publish` calls in domain code skip the source-tagging the api adds, which means the trace can't attribute the event to an agent.
 - **Persisting state in the bus.** The bus is a router. Anything that needs persistence belongs in a store one layer up.
+- **Unsubscribing by event type from a shared consumer.** It reads like "stop listening" and behaves like "nobody listens." Use the `Subscription` handle unless you are certain you are the only subscriber on that type, and say so in a comment if you are.
+- **Exposing `subscribe` across the FFI boundary.** It calls `runBlockingCompat`, so a Swift call from the main thread blocks the UI and can deadlock on Kotlin/Native. Swift gets a Flow or a callback facade, never the bus.

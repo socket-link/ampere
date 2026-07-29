@@ -72,3 +72,20 @@ jobs:
       - name: Run iOS simulator tests
         timeout-minutes: 25
         run: ./gradlew :ampere-core:iosSimulatorArm64Test
+
+      # The Kotlin↔Swift Arc bridge (AMPR-243). iosSimulatorArm64Test proves the Kotlin half
+      # runs on Native; only xcodebuild proves the Objective-C export is usable from Swift.
+      - name: Run Swift bridge tests
+        timeout-minutes: 30
+        run: |
+          UDID=$(xcrun simctl list devices available -j \
+            | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
+          test -n "$UDID" || { echo "No iPhone simulator available"; exit 1; }
+          xcodebuild test \
+            -project ampere-ios/ampere-ios.xcodeproj \
+            -scheme ampere-ios \
+            -destination "id=$UDID" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
