@@ -69,7 +69,7 @@ internal sealed interface DeclarativeSparkSource {
 
 /**
  * Bridges a parsed [DeclarativeSparkSource.Phase] back into the existing
- * [DeclarativePhaseSparkSource] data path used by [DeclarativePhaseSpark.toPhaseSpark].
+ * [DeclarativePhaseSparkSource] data path used by [DeclarativePhaseSparkSource.toPhaseSpark].
  * Keeping this adapter local to the parser layer means downstream phase-spark
  * consumers don't need to know the JSON variant exists.
  */

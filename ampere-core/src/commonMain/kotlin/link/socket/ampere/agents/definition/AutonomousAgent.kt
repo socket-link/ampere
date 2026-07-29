@@ -64,7 +64,7 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
      * tools that are registered at runtime, not just their statically-defined [requiredTools].
      *
      * Set this after agent creation (e.g., during system initialization) via
-     * [AmpereStartupResult.registry].
+     * [link.socket.ampere.startup.AmpereStartupResult.registry].
      */
     @Transient
     var toolRegistry: ToolRegistry? = null
