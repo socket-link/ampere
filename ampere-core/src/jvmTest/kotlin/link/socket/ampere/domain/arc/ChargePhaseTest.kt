@@ -5,7 +5,11 @@ import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.runTest
+import link.socket.ampere.agents.definition.SparkAgentFactory
 import okio.FileSystem
 import okio.Path.Companion.toPath
 
@@ -79,7 +83,12 @@ class ChargePhaseTest {
             ),
         )
 
-        val agents = ArcAgentSpawner().spawn(arcConfig, context)
+        val spawnScope = CoroutineScope(SupervisorJob())
+        val agents = try {
+            ArcAgentSpawner(SparkAgentFactory(scope = spawnScope)).spawn(arcConfig, context)
+        } finally {
+            spawnScope.cancel()
+        }
 
         assertEquals(2, agents.size)
 
@@ -124,7 +133,11 @@ class ChargePhaseTest {
             ),
         )
 
-        val result = ChargePhase(arcConfig, tempDir.toString().toPath()).execute("Implement auth and add tests")
+        val result = ChargePhase(
+            arcConfig = arcConfig,
+            projectDir = tempDir.toString().toPath(),
+            agentScope = backgroundScope,
+        ).execute("Implement auth and add tests")
 
         assertEquals("ChargeProject", result.projectContext.projectId)
         assertTrue(result.projectContext.techStack.isNotEmpty())

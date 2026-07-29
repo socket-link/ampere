@@ -9,11 +9,15 @@ import com.aallam.openai.api.model.ModelId
 import com.charleskorn.kaml.Yaml
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.io.path.createTempDirectory
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.serialization.encodeToString
 import link.socket.ampere.agents.definition.SparkAgentFactory
 import link.socket.ampere.agents.domain.routing.RoutingFloorUnmetException
@@ -37,6 +41,14 @@ import okio.Path.Companion.toPath
  * that makes a declared floor mean something rather than being silently ignored.
  */
 class ArcRungPropagationTest {
+
+    /** Owns the agents these tests spawn; cancelled once each test is done with them. */
+    private val agentScope = CoroutineScope(SupervisorJob())
+
+    @AfterTest
+    fun cancelAgentScope() {
+        agentScope.cancel()
+    }
 
     // The agent's static fallback. If the relay ever resolved to this on a
     // floored step, the floor would have been ignored — which is the bug.
@@ -150,7 +162,7 @@ class ArcRungPropagationTest {
             ),
         )
 
-        val agents = ArcAgentSpawner().spawn(arc, projectContext())
+        val agents = ArcAgentSpawner(SparkAgentFactory(scope = agentScope)).spawn(arc, projectContext())
 
         assertEquals(
             CapabilityRung.THREE,
@@ -171,7 +183,7 @@ class ArcRungPropagationTest {
             minimumRung = CapabilityRung.THREE,
         )
 
-        val agents = ArcAgentSpawner().spawn(arc, projectContext())
+        val agents = ArcAgentSpawner(SparkAgentFactory(scope = agentScope)).spawn(arc, projectContext())
 
         assertEquals(CapabilityRung.THREE, agents[0].agentConfiguration.agentDefinition.minimumRung)
     }
@@ -186,7 +198,7 @@ class ArcRungPropagationTest {
             ),
         )
 
-        val agents = ArcAgentSpawner().spawn(arc, projectContext())
+        val agents = ArcAgentSpawner(SparkAgentFactory(scope = agentScope)).spawn(arc, projectContext())
 
         assertNotNull(
             agents[0].agentConfiguration.cognitiveRelay,
@@ -212,6 +224,7 @@ class ArcRungPropagationTest {
 
         val agent = ArcAgentSpawner(
             agentFactory = SparkAgentFactory(
+                scope = agentScope,
                 defaultAiConfiguration = agentFallback,
                 upstreamLlmClient = client,
             ),
@@ -239,6 +252,7 @@ class ArcRungPropagationTest {
 
         val agent = ArcAgentSpawner(
             agentFactory = SparkAgentFactory(
+                scope = agentScope,
                 defaultAiConfiguration = agentFallback,
                 upstreamLlmClient = client,
             ),
@@ -259,6 +273,7 @@ class ArcRungPropagationTest {
 
         val agent = ArcAgentSpawner(
             agentFactory = SparkAgentFactory(
+                scope = agentScope,
                 defaultAiConfiguration = agentFallback,
                 upstreamLlmClient = client,
             ),

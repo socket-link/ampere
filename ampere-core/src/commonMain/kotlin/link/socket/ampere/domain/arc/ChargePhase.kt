@@ -1,5 +1,6 @@
 package link.socket.ampere.domain.arc
 
+import kotlinx.coroutines.CoroutineScope
 import link.socket.ampere.agents.definition.Agent
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.SparkAgentFactory
@@ -70,9 +71,15 @@ data class GoalNode(
     val children: List<GoalNode> = emptyList(),
 )
 
+/**
+ * @param agentScope Caller-owned scope that every agent spawned here is bound to. Required, and
+ *   deliberately not defaulted: agents spawned onto an implicit scope have no owner and no
+ *   cancellation path, which is the orphaned-coroutine hole this parameter exists to close.
+ */
 class ChargePhase(
     private val arcConfig: ArcConfig,
     private val projectDir: Path,
+    private val agentScope: CoroutineScope,
     private val fileSystem: FileSystem = systemFileSystem,
     private val cognitiveRelay: CognitiveRelay? = null,
     private val executor: Executor? = null,
@@ -97,6 +104,7 @@ class ChargePhase(
 
         val agents = ArcAgentSpawner(
             agentFactory = SparkAgentFactory(
+                scope = agentScope,
                 cognitiveRelay = cognitiveRelay,
                 executor = executor,
                 upstreamLlmClient = upstreamLlmClient,
@@ -309,7 +317,7 @@ internal class GoalTreeBuilder {
 }
 
 internal class ArcAgentSpawner(
-    private val agentFactory: SparkAgentFactory = SparkAgentFactory(),
+    private val agentFactory: SparkAgentFactory,
     private val sparkRegistry: SparkRegistry = DefaultSparkCatalog.registry,
 ) {
     fun spawn(arcConfig: ArcConfig, projectContext: ProjectContext): List<SparkBasedAgent<CodeState>> {

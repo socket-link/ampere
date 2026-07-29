@@ -1,5 +1,9 @@
 package link.socket.ampere.domain.arc
 
+import kotlin.concurrent.Volatile
+import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import link.socket.ampere.agents.definition.Agent
@@ -17,9 +21,19 @@ data class FlowResult(
 )
 
 enum class TerminationReason {
+    /** Every goal in the tree was completed. */
     GOAL_COMPLETE,
+
+    /** The tick budget ran out before the goal tree was complete. */
     MAX_TICKS_REACHED,
+
+    /** A caller asked for a graceful stop via [FlowPhase.stop] / `AmpereRuntime.stop()`. */
     MANUAL_STOP,
+
+    /** The Flow coroutine was cancelled; the tick loop bailed at its next cancellation point. */
+    CANCELLED,
+
+    /** A tick threw. The exception is rethrown; this reason only labels the partial result. */
     ERROR,
 }
 
@@ -49,13 +63,21 @@ class FlowPhase(
     private val goalTree: GoalTree,
     private val maxTicks: Int = 100,
 ) {
+    // Volatile because [stop] is called from another thread while the tick loop is running, and
+    // [getCurrentTick]/[snapshot] are read from another thread while it is still ticking.
+    @Volatile
     private var currentTick = 0
+
     private val sharedContext = SharedContext(
         goalTree = goalTree,
         currentGoal = goalTree.root,
     )
     private val barrierMutex = Mutex()
+
+    @Volatile
     private var isComplete = false
+
+    @Volatile
     private var terminationReason: TerminationReason? = null
 
     suspend fun execute(): FlowResult {
@@ -66,27 +88,48 @@ class FlowPhase(
             "FlowPhase currently only supports SEQUENTIAL orchestration"
         }
 
-        while (!isComplete && currentTick < maxTicks) {
-            executeTick()
-            currentTick++
+        try {
+            while (!isComplete && currentTick < maxTicks) {
+                // The tick loop is the Arc's cancellation point: a tick can be long and an
+                // inner suspend call may never hit one, so check explicitly every tick.
+                coroutineContext.ensureActive()
 
-            if (sharedContext.isGoalTreeComplete()) {
-                isComplete = true
-                terminationReason = TerminationReason.GOAL_COMPLETE
+                executeTick()
+                currentTick++
+
+                if (sharedContext.isGoalTreeComplete()) {
+                    isComplete = true
+                    terminationReason = TerminationReason.GOAL_COMPLETE
+                }
             }
+        } catch (e: CancellationException) {
+            terminationReason = TerminationReason.CANCELLED
+            throw e
+        } catch (e: Throwable) {
+            terminationReason = TerminationReason.ERROR
+            throw e
         }
 
         if (!isComplete && currentTick >= maxTicks) {
             terminationReason = TerminationReason.MAX_TICKS_REACHED
         }
 
-        return FlowResult(
-            completedGoals = sharedContext.completedGoals.toList(),
-            finalTick = currentTick,
-            agentOutcomes = sharedContext.agentOutcomes.mapValues { it.value.toList() },
-            terminationReason = terminationReason ?: TerminationReason.MANUAL_STOP,
-        )
+        return snapshot()
     }
+
+    /**
+     * The Flow's progress so far, as a [FlowResult].
+     *
+     * [execute] returns this on the happy path, and callers that hold the [FlowPhase] can call
+     * it after a cancellation or failure to recover the partial run — that is the whole reason
+     * `AmpereRuntime` holds the instance rather than dropping it.
+     */
+    fun snapshot(): FlowResult = FlowResult(
+        completedGoals = sharedContext.completedGoals.toList(),
+        finalTick = currentTick,
+        agentOutcomes = sharedContext.agentOutcomes.mapValues { it.value.toList() },
+        terminationReason = terminationReason ?: TerminationReason.MANUAL_STOP,
+    )
 
     private suspend fun executeTick() {
         val agentOrder = determineAgentOrder()
@@ -196,6 +239,10 @@ class FlowPhase(
 
     fun isComplete(): Boolean = isComplete
 
+    /**
+     * Request a graceful stop. The tick loop exits after the tick in flight, and the run
+     * terminates with [TerminationReason.MANUAL_STOP].
+     */
     fun stop() {
         isComplete = true
         terminationReason = TerminationReason.MANUAL_STOP

@@ -3,7 +3,15 @@ package link.socket.ampere.domain.arc
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import link.socket.ampere.agents.definition.SparkAgentFactory
+import okio.Path.Companion.toPath
 
 class FlowPhaseTest {
 
@@ -90,6 +98,57 @@ class FlowPhaseTest {
         assertEquals(false, flow.isComplete())
         flow.stop()
         assertTrue(flow.isComplete())
+        assertEquals(TerminationReason.MANUAL_STOP, flow.snapshot().terminationReason)
+    }
+
+    @Test
+    fun `flow phase tick loop bails out when its coroutine is cancelled`() = runTest {
+        val arcConfig = ArcConfig(
+            name = "test-arc",
+            agents = listOf(ArcAgentConfig(role = "code")),
+            orchestration = OrchestrationConfig(type = OrchestrationType.SEQUENTIAL),
+        )
+
+        val goalTree = GoalTree(root = GoalNode(id = "goal-1", description = "Test goal"))
+
+        val agentScope = CoroutineScope(SupervisorJob())
+        val agents = try {
+            ArcAgentSpawner(SparkAgentFactory(scope = agentScope)).spawn(
+                arcConfig,
+                ProjectContext(
+                    projectId = "demo",
+                    description = "Demo",
+                    repositoryRoot = "/tmp".toPath(),
+                    architecture = "Layered",
+                    conventions = "Kotlin",
+                    techStack = listOf("Kotlin"),
+                    sources = emptyList(),
+                ),
+            )
+        } finally {
+            agentScope.cancel()
+        }
+
+        val flow = FlowPhase(
+            arcConfig = arcConfig,
+            agents = agents,
+            goalTree = goalTree,
+            maxTicks = 100,
+        )
+
+        // Cancel from inside the coroutine that runs the loop: the very first `ensureActive()`
+        // must throw rather than grinding through all 100 ticks.
+        val outerJob = Job()
+        val thrown = runCatching {
+            withContext(outerJob) {
+                outerJob.cancel()
+                flow.execute()
+            }
+        }.exceptionOrNull()
+
+        assertTrue(thrown is CancellationException, "Cancellation must propagate, not be swallowed")
+        assertEquals(0, flow.getCurrentTick())
+        assertEquals(TerminationReason.CANCELLED, flow.snapshot().terminationReason)
     }
 
     @Test

@@ -104,6 +104,7 @@ class ArcRunIdentityIntegrationTest {
         val runtime = AmpereRuntime(
             arcConfig = arcConfig,
             projectDir = tempDir.toString().toPath(),
+            agentScope = backgroundScope,
             maxFlowTicks = 1,
             upstreamLlmClient = FakeUpstreamLlmClient,
             eventApiFactory = { agentId -> eventApiFactory.create(agentId) },

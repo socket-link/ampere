@@ -1,5 +1,8 @@
 package link.socket.ampere.eval.bench
 
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.EventSource
@@ -9,6 +12,7 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.NoOpExecutor
 import link.socket.ampere.domain.arc.AmpereRuntime
 import link.socket.ampere.domain.arc.ArcConfig
+import link.socket.ampere.domain.arc.ArcOutcome
 import link.socket.ampere.domain.arc.ArcRegistry
 import link.socket.ampere.eval.meter.Reading
 import link.socket.ampere.eval.relay.MissPolicy
@@ -121,22 +125,15 @@ class Bench(
 
         val playbackRelay = PlaybackRelay(trace = goldenTrace, missPolicy = MissPolicy.Error)
 
-        val runResult = runCatching {
-            AmpereRuntime(
-                arcConfig = arcConfig,
-                projectDir = projectDir,
-                cognitiveRelay = playbackRelay,
-                executor = NoOpExecutor(),
-                maxFlowTicks = maxFlowTicks,
-            ).execute(probe.seed.userGoal)
-        }
+        val outcome = runArc(arcConfig, probe, playbackRelay)
 
-        return runResult.fold(
-            onSuccess = { grade(probe, goldenTrace) },
-            onFailure = { error ->
-                failingResult(probe, goldenTrace, "Arc run diverged from goldenTrace: ${error.message}")
-            },
-        )
+        return when (outcome) {
+            is ArcOutcome.Completed -> grade(probe, goldenTrace)
+            is ArcOutcome.Cancelled ->
+                failingResult(probe, goldenTrace, "Arc run was cancelled before it finished.")
+            is ArcOutcome.Failed ->
+                failingResult(probe, goldenTrace, "Arc run diverged from goldenTrace: ${outcome.cause.message}")
+        }
     }
 
     private suspend fun runLive(runId: String, probe: Probe, arcConfig: ArcConfig): ProbeResult {
@@ -155,33 +152,61 @@ class Bench(
 
         val handle = recorder.start(runId = runId, arcId = probe.arcId)
 
-        val runResult = runCatching {
-            AmpereRuntime(
-                arcConfig = arcConfig,
-                projectDir = projectDir,
-                cognitiveRelay = relay,
-                executor = NoOpExecutor(),
-                maxFlowTicks = maxFlowTicks,
-            ).execute(probe.seed.userGoal)
+        // The recording handle must be closed even if the bench coroutine is cancelled, so stop
+        // it in a `finally` rather than only on the happy path.
+        var traceResult: Result<Trace>? = null
+        val outcome = try {
+            runArc(arcConfig, probe, relay)
+        } finally {
+            traceResult = withContext(NonCancellable) { handle.stop() }
         }
-
-        val traceResult = handle.stop()
+        val trace = checkNotNull(traceResult) { "TraceRecorder handle was not stopped." }
 
         return when {
-            runResult.isFailure ->
+            outcome is ArcOutcome.Cancelled ->
                 failingResult(
                     probe,
-                    traceResult.getOrNull() ?: emptyTrace(runId, probe),
-                    "Live run failed: ${runResult.exceptionOrNull()?.message}",
+                    trace.getOrNull() ?: emptyTrace(runId, probe),
+                    "Live run was cancelled before it finished.",
                 )
-            traceResult.isFailure ->
+            outcome is ArcOutcome.Failed ->
+                failingResult(
+                    probe,
+                    trace.getOrNull() ?: emptyTrace(runId, probe),
+                    "Live run failed: ${outcome.cause.message}",
+                )
+            trace.isFailure ->
                 failingResult(
                     probe,
                     emptyTrace(runId, probe),
-                    "Failed to persist recorded trace: ${traceResult.exceptionOrNull()?.message}",
+                    "Failed to persist recorded trace: ${trace.exceptionOrNull()?.message}",
                 )
-            else -> grade(probe, traceResult.getOrThrow())
+            else -> grade(probe, trace.getOrThrow())
         }
+    }
+
+    /**
+     * Runs one probe's Arc to a terminal [ArcOutcome].
+     *
+     * `coroutineScope` makes the run a genuine child of the bench coroutine: agents are bound to
+     * it, and cancelling the bench cancels the Arc instead of leaving detached agents behind.
+     * Cancellation is not caught here — [AmpereRuntime.execute] already returns
+     * [ArcOutcome.Cancelled] for its own cancellation and rethrows the caller's, and swallowing
+     * the latter is exactly what the old `runCatching` did wrong.
+     */
+    private suspend fun runArc(
+        arcConfig: ArcConfig,
+        probe: Probe,
+        relay: CognitiveRelay,
+    ): ArcOutcome = coroutineScope {
+        AmpereRuntime(
+            arcConfig = arcConfig,
+            projectDir = projectDir,
+            agentScope = this,
+            cognitiveRelay = relay,
+            executor = NoOpExecutor(),
+            maxFlowTicks = maxFlowTicks,
+        ).execute(probe.seed.userGoal)
     }
 
     private suspend fun grade(probe: Probe, trace: Trace): ProbeResult {
