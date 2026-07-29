@@ -113,6 +113,14 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Cache Xcode DerivedData
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData
+          key: deriveddata-${{ runner.os }}-${{ hashFiles('ampere-ios/**/*.swift', 'ampere-ios/**/project.pbxproj') }}
+          restore-keys: |
+            deriveddata-${{ runner.os }}-
+
       - name: Create local.properties
         run: |
           cat > local.properties << 'EOF'
@@ -127,16 +135,37 @@ jobs:
 
       # The Kotlin↔Swift Arc bridge (AMPR-243). iosSimulatorArm64Test proves the Kotlin half
       # runs on Native; only xcodebuild proves the Objective-C export is usable from Swift.
-      - name: Run Swift bridge tests
-        timeout-minutes: 30
+      #
+      # AMPR-244: build-for-testing (which triggers the Kotlin/Native framework link) and the
+      # simulator boot are independent and were previously fully serialized. Kick the boot off
+      # in the background before the build so the ~7m link and the ~3m boot overlap instead of
+      # stacking.
+      - name: Build Swift bridge tests
+        timeout-minutes: 20
         run: |
           UDID=$(xcrun simctl list devices available -j \
             | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
           test -n "$UDID" || { echo "No iPhone simulator available"; exit 1; }
-          xcodebuild test \
+          echo "SIMULATOR_UDID=$UDID" >> "$GITHUB_ENV"
+
+          xcrun simctl boot "$UDID" 2>/dev/null &
+
+          xcodebuild build-for-testing \
             -project ampere-ios/ampere-ios.xcodeproj \
             -scheme ampere-ios \
             -destination "id=$UDID" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Run Swift bridge tests
+        timeout-minutes: 10
+        run: |
+          xcodebuild test-without-building \
+            -project ampere-ios/ampere-ios.xcodeproj \
+            -scheme ampere-ios \
+            -destination "id=$SIMULATOR_UDID" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
