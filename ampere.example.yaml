@@ -130,3 +130,24 @@ team:
 # Set a default goal for the team. Can also be passed via CLI:
 #   ampere --goal "Build a user authentication system"
 goal: "Build a user authentication system"
+
+# Model Rung Overrides (optional)
+# --------------------------------
+# Re-rate a model's capability tier (or cost/capabilities) without waiting on a
+# framework release or recompiling. Loaded via YamlModelDescriptorSource and
+# layered *over* the bundled catalog (defaultModelDescriptors()) — a model
+# named here has only its listed fields replaced; every other field on that
+# model, and every model not named here, keeps its shipped value. Routing
+# picks up the change the next time the registry's refresh() is called
+# (caller-driven; there is no file-watching or hot reload).
+#
+# model-overrides:
+#   claude-haiku-4-5:
+#     rung: TWO                # ZERO, ONE, TWO, THREE, or FOUR
+#   gemini-2.5-flash:
+#     rung: THREE
+#     cost-per-watt: 0.009      # optional: USD per normalized Watt (1 Watt = 1000 tokens)
+#     capabilities: [TOOL_CALLING, LONG_CONTEXT]   # optional: replaces the model's capability set
+#
+# A model name not present in the bundled catalog fails the load (Result.failure)
+# rather than being silently ignored — the prior catalog is left untouched.
