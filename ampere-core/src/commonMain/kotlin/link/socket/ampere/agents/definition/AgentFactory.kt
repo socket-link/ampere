@@ -17,7 +17,9 @@ import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.domain.routing.CognitiveRelayImpl
 import link.socket.ampere.agents.domain.routing.RelayConfig
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
+import link.socket.ampere.agents.domain.routing.capability.DefaultModelDescriptorSource
 import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorSource
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -73,6 +75,8 @@ enum class AgentType {
  * @param aiConfiguration Optional AI configuration for model selection
  * @param projectSpark Optional project spark (defaults to AmpereProjectSpark)
  * @param toolWriteCodeFileOverride Optional override for write_code_file tool
+ * @param modelDescriptorSource Optional catalog source for the default relay's
+ *   model registry (AMPR-231); ignored when [cognitiveRelay] is supplied
  */
 class AgentFactory(
     private val scope: CoroutineScope,
@@ -101,6 +105,14 @@ class AgentFactory(
      * downgrading.
      */
     private val codeAgentMinimumRung: CapabilityRung? = DEFAULT_CODE_AGENT_RUNG,
+    /**
+     * Catalog source for the default relay's [InMemoryModelDescriptorRegistry]
+     * (AMPR-231). Null falls back to [DefaultModelDescriptorSource] — the
+     * bundled cloud catalog, unchanged from prior behavior. Ignored when
+     * [cognitiveRelay] is supplied directly: an explicit relay owns its own
+     * registry, and the two are never merged.
+     */
+    private val modelDescriptorSource: ModelDescriptorSource? = null,
     /**
      * Outbound LLM transport handed to every agent this factory builds
      * (AMPR-236). `Ampere.fromEnvironment(upstreamLlmClient = ...)` supplies
@@ -164,9 +176,19 @@ class AgentFactory(
         cognitiveRelay ?: CognitiveRelayImpl(
             initialConfig = RelayConfig(rules = CapabilityRoutingDefaults.defaultCapabilityRules()),
             eventBus = eventSerialBus,
-            registry = InMemoryModelDescriptorRegistry(),
+            registry = InMemoryModelDescriptorRegistry(
+                // Loaded eagerly (mirrors phaseSparkLibrary below) so a supplied
+                // source governs routing immediately, not only after a future
+                // refresh() call.
+                seed = runBlockingCompat { effectiveModelDescriptorSource.load() }
+                    .getOrElse { InMemoryModelDescriptorRegistry.defaultModelDescriptors() },
+                source = effectiveModelDescriptorSource,
+            ),
         )
     }
+
+    private val effectiveModelDescriptorSource: ModelDescriptorSource
+        get() = modelDescriptorSource ?: DefaultModelDescriptorSource
 
     private val agentConfiguration: AgentConfiguration
         get() = AgentConfiguration(

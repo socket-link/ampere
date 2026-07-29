@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import link.socket.ampere.agents.definition.AgentFactory
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorSource
 import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.events.messages.DefaultThreadViewService
 import link.socket.ampere.agents.events.tickets.DefaultTicketViewService
@@ -57,6 +58,10 @@ import link.socket.ampere.memory.MemoryStore
  * @param agentScope Coroutine scope the instance's [AmpereInstance.agentFactory]
  *   hands to the agents it builds. Defaults to a fresh `Dispatchers.Default`
  *   scope; pass the environment's own scope to share cancellation.
+ * @param modelDescriptorSource Catalog source for the default relay's model
+ *   registry (AMPR-231). Null keeps the bundled cloud catalog. Has no effect
+ *   if a caller constructs agents with their own [AgentFactory] supplying a
+ *   [link.socket.ampere.agents.domain.routing.CognitiveRelay] directly.
  */
 @AmpereStableApi
 fun Ampere.fromEnvironment(
@@ -66,6 +71,7 @@ fun Ampere.fromEnvironment(
     memoryStore: MemoryStore? = null,
     upstreamLlmClient: UpstreamLlmClient? = null,
     agentScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
+    modelDescriptorSource: ModelDescriptorSource? = null,
 ): AmpereInstance {
     val sdkEventApi = environmentService.createEventApi("sdk-cli")
 
@@ -135,6 +141,7 @@ fun Ampere.fromEnvironment(
         eventApiFactory = { agentId -> environmentService.createEventApi(agentId) },
         eventSerialBus = environmentService.eventBus,
         upstreamLlmClient = upstreamLlmClient,
+        modelDescriptorSource = modelDescriptorSource,
     )
 
     return object : AmpereInstance {

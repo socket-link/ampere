@@ -1,5 +1,6 @@
 package link.socket.ampere.api
 
+import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorSource
 import link.socket.ampere.dsl.config.ProviderConfig
 import link.socket.ampere.dsl.events.Escalated
 
@@ -25,6 +26,9 @@ import link.socket.ampere.dsl.events.Escalated
  * @param workspace Workspace directory for file operations
  * @param databasePath Override default database location
  * @param onEscalation Callback invoked when an agent escalates to human
+ * @param modelDescriptorSource Catalog source for the default relay's model
+ *   registry (AMPR-231). Null keeps the bundled cloud catalog. Reaches the
+ *   embedding API without the caller touching `AgentFactory` directly.
  */
 @AmpereStableApi
 data class AmpereConfig(
@@ -33,6 +37,7 @@ data class AmpereConfig(
     val databasePath: String? = null,
     val onEscalation: ((Escalated) -> Unit)? = null,
     val pricingOverrides: PricingOverrides = PricingOverrides(),
+    val modelDescriptorSource: ModelDescriptorSource? = null,
 ) {
     class Builder {
         private var providerConfig: ProviderConfig? = null
@@ -40,6 +45,7 @@ data class AmpereConfig(
         private var databasePath: String? = null
         private var escalationHandler: ((Escalated) -> Unit)? = null
         private val pricingOverridesBuilder = PricingOverridesBuilder()
+        private var modelDescriptorSource: ModelDescriptorSource? = null
 
         /**
          * Set the AI provider configuration.
@@ -102,6 +108,18 @@ data class AmpereConfig(
             pricingOverridesBuilder.apply(configure)
         }
 
+        /**
+         * Catalog source for the default relay's model registry (AMPR-231).
+         * Omit to keep the bundled cloud catalog.
+         *
+         * ```
+         * modelDescriptorSource(MyCatalogSource)
+         * ```
+         */
+        fun modelDescriptorSource(source: ModelDescriptorSource) {
+            modelDescriptorSource = source
+        }
+
         fun build(): AmpereConfig {
             val provider = requireNotNull(providerConfig) {
                 "Provider is required. Use provider(AnthropicConfig()) or similar."
@@ -112,6 +130,7 @@ data class AmpereConfig(
                 databasePath = databasePath,
                 onEscalation = escalationHandler,
                 pricingOverrides = pricingOverridesBuilder.build(),
+                modelDescriptorSource = modelDescriptorSource,
             )
         }
     }
