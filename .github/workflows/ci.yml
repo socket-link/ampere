@@ -115,9 +115,14 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # Keyed per job: this job populates the test-binary cache bucket and the Swift bridge job
+      # Keyed per job: this job populates the test-binary gSTATIC bucket and the Swift bridge job
       # populates the framework one, so a shared key would make the two races overwrite each
       # other's entry on every run.
+      #
+      # Do NOT add a cross-job "konan-<os>-" restore-key. AMPR-253 did, and on any branch without
+      # its own entry yet the Swift bridge job restored *this* job's bucket instead. A mismatched
+      # Konan cache is far worse than none: the framework link went 323s (no cache) -> 1208s
+      # (wrong bucket) -> 138s (right bucket). A clean miss is the good failure mode here.
       - name: Cache Kotlin/Native toolchain
         uses: actions/cache@v4
         with:
@@ -125,7 +130,6 @@ jobs:
           key: konan-${{ runner.os }}-kotlin-tests-${{ hashFiles('gradle.properties') }}
           restore-keys: |
             konan-${{ runner.os }}-kotlin-tests-
-            konan-${{ runner.os }}-
 
       - name: Create local.properties
         run: |
@@ -190,7 +194,6 @@ jobs:
           key: konan-${{ runner.os }}-swift-bridge-${{ hashFiles('gradle.properties') }}
           restore-keys: |
             konan-${{ runner.os }}-swift-bridge-
-            konan-${{ runner.os }}-
 
       # Per AMPR-244 this had never successfully populated on any branch, and it still restores in
       # ~1s / saves in ~5s, so it is not currently buying anything. Kept because it only starts
