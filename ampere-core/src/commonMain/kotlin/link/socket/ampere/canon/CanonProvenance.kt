@@ -51,7 +51,7 @@ data class SourceHandle(
  */
 @Serializable
 data class NativePayload(
-    val schema: String,
+    val schema: NativeSchema,
     val fields: JsonObject,
 )
 

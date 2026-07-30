@@ -13,6 +13,7 @@ import link.socket.ampere.canon.CanonRing
 import link.socket.ampere.canon.CanonType
 import link.socket.ampere.canon.DocumentKind
 import link.socket.ampere.canon.NativePayload
+import link.socket.ampere.canon.NativeSchema
 import link.socket.ampere.canon.SourceHandle
 import link.socket.ampere.link.LinkId
 
@@ -31,7 +32,7 @@ class CanonAdapterTest {
      * four it does not. The four are the ones a naive write-back destroys.
      */
     private fun nativeMail() = NativePayload(
-        schema = "MailMessageEntity",
+        schema = NativeSchema("MailMessageEntity"),
         fields = JsonObject(
             mapOf(
                 "subject" to JsonPrimitive("Quarterly review"),
@@ -94,19 +95,19 @@ class CanonAdapterTest {
     @Test
     fun `projecting the wrong native schema fails rather than guessing`() {
         val adapter = MailMessageAdapter(FakeNativeStore())
-        val wrongShape = NativePayload("CalendarEventEntity", JsonObject(emptyMap()))
+        val wrongShape = NativePayload(NativeSchema("CalendarEventEntity"), JsonObject(emptyMap()))
 
         val failure = failureOf(adapter.project(wrongShape, handle, observedAt))
 
         assertIs<CanonConversionFailure.SchemaMismatch>(failure)
-        assertEquals("MailMessageEntity", failure.expectedSchema)
-        assertEquals("CalendarEventEntity", failure.actualSchema)
+        assertEquals(NativeSchema("MailMessageEntity"), failure.expectedSchema)
+        assertEquals(NativeSchema("CalendarEventEntity"), failure.actualSchema)
     }
 
     @Test
     fun `a missing required field is a typed failure and never a throw`() {
         val adapter = MailMessageAdapter(FakeNativeStore())
-        val empty = NativePayload("MailMessageEntity", JsonObject(emptyMap()))
+        val empty = NativePayload(NativeSchema("MailMessageEntity"), JsonObject(emptyMap()))
 
         val failure = failureOf(adapter.project(empty, handle, observedAt))
 
@@ -133,7 +134,7 @@ class CanonAdapterTest {
     fun `document round-trip preserves the fan-out discriminator`() = runTest {
         val adapter = FileDocumentAdapter(FakeNativeStore())
         val original = NativePayload(
-            schema = "FileEntity",
+            schema = NativeSchema("FileEntity"),
             fields = JsonObject(
                 mapOf(
                     "title" to JsonPrimitive("Roadmap"),
@@ -155,7 +156,7 @@ class CanonAdapterTest {
     fun `an unmappable document kind is a typed failure`() {
         val adapter = FileDocumentAdapter(FakeNativeStore())
         val payload = NativePayload(
-            schema = "FileEntity",
+            schema = NativeSchema("FileEntity"),
             fields = JsonObject(
                 mapOf(
                     "title" to JsonPrimitive("Mystery"),
@@ -268,7 +269,7 @@ class CanonAdapterTest {
         val entity = adapter.project(nativeMail(), handle, observedAt).getOrThrow()
         val corrupted = entity.copy(
             provenance = entity.provenance.copy(
-                nativePayload = NativePayload("CalendarEventEntity", JsonObject(emptyMap())),
+                nativePayload = NativePayload(NativeSchema("CalendarEventEntity"), JsonObject(emptyMap())),
             ),
         )
 

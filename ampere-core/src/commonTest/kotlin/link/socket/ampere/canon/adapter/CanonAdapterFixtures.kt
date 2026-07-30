@@ -3,7 +3,6 @@ package link.socket.ampere.canon.adapter
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import link.socket.ampere.canon.CanonDocument
@@ -13,6 +12,7 @@ import link.socket.ampere.canon.CanonProvenance
 import link.socket.ampere.canon.CanonType
 import link.socket.ampere.canon.DocumentKind
 import link.socket.ampere.canon.NativePayload
+import link.socket.ampere.canon.NativeSchema
 import link.socket.ampere.canon.SourceHandle
 import link.socket.ampere.link.LinkId
 
@@ -69,33 +69,27 @@ private fun mailFields(entity: CanonEmailMessage): Map<String, JsonElement> =
 
 private fun projectMailFields(
     canonType: CanonType,
-    nativeSchema: String,
+    nativeSchema: NativeSchema,
     fields: JsonObject,
     provenance: CanonProvenance,
-): Result<CanonEmailMessage> {
-    val subject = fields["subject"]?.jsonPrimitive?.contentOrNull
-        ?: return canonFailure(
-            CanonConversionFailure.MissingRequiredField(canonType, "subject", nativeSchema),
-        )
-
-    return Result.success(
+): Result<CanonEmailMessage> =
+    NativeFields.project(fields, canonType, nativeSchema) { mail ->
         CanonEmailMessage(
             canonId = CanonId(provenance.sourceHandle.nativeId),
             provenance = provenance,
-            subject = subject,
+            subject = mail.requireString("subject"),
             from = null,
-            bodyText = fields["bodyText"]?.jsonPrimitive?.contentOrNull,
-            isRead = fields["isRead"]?.jsonPrimitive?.booleanOrNull ?: false,
-        ),
-    )
-}
+            bodyText = mail.optionalString("bodyText"),
+            isRead = mail.optionalBoolean("isRead", default = false),
+        )
+    }
 
 class MailMessageAdapter(
     private val store: FakeNativeStore,
 ) : WritableCanonAdapter<CanonEmailMessage>() {
 
     override val canonType: CanonType = CanonType.EMAIL_MESSAGE
-    override val nativeSchema: String = "MailMessageEntity"
+    override val nativeSchema: NativeSchema = NativeSchema("MailMessageEntity")
     override val ownedFields: Set<String> = setOf("subject", "bodyText", "isRead")
 
     override fun projectFields(
@@ -120,38 +114,29 @@ class FileDocumentAdapter(
 ) : WritableCanonAdapter<CanonDocument>() {
 
     override val canonType: CanonType = CanonType.DOCUMENT
-    override val nativeSchema: String = "FileEntity"
+    override val nativeSchema: NativeSchema = NativeSchema("FileEntity")
     override val ownedFields: Set<String> = setOf("title", "documentKind", "mimeType")
 
     override fun projectFields(
         fields: JsonObject,
         provenance: CanonProvenance,
-    ): Result<CanonDocument> {
-        val title = fields["title"]?.jsonPrimitive?.contentOrNull
-            ?: return canonFailure(
-                CanonConversionFailure.MissingRequiredField(canonType, "title", nativeSchema),
-            )
-
-        val rawKind = fields["documentKind"]?.jsonPrimitive?.contentOrNull ?: "file"
-        val kind = DocumentKind.entries.firstOrNull { it.appleDomain == rawKind }
-            ?: return canonFailure(
-                CanonConversionFailure.MalformedField(
-                    canonType,
+    ): Result<CanonDocument> =
+        NativeFields.project(fields, canonType, nativeSchema) { document ->
+            val rawKind = document.optionalString("documentKind") ?: "file"
+            val kind = DocumentKind.entries.firstOrNull { it.appleDomain == rawKind }
+                ?: document.malformed<DocumentKind>(
                     "documentKind",
                     "no DocumentKind maps to Apple domain '$rawKind'",
-                ),
-            )
+                )
 
-        return Result.success(
             CanonDocument(
                 canonId = CanonId(provenance.sourceHandle.nativeId),
                 provenance = provenance,
-                title = title,
+                title = document.requireString("title"),
                 kind = kind,
-                mimeType = fields["mimeType"]?.jsonPrimitive?.contentOrNull,
-            ),
-        )
-    }
+                mimeType = document.optionalString("mimeType"),
+            )
+        }
 
     override fun canonFields(entity: CanonDocument): Result<Map<String, JsonElement>> =
         Result.success(
@@ -180,7 +165,7 @@ class OverreachingMailAdapter(
 ) : WritableCanonAdapter<CanonEmailMessage>() {
 
     override val canonType: CanonType = CanonType.EMAIL_MESSAGE
-    override val nativeSchema: String = "MailMessageEntity"
+    override val nativeSchema: NativeSchema = NativeSchema("MailMessageEntity")
     override val ownedFields: Set<String> = setOf("subject")
 
     override fun projectFields(
@@ -223,7 +208,7 @@ class ReadOnlyMailAdapter(
 ) : ReadableCanonAdapter<CanonEmailMessage>() {
 
     override val canonType: CanonType = CanonType.EMAIL_MESSAGE
-    override val nativeSchema: String = "MailMessageEntity"
+    override val nativeSchema: NativeSchema = NativeSchema("MailMessageEntity")
 
     override fun projectFields(
         fields: JsonObject,
@@ -243,7 +228,7 @@ class CreatingMailAdapter(
 ) : CreatingCanonAdapter<CanonEmailMessage>() {
 
     override val canonType: CanonType = CanonType.EMAIL_MESSAGE
-    override val nativeSchema: String = "MailMessageEntity"
+    override val nativeSchema: NativeSchema = NativeSchema("MailMessageEntity")
     override val ownedFields: Set<String> = setOf("subject", "bodyText", "isRead")
 
     private var nextId = 0
@@ -287,7 +272,7 @@ class OverreachingCreatingMailAdapter(
 ) : CreatingCanonAdapter<CanonEmailMessage>() {
 
     override val canonType: CanonType = CanonType.EMAIL_MESSAGE
-    override val nativeSchema: String = "MailMessageEntity"
+    override val nativeSchema: NativeSchema = NativeSchema("MailMessageEntity")
     override val ownedFields: Set<String> = setOf("subject")
 
     override fun projectFields(
