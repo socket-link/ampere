@@ -15,7 +15,7 @@ import kotlinx.serialization.Serializable
  * The canon type is the superset; a binding is a *projection* of it. Everything
  * the projection drops is named in [lossyFields] and is what the
  * preserve-and-merge write-back contract
- * ([link.socket.ampere.canon.adapter.CanonAdapter]) exists to protect.
+ * ([link.socket.ampere.canon.adapter.WritableCanonAdapter]) exists to protect.
  */
 @Serializable
 data class CanonBinding(

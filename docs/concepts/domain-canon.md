@@ -4,7 +4,7 @@ status: stable
 tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/canon/**
 related: [LinkLayer, PlugPermissions, AgentSurface, CognitionTrace]
-last_verified: 2026-07-28
+last_verified: 2026-07-29
 ---
 
 # Domain Canon
@@ -46,7 +46,7 @@ result. The canon earns its keep precisely where Apple's registry stops.
 - `canon/CanonBinding.kt` — `AppleSchemaBinding` (entity schema or system value type), `AndroidSchemaBinding`.
 - `canon/CanonProvenance.kt` — `CanonId`, `SourceHandle`, `NativePayload`, `CanonProvenance`.
 - `canon/CanonEntity.kt` — the sealed hierarchy; `CanonRing1Entities.kt`, `CanonRing2Entities.kt`, `CanonRing3Entities.kt`.
-- `canon/adapter/CanonAdapter.kt` — the transport-agnostic adapter SPI.
+- `canon/adapter/ReadableCanonAdapter.kt`, `WritableCanonAdapter.kt`, `CreatingCanonAdapter.kt` — the transport-agnostic adapter SPI, split by capability: read, write-back, create.
 - `canon/adapter/CanonConversionFailure.kt` — the closed failure set.
 - `ampere-core/src/commonTest/.../canon/` — round-trip, write-back-merge, and serialization-stability tests.
 - `.context/recon/apple-assistant-schemas-ios265.tsv` — the raw SDK enumeration.
@@ -55,8 +55,9 @@ result. The canon earns its keep precisely where Apple's registry stops.
 
 - **The canon set is closed for v1.** New nouns are a versioned change, not a Plug-declared extension. The escape hatch is `CanonProvenance.nativePayload`, not a new member.
 - **Every canon entity carries provenance.** An entity with no `SourceHandle` is a guess, not a canon entity.
-- **Write-back merges; it never replaces.** `CanonAdapter.writeBack` is the only write path and always routes through `mergeForWriteBack`, which overlays canon deltas onto the native payload. Adding a write path that bypasses the merge silently destroys every native field the projection dropped.
-- **An adapter may only write fields it declares in `ownedFields`.** A `canonFields` result reaching outside that set fails with `UnownedFieldWrite` rather than widening the write footprint.
+- **Write-back merges; it never replaces.** `WritableCanonAdapter.writeBack` is the only path that touches an *existing* native object, and it always routes through `mergeForWriteBack`, which overlays canon deltas onto the native payload. Adding a write path that bypasses the merge silently destroys every native field the projection dropped.
+- **An adapter may only write fields it declares in `ownedFields`.** A `canonFields` result reaching outside that set fails with `UnownedFieldWrite` rather than widening the write footprint. `CreatingCanonAdapter.create` routes through the same guard.
+- **`create` touches no existing object, so it cannot clobber — but it is still final and confined to `CreatingCanonAdapter`.** `ReadableCanonAdapter` and `WritableCanonAdapter` gain no create surface; a Plug that only reads or only updates cannot acquire the ability to create by inheritance.
 - **Ring membership is a binding-provenance claim, not a support level.** A Ring 1 type maps to an Apple assistant-schema entity or system value type *without contortion*. Promoting a type into Ring 1 requires an SDK pass, not an opinion.
 - **`@SerialName` and `wireName` are wire contracts.** These types cross the wire and land in traces; renaming a discriminator breaks `PlaybackRelay` replay of every trace already recorded.
 - **Conversions are `Result`-typed.** No adapter throws.
@@ -65,7 +66,12 @@ result. The canon earns its keep precisely where Apple's registry stops.
 ## Common operations
 
 - **Add a canon type** — add the `CanonType` member with a stable `wireName`, ring, and `CanonBinding`; add the `@Serializable` entity with a stable `@SerialName`; add a sample to `CanonSerializationTest.samples()` (the coverage test fails otherwise).
-- **Write an adapter** — subclass `CanonAdapter<E>`, implement `projectFields`, `canonFields`, `fetchNative`, `writeNative`, and declare `nativeSchema` + `ownedFields`. Never add a public write method.
+- **Write an adapter** — subclass the narrowest class the Plug's capability supports:
+  - Read-only: `ReadableCanonAdapter<E>`, implementing `projectFields` + `fetchNative` and declaring `nativeSchema`.
+  - Updates existing objects: `WritableCanonAdapter<E>`, additionally implementing `canonFields` + `writeNative` and declaring `ownedFields`.
+  - Also creates new objects: `CreatingCanonAdapter<E>`, additionally implementing `createNative`.
+
+  Never add a public write method outside `writeBack` and `create`.
 - **Preview a pending write** — `adapter.mergeForWriteBack(entity)` returns the merged payload without writing.
 - **Check a binding** — `CanonType.EMAIL_MESSAGE.binding.apple` gives the `mail.message` address and the fields the projection drops.
 - **Re-run the SDK pass** — the extraction commands are in the Appendix of `.context/issue-586-domain-type-canon-v1.md`; diff against the committed TSV.
