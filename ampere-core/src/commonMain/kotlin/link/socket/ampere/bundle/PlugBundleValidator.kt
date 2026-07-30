@@ -64,6 +64,7 @@ class PlugBundleValidator {
             is PlugPermission.KnowledgeQuery -> "scope" to permission.scope
             is PlugPermission.NativeAction -> "actionId" to permission.actionId
             is PlugPermission.LinkAccess -> "linkId" to permission.linkId
+            is PlugPermission.DeviceCapability -> "capability" to permission.capability
         }
         return if (value.isBlank()) {
             "requiredPermissions[$index] (${permission::class.simpleName}) has blank $field."
