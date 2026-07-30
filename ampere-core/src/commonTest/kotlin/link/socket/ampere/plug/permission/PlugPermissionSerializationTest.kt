@@ -2,6 +2,7 @@ package link.socket.ampere.plug.permission
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlinx.serialization.json.Json
 import link.socket.ampere.plug.McpServerDependency
 import link.socket.ampere.plug.PlugManifest
@@ -21,6 +22,7 @@ class PlugPermissionSerializationTest {
             PlugPermission.KnowledgeQuery("workspace"),
             PlugPermission.NativeAction("open-url"),
             PlugPermission.LinkAccess("linear-AMPR-149"),
+            PlugPermission.DeviceCapability("calendar"),
         )
 
         permissions.forEach { permission ->
@@ -29,6 +31,47 @@ class PlugPermissionSerializationTest {
 
             assertEquals(permission, decoded)
         }
+    }
+
+    @Test
+    fun `device capability permission uses a stable serial name`() {
+        val encoded = json.encodeToString(
+            PlugPermission.serializer(),
+            PlugPermission.DeviceCapability("calendar"),
+        )
+
+        assertEquals("""{"type":"device_capability","capability":"calendar"}""", encoded)
+    }
+
+    @Test
+    fun `round-trips all native authorization status variants through json`() {
+        val statuses = listOf(
+            NativeAuthorizationStatus.Granted,
+            NativeAuthorizationStatus.NotDetermined,
+            NativeAuthorizationStatus.Denied,
+            NativeAuthorizationStatus.Restricted,
+            NativeAuthorizationStatus.EntitlementMissing,
+        )
+
+        statuses.forEach { status ->
+            val encoded = json.encodeToString(NativeAuthorizationStatus.serializer(), status)
+            val decoded = json.decodeFromString(NativeAuthorizationStatus.serializer(), encoded)
+
+            assertEquals(status, decoded)
+        }
+    }
+
+    @Test
+    fun `entitlement missing is distinguishable from denied at the type level`() {
+        val denied: NativeAuthorizationStatus = NativeAuthorizationStatus.Denied
+        val entitlementMissing: NativeAuthorizationStatus = NativeAuthorizationStatus.EntitlementMissing
+
+        assertEquals("""{"type":"denied"}""", json.encodeToString(NativeAuthorizationStatus.serializer(), denied))
+        assertEquals(
+            """{"type":"entitlement_missing"}""",
+            json.encodeToString(NativeAuthorizationStatus.serializer(), entitlementMissing),
+        )
+        assertNotEquals(denied, entitlementMissing)
     }
 
     @Test

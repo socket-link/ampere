@@ -203,6 +203,65 @@ class PlugManifestValidationTest {
         )
     }
 
+    // -----------------------------------------------------------------
+    // Device capabilities
+    // -----------------------------------------------------------------
+
+    @Test
+    fun `a manifest declaring a device capability validates`() {
+        val manifest = PlugManifest(
+            id = "calendar-plug",
+            name = "Calendar Plug",
+            version = "1.0.0",
+            requiredPermissions = listOf(
+                PlugPermission.DeviceCapability("calendar"),
+            ),
+        )
+
+        assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
+    }
+
+    @Test
+    fun `a manifest declaring an unrecognised device capability still validates`() {
+        // The validator only enforces structural rules; an unrecognised
+        // capability token is a renderer-time concern, not an install-time
+        // failure.
+        val manifest = PlugManifest(
+            id = "exotic-plug",
+            name = "Exotic Plug",
+            version = "1.0.0",
+            requiredPermissions = listOf(
+                PlugPermission.DeviceCapability("some_future_capability"),
+            ),
+        )
+
+        assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
+    }
+
+    @Test
+    fun `duplicate device capability declarations are rejected`() {
+        val manifest = PlugManifest(
+            id = "calendar-plug",
+            name = "Calendar Plug",
+            version = "1.0.0",
+            requiredPermissions = listOf(
+                PlugPermission.DeviceCapability("calendar"),
+                PlugPermission.DeviceCapability("calendar"),
+            ),
+        )
+
+        val invalid = assertIs<ManifestValidationResult.Invalid>(
+            PlugManifestValidator.validate(manifest),
+        )
+
+        assertEquals(
+            listOf("calendar"),
+            invalid.reasons
+                .filterIsInstance<ManifestValidationReason.DuplicateDeviceCapability>()
+                .map { it.capability },
+        )
+    }
+
     @Test
     fun `a manifest written before link requirements existed still decodes`() {
         // The defaults are what keep pre-AMPR-223 manifests valid.

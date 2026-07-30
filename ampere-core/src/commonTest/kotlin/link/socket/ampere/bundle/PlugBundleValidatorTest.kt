@@ -93,6 +93,7 @@ class PlugBundleValidatorTest {
             PlugPermission.KnowledgeQuery("") to "scope",
             PlugPermission.NativeAction("") to "actionId",
             PlugPermission.LinkAccess(" ") to "linkId",
+            PlugPermission.DeviceCapability("") to "capability",
         )
 
         variants.forEach { (permission, field) ->
@@ -111,6 +112,25 @@ class PlugBundleValidatorTest {
             assertTrue(failed.reasons.single().contains(field))
             assertTrue(failed.reasons.single().contains(permission::class.simpleName!!))
         }
+    }
+
+    @Test
+    fun `an unrecognised device capability token does not fail install`() {
+        val result = validator.validate(
+            bundle(
+                manifest = PlugManifest(
+                    id = "exotic-plug",
+                    name = "Exotic",
+                    version = "1.0.0",
+                    requiredPermissions = listOf(
+                        PlugPermission.DeviceCapability("some_future_capability"),
+                    ),
+                ),
+            ),
+        )
+
+        val ok = assertIs<BundleValidation.Ok>(result)
+        assertEquals(listOf(PlugPermission.DeviceCapability("some_future_capability")), ok.permissions)
     }
 
     @Test

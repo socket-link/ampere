@@ -13,6 +13,11 @@ import link.socket.ampere.plug.permission.PlugPermission
  *
  * Returning a sealed result keeps the validator usable both for early failure
  * (during plug install) and for surfacing diagnostics in tooling.
+ *
+ * This validator does not check [PlugManifest.emits] / [PlugManifest.consumes]
+ * at all, and the only production call site today is [PlugContext.create].
+ * It is expected to run at plug install time on every host that accepts
+ * manifests — including Socket, which does not currently call it.
  */
 object PlugManifestValidator {
 
@@ -43,6 +48,7 @@ object PlugManifestValidator {
         }
 
         reasons += validateLinkRequirements(manifest)
+        reasons += validateDeviceCapabilities(manifest)
 
         return if (reasons.isEmpty()) {
             ManifestValidationResult.Valid
@@ -79,6 +85,22 @@ object PlugManifestValidator {
             }
 
         return reasons
+    }
+
+    /**
+     * A manifest declaring the same device capability token more than once
+     * is almost always a copy-paste mistake, not two distinct grants — the
+     * OS authorization APIs this maps to have no notion of "granted twice".
+     */
+    private fun validateDeviceCapabilities(
+        manifest: PlugManifest,
+    ): List<ManifestValidationReason> {
+        return manifest.requiredPermissions
+            .filterIsInstance<PlugPermission.DeviceCapability>()
+            .groupBy { it.capability }
+            .filterValues { it.size > 1 }
+            .keys
+            .map { ManifestValidationReason.DuplicateDeviceCapability(it) }
     }
 }
 
@@ -122,5 +144,13 @@ sealed interface ManifestValidationReason {
      */
     data class EmptyLinkRequirementScope(
         val name: String,
+    ) : ManifestValidationReason
+
+    /**
+     * The same [PlugPermission.DeviceCapability] token was declared more
+     * than once in [PlugManifest.requiredPermissions].
+     */
+    data class DuplicateDeviceCapability(
+        val capability: String,
     ) : ManifestValidationReason
 }
