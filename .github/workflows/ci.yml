@@ -149,6 +149,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # The simulator takes ~5m of mostly-idle wall clock to come up, and AMPR-253 left that fully
+      # serial in "Run Swift bridge tests" — 346s of a 638s job. Kick it off first so it overlaps
+      # the JDK/Gradle setup, the framework link and the Swift build (~245s of cover).
+      #
+      # simctl hands the boot to CoreSimulator and returns, so this does not need backgrounding
+      # with '&': there is no child process to outlive the step. AMPR-244 backgrounded it and it
+      # still hurt, because back then it overlapped the framework link inside the same step on a
+      # 3-core runner. The link is now upstream of this and already done by the time tests run.
+      - name: Start simulator boot
+        run: |
+          UDID=$(xcrun simctl list devices available -j \
+            | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
+          test -n "$UDID" || { echo "No iPhone simulator available"; exit 1; }
+          echo "SIMULATOR_UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID" || true
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -214,27 +230,22 @@ jobs:
       - name: Build Swift bridge tests
         timeout-minutes: 30
         run: |
-          UDID=$(xcrun simctl list devices available -j \
-            | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
-          test -n "$UDID" || { echo "No iPhone simulator available"; exit 1; }
-          echo "SIMULATOR_UDID=$UDID" >> "$GITHUB_ENV"
-
           xcodebuild build-for-testing \
             -project ampere-ios/ampere-ios.xcodeproj \
             -scheme ampere-ios \
-            -destination "id=$UDID" \
+            -destination "id=$SIMULATOR_UDID" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM=""
 
-      # Booting is ~3m of mostly-idle wall clock. AMPR-244 overlapped it with the framework link
-      # by backgrounding it, but the runner only has 3 cores / 7GB and the boot competed with the
-      # linker for them. Boot it here instead, where the only thing waiting is the test run.
+      # The boot was started at the top of the job; by now it is usually finished. bootstatus just
+      # collects it, and returns immediately if the device is already booted — so this step's
+      # duration is a direct readout of how much boot time the overlap failed to hide.
       - name: Run Swift bridge tests
         timeout-minutes: 15
         run: |
-          xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b || true
 
           xcodebuild test-without-building \
             -project ampere-ios/ampere-ios.xcodeproj \
