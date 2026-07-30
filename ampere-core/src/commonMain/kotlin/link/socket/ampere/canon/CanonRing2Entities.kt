@@ -72,6 +72,15 @@ data class CanonMediaItem(
     override val canonType: CanonType get() = CanonType.MEDIA_ITEM
 }
 
+/**
+ * Canon-external for the P0 Plug wave (AMPR-252) — HealthKit is fast-follow,
+ * not in this wave, and no Plug emits this type yet. [quantityType] and [unit]
+ * are untyped `String`s mirroring HealthKit's own closed
+ * `HKQuantityTypeIdentifier` / `HKUnit` catalogs; the recorded direction for
+ * whoever opens the HealthKit Plug ticket is to replace both with closed
+ * enums — one canonical unit per quantity type, eliminating unit-mismatch
+ * bugs by construction rather than by convention.
+ */
 @Serializable
 @SerialName("canon.health_sample")
 data class CanonHealthSample(
@@ -106,8 +115,24 @@ data class CanonTransaction(
     val currencyCode: String,
     val merchantName: String? = null,
     val postedAt: Instant? = null,
+    val category: String? = null,
+    val status: CanonTransactionStatus = CanonTransactionStatus.POSTED,
 ) : CanonEntity {
     override val canonType: CanonType get() = CanonType.TRANSACTION
+}
+
+/**
+ * Whether a [CanonTransaction] has cleared. FinanceKit distinguishes pending
+ * from posted; a canon with no such distinction cannot tell "you have a
+ * pending charge" from "you were charged".
+ */
+@Serializable
+enum class CanonTransactionStatus {
+    @SerialName("pending")
+    PENDING,
+
+    @SerialName("posted")
+    POSTED,
 }
 
 @Serializable
@@ -131,9 +156,23 @@ data class CanonWeatherForecast(
     val validAt: Instant,
     val temperatureCelsius: Double? = null,
     val conditionSummary: String? = null,
+    val series: List<CanonWeatherPoint> = emptyList(),
 ) : CanonEntity {
     override val canonType: CanonType get() = CanonType.WEATHER_FORECAST
 }
+
+/**
+ * One point in a forecast series. WeatherKit's entire value is the
+ * hourly/daily series, not a single instant — [CanonWeatherForecast.series]
+ * is what lets an Arc reason over "will it rain later" rather than only
+ * "what is it doing right now".
+ */
+@Serializable
+data class CanonWeatherPoint(
+    val validAt: Instant,
+    val temperatureCelsius: Double? = null,
+    val conditionSummary: String? = null,
+)
 
 @Serializable
 @SerialName("canon.bluetooth_peripheral")
@@ -146,6 +185,15 @@ data class CanonBluetoothPeripheral(
     override val canonType: CanonType get() = CanonType.BLUETOOTH_PERIPHERAL
 }
 
+/**
+ * Canon-external for the P0 Plug wave (AMPR-252) — Core Motion is fast-follow,
+ * not in this wave, and no Plug emits this type yet. [activity] is an untyped
+ * `String` mirroring Core Motion's own closed `CMMotionActivity` booleans; the
+ * recorded direction for whoever opens the Motion Plug ticket is to replace it
+ * with a closed enum (`WALKING`, `RUNNING`, `AUTOMOTIVE`, `CYCLING`,
+ * `STATIONARY`, `UNKNOWN`) so an Arc can exhaustively `when` over it instead of
+ * matching an unenforced string vocabulary.
+ */
 @Serializable
 @SerialName("canon.motion_sample")
 data class CanonMotionSample(
