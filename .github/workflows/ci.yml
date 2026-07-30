@@ -96,8 +96,10 @@ jobs:
             exit 1
           fi
 
-  ios-tests:
-    name: iOS Simulator Tests (macos, JDK 21)
+  # The Kotlin half of the iOS surface: commonTest/nativeTest compiled and run on Native.
+  # Independent of the Swift bridge job below, so the two run in parallel.
+  ios-kotlin-tests:
+    name: iOS Kotlin Tests (macos, JDK 21)
     runs-on: macos-latest
 
     steps:
@@ -113,6 +115,70 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # Keyed per job: this job populates the test-binary cache bucket and the Swift bridge job
+      # populates the framework one, so a shared key would make the two races overwrite each
+      # other's entry on every run.
+      - name: Cache Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-kotlin-tests-${{ hashFiles('gradle.properties') }}
+          restore-keys: |
+            konan-${{ runner.os }}-kotlin-tests-
+            konan-${{ runner.os }}-
+
+      - name: Create local.properties
+        run: |
+          cat > local.properties << 'EOF'
+          anthropic_api_key=placeholder
+          google_api_key=placeholder
+          openai_api_key=placeholder
+          EOF
+
+      - name: Run iOS simulator tests
+        timeout-minutes: 25
+        run: ./gradlew :ampere-core:iosSimulatorArm64Test
+
+  # The Kotlin↔Swift Arc bridge (AMPR-243). iosSimulatorArm64Test proves the Kotlin half runs on
+  # Native; only xcodebuild proves the Objective-C export is usable from Swift.
+  ios-swift-bridge:
+    name: iOS Swift Bridge Tests (macos, JDK 21)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # ~/.konan holds the Kotlin/Native toolchain *and* the gSTATIC compiler caches. This job
+      # rebuilds ~388MB of the iosSimulatorArm64 bucket from scratch on every run; caching it is
+      # worth ~19% of the link (measured: 362s cold vs 293s warm).
+      #
+      # AMPR-244 tried this and had to revert it: Xcode's "Compile Kotlin" script phase spawns a
+      # second, concurrent Gradle process, and that raced the first one on Konan's inter-process
+      # lock, hanging the job. The expensive framework link is now done in the "Link Kotlin
+      # framework" step below, so by the time xcodebuild's nested Gradle runs, the link is
+      # UP-TO-DATE and it no longer competes for the toolchain.
+      - name: Cache Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-swift-bridge-${{ hashFiles('gradle.properties') }}
+          restore-keys: |
+            konan-${{ runner.os }}-swift-bridge-
+            konan-${{ runner.os }}-
+
+      # Per AMPR-244 this had never successfully populated on any branch, and it still restores in
+      # ~1s / saves in ~5s, so it is not currently buying anything. Kept because it only starts
+      # paying off now that the framework link no longer dominates the step it was meant to help.
       - name: Cache Xcode DerivedData
         uses: actions/cache@v4
         with:
@@ -129,24 +195,22 @@ jobs:
           openai_api_key=placeholder
           EOF
 
-      - name: Run iOS simulator tests
-        timeout-minutes: 25
-        run: ./gradlew :ampere-core:iosSimulatorArm64Test
+      # linkDebugFrameworkIosSimulatorArm64 is the single most expensive task in the whole job.
+      # Running it here rather than letting xcodebuild's script phase trigger it keeps it visible
+      # and separately timed, lets it use the Gradle build cache, and keeps it out of the
+      # xcodebuild step's timeout. The script phase still runs embedAndSignAppleFrameworkForXcode
+      # (which embeds and signs the dynamic framework into the .app), but finds the link already
+      # done.
+      - name: Link Kotlin framework
+        timeout-minutes: 30
+        run: ./gradlew :ampere-core:linkDebugFrameworkIosSimulatorArm64
 
-      # The Kotlin↔Swift Arc bridge (AMPR-243). iosSimulatorArm64Test proves the Kotlin half
-      # runs on Native; only xcodebuild proves the Objective-C export is usable from Swift.
-      #
-      # AMPR-244: build-for-testing (which triggers the Kotlin/Native framework link) and the
-      # simulator boot are independent and were previously fully serialized. Kick the boot off
-      # in the background before the build so the ~7m link and the ~3m boot overlap instead of
-      # stacking.
-      #
-      # The 20-minute budget was too tight: observed real durations across recent runs are
-      # 11m, 14m, and >20m (timed out) with no code change in common — this step's actual
-      # variance on shared macOS runners, not a regression. The Xcode DerivedData cache that's
-      # meant to smooth this out had also never successfully populated on any branch until just
-      # now, so every run so far has paid the full cold-build cost. 30m gives real headroom
-      # instead of chasing this exact number every time a run runs a little hot.
+      # AMPR-244 raised this budget from 20m to 30m after observing 11m / 14m / >20m on this step
+      # with no code change in common. That variance was mostly the framework link, which now runs
+      # in the step above, so what's left here is the Swift compile and link — 31s locally. The
+      # 30m budget is kept anyway: it costs nothing when the step is healthy, and macOS runners
+      # are genuinely noisy. If this step ever approaches it again, that is a real hang, not
+      # variance.
       - name: Build Swift bridge tests
         timeout-minutes: 30
         run: |
@@ -154,8 +218,6 @@ jobs:
             | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
           test -n "$UDID" || { echo "No iPhone simulator available"; exit 1; }
           echo "SIMULATOR_UDID=$UDID" >> "$GITHUB_ENV"
-
-          xcrun simctl boot "$UDID" 2>/dev/null &
 
           xcodebuild build-for-testing \
             -project ampere-ios/ampere-ios.xcodeproj \
@@ -166,9 +228,14 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM=""
 
+      # Booting is ~3m of mostly-idle wall clock. AMPR-244 overlapped it with the framework link
+      # by backgrounding it, but the runner only has 3 cores / 7GB and the boot competed with the
+      # linker for them. Boot it here instead, where the only thing waiting is the test run.
       - name: Run Swift bridge tests
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: |
+          xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
+
           xcodebuild test-without-building \
             -project ampere-ios/ampere-ios.xcodeproj \
             -scheme ampere-ios \
@@ -177,3 +244,18 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM=""
+
+  ios-tests-status:
+    name: iOS Simulator Tests (macos, JDK 21)
+    needs: [ ios-kotlin-tests, ios-swift-bridge ]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check required jobs succeeded
+        run: |
+          if [ "${{ needs.ios-kotlin-tests.result }}" != "success" ] || [ "${{ needs.ios-swift-bridge.result }}" != "success" ]; then
+            echo "ios-kotlin-tests: ${{ needs.ios-kotlin-tests.result }}"
+            echo "ios-swift-bridge: ${{ needs.ios-swift-bridge.result }}"
+            exit 1
+          fi
