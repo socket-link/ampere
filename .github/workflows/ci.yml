@@ -140,8 +140,15 @@ jobs:
       # simulator boot are independent and were previously fully serialized. Kick the boot off
       # in the background before the build so the ~7m link and the ~3m boot overlap instead of
       # stacking.
+      #
+      # The 20-minute budget was too tight: observed real durations across recent runs are
+      # 11m, 14m, and >20m (timed out) with no code change in common — this step's actual
+      # variance on shared macOS runners, not a regression. The Xcode DerivedData cache that's
+      # meant to smooth this out had also never successfully populated on any branch until just
+      # now, so every run so far has paid the full cold-build cost. 30m gives real headroom
+      # instead of chasing this exact number every time a run runs a little hot.
       - name: Build Swift bridge tests
-        timeout-minutes: 20
+        timeout-minutes: 30
         run: |
           UDID=$(xcrun simctl list devices available -j \
             | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
