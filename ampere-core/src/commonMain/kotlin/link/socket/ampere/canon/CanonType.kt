@@ -190,7 +190,10 @@ enum class CanonType(
     REMINDER(
         wireName = "reminder",
         ring = CanonRing.PLATFORM,
-        binding = CanonBinding(apple = null, lossyFields = listOf("eventKitAlarms", "recurrenceRules")),
+        binding = CanonBinding(
+            apple = null,
+            lossyFields = listOf("eventKitAlarms", "recurrenceRules", "priority", "subtasks"),
+        ),
     ),
 
     @SerialName("alarm")
@@ -209,7 +212,13 @@ enum class CanonType(
         ring = CanonRing.PLATFORM,
         binding = CanonBinding(
             apple = null,
-            lossyFields = listOf("playbackState", "libraryIdentity", "drmAssetHandle"),
+            lossyFields = listOf(
+                "playbackState",
+                "libraryIdentity",
+                "drmAssetHandle",
+                "albumTitle",
+                "artworkUrl",
+            ),
         ),
     ),
 
@@ -241,7 +250,10 @@ enum class CanonType(
     PASS(
         wireName = "pass",
         ring = CanonRing.PLATFORM,
-        binding = CanonBinding(apple = null, lossyFields = listOf("passKitFields", "barcodePayload")),
+        binding = CanonBinding(
+            apple = null,
+            lossyFields = listOf("passType", "structuredFields", "barcodePayload", "relevantDate"),
+        ),
     ),
 
     @SerialName("weather_forecast")
@@ -250,7 +262,15 @@ enum class CanonType(
         ring = CanonRing.PLATFORM,
         binding = CanonBinding(
             apple = AppleSchemaBinding.SystemValueType("Measurement"),
-            lossyFields = listOf("weatherKitAttribution", "hourlyBreakdown"),
+            // AMPR-252: series is now modelled via CanonWeatherForecast.series;
+            // per-point richness beyond temperature/condition is still lossy.
+            lossyFields = listOf(
+                "weatherKitAttribution",
+                "precipitationChance",
+                "windSpeed",
+                "uvIndex",
+                "humidity",
+            ),
         ),
     ),
 

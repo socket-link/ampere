@@ -79,6 +79,8 @@ class CanonSerializationTest {
             provenance,
             amountMinorUnits = 1250,
             currencyCode = "USD",
+            category = "groceries",
+            status = CanonTransactionStatus.PENDING,
         ),
         "canon.pass" to CanonPass(CanonId("pa"), provenance, description = "Boarding"),
         "canon.weather_forecast" to CanonWeatherForecast(
@@ -86,6 +88,13 @@ class CanonSerializationTest {
             provenance,
             place = null,
             validAt = Instant.fromEpochMilliseconds(1_700_000_300_000),
+            series = listOf(
+                CanonWeatherPoint(
+                    validAt = Instant.fromEpochMilliseconds(1_700_003_900_000),
+                    temperatureCelsius = 18.5,
+                    conditionSummary = "Light rain",
+                ),
+            ),
         ),
         "canon.bluetooth_peripheral" to CanonBluetoothPeripheral(CanonId("bp"), provenance),
         "canon.motion_sample" to CanonMotionSample(
@@ -96,9 +105,24 @@ class CanonSerializationTest {
         ),
         "canon.message" to CanonMessage(CanonId("msg"), provenance, bodyText = "yo"),
         "canon.note" to CanonNote(CanonId("n"), provenance),
-        "canon.ride" to CanonRide(CanonId("rd"), provenance, status = "requested"),
-        "canon.order" to CanonOrder(CanonId("or"), provenance, status = "placed"),
-        "canon.delivery" to CanonDelivery(CanonId("dl"), provenance, status = "in_transit"),
+        "canon.ride" to CanonRide(
+            CanonId("rd"),
+            provenance,
+            status = CanonServiceStatus.REQUESTED,
+            providerStatus = "requested",
+        ),
+        "canon.order" to CanonOrder(
+            CanonId("or"),
+            provenance,
+            status = CanonServiceStatus.IN_PROGRESS,
+            providerStatus = "placed",
+        ),
+        "canon.delivery" to CanonDelivery(
+            CanonId("dl"),
+            provenance,
+            status = CanonServiceStatus.IN_PROGRESS,
+            providerStatus = "in_transit",
+        ),
         "canon.third_party_playlist" to CanonThirdPartyPlaylist(CanonId("pp"), provenance, title = "Focus"),
     )
 
