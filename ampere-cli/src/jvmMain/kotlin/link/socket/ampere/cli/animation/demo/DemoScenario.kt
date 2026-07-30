@@ -37,8 +37,17 @@ sealed class DemoScenario(
     )
 
     companion object {
-        /** All available scenarios */
-        val all: List<DemoScenario> = listOf(ReleaseNotes, CodeReview)
+        /**
+         * All available scenarios.
+         *
+         * Lazy on purpose: eagerly reading [ReleaseNotes]/[CodeReview] here would
+         * run during [DemoScenario]'s own `<clinit>` whenever the companion is
+         * the first thing to touch this class (e.g. a bare [byName] call), which
+         * races the JVM's circular class-initialization handling and can observe
+         * those singletons as not-yet-assigned. Deferring to first real access
+         * guarantees the class has already finished initializing.
+         */
+        val all: List<DemoScenario> by lazy { listOf(ReleaseNotes, CodeReview) }
 
         /** Get scenario by name */
         fun byName(name: String): DemoScenario? = all.find {
@@ -46,10 +55,10 @@ sealed class DemoScenario(
         }
 
         /** Default scenario */
-        val default: DemoScenario = ReleaseNotes
+        val default: DemoScenario by lazy { ReleaseNotes }
 
         /** List all scenario names */
-        val names: List<String> = all.map { it.name }
+        val names: List<String> by lazy { all.map { it.name } }
     }
 }
 

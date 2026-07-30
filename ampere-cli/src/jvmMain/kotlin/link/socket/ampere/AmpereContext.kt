@@ -4,8 +4,10 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.SparkBasedAgent
@@ -403,7 +405,10 @@ class AmpereContext(
         // Stop the workspace monitoring system if enabled
         fileSystemReceptor?.stop()
 
-        scope.cancel()
+        // Wait for in-flight coroutines (e.g. WorkspaceStateStore's event replay)
+        // to actually stop before closing the driver out from under them —
+        // scope.cancel() alone only signals cancellation, it doesn't wait.
+        runBlocking { scope.coroutineContext[Job]?.cancelAndJoin() }
         driver.close()
     }
 
