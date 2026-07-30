@@ -33,7 +33,6 @@ Unknown top-level entries are ignored by the parser. This keeps the format addit
     "name": "GitHub Plug",
     "version": "1.0.0",
     "description": "Open and review GitHub PRs from inside Ampere.",
-    "entrypoint": "main",
     "requiredPermissions": [
       { "type": "network_domain", "host": "api.github.com" },
       { "type": "mcp_server", "uri": "mcp://github" }
@@ -46,11 +45,10 @@ Unknown top-level entries are ignored by the parser. This keeps the format addit
 | --- | --- | --- | --- |
 | `bundleFormatVersion` | `Int` | Yes | Currently `1`. Parsers reject any other value with `UnknownVersion`. |
 | `plug` | `PlugManifest` | Yes | The W0.1 plug manifest, embedded verbatim. |
-| `plug.id` | `String` | Yes | Stable identifier; must be non-blank. |
+| `plug.id` | `PlugId` | Yes | Stable identifier; must match `[a-z0-9_-]+` (validated at construction). |
 | `plug.name` | `String` | Yes | Human-readable name; must be non-blank. |
 | `plug.version` | `String` | Yes | Plug's own version; must be non-blank. Independent of `bundleFormatVersion`. |
 | `plug.description` | `String?` | No | Free-form description. |
-| `plug.entrypoint` | `String?` | No | Plug-defined entry handle; opaque to the bundle format. |
 | `plug.requiredPermissions` | `List<PlugPermission>` | No (defaults to `[]`) | W0.1 permission objects. |
 
 `PlugPermission` uses `type` as its discriminator and is reused unchanged from W0.1. See [`PlugPermission.kt`][PlugPermission] for the closed set of variants (`network_domain`, `mcp_server`, `knowledge_query`, `native_action`, `link_access`).

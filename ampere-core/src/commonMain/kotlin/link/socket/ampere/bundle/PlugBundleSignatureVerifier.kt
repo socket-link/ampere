@@ -55,7 +55,7 @@ object NoOpPlugBundleSignatureVerifier : PlugBundleSignatureVerifier {
     override suspend fun verify(bundle: PlugBundle): PlugBundleSignatureVerification {
         log.w {
             "Signature verification is stubbed (no-op). " +
-                "Bundle '${bundle.manifest.id}' v${bundle.manifest.version} accepted without crypto."
+                "Bundle '${bundle.manifest.id.value}' v${bundle.manifest.version} accepted without crypto."
         }
         return PlugBundleSignatureVerification.Verified.Skipped
     }

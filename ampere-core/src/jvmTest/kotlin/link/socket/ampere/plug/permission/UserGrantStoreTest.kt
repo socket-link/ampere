@@ -10,6 +10,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import link.socket.ampere.db.Database
+import link.socket.ampere.plug.PlugId
 
 class UserGrantStoreTest {
 
@@ -33,15 +34,15 @@ class UserGrantStoreTest {
         val permission = PlugPermission.KnowledgeQuery("workspace")
 
         store.grant(
-            plugId = "plug-1",
+            plugId = PlugId("plug-1"),
             permission = permission,
             grantedAt = Instant.fromEpochMilliseconds(1_000),
         ).getOrThrow()
 
-        val grants = store.listGrants("plug-1").getOrThrow()
+        val grants = store.listGrants(PlugId("plug-1")).getOrThrow()
 
         assertEquals(listOf(permission), grants.granted)
-        assertTrue(store.hasGrant("plug-1", permission).getOrThrow())
+        assertTrue(store.hasGrant(PlugId("plug-1"), permission).getOrThrow())
     }
 
     @Test
@@ -49,15 +50,15 @@ class UserGrantStoreTest {
         val permission = PlugPermission.NativeAction("open-url")
 
         store.grant(
-            plugId = "plug-1",
+            plugId = PlugId("plug-1"),
             permission = permission,
             grantedAt = Instant.fromEpochMilliseconds(1_000),
         ).getOrThrow()
-        store.revoke("plug-1", permission).getOrThrow()
+        store.revoke(PlugId("plug-1"), permission).getOrThrow()
 
-        val grants = store.listGrants("plug-1").getOrThrow()
+        val grants = store.listGrants(PlugId("plug-1")).getOrThrow()
 
         assertEquals(emptyList(), grants.granted)
-        assertFalse(store.hasGrant("plug-1", permission).getOrThrow())
+        assertFalse(store.hasGrant(PlugId("plug-1"), permission).getOrThrow())
     }
 }

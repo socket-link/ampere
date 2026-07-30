@@ -28,6 +28,7 @@ import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
+import link.socket.ampere.plug.PlugId
 import link.socket.ampere.plug.PlugManifest
 
 class ToolExecutionPermissionGateTest {
@@ -38,7 +39,7 @@ class ToolExecutionPermissionGateTest {
         val executor = FunctionExecutor.create()
         val permission = PlugPermission.NetworkDomain("api.example.com")
         val manifest = PlugManifest(
-            id = "example-plug",
+            id = PlugId("example-plug"),
             name = "Example Plug",
             version = "1.0.0",
             requiredPermissions = listOf(permission),

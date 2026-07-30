@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
+import link.socket.ampere.plug.PlugId
 import link.socket.ampere.plug.PlugManifest
 import link.socket.ampere.plug.permission.PlugPermission
 
@@ -22,7 +23,7 @@ class PlugBundleParserTest {
         val manifest = BundleManifest(
             bundleFormatVersion = 1,
             plug = PlugManifest(
-                id = "github-plug",
+                id = PlugId("github-plug"),
                 name = "GitHub Plug",
                 version = "1.0.0",
                 requiredPermissions = listOf(
@@ -55,7 +56,7 @@ class PlugBundleParserTest {
     fun `bundle without optional entries omits assets and signature`() {
         val manifest = BundleManifest(
             bundleFormatVersion = 1,
-            plug = PlugManifest(id = "x", name = "X", version = "0.1.0"),
+            plug = PlugManifest(id = PlugId("x"), name = "X", version = "0.1.0"),
         )
         val source = MapBundleSource(
             mapOf(

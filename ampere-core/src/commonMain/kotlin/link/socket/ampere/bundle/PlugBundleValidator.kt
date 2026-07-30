@@ -37,7 +37,9 @@ class PlugBundleValidator {
         }
 
         val manifest = bundle.manifest
-        if (manifest.id.isBlank()) reasons += "manifest.id is blank."
+        // manifest.id has no blank check here: PlugId's init already rejected
+        // an invalid id during deserialization, surfaced by the parser as
+        // BundleParseError.InvalidManifest before validate() ever runs.
         if (manifest.name.isBlank()) reasons += "manifest.name is blank."
         if (manifest.version.isBlank()) reasons += "manifest.version is blank."
 

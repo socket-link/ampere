@@ -24,11 +24,10 @@ import link.socket.ampere.plug.permission.PlugPermission
  */
 @Serializable
 data class PlugManifest(
-    val id: String,
+    val id: PlugId,
     val name: String,
     val version: String,
     val description: String? = null,
-    val entrypoint: String? = null,
     val requiredPermissions: List<PlugPermission> = emptyList(),
     val mcpServers: List<McpServerDependency> = emptyList(),
     val requiredLinks: List<LinkRequirement> = emptyList(),

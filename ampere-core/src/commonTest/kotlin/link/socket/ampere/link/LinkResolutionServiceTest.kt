@@ -18,6 +18,7 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.canon.CanonType
+import link.socket.ampere.plug.PlugId
 import link.socket.ampere.plug.PlugManifest
 
 class LinkResolutionServiceTest {
@@ -39,7 +40,7 @@ class LinkResolutionServiceTest {
     )
 
     private fun manifest(vararg requirements: LinkRequirement) = PlugManifest(
-        id = "calendar-plug",
+        id = PlugId("calendar-plug"),
         name = "Calendar Plug",
         version = "1.0.0",
         requiredLinks = requirements.toList(),
@@ -56,10 +57,10 @@ class LinkResolutionServiceTest {
     @Test
     fun `resolution returns the Link keyed by requirement name`() = runTest {
         val store = InMemoryLinkStore(listOf(googleLink))
-        store.grant("calendar-plug", googleLink.id, Instant.fromEpochMilliseconds(1))
+        store.grant(PlugId("calendar-plug"), googleLink.id, Instant.fromEpochMilliseconds(1))
 
         val resolved = service(store)
-            .resolve("calendar-plug", manifest(calendarRequirement))
+            .resolve(PlugId("calendar-plug"), manifest(calendarRequirement))
             .getOrThrow()
 
         assertEquals(googleLink, resolved["calendar"])
@@ -70,7 +71,7 @@ class LinkResolutionServiceTest {
     fun `a missing Link is a Result failure and never a throw`() = runTest {
         val store = InMemoryLinkStore()
 
-        val result = service(store).resolve("calendar-plug", manifest(calendarRequirement))
+        val result = service(store).resolve(PlugId("calendar-plug"), manifest(calendarRequirement))
 
         assertTrue(result.isFailure)
         val error = assertIs<LinkResolutionException>(result.exceptionOrNull())
@@ -80,10 +81,10 @@ class LinkResolutionServiceTest {
     @Test
     fun `every failure is reported rather than just the first`() = runTest {
         val store = InMemoryLinkStore(listOf(googleLink))
-        store.grant("calendar-plug", googleLink.id, Instant.fromEpochMilliseconds(1))
+        store.grant(PlugId("calendar-plug"), googleLink.id, Instant.fromEpochMilliseconds(1))
 
         val result = service(store).resolve(
-            plugId = "calendar-plug",
+            plugId = PlugId("calendar-plug"),
             manifest = manifest(
                 calendarRequirement.copy(
                     name = "health",
@@ -109,10 +110,10 @@ class LinkResolutionServiceTest {
     @Test
     fun `an optional requirement does not fail the whole resolution`() = runTest {
         val store = InMemoryLinkStore(listOf(googleLink))
-        store.grant("calendar-plug", googleLink.id, Instant.fromEpochMilliseconds(1))
+        store.grant(PlugId("calendar-plug"), googleLink.id, Instant.fromEpochMilliseconds(1))
 
         val resolved = service(store).resolve(
-            plugId = "calendar-plug",
+            plugId = PlugId("calendar-plug"),
             manifest = manifest(
                 calendarRequirement,
                 LinkRequirement(
@@ -139,11 +140,11 @@ class LinkResolutionServiceTest {
             scope = setOf(CanonType.MESSAGE),
         )
         val store = InMemoryLinkStore(listOf(googleLink, writeOnly))
-        store.grant("calendar-plug", googleLink.id, Instant.fromEpochMilliseconds(1))
-        store.grant("calendar-plug", writeOnly.id, Instant.fromEpochMilliseconds(2))
+        store.grant(PlugId("calendar-plug"), googleLink.id, Instant.fromEpochMilliseconds(1))
+        store.grant(PlugId("calendar-plug"), writeOnly.id, Instant.fromEpochMilliseconds(2))
 
         val resolved = service(store, platform = PlatformTarget.JVM_DESKTOP).resolve(
-            plugId = "calendar-plug",
+            plugId = PlugId("calendar-plug"),
             manifest = manifest(
                 calendarRequirement,
                 LinkRequirement(
@@ -166,10 +167,10 @@ class LinkResolutionServiceTest {
     fun `granting an unknown Link fails without touching the store`() = runTest {
         val store = InMemoryLinkStore()
 
-        val result = service(store).grant("calendar-plug", LinkId("ghost"))
+        val result = service(store).grant(PlugId("calendar-plug"), LinkId("ghost"))
 
         assertIs<UnknownLinkException>(result.exceptionOrNull())
-        assertTrue(store.grantsForPlug("calendar-plug").getOrThrow().grants.isEmpty())
+        assertTrue(store.grantsForPlug(PlugId("calendar-plug")).getOrThrow().grants.isEmpty())
     }
 
     // -----------------------------------------------------------------
@@ -179,29 +180,29 @@ class LinkResolutionServiceTest {
     @Test
     fun `revoking a Link cascades to every Plug that held a grant`() = runTest {
         val store = InMemoryLinkStore(listOf(googleLink))
-        store.grant("calendar-plug", googleLink.id, Instant.fromEpochMilliseconds(1))
-        store.grant("gmail-plug", googleLink.id, Instant.fromEpochMilliseconds(2))
+        store.grant(PlugId("calendar-plug"), googleLink.id, Instant.fromEpochMilliseconds(1))
+        store.grant(PlugId("gmail-plug"), googleLink.id, Instant.fromEpochMilliseconds(2))
 
         val affected = service(store).revokeLink(googleLink.id).getOrThrow()
 
         assertEquals(setOf("calendar-plug", "gmail-plug"), affected.toSet())
         assertTrue(store.get(googleLink.id).getOrThrow()!!.isRevoked)
-        assertTrue(store.grantsForPlug("gmail-plug").getOrThrow().isRevoked(googleLink.id))
+        assertTrue(store.grantsForPlug(PlugId("gmail-plug")).getOrThrow().isRevoked(googleLink.id))
     }
 
     @Test
     fun `revoking one Plug's grant leaves the other Plug working`() = runTest {
         val store = InMemoryLinkStore(listOf(googleLink))
-        store.grant("calendar-plug", googleLink.id, Instant.fromEpochMilliseconds(1))
-        store.grant("gmail-plug", googleLink.id, Instant.fromEpochMilliseconds(2))
+        store.grant(PlugId("calendar-plug"), googleLink.id, Instant.fromEpochMilliseconds(1))
+        store.grant(PlugId("gmail-plug"), googleLink.id, Instant.fromEpochMilliseconds(2))
 
         val svc = service(store)
-        svc.revokeGrant("calendar-plug", googleLink.id).getOrThrow()
+        svc.revokeGrant(PlugId("calendar-plug"), googleLink.id).getOrThrow()
 
-        assertTrue(svc.resolve("calendar-plug", manifest(calendarRequirement)).isFailure)
+        assertTrue(svc.resolve(PlugId("calendar-plug"), manifest(calendarRequirement)).isFailure)
         assertTrue(
             svc.resolve(
-                "gmail-plug",
+                PlugId("gmail-plug"),
                 manifest(calendarRequirement.copy(name = "mail", minimumScope = setOf(CanonType.EMAIL_MESSAGE))),
             ).isSuccess,
         )
@@ -225,10 +226,10 @@ class LinkResolutionServiceTest {
             }
 
             val store = InMemoryLinkStore(listOf(googleLink))
-            store.grant("calendar-plug", googleLink.id, Instant.fromEpochMilliseconds(1))
+            store.grant(PlugId("calendar-plug"), googleLink.id, Instant.fromEpochMilliseconds(1))
 
             service(store, bus = bus)
-                .resolve("calendar-plug", manifest(calendarRequirement))
+                .resolve(PlugId("calendar-plug"), manifest(calendarRequirement))
                 .getOrThrow()
 
             val seen = withTimeout(5.seconds) { received.await() }
@@ -252,7 +253,7 @@ class LinkResolutionServiceTest {
             }
 
             service(InMemoryLinkStore(), bus = bus)
-                .resolve("calendar-plug", manifest(calendarRequirement))
+                .resolve(PlugId("calendar-plug"), manifest(calendarRequirement))
 
             val seen = withTimeout(5.seconds) { received.await() }
             assertIs<LinkResolutionFailure.MissingLink>(seen.failure)
@@ -274,8 +275,8 @@ class LinkResolutionServiceTest {
             }
 
             val store = InMemoryLinkStore(listOf(googleLink))
-            store.grant("calendar-plug", googleLink.id, Instant.fromEpochMilliseconds(1))
-            store.grant("gmail-plug", googleLink.id, Instant.fromEpochMilliseconds(2))
+            store.grant(PlugId("calendar-plug"), googleLink.id, Instant.fromEpochMilliseconds(1))
+            store.grant(PlugId("gmail-plug"), googleLink.id, Instant.fromEpochMilliseconds(2))
 
             service(store, bus = bus).revokeLink(googleLink.id).getOrThrow()
 
@@ -288,11 +289,11 @@ class LinkResolutionServiceTest {
     @Test
     fun `resolution works with no bus wired`() = runTest {
         val store = InMemoryLinkStore(listOf(googleLink))
-        store.grant("calendar-plug", googleLink.id, Instant.fromEpochMilliseconds(1))
+        store.grant(PlugId("calendar-plug"), googleLink.id, Instant.fromEpochMilliseconds(1))
 
         assertTrue(
             service(store, bus = null)
-                .resolve("calendar-plug", manifest(calendarRequirement))
+                .resolve(PlugId("calendar-plug"), manifest(calendarRequirement))
                 .isSuccess,
         )
     }

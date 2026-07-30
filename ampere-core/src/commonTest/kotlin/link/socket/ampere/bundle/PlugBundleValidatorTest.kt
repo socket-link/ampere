@@ -2,8 +2,10 @@ package link.socket.ampere.bundle
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import link.socket.ampere.plug.PlugId
 import link.socket.ampere.plug.PlugManifest
 import link.socket.ampere.plug.permission.PlugPermission
 
@@ -12,7 +14,7 @@ class PlugBundleValidatorTest {
     private val validator = PlugBundleValidator()
 
     private fun bundle(
-        manifest: PlugManifest = PlugManifest(id = "x", name = "X", version = "1.0.0"),
+        manifest: PlugManifest = PlugManifest(id = PlugId("x"), name = "X", version = "1.0.0"),
         bundleFormatVersion: Int = CURRENT_BUNDLE_FORMAT_VERSION,
         signature: ByteArray? = null,
         assets: Map<String, ByteArray> = emptyMap(),
@@ -33,7 +35,7 @@ class PlugBundleValidatorTest {
         val result = validator.validate(
             bundle(
                 manifest = PlugManifest(
-                    id = "github-plug",
+                    id = PlugId("github-plug"),
                     name = "GitHub",
                     version = "1.0.0",
                     requiredPermissions = permissions,
@@ -59,18 +61,16 @@ class PlugBundleValidatorTest {
     }
 
     @Test
-    fun `blank manifest id is reported`() {
-        val result = validator.validate(
-            bundle(manifest = PlugManifest(id = "  ", name = "x", version = "1.0.0")),
-        )
-        val failed = assertIs<BundleValidation.Failed>(result)
-        assertEquals(listOf("manifest.id is blank."), failed.reasons)
+    fun `blank manifest id fails at PlugId construction before the validator ever runs`() {
+        assertFailsWith<IllegalArgumentException> {
+            PlugId("  ")
+        }
     }
 
     @Test
     fun `blank manifest name is reported`() {
         val result = validator.validate(
-            bundle(manifest = PlugManifest(id = "x", name = "", version = "1.0.0")),
+            bundle(manifest = PlugManifest(id = PlugId("x"), name = "", version = "1.0.0")),
         )
         val failed = assertIs<BundleValidation.Failed>(result)
         assertEquals(listOf("manifest.name is blank."), failed.reasons)
@@ -79,7 +79,7 @@ class PlugBundleValidatorTest {
     @Test
     fun `blank manifest version is reported`() {
         val result = validator.validate(
-            bundle(manifest = PlugManifest(id = "x", name = "x", version = "")),
+            bundle(manifest = PlugManifest(id = PlugId("x"), name = "x", version = "")),
         )
         val failed = assertIs<BundleValidation.Failed>(result)
         assertEquals(listOf("manifest.version is blank."), failed.reasons)
@@ -100,7 +100,7 @@ class PlugBundleValidatorTest {
             val result = validator.validate(
                 bundle(
                     manifest = PlugManifest(
-                        id = "x",
+                        id = PlugId("x"),
                         name = "x",
                         version = "1.0.0",
                         requiredPermissions = listOf(permission),
@@ -119,7 +119,7 @@ class PlugBundleValidatorTest {
         val result = validator.validate(
             bundle(
                 manifest = PlugManifest(
-                    id = "exotic-plug",
+                    id = PlugId("exotic-plug"),
                     name = "Exotic",
                     version = "1.0.0",
                     requiredPermissions = listOf(
@@ -145,10 +145,10 @@ class PlugBundleValidatorTest {
         val result = validator.validate(
             bundle(
                 bundleFormatVersion = 999,
-                manifest = PlugManifest(id = "", name = "", version = ""),
+                manifest = PlugManifest(id = PlugId("x"), name = "", version = ""),
             ),
         )
         val failed = assertIs<BundleValidation.Failed>(result)
-        assertTrue(failed.reasons.size >= 4)
+        assertTrue(failed.reasons.size >= 3)
     }
 }

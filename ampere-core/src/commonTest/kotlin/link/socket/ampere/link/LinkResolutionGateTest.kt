@@ -6,6 +6,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.datetime.Instant
 import link.socket.ampere.canon.CanonType
+import link.socket.ampere.plug.PlugId
 
 class LinkResolutionGateTest {
 
@@ -30,8 +31,8 @@ class LinkResolutionGateTest {
     )
 
     private fun grants(plugId: String, links: List<LinkId>) = LinkGrants(
-        plugId = plugId,
-        grants = links.map { LinkGrant(plugId, it, grantedAt) },
+        plugId = PlugId(plugId),
+        grants = links.map { LinkGrant(PlugId(plugId), it, grantedAt) },
     )
 
     private fun grants(plugId: String, link: LinkId) = grants(plugId, listOf(link))
@@ -76,7 +77,7 @@ class LinkResolutionGateTest {
         val result = LinkResolutionGate.resolve(
             requirement = requirement(),
             candidates = listOf(googleLink),
-            grants = LinkGrants.empty("stranger-plug"),
+            grants = LinkGrants.empty(PlugId("stranger-plug")),
             platform = PlatformTarget.ANDROID,
         )
 
@@ -205,8 +206,8 @@ class LinkResolutionGateTest {
     @Test
     fun `a revoked Plug grant reports PLUG_GRANT scope and spares other Plugs`() {
         val revokedGrants = LinkGrants(
-            plugId = "calendar-plug",
-            grants = listOf(LinkGrant("calendar-plug", googleLink.id, grantedAt, revokedAt)),
+            plugId = PlugId("calendar-plug"),
+            grants = listOf(LinkGrant(PlugId("calendar-plug"), googleLink.id, grantedAt, revokedAt)),
         )
 
         val revokedPlug = LinkResolutionGate.resolve(
@@ -308,7 +309,7 @@ class LinkResolutionGateTest {
         val result = LinkResolutionGate.resolve(
             requirement = requirement(optional = true),
             candidates = emptyList(),
-            grants = LinkGrants.empty("calendar-plug"),
+            grants = LinkGrants.empty(PlugId("calendar-plug")),
             platform = PlatformTarget.ANDROID,
         )
 

@@ -25,6 +25,7 @@ import link.socket.ampere.knowledge.InMemoryKnowledgeStore
 import link.socket.ampere.knowledge.KnowledgeDocument
 import link.socket.ampere.knowledge.KnowledgeScope
 import link.socket.ampere.knowledge.QueryMode
+import link.socket.ampere.plug.PlugId
 import link.socket.ampere.plug.PlugManifest
 import link.socket.ampere.plug.permission.GateResult
 import link.socket.ampere.plug.permission.PlugPermission
@@ -59,7 +60,7 @@ class KnowledgeQueryToolTest {
         val tool = KnowledgeQueryTool(store = store, plugManifest = manifest)
 
         val plugManifest = assertNotNull(tool.plugManifest)
-        assertEquals("pl-1", plugManifest.id)
+        assertEquals(PlugId("pl-1"), plugManifest.id)
     }
 
     @Test
@@ -158,7 +159,7 @@ class KnowledgeQueryToolTest {
         )
 
         val gateResult = PlugPermissionGate.check(
-            toolCall = PlugToolCall(plugId = "pl-1", toolId = tool.id),
+            toolCall = PlugToolCall(plugId = PlugId("pl-1"), toolId = tool.id),
             manifest = tool.plugManifest!!,
             userGrants = UserGrants(),
         )
@@ -177,7 +178,7 @@ class KnowledgeQueryToolTest {
         )
 
         val gateResult = PlugPermissionGate.check(
-            toolCall = PlugToolCall(plugId = "pl-1", toolId = tool.id),
+            toolCall = PlugToolCall(plugId = PlugId("pl-1"), toolId = tool.id),
             manifest = tool.plugManifest!!,
             // User granted "personal" — not the "work" the manifest requires.
             userGrants = UserGrants.granted(PlugPermission.KnowledgeQuery("personal")),
@@ -197,7 +198,7 @@ class KnowledgeQueryToolTest {
         )
 
         val gateResult = PlugPermissionGate.check(
-            toolCall = PlugToolCall(plugId = "pl-1", toolId = tool.id),
+            toolCall = PlugToolCall(plugId = PlugId("pl-1"), toolId = tool.id),
             manifest = tool.plugManifest!!,
             userGrants = UserGrants.granted(PlugPermission.KnowledgeQuery("work")),
         )
@@ -240,7 +241,7 @@ class KnowledgeQueryToolTest {
         id: String,
         vararg permissions: PlugPermission,
     ): PlugManifest = PlugManifest(
-        id = id,
+        id = PlugId(id),
         name = "Test plug $id",
         version = "1.0.0",
         requiredPermissions = permissions.toList(),

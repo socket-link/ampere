@@ -276,11 +276,11 @@ class ToolExecutionEngine(
     ): ExecutionOutcome {
         eventApi?.publish(
             PermissionDeniedEvent(
-                eventId = generateUUID("permission-denied", manifest.id, tool.id, executorId),
+                eventId = generateUUID("permission-denied", manifest.id.value, tool.id, executorId),
                 timestamp = Clock.System.now(),
                 eventSource = EventSource.Agent(eventApi.agentId),
                 urgency = Urgency.HIGH,
-                plugId = manifest.id,
+                plugId = manifest.id.value,
                 toolId = tool.id,
                 toolName = tool.name,
                 permission = permission,
@@ -291,7 +291,7 @@ class ToolExecutionEngine(
         return createFailure(
             request = request,
             startTime = startTime,
-            message = "Permission denied for plug '${manifest.id}' tool '${tool.id}': " +
+            message = "Permission denied for plug '${manifest.id.value}' tool '${tool.id}': " +
                 "$reason for $permission",
         )
     }

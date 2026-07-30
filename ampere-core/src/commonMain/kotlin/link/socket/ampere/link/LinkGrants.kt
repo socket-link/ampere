@@ -2,6 +2,7 @@ package link.socket.ampere.link
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import link.socket.ampere.plug.PlugId
 
 /**
  * One Plug's standing on one Link.
@@ -15,7 +16,7 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class LinkGrant(
-    val plugId: String,
+    val plugId: PlugId,
     val linkId: LinkId,
     val grantedAt: Instant,
     val revokedAt: Instant? = null,
@@ -32,7 +33,7 @@ data class LinkGrant(
  */
 @Serializable
 data class LinkGrants(
-    val plugId: String,
+    val plugId: PlugId,
     val grants: List<LinkGrant> = emptyList(),
 ) {
     private val byLink: Map<LinkId, LinkGrant> = grants.associateBy { it.linkId }
@@ -44,6 +45,6 @@ data class LinkGrants(
     fun isRevoked(linkId: LinkId): Boolean = byLink[linkId]?.isRevoked == true
 
     companion object {
-        fun empty(plugId: String): LinkGrants = LinkGrants(plugId)
+        fun empty(plugId: PlugId): LinkGrants = LinkGrants(plugId)
     }
 }

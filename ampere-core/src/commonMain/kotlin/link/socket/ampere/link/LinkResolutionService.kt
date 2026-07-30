@@ -6,6 +6,7 @@ import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.LinkEvent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.plug.PlugId
 import link.socket.ampere.plug.PlugManifest
 
 /**
@@ -44,7 +45,7 @@ class LinkResolutionService(
      * [LinkResolutionException].
      */
     suspend fun resolve(
-        plugId: String,
+        plugId: PlugId,
         manifest: PlugManifest,
         agentId: AgentId? = null,
     ): Result<ResolvedLinks> {
@@ -86,7 +87,7 @@ class LinkResolutionService(
 
     /** Resolve a single requirement. Same rules, one result. */
     suspend fun resolveOne(
-        plugId: String,
+        plugId: PlugId,
         requirement: LinkRequirement,
         agentId: AgentId? = null,
     ): Result<LinkResolution> {
@@ -106,7 +107,7 @@ class LinkResolutionService(
 
     /** Record a Plug's grant on a Link and announce it. */
     suspend fun grant(
-        plugId: String,
+        plugId: PlugId,
         linkId: LinkId,
         agentId: AgentId? = null,
     ): Result<Unit> {
@@ -121,7 +122,7 @@ class LinkResolutionService(
                 timestamp = clock.now(),
                 eventSource = sourceFor(agentId),
                 linkId = linkId,
-                plugId = plugId,
+                plugId = plugId.value,
                 transport = link.transport,
             ),
         )
@@ -157,7 +158,7 @@ class LinkResolutionService(
 
     /** Revoke one Plug's grant, leaving every other Plug on the Link intact. */
     suspend fun revokeGrant(
-        plugId: String,
+        plugId: PlugId,
         linkId: LinkId,
         agentId: AgentId? = null,
     ): Result<Unit> {
@@ -171,7 +172,7 @@ class LinkResolutionService(
                 eventSource = sourceFor(agentId),
                 linkId = linkId,
                 scope = RevocationScope.PLUG_GRANT,
-                affectedPlugIds = listOf(plugId),
+                affectedPlugIds = listOf(plugId.value),
             ),
         )
 
@@ -179,7 +180,7 @@ class LinkResolutionService(
     }
 
     private suspend fun emitResolved(
-        plugId: String,
+        plugId: PlugId,
         resolution: LinkResolution.Resolved,
         agentId: AgentId?,
     ) {
@@ -189,7 +190,7 @@ class LinkResolutionService(
                 timestamp = clock.now(),
                 eventSource = sourceFor(agentId),
                 linkId = resolution.link.id,
-                plugId = plugId,
+                plugId = plugId.value,
                 requirementName = resolution.requirement.name,
                 transport = resolution.link.transport,
             ),
@@ -197,7 +198,7 @@ class LinkResolutionService(
     }
 
     private suspend fun emitFailed(
-        plugId: String,
+        plugId: PlugId,
         resolution: LinkResolution.Failed,
         agentId: AgentId?,
     ) {
@@ -207,7 +208,7 @@ class LinkResolutionService(
                 timestamp = clock.now(),
                 eventSource = sourceFor(agentId),
                 linkId = linkIdOf(resolution.failure),
-                plugId = plugId,
+                plugId = plugId.value,
                 failure = resolution.failure,
             ),
         )

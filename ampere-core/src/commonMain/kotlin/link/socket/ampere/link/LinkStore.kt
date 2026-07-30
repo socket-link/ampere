@@ -5,6 +5,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import link.socket.ampere.db.Database
+import link.socket.ampere.plug.PlugId
 import link.socket.ampere.util.ioDispatcher
 
 /**
@@ -27,18 +28,18 @@ interface LinkStore {
     suspend fun delete(linkId: LinkId): Result<Unit>
 
     suspend fun grant(
-        plugId: String,
+        plugId: PlugId,
         linkId: LinkId,
         grantedAt: Instant = Clock.System.now(),
     ): Result<Unit>
 
     suspend fun revokeGrant(
-        plugId: String,
+        plugId: PlugId,
         linkId: LinkId,
         revokedAt: Instant = Clock.System.now(),
     ): Result<Unit>
 
-    suspend fun grantsForPlug(plugId: String): Result<LinkGrants>
+    suspend fun grantsForPlug(plugId: PlugId): Result<LinkGrants>
 
     suspend fun grantsForLink(linkId: LinkId): Result<List<LinkGrant>>
 
@@ -106,14 +107,14 @@ class SqlDelightLinkStore(
         }
 
     override suspend fun grant(
-        plugId: String,
+        plugId: PlugId,
         linkId: LinkId,
         grantedAt: Instant,
     ): Result<Unit> =
         withContext(ioDispatcher) {
             runCatching {
                 queries.upsertLinkGrant(
-                    plug_id = plugId,
+                    plug_id = plugId.value,
                     link_id = linkId.value,
                     granted_at = grantedAt.toEpochMilliseconds(),
                     revoked_at = null,
@@ -122,18 +123,18 @@ class SqlDelightLinkStore(
         }
 
     override suspend fun revokeGrant(
-        plugId: String,
+        plugId: PlugId,
         linkId: LinkId,
         revokedAt: Instant,
     ): Result<Unit> =
         withContext(ioDispatcher) {
             runCatching {
-                val existing = queries.selectGrantsForPlug(plugId)
+                val existing = queries.selectGrantsForPlug(plugId.value)
                     .executeAsList()
                     .firstOrNull { it.link_id == linkId.value }
 
                 queries.upsertLinkGrant(
-                    plug_id = plugId,
+                    plug_id = plugId.value,
                     link_id = linkId.value,
                     granted_at = existing?.granted_at ?: revokedAt.toEpochMilliseconds(),
                     revoked_at = revokedAt.toEpochMilliseconds(),
@@ -141,14 +142,14 @@ class SqlDelightLinkStore(
             }.map { }
         }
 
-    override suspend fun grantsForPlug(plugId: String): Result<LinkGrants> =
+    override suspend fun grantsForPlug(plugId: PlugId): Result<LinkGrants> =
         withContext(ioDispatcher) {
             runCatching {
                 LinkGrants(
                     plugId = plugId,
-                    grants = queries.selectGrantsForPlug(plugId).executeAsList().map { row ->
+                    grants = queries.selectGrantsForPlug(plugId.value).executeAsList().map { row ->
                         LinkGrant(
-                            plugId = row.plug_id,
+                            plugId = PlugId(row.plug_id),
                             linkId = LinkId(row.link_id),
                             grantedAt = Instant.fromEpochMilliseconds(row.granted_at),
                             revokedAt = row.revoked_at?.let(Instant::fromEpochMilliseconds),
@@ -163,7 +164,7 @@ class SqlDelightLinkStore(
             runCatching {
                 queries.selectGrantsForLink(linkId.value).executeAsList().map { row ->
                     LinkGrant(
-                        plugId = row.plug_id,
+                        plugId = PlugId(row.plug_id),
                         linkId = LinkId(row.link_id),
                         grantedAt = Instant.fromEpochMilliseconds(row.granted_at),
                         revokedAt = row.revoked_at?.let(Instant::fromEpochMilliseconds),
@@ -220,7 +221,8 @@ class InMemoryLinkStore(
 ) : LinkStore {
 
     private val links = links.associateBy { it.id }.toMutableMap()
-    private val grants = grants.associateBy { it.plugId to it.linkId }.toMutableMap()
+    private val grants: MutableMap<Pair<PlugId, LinkId>, LinkGrant> =
+        grants.associateBy { it.plugId to it.linkId }.toMutableMap()
 
     override suspend fun upsert(link: Link, updatedAt: Instant): Result<Unit> {
         links[link.id] = link
@@ -241,7 +243,7 @@ class InMemoryLinkStore(
     }
 
     override suspend fun grant(
-        plugId: String,
+        plugId: PlugId,
         linkId: LinkId,
         grantedAt: Instant,
     ): Result<Unit> {
@@ -250,7 +252,7 @@ class InMemoryLinkStore(
     }
 
     override suspend fun revokeGrant(
-        plugId: String,
+        plugId: PlugId,
         linkId: LinkId,
         revokedAt: Instant,
     ): Result<Unit> {
@@ -264,7 +266,7 @@ class InMemoryLinkStore(
         return Result.success(Unit)
     }
 
-    override suspend fun grantsForPlug(plugId: String): Result<LinkGrants> =
+    override suspend fun grantsForPlug(plugId: PlugId): Result<LinkGrants> =
         Result.success(
             LinkGrants(plugId, grants.values.filter { it.plugId == plugId }),
         )
@@ -283,6 +285,6 @@ class InMemoryLinkStore(
 
         links[linkId]?.let { links[linkId] = it.copy(revokedAt = revokedAt) }
 
-        return Result.success(affected)
+        return Result.success(affected.map { it.value })
     }
 }

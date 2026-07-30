@@ -7,6 +7,7 @@ import kotlin.test.assertNotNull
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.knowledge.InMemoryKnowledgeStore
+import link.socket.ampere.plug.PlugId
 import link.socket.ampere.plug.PlugManifest
 import link.socket.ampere.plug.permission.GateResult
 import link.socket.ampere.plug.permission.PlugPermission
@@ -96,7 +97,7 @@ class DefaultToolRegistryTest {
         id: String,
         vararg permissions: PlugPermission,
     ): PlugManifest = PlugManifest(
-        id = id,
+        id = PlugId(id),
         name = "Test plug $id",
         version = "1.0.0",
         requiredPermissions = permissions.toList(),

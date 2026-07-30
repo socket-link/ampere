@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import link.socket.ampere.canon.CanonType
 import link.socket.ampere.db.Database
+import link.socket.ampere.plug.PlugId
 
 class SqlDelightLinkStoreTest {
 
@@ -87,9 +88,9 @@ class SqlDelightLinkStoreTest {
     @Test
     fun `grants round-trip per Plug`() = runTest {
         store.upsert(googleLink, at).getOrThrow()
-        store.grant("calendar-plug", googleLink.id, at).getOrThrow()
+        store.grant(PlugId("calendar-plug"), googleLink.id, at).getOrThrow()
 
-        val grants = store.grantsForPlug("calendar-plug").getOrThrow()
+        val grants = store.grantsForPlug(PlugId("calendar-plug")).getOrThrow()
 
         assertTrue(grants.isGranted(googleLink.id))
         assertFalse(grants.isRevoked(googleLink.id))
@@ -99,10 +100,10 @@ class SqlDelightLinkStoreTest {
     @Test
     fun `revoking a grant preserves the original grant timestamp`() = runTest {
         store.upsert(googleLink, at).getOrThrow()
-        store.grant("calendar-plug", googleLink.id, at).getOrThrow()
-        store.revokeGrant("calendar-plug", googleLink.id, later).getOrThrow()
+        store.grant(PlugId("calendar-plug"), googleLink.id, at).getOrThrow()
+        store.revokeGrant(PlugId("calendar-plug"), googleLink.id, later).getOrThrow()
 
-        val grant = store.grantsForPlug("calendar-plug").getOrThrow().grantFor(googleLink.id)
+        val grant = store.grantsForPlug(PlugId("calendar-plug")).getOrThrow().grantFor(googleLink.id)
 
         assertEquals(at, grant?.grantedAt)
         assertEquals(later, grant?.revokedAt)
@@ -111,21 +112,21 @@ class SqlDelightLinkStoreTest {
     @Test
     fun `revoking a Link cascades across Plugs and persists on the Link itself`() = runTest {
         store.upsert(googleLink, at).getOrThrow()
-        store.grant("calendar-plug", googleLink.id, at).getOrThrow()
-        store.grant("gmail-plug", googleLink.id, at).getOrThrow()
+        store.grant(PlugId("calendar-plug"), googleLink.id, at).getOrThrow()
+        store.grant(PlugId("gmail-plug"), googleLink.id, at).getOrThrow()
 
         val affected = store.revokeLink(googleLink.id, later).getOrThrow()
 
         assertEquals(setOf("calendar-plug", "gmail-plug"), affected.toSet())
         assertTrue(store.get(googleLink.id).getOrThrow()!!.isRevoked)
-        assertTrue(store.grantsForPlug("calendar-plug").getOrThrow().isRevoked(googleLink.id))
-        assertTrue(store.grantsForPlug("gmail-plug").getOrThrow().isRevoked(googleLink.id))
+        assertTrue(store.grantsForPlug(PlugId("calendar-plug")).getOrThrow().isRevoked(googleLink.id))
+        assertTrue(store.grantsForPlug(PlugId("gmail-plug")).getOrThrow().isRevoked(googleLink.id))
     }
 
     @Test
     fun `an already-revoked grant is not re-reported by a second cascade`() = runTest {
         store.upsert(googleLink, at).getOrThrow()
-        store.grant("calendar-plug", googleLink.id, at).getOrThrow()
+        store.grant(PlugId("calendar-plug"), googleLink.id, at).getOrThrow()
 
         store.revokeLink(googleLink.id, later).getOrThrow()
         val second = store.revokeLink(googleLink.id, later).getOrThrow()
@@ -136,7 +137,7 @@ class SqlDelightLinkStoreTest {
     @Test
     fun `deleting a Link removes its grants too`() = runTest {
         store.upsert(googleLink, at).getOrThrow()
-        store.grant("calendar-plug", googleLink.id, at).getOrThrow()
+        store.grant(PlugId("calendar-plug"), googleLink.id, at).getOrThrow()
 
         store.delete(googleLink.id).getOrThrow()
 
@@ -147,7 +148,7 @@ class SqlDelightLinkStoreTest {
     @Test
     fun `a Link persisted through the store resolves through the service`() = runTest {
         store.upsert(googleLink, at).getOrThrow()
-        store.grant("calendar-plug", googleLink.id, at).getOrThrow()
+        store.grant(PlugId("calendar-plug"), googleLink.id, at).getOrThrow()
 
         val service = LinkResolutionService(
             linkStore = store,
@@ -155,7 +156,7 @@ class SqlDelightLinkStoreTest {
         )
 
         val resolution = service.resolveOne(
-            plugId = "calendar-plug",
+            plugId = PlugId("calendar-plug"),
             requirement = LinkRequirement(
                 name = "calendar",
                 transport = Transport.OAUTH_REST,

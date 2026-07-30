@@ -2,6 +2,7 @@ package link.socket.ampere.link
 
 import kotlinx.serialization.Serializable
 import link.socket.ampere.canon.CanonType
+import link.socket.ampere.plug.PlugId
 
 /**
  * What a Plug declares it needs, before any concrete Link exists.
@@ -59,7 +60,7 @@ sealed interface LinkResolution {
 
 /** Every resolved Link for a Plug, keyed by [LinkRequirement.name]. */
 data class ResolvedLinks(
-    val plugId: String,
+    val plugId: PlugId,
     val byRequirement: Map<String, Link>,
 ) {
     operator fun get(requirementName: String): Link? = byRequirement[requirementName]
