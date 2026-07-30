@@ -14,19 +14,26 @@ import link.socket.ampere.canon.CanonType
 import link.socket.ampere.canon.DocumentKind
 import link.socket.ampere.canon.NativePayload
 import link.socket.ampere.canon.SourceHandle
+import link.socket.ampere.link.LinkId
 
 /**
- * Reference adapters used to exercise the [CanonAdapter] contract.
+ * Reference adapters used to exercise the [ReadableCanonAdapter] /
+ * [WritableCanonAdapter] / [CreatingCanonAdapter] contracts.
  *
  * They live in the test source set on purpose. AMPR-222 ships the *SPI*; real
  * adapters are per-Plug work that lands with each transport. These fixtures
- * cover the three binding shapes a real adapter has to handle:
+ * cover the binding shapes a real adapter has to handle:
  *
  *  - [MailMessageAdapter] — an entity-schema binding with a write path.
  *  - [FileDocumentAdapter] — the `Document` fan-out, where the discriminator is
  *    itself the lossy axis.
  *  - [OverreachingMailAdapter] — a deliberately broken adapter that writes
  *    outside its declared `ownedFields`, to prove the guard fires.
+ *  - [ReadOnlyMailAdapter] — a read-only adapter with no write surface at all.
+ *  - [CreatingMailAdapter] — a creating adapter, to exercise [CreatingCanonAdapter.create].
+ *  - [OverreachingCreatingMailAdapter] — a creating adapter that overreaches
+ *    its `ownedFields`, to prove `create` routes through the same guard as
+ *    `writeBack`.
  */
 
 /** A tiny in-memory stand-in for a native mail store. */
@@ -53,9 +60,39 @@ class FakeNativeStore(
     }
 }
 
+private fun mailFields(entity: CanonEmailMessage): Map<String, JsonElement> =
+    buildMap {
+        put("subject", JsonPrimitive(entity.subject))
+        entity.bodyText?.let { put("bodyText", JsonPrimitive(it)) }
+        put("isRead", JsonPrimitive(entity.isRead))
+    }
+
+private fun projectMailFields(
+    canonType: CanonType,
+    nativeSchema: String,
+    fields: JsonObject,
+    provenance: CanonProvenance,
+): Result<CanonEmailMessage> {
+    val subject = fields["subject"]?.jsonPrimitive?.contentOrNull
+        ?: return canonFailure(
+            CanonConversionFailure.MissingRequiredField(canonType, "subject", nativeSchema),
+        )
+
+    return Result.success(
+        CanonEmailMessage(
+            canonId = CanonId(provenance.sourceHandle.nativeId),
+            provenance = provenance,
+            subject = subject,
+            from = null,
+            bodyText = fields["bodyText"]?.jsonPrimitive?.contentOrNull,
+            isRead = fields["isRead"]?.jsonPrimitive?.booleanOrNull ?: false,
+        ),
+    )
+}
+
 class MailMessageAdapter(
     private val store: FakeNativeStore,
-) : CanonAdapter<CanonEmailMessage>() {
+) : WritableCanonAdapter<CanonEmailMessage>() {
 
     override val canonType: CanonType = CanonType.EMAIL_MESSAGE
     override val nativeSchema: String = "MailMessageEntity"
@@ -64,32 +101,10 @@ class MailMessageAdapter(
     override fun projectFields(
         fields: JsonObject,
         provenance: CanonProvenance,
-    ): Result<CanonEmailMessage> {
-        val subject = fields["subject"]?.jsonPrimitive?.contentOrNull
-            ?: return canonFailure(
-                CanonConversionFailure.MissingRequiredField(canonType, "subject", nativeSchema),
-            )
-
-        return Result.success(
-            CanonEmailMessage(
-                canonId = CanonId(provenance.sourceHandle.nativeId),
-                provenance = provenance,
-                subject = subject,
-                from = null,
-                bodyText = fields["bodyText"]?.jsonPrimitive?.contentOrNull,
-                isRead = fields["isRead"]?.jsonPrimitive?.booleanOrNull ?: false,
-            ),
-        )
-    }
+    ): Result<CanonEmailMessage> = projectMailFields(canonType, nativeSchema, fields, provenance)
 
     override fun canonFields(entity: CanonEmailMessage): Result<Map<String, JsonElement>> =
-        Result.success(
-            buildMap {
-                put("subject", JsonPrimitive(entity.subject))
-                entity.bodyText?.let { put("bodyText", JsonPrimitive(it)) }
-                put("isRead", JsonPrimitive(entity.isRead))
-            },
-        )
+        Result.success(mailFields(entity))
 
     override suspend fun fetchNative(handle: SourceHandle): Result<NativePayload> =
         store.fetch(handle.nativeId)
@@ -102,7 +117,7 @@ class MailMessageAdapter(
 
 class FileDocumentAdapter(
     private val store: FakeNativeStore,
-) : CanonAdapter<CanonDocument>() {
+) : WritableCanonAdapter<CanonDocument>() {
 
     override val canonType: CanonType = CanonType.DOCUMENT
     override val nativeSchema: String = "FileEntity"
@@ -162,7 +177,7 @@ class FileDocumentAdapter(
  */
 class OverreachingMailAdapter(
     private val store: FakeNativeStore,
-) : CanonAdapter<CanonEmailMessage>() {
+) : WritableCanonAdapter<CanonEmailMessage>() {
 
     override val canonType: CanonType = CanonType.EMAIL_MESSAGE
     override val nativeSchema: String = "MailMessageEntity"
@@ -195,4 +210,115 @@ class OverreachingMailAdapter(
         handle: SourceHandle,
         merged: NativePayload,
     ): Result<Unit> = runCatching { store.write(handle.nativeId, merged) }
+}
+
+/**
+ * A read-only adapter. `ReadableCanonAdapter` declares no write member at all,
+ * so there is no `ownedFields` to declare and no `WriteRejected` stub to
+ * author — `readOnlyAdapter.writeBack(...)` does not compile, because
+ * `writeBack` is not a member of this class.
+ */
+class ReadOnlyMailAdapter(
+    private val store: FakeNativeStore,
+) : ReadableCanonAdapter<CanonEmailMessage>() {
+
+    override val canonType: CanonType = CanonType.EMAIL_MESSAGE
+    override val nativeSchema: String = "MailMessageEntity"
+
+    override fun projectFields(
+        fields: JsonObject,
+        provenance: CanonProvenance,
+    ): Result<CanonEmailMessage> = projectMailFields(canonType, nativeSchema, fields, provenance)
+
+    override suspend fun fetchNative(handle: SourceHandle): Result<NativePayload> =
+        store.fetch(handle.nativeId)
+}
+
+/**
+ * Exercises [CreatingCanonAdapter.create]: creates a new native mail object
+ * rather than merging onto an existing one.
+ */
+class CreatingMailAdapter(
+    private val store: FakeNativeStore,
+) : CreatingCanonAdapter<CanonEmailMessage>() {
+
+    override val canonType: CanonType = CanonType.EMAIL_MESSAGE
+    override val nativeSchema: String = "MailMessageEntity"
+    override val ownedFields: Set<String> = setOf("subject", "bodyText", "isRead")
+
+    private var nextId = 0
+
+    override fun projectFields(
+        fields: JsonObject,
+        provenance: CanonProvenance,
+    ): Result<CanonEmailMessage> = projectMailFields(canonType, nativeSchema, fields, provenance)
+
+    override fun canonFields(entity: CanonEmailMessage): Result<Map<String, JsonElement>> =
+        Result.success(mailFields(entity))
+
+    override suspend fun fetchNative(handle: SourceHandle): Result<NativePayload> =
+        store.fetch(handle.nativeId)
+
+    override suspend fun writeNative(
+        handle: SourceHandle,
+        merged: NativePayload,
+    ): Result<Unit> = runCatching { store.write(handle.nativeId, merged) }
+
+    override suspend fun createNative(fields: JsonObject): Result<SourceHandle> {
+        val nativeId = "created-${nextId++}"
+        store.write(nativeId, NativePayload(schema = nativeSchema, fields = fields))
+        return Result.success(
+            SourceHandle(
+                linkId = LinkId("google-oauth-1"),
+                sourceSystem = "apple.mail",
+                nativeId = nativeId,
+            ),
+        )
+    }
+}
+
+/**
+ * Creates with `providerLabels` — a field outside [ownedFields]. Exists to
+ * prove [CreatingCanonAdapter.create] routes through the same guard
+ * [WritableCanonAdapter.writeBack] does.
+ */
+class OverreachingCreatingMailAdapter(
+    private val store: FakeNativeStore,
+) : CreatingCanonAdapter<CanonEmailMessage>() {
+
+    override val canonType: CanonType = CanonType.EMAIL_MESSAGE
+    override val nativeSchema: String = "MailMessageEntity"
+    override val ownedFields: Set<String> = setOf("subject")
+
+    override fun projectFields(
+        fields: JsonObject,
+        provenance: CanonProvenance,
+    ): Result<CanonEmailMessage> = projectMailFields(canonType, nativeSchema, fields, provenance)
+
+    override fun canonFields(entity: CanonEmailMessage): Result<Map<String, JsonElement>> =
+        Result.success(
+            mapOf(
+                "subject" to JsonPrimitive(entity.subject),
+                "providerLabels" to JsonPrimitive("clobbered"),
+            ),
+        )
+
+    override suspend fun fetchNative(handle: SourceHandle): Result<NativePayload> =
+        store.fetch(handle.nativeId)
+
+    override suspend fun writeNative(
+        handle: SourceHandle,
+        merged: NativePayload,
+    ): Result<Unit> = runCatching { store.write(handle.nativeId, merged) }
+
+    override suspend fun createNative(fields: JsonObject): Result<SourceHandle> {
+        store.write("should-not-be-created", NativePayload(schema = nativeSchema, fields = fields))
+        return Result.success(
+            SourceHandle(
+                linkId = LinkId("google-oauth-1"),
+                sourceSystem = "apple.mail",
+                nativeId = "should-not-be-created",
+            ),
+        )
+    }
 }

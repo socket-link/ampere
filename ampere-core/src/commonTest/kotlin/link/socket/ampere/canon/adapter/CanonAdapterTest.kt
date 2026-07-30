@@ -278,6 +278,57 @@ class CanonAdapterTest {
     }
 
     // -----------------------------------------------------------------
+    // Read-only adapters have no write surface
+    // -----------------------------------------------------------------
+
+    @Test
+    fun `a read-only adapter projects without exposing any write surface`() {
+        val adapter = ReadOnlyMailAdapter(FakeNativeStore())
+
+        val entity = adapter.project(nativeMail(), handle, observedAt).getOrThrow()
+
+        assertEquals("Quarterly review", entity.subject)
+        // `adapter.writeBack(entity)` does not compile here — `ReadableCanonAdapter`
+        // declares no such member, so there is nothing to call.
+    }
+
+    // -----------------------------------------------------------------
+    // Creation
+    // -----------------------------------------------------------------
+
+    @Test
+    fun `create with an unowned field fails UnownedFieldWrite`() = runTest {
+        val adapter = OverreachingCreatingMailAdapter(FakeNativeStore())
+        val draft = adapter.project(nativeMail(), handle, observedAt).getOrThrow()
+
+        val failure = failureOf(adapter.create(draft))
+
+        assertIs<CanonConversionFailure.UnownedFieldWrite>(failure)
+        assertEquals("providerLabels", failure.field)
+    }
+
+    @Test
+    fun `a created entity's returned handle re-projects to an equal entity`() = runTest {
+        val store = FakeNativeStore()
+        val adapter = CreatingMailAdapter(store)
+
+        // The entity's own provenance is a placeholder — `create` never reads
+        // it, since there is no existing native object to resolve a handle
+        // against yet.
+        val draft = adapter.project(nativeMail(), handle, observedAt).getOrThrow()
+            .copy(subject = "New thread", bodyText = "Hello", isRead = false)
+
+        val createdHandle = adapter.create(draft).getOrThrow()
+
+        val createdPayload = store.read(createdHandle.nativeId)!!
+        val reprojected = adapter.project(createdPayload, createdHandle, observedAt).getOrThrow()
+
+        assertEquals(draft.subject, reprojected.subject)
+        assertEquals(draft.bodyText, reprojected.bodyText)
+        assertEquals(draft.isRead, reprojected.isRead)
+    }
+
+    // -----------------------------------------------------------------
     // Coverage bookkeeping
     // -----------------------------------------------------------------
 
