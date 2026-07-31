@@ -1,6 +1,7 @@
 package link.socket.ampere.cli.watch.presentation
 
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
+import link.socket.ampere.agents.domain.event.AssetAccessEvent
 import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
@@ -129,6 +130,7 @@ object EventCategorizer {
         is SparkEvent,
         is BenchEvent.BenchRunStarted,
         is LinkEvent.LinkResolved,
+        is AssetAccessEvent,
         is BenchEvent.ProbeGraded -> EventSignificance.ROUTINE
 
         is RoutingEvent.RouteFallback,
