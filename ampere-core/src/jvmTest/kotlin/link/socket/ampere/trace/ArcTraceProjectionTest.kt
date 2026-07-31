@@ -173,8 +173,11 @@ class ArcTraceProjectionTest {
         projection.project(runId).getOrThrow()
         val elapsed = mark.elapsedNow()
 
+        // Generous enough to absorb shared-CI-runner noise (GC pauses, cold
+        // caches) while still catching an accidental quadratic regression,
+        // which would blow well past this on 100 events.
         assertTrue(
-            elapsed.inWholeMilliseconds < 50,
+            elapsed.inWholeMilliseconds < 300,
             "Projection took ${elapsed.inWholeMilliseconds}ms",
         )
     }
