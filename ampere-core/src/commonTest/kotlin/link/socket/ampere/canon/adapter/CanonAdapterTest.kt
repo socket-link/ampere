@@ -55,20 +55,12 @@ class CanonAdapterTest {
     // -----------------------------------------------------------------
     // Projection
     // -----------------------------------------------------------------
-
-    @Test
-    fun `projection carries provenance the adapter cannot omit`() {
-        val adapter = MailMessageAdapter(FakeNativeStore())
-        val payload = nativeMail()
-
-        val entity = adapter.project(payload, handle, observedAt).getOrThrow()
-
-        assertEquals(handle, entity.provenance.sourceHandle)
-        assertEquals(observedAt, entity.provenance.observedAt)
-        assertEquals(payload, entity.provenance.nativePayload)
-        assertEquals(CanonType.EMAIL_MESSAGE, entity.canonType)
-        assertEquals(CanonRing.INTERCHANGE, entity.ring)
-    }
+    //
+    // Provenance wiring, carryNativePayload, schema-mismatch, and
+    // missing-required-field are covered generically by
+    // MailMessageAdapterContractTest (WritableCanonAdapterContract, from
+    // :ampere-core-test-fixtures). Only MailMessageAdapter-specific decoding
+    // stays here.
 
     @Test
     fun `projection reads the fields the canon type owns`() {
@@ -81,54 +73,13 @@ class CanonAdapterTest {
         assertEquals(false, entity.isRead)
     }
 
-    @Test
-    fun `projection can drop the native payload when the caller asks`() {
-        val adapter = MailMessageAdapter(FakeNativeStore())
-
-        val entity = adapter
-            .project(nativeMail(), handle, observedAt, carryNativePayload = false)
-            .getOrThrow()
-
-        assertNull(entity.provenance.nativePayload)
-    }
-
-    @Test
-    fun `projecting the wrong native schema fails rather than guessing`() {
-        val adapter = MailMessageAdapter(FakeNativeStore())
-        val wrongShape = NativePayload(NativeSchema("CalendarEventEntity"), JsonObject(emptyMap()))
-
-        val failure = failureOf(adapter.project(wrongShape, handle, observedAt))
-
-        assertIs<CanonConversionFailure.SchemaMismatch>(failure)
-        assertEquals(NativeSchema("MailMessageEntity"), failure.expectedSchema)
-        assertEquals(NativeSchema("CalendarEventEntity"), failure.actualSchema)
-    }
-
-    @Test
-    fun `a missing required field is a typed failure and never a throw`() {
-        val adapter = MailMessageAdapter(FakeNativeStore())
-        val empty = NativePayload(NativeSchema("MailMessageEntity"), JsonObject(emptyMap()))
-
-        val failure = failureOf(adapter.project(empty, handle, observedAt))
-
-        assertIs<CanonConversionFailure.MissingRequiredField>(failure)
-        assertEquals("subject", failure.field)
-    }
-
     // -----------------------------------------------------------------
     // Round-trip
     // -----------------------------------------------------------------
-
-    @Test
-    fun `canon to native round-trip is byte-identical when nothing changed`() = runTest {
-        val adapter = MailMessageAdapter(FakeNativeStore())
-        val original = nativeMail()
-
-        val entity = adapter.project(original, handle, observedAt).getOrThrow()
-        val merged = adapter.mergeForWriteBack(entity).getOrThrow()
-
-        assertEquals(original, merged)
-    }
+    //
+    // The byte-identical-when-nothing-changed case is covered generically by
+    // the contract tests above; only the Document-specific discriminator
+    // fan-out stays here.
 
     @Test
     fun `document round-trip preserves the fan-out discriminator`() = runTest {
@@ -174,29 +125,9 @@ class CanonAdapterTest {
     // -----------------------------------------------------------------
     // Preserve-and-merge write-back — the non-negotiable
     // -----------------------------------------------------------------
-
-    @Test
-    fun `write-back preserves every native field the projection dropped`() = runTest {
-        val store = FakeNativeStore(mapOf("msg-42" to nativeMail()))
-        val adapter = MailMessageAdapter(store)
-
-        val entity = adapter.project(nativeMail(), handle, observedAt).getOrThrow()
-        val mutated = entity.copy(subject = "Quarterly review (revised)", isRead = true)
-
-        adapter.writeBack(mutated).getOrThrow()
-
-        val written = store.read("msg-42")!!
-
-        // Canon-owned fields changed...
-        assertEquals(JsonPrimitive("Quarterly review (revised)"), written.fields["subject"])
-        assertEquals(JsonPrimitive(true), written.fields["isRead"])
-
-        // ...and everything the projection never saw is byte-identical.
-        assertEquals(JsonPrimitive("multipart/mixed"), written.fields["mimeStructure"])
-        assertEquals(JsonPrimitive("Received: from mx.example"), written.fields["rawHeaders"])
-        assertEquals(JsonPrimitive("IMPORTANT,CATEGORY_UPDATES"), written.fields["providerLabels"])
-        assertEquals(JsonPrimitive("thread-7"), written.fields["threadId"])
-    }
+    //
+    // Field preservation across a merge is covered generically by the
+    // contract tests above. The nuances below are MailMessageAdapter-specific.
 
     @Test
     fun `write-back leaves an owned field alone when the canon value is absent`() = runTest {
@@ -241,25 +172,6 @@ class CanonAdapterTest {
         val written = store.read("msg-42")!!
         assertEquals(JsonPrimitive("Re-fetched"), written.fields["subject"])
         assertEquals(JsonPrimitive("thread-7"), written.fields["threadId"])
-    }
-
-    @Test
-    fun `a failed re-fetch is a typed failure and writes nothing`() = runTest {
-        val store = FakeNativeStore(mapOf("msg-42" to nativeMail()))
-        val adapter = MailMessageAdapter(store)
-
-        val entity = adapter
-            .project(nativeMail(), handle, observedAt, carryNativePayload = false)
-            .getOrThrow()
-
-        store.failNextFetch = "network down"
-        val failure = failureOf(adapter.writeBack(entity.copy(subject = "Never written")))
-
-        assertIs<CanonConversionFailure.SourceUnavailable>(failure)
-        assertEquals("msg-42", failure.nativeId)
-        assertTrue(failure.reason.contains("network down"))
-
-        assertEquals(JsonPrimitive("Quarterly review"), store.read("msg-42")!!.fields["subject"])
     }
 
     @Test

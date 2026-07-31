@@ -1,6 +1,7 @@
 rootProject.name = "Ampere"
 
 include(":ampere-core")
+include(":ampere-core-test-fixtures")
 include(":ampere-android")
 include(":ampere-compose")
 include(":ampere-desktop")

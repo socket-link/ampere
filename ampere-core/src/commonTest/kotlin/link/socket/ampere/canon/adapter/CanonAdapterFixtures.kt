@@ -34,31 +34,11 @@ import link.socket.ampere.link.LinkId
  *  - [OverreachingCreatingMailAdapter] — a creating adapter that overreaches
  *    its `ownedFields`, to prove `create` routes through the same guard as
  *    `writeBack`.
+ *
+ * [FakeNativeStore] itself lives in `:ampere-core-test-fixtures` (AMPR-250) —
+ * published so every Plug's adapter tests can share one in-memory native
+ * store instead of thirteen drifting copies.
  */
-
-/** A tiny in-memory stand-in for a native mail store. */
-class FakeNativeStore(
-    initial: Map<String, NativePayload> = emptyMap(),
-) {
-    private val rows = initial.toMutableMap()
-    var failNextFetch: String? = null
-
-    fun read(nativeId: String): NativePayload? = rows[nativeId]
-
-    fun write(nativeId: String, payload: NativePayload) {
-        rows[nativeId] = payload
-    }
-
-    fun fetch(nativeId: String): Result<NativePayload> {
-        failNextFetch?.let { reason ->
-            failNextFetch = null
-            return Result.failure(IllegalStateException(reason))
-        }
-        return rows[nativeId]
-            ?.let { Result.success(it) }
-            ?: Result.failure(IllegalStateException("no such native object: $nativeId"))
-    }
-}
 
 private fun mailFields(entity: CanonEmailMessage): Map<String, JsonElement> =
     buildMap {
