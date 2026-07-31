@@ -5,12 +5,10 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
-import link.socket.ampere.canon.CanonDocument
 import link.socket.ampere.canon.CanonEmailMessage
 import link.socket.ampere.canon.CanonId
 import link.socket.ampere.canon.CanonProvenance
 import link.socket.ampere.canon.CanonType
-import link.socket.ampere.canon.DocumentKind
 import link.socket.ampere.canon.NativePayload
 import link.socket.ampere.canon.NativeSchema
 import link.socket.ampere.canon.SourceHandle
@@ -24,9 +22,10 @@ import link.socket.ampere.link.LinkId
  * adapters are per-Plug work that lands with each transport. These fixtures
  * cover the binding shapes a real adapter has to handle:
  *
- *  - [MailMessageAdapter] — an entity-schema binding with a write path.
- *  - [FileDocumentAdapter] — the `Document` fan-out, where the discriminator is
- *    itself the lossy axis.
+ *  - `MailMessageAdapter` / `FileDocumentAdapter` — entity-schema bindings with
+ *    a write path — moved to `:ampere-core-test-fixtures` (AMPR-257), since
+ *    `ampere-bindings-apple`'s tests need them too; `mailFields` /
+ *    `projectMailFields` moved with them.
  *  - [OverreachingMailAdapter] — a deliberately broken adapter that writes
  *    outside its declared `ownedFields`, to prove the guard fires.
  *  - [ReadOnlyMailAdapter] — a read-only adapter with no write surface at all.
@@ -39,102 +38,6 @@ import link.socket.ampere.link.LinkId
  * published so every Plug's adapter tests can share one in-memory native
  * store instead of thirteen drifting copies.
  */
-
-private fun mailFields(entity: CanonEmailMessage): Map<String, JsonElement> =
-    buildMap {
-        put("subject", JsonPrimitive(entity.subject))
-        entity.bodyText?.let { put("bodyText", JsonPrimitive(it)) }
-        put("isRead", JsonPrimitive(entity.isRead))
-    }
-
-private fun projectMailFields(
-    canonType: CanonType,
-    nativeSchema: NativeSchema,
-    fields: JsonObject,
-    provenance: CanonProvenance,
-): Result<CanonEmailMessage> =
-    NativeFields.project(fields, canonType, nativeSchema) { mail ->
-        CanonEmailMessage(
-            canonId = CanonId(provenance.sourceHandle.nativeId),
-            provenance = provenance,
-            subject = mail.requireString("subject"),
-            from = null,
-            bodyText = mail.optionalString("bodyText"),
-            isRead = mail.optionalBoolean("isRead", default = false),
-        )
-    }
-
-class MailMessageAdapter(
-    private val store: FakeNativeStore,
-) : WritableCanonAdapter<CanonEmailMessage>() {
-
-    override val canonType: CanonType = CanonType.EMAIL_MESSAGE
-    override val nativeSchema: NativeSchema = NativeSchema("MailMessageEntity")
-    override val ownedFields: Set<String> = setOf("subject", "bodyText", "isRead")
-
-    override fun projectFields(
-        fields: JsonObject,
-        provenance: CanonProvenance,
-    ): Result<CanonEmailMessage> = projectMailFields(canonType, nativeSchema, fields, provenance)
-
-    override fun canonFields(entity: CanonEmailMessage): Result<Map<String, JsonElement>> =
-        Result.success(mailFields(entity))
-
-    override suspend fun fetchNative(handle: SourceHandle): Result<NativePayload> =
-        store.fetch(handle.nativeId)
-
-    override suspend fun writeNative(
-        handle: SourceHandle,
-        merged: NativePayload,
-    ): Result<Unit> = runCatching { store.write(handle.nativeId, merged) }
-}
-
-class FileDocumentAdapter(
-    private val store: FakeNativeStore,
-) : WritableCanonAdapter<CanonDocument>() {
-
-    override val canonType: CanonType = CanonType.DOCUMENT
-    override val nativeSchema: NativeSchema = NativeSchema("FileEntity")
-    override val ownedFields: Set<String> = setOf("title", "documentKind", "mimeType")
-
-    override fun projectFields(
-        fields: JsonObject,
-        provenance: CanonProvenance,
-    ): Result<CanonDocument> =
-        NativeFields.project(fields, canonType, nativeSchema) { document ->
-            val rawKind = document.optionalString("documentKind") ?: "file"
-            val kind = DocumentKind.entries.firstOrNull { it.appleDomain == rawKind }
-                ?: document.malformed<DocumentKind>(
-                    "documentKind",
-                    "no DocumentKind maps to Apple domain '$rawKind'",
-                )
-
-            CanonDocument(
-                canonId = CanonId(provenance.sourceHandle.nativeId),
-                provenance = provenance,
-                title = document.requireString("title"),
-                kind = kind,
-                mimeType = document.optionalString("mimeType"),
-            )
-        }
-
-    override fun canonFields(entity: CanonDocument): Result<Map<String, JsonElement>> =
-        Result.success(
-            buildMap {
-                put("title", JsonPrimitive(entity.title))
-                put("documentKind", JsonPrimitive(entity.kind.appleDomain))
-                entity.mimeType?.let { put("mimeType", JsonPrimitive(it)) }
-            },
-        )
-
-    override suspend fun fetchNative(handle: SourceHandle): Result<NativePayload> =
-        store.fetch(handle.nativeId)
-
-    override suspend fun writeNative(
-        handle: SourceHandle,
-        merged: NativePayload,
-    ): Result<Unit> = runCatching { store.write(handle.nativeId, merged) }
-}
 
 /**
  * Writes `providerLabels` — a field its canon projection never read and which

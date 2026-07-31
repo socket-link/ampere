@@ -298,6 +298,57 @@ tasks.matching { task ->
 
 tasks.findByName("build")?.dependsOn(kotlinConfiguration)
 
+// AMPR-257: the canon vocabulary (canon/**) is platform-neutral; platform
+// bindings live in ampere-bindings-apple / ampere-bindings-android instead.
+// Scoped to canon/** rather than all of ampere-core: the rest of the module
+// (agents, dsl, ui, mcp, ...) legitimately has platform-specific expect/actual
+// code (UUID, file IO, DB drivers, ...) that is out of scope for this ticket.
+// This is a merge-blocking guard against the canon boundary eroding again.
+val verifyCoreNeutrality = tasks.register("verifyCoreNeutrality") {
+    group = "verification"
+    description = "Fails if ampere-core's canon sources reference platform SDK symbols " +
+        "(AppIntents/EventKit/UIKit, android.*, or any other platform framework import)."
+
+    val mainSourceSetNames = listOf(
+        "commonMain", "androidMain", "jvmMain", "jsMain", "wasmJsMain",
+        "iosMain", "iosX64Main", "iosArm64Main", "iosSimulatorArm64Main",
+    )
+    val sourceDirs = mainSourceSetNames.map { layout.projectDirectory.dir("src/$it/kotlin/link/socket/ampere/canon") }
+    inputs.files(sourceDirs).skipWhenEmpty(false)
+
+    // kotlinx/stdlib are exempt; anything else starting with `platform.` (Kotlin/Native
+    // cinterop, e.g. `platform.EventKit.EKEvent`) or `android.` is a platform SDK leak.
+    val forbiddenImportPrefixes = listOf("import platform.", "import android.")
+
+    doLast {
+        val violations = mutableListOf<String>()
+        sourceDirs.forEach { dir ->
+            val dirFile = dir.asFile
+            if (dirFile.exists()) {
+                dirFile.walkTopDown()
+                    .filter { it.isFile && it.extension == "kt" }
+                    .forEach { file ->
+                        file.readLines().forEachIndexed { index, line ->
+                            val trimmed = line.trimStart()
+                            if (forbiddenImportPrefixes.any { trimmed.startsWith(it) }) {
+                                violations += "${file.relativeTo(projectDir)}:${index + 1}: $trimmed"
+                            }
+                        }
+                    }
+            }
+        }
+        if (violations.isNotEmpty()) {
+            throw GradleException(
+                "ampere-core must stay platform-neutral (AMPR-257), but found platform SDK " +
+                    "imports:\n" + violations.joinToString("\n") +
+                    "\n\nMove the binding to ampere-bindings-apple or ampere-bindings-android instead.",
+            )
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(verifyCoreNeutrality) }
+
 ktlint {
     android.set(true)
     verbose.set(true)
