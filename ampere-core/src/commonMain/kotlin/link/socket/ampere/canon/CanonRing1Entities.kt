@@ -167,6 +167,13 @@ data class CanonDocument(
  *
  * [FILE] is the fallback for anything with no richer domain — it binds to
  * `files.file` alone.
+ *
+ * AMPR-257: [appleDomain] is a deliberate, narrow exception to "no vendor
+ * references in `ampere-core`". It is a field on a canon *entity*
+ * ([CanonDocument.kind]), not a [link.socket.ampere.bindings.apple.AppleCanonBinding]
+ * declaration, and moving it would mean restructuring `DocumentKind` itself —
+ * out of scope for this ticket, which changes bindings, not canon membership
+ * or shape. It carries no platform-SDK dependency, only a vendor-named string.
  */
 @Serializable
 enum class DocumentKind(val appleDomain: String) {

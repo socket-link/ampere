@@ -13,36 +13,34 @@ import kotlinx.serialization.Serializable
  * canonical noun.
  *
  * Ring membership was settled by the SDK pass documented in
- * `.context/issue-586-domain-type-canon-v1.md`. Six of the originally proposed
- * Ring 1 types demoted because the shipped Apple assistant-schema catalog is
- * documents-and-content shaped: it has no calendar, messages, reminders, notes,
- * alarm, or music/video noun.
+ * `.context/issue-586-domain-type-canon-v1.md`. These definitions are
+ * intentionally vendor-neutral — which platform ships which schema, and the
+ * per-type projection detail, lives in the binding-table rows owned by the
+ * edge modules (`ampere-bindings-apple`, `ampere-bindings-android`), not here.
  */
 @Serializable
 enum class CanonRing {
 
     /**
-     * Maps to an Apple assistant-schema entity or an Apple system value type
-     * without lossy contortion, so the entity can cross app boundaries through
-     * the platform's own registry.
+     * Has an OS-canonical interchange schema on at least one platform, so the
+     * entity can cross app boundaries through that platform's own registry
+     * without lossy contortion.
      */
     @SerialName("interchange")
     INTERCHANGE,
 
     /**
-     * Reachable only through a native framework (EventKit, HealthKit, AlarmKit,
-     * …). Outside the assistant vocabulary, inside the OS.
+     * Reaches Ampere via a native framework rather than an OS-canonical
+     * cross-app schema — inside the OS, but outside its interchange
+     * vocabulary.
      */
     @SerialName("platform")
     PLATFORM,
 
     /**
-     * Arrives through a non-OS transport — `Mcp`, `OAuthRest`, `FolderMount`,
-     * or `Cli`.
-     *
-     * The original ticket wrote this as "Mcp/OAuthRest only". Recon widened it:
-     * a Note read out of an Obsidian vault arrives over `FolderMount` and was
-     * otherwise unhoused by the taxonomy.
+     * Arrives only over a service Link — a non-OS transport such as an MCP
+     * server, an OAuth REST API, a folder mount, or a CLI. Never reachable
+     * through a platform-native registry or framework.
      */
     @SerialName("service")
     SERVICE,

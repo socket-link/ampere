@@ -3,6 +3,8 @@ concept: DomainCanon
 status: stable
 tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/canon/**
+  - ampere-bindings-apple/src/commonMain/kotlin/link/socket/ampere/bindings/apple/**
+  - ampere-bindings-android/src/commonMain/kotlin/link/socket/ampere/bindings/android/**
 related: [LinkLayer, PlugPermissions, AgentSurface, CognitionTrace]
 last_verified: 2026-07-30
 ---
@@ -39,11 +41,34 @@ all documents-and-content shaped. **There is no calendar, messages, reminders,
 notes, places, media, or alarm domain.** Six proposed Ring 1 types demoted as a
 result. The canon earns its keep precisely where Apple's registry stops.
 
+## Ring definitions
+
+Ring definitions are vendor-neutral by design (AMPR-257) — which platform
+ships which schema, and the per-type projection detail, lives in the
+binding-table rows owned by the edge modules' registries, not in the
+definition itself:
+
+- **Ring 1 — `INTERCHANGE`**: has an OS-canonical interchange schema on ≥1 platform.
+- **Ring 2 — `PLATFORM`**: reaches Ampere via a native framework.
+- **Ring 3 — `SERVICE`**: arrives only over a service Link.
+
+The vendor-specific "why" — e.g. that CALENDAR_EVENT is Ring 2 because the
+shipped Apple assistant-schema catalog has no calendar domain — is documented
+on `AppleCanonBindingRegistry` in `ampere-bindings-apple`, next to the binding
+table it explains, not on `CanonRing` itself.
+
 ## Where it lives
 
-- `canon/CanonType.kt` — the closed enum; each member carries its ring and binding.
-- `canon/CanonRing.kt` — `INTERCHANGE` / `PLATFORM` / `SERVICE`.
-- `canon/CanonBinding.kt` — `AppleSchemaBinding` (entity schema or system value type), `AndroidSchemaBinding`.
+`ampere-core` carries zero platform-SDK references (AMPR-257, enforced by the
+merge-blocking `verifyCoreNeutrality` Gradle check): canon types and ring
+membership live there; how a canon type reaches a given platform's own
+vocabulary is a *binding*, declared in an edge module that depends on
+`ampere-core` and never the reverse.
+
+- `canon/CanonType.kt` — the closed enum; each member carries its `wireName` and `ring`.
+- `canon/CanonRing.kt` — `INTERCHANGE` / `PLATFORM` / `SERVICE`, defined vendor-neutrally — see [Ring definitions](#ring-definitions) below.
+- `ampere-bindings-apple/.../bindings/apple/AppleCanonBindingRegistry.kt` — every `CanonType`'s binding onto Apple's assistant-schema vocabulary (`AppleSchemaBinding`: entity schema or system value type), keyed by `CanonType`.
+- `ampere-bindings-android/.../bindings/android/AndroidCanonBindingRegistry.kt` — the Android equivalent (`AndroidSchemaBinding`); every entry is `PendingSdkVerification` until an AppFunctions SDK pass happens.
 - `canon/CanonProvenance.kt` — `CanonId`, `SourceHandle`, `NativePayload`, `CanonProvenance`.
 - `canon/NativeSchema.kt` — the value class wrapping a native shape identifier (`EKEvent`, `MailMessageEntity`); referenced by both `ReadableCanonAdapter.nativeSchema` and `NativePayload.schema` so the two cannot drift into a runtime-only `SchemaMismatch`.
 - `canon/CanonEntity.kt` — the sealed hierarchy; `CanonRing1Entities.kt`, `CanonRing2Entities.kt`, `CanonRing3Entities.kt`.
@@ -61,14 +86,14 @@ result. The canon earns its keep precisely where Apple's registry stops.
 - **Write-back merges; it never replaces.** `WritableCanonAdapter.writeBack` is the only path that touches an *existing* native object, and it always routes through `mergeForWriteBack`, which overlays canon deltas onto the native payload. Adding a write path that bypasses the merge silently destroys every native field the projection dropped.
 - **An adapter may only write fields it declares in `ownedFields`.** A `canonFields` result reaching outside that set fails with `UnownedFieldWrite` rather than widening the write footprint. `CreatingCanonAdapter.create` routes through the same guard.
 - **`create` touches no existing object, so it cannot clobber — but it is still final and confined to `CreatingCanonAdapter`.** `ReadableCanonAdapter` and `WritableCanonAdapter` gain no create surface; a Plug that only reads or only updates cannot acquire the ability to create by inheritance.
-- **Ring membership is a binding-provenance claim, not a support level.** A Ring 1 type maps to an Apple assistant-schema entity or system value type *without contortion*. Promoting a type into Ring 1 requires an SDK pass, not an opinion.
+- **Ring membership is a binding-provenance claim, not a support level.** See [Ring definitions](#ring-definitions). Promoting a type into Ring 1 requires an SDK pass, not an opinion.
 - **`@SerialName` and `wireName` are wire contracts.** These types cross the wire and land in traces; renaming a discriminator breaks `PlaybackRelay` replay of every trace already recorded.
 - **Conversions are `Result`-typed. No adapter throws.** `NativeFields` (used from inside `projectFields`) is the one narrow exception, and only internally: its accessors throw `CanonConversionException` so a projection can read a field inline instead of `?: return canonFailure(...)`, but the only way to obtain a `NativeFields` is `NativeFields.project(...)`, which catches that exception and returns `Result.failure` — the constructor is private, so the throw cannot reach an adapter's caller. An adapter written against this cursor still satisfies the never-throws contract from the outside.
 - **`SourceHandle.nativeId` is opaque.** Parsing it makes a provider's identifier format a contract Ampere has to honour.
 
 ## Common operations
 
-- **Add a canon type** — add the `CanonType` member with a stable `wireName`, ring, and `CanonBinding`; add the `@Serializable` entity with a stable `@SerialName`; add a sample to `CanonSerializationTest.samples()` (the coverage test fails otherwise).
+- **Add a canon type** — add the `CanonType` member with a stable `wireName` and `ring`; add its entry to `AppleCanonBindingRegistry` and `AndroidCanonBindingRegistry`; add the `@Serializable` entity with a stable `@SerialName`; add a sample to `CanonSerializationTest.samples()` (the coverage test fails otherwise). Canon membership is closed for v1 (see Invariants) — this is a versioned decision, not a routine addition.
 - **Write an adapter** — subclass the narrowest class the Plug's capability supports:
   - Read-only: `ReadableCanonAdapter<E>`, implementing `projectFields` + `fetchNative` and declaring `nativeSchema: NativeSchema` (declare the schema once as a named constant shared by the commonMain projection and the platform glue that produces the payload).
   - Updates existing objects: `WritableCanonAdapter<E>`, additionally implementing `canonFields` + `writeNative` and declaring `ownedFields`.
@@ -77,13 +102,13 @@ result. The canon earns its keep precisely where Apple's registry stops.
   Never add a public write method outside `writeBack` and `create`.
   Inside `projectFields`, read through `NativeFields.project(fields, canonType, nativeSchema) { cursor -> ... }` rather than hand-rolling `?: return canonFailure(...)` per field — it keeps the failure taxonomy (`MissingRequiredField` vs. `MalformedField`) uniform and nested/array failures report a path (`location.latitude`, `people[1].name`). When a canon type nests another entity, give the child its own id and provenance with `childNativeId(parentNativeId, role, naturalKey)` and `provenance.forChild(childNativeId)` — never derive a child id from array position, and never reuse the parent's provenance verbatim (see `CanonChildren.kt`).
 - **Preview a pending write** — `adapter.mergeForWriteBack(entity)` returns the merged payload without writing.
-- **Check a binding** — `CanonType.EMAIL_MESSAGE.binding.apple` gives the `mail.message` address and the fields the projection drops.
+- **Check a binding** — `AppleCanonBindingRegistry.bindingFor(CanonType.EMAIL_MESSAGE).schema` (from `ampere-bindings-apple`) gives the `mail.message` address; `.lossyFields` on the same result names the fields the projection drops.
 - **Re-run the SDK pass** — the extraction commands are in the Appendix of `.context/issue-586-domain-type-canon-v1.md`; diff against the committed TSV.
 
 ## Anti-patterns
 
 - **"Just write the projected entity back."** This is the destructive default the SPI exists to prevent — it clobbers MIME structure, edit stacks, provider labels, everything the projection dropped.
-- **Promoting `CalendarEvent` to Ring 1 because calendars feel like interchange.** No calendar assistant-schema domain exists. `Calendar.RecurrenceRule` binds a field, not the entity.
+- **Promoting `CalendarEvent` to Ring 1 because calendars feel like interchange.** `AppleCanonBindingRegistry` has no calendar assistant-schema domain entry; `Calendar.RecurrenceRule` binds a field, not the entity.
 - **Adding a `Custom(payload)` canon member.** It would make the `when` non-exhaustive and hand the reconciliation problem back to the LLM. Use the native payload on a typed entity.
 - **Declaring a wide `ownedFields` "to be safe".** Over-declaring re-opens the clobber path; under-declaring merely means the field is never written.
 - **Parsing `nativeId` to extract structure.** It is opaque by design.

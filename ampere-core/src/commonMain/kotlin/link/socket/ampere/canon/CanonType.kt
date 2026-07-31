@@ -9,26 +9,27 @@ import kotlinx.serialization.Serializable
  * The canon is an **intermediate representation**, not a convenience DTO set.
  * Apps are frontends and backends; Arc logic compiles against the IR, and one
  * Arc runs on iOS and Android because it targets the IR rather than either
- * platform's vocabulary. Where Apple built a canonical registry the IR partly
- * duplicates it and integration is a mapping table; where Android built none,
- * the IR *is* the missing canon. An agent guesses two tasks are the same kind
- * of thing; Ampere knows it, with provenance.
+ * platform's vocabulary. `ampere-core` carries zero platform-SDK references —
+ * how a canon type reaches a given platform's own vocabulary is a *binding*,
+ * declared in an edge module (`ampere-bindings-apple`, `ampere-bindings-android`)
+ * that depends on this module, never the reverse. See
+ * [link.socket.ampere.bindings.apple.AppleCanonBindingRegistry] and
+ * [link.socket.ampere.bindings.android.AndroidCanonBindingRegistry].
  *
  * **The set is closed for v1.** Extensibility is a post-launch decision. The
  * escape hatch is not a new canon member — it is
  * [CanonProvenance.nativePayload], which carries the lossless native object
  * alongside the projection.
  *
- * Each member declares its [ring] and its [binding]. Both were settled by the
- * SDK pass recorded in `.context/issue-586-domain-type-canon-v1.md`; the
- * `wireName` is a stable serialization contract — renaming one breaks
- * `PlaybackRelay` replay of any trace that already carries it.
+ * Each member declares its [ring]. Ring membership was settled by the SDK pass
+ * recorded in `.context/issue-586-domain-type-canon-v1.md`; the `wireName` is a
+ * stable serialization contract — renaming one breaks `PlaybackRelay` replay of
+ * any trace that already carries it.
  */
 @Serializable
 enum class CanonType(
     val wireName: String,
     val ring: CanonRing,
-    val binding: CanonBinding,
 ) {
 
     // ---------------------------------------------------------------------
@@ -36,307 +37,106 @@ enum class CanonType(
     // ---------------------------------------------------------------------
 
     @SerialName("person")
-    PERSON(
-        wireName = "person",
-        ring = CanonRing.INTERCHANGE,
-        binding = CanonBinding(
-            apple = AppleSchemaBinding.SystemValueType("IntentPerson"),
-            lossyFields = listOf("relationships", "alternateHandles", "organization", "jobTitle"),
-        ),
-    ),
+    PERSON(wireName = "person", ring = CanonRing.INTERCHANGE),
 
     @SerialName("email_message")
-    EMAIL_MESSAGE(
-        wireName = "email_message",
-        ring = CanonRing.INTERCHANGE,
-        binding = CanonBinding(
-            apple = AppleSchemaBinding.EntitySchema("mail", "message", "MailMessageEntity"),
-            lossyFields = listOf(
-                "mimeStructure",
-                "rawHeaders",
-                "threadIdentifiers",
-                "providerLabels",
-                "attachmentBytes",
-            ),
-        ),
-    ),
+    EMAIL_MESSAGE(wireName = "email_message", ring = CanonRing.INTERCHANGE),
 
     @SerialName("email_draft")
-    EMAIL_DRAFT(
-        wireName = "email_draft",
-        ring = CanonRing.INTERCHANGE,
-        binding = CanonBinding(
-            apple = AppleSchemaBinding.EntitySchema("mail", "draft", "MailDraftEntity"),
-            lossyFields = listOf("mimeStructure", "rawHeaders", "sendState", "attachmentBytes"),
-        ),
-    ),
+    EMAIL_DRAFT(wireName = "email_draft", ring = CanonRing.INTERCHANGE),
 
     @SerialName("mailbox")
-    MAILBOX(
-        wireName = "mailbox",
-        ring = CanonRing.INTERCHANGE,
-        binding = CanonBinding(
-            apple = AppleSchemaBinding.EntitySchema("mail", "mailbox", "MailboxEntity"),
-            lossyFields = listOf("providerFolderSemantics", "syncState"),
-        ),
-    ),
+    MAILBOX(wireName = "mailbox", ring = CanonRing.INTERCHANGE),
 
     @SerialName("photo")
-    PHOTO(
-        wireName = "photo",
-        ring = CanonRing.INTERCHANGE,
-        binding = CanonBinding(
-            apple = AppleSchemaBinding.EntitySchema("photos", "asset", "PhotoEntity"),
-            lossyFields = listOf("editStack", "adjustmentData", "livePhotoPair", "burstIdentity", "originalRendition"),
-        ),
-    ),
+    PHOTO(wireName = "photo", ring = CanonRing.INTERCHANGE),
 
     @SerialName("photo_album")
-    PHOTO_ALBUM(
-        wireName = "photo_album",
-        ring = CanonRing.INTERCHANGE,
-        binding = CanonBinding(
-            apple = AppleSchemaBinding.EntitySchema("photos", "album", "PhotoAlbumEntity"),
-            lossyFields = listOf("smartAlbumPredicate", "sharedParticipants"),
-        ),
-    ),
+    PHOTO_ALBUM(wireName = "photo_album", ring = CanonRing.INTERCHANGE),
 
-    /**
-     * One canon type fans out to five Apple document domains — `wordProcessor`,
-     * `reader`, `spreadsheet`, `presentation`, `whiteboard` — plus `files.file`.
-     * The fan-out *is* the lossy axis: a projection that drops
-     * `CanonDocument.kind` cannot round-trip to the right Apple schema.
-     */
     @SerialName("document")
-    DOCUMENT(
-        wireName = "document",
-        ring = CanonRing.INTERCHANGE,
-        binding = CanonBinding(
-            apple = AppleSchemaBinding.EntitySchema("files", "file", "FileEntity"),
-            lossyFields = listOf("documentKindSpecifics", "pageGeometry", "templateIdentity", "revisionHistory"),
-        ),
-    ),
+    DOCUMENT(wireName = "document", ring = CanonRing.INTERCHANGE),
 
     @SerialName("place")
-    PLACE(
-        wireName = "place",
-        ring = CanonRing.INTERCHANGE,
-        binding = CanonBinding(
-            apple = AppleSchemaBinding.SystemValueType("CLPlacemark"),
-            lossyFields = listOf("venueIdentity", "openingHours", "category", "rating", "providerPlaceId"),
-        ),
-    ),
+    PLACE(wireName = "place", ring = CanonRing.INTERCHANGE),
 
     @SerialName("journal_entry")
-    JOURNAL_ENTRY(
-        wireName = "journal_entry",
-        ring = CanonRing.INTERCHANGE,
-        binding = CanonBinding(
-            apple = AppleSchemaBinding.EntitySchema("journal", "entry", "JournalEntity"),
-            lossyFields = listOf("attachedMedia", "suggestionMetadata"),
-        ),
-    ),
+    JOURNAL_ENTRY(wireName = "journal_entry", ring = CanonRing.INTERCHANGE),
 
     @SerialName("book")
-    BOOK(
-        wireName = "book",
-        ring = CanonRing.INTERCHANGE,
-        binding = CanonBinding(
-            apple = AppleSchemaBinding.EntitySchema("books", "book", "BookEntity"),
-            lossyFields = listOf("readingPosition", "annotations", "assetIdentity"),
-        ),
-    ),
+    BOOK(wireName = "book", ring = CanonRing.INTERCHANGE),
 
     @SerialName("web_bookmark")
-    WEB_BOOKMARK(
-        wireName = "web_bookmark",
-        ring = CanonRing.INTERCHANGE,
-        binding = CanonBinding(
-            apple = AppleSchemaBinding.EntitySchema("browser", "bookmark", "BookmarkEntity"),
-            lossyFields = listOf("folderHierarchy", "syncState", "favicon"),
-        ),
-    ),
+    WEB_BOOKMARK(wireName = "web_bookmark", ring = CanonRing.INTERCHANGE),
 
     @SerialName("browser_tab")
-    BROWSER_TAB(
-        wireName = "browser_tab",
-        ring = CanonRing.INTERCHANGE,
-        binding = CanonBinding(
-            apple = AppleSchemaBinding.EntitySchema("browser", "tab", "TabEntity"),
-            lossyFields = listOf("backForwardHistory", "windowMembership", "scrollState"),
-        ),
-    ),
+    BROWSER_TAB(wireName = "browser_tab", ring = CanonRing.INTERCHANGE),
 
     // ---------------------------------------------------------------------
     // Ring 2 — Platform
     //
-    // CALENDAR_EVENT, REMINDER, ALARM and MEDIA_ITEM were Ring 1 candidates.
-    // They demoted because the shipped assistant-schema catalog has no
-    // calendar, reminders, clock or music/video domain — `Calendar.Recurrence-
-    // Rule` and `Date` bind *fields*, never the entity.
+    // CALENDAR_EVENT, REMINDER, ALARM and MEDIA_ITEM were Ring 1 candidates
+    // in the original SDK pass; see the edge-module binding registries for
+    // why they demoted.
     // ---------------------------------------------------------------------
 
     @SerialName("calendar_event")
-    CALENDAR_EVENT(
-        wireName = "calendar_event",
-        ring = CanonRing.PLATFORM,
-        binding = CanonBinding(
-            apple = null,
-            lossyFields = listOf("eventKitAttendeeStatus", "alarms", "structuredLocation"),
-        ),
-    ),
+    CALENDAR_EVENT(wireName = "calendar_event", ring = CanonRing.PLATFORM),
 
     @SerialName("reminder")
-    REMINDER(
-        wireName = "reminder",
-        ring = CanonRing.PLATFORM,
-        binding = CanonBinding(
-            apple = null,
-            lossyFields = listOf("eventKitAlarms", "recurrenceRules", "priority", "subtasks"),
-        ),
-    ),
+    REMINDER(wireName = "reminder", ring = CanonRing.PLATFORM),
 
     @SerialName("alarm")
-    ALARM(
-        wireName = "alarm",
-        ring = CanonRing.PLATFORM,
-        binding = CanonBinding(
-            apple = null,
-            lossyFields = listOf("alarmKitPresentation", "snoozeConfiguration"),
-        ),
-    ),
+    ALARM(wireName = "alarm", ring = CanonRing.PLATFORM),
 
     @SerialName("media_item")
-    MEDIA_ITEM(
-        wireName = "media_item",
-        ring = CanonRing.PLATFORM,
-        binding = CanonBinding(
-            apple = null,
-            lossyFields = listOf(
-                "playbackState",
-                "libraryIdentity",
-                "drmAssetHandle",
-                "albumTitle",
-                "artworkUrl",
-            ),
-        ),
-    ),
+    MEDIA_ITEM(wireName = "media_item", ring = CanonRing.PLATFORM),
 
     @SerialName("health_sample")
-    HEALTH_SAMPLE(
-        wireName = "health_sample",
-        ring = CanonRing.PLATFORM,
-        binding = CanonBinding(apple = null, lossyFields = listOf("healthKitMetadata", "deviceProvenance")),
-    ),
+    HEALTH_SAMPLE(wireName = "health_sample", ring = CanonRing.PLATFORM),
 
     @SerialName("home_accessory")
-    HOME_ACCESSORY(
-        wireName = "home_accessory",
-        ring = CanonRing.PLATFORM,
-        binding = CanonBinding(apple = null, lossyFields = listOf("serviceGraph", "roomAssignment")),
-    ),
+    HOME_ACCESSORY(wireName = "home_accessory", ring = CanonRing.PLATFORM),
 
     @SerialName("transaction")
-    TRANSACTION(
-        wireName = "transaction",
-        ring = CanonRing.PLATFORM,
-        binding = CanonBinding(
-            apple = AppleSchemaBinding.SystemValueType("IntentCurrencyAmount"),
-            lossyFields = listOf("merchantIdentity", "financeKitAccount", "paymentMethod"),
-        ),
-    ),
+    TRANSACTION(wireName = "transaction", ring = CanonRing.PLATFORM),
 
     @SerialName("pass")
-    PASS(
-        wireName = "pass",
-        ring = CanonRing.PLATFORM,
-        binding = CanonBinding(
-            apple = null,
-            lossyFields = listOf("passType", "structuredFields", "barcodePayload", "relevantDate"),
-        ),
-    ),
+    PASS(wireName = "pass", ring = CanonRing.PLATFORM),
 
     @SerialName("weather_forecast")
-    WEATHER_FORECAST(
-        wireName = "weather_forecast",
-        ring = CanonRing.PLATFORM,
-        binding = CanonBinding(
-            apple = AppleSchemaBinding.SystemValueType("Measurement"),
-            // AMPR-252: series is now modelled via CanonWeatherForecast.series;
-            // per-point richness beyond temperature/condition is still lossy.
-            lossyFields = listOf(
-                "weatherKitAttribution",
-                "precipitationChance",
-                "windSpeed",
-                "uvIndex",
-                "humidity",
-            ),
-        ),
-    ),
+    WEATHER_FORECAST(wireName = "weather_forecast", ring = CanonRing.PLATFORM),
 
     @SerialName("bluetooth_peripheral")
-    BLUETOOTH_PERIPHERAL(
-        wireName = "bluetooth_peripheral",
-        ring = CanonRing.PLATFORM,
-        binding = CanonBinding(apple = null, lossyFields = listOf("gattServices", "advertisementData")),
-    ),
+    BLUETOOTH_PERIPHERAL(wireName = "bluetooth_peripheral", ring = CanonRing.PLATFORM),
 
     @SerialName("motion_sample")
-    MOTION_SAMPLE(
-        wireName = "motion_sample",
-        ring = CanonRing.PLATFORM,
-        binding = CanonBinding(apple = null, lossyFields = listOf("coreMotionRawVectors")),
-    ),
+    MOTION_SAMPLE(wireName = "motion_sample", ring = CanonRing.PLATFORM),
 
     // ---------------------------------------------------------------------
     // Ring 3 — Service
     //
-    // MESSAGE and NOTE were Ring 1 candidates. Neither has an assistant-schema
-    // domain, and neither has a public iOS read API; their real sources are
-    // service Links (Slack, Twilio, Notion) and folder mounts (Obsidian).
+    // MESSAGE and NOTE were Ring 1 candidates in the original SDK pass; see
+    // the edge-module binding registries for why they demoted.
     // ---------------------------------------------------------------------
 
     @SerialName("message")
-    MESSAGE(
-        wireName = "message",
-        ring = CanonRing.SERVICE,
-        binding = CanonBinding.UNBOUND,
-    ),
+    MESSAGE(wireName = "message", ring = CanonRing.SERVICE),
 
     @SerialName("note")
-    NOTE(
-        wireName = "note",
-        ring = CanonRing.SERVICE,
-        binding = CanonBinding.UNBOUND,
-    ),
+    NOTE(wireName = "note", ring = CanonRing.SERVICE),
 
     @SerialName("ride")
-    RIDE(
-        wireName = "ride",
-        ring = CanonRing.SERVICE,
-        binding = CanonBinding.UNBOUND,
-    ),
+    RIDE(wireName = "ride", ring = CanonRing.SERVICE),
 
     @SerialName("order")
-    ORDER(
-        wireName = "order",
-        ring = CanonRing.SERVICE,
-        binding = CanonBinding.UNBOUND,
-    ),
+    ORDER(wireName = "order", ring = CanonRing.SERVICE),
 
     @SerialName("delivery")
-    DELIVERY(
-        wireName = "delivery",
-        ring = CanonRing.SERVICE,
-        binding = CanonBinding.UNBOUND,
-    ),
+    DELIVERY(wireName = "delivery", ring = CanonRing.SERVICE),
 
     @SerialName("third_party_playlist")
-    THIRD_PARTY_PLAYLIST(
-        wireName = "third_party_playlist",
-        ring = CanonRing.SERVICE,
-        binding = CanonBinding.UNBOUND,
-    ),
+    THIRD_PARTY_PLAYLIST(wireName = "third_party_playlist", ring = CanonRing.SERVICE),
     ;
 
     companion object {
