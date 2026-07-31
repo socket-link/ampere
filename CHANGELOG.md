@@ -69,6 +69,41 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
 - Phosphor 0.6.2 ([PHO-28](https://linear.app/miley/issue/PHO-28)) now
   aligns with canonical PROPEL phases: `PERCEIVE / RECALL / OBSERVE / PLAN / EXECUTE / LEARN / LOOP / NONE`.
 
+## [0.12.0] — 2026-07-31
+
+### Added
+
+- `CanonAssetRef` and `AssetResolver` for canon asset references
+  ([AMPR-258](https://linear.app/miley/issue/AMPR-258)).
+- `NativeFields` cursor, `NativeSchema` value class, and child provenance
+  rules ([AMPR-248](https://linear.app/miley/issue/AMPR-248)).
+- `PlugPermission.DeviceCapability` and `NativeAuthorizationStatus`
+  ([AMPR-249](https://linear.app/miley/issue/AMPR-249)).
+- `PerceiveSource`/`ExecuteSink` chassis operation layer
+  ([AMPR-246](https://linear.app/miley/issue/AMPR-246)).
+- `ampere-core-test-fixtures` published as its own Maven artifact
+  ([AMPR-250](https://linear.app/miley/issue/AMPR-250)).
+
+### Changed
+
+- Binding declarations split out of `ampere-core` into edge modules
+  ([AMPR-257](https://linear.app/miley/issue/AMPR-257)).
+- `CanonAdapter` split into `Readable`/`Writable`/`CreatingCanonAdapter`
+  ([AMPR-247](https://linear.app/miley/issue/AMPR-247)).
+- Thin Canon types widened for the P0 Plug wave
+  ([AMPR-252](https://linear.app/miley/issue/AMPR-252)).
+- Plug manifest dead ends closed
+  ([AMPR-251](https://linear.app/miley/issue/AMPR-251)).
+- iOS framework link moved out of Xcode's nested Gradle invocation
+  ([AMPR-253](https://linear.app/miley/issue/AMPR-253)).
+- iOS CI job time reduced via simulator boot caching/overlap
+  ([AMPR-244](https://linear.app/miley/issue/AMPR-244),
+  [AMPR-255](https://linear.app/miley/issue/AMPR-255)).
+
+### Fixed
+
+- Dokka link-resolution and Kotlin/Native cast warnings.
+
 ## [0.6.0] — 2026-05
 
 Released; see `git log v0.6.0` for the commit history.
