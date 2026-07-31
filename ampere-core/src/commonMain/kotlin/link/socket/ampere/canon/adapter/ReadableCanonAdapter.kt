@@ -6,6 +6,7 @@ import link.socket.ampere.canon.CanonEntity
 import link.socket.ampere.canon.CanonProvenance
 import link.socket.ampere.canon.CanonType
 import link.socket.ampere.canon.NativePayload
+import link.socket.ampere.canon.NativeSchema
 import link.socket.ampere.canon.SourceHandle
 
 /**
@@ -30,7 +31,7 @@ abstract class ReadableCanonAdapter<E : CanonEntity> {
      * The native shape identifier this adapter reads, e.g. `MailMessageEntity`.
      * Checked on every projection.
      */
-    abstract val nativeSchema: String
+    abstract val nativeSchema: NativeSchema
 
     /**
      * Native → canon. The provenance is built for you and cannot be omitted.

@@ -33,7 +33,7 @@ class CanonSerializationTest {
         ),
         observedAt = Instant.fromEpochMilliseconds(1_700_000_000_000),
         nativePayload = NativePayload(
-            schema = "MailMessageEntity",
+            schema = NativeSchema("MailMessageEntity"),
             fields = JsonObject(mapOf("subject" to JsonPrimitive("hi"))),
         ),
     )

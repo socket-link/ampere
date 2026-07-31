@@ -1,6 +1,7 @@
 package link.socket.ampere.canon.adapter
 
 import link.socket.ampere.canon.CanonType
+import link.socket.ampere.canon.NativeSchema
 
 /**
  * Why a canon projection or write-back could not complete.
@@ -17,15 +18,15 @@ sealed interface CanonConversionFailure {
      */
     data class SchemaMismatch(
         val canonType: CanonType,
-        val expectedSchema: String,
-        val actualSchema: String,
+        val expectedSchema: NativeSchema,
+        val actualSchema: NativeSchema,
     ) : CanonConversionFailure
 
     /** A field the canon type requires was absent from the native payload. */
     data class MissingRequiredField(
         val canonType: CanonType,
         val field: String,
-        val schema: String,
+        val schema: NativeSchema,
     ) : CanonConversionFailure
 
     /** A field was present but could not be read as the canon type expects. */
