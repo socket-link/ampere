@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.Instant
 import kotlinx.serialization.json.JsonElement
 import link.socket.ampere.agents.tools.mcp.connection.McpServerConnection
 import link.socket.ampere.agents.tools.mcp.protocol.ContentItem
@@ -13,7 +14,16 @@ import link.socket.ampere.agents.tools.mcp.protocol.McpToolDescriptor
 import link.socket.ampere.agents.tools.mcp.protocol.ServerCapabilities
 import link.socket.ampere.agents.tools.mcp.protocol.ServerInfo
 import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
+import link.socket.ampere.canon.CanonType
+import link.socket.ampere.link.EgressClass
+import link.socket.ampere.link.InMemoryLinkStore
+import link.socket.ampere.link.Link
+import link.socket.ampere.link.LinkDirection
 import link.socket.ampere.link.LinkId
+import link.socket.ampere.link.LinkRequirement
+import link.socket.ampere.link.LinkResolutionService
+import link.socket.ampere.link.PlatformTarget
+import link.socket.ampere.link.Transport
 import link.socket.ampere.mcp.InMemoryMcpCredentialBinding
 import link.socket.ampere.plug.permission.PlugPermission
 import link.socket.ampere.plug.permission.UserGrants
@@ -24,16 +34,45 @@ class PlugContextEndToEndTest {
 
     private val mcpUri = "mcp://github"
     private val toolName = "list_repos"
+    private val plugId = PlugId("github-plug")
+    private val linkId = LinkId("github-link")
 
     private val manifest = PlugManifest(
-        id = "github-plug",
+        id = plugId,
         name = "GitHub Plug",
         version = "1.0.0",
         requiredPermissions = listOf(PlugPermission.MCPServer(mcpUri)),
         mcpServers = listOf(
             McpServerDependency(name = "github", uri = mcpUri),
         ),
+        requiredLinks = listOf(
+            LinkRequirement(
+                name = "github",
+                transport = Transport.MCP,
+                direction = LinkDirection.READ_WRITE,
+                minimumScope = setOf(CanonType.DOCUMENT),
+            ),
+        ),
+        emits = setOf(CanonType.DOCUMENT),
+        consumes = setOf(CanonType.DOCUMENT),
     )
+
+    /** A [LinkResolutionService] with a granted Link satisfying the manifest's one requirement. */
+    private suspend fun grantedLinkResolutionService(): LinkResolutionService {
+        val store = InMemoryLinkStore(
+            links = listOf(
+                Link(
+                    id = linkId,
+                    transport = Transport.MCP,
+                    direction = LinkDirection.READ_WRITE,
+                    egress = EgressClass.ThirdParty("github"),
+                    scope = setOf(CanonType.DOCUMENT),
+                ),
+            ),
+        )
+        store.grant(plugId, linkId, Instant.fromEpochMilliseconds(0))
+        return LinkResolutionService(linkStore = store, platform = PlatformTarget.JVM_DESKTOP)
+    }
 
     @Test
     fun `granted user invokes mcp tool successfully`() = runTest {
@@ -52,7 +91,7 @@ class PlugContextEndToEndTest {
         val context = PlugContext.create(
             manifest = manifest,
             credentialBinding = InMemoryMcpCredentialBinding(),
-            linkId = LinkId("test-link"),
+            linkResolutionService = grantedLinkResolutionService(),
             connectionFactory = { _, _ -> mock },
         ).getOrThrow()
 
@@ -82,7 +121,7 @@ class PlugContextEndToEndTest {
         val context = PlugContext.create(
             manifest = manifest,
             credentialBinding = InMemoryMcpCredentialBinding(),
-            linkId = LinkId("test-link"),
+            linkResolutionService = grantedLinkResolutionService(),
             connectionFactory = { _, _ -> mock },
         ).getOrThrow()
 
@@ -109,7 +148,7 @@ class PlugContextEndToEndTest {
         val context = PlugContext.create(
             manifest = manifest,
             credentialBinding = InMemoryMcpCredentialBinding(),
-            linkId = LinkId("test-link"),
+            linkResolutionService = grantedLinkResolutionService(),
             connectionFactory = { _, _ -> mock },
         ).getOrThrow()
 

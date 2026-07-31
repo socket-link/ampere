@@ -12,6 +12,7 @@ import link.socket.ampere.canon.CanonType
 import link.socket.ampere.canon.SourceHandle
 import link.socket.ampere.canon.adapter.CanonConversionFailure
 import link.socket.ampere.link.LinkId
+import link.socket.ampere.plug.PlugId
 import link.socket.ampere.plug.PlugManifest
 
 class PerceiveSourceTest {
@@ -87,7 +88,7 @@ class PerceiveSourceTest {
     @Test
     fun `emits disagreeing with a manifest is detectable by a caller`() {
         val manifest = PlugManifest(
-            id = "contacts-plug",
+            id = PlugId("contacts-plug"),
             name = "Contacts",
             version = "1.0.0",
             emits = setOf(CanonType.PERSON, CanonType.EMAIL_MESSAGE),

@@ -15,7 +15,7 @@ class PlugManifestValidationTest {
     @Test
     fun `manifest with declared mcp server and matching permission validates`() {
         val manifest = PlugManifest(
-            id = "github-plug",
+            id = PlugId("github-plug"),
             name = "GitHub Plug",
             version = "1.0.0",
             requiredPermissions = listOf(
@@ -37,7 +37,7 @@ class PlugManifestValidationTest {
     @Test
     fun `manifest missing matching mcp permission fails with diagnostic naming the uri`() {
         val manifest = PlugManifest(
-            id = "github-plug",
+            id = PlugId("github-plug"),
             name = "GitHub Plug",
             version = "1.0.0",
             requiredPermissions = emptyList(),
@@ -62,7 +62,7 @@ class PlugManifestValidationTest {
     fun `dependency permission not lifted to manifest is flagged`() {
         val knowledgeQuery = PlugPermission.KnowledgeQuery("workspace")
         val manifest = PlugManifest(
-            id = "github-plug",
+            id = PlugId("github-plug"),
             name = "GitHub Plug",
             version = "1.0.0",
             requiredPermissions = listOf(
@@ -90,7 +90,7 @@ class PlugManifestValidationTest {
     @Test
     fun `manifest with no mcp servers validates regardless of permissions`() {
         val manifest = PlugManifest(
-            id = "no-mcp-plug",
+            id = PlugId("no-mcp-plug"),
             name = "No MCP Plug",
             version = "1.0.0",
         )
@@ -103,7 +103,7 @@ class PlugManifestValidationTest {
     @Test
     fun `multiple mcp servers all require their own permissions`() {
         val manifest = PlugManifest(
-            id = "multi-mcp",
+            id = PlugId("multi-mcp"),
             name = "Multi MCP",
             version = "1.0.0",
             requiredPermissions = listOf(
@@ -142,14 +142,14 @@ class PlugManifestValidationTest {
     @Test
     fun `a manifest declaring well-formed link requirements validates`() {
         val manifest = PlugManifest(
-            id = "calendar-plug",
+            id = PlugId("calendar-plug"),
             name = "Calendar Plug",
             version = "1.0.0",
             requiredLinks = listOf(
                 linkRequirement("calendar"),
                 linkRequirement("mail", setOf(CanonType.EMAIL_MESSAGE)),
             ),
-            emits = setOf(CanonType.CALENDAR_EVENT),
+            emits = setOf(CanonType.CALENDAR_EVENT, CanonType.EMAIL_MESSAGE),
             consumes = setOf(CanonType.PERSON),
         )
 
@@ -161,7 +161,7 @@ class PlugManifestValidationTest {
         // Both would collapse onto one key in ResolvedLinks, so one Link would
         // be silently unreachable at execution time.
         val manifest = PlugManifest(
-            id = "calendar-plug",
+            id = PlugId("calendar-plug"),
             name = "Calendar Plug",
             version = "1.0.0",
             requiredLinks = listOf(
@@ -185,7 +185,7 @@ class PlugManifestValidationTest {
     @Test
     fun `a link requirement with an empty scope is rejected`() {
         val manifest = PlugManifest(
-            id = "calendar-plug",
+            id = PlugId("calendar-plug"),
             name = "Calendar Plug",
             version = "1.0.0",
             requiredLinks = listOf(linkRequirement("calendar", emptySet())),
@@ -210,7 +210,7 @@ class PlugManifestValidationTest {
     @Test
     fun `a manifest declaring a device capability validates`() {
         val manifest = PlugManifest(
-            id = "calendar-plug",
+            id = PlugId("calendar-plug"),
             name = "Calendar Plug",
             version = "1.0.0",
             requiredPermissions = listOf(
@@ -227,7 +227,7 @@ class PlugManifestValidationTest {
         // capability token is a renderer-time concern, not an install-time
         // failure.
         val manifest = PlugManifest(
-            id = "exotic-plug",
+            id = PlugId("exotic-plug"),
             name = "Exotic Plug",
             version = "1.0.0",
             requiredPermissions = listOf(
@@ -241,7 +241,7 @@ class PlugManifestValidationTest {
     @Test
     fun `duplicate device capability declarations are rejected`() {
         val manifest = PlugManifest(
-            id = "calendar-plug",
+            id = PlugId("calendar-plug"),
             name = "Calendar Plug",
             version = "1.0.0",
             requiredPermissions = listOf(
@@ -263,9 +263,48 @@ class PlugManifestValidationTest {
     }
 
     @Test
+    fun `a link requirement scoped to a canon type the manifest neither emits nor consumes is rejected`() {
+        val manifest = PlugManifest(
+            id = PlugId("calendar-plug"),
+            name = "Calendar Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(linkRequirement("calendar", setOf(CanonType.CALENDAR_EVENT))),
+            emits = setOf(CanonType.PERSON),
+            consumes = emptySet(),
+        )
+
+        val invalid = assertIs<ManifestValidationResult.Invalid>(
+            PlugManifestValidator.validate(manifest),
+        )
+
+        val undeclared = invalid.reasons
+            .filterIsInstance<ManifestValidationReason.UndeclaredCanonScope>()
+        assertEquals(1, undeclared.size)
+        assertEquals("calendar", undeclared.single().requirementName)
+        assertEquals(CanonType.CALENDAR_EVENT, undeclared.single().canonType)
+    }
+
+    @Test
+    fun `a link requirement scoped to a canon type in either emits or consumes validates`() {
+        val manifest = PlugManifest(
+            id = PlugId("calendar-plug"),
+            name = "Calendar Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(
+                linkRequirement("calendar", setOf(CanonType.CALENDAR_EVENT)),
+                linkRequirement("contacts", setOf(CanonType.PERSON)),
+            ),
+            emits = setOf(CanonType.CALENDAR_EVENT),
+            consumes = setOf(CanonType.PERSON),
+        )
+
+        assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
+    }
+
+    @Test
     fun `a manifest written before link requirements existed still decodes`() {
         // The defaults are what keep pre-AMPR-223 manifests valid.
-        val manifest = PlugManifest(id = "legacy", name = "Legacy", version = "0.1.0")
+        val manifest = PlugManifest(id = PlugId("legacy"), name = "Legacy", version = "0.1.0")
 
         assertTrue(manifest.requiredLinks.isEmpty())
         assertTrue(manifest.emits.isEmpty())

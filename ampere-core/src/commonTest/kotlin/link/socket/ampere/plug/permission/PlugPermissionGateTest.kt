@@ -2,13 +2,14 @@ package link.socket.ampere.plug.permission
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import link.socket.ampere.plug.PlugId
 import link.socket.ampere.plug.PlugManifest
 
 class PlugPermissionGateTest {
 
     private val permission = PlugPermission.NetworkDomain("api.example.com")
     private val manifest = PlugManifest(
-        id = "example-plug",
+        id = PlugId("example-plug"),
         name = "Example Plug",
         version = "1.0.0",
         requiredPermissions = listOf(permission),

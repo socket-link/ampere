@@ -1,5 +1,6 @@
 package link.socket.ampere.plug
 
+import link.socket.ampere.canon.CanonType
 import link.socket.ampere.plug.permission.PlugPermission
 
 /**
@@ -60,10 +61,12 @@ object PlugManifestValidator {
     /**
      * Structural checks on [PlugManifest.requiredLinks].
      *
-     * Both rules exist because the failure they catch is silent otherwise: a
-     * duplicate requirement name means one of the two Links is unreachable
-     * through [link.socket.ampere.link.ResolvedLinks], and an empty scope means
-     * a wire that resolves successfully and then may carry nothing.
+     * All three rules exist because the failure they catch is silent
+     * otherwise: a duplicate requirement name means one of the two Links is
+     * unreachable through [link.socket.ampere.link.ResolvedLinks], an empty
+     * scope means a wire that resolves successfully and then may carry
+     * nothing, and a scope naming a canon type the Plug never declares means
+     * the Plug is asking for data it has no stated way to produce or use.
      */
     private fun validateLinkRequirements(
         manifest: PlugManifest,
@@ -83,6 +86,16 @@ object PlugManifestValidator {
             .forEach { requirement ->
                 reasons += ManifestValidationReason.EmptyLinkRequirementScope(requirement.name)
             }
+
+        val declaredCanonTypes = manifest.emits + manifest.consumes
+        manifest.requiredLinks.forEach { requirement ->
+            (requirement.minimumScope - declaredCanonTypes).forEach { undeclared ->
+                reasons += ManifestValidationReason.UndeclaredCanonScope(
+                    requirementName = requirement.name,
+                    canonType = undeclared,
+                )
+            }
+        }
 
         return reasons
     }
@@ -152,5 +165,16 @@ sealed interface ManifestValidationReason {
      */
     data class DuplicateDeviceCapability(
         val capability: String,
+    ) : ManifestValidationReason
+
+    /**
+     * A [link.socket.ampere.link.LinkRequirement.minimumScope] names a
+     * [CanonType] the manifest neither [PlugManifest.emits] nor
+     * [PlugManifest.consumes] — the Plug is asking for data it has no stated
+     * way to produce or use.
+     */
+    data class UndeclaredCanonScope(
+        val requirementName: String,
+        val canonType: CanonType,
     ) : ManifestValidationReason
 }

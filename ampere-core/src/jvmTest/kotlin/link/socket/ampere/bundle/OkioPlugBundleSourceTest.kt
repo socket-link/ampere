@@ -13,6 +13,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
+import link.socket.ampere.plug.PlugId
 import link.socket.ampere.plug.PlugManifest
 import link.socket.ampere.plug.permission.PlugPermission
 import okio.FileSystem
@@ -30,7 +31,7 @@ class OkioPlugBundleSourceTest {
     private val fixtureManifest = BundleManifest(
         bundleFormatVersion = 1,
         plug = PlugManifest(
-            id = "github-plug",
+            id = PlugId("github-plug"),
             name = "GitHub Plug",
             version = "1.0.0",
             requiredPermissions = listOf(

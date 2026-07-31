@@ -1,6 +1,7 @@
 package link.socket.ampere.plug.permission
 
 import kotlinx.serialization.Serializable
+import link.socket.ampere.plug.PlugId
 import link.socket.ampere.plug.PlugManifest
 
 /**
@@ -31,7 +32,7 @@ object PlugPermissionGate {
 
 @Serializable
 data class PlugToolCall(
-    val plugId: String,
+    val plugId: PlugId,
     val toolId: String,
     val requestedPermissions: List<PlugPermission> = emptyList(),
 )

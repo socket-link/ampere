@@ -1,10 +1,11 @@
 package link.socket.ampere.plug
 
 import link.socket.ampere.agents.config.AgentActionAutonomy
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.tools.mcp.connection.McpServerConnection
-import link.socket.ampere.link.LinkId
+import link.socket.ampere.link.LinkResolutionService
 import link.socket.ampere.mcp.McpClient
 import link.socket.ampere.mcp.McpCredential
 import link.socket.ampere.mcp.McpCredentialBinding
@@ -20,11 +21,17 @@ import link.socket.ampere.mcp.defaultHttpConnection
  * carries the originating manifest so [PlugPermissionGate][link.socket.ampere.plug.permission.PlugPermissionGate]
  * still gates dispatch.
  *
- * Construction goes through [create]. It validates the manifest, opens an
- * [McpClient] per dependency, runs the handshake, lists tools, and wraps
- * each descriptor as an [McpTool]. Server failures are surfaced per server
- * (mirroring the existing [link.socket.ampere.agents.tools.mcp.McpServerManager]
- * resilience pattern) so one bad server doesn't kill the plug.
+ * Construction goes through [create]. It validates the manifest, resolves
+ * [PlugManifest.requiredLinks] through [LinkResolutionService] — callers pass
+ * the service, never a pre-resolved [link.socket.ampere.link.LinkId], so a
+ * misconfigured or revoked Link fails at construction instead of at first
+ * dispatch — then opens an [McpClient] per [McpServerDependency] using the
+ * Link resolved for the requirement of the same name, runs the handshake,
+ * lists tools, and wraps each descriptor as an [McpTool]. Server failures are
+ * surfaced per server (mirroring the existing
+ * [link.socket.ampere.agents.tools.mcp.McpServerManager] resilience pattern)
+ * so one bad server doesn't kill the plug — including a dependency with no
+ * matching requirement, or one whose requirement resolved to nothing.
  *
  * Tools are dispatched through
  * [link.socket.ampere.propel.ExecuteStep], which resolves the right
@@ -66,7 +73,8 @@ class PlugContext private constructor(
         suspend fun create(
             manifest: PlugManifest,
             credentialBinding: McpCredentialBinding,
-            linkId: LinkId,
+            linkResolutionService: LinkResolutionService,
+            agentId: AgentId? = null,
             nativeTools: List<Tool<*>> = emptyList(),
             connectionFactory: (McpServerDependency, McpCredential?) -> McpServerConnection =
                 ::defaultHttpConnection,
@@ -78,15 +86,27 @@ class PlugContext private constructor(
                 )
             }
 
+            val resolvedLinks = linkResolutionService.resolve(manifest.id, manifest, agentId)
+                .getOrElse { return Result.failure(it) }
+
             val clientsByUri = mutableMapOf<String, McpClient>()
             val toolsByUri = mutableMapOf<String, List<McpTool>>()
             val failures = mutableListOf<PlugContextServerFailure>()
 
             manifest.mcpServers.forEach { dependency ->
+                val link = resolvedLinks[dependency.name]
+                if (link == null) {
+                    failures += PlugContextServerFailure(
+                        dependency = dependency,
+                        cause = UnresolvedPlugLinkException(dependency.name),
+                    )
+                    return@forEach
+                }
+
                 val client = McpClient(
                     dependency = dependency,
                     credentialBinding = credentialBinding,
-                    linkId = linkId,
+                    linkId = link.id,
                     connectionFactory = connectionFactory,
                 )
 
@@ -155,3 +175,13 @@ data class PlugContextServerFailure(
 class PlugManifestValidationException(
     val reasons: List<ManifestValidationReason>,
 ) : Exception("Plug manifest validation failed: $reasons")
+
+/**
+ * Thrown internally when an [McpServerDependency] has no [LinkRequirement]
+ * of the same name resolved in [PlugContext.create]'s
+ * [link.socket.ampere.link.ResolvedLinks] — never crosses [PlugContext.create]
+ * itself, only [PlugContextServerFailure.cause].
+ */
+class UnresolvedPlugLinkException(
+    dependencyName: String,
+) : Exception("No resolved Link for MCP dependency \"$dependencyName\"")

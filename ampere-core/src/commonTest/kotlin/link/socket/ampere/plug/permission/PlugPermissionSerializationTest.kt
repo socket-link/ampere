@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlinx.serialization.json.Json
 import link.socket.ampere.plug.McpServerDependency
+import link.socket.ampere.plug.PlugId
 import link.socket.ampere.plug.PlugManifest
 
 class PlugPermissionSerializationTest {
@@ -92,7 +93,7 @@ class PlugPermissionSerializationTest {
     @Test
     fun `manifest surfaces declared required permissions`() {
         val original = PlugManifest(
-            id = "github-plug",
+            id = PlugId("github-plug"),
             name = "GitHub Plug",
             version = "1.0.0",
             requiredPermissions = listOf(
@@ -125,7 +126,7 @@ class PlugPermissionSerializationTest {
     @Test
     fun `manifest round-trips mcp server dependencies through json`() {
         val original = PlugManifest(
-            id = "github-plug",
+            id = PlugId("github-plug"),
             name = "GitHub Plug",
             version = "1.0.0",
             requiredPermissions = listOf(
