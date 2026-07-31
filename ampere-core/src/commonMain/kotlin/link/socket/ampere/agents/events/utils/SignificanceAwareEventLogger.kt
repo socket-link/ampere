@@ -3,6 +3,7 @@ package link.socket.ampere.agents.events.utils
 import co.touchlab.kermit.Logger
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
+import link.socket.ampere.agents.domain.event.AssetAccessEvent
 import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
@@ -192,6 +193,9 @@ class SignificanceAwareEventLogger(
         is LinkEvent.LinkGranted -> EventSignificance.SIGNIFICANT
         is LinkEvent.LinkRevoked -> EventSignificance.CRITICAL
         is LinkEvent.LinkResolutionFailed -> EventSignificance.CRITICAL
+
+        // Asset resolution - routine, mirroring LinkResolved.
+        is AssetAccessEvent -> EventSignificance.ROUTINE
     }
 
     private fun formatUrgency(urgency: Urgency): String = when (urgency) {
