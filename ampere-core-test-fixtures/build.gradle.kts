@@ -1,3 +1,5 @@
+@file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+
 import com.vanniktech.maven.publish.JavadocJar
 import com.vanniktech.maven.publish.KotlinMultiplatform
 import com.vanniktech.maven.publish.SonatypeHost
@@ -77,6 +79,17 @@ kotlin {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_21)
         }
+    }
+
+    // ampere-core also targets js/wasmJs, and its commonTest depends on this
+    // module — every ampere-core target needs a matching variant here for
+    // that dependency to resolve.
+    js(IR) {
+        browser()
+    }
+
+    wasmJs {
+        browser()
     }
 
     iosX64()
