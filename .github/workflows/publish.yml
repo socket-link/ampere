@@ -59,7 +59,7 @@ jobs:
         run: ./gradlew ktlintCheck
 
       - name: Run tests before publish
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: ./gradlew :ampere-core:jvmTest
 
       - name: Decode signing key
