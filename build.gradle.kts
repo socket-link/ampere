@@ -12,6 +12,6 @@ plugins {
 
 allprojects {
     tasks.withType<Test>().configureEach {
-        maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+        maxParallelForks = Runtime.getRuntime().availableProcessors().coerceIn(2, 8)
     }
 }
