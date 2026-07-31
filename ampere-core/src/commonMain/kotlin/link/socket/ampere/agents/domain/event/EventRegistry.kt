@@ -117,6 +117,9 @@ object EventRegistry {
         LinkEvent.LinkResolved.EVENT_TYPE,
         LinkEvent.LinkResolutionFailed.EVENT_TYPE,
 
+        // AssetAccessEvent types
+        AssetAccessEvent.EVENT_TYPE,
+
         // AgentSurfaceEvent types
         AgentSurfaceEvent.Requested.EVENT_TYPE,
         AgentSurfaceEvent.Responded.EVENT_TYPE,

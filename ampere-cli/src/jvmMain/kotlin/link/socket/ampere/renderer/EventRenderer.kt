@@ -13,6 +13,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
+import link.socket.ampere.agents.domain.event.AssetAccessEvent
 import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
@@ -183,6 +184,8 @@ class EventRenderer(
             is LinkEvent.LinkGranted -> "🔌" to blue
             is LinkEvent.LinkRevoked -> "🔌" to red
             is LinkEvent.LinkResolutionFailed -> "🔌" to red
+            // Asset resolution: out-of-band, mirroring Link's icon family
+            is AssetAccessEvent -> "🖼" to green
         }
     }
 

@@ -124,6 +124,7 @@ data class CanonPhoto(
     val isFavorite: Boolean = false,
     val place: CanonPlace? = null,
     val recognizedPeople: List<CanonPerson> = emptyList(),
+    val thumbnail: CanonAssetRef? = null,
 ) : CanonEntity {
     override val canonType: CanonType get() = CanonType.PHOTO
 }
@@ -158,6 +159,7 @@ data class CanonDocument(
     val sizeBytes: Long? = null,
     val modifiedAt: Instant? = null,
     val plainText: String? = null,
+    val thumbnail: CanonAssetRef? = null,
 ) : CanonEntity {
     override val canonType: CanonType get() = CanonType.DOCUMENT
 }

@@ -68,6 +68,7 @@ data class CanonMediaItem(
     val title: String,
     val artist: String? = null,
     val durationSeconds: Long? = null,
+    val artwork: CanonAssetRef? = null,
 ) : CanonEntity {
     override val canonType: CanonType get() = CanonType.MEDIA_ITEM
 }
@@ -143,6 +144,7 @@ data class CanonPass(
     val description: String,
     val organizationName: String? = null,
     val expiresAt: Instant? = null,
+    val logo: CanonAssetRef? = null,
 ) : CanonEntity {
     override val canonType: CanonType get() = CanonType.PASS
 }

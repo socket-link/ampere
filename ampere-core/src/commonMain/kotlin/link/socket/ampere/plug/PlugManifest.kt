@@ -19,6 +19,12 @@ import link.socket.ampere.plug.permission.PlugPermission
  * produce for other Arc steps, and what it needs handed to it. They are what a
  * future planner reads to decide two Plugs can be chained.
  *
+ * [resolvesAssets] declares the third, optional chassis capability — a Plug
+ * implementing [link.socket.ampere.plug.spi.AssetResolver] alongside (or
+ * instead of) Perceive/Execute — so a consent surface can state that a Plug
+ * resolves assets before any [link.socket.ampere.canon.CanonAssetRef.NativeHandle]
+ * it produced is ever resolved.
+ *
  * Every collection field defaults to empty so manifests written before each
  * schema addition continue to decode unchanged.
  */
@@ -33,4 +39,5 @@ data class PlugManifest(
     val requiredLinks: List<LinkRequirement> = emptyList(),
     val emits: Set<CanonType> = emptySet(),
     val consumes: Set<CanonType> = emptySet(),
+    val resolvesAssets: Boolean = false,
 )
