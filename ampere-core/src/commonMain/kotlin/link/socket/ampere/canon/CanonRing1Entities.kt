@@ -60,7 +60,25 @@ enum class RecognitionContext {
     PHOTOS,
 }
 
-/** A delivered email. Its MIME structure and raw headers stay in the payload. */
+/**
+ * A delivered email. Its MIME structure and raw headers stay in the payload.
+ *
+ * @property mailboxId The mailbox this message is filed under, or null. Null
+ *   conflates two facts a reader must not tell apart: *not filed under any
+ *   mailbox the provider models* and *the provider did not say*. Do not read
+ *   null as "definitely unfiled".
+ *
+ *   This is the cross-reference precedent every other nullable `CanonId`
+ *   field in the canon follows — [link.socket.ampere.canon.CanonWorkItem.projectId],
+ *   [link.socket.ampere.canon.CanonMilestone.projectId], and
+ *   [link.socket.ampere.canon.CanonTable.documentId] — and it is a **caller
+ *   contract, not a resolution mechanism** (AMPR-266): a [CanonId] is
+ *   Ampere-scoped and resolvable only against [CanonMailbox] entities produced
+ *   by the *same* Link, since the same id string from a different Link names a
+ *   different mailbox. Nothing guarantees the referenced mailbox was ever
+ *   perceived — resolving one is the caller's job, and it may find nothing.
+ *   See the cross-reference invariant in `docs/concepts/domain-canon.md`.
+ */
 @Serializable
 @SerialName("canon.email_message")
 data class CanonEmailMessage(
