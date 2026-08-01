@@ -5,8 +5,8 @@ import kotlinx.serialization.Serializable
 import link.socket.ampere.link.LinkId
 
 /**
- * A reference to visual media carried by a canon entity — never the bytes
- * themselves.
+ * A reference to out-of-band content carried by a canon entity — never the
+ * bytes themselves.
  *
  * Two shapes exist because the platforms that produce artwork disagree on
  * what an asset *is*: a streaming service hands back a URL template with
@@ -14,9 +14,19 @@ import link.socket.ampere.link.LinkId
  * object with no URL at all. Forcing both through `artworkUrl: String?` loses
  * the local-media case outright.
  *
+ * Artwork is the motivating case, not the definition. AMPR-258 deferred
+ * non-visual use; AMPR-262 resolved it in favour of **reusing this type** for
+ * [CanonTable.contentRef] rather than forking a sibling primitive. The two
+ * shapes already carry nothing visual in their structure ([Url.width]/
+ * [Url.height] are simply unused for a table), and a second ref hierarchy would
+ * fork the [link.socket.ampere.plug.spi.AssetResolver] SPI — which exists so
+ * consent is enforced once in the contract rather than per implementor. The ref
+ * story stays singular; the name is the only vestigial part, and wire names are
+ * opaque.
+ *
  * Resolving a [CanonAssetRef] to bytes is an
  * [link.socket.ampere.plug.spi.AssetResolver] concern, not a canon concern —
- * this type only names *where* an asset lives.
+ * this type only names *where* content lives.
  */
 @Serializable
 sealed interface CanonAssetRef {

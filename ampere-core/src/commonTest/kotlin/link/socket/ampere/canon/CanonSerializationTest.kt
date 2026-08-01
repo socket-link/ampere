@@ -124,6 +124,29 @@ class CanonSerializationTest {
             providerStatus = "in_transit",
         ),
         "canon.third_party_playlist" to CanonThirdPartyPlaylist(CanonId("pp"), provenance, title = "Focus"),
+        "canon.work_item" to CanonWorkItem(
+            CanonId("wi"),
+            provenance,
+            title = "Ship the canon wave",
+            status = CanonWorkStatus.IN_PROGRESS,
+            providerStatus = "In Review",
+        ),
+        "canon.project" to CanonProject(
+            CanonId("pj"),
+            provenance,
+            name = "Chassis & Canon",
+            status = CanonWorkStatus.BACKLOG,
+            providerStatus = "Backlog",
+        ),
+        "canon.milestone" to CanonMilestone(CanonId("ml"), provenance, name = "Beta"),
+        "canon.table" to CanonTable(
+            CanonId("tbl"),
+            provenance,
+            title = "Q3 forecast",
+            columnNames = listOf("region", "revenue"),
+            rowCount = 412,
+            preview = CanonTablePreview.bounded(listOf(listOf("EMEA", "120"))),
+        ),
     )
 
     @Test

@@ -22,7 +22,7 @@ import kotlinx.serialization.Serializable
  * alongside the projection.
  *
  * Each member declares its [ring]. Ring membership was settled by the SDK pass
- * recorded in `.context/issue-586-domain-type-canon-v1.md`; the `wireName` is a
+ * recorded in `docs/ampr-222-domain-type-canon-v1.md`; the `wireName` is a
  * stable serialization contract — renaming one breaks `PlaybackRelay` replay of
  * any trace that already carries it.
  */
@@ -137,6 +137,23 @@ enum class CanonType(
 
     @SerialName("third_party_playlist")
     THIRD_PARTY_PLAYLIST(wireName = "third_party_playlist", ring = CanonRing.SERVICE),
+
+    // The knowledge-work wave (AMPR-262). Ring 3 by definition: no assistant
+    // schema, no native framework — these reach Ampere only over `Mcp`,
+    // `OAuthRest`, or `FolderMount`. Their provider intersections and the
+    // fields each one drops are recorded on the entities themselves.
+
+    @SerialName("work_item")
+    WORK_ITEM(wireName = "work_item", ring = CanonRing.SERVICE),
+
+    @SerialName("project")
+    PROJECT(wireName = "project", ring = CanonRing.SERVICE),
+
+    @SerialName("milestone")
+    MILESTONE(wireName = "milestone", ring = CanonRing.SERVICE),
+
+    @SerialName("table")
+    TABLE(wireName = "table", ring = CanonRing.SERVICE),
     ;
 
     companion object {
