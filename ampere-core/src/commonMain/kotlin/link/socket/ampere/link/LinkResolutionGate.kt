@@ -125,6 +125,7 @@ object LinkResolutionGate {
     private fun revocationOf(link: Link, grants: LinkGrants): RevocationScope? = when {
         link.isRevoked -> RevocationScope.LINK
         link.credentialRef?.isRevoked == true -> RevocationScope.CREDENTIAL
+        link.folderRef?.isRevoked == true -> RevocationScope.FOLDER
         grants.isRevoked(link.id) -> RevocationScope.PLUG_GRANT
         else -> null
     }
@@ -139,5 +140,6 @@ object LinkResolutionGate {
     fun permits(link: Link, operation: LinkOperation): Boolean =
         !link.isRevoked &&
             link.credentialRef?.isRevoked != true &&
+            link.folderRef?.isRevoked != true &&
             link.direction.permits(operation)
 }

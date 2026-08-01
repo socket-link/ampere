@@ -23,6 +23,10 @@ import link.socket.ampere.canon.CanonType
  *   Narrower than the transport can technically carry, on purpose.
  * @property credentialRef A *reference*. Raw credentials never live in this
  *   type, never reach a trace, and never cross the bus.
+ * @property folderRef A *reference* to a mounted folder, e.g. a security-scoped
+ *   bookmark. Distinct from [credentialRef]: a folder mount is not a secret,
+ *   so it belongs to a different storage class and a different row in the
+ *   consent ledger.
  */
 @Serializable
 data class Link(
@@ -32,6 +36,7 @@ data class Link(
     val egress: EgressClass,
     val scope: Set<CanonType> = emptySet(),
     val credentialRef: CredentialRef? = null,
+    val folderRef: FolderRef? = null,
     val revokedAt: Instant? = null,
 ) {
     /** A revoked Link resolves for nobody, regardless of standing grants. */
@@ -80,6 +85,30 @@ sealed interface EgressClass {
 @Serializable
 data class CredentialRef(
     val keychainAlias: String,
+    val revokedAt: Instant? = null,
+) {
+    val isRevoked: Boolean get() = revokedAt != null
+}
+
+/**
+ * A pointer to a mounted folder, e.g. a security-scoped bookmark.
+ *
+ * A folder mount is not a secret — it is an opaque path token, useless to an
+ * attacker without the app's entitlements — so it does not belong in the
+ * keychain-backed [CredentialRef] seam, and presenting it as a credential in
+ * the consent ledger would misrepresent the Link in exactly the surface where
+ * clarity matters most. Storage of the bookmark bytes themselves is
+ * platform-side and out of scope here; this type exists so a Link can *name*
+ * its folder mount without carrying it.
+ *
+ * @property mountId The key under which the platform-side bookmark blob is
+ *   stored, e.g. in an app-group-shared folder mount store.
+ * @property revokedAt Set when the folder mount itself is revoked, as
+ *   distinct from a Plug's grant being revoked.
+ */
+@Serializable
+data class FolderRef(
+    val mountId: String,
     val revokedAt: Instant? = null,
 ) {
     val isRevoked: Boolean get() = revokedAt != null
