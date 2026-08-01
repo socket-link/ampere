@@ -2,6 +2,7 @@ package link.socket.ampere.plug
 
 import kotlinx.serialization.Serializable
 import link.socket.ampere.canon.CanonType
+import link.socket.ampere.canon.table.TableWriteCapability
 import link.socket.ampere.link.LinkRequirement
 import link.socket.ampere.plug.permission.PlugPermission
 
@@ -42,6 +43,16 @@ import link.socket.ampere.plug.permission.PlugPermission
  * than a gap to fill in later. See [PlugManifestValidator] for how this flag
  * changes Link requirement validation.
  *
+ * [tableWriteCapabilities] is the AMPR-263 verdict expressed as a manifest
+ * declaration: which [TableWriteCapability] this Plug can honor losslessly
+ * for `TABLE`, never more than it can actually guarantee. A Plug that cannot
+ * honor preserve-and-merge for [TableWriteCapability.UPDATE_CELL] on its
+ * provider simply omits it — the AMPR-263 non-negotiable's "degrade to
+ * read-only" clause is this field being empty or partial, not a runtime
+ * override. See [link.socket.ampere.canon.table.TableWriteSink] for the
+ * corresponding execute-side guard, and [PlugManifestValidator] for how a
+ * declaration here is cross-checked against [emits]/[consumes].
+ *
  * Every collection field defaults to empty so manifests written before each
  * schema addition continue to decode unchanged.
  */
@@ -59,4 +70,5 @@ data class PlugManifest(
     val optionalConsumes: Set<CanonType> = emptySet(),
     val resolvesAssets: Boolean = false,
     val isCanonExternal: Boolean = false,
+    val tableWriteCapabilities: Set<TableWriteCapability> = emptySet(),
 )
