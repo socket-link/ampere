@@ -2,7 +2,9 @@ package link.socket.ampere.plug
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
+import link.socket.ampere.canon.CanonType
 import link.socket.ampere.plug.permission.PlugPermission
 
 class PlugManifestSerializationTest {
@@ -31,6 +33,37 @@ class PlugManifestSerializationTest {
         val decoded = json.decodeFromString(PlugManifest.serializer(), encoded)
 
         assertEquals(manifest, decoded)
+    }
+
+    @Test
+    fun `round-trips a manifest declaring optional canon consumption unchanged`() {
+        val manifest = PlugManifest(
+            id = PlugId("vision-ocr-plug"),
+            name = "Vision OCR Plug",
+            version = "1.0.0",
+            optionalConsumes = setOf(CanonType.PHOTO),
+        )
+
+        val encoded = json.encodeToString(PlugManifest.serializer(), manifest)
+        val decoded = json.decodeFromString(PlugManifest.serializer(), encoded)
+
+        assertEquals(manifest, decoded)
+        assertEquals(setOf(CanonType.PHOTO), decoded.optionalConsumes)
+    }
+
+    @Test
+    fun `a manifest written before optionalConsumes existed still decodes`() {
+        val legacyManifestJson = """
+            {
+              "id": "github-plug",
+              "name": "GitHub Plug",
+              "version": "1.0.0"
+            }
+        """.trimIndent()
+
+        val decoded = json.decodeFromString(PlugManifest.serializer(), legacyManifestJson)
+
+        assertTrue(decoded.optionalConsumes.isEmpty())
     }
 
     @Test
