@@ -29,6 +29,9 @@ import link.socket.ampere.data.DEFAULT_JSON
  *
  * @param bus the `EventSerialBus` to capture from (AMPR-183 calls this `EventSerializerBus`).
  * @param traceService persistence boundary the built [Trace] is saved through on stop.
+ * @param maxEventBytes AMPR-267 per-event budget; see [TraceBudget.MAX_EVENT_BYTES]. Overridable for tests.
+ * @param maxTraceBytes AMPR-267 per-trace budget; see [TraceBudget.MAX_TRACE_BYTES]. Overridable for tests.
+ * @param maxStringFieldChars truncation granularity; see [TraceBudget.MAX_STRING_FIELD_CHARS]. Overridable for tests.
  */
 class TraceRecorder(
     private val bus: EventSerialBus,
@@ -37,13 +40,16 @@ class TraceRecorder(
     private val eventTypes: List<EventType> = EventRegistry.allEventTypes,
     private val clockMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val idGenerator: () -> String = { generateUUID() },
+    private val maxEventBytes: Int = TraceBudget.MAX_EVENT_BYTES,
+    private val maxTraceBytes: Int = TraceBudget.MAX_TRACE_BYTES,
+    private val maxStringFieldChars: Int = TraceBudget.MAX_STRING_FIELD_CHARS,
 ) {
     /**
      * Begin recording. Subscribes to the bus immediately; events published after
      * this call are captured until [RecordingHandle.stop].
      */
     fun start(runId: String, arcId: String): RecordingHandle {
-        val buffer = Channel<Event>(Channel.UNLIMITED)
+        val buffer = Channel<Event>(TraceBudget.CHANNEL_CAPACITY)
         val agentId = "trace-recorder/$runId/${idGenerator()}"
 
         val subscriptions = eventTypes.map { eventType ->
@@ -66,6 +72,9 @@ class TraceRecorder(
             bus = bus,
             traceService = traceService,
             json = json,
+            maxEventBytes = maxEventBytes,
+            maxTraceBytes = maxTraceBytes,
+            maxStringFieldChars = maxStringFieldChars,
         )
     }
 }
@@ -83,6 +92,9 @@ class RecordingHandle internal constructor(
     private val bus: EventSerialBus,
     private val traceService: TraceService,
     private val json: Json,
+    private val maxEventBytes: Int,
+    private val maxTraceBytes: Int,
+    private val maxStringFieldChars: Int,
 ) {
     /**
      * Stop recording, build the [Trace] from buffered events (in emission order),
@@ -108,13 +120,41 @@ class RecordingHandle internal constructor(
             }
         }
 
-        val events = captured.mapIndexed { index, event ->
-            TraceEvent(
-                index = index,
-                timestamp = event.timestamp.toEpochMilliseconds(),
-                type = event.eventType,
-                payload = json.encodeToJsonElement(Event.serializer(), event),
-            )
+        // Enforce the AMPR-267 size contract at this single chokepoint every
+        // captured event passes through. Per event: truncate-and-flag any
+        // payload over MAX_EVENT_BYTES by cutting oversized string leaves
+        // (never the JSON shape), so it always stays decodable. Per trace:
+        // once cumulative bytes would exceed MAX_TRACE_BYTES, drop the
+        // remaining events (trailing, in emission order) with a marker rather
+        // than growing the persisted blob without limit.
+        var traceBytes = 0
+        var droppedEventCount = 0
+        val events = buildList {
+            for ((index, event) in captured.withIndex()) {
+                val encoded = json.encodeToJsonElement(Event.serializer(), event)
+                val (payload, wasTruncated) = if (encoded.serializedByteSize(json) > maxEventBytes) {
+                    encoded.truncateStringLeaves(maxStringFieldChars)
+                } else {
+                    encoded to false
+                }
+
+                val eventBytes = payload.serializedByteSize(json)
+                if (traceBytes + eventBytes > maxTraceBytes) {
+                    droppedEventCount = captured.size - index
+                    break
+                }
+                traceBytes += eventBytes
+
+                add(
+                    TraceEvent(
+                        index = index,
+                        timestamp = event.timestamp.toEpochMilliseconds(),
+                        type = event.eventType,
+                        payload = payload,
+                        truncated = wasTruncated,
+                    ),
+                )
+            }
         }
 
         val trace = Trace(
@@ -123,6 +163,7 @@ class RecordingHandle internal constructor(
             arcId = arcId,
             createdAt = createdAt,
             events = events,
+            droppedEventCount = droppedEventCount,
         )
 
         return traceService.save(trace).map { trace }

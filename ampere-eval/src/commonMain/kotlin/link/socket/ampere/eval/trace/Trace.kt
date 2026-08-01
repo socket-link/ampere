@@ -13,6 +13,10 @@ import kotlinx.serialization.json.JsonElement
  *   discriminator (which lives inside [payload]).
  * @property payload the full serialized source event as a [JsonElement]; decodable
  *   back to the original `Event` via `Event.serializer()` with the shared `DEFAULT_JSON`.
+ *   String leaves beyond [TraceBudget.MAX_STRING_FIELD_CHARS] are cut in place
+ *   (see `truncateStringLeaves`) when the event exceeds [TraceBudget.MAX_EVENT_BYTES];
+ *   the JSON shape is never changed, so this always remains decodable.
+ * @property truncated true if [payload] was cut to fit [TraceBudget.MAX_EVENT_BYTES] (AMPR-267).
  */
 @Serializable
 data class TraceEvent(
@@ -20,6 +24,7 @@ data class TraceEvent(
     val timestamp: Long,
     val type: String,
     val payload: JsonElement,
+    val truncated: Boolean = false,
 )
 
 /**
@@ -34,6 +39,9 @@ data class TraceEvent(
  * @property arcId the orchestration pathway (Arc) this run belongs to.
  * @property createdAt epoch milliseconds when the trace was recorded.
  * @property events the captured events, in emission order.
+ * @property droppedEventCount trailing events cut when the trace exceeded
+ *   [TraceBudget.MAX_TRACE_BYTES] (AMPR-267's drop-with-a-marker policy).
+ *   Zero for a trace that stayed within budget.
  */
 @Serializable
 data class Trace(
@@ -42,6 +50,7 @@ data class Trace(
     val arcId: String,
     val createdAt: Long,
     val events: List<TraceEvent>,
+    val droppedEventCount: Int = 0,
 ) {
     /** Number of events in the trace. */
     val size: Int get() = events.size
@@ -61,4 +70,5 @@ data class TraceSummary(
     val arcId: String,
     val createdAt: Long,
     val eventCount: Int,
+    val droppedEventCount: Int = 0,
 )
