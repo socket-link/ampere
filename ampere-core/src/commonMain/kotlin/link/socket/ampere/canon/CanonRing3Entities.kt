@@ -146,9 +146,6 @@ data class CanonThirdPartyPlaylist(
  * Lossy on every provider: `priority` (three incompatible scales — Linear's
  * 0–4 ordinal, Jira's named object, GitHub's labels-by-convention), `estimate`,
  * `parent`/`children`, and label colour, since [labels] keeps names only.
- * `description` is deliberately absent — it is unbounded provider prose with no
- * bulk-rule story yet, and it survives losslessly in
- * [CanonProvenance.nativePayload] meanwhile.
  *
  * @property dueAt **Lossy by type, not by omission.** Linear `dueDate` and Jira
  *   `duedate` are calendar dates with no time and no zone; adapters normalise to
@@ -160,6 +157,16 @@ data class CanonThirdPartyPlaylist(
  *   as "definitely standalone". Resolvable only against entities from the same
  *   Link, and nothing guarantees the referenced [CanonProject] was ever
  *   perceived. Follows the [CanonEmailMessage.mailboxId] precedent.
+ * @property description A bounded snippet, not the item's full description —
+ *   see [CanonProse]. Three formats collapse to one field, each losing
+ *   structure a flattening to prose cannot carry back: Jira's is **ADF
+ *   (Atlassian Document Format), a structured JSON tree, not text** —
+ *   flattening it drops mentions, panels, code blocks, and embedded media.
+ *   GitHub's is GitHub-flavoured Markdown; Linear's is Markdown. Deferred at
+ *   admission (AMPR-262) for failing the bulk rule — a GitHub issue body
+ *   routinely exceeds the 32 KiB projection budget — until [CanonProse] gave
+ *   it a bounded shape (AMPR-268). The full provider value survives losslessly
+ *   in [CanonProvenance.nativePayload] regardless.
  */
 @Serializable
 @SerialName("canon.work_item")
@@ -173,6 +180,7 @@ data class CanonWorkItem(
     val projectId: CanonId? = null,
     val dueAt: Instant? = null,
     val labels: List<String> = emptyList(),
+    val description: CanonProse? = null,
 ) : CanonEntity {
     override val canonType: CanonType get() = CanonType.WORK_ITEM
 }

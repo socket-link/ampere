@@ -82,6 +82,7 @@ class CanonWorkEntitiesTest {
             projectId = CanonId("pj-1"),
             dueAt = Instant.fromEpochMilliseconds(1_700_086_400_000),
             labels = listOf("api", "spike", "architecture"),
+            description = CanonProse.bounded("Admit WORK_ITEM, PROJECT, MILESTONE and TABLE to the canon."),
         )
 
         assertEquals(entity, roundTrip(entity))
@@ -240,6 +241,35 @@ class CanonWorkEntitiesTest {
             "a worst-case canon.document serialized to $byteCount bytes over a $projectionBudgetBytes byte budget",
         )
         assertEquals(maxed, roundTrip(maxed), "worst-case prose must survive the round trip intact")
+    }
+
+    @Test
+    fun `a worst case work item serializes within the projection budget`() {
+        // AMPR-269: description was deferred at admission (AMPR-262) for
+        // failing the bulk rule; this pins a maximally-filled CanonWorkItem
+        // now that CanonProse gives it a bounded shape.
+        val worstCaseChar = "漢"
+        val maxed = CanonWorkItem(
+            canonId = CanonId("wi-1"),
+            provenance = mcpProvenance,
+            title = "x".repeat(200),
+            status = CanonWorkStatus.IN_PROGRESS,
+            providerStatus = "In Review",
+            assignee = CanonPerson(CanonId("p-1"), mcpProvenance, displayName = "Miley"),
+            projectId = CanonId("pj-1"),
+            dueAt = Instant.fromEpochMilliseconds(1_700_086_400_000),
+            labels = List(20) { "label-$it" },
+            description = CanonProse.bounded(worstCaseChar.repeat(CanonProse.MAX_CHARS * 3)),
+        )
+
+        val encoded = json.encodeToString(CanonEntity.serializer(), maxed)
+
+        val byteCount = encoded.encodeToByteArray().size
+        assertTrue(
+            byteCount <= projectionBudgetBytes,
+            "a worst-case canon.work_item serialized to $byteCount bytes over a $projectionBudgetBytes byte budget",
+        )
+        assertEquals(maxed, roundTrip(maxed), "worst-case fields must survive the round trip intact")
     }
 
     @Test
