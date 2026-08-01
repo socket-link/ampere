@@ -38,6 +38,7 @@ class TraceService(
                 created_at = trace.createdAt,
                 event_count = trace.size.toLong(),
                 events_json = json.encodeToString(eventsSerializer, trace.events),
+                dropped_event_count = trace.droppedEventCount.toLong(),
             )
             Unit
         }
@@ -46,13 +47,14 @@ class TraceService(
     /** Load a full [Trace] by id. Fails if no trace with [traceId] exists. */
     suspend fun load(traceId: String): Result<Trace> = withContext(dispatcher) {
         runCatching {
-            queries.selectById(traceId) { id, runId, arcId, createdAt, _, eventsJson ->
+            queries.selectById(traceId) { id, runId, arcId, createdAt, _, eventsJson, droppedEventCount ->
                 Trace(
                     id = id,
                     runId = runId,
                     arcId = arcId,
                     createdAt = createdAt,
                     events = json.decodeFromString(eventsSerializer, eventsJson),
+                    droppedEventCount = droppedEventCount.toInt(),
                 )
             }.executeAsOneOrNull()
                 ?: error("Trace not found: $traceId")
@@ -62,13 +64,21 @@ class TraceService(
     /** List trace metadata, newest first; optionally scoped to a single [arcId]. */
     suspend fun list(arcId: String? = null): Result<List<TraceSummary>> = withContext(dispatcher) {
         runCatching {
-            val mapper = { id: String, runId: String, arc: String, createdAt: Long, eventCount: Long ->
+            val mapper = {
+                    id: String,
+                    runId: String,
+                    arc: String,
+                    createdAt: Long,
+                    eventCount: Long,
+                    droppedEventCount: Long,
+                ->
                 TraceSummary(
                     id = id,
                     runId = runId,
                     arcId = arc,
                     createdAt = createdAt,
                     eventCount = eventCount.toInt(),
+                    droppedEventCount = droppedEventCount.toInt(),
                 )
             }
             if (arcId == null) {
