@@ -19,12 +19,13 @@ import kotlinx.serialization.Serializable
  * from "Mcp/OAuthRest only" to "any non-OS Link".
  */
 
+/** @property bodyText A bounded snippet, not the message's full text — see [CanonProse]. */
 @Serializable
 @SerialName("canon.message")
 data class CanonMessage(
     override val canonId: CanonId,
     override val provenance: CanonProvenance,
-    val bodyText: String,
+    val bodyText: CanonProse,
     val sender: CanonPerson? = null,
     val conversationId: String? = null,
     val sentAt: Instant? = null,
@@ -32,13 +33,14 @@ data class CanonMessage(
     override val canonType: CanonType get() = CanonType.MESSAGE
 }
 
+/** @property bodyText A bounded snippet, not the note's full text — see [CanonProse]. */
 @Serializable
 @SerialName("canon.note")
 data class CanonNote(
     override val canonId: CanonId,
     override val provenance: CanonProvenance,
     val title: String? = null,
-    val bodyText: String? = null,
+    val bodyText: CanonProse? = null,
     val tags: List<String> = emptyList(),
     val modifiedAt: Instant? = null,
 ) : CanonEntity {
@@ -197,6 +199,8 @@ data class CanonWorkItem(
  *   to an [Instant] silently promotes that to a precise timestamp. Adapters
  *   normalise a coarse resolution to the *last* day of the period, so a deadline
  *   is never reported earlier than the provider means it.
+ * @property summary A bounded snippet, not the project's full description — see
+ *   [CanonProse].
  */
 @Serializable
 @SerialName("canon.project")
@@ -208,7 +212,7 @@ data class CanonProject(
     val providerStatus: String? = null,
     val targetDate: Instant? = null,
     val lead: CanonPerson? = null,
-    val summary: String? = null,
+    val summary: CanonProse? = null,
 ) : CanonEntity {
     override val canonType: CanonType get() = CanonType.PROJECT
 }
