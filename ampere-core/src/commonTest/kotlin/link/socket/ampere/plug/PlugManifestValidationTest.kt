@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import link.socket.ampere.canon.CanonType
+import link.socket.ampere.canon.table.TableWriteCapability
 import link.socket.ampere.link.LinkDirection
 import link.socket.ampere.link.LinkRequirement
 import link.socket.ampere.link.Transport
@@ -455,6 +456,77 @@ class PlugManifestValidationTest {
         assertTrue(manifest.emits.isEmpty())
         assertTrue(manifest.consumes.isEmpty())
         assertTrue(manifest.optionalConsumes.isEmpty())
+        assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
+    }
+
+    // -----------------------------------------------------------------
+    // Table write capabilities (AMPR-263)
+    // -----------------------------------------------------------------
+
+    @Test
+    fun `a manifest written before table write capabilities existed still decodes`() {
+        val manifest = PlugManifest(id = PlugId("legacy"), name = "Legacy", version = "0.1.0")
+
+        assertTrue(manifest.tableWriteCapabilities.isEmpty())
+        assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
+    }
+
+    @Test
+    fun `a manifest declaring table write capabilities alongside TABLE in its canon contract validates`() {
+        val manifest = PlugManifest(
+            id = PlugId("csv-plug"),
+            name = "CSV Plug",
+            version = "1.0.0",
+            emits = setOf(CanonType.TABLE),
+            tableWriteCapabilities = setOf(TableWriteCapability.APPEND_ROW),
+        )
+
+        assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
+    }
+
+    @Test
+    fun `table write capabilities declared without TABLE in emits or consumes is rejected`() {
+        val manifest = PlugManifest(
+            id = PlugId("csv-plug"),
+            name = "CSV Plug",
+            version = "1.0.0",
+            tableWriteCapabilities = setOf(TableWriteCapability.APPEND_ROW),
+        )
+
+        val invalid = assertIs<ManifestValidationResult.Invalid>(
+            PlugManifestValidator.validate(manifest),
+        )
+
+        val undeclared = invalid.reasons
+            .filterIsInstance<ManifestValidationReason.UndeclaredTableWriteCapability>()
+        assertEquals(1, undeclared.size)
+        assertEquals(setOf(TableWriteCapability.APPEND_ROW), undeclared.single().capabilities)
+    }
+
+    @Test
+    fun `table write capabilities declared on a canon-external manifest is rejected`() {
+        val manifest = PlugManifest(
+            id = PlugId("mislabelled-plug"),
+            name = "Mislabelled Plug",
+            version = "1.0.0",
+            isCanonExternal = true,
+            tableWriteCapabilities = setOf(TableWriteCapability.UPDATE_CELL),
+        )
+
+        val invalid = assertIs<ManifestValidationResult.Invalid>(
+            PlugManifestValidator.validate(manifest),
+        )
+
+        val contradiction = invalid.reasons
+            .filterIsInstance<ManifestValidationReason.CanonExternalWithTableWriteCapabilities>()
+        assertEquals(1, contradiction.size)
+        assertEquals(setOf(TableWriteCapability.UPDATE_CELL), contradiction.single().capabilities)
+    }
+
+    @Test
+    fun `a manifest declaring no table write capabilities validates without naming TABLE`() {
+        val manifest = PlugManifest(id = PlugId("plain-plug"), name = "Plain Plug", version = "1.0.0")
+
         assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
     }
 }

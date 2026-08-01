@@ -1,6 +1,7 @@
 package link.socket.ampere.plug
 
 import link.socket.ampere.canon.CanonType
+import link.socket.ampere.canon.table.TableWriteCapability
 import link.socket.ampere.plug.permission.PlugPermission
 
 /**
@@ -55,6 +56,7 @@ object PlugManifestValidator {
         reasons += validateLinkRequirements(manifest)
         reasons += validateDeviceCapabilities(manifest)
         reasons += validateCanonConsumption(manifest)
+        reasons += validateTableWriteCapabilities(manifest)
 
         return if (reasons.isEmpty()) {
             ManifestValidationResult.Valid
@@ -152,6 +154,33 @@ object PlugManifestValidator {
         return (manifest.consumes intersect manifest.optionalConsumes)
             .map { ManifestValidationReason.RedundantOptionalConsumes(it) }
     }
+
+    /**
+     * A [PlugManifest.tableWriteCapabilities] declaration only makes sense
+     * for a Plug that actually has `TABLE` in its canon-level data contract
+     * — same asymmetry [validateLinkRequirements] enforces for
+     * [link.socket.ampere.link.LinkRequirement.minimumScope], applied to
+     * write capabilities instead of read scope.
+     */
+    private fun validateTableWriteCapabilities(
+        manifest: PlugManifest,
+    ): List<ManifestValidationReason> {
+        if (manifest.tableWriteCapabilities.isEmpty()) return emptyList()
+
+        val reasons = mutableListOf<ManifestValidationReason>()
+
+        if (manifest.isCanonExternal) {
+            reasons += ManifestValidationReason.CanonExternalWithTableWriteCapabilities(
+                capabilities = manifest.tableWriteCapabilities,
+            )
+        } else if (CanonType.TABLE !in manifest.emits + manifest.consumes) {
+            reasons += ManifestValidationReason.UndeclaredTableWriteCapability(
+                capabilities = manifest.tableWriteCapabilities,
+            )
+        }
+
+        return reasons
+    }
 }
 
 sealed interface ManifestValidationResult {
@@ -233,5 +262,25 @@ sealed interface ManifestValidationReason {
      */
     data class CanonExternalWithDeclaredCanon(
         val canonTypes: Set<CanonType>,
+    ) : ManifestValidationReason
+
+    /**
+     * [PlugManifest.tableWriteCapabilities] is non-empty but the manifest
+     * names neither [CanonType.TABLE] in [PlugManifest.emits] nor
+     * [PlugManifest.consumes] — a Plug asking to write a canon type it never
+     * declared handling.
+     */
+    data class UndeclaredTableWriteCapability(
+        val capabilities: Set<TableWriteCapability>,
+    ) : ManifestValidationReason
+
+    /**
+     * [PlugManifest.isCanonExternal] declares no canon-level data contract,
+     * but [PlugManifest.tableWriteCapabilities] is non-empty — the same
+     * contradiction [CanonExternalWithDeclaredCanon] catches for
+     * [PlugManifest.emits]/[PlugManifest.consumes], for write capabilities.
+     */
+    data class CanonExternalWithTableWriteCapabilities(
+        val capabilities: Set<TableWriteCapability>,
     ) : ManifestValidationReason
 }
