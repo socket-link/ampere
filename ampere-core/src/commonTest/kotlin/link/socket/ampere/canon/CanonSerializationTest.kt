@@ -103,7 +103,7 @@ class CanonSerializationTest {
             activity = "walking",
             recordedAt = Instant.fromEpochMilliseconds(1_700_000_400_000),
         ),
-        "canon.message" to CanonMessage(CanonId("msg"), provenance, bodyText = "yo"),
+        "canon.message" to CanonMessage(CanonId("msg"), provenance, bodyText = CanonProse.bounded("yo")),
         "canon.note" to CanonNote(CanonId("n"), provenance),
         "canon.ride" to CanonRide(
             CanonId("rd"),

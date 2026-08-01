@@ -46,6 +46,40 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
 
 ### Breaking
 
+- **Bounded prose in canon: `CanonProse` replaces raw `String` prose fields**
+  ([AMPR-268](https://linear.app/miley/issue/AMPR-268)).
+
+  `CanonDocument.plainText` predated the bulk rule admitted by AMPR-262 — an
+  unbounded `String?` that could blow the 32 KiB per-projection budget on its
+  own. `CanonProse` brings it, and every other free-form prose field the recon
+  flagged, under the same rule `CanonTablePreview` established for tables: a
+  `bounded()` factory truncates to 8,000 UTF-16 units (never splitting a
+  surrogate pair) and sets `truncated` rather than rejecting at decode time —
+  a canon type must always decode, so bounding stays a write-side concern.
+
+  Changed from `String`/`String?` to `CanonProse`/`CanonProse?`:
+  - `CanonDocument.plainText`
+  - `CanonMessage.bodyText`
+  - `CanonNote.bodyText`
+  - `CanonJournalEntry.bodyText`
+  - `CanonProject.summary`
+
+  `CanonEmailMessage.bodyText` and `CanonEmailDraft.bodyText` are **not**
+  changed — both already have a live write-back adapter
+  (`MailMessageAdapter`) that round-trips the raw string through
+  `NativePayload.fields`, and truncating a field an adapter writes back would
+  silently corrupt provider data. That decision is scoped to this ticket, not
+  a permanent exemption.
+
+  **Migration for external consumers:** callers constructing these fields
+  must switch to `CanonProse.bounded(text)`. A recorded trace containing the
+  old wire shape (`"plainText": "..."` as a raw JSON string) will fail to
+  decode against the new shape (`"plainText": {"text": "...", "truncated":
+  false}`). No migration tooling exists for already-recorded traces — trace
+  hygiene is out of scope here (tracked separately) and none of the affected
+  types has shipped a production adapter yet, so no real trace is known to
+  carry the old shape.
+
 - **PROPEL `CognitivePhase` enum is now canonically six members**
   ([AMPR-172](https://linear.app/miley/issue/AMPR-172)).
 

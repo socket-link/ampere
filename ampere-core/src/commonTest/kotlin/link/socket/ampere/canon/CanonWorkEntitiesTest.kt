@@ -16,7 +16,9 @@ import link.socket.ampere.link.LinkId
  * sources are `Mcp` and `FolderMount` Links, so provenance from both is
  * exercised. Second, [CanonTable] is the first canon type that could carry bulk
  * content, and the bulk rule — schema and counts in canon, content by reference
- * — is only real if something asserts it.
+ * — is only real if something asserts it. [CanonDocument] rides along on the
+ * same budget assertion (AMPR-268): its `plainText` was the pre-existing
+ * counterexample to the rule, and [CanonProse] is what brings it into line.
  */
 class CanonWorkEntitiesTest {
 
@@ -96,7 +98,7 @@ class CanonWorkEntitiesTest {
             providerStatus = "Backlog",
             targetDate = Instant.fromEpochMilliseconds(1_700_086_400_000),
             lead = CanonPerson(CanonId("p-1"), mcpProvenance, displayName = "Miley"),
-            summary = "Chassis SPI and domain-type canon v1.",
+            summary = CanonProse.bounded("Chassis SPI and domain-type canon v1."),
         )
 
         assertEquals(entity, roundTrip(entity))
@@ -214,6 +216,30 @@ class CanonWorkEntitiesTest {
             "a worst-case canon.table serialized to $byteCount bytes over a $projectionBudgetBytes byte budget",
         )
         assertEquals(maxed, roundTrip(maxed), "worst-case cells must survive the round trip intact")
+    }
+
+    @Test
+    fun `a worst case document serializes within the projection budget`() {
+        // CanonDocument.plainText predates the bulk rule and was its one
+        // counterexample (AMPR-268); this pins it under the same budget as
+        // CanonTable now that CanonProse bounds it.
+        val worstCaseChar = "漢"
+        val maxed = CanonDocument(
+            canonId = CanonId("doc-1"),
+            provenance = folderMountProvenance,
+            title = "Spec",
+            kind = DocumentKind.WORD_PROCESSOR,
+            plainText = CanonProse.bounded(worstCaseChar.repeat(CanonProse.MAX_CHARS * 3)),
+        )
+
+        val encoded = json.encodeToString(CanonEntity.serializer(), maxed)
+
+        val byteCount = encoded.encodeToByteArray().size
+        assertTrue(
+            byteCount <= projectionBudgetBytes,
+            "a worst-case canon.document serialized to $byteCount bytes over a $projectionBudgetBytes byte budget",
+        )
+        assertEquals(maxed, roundTrip(maxed), "worst-case prose must survive the round trip intact")
     }
 
     @Test

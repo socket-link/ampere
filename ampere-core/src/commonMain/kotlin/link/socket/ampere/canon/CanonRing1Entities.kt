@@ -147,6 +147,10 @@ data class CanonPhotoAlbum(
  * One canon type covers Apple's five document domains. [kind] is the
  * discriminator that makes the fan-out survivable: drop it, and a projection
  * cannot find its way back to the right schema on write-back.
+ *
+ * @property plainText A bounded snippet, not the document's full text — see
+ *   [CanonProse]. A single unbounded document body was the counterexample to
+ *   the bulk rule the rest of canon holds to; this is the fix.
  */
 @Serializable
 @SerialName("canon.document")
@@ -158,7 +162,7 @@ data class CanonDocument(
     val mimeType: String? = null,
     val sizeBytes: Long? = null,
     val modifiedAt: Instant? = null,
-    val plainText: String? = null,
+    val plainText: CanonProse? = null,
     val thumbnail: CanonAssetRef? = null,
 ) : CanonEntity {
     override val canonType: CanonType get() = CanonType.DOCUMENT
@@ -222,13 +226,14 @@ data class CanonPlace(
     override val canonType: CanonType get() = CanonType.PLACE
 }
 
+/** @property bodyText A bounded snippet, not the entry's full text — see [CanonProse]. */
 @Serializable
 @SerialName("canon.journal_entry")
 data class CanonJournalEntry(
     override val canonId: CanonId,
     override val provenance: CanonProvenance,
     val title: String? = null,
-    val bodyText: String? = null,
+    val bodyText: CanonProse? = null,
     val createdAt: Instant? = null,
     val place: CanonPlace? = null,
 ) : CanonEntity {
