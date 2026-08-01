@@ -6,6 +6,8 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-08-01
+
 ### Added
 
 - **`CanonWorkItem.description`** ([AMPR-269](https://linear.app/miley/issue/AMPR-269)).
@@ -75,6 +77,50 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
   `SourceHandle` a resolver would need, so either option is new-store
   machinery speculatively built for no confirmed consumer, not a cheap mirror
   of `AssetResolver`. Pinned in `CanonCrossReferenceContractTest`.
+
+- **`FolderRef` alongside `CredentialRef` on `Link`** ([AMPR-261](https://linear.app/miley/issue/AMPR-261)).
+
+  A folder mount's reference is now a first-class part of `Link` instead of
+  side-channel state, mirroring `CredentialRef`'s shape. Revoked folder refs
+  wire into the resolution gate's existing revocation precedence via a new
+  `RevocationScope.FOLDER`.
+
+- **`PlugManifest.optionalConsumes`** ([AMPR-259](https://linear.app/miley/issue/AMPR-259)).
+
+  Lets a Plug (e.g. Vision OCR, SCKT-436) declare a canon type it can use if
+  available without requiring it. `PlugManifestValidator` counts
+  `optionalConsumes` toward the `UndeclaredCanonScope` subset check and
+  rejects a canon type declared in both `consumes` and `optionalConsumes`.
+
+- **`PlugManifest.isCanonExternal` carve-out** ([AMPR-260](https://linear.app/miley/issue/AMPR-260)).
+
+  Canon-external Plugs (`emits={}`, `consumes={}`) had no
+  `LinkRequirement.minimumScope` that could pass `EmptyLinkRequirementScope`
+  and `UndeclaredCanonScope` together. `isCanonExternal` is now an explicit
+  positive declaration that skips both rules, mirroring Socket's
+  `NativePlugDescriptor.isCanonExternal`, plus a new
+  `CanonExternalWithDeclaredCanon` check so the flag can't be used to
+  silently exempt a mis-declared canon-bearing Plug.
+
+- **Size budget and drop policy for trace recording** ([AMPR-267](https://linear.app/miley/issue/AMPR-267)).
+
+  Trace recording was unbounded: `Channel.UNLIMITED` buffering, an
+  unconstrained `events_json` TEXT column, and no hygiene test. Enforces a
+  per-event (truncate-and-flag) and per-trace (drop-with-a-marker) byte
+  budget at `RecordingHandle.stop()`, the single chokepoint every event
+  passes through, so an already-persisted trace always stays decodable via
+  `Event.serializer()`. Also bounds the recorder's buffering channel as a
+  producer-side backstop.
+
+- **`TableWriteIntent` core primitives and `PlugManifest` capability gating**
+  ([AMPR-263](https://linear.app/miley/issue/AMPR-263)).
+
+  Following the AMPR-263 write-back verdict (append-row and update-cell as
+  provider-delegated intents, no whole-table replace): adds
+  `TableWriteIntent`/`RowRef`/`Capability`/`Failure` and a `TableWriteSink`
+  guard base that enforces the capability gate before any dispatch, plus a
+  matching `PlugManifest.tableWriteCapabilities` declaration and validator
+  rules.
 
 ### Breaking
 
