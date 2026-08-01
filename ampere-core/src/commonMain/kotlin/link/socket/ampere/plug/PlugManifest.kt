@@ -34,6 +34,14 @@ import link.socket.ampere.plug.permission.PlugPermission
  * resolves assets before any [link.socket.ampere.canon.CanonAssetRef.NativeHandle]
  * it produced is ever resolved.
  *
+ * [isCanonExternal] is a positive declaration that this Plug has no canon-level
+ * data contract at all — it neither emits nor consumes any [CanonType], by
+ * design, not by omission. The closed v1 canon has no member for some Plugs'
+ * data (e.g. a notification, a pasteboard payload, recognised text), so
+ * [emits] and [consumes] being empty is the correct, permanent state rather
+ * than a gap to fill in later. See [PlugManifestValidator] for how this flag
+ * changes Link requirement validation.
+ *
  * Every collection field defaults to empty so manifests written before each
  * schema addition continue to decode unchanged.
  */
@@ -50,4 +58,5 @@ data class PlugManifest(
     val consumes: Set<CanonType> = emptySet(),
     val optionalConsumes: Set<CanonType> = emptySet(),
     val resolvesAssets: Boolean = false,
+    val isCanonExternal: Boolean = false,
 )

@@ -15,12 +15,14 @@ import link.socket.ampere.plug.permission.PlugPermission
  * Returning a sealed result keeps the validator usable both for early failure
  * (during plug install) and for surfacing diagnostics in tooling.
  *
- * This validator does not check [PlugManifest.emits] itself, only that
- * [PlugManifest.requiredLinks] scopes and [PlugManifest.optionalConsumes]
- * stay consistent with [PlugManifest.consumes]. The only production call
- * site today is [PlugContext.create]. It is expected to run at plug install
- * time on every host that accepts manifests — including Socket, which does
- * not currently call it.
+ * This validator does not check [PlugManifest.emits] / [PlugManifest.consumes]
+ * against anything outside the manifest itself — it only cross-references
+ * them against [PlugManifest.requiredLinks] scopes and
+ * [PlugManifest.optionalConsumes], and checks them against
+ * [PlugManifest.isCanonExternal] for internal consistency. The only
+ * production call site today is [PlugContext.create]. It is expected to run
+ * at plug install time on every host that accepts manifests — including
+ * Socket, which does not currently call it.
  */
 object PlugManifestValidator {
 
@@ -64,12 +66,24 @@ object PlugManifestValidator {
     /**
      * Structural checks on [PlugManifest.requiredLinks].
      *
-     * All three rules exist because the failure they catch is silent
+     * All four rules exist because the failure they catch is silent
      * otherwise: a duplicate requirement name means one of the two Links is
      * unreachable through [link.socket.ampere.link.ResolvedLinks], an empty
      * scope means a wire that resolves successfully and then may carry
      * nothing, and a scope naming a canon type the Plug never declares means
      * the Plug is asking for data it has no stated way to produce or use.
+     *
+     * The empty-scope and undeclared-canon-scope rules are skipped entirely
+     * for a [PlugManifest.isCanonExternal] Plug: by declaration it has no
+     * canon type it could truthfully name, so every [LinkRequirement] is
+     * allowed an empty [LinkRequirement.minimumScope] and any non-empty
+     * scope is exempt from the "declared in emits/consumes/optionalConsumes"
+     * check. This is a carve-out for a positively-declared state, not an
+     * inference from empty [PlugManifest.emits]/[PlugManifest.consumes] — a
+     * canon-bearing Plug that leaves those collections empty by mistake
+     * still fails both rules unchanged. [CanonExternalWithDeclaredCanon]
+     * catches the inverse mistake: [PlugManifest.isCanonExternal] set while
+     * still claiming a canon type.
      */
     private fun validateLinkRequirements(
         manifest: PlugManifest,
@@ -84,19 +98,27 @@ object PlugManifestValidator {
                 reasons += ManifestValidationReason.DuplicateLinkRequirementName(name)
             }
 
-        manifest.requiredLinks
-            .filter { it.minimumScope.isEmpty() }
-            .forEach { requirement ->
-                reasons += ManifestValidationReason.EmptyLinkRequirementScope(requirement.name)
-            }
+        if (manifest.isCanonExternal && (manifest.emits.isNotEmpty() || manifest.consumes.isNotEmpty())) {
+            reasons += ManifestValidationReason.CanonExternalWithDeclaredCanon(
+                canonTypes = manifest.emits + manifest.consumes,
+            )
+        }
 
-        val declaredCanonTypes = manifest.emits + manifest.consumes + manifest.optionalConsumes
-        manifest.requiredLinks.forEach { requirement ->
-            (requirement.minimumScope - declaredCanonTypes).forEach { undeclared ->
-                reasons += ManifestValidationReason.UndeclaredCanonScope(
-                    requirementName = requirement.name,
-                    canonType = undeclared,
-                )
+        if (!manifest.isCanonExternal) {
+            manifest.requiredLinks
+                .filter { it.minimumScope.isEmpty() }
+                .forEach { requirement ->
+                    reasons += ManifestValidationReason.EmptyLinkRequirementScope(requirement.name)
+                }
+
+            val declaredCanonTypes = manifest.emits + manifest.consumes + manifest.optionalConsumes
+            manifest.requiredLinks.forEach { requirement ->
+                (requirement.minimumScope - declaredCanonTypes).forEach { undeclared ->
+                    reasons += ManifestValidationReason.UndeclaredCanonScope(
+                        requirementName = requirement.name,
+                        canonType = undeclared,
+                    )
+                }
             }
         }
 
@@ -200,5 +222,16 @@ sealed interface ManifestValidationReason {
      */
     data class RedundantOptionalConsumes(
         val canonType: CanonType,
+    ) : ManifestValidationReason
+
+    /**
+     * [PlugManifest.isCanonExternal] declares that a Plug has no canon-level
+     * data contract, but [PlugManifest.emits] or [PlugManifest.consumes] is
+     * non-empty — a contradiction that would otherwise silently exempt a
+     * canon-bearing Plug from [EmptyLinkRequirementScope] and
+     * [UndeclaredCanonScope].
+     */
+    data class CanonExternalWithDeclaredCanon(
+        val canonTypes: Set<CanonType>,
     ) : ManifestValidationReason
 }

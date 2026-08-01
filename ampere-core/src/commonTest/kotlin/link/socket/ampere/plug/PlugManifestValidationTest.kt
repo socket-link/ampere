@@ -349,6 +349,104 @@ class PlugManifestValidationTest {
     }
 
     @Test
+    fun `a canon-external manifest with an empty-scope link requirement validates`() {
+        val manifest = PlugManifest(
+            id = PlugId("vision-ocr-plug"),
+            name = "Vision OCR Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(linkRequirement("camera", emptySet())),
+            isCanonExternal = true,
+        )
+
+        assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
+    }
+
+    @Test
+    fun `a canon-external manifest with a non-empty undeclared scope validates`() {
+        val manifest = PlugManifest(
+            id = PlugId("vision-ocr-plug"),
+            name = "Vision OCR Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(linkRequirement("camera", setOf(CanonType.CALENDAR_EVENT))),
+            isCanonExternal = true,
+        )
+
+        assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
+    }
+
+    @Test
+    fun `a canon-bearing manifest with an empty scope still fails when isCanonExternal is unset`() {
+        val manifest = PlugManifest(
+            id = PlugId("calendar-plug"),
+            name = "Calendar Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(linkRequirement("calendar", emptySet())),
+            emits = setOf(CanonType.CALENDAR_EVENT),
+        )
+
+        val invalid = assertIs<ManifestValidationResult.Invalid>(
+            PlugManifestValidator.validate(manifest),
+        )
+
+        assertEquals(
+            listOf("calendar"),
+            invalid.reasons
+                .filterIsInstance<ManifestValidationReason.EmptyLinkRequirementScope>()
+                .map { it.name },
+        )
+    }
+
+    @Test
+    fun `a canon-bearing manifest with an undeclared scope still fails when isCanonExternal is unset`() {
+        val manifest = PlugManifest(
+            id = PlugId("calendar-plug"),
+            name = "Calendar Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(linkRequirement("calendar", setOf(CanonType.CALENDAR_EVENT))),
+            emits = setOf(CanonType.PERSON),
+        )
+
+        val invalid = assertIs<ManifestValidationResult.Invalid>(
+            PlugManifestValidator.validate(manifest),
+        )
+
+        assertEquals(
+            listOf(CanonType.CALENDAR_EVENT),
+            invalid.reasons
+                .filterIsInstance<ManifestValidationReason.UndeclaredCanonScope>()
+                .map { it.canonType },
+        )
+    }
+
+    @Test
+    fun `isCanonExternal set while still declaring emits or consumes is rejected`() {
+        val manifest = PlugManifest(
+            id = PlugId("mislabelled-plug"),
+            name = "Mislabelled Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(linkRequirement("calendar", setOf(CanonType.CALENDAR_EVENT))),
+            emits = setOf(CanonType.CALENDAR_EVENT),
+            isCanonExternal = true,
+        )
+
+        val invalid = assertIs<ManifestValidationResult.Invalid>(
+            PlugManifestValidator.validate(manifest),
+        )
+
+        val contradiction = invalid.reasons
+            .filterIsInstance<ManifestValidationReason.CanonExternalWithDeclaredCanon>()
+        assertEquals(1, contradiction.size)
+        assertEquals(setOf(CanonType.CALENDAR_EVENT), contradiction.single().canonTypes)
+    }
+
+    @Test
+    fun `a manifest written before isCanonExternal existed still decodes as canon-bearing`() {
+        val manifest = PlugManifest(id = PlugId("legacy"), name = "Legacy", version = "0.1.0")
+
+        assertTrue(!manifest.isCanonExternal)
+    }
+
+    @Test
     fun `a manifest written before link requirements existed still decodes`() {
         // The defaults are what keep pre-AMPR-223 manifests valid.
         val manifest = PlugManifest(id = PlugId("legacy"), name = "Legacy", version = "0.1.0")
