@@ -8,6 +8,22 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
 
 ### Added
 
+- **`CanonWorkItem.description`** ([AMPR-269](https://linear.app/miley/issue/AMPR-269)).
+
+  Deferred at admission (AMPR-262) for failing the bulk rule — a GitHub issue
+  body routinely exceeds the 32 KiB per-projection budget, and `WORK_ITEM` was
+  the wave's strongest admission candidate. `CanonProse` (AMPR-268) now gives
+  it a bounded shape, so the field lands additively with a `null` default: a
+  bounded snippet, not the provider's full description, which continues to
+  survive losslessly in `CanonProvenance.nativePayload`. Three provider
+  formats collapse to one field — Jira's ADF (a structured JSON tree, not
+  text), GitHub-flavoured Markdown, and Linear's Markdown — each losing
+  structure a flattening to prose cannot carry back; named in KDoc alongside
+  the wave's other lossy fields. `CanonProject.summary` already moved to
+  `CanonProse` as part of AMPR-268, so no further migration was needed there.
+  Pinned by a maximally-filled `CanonWorkItem` in the existing
+  `CanonWorkEntitiesTest` projection-budget assertion.
+
 - **Knowledge-work canon wave: `WORK_ITEM`, `PROJECT`, `MILESTONE`, `TABLE`**
   ([AMPR-262](https://linear.app/miley/issue/AMPR-262)).
 
