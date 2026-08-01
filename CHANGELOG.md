@@ -44,6 +44,22 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
   one place (`ConsentEnforcingAssetResolver`) rather than forking with a second
   resolver hierarchy.
 
+- **Canon cross-reference contract settled** ([AMPR-266](https://linear.app/miley/issue/AMPR-266)).
+
+  Documentation and tests only — no shape or wire-name change. The nullable
+  `CanonId` cross-reference shape shared by `CanonEmailMessage.mailboxId`,
+  `CanonWorkItem.projectId`, `CanonMilestone.projectId`, and
+  `CanonTable.documentId` is now a formalized invariant in
+  `domain-canon.md`: `null` is ambiguous between "not attached" and "provider
+  didn't say," a `CanonId` only resolves against entities from the *same*
+  Link, and there is no referential integrity. `mailboxId` — the field the
+  other three copied without KDoc — is documented for the first time. A
+  resolver SPI and a breaking typed-reference wrapper were both costed and
+  rejected: neither `CanonId` nor anything else in the repo maps back to the
+  `SourceHandle` a resolver would need, so either option is new-store
+  machinery speculatively built for no confirmed consumer, not a cheap mirror
+  of `AssetResolver`. Pinned in `CanonCrossReferenceContractTest`.
+
 ### Breaking
 
 - **PROPEL `CognitivePhase` enum is now canonically six members**
