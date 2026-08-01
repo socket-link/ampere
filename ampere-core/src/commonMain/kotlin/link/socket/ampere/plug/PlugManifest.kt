@@ -19,6 +19,15 @@ import link.socket.ampere.plug.permission.PlugPermission
  * produce for other Arc steps, and what it needs handed to it. They are what a
  * future planner reads to decide two Plugs can be chained.
  *
+ * [optionalConsumes] names canon types this Plug can use if an Arc-execution
+ * planner hands them one, but does not require — e.g. a Plug that can use a
+ * [link.socket.ampere.canon.CanonType.PHOTO] earlier in an Arc without forcing
+ * every caller through whatever Plug would otherwise produce one. Unlike
+ * [consumes], no input source is required for the Plug to run. The
+ * Arc-execution planner that chains one Plug's canon output into another
+ * Plug's optional input is out of scope here; this field only needs to exist
+ * for that planner to read.
+ *
  * [resolvesAssets] declares the third, optional chassis capability — a Plug
  * implementing [link.socket.ampere.plug.spi.AssetResolver] alongside (or
  * instead of) Perceive/Execute — so a consent surface can state that a Plug
@@ -39,5 +48,6 @@ data class PlugManifest(
     val requiredLinks: List<LinkRequirement> = emptyList(),
     val emits: Set<CanonType> = emptySet(),
     val consumes: Set<CanonType> = emptySet(),
+    val optionalConsumes: Set<CanonType> = emptySet(),
     val resolvesAssets: Boolean = false,
 )

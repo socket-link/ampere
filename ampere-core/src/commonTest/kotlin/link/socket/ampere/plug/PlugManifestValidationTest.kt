@@ -302,6 +302,53 @@ class PlugManifestValidationTest {
     }
 
     @Test
+    fun `a manifest declaring an optional canon type it does not also require validates`() {
+        val manifest = PlugManifest(
+            id = PlugId("vision-ocr-plug"),
+            name = "Vision OCR Plug",
+            version = "1.0.0",
+            optionalConsumes = setOf(CanonType.PHOTO),
+        )
+
+        assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
+    }
+
+    @Test
+    fun `a link requirement scoped to a canon type only in optionalConsumes validates`() {
+        val manifest = PlugManifest(
+            id = PlugId("vision-ocr-plug"),
+            name = "Vision OCR Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(linkRequirement("photos", setOf(CanonType.PHOTO))),
+            optionalConsumes = setOf(CanonType.PHOTO),
+        )
+
+        assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
+    }
+
+    @Test
+    fun `a canon type declared in both consumes and optionalConsumes is rejected`() {
+        val manifest = PlugManifest(
+            id = PlugId("vision-ocr-plug"),
+            name = "Vision OCR Plug",
+            version = "1.0.0",
+            consumes = setOf(CanonType.PHOTO),
+            optionalConsumes = setOf(CanonType.PHOTO),
+        )
+
+        val invalid = assertIs<ManifestValidationResult.Invalid>(
+            PlugManifestValidator.validate(manifest),
+        )
+
+        assertEquals(
+            listOf(CanonType.PHOTO),
+            invalid.reasons
+                .filterIsInstance<ManifestValidationReason.RedundantOptionalConsumes>()
+                .map { it.canonType },
+        )
+    }
+
+    @Test
     fun `a manifest written before link requirements existed still decodes`() {
         // The defaults are what keep pre-AMPR-223 manifests valid.
         val manifest = PlugManifest(id = PlugId("legacy"), name = "Legacy", version = "0.1.0")
@@ -309,6 +356,7 @@ class PlugManifestValidationTest {
         assertTrue(manifest.requiredLinks.isEmpty())
         assertTrue(manifest.emits.isEmpty())
         assertTrue(manifest.consumes.isEmpty())
+        assertTrue(manifest.optionalConsumes.isEmpty())
         assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
     }
 }

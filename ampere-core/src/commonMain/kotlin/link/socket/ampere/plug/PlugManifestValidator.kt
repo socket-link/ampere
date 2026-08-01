@@ -15,10 +15,12 @@ import link.socket.ampere.plug.permission.PlugPermission
  * Returning a sealed result keeps the validator usable both for early failure
  * (during plug install) and for surfacing diagnostics in tooling.
  *
- * This validator does not check [PlugManifest.emits] / [PlugManifest.consumes]
- * at all, and the only production call site today is [PlugContext.create].
- * It is expected to run at plug install time on every host that accepts
- * manifests — including Socket, which does not currently call it.
+ * This validator does not check [PlugManifest.emits] itself, only that
+ * [PlugManifest.requiredLinks] scopes and [PlugManifest.optionalConsumes]
+ * stay consistent with [PlugManifest.consumes]. The only production call
+ * site today is [PlugContext.create]. It is expected to run at plug install
+ * time on every host that accepts manifests — including Socket, which does
+ * not currently call it.
  */
 object PlugManifestValidator {
 
@@ -50,6 +52,7 @@ object PlugManifestValidator {
 
         reasons += validateLinkRequirements(manifest)
         reasons += validateDeviceCapabilities(manifest)
+        reasons += validateCanonConsumption(manifest)
 
         return if (reasons.isEmpty()) {
             ManifestValidationResult.Valid
@@ -87,7 +90,7 @@ object PlugManifestValidator {
                 reasons += ManifestValidationReason.EmptyLinkRequirementScope(requirement.name)
             }
 
-        val declaredCanonTypes = manifest.emits + manifest.consumes
+        val declaredCanonTypes = manifest.emits + manifest.consumes + manifest.optionalConsumes
         manifest.requiredLinks.forEach { requirement ->
             (requirement.minimumScope - declaredCanonTypes).forEach { undeclared ->
                 reasons += ManifestValidationReason.UndeclaredCanonScope(
@@ -114,6 +117,18 @@ object PlugManifestValidator {
             .filterValues { it.size > 1 }
             .keys
             .map { ManifestValidationReason.DuplicateDeviceCapability(it) }
+    }
+
+    /**
+     * A canon type in both [PlugManifest.consumes] and
+     * [PlugManifest.optionalConsumes] is a contradiction: the Plug cannot
+     * simultaneously require and merely-accept-if-available the same type.
+     */
+    private fun validateCanonConsumption(
+        manifest: PlugManifest,
+    ): List<ManifestValidationReason> {
+        return (manifest.consumes intersect manifest.optionalConsumes)
+            .map { ManifestValidationReason.RedundantOptionalConsumes(it) }
     }
 }
 
@@ -169,12 +184,21 @@ sealed interface ManifestValidationReason {
 
     /**
      * A [link.socket.ampere.link.LinkRequirement.minimumScope] names a
-     * [CanonType] the manifest neither [PlugManifest.emits] nor
-     * [PlugManifest.consumes] — the Plug is asking for data it has no stated
-     * way to produce or use.
+     * [CanonType] the manifest declares in none of [PlugManifest.emits],
+     * [PlugManifest.consumes], or [PlugManifest.optionalConsumes] — the Plug
+     * is asking for data it has no stated way to produce or use.
      */
     data class UndeclaredCanonScope(
         val requirementName: String,
+        val canonType: CanonType,
+    ) : ManifestValidationReason
+
+    /**
+     * A [CanonType] appears in both [PlugManifest.consumes] and
+     * [PlugManifest.optionalConsumes] — the Plug cannot both require and
+     * merely-accept-if-available the same canon type.
+     */
+    data class RedundantOptionalConsumes(
         val canonType: CanonType,
     ) : ManifestValidationReason
 }
