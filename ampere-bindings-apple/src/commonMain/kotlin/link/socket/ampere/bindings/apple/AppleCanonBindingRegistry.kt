@@ -4,7 +4,7 @@ import link.socket.ampere.canon.CanonType
 
 /**
  * Every [CanonType]'s projection onto Apple's assistant-schema vocabulary,
- * settled by the SDK pass recorded in `.context/issue-586-domain-type-canon-v1.md`.
+ * settled by the SDK pass recorded in `docs/ampr-222-domain-type-canon-v1.md`.
  *
  * CALENDAR_EVENT, REMINDER, ALARM and MEDIA_ITEM were Ring 1 candidates. They
  * demoted to Ring 2 because the shipped assistant-schema catalog has no

@@ -13,7 +13,7 @@ import kotlinx.serialization.Serializable
  * canonical noun.
  *
  * Ring membership was settled by the SDK pass documented in
- * `.context/issue-586-domain-type-canon-v1.md`. These definitions are
+ * `docs/ampr-222-domain-type-canon-v1.md`. These definitions are
  * intentionally vendor-neutral — which platform ships which schema, and the
  * per-type projection detail, lives in the binding-table rows owned by the
  * edge modules (`ampere-bindings-apple`, `ampere-bindings-android`), not here.

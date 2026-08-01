@@ -35,7 +35,7 @@ schema registry, so there the IR partly duplicates it and integration is a
 mapping table. Android's AppFunctions has **no** noun catalogue — per-app data
 classes reconciled by an LLM at runtime. That void is the shape of this IR.
 
-An SDK pass against iPhoneOS 26.5 (`.context/issue-586-domain-type-canon-v1.md`)
+An SDK pass against iPhoneOS 26.5 (`docs/ampr-222-domain-type-canon-v1.md`)
 found Apple's catalogue narrower than expected: 15 domains, 26 entity schemas,
 all documents-and-content shaped. **There is no calendar, messages, reminders,
 notes, places, media, or alarm domain.** Six proposed Ring 1 types demoted as a
@@ -77,7 +77,7 @@ vocabulary is a *binding*, declared in an edge module that depends on
 - `canon/adapter/CanonChildren.kt` — `forChild`/`childNativeId`/`unstableChildNativeId`: identity and provenance rules for entities nested inside another (an event's attendees, an album's assets).
 - `canon/adapter/CanonConversionFailure.kt` — the closed failure set.
 - `ampere-core/src/commonTest/.../canon/` — round-trip, write-back-merge, and serialization-stability tests.
-- `.context/recon/apple-assistant-schemas-ios265.tsv` — the raw SDK enumeration.
+- `docs/recon/apple-assistant-schemas-ios265.tsv` — the raw SDK enumeration.
 
 ## Invariants
 
@@ -104,7 +104,7 @@ vocabulary is a *binding*, declared in an edge module that depends on
   Inside `projectFields`, read through `NativeFields.project(fields, canonType, nativeSchema) { cursor -> ... }` rather than hand-rolling `?: return canonFailure(...)` per field — it keeps the failure taxonomy (`MissingRequiredField` vs. `MalformedField`) uniform and nested/array failures report a path (`location.latitude`, `people[1].name`). When a canon type nests another entity, give the child its own id and provenance with `childNativeId(parentNativeId, role, naturalKey)` and `provenance.forChild(childNativeId)` — never derive a child id from array position, and never reuse the parent's provenance verbatim (see `CanonChildren.kt`).
 - **Preview a pending write** — `adapter.mergeForWriteBack(entity)` returns the merged payload without writing.
 - **Check a binding** — `AppleCanonBindingRegistry.bindingFor(CanonType.EMAIL_MESSAGE).schema` (from `ampere-bindings-apple`) gives the `mail.message` address; `.lossyFields` on the same result names the fields the projection drops.
-- **Re-run the SDK pass** — the extraction commands are in the Appendix of `.context/issue-586-domain-type-canon-v1.md`; diff against the committed TSV.
+- **Re-run the SDK pass** — the extraction commands are in the Appendix of `docs/ampr-222-domain-type-canon-v1.md`; diff against the committed TSV.
 
 ## Anti-patterns
 
@@ -115,4 +115,4 @@ vocabulary is a *binding*, declared in an edge module that depends on
 - **Parsing `nativeId` to extract structure.** It is opaque by design.
 - **Deriving a nested entity's id from its array position, or giving it the parent's provenance verbatim.** An index-derived id (`"$eventId:attendee:0"`) changes when the provider reorders the collection; a reused parent provenance hands the child the parent's `nativeId` and `nativePayload`, so e.g. a `CanonPerson` extracted from a `CanonCalendarEvent` claims to *be* an `EKEvent`. Use `childNativeId`/`forChild` from `CanonChildren.kt`.
 - **Reading bindings via annotations/reflection.** `kotlin-reflect` is JVM-only and Kotlin/Native cannot read annotations reflectively; bindings are data for exactly this reason.
-- **Re-proposing `SPREADSHEET`, `ROADMAP`, or `INITIATIVE`.** All three were assessed by the AMPR-262 wave and the rationale is recorded in `.context/issue-663-knowledge-work-canon-wave.md` so it is not re-litigated per request. `SPREADSHEET` is a duplicate — the file is `CanonDocument(kind = SPREADSHEET)` and the missing concept was the grid, admitted as `CanonTable`. `ROADMAP` is a view, not a noun: a rendering of projects and milestones over time, and therefore a Phosphor surface over `CanonProject`/`CanonMilestone`. `INITIATIVE` is deferred, not rejected — only Linear ships a durable object above the project; its re-admission trigger is a second provider doing the same with a non-configurable hierarchy level.
+- **Re-proposing `SPREADSHEET`, `ROADMAP`, or `INITIATIVE`.** All three were assessed by the AMPR-262 wave and the rationale is recorded in `docs/ampr-262-knowledge-work-canon-wave.md` so it is not re-litigated per request. `SPREADSHEET` is a duplicate — the file is `CanonDocument(kind = SPREADSHEET)` and the missing concept was the grid, admitted as `CanonTable`. `ROADMAP` is a view, not a noun: a rendering of projects and milestones over time, and therefore a Phosphor surface over `CanonProject`/`CanonMilestone`. `INITIATIVE` is deferred, not rejected — only Linear ships a durable object above the project; its re-admission trigger is a second provider doing the same with a non-configurable hierarchy level.

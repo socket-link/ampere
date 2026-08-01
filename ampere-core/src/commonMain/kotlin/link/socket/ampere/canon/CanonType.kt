@@ -22,7 +22,7 @@ import kotlinx.serialization.Serializable
  * alongside the projection.
  *
  * Each member declares its [ring]. Ring membership was settled by the SDK pass
- * recorded in `.context/issue-586-domain-type-canon-v1.md`; the `wireName` is a
+ * recorded in `docs/ampr-222-domain-type-canon-v1.md`; the `wireName` is a
  * stable serialization contract — renaming one breaks `PlaybackRelay` replay of
  * any trace that already carries it.
  */

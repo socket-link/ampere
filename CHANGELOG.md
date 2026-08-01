@@ -16,7 +16,7 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
   — they arrive only over `Mcp`, `OAuthRest`, or `FolderMount` Links — bringing
   the canon to 33 types. Each admission is recorded against a four-gate bar
   (noun / intersection / producer / bulk) in
-  `.context/issue-663-knowledge-work-canon-wave.md`, with per-provider lossy
+  `docs/ampr-262-knowledge-work-canon-wave.md`, with per-provider lossy
   fields named in KDoc on day one.
 
   Also added: `CanonWorkStatus` (a coarse `BACKLOG`/`TODO`/`IN_PROGRESS`/`DONE`/

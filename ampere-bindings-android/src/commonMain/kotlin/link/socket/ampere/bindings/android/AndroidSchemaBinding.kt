@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
  * [PendingSdkVerification] is the honest default and the current state of every
  * canon type. `androidx.appfunctions` is not on this repo's classpath, so
  * `AppFunctionSchemaDefinition` could not be enumerated during recon — see the
- * "Recon caveats" section of `.context/issue-586-domain-type-canon-v1.md`.
+ * "Recon caveats" section of `docs/ampr-222-domain-type-canon-v1.md`.
  * Modelling the gap as a variant rather than a `null` keeps "we have not looked"
  * distinguishable from "we looked and there is nothing".
  */

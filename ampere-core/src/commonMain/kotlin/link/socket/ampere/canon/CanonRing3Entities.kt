@@ -126,7 +126,7 @@ data class CanonThirdPartyPlaylist(
 // The knowledge-work wave (AMPR-262)
 //
 // Four nouns admitted in one deliberate reopening of the closed set, with
-// provider-intersection evidence in `.context/issue-663-knowledge-work-canon-wave.md`.
+// provider-intersection evidence in `docs/ampr-262-knowledge-work-canon-wave.md`.
 // `SPREADSHEET` was rejected (the file is already `CanonDocument(kind = SPREADSHEET)`;
 // the missing concept was the grid, admitted as [CanonTable]), `ROADMAP` was
 // rejected (a rendering of projects and milestones over time, not a noun), and

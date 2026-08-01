@@ -34,7 +34,7 @@ class AppleCanonBindingRegistryTest {
     @Test
     fun `Ring 1 entity-schema bindings only name domains the SDK actually ships`() {
         // Enumerated from iPhoneOS 26.5 AppIntents.swiftinterface; see
-        // .context/recon/apple-assistant-schemas-ios265.tsv
+        // docs/recon/apple-assistant-schemas-ios265.tsv
         val shippedDomains = setOf(
             "assistant", "books", "browser", "camera", "files", "journal", "mail",
             "photos", "presentation", "reader", "spreadsheet", "system",
