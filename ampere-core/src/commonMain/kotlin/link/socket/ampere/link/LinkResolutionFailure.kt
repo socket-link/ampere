@@ -92,6 +92,10 @@ enum class RevocationScope {
     @SerialName("credential")
     CREDENTIAL,
 
+    /** The folder mount is gone. Cascades to every Plug that used it. */
+    @SerialName("folder")
+    FOLDER,
+
     /** Only this Plug's grant on the Link was revoked. */
     @SerialName("plug_grant")
     PLUG_GRANT,

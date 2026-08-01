@@ -139,6 +139,13 @@ class LinkResolutionGateTest {
         assertTrue(!LinkResolutionGate.permits(apnsLink, LinkOperation.PERCEIVE))
     }
 
+    @Test
+    fun `an already-resolved Link with a revoked folder ref no longer permits`() {
+        val revokedFolder = googleLink.copy(folderRef = FolderRef("mount-1", revokedAt))
+
+        assertTrue(!LinkResolutionGate.permits(revokedFolder, LinkOperation.PERCEIVE))
+    }
+
     // -----------------------------------------------------------------
     // Scope
     // -----------------------------------------------------------------
@@ -201,6 +208,22 @@ class LinkResolutionGateTest {
         val failed = assertIs<LinkResolution.Failed>(result)
         val failure = assertIs<LinkResolutionFailure.RevokedCredential>(failed.failure)
         assertEquals(RevocationScope.CREDENTIAL, failure.scope)
+    }
+
+    @Test
+    fun `a revoked folder ref reports FOLDER scope`() {
+        val result = LinkResolutionGate.resolve(
+            requirement = requirement(),
+            candidates = listOf(
+                googleLink.copy(folderRef = FolderRef("mount-1", revokedAt)),
+            ),
+            grants = grants("calendar-plug", googleLink.id),
+            platform = PlatformTarget.ANDROID,
+        )
+
+        val failed = assertIs<LinkResolution.Failed>(result)
+        val failure = assertIs<LinkResolutionFailure.RevokedCredential>(failed.failure)
+        assertEquals(RevocationScope.FOLDER, failure.scope)
     }
 
     @Test

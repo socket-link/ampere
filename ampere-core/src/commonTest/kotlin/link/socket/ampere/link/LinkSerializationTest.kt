@@ -82,6 +82,31 @@ class LinkSerializationTest {
     }
 
     @Test
+    fun `a folder ref never carries the bookmark bytes`() {
+        val folderRef = FolderRef("mount-1")
+        val encoded = json.encodeToString(FolderRef.serializer(), folderRef)
+
+        // The mount id is a pointer; if bookmark bytes ever appear in this
+        // type, every trace that recorded a Link becomes a breach.
+        assertTrue(encoded.contains("mount-1"))
+        assertEquals(
+            setOf("mountId", "revokedAt"),
+            Regex("\"(\\w+)\":").findAll(encoded).map { it.groupValues[1] }.toSet(),
+        )
+    }
+
+    @Test
+    fun `a Link round-trips with its folder ref intact`() {
+        val withFolder = link.copy(folderRef = FolderRef("mount-1"))
+        val decoded = json.decodeFromString(
+            Link.serializer(),
+            json.encodeToString(Link.serializer(), withFolder),
+        )
+
+        assertEquals(withFolder, decoded)
+    }
+
+    @Test
     fun `every resolution failure round-trips`() {
         val failures = listOf<LinkResolutionFailure>(
             LinkResolutionFailure.MissingLink("calendar", Transport.MCP, LinkDirection.READ),
@@ -100,6 +125,11 @@ class LinkSerializationTest {
                 "calendar",
                 LinkId("google-oauth"),
                 RevocationScope.PLUG_GRANT,
+            ),
+            LinkResolutionFailure.RevokedCredential(
+                "files",
+                LinkId("folder-mount"),
+                RevocationScope.FOLDER,
             ),
             LinkResolutionFailure.TransportUnsupported(
                 "calendar",
