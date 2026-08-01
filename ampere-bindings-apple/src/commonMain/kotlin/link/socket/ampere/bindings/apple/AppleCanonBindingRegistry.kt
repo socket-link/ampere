@@ -186,6 +186,14 @@ object AppleCanonBindingRegistry {
         CanonType.ORDER to AppleCanonBinding.UNBOUND,
         CanonType.DELIVERY to AppleCanonBinding.UNBOUND,
         CanonType.THIRD_PARTY_PLAYLIST to AppleCanonBinding.UNBOUND,
+
+        // The knowledge-work wave (AMPR-262). Apple ships no project-management
+        // or tabular-data assistant schema, so these are unbound by definition
+        // rather than by SDK-pass verdict.
+        CanonType.WORK_ITEM to AppleCanonBinding.UNBOUND,
+        CanonType.PROJECT to AppleCanonBinding.UNBOUND,
+        CanonType.MILESTONE to AppleCanonBinding.UNBOUND,
+        CanonType.TABLE to AppleCanonBinding.UNBOUND,
     )
 
     /** The Apple binding for [type]. Falls back to [AppleCanonBinding.UNBOUND] for any type not listed. */

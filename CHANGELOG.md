@@ -6,6 +6,44 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
 
 ## [Unreleased]
 
+### Added
+
+- **Knowledge-work canon wave: `WORK_ITEM`, `PROJECT`, `MILESTONE`, `TABLE`**
+  ([AMPR-262](https://linear.app/miley/issue/AMPR-262)).
+
+  The canon's first deliberate reopening since v1, admitting the vocabulary Arcs
+  need to participate in projects, tasks, and tabular data. All four are Ring 3
+  — they arrive only over `Mcp`, `OAuthRest`, or `FolderMount` Links — bringing
+  the canon to 33 types. Each admission is recorded against a four-gate bar
+  (noun / intersection / producer / bulk) in
+  `.context/issue-663-knowledge-work-canon-wave.md`, with per-provider lossy
+  fields named in KDoc on day one.
+
+  Also added: `CanonWorkStatus` (a coarse `BACKLOG`/`TODO`/`IN_PROGRESS`/`DONE`/
+  `CANCELLED` lifecycle plus verbatim `providerStatus`, mirroring
+  `CanonServiceStatus`), and `CanonTablePreview`, whose `bounded()` factory caps
+  a table preview at 5 rows × 12 columns × 120 characters so bulk rows resolve
+  out of band rather than riding the entity.
+
+  `SPREADSHEET` and `ROADMAP` were assessed and rejected, `INITIATIVE` deferred
+  with a recorded re-admission trigger; the rationale is in `domain-canon.md`.
+
+  **Additive.** No existing type, field, or wire name changes, and no exhaustive
+  `when` over `CanonType` or `CanonEntity` exists in the codebase — external
+  consumers who wrote one will see a new-member exhaustiveness error, which is
+  the intended tripwire.
+
+- **`CanonAssetRef` widened to out-of-band content**
+  ([AMPR-262](https://linear.app/miley/issue/AMPR-262),
+  [AMPR-258](https://linear.app/miley/issue/AMPR-258)).
+
+  Documentation only — no shape or wire-name change. `CanonAssetRef` now names
+  where any out-of-band content lives, not only visual media, and backs
+  `CanonTable.contentRef`. This resolves the non-visual case AMPR-258 deferred
+  in favour of reuse over a sibling primitive, so consent enforcement stays in
+  one place (`ConsentEnforcingAssetResolver`) rather than forking with a second
+  resolver hierarchy.
+
 ### Breaking
 
 - **PROPEL `CognitivePhase` enum is now canonically six members**
