@@ -6,7 +6,77 @@ on:
   pull_request:
     branches: [ main ]
 
+# The macOS jobs below are the scarcest resource in this repo: the Team plan allows 5 concurrent
+# macOS jobs org-wide and each CI run asks for 2 of them. With ~6 runs in flight the queue was
+# consistently as long as the running set, so a force-push used to add two more macOS jobs rather
+# than replace the two it superseded. Cancel superseded PR runs; never cancel main.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Which halves of CI does this change actually need? Only the iOS jobs are gated on this — they
+  # are the ones that queue. The ubuntu jobs are cheap and always run, so a wrong answer here can
+  # never let an untested Kotlin change through the JVM gate.
+  #
+  # The list is an ignore-list on purpose: anything not named here counts as iOS-relevant. Adding
+  # a path is a decision to stop testing it on iOS, so the failure mode of forgetting to update it
+  # is a wasted runner, not a missed regression.
+  changes:
+    name: Detect iOS-relevant changes
+    runs-on: ubuntu-latest
+
+    outputs:
+      ios: ${{ steps.filter.outputs.ios }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether iOS jobs need to run
+        id: filter
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          # A first push to a branch reports an all-zero "before", and a shallow/forced history can
+          # leave the base unreachable. Both mean "we cannot tell" -> run the iOS jobs.
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ] \
+            || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            echo "Cannot resolve base commit; running iOS jobs."
+            echo "ios=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          echo "Changed files:"
+          echo "$CHANGED" | sed 's/^/  /'
+
+          # Paths that cannot affect the Kotlin/Native or Swift build.
+          RELEVANT=$(echo "$CHANGED" | grep -Ev \
+            -e '^docs/' \
+            -e '^\.context/' \
+            -e '^assets/' \
+            -e '^scripts/' \
+            -e '^\.github/(ISSUE_TEMPLATE|PULL_REQUEST_TEMPLATE)' \
+            -e '\.md$' \
+            -e '^LICENSE' \
+            -e '^\.gitignore$' \
+            || true)
+
+          if [ -z "$RELEVANT" ]; then
+            echo "Documentation-only change; skipping iOS jobs."
+            echo "ios=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "iOS-relevant files changed:"
+            echo "$RELEVANT" | sed 's/^/  /'
+            echo "ios=true" >> "$GITHUB_OUTPUT"
+          fi
+
   jvm-lint-build:
     name: JVM Lint + Build (ubuntu, JDK 21)
     runs-on: ubuntu-latest
@@ -21,8 +91,15 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
+      # Only main writes Gradle caches. The repo was sitting at 10.9GB against a 10GB Actions cache
+      # quota, so every new entry evicted an older one and the expensive ~/.konan buckets were gone
+      # before the next run could read them. PR branches cannot share cache entries with each other
+      # anyway — a PR reads its own ref and main — so writing from PRs bought nothing and cost the
+      # quota that made main's entries survivable.
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Create local.properties
         run: |
@@ -100,6 +177,8 @@ jobs:
   # Independent of the Swift bridge job below, so the two run in parallel.
   ios-kotlin-tests:
     name: iOS Kotlin Tests (macos, JDK 21)
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
     runs-on: macos-latest
 
     steps:
@@ -114,6 +193,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       # Keyed per job: this job populates the test-binary gSTATIC bucket and the Swift bridge job
       # populates the framework one, so a shared key would make the two races overwrite each
@@ -123,8 +204,13 @@ jobs:
       # its own entry yet the Swift bridge job restored *this* job's bucket instead. A mismatched
       # Konan cache is far worse than none: the framework link went 323s (no cache) -> 1208s
       # (wrong bucket) -> 138s (right bucket). A clean miss is the good failure mode here.
-      - name: Cache Kotlin/Native toolchain
-        uses: actions/cache@v4
+      #
+      # Restore on every branch, save only from main. A 344MB entry per PR branch was pure quota
+      # burn: no other branch could ever read it, and the repo was over its 10GB cache limit, so
+      # those writes were evicting the main entry that every branch does read.
+      - name: Restore Kotlin/Native toolchain
+        id: konan-cache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.konan
           key: konan-${{ runner.os }}-kotlin-tests-${{ hashFiles('gradle.properties') }}
@@ -143,10 +229,19 @@ jobs:
         timeout-minutes: 25
         run: ./gradlew :ampere-core:iosSimulatorArm64Test
 
+      - name: Save Kotlin/Native toolchain
+        if: github.ref == 'refs/heads/main' && steps.konan-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-kotlin-tests-${{ hashFiles('gradle.properties') }}
+
   # The Kotlin↔Swift Arc bridge (AMPR-243). iosSimulatorArm64Test proves the Kotlin half runs on
   # Native; only xcodebuild proves the Objective-C export is usable from Swift.
   ios-swift-bridge:
     name: iOS Swift Bridge Tests (macos, JDK 21)
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
     runs-on: macos-latest
 
     steps:
@@ -155,12 +250,10 @@ jobs:
 
       # The simulator takes ~5m of mostly-idle wall clock to come up, and AMPR-253 left that fully
       # serial in "Run Swift bridge tests" — 346s of a 638s job. Kick it off first so it overlaps
-      # the JDK/Gradle setup, the framework link and the Swift build (~245s of cover).
+      # the JDK/Gradle setup and the xcodebuild step.
       #
       # simctl hands the boot to CoreSimulator and returns, so this does not need backgrounding
-      # with '&': there is no child process to outlive the step. AMPR-244 backgrounded it and it
-      # still hurt, because back then it overlapped the framework link inside the same step on a
-      # 3-core runner. The link is now upstream of this and already done by the time tests run.
+      # with '&': there is no child process to outlive the step.
       - name: Start simulator boot
         run: |
           UDID=$(xcrun simctl list devices available -j \
@@ -177,34 +270,26 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       # ~/.konan holds the Kotlin/Native toolchain *and* the gSTATIC compiler caches. This job
-      # rebuilds ~388MB of the iosSimulatorArm64 bucket from scratch on every run; caching it is
-      # worth ~19% of the link (measured: 362s cold vs 293s warm).
+      # rebuilds ~388MB of the iosSimulatorArm64 bucket from scratch on every run.
       #
       # AMPR-244 tried this and had to revert it: Xcode's "Compile Kotlin" script phase spawns a
       # second, concurrent Gradle process, and that raced the first one on Konan's inter-process
-      # lock, hanging the job. The expensive framework link is now done in the "Link Kotlin
-      # framework" step below, so by the time xcodebuild's nested Gradle runs, the link is
-      # UP-TO-DATE and it no longer competes for the toolchain.
-      - name: Cache Kotlin/Native toolchain
-        uses: actions/cache@v4
+      # lock. That hazard is gone — there is only one Gradle process in this job now (see the
+      # xcodebuild step below).
+      #
+      # Restore everywhere, save only from main: see the equivalent note in ios-kotlin-tests.
+      - name: Restore Kotlin/Native toolchain
+        id: konan-cache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.konan
           key: konan-${{ runner.os }}-swift-bridge-${{ hashFiles('gradle.properties') }}
           restore-keys: |
             konan-${{ runner.os }}-swift-bridge-
-
-      # Per AMPR-244 this had never successfully populated on any branch, and it still restores in
-      # ~1s / saves in ~5s, so it is not currently buying anything. Kept because it only starts
-      # paying off now that the framework link no longer dominates the step it was meant to help.
-      - name: Cache Xcode DerivedData
-        uses: actions/cache@v4
-        with:
-          path: ~/Library/Developer/Xcode/DerivedData
-          key: deriveddata-${{ runner.os }}-${{ hashFiles('ampere-ios/**/*.swift', 'ampere-ios/**/project.pbxproj') }}
-          restore-keys: |
-            deriveddata-${{ runner.os }}-
 
       - name: Create local.properties
         run: |
@@ -214,24 +299,20 @@ jobs:
           openai_api_key=placeholder
           EOF
 
-      # linkDebugFrameworkIosSimulatorArm64 is the single most expensive task in the whole job.
-      # Running it here rather than letting xcodebuild's script phase trigger it keeps it visible
-      # and separately timed, lets it use the Gradle build cache, and keeps it out of the
-      # xcodebuild step's timeout. The script phase still runs embedAndSignAppleFrameworkForXcode
-      # (which embeds and signs the dynamic framework into the .app), but finds the link already
-      # done.
-      - name: Link Kotlin framework
-        timeout-minutes: 30
-        run: ./gradlew :ampere-core:linkDebugFrameworkIosSimulatorArm64
-
-      # AMPR-244 raised this budget from 20m to 30m after observing 11m / 14m / >20m on this step
-      # with no code change in common. That variance was mostly the framework link, which now runs
-      # in the step above, so what's left here is the Swift compile and link — 31s locally. The
-      # 30m budget is kept anyway: it costs nothing when the step is healthy, and macOS runners
-      # are genuinely noisy. If this step ever approaches it again, that is a real hang, not
-      # variance.
+      # There used to be a "Link Kotlin framework" step here running
+      # :ampere-core:linkDebugFrameworkIosSimulatorArm64 up front, on the premise that xcodebuild's
+      # nested Gradle would then find the link UP-TO-DATE. Measured across five consecutive runs,
+      # it never did: the standalone link took 8-17m and the nested one re-linked from scratch for
+      # another 12-15m in every single run, while only compileKotlinIosSimulatorArm64 came back
+      # UP-TO-DATE. The link task's inputs genuinely differ between the two invocations — Xcode's
+      # script phase supplies build settings that reach the link task's compiler arguments — so the
+      # first link was never reusable and the job was paying for the same work twice.
+      #
+      # Doing the link once, inside xcodebuild, roughly halves this job. If a separately-timed link
+      # is ever wanted again, it has to be provably the *same* task invocation, not just the same
+      # task name.
       - name: Build Swift bridge tests
-        timeout-minutes: 30
+        timeout-minutes: 40
         run: |
           xcodebuild build-for-testing \
             -project ampere-ios/ampere-ios.xcodeproj \
@@ -259,17 +340,37 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM=""
 
+      - name: Save Kotlin/Native toolchain
+        if: github.ref == 'refs/heads/main' && steps.konan-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-swift-bridge-${{ hashFiles('gradle.properties') }}
+
   ios-tests-status:
     name: iOS Simulator Tests (macos, JDK 21)
-    needs: [ ios-kotlin-tests, ios-swift-bridge ]
+    needs: [ changes, ios-kotlin-tests, ios-swift-bridge ]
     runs-on: ubuntu-latest
     if: always()
 
     steps:
+      # This job is the required status check, so it must report on every run — including the
+      # documentation-only ones where both iOS jobs are skipped. 'skipped' is a pass here; only
+      # 'changes' itself is required to have actually succeeded.
       - name: Check required jobs succeeded
         run: |
-          if [ "${{ needs.ios-kotlin-tests.result }}" != "success" ] || [ "${{ needs.ios-swift-bridge.result }}" != "success" ]; then
-            echo "ios-kotlin-tests: ${{ needs.ios-kotlin-tests.result }}"
-            echo "ios-swift-bridge: ${{ needs.ios-swift-bridge.result }}"
+          if [ "${{ needs.changes.result }}" != "success" ]; then
+            echo "changes: ${{ needs.changes.result }}"
             exit 1
           fi
+
+          for result in "${{ needs.ios-kotlin-tests.result }}" "${{ needs.ios-swift-bridge.result }}"; do
+            case "$result" in
+              success|skipped) ;;
+              *)
+                echo "ios-kotlin-tests: ${{ needs.ios-kotlin-tests.result }}"
+                echo "ios-swift-bridge: ${{ needs.ios-swift-bridge.result }}"
+                exit 1
+                ;;
+            esac
+          done
