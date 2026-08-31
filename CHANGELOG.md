@@ -43,6 +43,33 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
   SQLDelight's default `FrameworkSQLiteOpenHelperFactory` uses the system
   SQLite and reintroduces the failure above.
 
+- **`CanonRecurrence`, plus `recurrence` on `CanonReminder`/`CanonCalendarEvent`
+  and `CanonReminder.startsAt`** ([AMPR-319](https://linear.app/miley/issue/AMPR-319)).
+
+  A bounded recurrence value type in `ampere-core`: `every` (a wall-clock
+  `kotlin.time.Duration`), bounded by `count` or `until`, built through
+  `CanonRecurrence.of(...): Result<CanonRecurrence>`. Deliberately not RFC
+  5545 — an `RRULE` carries calendar vocabulary (`BYDAY`, `BYSETPOS`) that no
+  canon provider round-trips honestly. Bounding is a write-side factory, never
+  a `require` in `init`, so an out-of-range recorded value still decodes and a
+  trace stays replayable; `isWithinBounds` exposes the rule.
+
+  It lands on `CanonReminder` and `CanonCalendarEvent`, where Apple Reminders
+  and Apple Calendar both already produce recurrence through
+  `EKRecurrenceRule`. It was considered and **declined** on `CanonWorkItem`:
+  Linear's recurrence is a template that materializes separate issues, Jira's
+  is a clone, and GitHub Issues has none, so the field would have been the
+  canon's first justified by a consumer's need rather than provider evidence.
+  The split that fell out — a work item is the work, a reminder is its
+  schedule — is recorded in `docs/concepts/domain-canon.md`. `startsAt` on
+  `CanonReminder` mirrors EventKit's `startDateComponents`. All three fields
+  default to `null`, so entities serialized before this change decode
+  unchanged.
+
+  Four-consumer note: `every` is a span and survives a game or simulation
+  clock; `until` is wall-clock and does not. A `count`-bounded recurrence is
+  the portable form.
+
 - **Probe SPI: `Probe<in S>`, four-valued `Verdict`, `ProbeSuite`, open
   `ProbeRegistry`** ([AMPR-318](https://linear.app/miley/issue/AMPR-318)).
 
@@ -79,6 +106,19 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
   before. Socket's `NativePlugCatalogTest` re-implements these rules and needs
   the same change — filed as
   [SCKT-603](https://linear.app/miley/issue/SCKT-603) (Socket Phase 2a).
+
+- **Apple binding: `recurrenceRules` is no longer a dropped field**
+  ([AMPR-319](https://linear.app/miley/issue/AMPR-319)).
+
+  `AppleCanonBindingRegistry` listed `recurrenceRules` as lossy for `REMINDER`
+  — a true statement that is now false. `EKRecurrenceRule` frequency ∈ {daily,
+  weekly, monthly, yearly} × `interval` maps to `every`,
+  `EKRecurrenceEnd.recurrenceEndWithOccurrenceCount` to `count`, and
+  `recurrenceEndWithEndDate` to `until`. What stays lossy runs the other way,
+  canon → EventKit — a sub-daily `every` has no EventKit frequency, and
+  EventKit's day/set-position selectors have no canon expression — and is
+  recorded as a residual note on a carried field rather than as a dropped
+  field. `eventKitAlarms`, `priority`, and `subtasks` are unchanged.
 
 - **Breaking (with alias): eval `Probe` renamed `EvalCase`**
   ([AMPR-318](https://linear.app/miley/issue/AMPR-318)).

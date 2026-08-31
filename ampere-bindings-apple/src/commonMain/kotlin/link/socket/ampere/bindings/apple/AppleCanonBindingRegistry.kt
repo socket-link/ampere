@@ -107,6 +107,16 @@ object AppleCanonBindingRegistry {
         // Ring 2 — Platform
         // ---------------------------------------------------------------
 
+        // Recurrence is no longer dropped (AMPR-319). `EKRecurrenceRule` maps to
+        // `CanonRecurrence`: frequency ∈ {daily, weekly, monthly, yearly} × `interval`
+        // ↔ `every`; `EKRecurrenceEnd.recurrenceEndWithOccurrenceCount` ↔ `count`;
+        // `recurrenceEndWithEndDate` ↔ `until`. What stays lossy is narrower than the
+        // old `recurrenceRules` entry claimed and runs the other way, canon → EventKit:
+        // a sub-daily `every` has no EventKit frequency to land in, and EventKit's
+        // day/month/set-position selectors (`EKRecurrenceDayOfWeek`, `bySetPosition`)
+        // have no canon expression — the deliberate non-RFC-5545 choice recorded on
+        // `CanonRecurrence`. Both are residual notes on a field canon now carries, not
+        // a dropped field, so neither is listed below.
         CanonType.CALENDAR_EVENT to AppleCanonBinding(
             schema = null,
             lossyFields = listOf("eventKitAttendeeStatus", "alarms", "structuredLocation"),
@@ -114,7 +124,7 @@ object AppleCanonBindingRegistry {
 
         CanonType.REMINDER to AppleCanonBinding(
             schema = null,
-            lossyFields = listOf("eventKitAlarms", "recurrenceRules", "priority", "subtasks"),
+            lossyFields = listOf("eventKitAlarms", "priority", "subtasks"),
         ),
 
         CanonType.ALARM to AppleCanonBinding(
