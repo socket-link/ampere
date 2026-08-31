@@ -40,7 +40,7 @@ How the cognitive substrate meets the user, the platform, and the plug ecosystem
 | Concept | Status | One-line summary |
 |---------|--------|------------------|
 | [AgentSurface](agent-surface.md) | stable | Typed, serializable UI render request (Form, Choice, Confirmation, Card). Plugs emit; platform renderers translate. No platform types in the contract. |
-| [ChiProtocol](chi.md) | experimental | Computer-Human Interface: the inverse of HCI. Runtime protocol for computer-initiated human contact. Four uncoordinated paths today; target collapse onto `EmissionKind.Decision`. |
+| [ChiProtocol](chi.md) | experimental | Computer-Human Interface: the inverse of HCI. Runtime protocol for computer-initiated human contact. `HumanInteractionEvent` already collapsed into `EmissionEvent` (AMPR-180); three uncoordinated paths remain (`ToolAskHuman`, `MessageEvent.EscalationRequested`, `AgentPause`). |
 | [Emission](emission.md) | experimental | The unifying CHI primitive. Typed domain object + `EmissionEvent` family on the bus. Four kinds (Prose, Decision, Confirmation, Sensor). AMPERE owns the noun; Socket owns rendering. |
 | [EmissionDedup](emission-dedup.md) | experimental | Content-based dedup via `dedupKey` (SHA-256, 16 hex chars). Optional and never overloaded onto `EmissionId`. Window length is a consumer-side policy. |
 | [PlugPermissions](plug-permissions.md) | stable | Deterministic gate that runs *before* any plug tool dispatch. Compares manifest + tool-requested permissions against user grants. |
