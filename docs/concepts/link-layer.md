@@ -68,7 +68,8 @@ platform), exposed as `canProvide`/`canConsume` flags.
 - **Resolution never throws.** A missing Link is `Result.failure(LinkResolutionException(...))` carrying typed failures. `LinkResolutionGate` returns a sealed result and is side-effect-free.
 - **Revoked beats granted**, matching `PlugPermissionGate`. `LinkResolutionGate` checks revocation *first*, then transport capability, then direction, then scope — a revoked Link must not produce a scope-shaped error.
 - **Link revocation cascades; grant revocation does not.** Revoking a Link revokes every Plug's grant on it and reports the affected plug ids. Revoking one Plug's grant leaves the others working.
-- **A Link the Plug was never granted is invisible, not rejected** — it yields `MissingLink`. A *revoked* grant stays visible so the failure can say "revoked".
+- **A Link the Plug was never granted is invisible, not rejected** — it cannot satisfy the requirement, but it is reported as `UngrantedLink` carrying its `LinkId`, so a caller can drive just-in-time consent without re-deriving the Link. `MissingLink` means no Link of the transport exists at all. A *revoked* grant stays visible so the failure can say "revoked".
+- **The ungranted Link reported is one a grant would actually fix** — with several ungranted candidates, the first (in list order) that would resolve once granted; the first candidate overall if none would.
 - **Transport capability is consulted before dispatch.** A consumer-role requirement on a transport whose platform capability is false fails with `TransportUnsupported`.
 - **Every resolution outcome reaches the bus.** A Plug that quietly does nothing because its Link was revoked is the opacity the glass brain exists to prevent.
 - **`Link` and `LinkResolutionFailure` are wire types** — stable `@SerialName`s; `Links.link_json` and trace payloads both depend on them.
@@ -88,5 +89,6 @@ platform), exposed as `canProvide`/`canConsume` flags.
 - **Separate enum members per direction** (`AppFunctionConsumer` / `AppFunctionProvider`). Direction is per-platform; enum members are not.
 - **Binding Links in the Arc manifest.** It couples the Arc to an account and defeats late resolution.
 - **Gating resolution on `Transport.hasImplementation`.** Only MCP has a transport implementation today; gating on it would make every other Link unresolvable before its transport ticket lands. The flag is metadata for tooling.
+- **Treating `UngrantedLink` as a configuration error.** It is the consent question — a Plug's first use of a seeded Link always lands there. Asking, recording the grant, and re-resolving is the remedy.
 - **Treating `MissingLink` as an error to throw.** Every resolution failure is a consent-shaped fact the user may be able to fix; it belongs in a `Result` and on the bus.
 - **Checking scope before revocation.** The reader is sent looking in the wrong place entirely.

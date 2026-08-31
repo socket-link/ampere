@@ -262,6 +262,29 @@ class LinkResolutionServiceTest {
     }
 
     @Test
+    fun `an ungranted Link is announced with the id consent would be asked on`() = runTest {
+        coroutineScope {
+            val bus = EventSerialBus(scope = this)
+            val received = CompletableDeferred<LinkEvent.LinkResolutionFailed>()
+
+            bus.subscribe<LinkEvent.LinkResolutionFailed, EventSubscription.ByEventClassType>(
+                agentId = "observer",
+                eventType = LinkEvent.LinkResolutionFailed.EVENT_TYPE,
+            ) { event, _ ->
+                if (!received.isCompleted) received.complete(event)
+            }
+
+            service(InMemoryLinkStore(listOf(googleLink)), bus = bus)
+                .resolve(PlugId("stranger-plug"), manifest(calendarRequirement))
+
+            val seen = withTimeout(5.seconds) { received.await() }
+            val failure = assertIs<LinkResolutionFailure.UngrantedLink>(seen.failure)
+            assertEquals(googleLink.id, failure.linkId)
+            assertEquals(googleLink.id, seen.linkId)
+        }
+    }
+
+    @Test
     fun `a revocation announces its blast radius`() = runTest {
         coroutineScope {
             val bus = EventSerialBus(scope = this)
