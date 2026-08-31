@@ -3,6 +3,7 @@ package link.socket.ampere.agents.domain.reasoning
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.domain.RunId
+import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
@@ -240,11 +241,17 @@ class AgentReasoning private constructor(
      *   *raises* the bar: agent `THREE` + call-site `FOUR` resolves against `FOUR`,
      *   and agent `FOUR` + call-site `THREE` still resolves against `FOUR`. Neither
      *   direction downgrades. Null keeps the agent's own floor.
+     * @param phase Per-call cognitive phase (AMPR-273). Without it, the invocation's
+     *   [RoutingContext.phase] is null and `ArcTraceProjection` files the call under
+     *   `UNKNOWN`. Supplying it here tags the call the same way the phase-aware
+     *   reasoning entry points do, without dropping to [AgentLLMService] directly.
+     *   Null keeps today's behaviour.
      */
     suspend fun callLLM(
         prompt: String,
         systemMessage: String? = null,
         requirements: CapabilityRequirement? = null,
+        phase: CognitivePhase? = null,
     ): String {
         // Use mock response if available
         mockResponses?.llmCall?.let { call ->
@@ -254,7 +261,7 @@ class AgentReasoning private constructor(
         return llmService?.call(
             prompt = prompt,
             systemMessage = systemMessage ?: "You are a ${settings.agentRole} agent.",
-            routingContext = routingContext(requirements),
+            routingContext = routingContext(requirements, phase),
         ) ?: throw IllegalStateException("No LLM service configured")
     }
 
@@ -262,24 +269,30 @@ class AgentReasoning private constructor(
      * Calls the LLM expecting a JSON response.
      *
      * @param requirements Per-call capability requirement (AMPR-232); see [callLLM].
+     * @param phase Per-call cognitive phase (AMPR-273); see [callLLM].
      */
     suspend fun callLLMForJson(
         prompt: String,
         requirements: CapabilityRequirement? = null,
+        phase: CognitivePhase? = null,
     ): LLMJsonResponse {
         return llmService?.callForJson(
             prompt = prompt,
-            routingContext = routingContext(requirements),
+            routingContext = routingContext(requirements, phase),
         )
             ?: throw IllegalStateException("No LLM service configured")
     }
 
-    private fun routingContext(requirements: CapabilityRequirement?): RoutingContext =
+    private fun routingContext(
+        requirements: CapabilityRequirement?,
+        phase: CognitivePhase? = null,
+    ): RoutingContext =
         RoutingContext(
             agentId = settings.executorId,
             agentRole = settings.agentRole,
             requirements = requirements,
             workflowId = runId,
+            phase = phase,
         )
 
     companion object {
