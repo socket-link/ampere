@@ -76,13 +76,13 @@ class BenchTest {
         bus.subscribe("bench-test-observer", BenchEvent.BenchRunCompleted.EVENT_TYPE, handler)
     }
 
-    private fun probe(id: String, arcId: String, tolerance: Tolerance): Probe {
+    private fun probe(id: String, arcId: String, tolerance: Tolerance): EvalCase {
         val trace = Trace(id = "t-$id", runId = "r-$id", arcId = arcId, createdAt = 0L, events = emptyList())
         val meter = Meter { _ -> Result.success(Reading(score = 1.0, passed = true, meterId = "always-pass")) }
-        return Probe(
+        return EvalCase(
             id = id,
             arcId = arcId,
-            seed = ProbeSeed(userGoal = "Implement a small feature"),
+            seed = EvalSeed(userGoal = "Implement a small feature"),
             meters = listOf(meter),
             tolerance = tolerance,
             goldenTrace = trace,

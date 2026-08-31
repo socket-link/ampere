@@ -6,6 +6,35 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
 
 ## [Unreleased]
 
+### Added
+
+- **Probe SPI: `Probe<in S>`, four-valued `Verdict`, `ProbeSuite`, open
+  `ProbeRegistry`** ([AMPR-318](https://linear.app/miley/issue/AMPR-318)).
+
+  New `link.socket.ampere.probe` package in `ampere-core`. A Probe is a
+  predicate over a static artifact — a plan graph, a manifest, a recalled
+  fact — not a grader of a trace. `S` is deliberately unconstrained
+  (the `PerceiveSource` precedent), so consumers can probe types Ampere never
+  imports. `Verdict` is fixed at four values: `Holds`, `Warn` (decided, bad,
+  not disqualifying), `Violated`, and `Undetermined` (not decided — carries a
+  machine-readable `UndeterminedCause` so "no published spec" and "page needed
+  a JS engine" route to different remedies; never renders as a soft pass).
+  `ProbeRegistry` is open (modeled on `ToolRegistry`, not the closed
+  `ArcRegistry`) and exists for discovery/observability, not dispatch. No
+  Probe implementations ship in this change.
+
+### Changed
+
+- **Breaking (with alias): eval `Probe` renamed `EvalCase`**
+  ([AMPR-318](https://linear.app/miley/issue/AMPR-318)).
+
+  The eval harness's `Probe` data class was an eval *case*, and its name
+  blocked the Probe SPI above. `Probe` → `EvalCase`, `ProbeResult` →
+  `EvalCaseResult`, `ProbeSeed` → `EvalSeed`, each with a
+  `@Deprecated` typealias so existing code compiles with a warning only.
+  `BenchEvent.ProbeGraded` keeps its name — it is serialized into recorded
+  traces, and renaming it would make them undecodable.
+
 ## [0.13.0] — 2026-08-01
 
 ### Added
