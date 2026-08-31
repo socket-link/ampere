@@ -17,13 +17,39 @@ sealed interface LinkResolutionFailure {
 
     val requirementName: String
 
-    /** No Link of the required transport is available and granted to this Plug. */
+    /**
+     * No Link of the required transport exists at all.
+     *
+     * A misconfiguration, or a Plug on a platform that has no such wire —
+     * there is nothing to grant, so there is no [LinkId] to report. When a
+     * Link of the transport *does* exist but this Plug holds no grant on it,
+     * the failure is [UngrantedLink] instead.
+     */
     @Serializable
     @SerialName("link_failure.missing")
     data class MissingLink(
         override val requirementName: String,
         val transport: Transport,
         val direction: LinkDirection,
+    ) : LinkResolutionFailure
+
+    /**
+     * A Link of the required transport exists, but this Plug has never been
+     * granted it.
+     *
+     * The consent-shaped failure: unlike every other variant, the remedy is to
+     * ask the user rather than to fix a configuration. [linkId] is the Link to
+     * request a grant on, so a caller driving just-in-time consent does not
+     * have to re-derive it from the [LinkRequirement] and re-query the store.
+     *
+     * A Plug's *first* use of a seeded Link — a `NATIVE_FRAMEWORK` wire that
+     * models "this device has EventKit", say — always lands here.
+     */
+    @Serializable
+    @SerialName("link_failure.ungranted")
+    data class UngrantedLink(
+        override val requirementName: String,
+        val linkId: LinkId,
     ) : LinkResolutionFailure
 
     /**
@@ -117,8 +143,8 @@ class LinkResolutionException(
  * A [LinkId] was referenced that no [Link] exists for.
  *
  * Distinct from [LinkResolutionFailure.MissingLink], which means "no Link of
- * the required *kind* is available to this Plug". This one means the caller
- * named a Link that is not in the store at all — a programming error or a
+ * the required *kind* exists". This one means the caller named a Link that is
+ * not in the store at all — a programming error or a
  * dangling reference, not a consent outcome.
  */
 class UnknownLinkException(

@@ -82,7 +82,128 @@ class LinkResolutionGateTest {
         )
 
         val failed = assertIs<LinkResolution.Failed>(result)
-        assertIs<LinkResolutionFailure.MissingLink>(failed.failure)
+        assertIs<LinkResolutionFailure.UngrantedLink>(failed.failure)
+    }
+
+    // -----------------------------------------------------------------
+    // Ungranted versus missing — the consent question, told apart
+    // -----------------------------------------------------------------
+
+    @Test
+    fun `an ungranted Link names the Link a caller would ask consent on`() {
+        val result = LinkResolutionGate.resolve(
+            requirement = requirement(),
+            candidates = listOf(googleLink),
+            grants = LinkGrants.empty(PlugId("stranger-plug")),
+            platform = PlatformTarget.ANDROID,
+        )
+
+        val failed = assertIs<LinkResolution.Failed>(result)
+        val failure = assertIs<LinkResolutionFailure.UngrantedLink>(failed.failure)
+        assertEquals(googleLink.id, failure.linkId)
+        assertEquals("calendar", failure.requirementName)
+    }
+
+    @Test
+    fun `no Link of the transport at all is missing rather than ungranted`() {
+        val result = LinkResolutionGate.resolve(
+            requirement = requirement(),
+            candidates = listOf(apnsLink),
+            grants = LinkGrants.empty(PlugId("calendar-plug")),
+            platform = PlatformTarget.ANDROID,
+        )
+
+        val failed = assertIs<LinkResolution.Failed>(result)
+        val failure = assertIs<LinkResolutionFailure.MissingLink>(failed.failure)
+        assertEquals(Transport.OAUTH_REST, failure.transport)
+        assertEquals(LinkDirection.READ, failure.direction)
+    }
+
+    @Test
+    fun `granting the reported Link resolves the requirement`() {
+        val plug = "stranger-plug"
+
+        val before = LinkResolutionGate.resolve(
+            requirement = requirement(),
+            candidates = listOf(googleLink),
+            grants = LinkGrants.empty(PlugId(plug)),
+            platform = PlatformTarget.ANDROID,
+        )
+        val failure = assertIs<LinkResolutionFailure.UngrantedLink>(
+            assertIs<LinkResolution.Failed>(before).failure,
+        )
+
+        val after = LinkResolutionGate.resolve(
+            requirement = requirement(),
+            candidates = listOf(googleLink),
+            grants = grants(plug, failure.linkId),
+            platform = PlatformTarget.ANDROID,
+        )
+
+        assertEquals(failure.linkId, assertIs<LinkResolution.Resolved>(after).link.id)
+    }
+
+    @Test
+    fun `an ungranted candidate that would still fail loses to one a grant would fix`() {
+        val narrow = googleLink.copy(id = LinkId("google-narrow"), scope = setOf(CanonType.PERSON))
+        val wide = googleLink.copy(id = LinkId("google-wide"))
+
+        val result = LinkResolutionGate.resolve(
+            requirement = requirement(),
+            candidates = listOf(narrow, wide),
+            grants = LinkGrants.empty(PlugId("calendar-plug")),
+            platform = PlatformTarget.ANDROID,
+        )
+
+        val failed = assertIs<LinkResolution.Failed>(result)
+        val failure = assertIs<LinkResolutionFailure.UngrantedLink>(failed.failure)
+        assertEquals(LinkId("google-wide"), failure.linkId)
+    }
+
+    @Test
+    fun `the first candidate in list order stands in when no grant would help`() {
+        val narrow = googleLink.copy(id = LinkId("google-narrow"), scope = setOf(CanonType.PERSON))
+        val alsoNarrow = googleLink.copy(id = LinkId("google-narrower"), scope = emptySet())
+
+        val result = LinkResolutionGate.resolve(
+            requirement = requirement(),
+            candidates = listOf(narrow, alsoNarrow),
+            grants = LinkGrants.empty(PlugId("calendar-plug")),
+            platform = PlatformTarget.ANDROID,
+        )
+
+        val failed = assertIs<LinkResolution.Failed>(result)
+        val failure = assertIs<LinkResolutionFailure.UngrantedLink>(failed.failure)
+        assertEquals(LinkId("google-narrow"), failure.linkId)
+    }
+
+    @Test
+    fun `a revoked Link is not preferred over a grantable sibling`() {
+        val dead = googleLink.copy(id = LinkId("google-dead"), revokedAt = revokedAt)
+        val live = googleLink.copy(id = LinkId("google-live"))
+
+        val result = LinkResolutionGate.resolve(
+            requirement = requirement(),
+            candidates = listOf(dead, live),
+            grants = LinkGrants.empty(PlugId("calendar-plug")),
+            platform = PlatformTarget.ANDROID,
+        )
+
+        val failed = assertIs<LinkResolution.Failed>(result)
+        val failure = assertIs<LinkResolutionFailure.UngrantedLink>(failed.failure)
+        assertEquals(LinkId("google-live"), failure.linkId)
+    }
+
+    @Test
+    fun `an optional requirement is skipped even when an ungranted Link exists`() {
+        val result = LinkResolutionGate.resolve(
+            requirement = requirement(optional = true),
+            candidates = listOf(googleLink),
+            grants = LinkGrants.empty(PlugId("stranger-plug")),
+            platform = PlatformTarget.ANDROID,
+        )
+
+        assertIs<LinkResolution.Skipped>(result)
     }
 
     // -----------------------------------------------------------------

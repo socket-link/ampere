@@ -219,6 +219,7 @@ class LinkResolutionService(
 
     private fun linkIdOf(failure: LinkResolutionFailure): LinkId = when (failure) {
         is LinkResolutionFailure.MissingLink -> LinkEvent.LinkResolutionFailed.NO_LINK
+        is LinkResolutionFailure.UngrantedLink -> failure.linkId
         is LinkResolutionFailure.DirectionViolation -> failure.linkId
         is LinkResolutionFailure.ScopeViolation -> failure.linkId
         is LinkResolutionFailure.RevokedCredential -> failure.linkId

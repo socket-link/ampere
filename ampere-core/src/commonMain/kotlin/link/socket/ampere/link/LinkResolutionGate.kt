@@ -25,6 +25,14 @@ package link.socket.ampere.link
  * When several Links share a transport, every candidate is tried and the first
  * one that passes wins. If none passes, the failure reported is the *first
  * candidate's*, in list order, so the result is deterministic.
+ *
+ * ## Ungranted versus missing
+ *
+ * A Link the Plug was never granted is invisible: it cannot satisfy the
+ * requirement. It is not, however, absent, and the two are reported apart.
+ * [LinkResolutionFailure.MissingLink] means nothing of the transport exists at
+ * all; [LinkResolutionFailure.UngrantedLink] means one does and carries its
+ * [LinkId], so a caller can ask for consent instead of re-deriving the Link.
  */
 object LinkResolutionGate {
 
@@ -44,18 +52,11 @@ object LinkResolutionGate {
         }
 
         if (visible.isEmpty()) {
-            return if (requirement.optional) {
-                LinkResolution.Skipped(requirement)
-            } else {
-                LinkResolution.Failed(
-                    requirement = requirement,
-                    failure = LinkResolutionFailure.MissingLink(
-                        requirementName = requirement.name,
-                        transport = requirement.transport,
-                        direction = requirement.direction,
-                    ),
-                )
-            }
+            if (requirement.optional) return LinkResolution.Skipped(requirement)
+            return LinkResolution.Failed(
+                requirement = requirement,
+                failure = nothingVisible(requirement, matchingTransport, grants, platform),
+            )
         }
 
         val evaluated = visible.map { link -> link to check(requirement, link, grants, platform) }
@@ -67,6 +68,42 @@ object LinkResolutionGate {
         return LinkResolution.Failed(
             requirement = requirement,
             failure = evaluated.first().second!!,
+        )
+    }
+
+    /**
+     * The failure to report when no candidate is visible to this Plug.
+     *
+     * Nothing of the transport exists at all — a misconfiguration, or a
+     * platform without this wire — and there is no Link to name. Otherwise
+     * every candidate is ungranted, which is a consent question, and the
+     * caller gets the [LinkId] it would have to ask about.
+     *
+     * With several ungranted candidates the one reported is the first, in list
+     * order, that *would* resolve once granted — so acting on the answer
+     * actually satisfies the requirement. If none would, the first candidate in
+     * list order stands in, keeping the gate's determinism rule intact.
+     */
+    private fun nothingVisible(
+        requirement: LinkRequirement,
+        matchingTransport: List<Link>,
+        grants: LinkGrants,
+        platform: PlatformTarget,
+    ): LinkResolutionFailure {
+        val grantable = matchingTransport.firstOrNull { link ->
+            check(requirement, link, grants, platform) == null
+        }
+
+        val ungranted = grantable ?: matchingTransport.firstOrNull()
+            ?: return LinkResolutionFailure.MissingLink(
+                requirementName = requirement.name,
+                transport = requirement.transport,
+                direction = requirement.direction,
+            )
+
+        return LinkResolutionFailure.UngrantedLink(
+            requirementName = requirement.name,
+            linkId = ungranted.id,
         )
     }
 

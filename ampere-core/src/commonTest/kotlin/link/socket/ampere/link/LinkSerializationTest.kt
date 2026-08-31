@@ -110,6 +110,7 @@ class LinkSerializationTest {
     fun `every resolution failure round-trips`() {
         val failures = listOf<LinkResolutionFailure>(
             LinkResolutionFailure.MissingLink("calendar", Transport.MCP, LinkDirection.READ),
+            LinkResolutionFailure.UngrantedLink("calendar", LinkId("google-oauth")),
             LinkResolutionFailure.DirectionViolation(
                 "notify",
                 LinkId("apns"),
