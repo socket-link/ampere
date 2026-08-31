@@ -35,13 +35,21 @@ import link.socket.ampere.plug.permission.PlugPermission
  * resolves assets before any [link.socket.ampere.canon.CanonAssetRef.NativeHandle]
  * it produced is ever resolved.
  *
- * [isCanonExternal] is a positive declaration that this Plug has no canon-level
- * data contract at all — it neither emits nor consumes any [CanonType], by
- * design, not by omission. The closed v1 canon has no member for some Plugs'
- * data (e.g. a notification, a pasteboard payload, recognised text), so
- * [emits] and [consumes] being empty is the correct, permanent state rather
- * than a gap to fill in later. See [PlugManifestValidator] for how this flag
- * changes Link requirement validation.
+ * [isCanonExternal] is a positive declaration that this Plug's *observations
+ * are outside canon* — it emits no [CanonType], by design, not by omission.
+ * The closed v1 canon has no member for some Plugs' data (e.g. a notification,
+ * a pasteboard payload, recognised text), so [emits] being empty is the
+ * correct, permanent state rather than a gap to fill in later.
+ *
+ * The flag exempts [emits] from the canon contract and nothing else:
+ * [consumes] and [optionalConsumes] remain subject to scope validation
+ * regardless (AMPR-320). A canon-external Plug may legitimately take canon
+ * *in* — Socket's Blueprint Plug emits Socket-native types but can use a
+ * [link.socket.ampere.canon.CanonType.PLACE] for its region if a planner
+ * offers one — so any [CanonType] it names in [requiredLinks] scopes must
+ * still appear in [consumes] or [optionalConsumes]. See
+ * [PlugManifestValidator] for how this flag changes Link requirement
+ * validation.
  *
  * [tableWriteCapabilities] is the AMPR-263 verdict expressed as a manifest
  * declaration: which [TableWriteCapability] this Plug can honor losslessly

@@ -25,6 +25,26 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
 
 ### Changed
 
+- **`PlugManifest.isCanonExternal` now exempts `emits` only**
+  ([AMPR-320](https://linear.app/miley/issue/AMPR-320)).
+
+  The flag was documented as "no canon-level data contract at all", and
+  `PlugManifestValidator` skipped the empty-scope and undeclared-scope rules
+  wholesale for a canon-external Plug — so `isCanonExternal = true` alongside
+  `optionalConsumes = {PLACE}` passed unchecked. The settled semantics: the
+  flag says a Plug's *observations* are outside canon; `consumes` and
+  `optionalConsumes` stay subject to scope validation regardless, because a
+  Plug emitting non-canon types can still take canon in (Socket's Blueprint
+  Plug uses a `CanonPlace` for its region when a planner offers one).
+  `LinkRequirement.minimumScope` is now checked against
+  `consumes ∪ optionalConsumes ∪ (emits unless canon-external)`, and
+  `CanonExternalWithDeclaredCanon` fires on `emits` only. A canon-external
+  Plug that consumes no canon keeps the AMPR-260 carve-out unchanged, so every
+  landed canon-external Plug (Clipboard, Vision OCR, Notify, Web) validates as
+  before. Socket's `NativePlugCatalogTest` re-implements these rules and needs
+  the same change — filed as
+  [SCKT-603](https://linear.app/miley/issue/SCKT-603) (Socket Phase 2a).
+
 - **Breaking (with alias): eval `Probe` renamed `EvalCase`**
   ([AMPR-318](https://linear.app/miley/issue/AMPR-318)).
 
