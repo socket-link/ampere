@@ -42,6 +42,11 @@ sealed interface BenchEvent : Event {
         }
     }
 
+    /**
+     * Grades an `EvalCase` (the eval type formerly named `Probe`, renamed in AMPR-318). This
+     * event keeps its `ProbeGraded` name — it is serialized into recorded traces, and renaming
+     * it would make existing traces undecodable.
+     */
     @Serializable
     data class ProbeGraded(
         override val eventId: EventId,

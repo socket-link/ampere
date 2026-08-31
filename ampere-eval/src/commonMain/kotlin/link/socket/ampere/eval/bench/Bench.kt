@@ -22,11 +22,11 @@ import link.socket.ampere.eval.trace.TraceRecorder
 import okio.Path
 
 /**
- * Runs a suite of [Probe]s against an Arc, in either [RunMode.Replay] (a golden [Trace] +
+ * Runs a suite of [EvalCase]s against an Arc, in either [RunMode.Replay] (a golden [Trace] +
  * `PlaybackRelay`, deterministic and CI-safe) or [RunMode.Live] (the real relay, recording a
  * fresh trace via [TraceRecorder]; nightly/on-demand only).
  *
- * Arcs run with tools in effect-free mode ([NoOpExecutor]) for every probe, regardless of
+ * Arcs run with tools in effect-free mode ([NoOpExecutor]) for every case, regardless of
  * [RunMode] — a bench run never performs a real tool side effect.
  *
  * @param liveModeEnabled explicit opt-in flag for [RunMode.Live] (AMPR-186 task 4.4); defaults
@@ -43,7 +43,7 @@ class Bench(
     private val maxFlowTicks: Int = 100,
 ) {
 
-    suspend fun run(suite: List<Probe>, mode: RunMode): Result<BenchReport> {
+    suspend fun run(suite: List<EvalCase>, mode: RunMode): Result<BenchReport> {
         if (mode is RunMode.Live && !liveModeEnabled) {
             return Result.failure(
                 IllegalStateException("RunMode.Live requires Bench to be constructed with liveModeEnabled = true."),
@@ -62,15 +62,15 @@ class Bench(
             ),
         )
 
-        val results = suite.map { probe ->
-            val result = runProbe(runId, probe, mode)
+        val results = suite.map { case ->
+            val result = runCase(runId, case, mode)
             eventBus.publish(
                 BenchEvent.ProbeGraded(
-                    eventId = generateUUID("probe-graded", runId, probe.id),
+                    eventId = generateUUID("probe-graded", runId, case.id),
                     runId = runId,
                     eventSource = source,
                     timestamp = Clock.System.now(),
-                    probeId = probe.id,
+                    probeId = case.id,
                     passed = result.passed,
                     meanScore = result.readings.map { it.score }.average().takeUnless { it.isNaN() } ?: 0.0,
                 ),
@@ -96,67 +96,67 @@ class Bench(
     }
 
     /**
-     * Runs and grades a single probe. A probe-level failure (unresolved arc, missing golden
+     * Runs and grades a single case. A case-level failure (unresolved arc, missing golden
      * trace, `PlaybackMiss` divergence, or a runtime exception) degrades to a failing
-     * [ProbeResult] rather than aborting the whole suite, so one probe's divergence doesn't
+     * [EvalCaseResult] rather than aborting the whole suite, so one case's divergence doesn't
      * blank out the report (AMPR-186 task 4.5: "report aggregates all probes").
      */
-    private suspend fun runProbe(runId: String, probe: Probe, mode: RunMode): ProbeResult {
-        val arcConfig = ArcRegistry.get(probe.arcId)
+    private suspend fun runCase(runId: String, case: EvalCase, mode: RunMode): EvalCaseResult {
+        val arcConfig = ArcRegistry.get(case.arcId)
             ?: return failingResult(
-                probe,
-                emptyTrace(runId, probe),
-                "No ArcConfig registered for arcId '${probe.arcId}'.",
+                case,
+                emptyTrace(runId, case),
+                "No ArcConfig registered for arcId '${case.arcId}'.",
             )
 
         return when (mode) {
-            RunMode.Replay -> runReplay(runId, probe, arcConfig)
-            RunMode.Live -> runLive(runId, probe, arcConfig)
+            RunMode.Replay -> runReplay(runId, case, arcConfig)
+            RunMode.Live -> runLive(runId, case, arcConfig)
         }
     }
 
-    private suspend fun runReplay(runId: String, probe: Probe, arcConfig: ArcConfig): ProbeResult {
-        val goldenTrace = probe.goldenTrace
+    private suspend fun runReplay(runId: String, case: EvalCase, arcConfig: ArcConfig): EvalCaseResult {
+        val goldenTrace = case.goldenTrace
             ?: return failingResult(
-                probe,
-                emptyTrace(runId, probe),
-                "Probe '${probe.id}' has no goldenTrace for Replay mode.",
+                case,
+                emptyTrace(runId, case),
+                "EvalCase '${case.id}' has no goldenTrace for Replay mode.",
             )
 
         val playbackRelay = PlaybackRelay(trace = goldenTrace, missPolicy = MissPolicy.Error)
 
-        val outcome = runArc(arcConfig, probe, playbackRelay)
+        val outcome = runArc(arcConfig, case, playbackRelay)
 
         return when (outcome) {
-            is ArcOutcome.Completed -> grade(probe, goldenTrace)
+            is ArcOutcome.Completed -> grade(case, goldenTrace)
             is ArcOutcome.Cancelled ->
-                failingResult(probe, goldenTrace, "Arc run was cancelled before it finished.")
+                failingResult(case, goldenTrace, "Arc run was cancelled before it finished.")
             is ArcOutcome.Failed ->
-                failingResult(probe, goldenTrace, "Arc run diverged from goldenTrace: ${outcome.cause.message}")
+                failingResult(case, goldenTrace, "Arc run diverged from goldenTrace: ${outcome.cause.message}")
         }
     }
 
-    private suspend fun runLive(runId: String, probe: Probe, arcConfig: ArcConfig): ProbeResult {
+    private suspend fun runLive(runId: String, case: EvalCase, arcConfig: ArcConfig): EvalCaseResult {
         val relay = liveRelay
             ?: return failingResult(
-                probe,
-                emptyTrace(runId, probe),
+                case,
+                emptyTrace(runId, case),
                 "RunMode.Live requires a liveRelay to be configured on Bench.",
             )
         val recorder = traceRecorder
             ?: return failingResult(
-                probe,
-                emptyTrace(runId, probe),
+                case,
+                emptyTrace(runId, case),
                 "RunMode.Live requires a traceRecorder to be configured on Bench.",
             )
 
-        val handle = recorder.start(runId = runId, arcId = probe.arcId)
+        val handle = recorder.start(runId = runId, arcId = case.arcId)
 
         // The recording handle must be closed even if the bench coroutine is cancelled, so stop
         // it in a `finally` rather than only on the happy path.
         var traceResult: Result<Trace>? = null
         val outcome = try {
-            runArc(arcConfig, probe, relay)
+            runArc(arcConfig, case, relay)
         } finally {
             traceResult = withContext(NonCancellable) { handle.stop() }
         }
@@ -165,28 +165,28 @@ class Bench(
         return when {
             outcome is ArcOutcome.Cancelled ->
                 failingResult(
-                    probe,
-                    trace.getOrNull() ?: emptyTrace(runId, probe),
+                    case,
+                    trace.getOrNull() ?: emptyTrace(runId, case),
                     "Live run was cancelled before it finished.",
                 )
             outcome is ArcOutcome.Failed ->
                 failingResult(
-                    probe,
-                    trace.getOrNull() ?: emptyTrace(runId, probe),
+                    case,
+                    trace.getOrNull() ?: emptyTrace(runId, case),
                     "Live run failed: ${outcome.cause.message}",
                 )
             trace.isFailure ->
                 failingResult(
-                    probe,
-                    emptyTrace(runId, probe),
+                    case,
+                    emptyTrace(runId, case),
                     "Failed to persist recorded trace: ${trace.exceptionOrNull()?.message}",
                 )
-            else -> grade(probe, trace.getOrThrow())
+            else -> grade(case, trace.getOrThrow())
         }
     }
 
     /**
-     * Runs one probe's Arc to a terminal [ArcOutcome].
+     * Runs one case's Arc to a terminal [ArcOutcome].
      *
      * `coroutineScope` makes the run a genuine child of the bench coroutine: agents are bound to
      * it, and cancelling the bench cancels the Arc instead of leaving detached agents behind.
@@ -196,7 +196,7 @@ class Bench(
      */
     private suspend fun runArc(
         arcConfig: ArcConfig,
-        probe: Probe,
+        case: EvalCase,
         relay: CognitiveRelay,
     ): ArcOutcome = coroutineScope {
         AmpereRuntime(
@@ -206,11 +206,11 @@ class Bench(
             cognitiveRelay = relay,
             executor = NoOpExecutor(),
             maxFlowTicks = maxFlowTicks,
-        ).execute(probe.seed.userGoal)
+        ).execute(case.seed.userGoal)
     }
 
-    private suspend fun grade(probe: Probe, trace: Trace): ProbeResult {
-        val readings = probe.meters.map { meter ->
+    private suspend fun grade(case: EvalCase, trace: Trace): EvalCaseResult {
+        val readings = case.meters.map { meter ->
             meter.measure(trace).getOrElse { error ->
                 Reading(
                     score = 0.0,
@@ -220,13 +220,13 @@ class Bench(
                 )
             }
         }
-        val passed = readings.isNotEmpty() && readings.all { probe.tolerance.passes(it.score) }
-        return ProbeResult(probeId = probe.id, readings = readings, passed = passed, trace = trace)
+        val passed = readings.isNotEmpty() && readings.all { case.tolerance.passes(it.score) }
+        return EvalCaseResult(probeId = case.id, readings = readings, passed = passed, trace = trace)
     }
 
-    private fun failingResult(probe: Probe, trace: Trace, reason: String): ProbeResult =
-        ProbeResult(
-            probeId = probe.id,
+    private fun failingResult(case: EvalCase, trace: Trace, reason: String): EvalCaseResult =
+        EvalCaseResult(
+            probeId = case.id,
             readings = listOf(
                 Reading(score = 0.0, passed = false, meterId = "bench", detail = mapOf("reason" to reason)),
             ),
@@ -234,11 +234,11 @@ class Bench(
             trace = trace,
         )
 
-    private fun emptyTrace(runId: String, probe: Probe): Trace =
+    private fun emptyTrace(runId: String, case: EvalCase): Trace =
         Trace(
             id = generateUUID("empty-trace"),
             runId = runId,
-            arcId = probe.arcId,
+            arcId = case.arcId,
             createdAt = 0L,
             events = emptyList(),
         )

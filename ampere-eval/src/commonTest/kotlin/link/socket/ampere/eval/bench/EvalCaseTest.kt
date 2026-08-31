@@ -9,39 +9,63 @@ import link.socket.ampere.eval.meter.Reading
 import link.socket.ampere.eval.meter.Tolerance
 import link.socket.ampere.eval.trace.Trace
 
-/** AMPR-186 task 4.1 validation. */
-class ProbeTest {
+/** AMPR-186 task 4.1 validation; renamed Probe → EvalCase in AMPR-318. */
+class EvalCaseTest {
 
     // region — task 4.1: core types
 
     @Test
-    fun `Probe constructs with a golden trace`() {
+    fun `EvalCase constructs with a golden trace`() {
         val trace = goldenTrace()
-        val probe = Probe(
-            id = "probe-1",
+        val case = EvalCase(
+            id = "case-1",
             arcId = "arc-1",
-            seed = ProbeSeed(userGoal = "Implement user login"),
+            seed = EvalSeed(userGoal = "Implement user login"),
             meters = listOf(alwaysPassMeter()),
             tolerance = Tolerance(minScore = 0.8),
             goldenTrace = trace,
         )
 
-        assertEquals("probe-1", probe.id)
-        assertEquals("arc-1", probe.arcId)
-        assertEquals(trace, probe.goldenTrace)
+        assertEquals("case-1", case.id)
+        assertEquals("arc-1", case.arcId)
+        assertEquals(trace, case.goldenTrace)
     }
 
     @Test
-    fun `Probe goldenTrace defaults to null`() {
-        val probe = Probe(
-            id = "probe-2",
+    fun `EvalCase goldenTrace defaults to null`() {
+        val case = EvalCase(
+            id = "case-2",
+            arcId = "arc-1",
+            seed = EvalSeed(userGoal = "goal"),
+            meters = listOf(alwaysPassMeter()),
+            tolerance = Tolerance(minScore = 0.0),
+        )
+
+        assertNull(case.goldenTrace)
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `deprecated Probe aliases still compile and resolve to the new types`() {
+        // AMPR-318 task 4 validation: old names keep working with a deprecation warning only.
+        val case: Probe = Probe(
+            id = "legacy",
             arcId = "arc-1",
             seed = ProbeSeed(userGoal = "goal"),
             meters = listOf(alwaysPassMeter()),
             tolerance = Tolerance(minScore = 0.0),
         )
+        val result: ProbeResult = ProbeResult(
+            probeId = case.id,
+            readings = emptyList(),
+            passed = true,
+            trace = goldenTrace(),
+        )
 
-        assertNull(probe.goldenTrace)
+        val newTypeCase: EvalCase = case
+        val newTypeResult: EvalCaseResult = result
+        assertEquals(case, newTypeCase)
+        assertEquals(result, newTypeResult)
     }
 
     @Test
@@ -52,11 +76,11 @@ class ProbeTest {
     }
 
     @Test
-    fun `BenchReport passRate reflects ProbeResult pass count`() {
+    fun `BenchReport passRate reflects EvalCaseResult pass count`() {
         val trace = goldenTrace()
         val results = listOf(
-            ProbeResult(probeId = "a", readings = emptyList(), passed = true, trace = trace),
-            ProbeResult(probeId = "b", readings = emptyList(), passed = false, trace = trace),
+            EvalCaseResult(probeId = "a", readings = emptyList(), passed = true, trace = trace),
+            EvalCaseResult(probeId = "b", readings = emptyList(), passed = false, trace = trace),
         )
         val report = BenchReport(results = results, passRate = 0.5)
 
