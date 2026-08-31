@@ -6,7 +6,42 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
 
 ## [Unreleased]
 
+### Fixed
+
+- **Android: the ampere-core database could never be created**
+  ([AMPR-324](https://linear.app/miley/issue/AMPR-324)).
+
+  The schema declares three FTS5 virtual tables (`knowledge_chunks_fts`,
+  `KnowledgeFts`, `OutcomeMemoryFts`) and Android's system SQLite ships
+  FTS3/FTS4 but not FTS5. `SQLiteOpenHelper.onCreate` runs in a transaction, so
+  the failing `CREATE VIRTUAL TABLE` rolled the *entire* schema back: the
+  database was never created, no version row was written, and every subsequent
+  open retried and failed identically. This took down far more than search —
+  `LinkStore`, `KnowledgeStore`, memory and the persisted event bus all threw
+  `SQLiteException: no such module: fts5` on every read and write. The tables
+  have been in the schema since `76762eba`, so the database had most likely
+  never initialized on Android.
+
+  `createAndroidDriver` now opens the database through a bundled SQLite build
+  that has FTS5 compiled in (`com.osmerion.sqlite.android:sqlite-android`,
+  the maintained continuation of `requery/sqlite-android`), which keeps FTS5
+  semantics identical to iOS and desktop/JVM. This adds ~1.2–1.8 MB of native
+  code per ABI to Android consumers.
+
+  It also opens the database eagerly and wraps any failure in a new
+  `AmpereDatabaseInitializationException`, so a schema that cannot be created
+  fails at driver construction with a diagnosable message instead of surfacing
+  as an opaque per-query exception that callers log as a skip.
+
 ### Added
+
+- **`ampereSqliteOpenHelperFactory()` (Android)**
+  ([AMPR-324](https://linear.app/miley/issue/AMPR-324)).
+
+  Consumers that construct their own `AndroidSqliteDriver` rather than calling
+  `createAndroidDriver` must pass this as the driver's `factory` argument;
+  SQLDelight's default `FrameworkSQLiteOpenHelperFactory` uses the system
+  SQLite and reintroduces the failure above.
 
 - **Probe SPI: `Probe<in S>`, four-valued `Verdict`, `ProbeSuite`, open
   `ProbeRegistry`** ([AMPR-318](https://linear.app/miley/issue/AMPR-318)).
