@@ -31,19 +31,36 @@ data class CanonCalendarEvent(
     val calendarId: String? = null,
     val place: CanonPlace? = null,
     val attendees: List<CanonPerson> = emptyList(),
+    val recurrence: CanonRecurrence? = null,
 ) : CanonEntity {
     override val canonType: CanonType get() = CanonType.CALENDAR_EVENT
 }
 
+/**
+ * A scheduled prompt to do something — the *schedule*, not the work.
+ *
+ * The split matters: `CanonWorkItem` is the work, and a reminder is when it
+ * comes back around. [recurrence] lives here and on [CanonCalendarEvent]
+ * because Apple Reminders and Apple Calendar both produce it; the providers
+ * behind `CanonWorkItem` (Linear, Jira, GitHub Issues) do not, so admitting it
+ * there would be a canon field justified by a consumer's need rather than by
+ * provider evidence. A caller that wants a recurring task holds the
+ * task-to-reminder mapping on its own side.
+ *
+ * [startsAt] mirrors EventKit's `startDateComponents`: a reminder can be
+ * scheduled to *begin* before it is due.
+ */
 @Serializable
 @SerialName("canon.reminder")
 data class CanonReminder(
     override val canonId: CanonId,
     override val provenance: CanonProvenance,
     val title: String,
+    val startsAt: Instant? = null,
     val dueAt: Instant? = null,
     val isCompleted: Boolean = false,
     val listId: String? = null,
+    val recurrence: CanonRecurrence? = null,
 ) : CanonEntity {
     override val canonType: CanonType get() = CanonType.REMINDER
 }

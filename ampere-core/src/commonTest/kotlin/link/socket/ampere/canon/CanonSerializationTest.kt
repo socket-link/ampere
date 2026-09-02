@@ -2,11 +2,16 @@ package link.socket.ampere.canon
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import link.socket.ampere.link.LinkId
 
 /**
@@ -61,8 +66,21 @@ class CanonSerializationTest {
             provenance,
             title = "Standup",
             startsAt = Instant.fromEpochMilliseconds(1_700_000_100_000),
+            // Sub-daily: legal in canon even though EventKit has no such frequency.
+            recurrence = CanonRecurrence.of(
+                every = 12.hours,
+                until = Instant.fromEpochMilliseconds(1_700_600_000_000),
+            ).getOrThrow(),
         ),
-        "canon.reminder" to CanonReminder(CanonId("r"), provenance, title = "Pay rent"),
+        "canon.reminder" to CanonReminder(
+            CanonId("r"),
+            provenance,
+            title = "Water the lawn",
+            startsAt = Instant.fromEpochMilliseconds(1_700_000_050_000),
+            dueAt = Instant.fromEpochMilliseconds(1_700_000_100_000),
+            // Count-only: the form that survives a simulation clock.
+            recurrence = CanonRecurrence.of(every = 3.days, count = 8).getOrThrow(),
+        ),
         "canon.alarm" to CanonAlarm(CanonId("a"), provenance),
         "canon.media_item" to CanonMediaItem(CanonId("mi"), provenance, title = "Track"),
         "canon.health_sample" to CanonHealthSample(
@@ -180,6 +198,29 @@ class CanonSerializationTest {
             covered,
             "a canon type has no serialization sample; drift in it would go unnoticed",
         )
+    }
+
+    @Test
+    fun `a reminder recorded before recurrence landed still decodes`() {
+        // AMPR-319 added startsAt and recurrence with null defaults. A trace
+        // written before that change carries neither key; decoding it must
+        // still produce a CanonReminder rather than fail on a missing field.
+        val current = CanonReminder(
+            CanonId("r"),
+            provenance,
+            title = "Pay rent",
+            startsAt = Instant.fromEpochMilliseconds(1_700_000_050_000),
+            recurrence = CanonRecurrence.of(every = 1.days, count = 12).getOrThrow(),
+        )
+        val encoded = json.encodeToJsonElement(CanonEntity.serializer(), current).jsonObject
+        val preChange = JsonObject(encoded - "startsAt" - "recurrence")
+
+        val decoded = json.decodeFromJsonElement(CanonEntity.serializer(), preChange)
+
+        assertIs<CanonReminder>(decoded)
+        assertEquals("Pay rent", decoded.title)
+        assertNull(decoded.startsAt)
+        assertNull(decoded.recurrence)
     }
 
     @Test

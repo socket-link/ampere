@@ -95,6 +95,24 @@ class AppleCanonBindingRegistryTest {
     }
 
     @Test
+    fun `recurrence is no longer a dropped field on the Apple schedule types`() {
+        // AMPR-319 admitted CanonRecurrence, so REMINDER's old "recurrenceRules"
+        // entry became a false claim. What remains lossy is the canon-to-EventKit
+        // direction (sub-daily every, day/set-position selectors), which is a note
+        // on a carried field rather than a dropped one.
+        listOf(CanonType.REMINDER, CanonType.CALENDAR_EVENT).forEach { type ->
+            val lossy = AppleCanonBindingRegistry.bindingFor(type).lossyFields
+
+            assertTrue(
+                lossy.none { it.contains("recurrence", ignoreCase = true) },
+                "${type.wireName} still declares recurrence as dropped: $lossy",
+            )
+        }
+
+        assertTrue("eventKitAlarms" in AppleCanonBindingRegistry.bindingFor(CanonType.REMINDER).lossyFields)
+    }
+
+    @Test
     fun `qualified name renders the dotted Apple address`() {
         val mail = AppleCanonBindingRegistry.bindingFor(CanonType.EMAIL_MESSAGE).schema
         assertIs<AppleSchemaBinding.EntitySchema>(mail)
