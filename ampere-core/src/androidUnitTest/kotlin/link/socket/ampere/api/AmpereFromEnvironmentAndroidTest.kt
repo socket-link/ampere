@@ -3,6 +3,7 @@ package link.socket.ampere.api
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import app.cash.sqldelight.db.SqlDriver
+import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.assertNotNull
@@ -12,7 +13,6 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.environment.EnvironmentService
-import link.socket.ampere.data.createAndroidDriver
 import link.socket.ampere.db.Database
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -22,11 +22,18 @@ import org.robolectric.annotation.Config
 /**
  * Android construction smoke test for [Ampere.fromEnvironment].
  *
- * Runs as a Robolectric unit test so it executes on the CI JVM without
- * requiring an emulator. Exercises [createAndroidDriver] —
- * [AndroidSqliteDriver][app.cash.sqldelight.driver.android.AndroidSqliteDriver]
- * end-to-end — proving that the migrated `fromEnvironment` extension and
- * its `Default*Service` dependencies compile and execute on Android.
+ * Runs as a Robolectric unit test so it executes on the CI JVM without requiring an
+ * emulator, proving that the migrated `fromEnvironment` extension and its
+ * `Default*Service` dependencies compile and execute under the Android runtime.
+ *
+ * The database is backed by an in-memory JDBC driver rather than
+ * [createAndroidDriver][link.socket.ampere.data.createAndroidDriver]: Robolectric's SQLite
+ * native runtime has no FTS5 module, so `Database.Schema.create` cannot run there, and the
+ * bundled FTS5 SQLite that [createAndroidDriver][link.socket.ampere.data.createAndroidDriver]
+ * uses is an Android `.so` that a desktop JVM cannot load. Coverage of the real Android
+ * driver requires an instrumented test on a device or emulator; see AMPR-324. Unlike the
+ * previous version of this test, the schema is genuinely created here instead of being
+ * silently skipped by the Android driver's lazy open.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -43,7 +50,9 @@ class AmpereFromEnvironmentAndroidTest {
     @BeforeTest
     fun setUp() {
         val context: Context = ApplicationProvider.getApplicationContext()
-        driver = createAndroidDriver(context = context, dbName = "ampere-android-test.db")
+        assertNotNull(context)
+        driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        Database.Schema.create(driver)
         database = Database(driver)
         environmentService = EnvironmentService.create(database = database, scope = scope)
         knowledgeRepository = KnowledgeRepositoryImpl(database)
@@ -55,14 +64,10 @@ class AmpereFromEnvironmentAndroidTest {
     }
 
     @Test
-    fun `fromEnvironment constructs on Android with AndroidSqliteDriver`() {
-        // Construction-only smoke: AndroidSqliteDriver is lazily initialized,
-        // so this proves the migrated `fromEnvironment` + `Default*Service`
-        // graph wires up under Android. The full event-bus smoke (pursue ->
-        // observe TaskCreated) lives in the JVM and iOS suites; Robolectric's
-        // bundled SQLite native runtime lacks FTS5, which Ampere's knowledge
-        // schema requires. A proper Android instrumented test (real device /
-        // emulator with full SQLite) is tracked as a follow-up.
+    fun `fromEnvironment constructs on Android`() {
+        // Construction smoke: proves the migrated `fromEnvironment` + `Default*Service`
+        // graph wires up and runs under the Android runtime. The full event-bus smoke
+        // (pursue -> observe TaskCreated) lives in the JVM and iOS suites.
         val instance = Ampere.fromEnvironment(
             environmentService = environmentService,
             knowledgeRepository = knowledgeRepository,

@@ -175,6 +175,13 @@ kotlin {
                 api("androidx.appcompat:appcompat:1.7.1")
                 api("androidx.core:core-ktx:1.17.0")
                 implementation("app.cash.sqldelight:android-driver:2.2.1")
+
+                // Android's system SQLite has no FTS5 module, which makes the ampere-core
+                // schema (and therefore the whole database) uncreatable. This is a bundled
+                // SQLite build with FTS5 compiled in; see ampereSqliteOpenHelperFactory().
+                // `api` so consumers constructing their own AndroidSqliteDriver can pass it.
+                api("com.osmerion.sqlite.android:sqlite-android:0.4.0")
+
                 implementation("com.lordcodes.turtle:turtle:0.10.0")
                 implementation("io.ktor:ktor-client-okhttp:3.2.2")
             }
@@ -199,6 +206,9 @@ kotlin {
         val androidUnitTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                // Robolectric's SQLite has no FTS5 module and cannot load the bundled
+                // Android SQLite `.so`, so unit tests build the schema over xerial instead.
+                implementation("app.cash.sqldelight:sqlite-driver:2.2.1")
                 implementation("org.robolectric:robolectric:4.14")
                 implementation("androidx.test:core:1.6.1")
                 implementation("androidx.test.ext:junit:1.2.1")
