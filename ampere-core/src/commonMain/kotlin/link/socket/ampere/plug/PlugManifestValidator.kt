@@ -75,17 +75,19 @@ object PlugManifestValidator {
      * nothing, and a scope naming a canon type the Plug never declares means
      * the Plug is asking for data it has no stated way to produce or use.
      *
-     * The empty-scope and undeclared-canon-scope rules are skipped entirely
-     * for a [PlugManifest.isCanonExternal] Plug: by declaration it has no
-     * canon type it could truthfully name, so every [LinkRequirement] is
-     * allowed an empty [LinkRequirement.minimumScope] and any non-empty
-     * scope is exempt from the "declared in emits/consumes/optionalConsumes"
-     * check. This is a carve-out for a positively-declared state, not an
-     * inference from empty [PlugManifest.emits]/[PlugManifest.consumes] — a
-     * canon-bearing Plug that leaves those collections empty by mistake
-     * still fails both rules unchanged. [CanonExternalWithDeclaredCanon]
-     * catches the inverse mistake: [PlugManifest.isCanonExternal] set while
-     * still claiming a canon type.
+     * [PlugManifest.isCanonExternal] exempts [PlugManifest.emits] from the
+     * canon contract and nothing else (AMPR-320): a canon-external Plug may
+     * still declare [PlugManifest.consumes] and
+     * [PlugManifest.optionalConsumes], and those are what its
+     * [LinkRequirement.minimumScope]s are checked against. Only a
+     * canon-external Plug that also consumes no canon at all is left with no
+     * type it could truthfully name, and only then are the empty-scope and
+     * undeclared-canon-scope rules skipped wholesale. This is a carve-out for
+     * a positively-declared state, not an inference from empty
+     * [PlugManifest.emits]/[PlugManifest.consumes] — a canon-bearing Plug that
+     * leaves those collections empty by mistake still fails both rules
+     * unchanged. [CanonExternalWithDeclaredCanon] catches the inverse mistake:
+     * [PlugManifest.isCanonExternal] set while still claiming to *emit* canon.
      */
     private fun validateLinkRequirements(
         manifest: PlugManifest,
@@ -100,20 +102,28 @@ object PlugManifestValidator {
                 reasons += ManifestValidationReason.DuplicateLinkRequirementName(name)
             }
 
-        if (manifest.isCanonExternal && (manifest.emits.isNotEmpty() || manifest.consumes.isNotEmpty())) {
+        if (manifest.isCanonExternal && manifest.emits.isNotEmpty()) {
             reasons += ManifestValidationReason.CanonExternalWithDeclaredCanon(
-                canonTypes = manifest.emits + manifest.consumes,
+                canonTypes = manifest.emits,
             )
         }
 
-        if (!manifest.isCanonExternal) {
+        val declaredCanonTypes = manifest.consumes +
+            manifest.optionalConsumes +
+            if (manifest.isCanonExternal) emptySet() else manifest.emits
+
+        // The AMPR-260 carve-out survives only for a canon-external Plug that
+        // consumes nothing either: it has no canon type it could truthfully
+        // name in a scope, so requiring one would be unsatisfiable.
+        val exemptFromScopeRules = manifest.isCanonExternal && declaredCanonTypes.isEmpty()
+
+        if (!exemptFromScopeRules) {
             manifest.requiredLinks
                 .filter { it.minimumScope.isEmpty() }
                 .forEach { requirement ->
                     reasons += ManifestValidationReason.EmptyLinkRequirementScope(requirement.name)
                 }
 
-            val declaredCanonTypes = manifest.emits + manifest.consumes + manifest.optionalConsumes
             manifest.requiredLinks.forEach { requirement ->
                 (requirement.minimumScope - declaredCanonTypes).forEach { undeclared ->
                     reasons += ManifestValidationReason.UndeclaredCanonScope(
@@ -254,11 +264,14 @@ sealed interface ManifestValidationReason {
     ) : ManifestValidationReason
 
     /**
-     * [PlugManifest.isCanonExternal] declares that a Plug has no canon-level
-     * data contract, but [PlugManifest.emits] or [PlugManifest.consumes] is
-     * non-empty — a contradiction that would otherwise silently exempt a
-     * canon-bearing Plug from [EmptyLinkRequirementScope] and
-     * [UndeclaredCanonScope].
+     * [PlugManifest.isCanonExternal] declares that a Plug's observations are
+     * outside canon, but [PlugManifest.emits] is non-empty — a contradiction
+     * that would otherwise silently exempt a canon-emitting Plug from
+     * [EmptyLinkRequirementScope] and [UndeclaredCanonScope].
+     *
+     * [PlugManifest.consumes] and [PlugManifest.optionalConsumes] are *not*
+     * a contradiction with the flag (AMPR-320) — a Plug whose outputs are
+     * external can still take canon in — so they never appear here.
      */
     data class CanonExternalWithDeclaredCanon(
         val canonTypes: Set<CanonType>,

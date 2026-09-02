@@ -350,7 +350,7 @@ class PlugManifestValidationTest {
     }
 
     @Test
-    fun `a canon-external manifest with an empty-scope link requirement validates`() {
+    fun `a canon-external manifest that consumes nothing allows an empty-scope link requirement`() {
         val manifest = PlugManifest(
             id = PlugId("vision-ocr-plug"),
             name = "Vision OCR Plug",
@@ -363,7 +363,7 @@ class PlugManifestValidationTest {
     }
 
     @Test
-    fun `a canon-external manifest with a non-empty undeclared scope validates`() {
+    fun `a canon-external manifest that consumes nothing allows an undeclared scope`() {
         val manifest = PlugManifest(
             id = PlugId("vision-ocr-plug"),
             name = "Vision OCR Plug",
@@ -373,6 +373,108 @@ class PlugManifestValidationTest {
         )
 
         assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
+    }
+
+    // -----------------------------------------------------------------
+    // isCanonExternal exempts emits only (AMPR-320)
+    // -----------------------------------------------------------------
+
+    @Test
+    fun `a canon-external manifest may optionally consume canon its link scope names`() {
+        val manifest = PlugManifest(
+            id = PlugId("blueprint-plug"),
+            name = "Blueprint Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(linkRequirement("region", setOf(CanonType.PLACE))),
+            optionalConsumes = setOf(CanonType.PLACE),
+            isCanonExternal = true,
+        )
+
+        assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
+    }
+
+    @Test
+    fun `a canon-external manifest that consumes canon still fails an undeclared scope`() {
+        val manifest = PlugManifest(
+            id = PlugId("blueprint-plug"),
+            name = "Blueprint Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(linkRequirement("region", setOf(CanonType.CALENDAR_EVENT))),
+            optionalConsumes = setOf(CanonType.PLACE),
+            isCanonExternal = true,
+        )
+
+        val invalid = assertIs<ManifestValidationResult.Invalid>(
+            PlugManifestValidator.validate(manifest),
+        )
+
+        assertEquals(
+            listOf(CanonType.CALENDAR_EVENT),
+            invalid.reasons
+                .filterIsInstance<ManifestValidationReason.UndeclaredCanonScope>()
+                .map { it.canonType },
+        )
+    }
+
+    @Test
+    fun `a canon-external manifest that consumes canon still fails an empty scope`() {
+        val manifest = PlugManifest(
+            id = PlugId("blueprint-plug"),
+            name = "Blueprint Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(linkRequirement("region", emptySet())),
+            optionalConsumes = setOf(CanonType.PLACE),
+            isCanonExternal = true,
+        )
+
+        val invalid = assertIs<ManifestValidationResult.Invalid>(
+            PlugManifestValidator.validate(manifest),
+        )
+
+        assertEquals(
+            listOf("region"),
+            invalid.reasons
+                .filterIsInstance<ManifestValidationReason.EmptyLinkRequirementScope>()
+                .map { it.name },
+        )
+    }
+
+    @Test
+    fun `a canon-external manifest declaring required consumes is not a contradiction`() {
+        val manifest = PlugManifest(
+            id = PlugId("blueprint-plug"),
+            name = "Blueprint Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(linkRequirement("region", setOf(CanonType.PLACE))),
+            consumes = setOf(CanonType.PLACE),
+            isCanonExternal = true,
+        )
+
+        assertEquals(ManifestValidationResult.Valid, PlugManifestValidator.validate(manifest))
+    }
+
+    @Test
+    fun `a canon type in both consumes and optionalConsumes is rejected when canon-external`() {
+        val manifest = PlugManifest(
+            id = PlugId("blueprint-plug"),
+            name = "Blueprint Plug",
+            version = "1.0.0",
+            requiredLinks = listOf(linkRequirement("region", setOf(CanonType.PLACE))),
+            consumes = setOf(CanonType.PLACE),
+            optionalConsumes = setOf(CanonType.PLACE),
+            isCanonExternal = true,
+        )
+
+        val invalid = assertIs<ManifestValidationResult.Invalid>(
+            PlugManifestValidator.validate(manifest),
+        )
+
+        assertEquals(
+            listOf(CanonType.PLACE),
+            invalid.reasons
+                .filterIsInstance<ManifestValidationReason.RedundantOptionalConsumes>()
+                .map { it.canonType },
+        )
     }
 
     @Test
@@ -420,7 +522,7 @@ class PlugManifestValidationTest {
     }
 
     @Test
-    fun `isCanonExternal set while still declaring emits or consumes is rejected`() {
+    fun `isCanonExternal set while still declaring emits is rejected`() {
         val manifest = PlugManifest(
             id = PlugId("mislabelled-plug"),
             name = "Mislabelled Plug",

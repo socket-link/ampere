@@ -7,7 +7,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/plug/PlugManifest.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/Links.sq
 related: [DomainCanon, PlugPermissions, EventSerialBus]
-last_verified: 2026-07-28
+last_verified: 2026-08-30
 ---
 
 # Link Layer
@@ -60,7 +60,7 @@ platform), exposed as `canProvide`/`canConsume` flags.
 - `link/LinkResolutionService.kt` — orchestration + bus emission.
 - `agents/domain/event/LinkEvent.kt` — `LinkGranted`, `LinkRevoked`, `LinkResolved`, `LinkResolutionFailed`.
 - `commonMain/sqldelight/link/socket/ampere/db/Links.sq` — schema (migration `2.sqm`).
-- `plug/PlugManifest.kt` — `requiredLinks`, `emits`, `consumes`.
+- `plug/PlugManifest.kt` — `requiredLinks`, `emits`, `consumes`, `optionalConsumes`, `isCanonExternal`.
 
 ## Invariants
 
@@ -74,10 +74,11 @@ platform), exposed as `canProvide`/`canConsume` flags.
 - **Every resolution outcome reaches the bus.** A Plug that quietly does nothing because its Link was revoked is the opacity the glass brain exists to prevent.
 - **`Link` and `LinkResolutionFailure` are wire types** — stable `@SerialName`s; `Links.link_json` and trace payloads both depend on them.
 - **Agents never touch `LinkStore` directly.** They go through `LinkResolutionService`.
+- **`PlugManifest.isCanonExternal` exempts `emits` only.** A canon-external Plug's *observations* are outside canon, but it may still declare `consumes` / `optionalConsumes`, and every `CanonType` in a `LinkRequirement.minimumScope` must appear in one of them. Only a canon-external Plug that consumes no canon at all keeps the wholesale carve-out from the empty-scope and undeclared-scope rules (AMPR-320).
 
 ## Common operations
 
-- **Declare a requirement** — add a `LinkRequirement(name, transport, direction, minimumScope)` to `PlugManifest.requiredLinks`. Names must be unique within a manifest and scope must be non-empty; `PlugManifestValidator` enforces both.
+- **Declare a requirement** — add a `LinkRequirement(name, transport, direction, minimumScope)` to `PlugManifest.requiredLinks`. Names must be unique within a manifest, and scope must be non-empty and drawn from the Plug's declared canon types; `PlugManifestValidator` enforces all three.
 - **Resolve at execution time** — `linkResolutionService.resolve(plugId, manifest)` → `ResolvedLinks`, indexed by requirement name.
 - **Check an operation against a resolved Link** — `LinkResolutionGate.permits(link, LinkOperation.PERCEIVE)`.
 - **Grant / revoke** — `service.grant(plugId, linkId)`, `service.revokeGrant(plugId, linkId)`, `service.revokeLink(linkId)` (cascading).
