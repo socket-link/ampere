@@ -5,6 +5,7 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.link.LinkId
+import link.socket.ampere.probe.Observed
 
 /** Ampere-scoped identity for a canon entity. Stable across projections. */
 @JvmInline
@@ -61,6 +62,13 @@ data class NativePayload(
  * Every canon entity carries one. An entity with no provenance is not a canon
  * entity — it is a guess.
  *
+ * Implements [Observed] so a `Probe<Observed>` (e.g.
+ * [link.socket.ampere.probe.FreshnessProbe]) runs over any canon entity's
+ * provenance. Conformance only: the field already existed, and the wire shape
+ * is unchanged.
+ *
+ * @property observedAt When the entity was read from its source — the
+ *   framework's clock at perceive. Never re-stamped downstream.
  * @property nativePayload Null when the adapter could not or would not carry
  *   the native object (large binaries, provider policy). A null payload does
  *   not disable write-back; it forces the adapter to re-fetch before merging.
@@ -68,6 +76,6 @@ data class NativePayload(
 @Serializable
 data class CanonProvenance(
     val sourceHandle: SourceHandle,
-    val observedAt: Instant,
+    override val observedAt: Instant,
     val nativePayload: NativePayload? = null,
-)
+) : Observed
