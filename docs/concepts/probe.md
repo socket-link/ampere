@@ -18,7 +18,7 @@ or `Undetermined` (not decided; carries an `UndeterminedCause`). A
 `ProbeSuite` runs an ordered list over one subject and yields `ProbeReport`s;
 a `ProbeRegistry` lists Probes for discovery (Oscilloscope), not dispatch.
 
-`FreshnessProbe : Probe<Observed>` is the first shipped Probe. `Observed` is
+`SequenceProbe : Probe<CanonWorkGraph>` and `FreshnessProbe : Probe<Observed>` are the shipped Probes. `Observed` is
 the one-field interface (`observedAt: Instant`) that lets it run over a canon
 entity's `CanonProvenance` or a consumer's own binding type without Ampere
 importing either.
@@ -41,8 +41,10 @@ type would leave foreign subjects with no base to extend.
 - `probe/Verdict.kt` — `Verdict` and `UndeterminedCause` (`EVIDENCE_ABSENT`, `EVIDENCE_UNREADABLE`, `STALE`).
 - `probe/ProbeSuite.kt`, `probe/ProbeReport.kt`, `probe/ProbeRegistry.kt`, `probe/ProbeId.kt`.
 - `probe/Observed.kt` — the timestamp interface; `canon/CanonProvenance.kt` implements it.
+- `probe/SequenceProbe.kt` — dangling `dependsOn` and cycles over a `CanonWorkGraph`.
 - `probe/FreshnessProbe.kt` — per-Probe `maxAge`, injected `now`.
-- `commonTest/.../probe/` — `ProbeSuiteTest`, `ProbeSerializationTest`, `FreshnessProbeTest`.
+- `probe/AmpereProbes.kt` — `registerAmpereProbes(freshnessMaxAge, now)`, the one-call wiring for a listing.
+- `commonTest/.../probe/` — `ProbeSuiteTest`, `ProbeSerializationTest`, `SequenceProbeTest`, `FreshnessProbeTest`.
 
 ## Where `observedAt` binds
 
@@ -69,7 +71,7 @@ and is never re-stamped on receipt, cache hit, or Plan.
 - **Check a canon entity's freshness** — `FreshnessProbe(maxAge = 24.hours, now = Clock.System::now).evaluate(entity.provenance)`.
 - **Check a consumer-side binding** — implement `Observed` on the binding, copying the source timestamp at bind time; the same Probe instance applies.
 - **Run several Probes over one subject** — `ProbeSuite<Observed>(listOf(freshness, ...)).evaluate(subjectId, subject)`.
-- **Expose Probes for listing** — `ProbeRegistry().register(probe)`; `all()` feeds the Oscilloscope listing.
+- **Expose Probes for listing** — `ProbeRegistry().registerAmpereProbes(freshnessMaxAge = 24.hours)` registers both shipped Probes; add consumer Probes with `register` afterwards. `all()` feeds the Oscilloscope listing.
 
 ## Anti-patterns
 

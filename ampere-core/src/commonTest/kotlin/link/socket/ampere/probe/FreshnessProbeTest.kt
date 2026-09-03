@@ -88,11 +88,10 @@ class FreshnessProbeTest {
     }
 
     @Test
-    fun `registry lists the freshness probe under its default id`() {
-        val registry = ProbeRegistry()
-        registry.register(probe)
+    fun `ampere wiring lists the freshness probe beside the sequence probe`() {
+        val registry = ProbeRegistry().registerAmpereProbes(freshnessMaxAge = maxAge, now = { now })
 
-        assertEquals(listOf<Probe<*>>(probe), registry.all())
-        assertEquals(probe, registry.get(ProbeId("ampere.freshness")))
+        assertEquals(listOf(ProbeId(SequenceProbe.ID), ProbeId(FreshnessProbe.ID)), registry.all().map { it.id })
+        assertIs<FreshnessProbe>(registry.get(ProbeId("ampere.freshness")))
     }
 }

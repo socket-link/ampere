@@ -28,8 +28,12 @@ import kotlinx.datetime.Instant
 class FreshnessProbe(
     private val maxAge: Duration,
     private val now: () -> Instant,
-    override val id: ProbeId = ProbeId("ampere.freshness"),
+    override val id: ProbeId = ProbeId(ID),
 ) : Probe<Observed> {
+
+    companion object {
+        const val ID = "ampere.freshness"
+    }
 
     override suspend fun evaluate(subject: Observed): Verdict {
         val age = now() - subject.observedAt
