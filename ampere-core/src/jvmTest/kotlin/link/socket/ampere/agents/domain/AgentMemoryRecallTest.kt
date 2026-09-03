@@ -33,6 +33,7 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.db.Database
+import link.socket.ampere.db.fts.FtsSchema
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModel
@@ -66,8 +67,9 @@ class AgentMemoryRecallTest {
     fun setUp() {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         Database.Schema.create(driver)
+        FtsSchema.install(driver)
         val database = Database(driver)
-        val knowledgeRepository = KnowledgeRepositoryImpl(database)
+        val knowledgeRepository = KnowledgeRepositoryImpl(database, driver)
         eventBus = EventSerialBus(testScope)
         now = Clock.System.now()
 

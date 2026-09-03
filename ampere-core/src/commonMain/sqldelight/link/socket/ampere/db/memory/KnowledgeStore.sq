@@ -45,31 +45,13 @@ CREATE TABLE IF NOT EXISTS KnowledgeTag (
 CREATE INDEX IF NOT EXISTS idx_knowledge_tag_tag ON KnowledgeTag(tag);
 CREATE INDEX IF NOT EXISTS idx_knowledge_tag_knowledge_id ON KnowledgeTag(knowledge_id);
 
--- Full-text search support for approach and learnings
--- Enables semantic queries like "find all knowledge mentioning 'schema migration'"
-CREATE VIRTUAL TABLE IF NOT EXISTS KnowledgeFts USING fts5(
-    knowledge_id UNINDEXED,
-    approach,
-    learnings,
-    content=KnowledgeStore,
-    content_rowid=rowid
-);
-
--- Triggers to keep FTS index in sync with main table
-CREATE TRIGGER IF NOT EXISTS knowledge_fts_insert AFTER INSERT ON KnowledgeStore BEGIN
-    INSERT INTO KnowledgeFts(rowid, knowledge_id, approach, learnings)
-    VALUES (new.rowid, new.id, new.approach, new.learnings);
-END;
-
-CREATE TRIGGER IF NOT EXISTS knowledge_fts_delete AFTER DELETE ON KnowledgeStore BEGIN
-    DELETE FROM KnowledgeFts WHERE rowid = old.rowid;
-END;
-
-CREATE TRIGGER IF NOT EXISTS knowledge_fts_update AFTER UPDATE ON KnowledgeStore BEGIN
-    DELETE FROM KnowledgeFts WHERE rowid = old.rowid;
-    INSERT INTO KnowledgeFts(rowid, knowledge_id, approach, learnings)
-    VALUES (new.rowid, new.id, new.approach, new.learnings);
-END;
+-- Full-text search support for approach and learnings.
+--
+-- The `KnowledgeFts` virtual table + sync triggers used to be declared here as
+-- `CREATE VIRTUAL TABLE ... USING fts5`. That DDL now lives in
+-- link.socket.ampere.db.fts.FtsSchema, installed as a separate guarded step after
+-- `Schema.create()` returns, so a SQLite build without the fts5 module (e.g. Android's system
+-- SQLite) degrades search instead of taking the whole schema down. See AMPR-325.
 
 -- =============================================================================
 -- KNOWLEDGE STORE QUERIES
@@ -145,13 +127,9 @@ WHERE kt.tag IN ?
 ORDER BY k.timestamp DESC
 LIMIT ?;
 
--- Full-text search in approach and learnings
-searchKnowledgeByText:
-SELECT k.* FROM KnowledgeStore k
-INNER JOIN KnowledgeFts fts ON k.rowid = fts.rowid
-WHERE KnowledgeFts MATCH ?
-ORDER BY fts.rank, k.timestamp DESC
-LIMIT ?;
+-- Full-text search in approach and learnings.
+-- See link.socket.ampere.db.fts.searchKnowledgeByText for the raw-query replacement — this
+-- can no longer be a SQLDelight query since `KnowledgeFts` isn't declared in this schema.
 
 -- Fallback text search using LIKE for simple keyword matching
 searchKnowledgeByTextLike:

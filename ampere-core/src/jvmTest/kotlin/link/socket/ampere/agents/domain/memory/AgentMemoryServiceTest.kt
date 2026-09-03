@@ -28,6 +28,7 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.db.Database
+import link.socket.ampere.db.fts.FtsSchema
 
 /**
  * Comprehensive test suite for AgentMemoryService.
@@ -60,8 +61,9 @@ class AgentMemoryServiceTest {
     fun setUp() {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         Database.Schema.create(driver)
+        FtsSchema.install(driver)
         val database = Database(driver)
-        knowledgeRepository = KnowledgeRepositoryImpl(database)
+        knowledgeRepository = KnowledgeRepositoryImpl(database, driver)
         eventBus = EventSerialBus(testScope)
         now = Clock.System.now()
 

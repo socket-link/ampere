@@ -1,10 +1,14 @@
 package link.socket.ampere.agents.domain.knowledge
 
+import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.db.Database
+import link.socket.ampere.db.fts.FtsAvailability
+import link.socket.ampere.db.fts.FtsSchema
+import link.socket.ampere.db.fts.searchKnowledgeByText
 import link.socket.ampere.db.memory.KnowledgeStore
 import link.socket.ampere.db.memory.KnowledgeStoreQueries
 import link.socket.ampere.util.ioDispatcher
@@ -18,13 +22,28 @@ import link.socket.ampere.util.ioDispatcher
  * The implementation uses a discriminator pattern to handle the polymorphic
  * Knowledge sealed class, storing all subtypes in a single table with
  * type-specific foreign key IDs.
+ *
+ * @param driver The driver backing [database]. Required to run the FTS5 `KnowledgeFts` query
+ * (see [link.socket.ampere.db.fts.FtsSchema]), which can no longer be a SQLDelight-typed query
+ * now that the virtual table isn't declared in the `.sq` schema. When `null` (the default, kept
+ * for source compatibility with existing callers), [findSimilarKnowledge] always uses the
+ * `LIKE` fallback rather than attempting FTS.
  */
 class KnowledgeRepositoryImpl(
     private val database: Database,
+    private val driver: SqlDriver? = null,
 ) : KnowledgeRepository {
 
     private val queries: KnowledgeStoreQueries
         get() = database.knowledgeStoreQueries
+
+    // Installed lazily rather than eagerly in the constructor so that repositories built from
+    // a driver whose schema hasn't been created yet (or in tests that never call
+    // findSimilarKnowledge) don't pay for it. Idempotent: safe to race with another repository
+    // installing the same driver's FTS schema.
+    private val ftsAvailability: FtsAvailability? by lazy {
+        driver?.let(FtsSchema::install)
+    }
 
     override suspend fun storeKnowledge(
         knowledge: Knowledge,
@@ -125,27 +144,29 @@ class KnowledgeRepositoryImpl(
         limit: Int,
     ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
-            // Try FTS search first, fall back to LIKE if FTS fails
-            try {
-                // Convert description to FTS5 query format
-                // Split into keywords and join with OR for broader matching
-                val keywords = description
-                    .split(Regex("\\s+"))
-                    .filter { it.length > 2 } // Skip very short words
-                    .joinToString(" OR ")
+            // Convert description to FTS5 query format: split into keywords and join with OR
+            // for broader matching.
+            val keywords = description
+                .split(Regex("\\s+"))
+                .filter { it.length > 2 } // Skip very short words
+                .joinToString(" OR ")
 
-                if (keywords.isNotEmpty()) {
-                    queries.searchKnowledgeByText(keywords, limit.toLong())
-                        .executeAsList()
-                        .map { row -> mapRowToKnowledgeEntry(row) }
-                } else {
-                    emptyList()
+            if (keywords.isEmpty()) {
+                emptyList()
+            } else {
+                // Route on the recorded FTS availability instead of attempting FTS and
+                // catching a failure on every call — a driver without the fts5 module fails
+                // identically every time, so there's nothing to gain from retrying it.
+                when (ftsAvailability) {
+                    is FtsAvailability.Available ->
+                        driver!!.searchKnowledgeByText(keywords, limit.toLong())
+                            .map { row -> mapRowToKnowledgeEntry(row) }
+
+                    is FtsAvailability.Unavailable, null ->
+                        queries.searchKnowledgeByTextLike(description, description, limit.toLong())
+                            .executeAsList()
+                            .map { row -> mapRowToKnowledgeEntry(row) }
                 }
-            } catch (e: Exception) {
-                // Fall back to LIKE-based search if FTS fails
-                queries.searchKnowledgeByTextLike(description, description, limit.toLong())
-                    .executeAsList()
-                    .map { row -> mapRowToKnowledgeEntry(row) }
             }
         }
     }

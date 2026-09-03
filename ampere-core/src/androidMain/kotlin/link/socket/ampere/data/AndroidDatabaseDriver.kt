@@ -6,32 +6,33 @@ import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import com.osmerion.android.database.sqlite.OsmerionSQLiteOpenHelperFactory
 import link.socket.ampere.db.Database
+import link.socket.ampere.db.fts.FtsSchema
 
 /**
- * The [SupportSQLiteOpenHelper.Factory] that the ampere-core schema requires on Android.
+ * The [SupportSQLiteOpenHelper.Factory] that gives the ampere-core database ranked FTS5
+ * search on Android.
  *
- * The schema declares FTS5 virtual tables (`knowledge_chunks_fts`, `KnowledgeFts`,
- * `OutcomeMemoryFts`). Android's system SQLite ships FTS3/FTS4 but not FTS5, so
- * `CREATE VIRTUAL TABLE ... USING fts5` fails with `no such module: fts5`. Because
- * `SQLiteOpenHelper.onCreate` runs inside a transaction, that single failure rolls back
- * the *entire* schema — the database is never created, no version row is written, and
- * every later open retries and fails identically. Links, knowledge, memory and the
- * persisted event bus all become unreadable, not just search.
- *
- * This factory is backed by a bundled SQLite build that has FTS5 compiled in, which keeps
- * FTS5 semantics identical to iOS (Apple's SQLite enables FTS5) and desktop/JVM (xerial's
- * `sqlite-jdbc` compiles it in). It costs roughly 1.2–1.8 MB of native code per ABI.
+ * Android's system SQLite ships FTS3/FTS4 but not FTS5. The FTS5 virtual tables
+ * (`knowledge_chunks_fts`, `KnowledgeFts`, `OutcomeMemoryFts`) are no longer part of
+ * `Database.Schema.create()` (see [FtsSchema]), so a missing module here no longer takes the
+ * whole database down — [createAndroidDriver] degrades to the `*Like` fallback queries instead.
+ * This factory exists so that degradation isn't necessary in the first place: it's backed by a
+ * bundled SQLite build with FTS5 compiled in, keeping ranked search parity with iOS (Apple's
+ * SQLite enables FTS5) and desktop/JVM (xerial's `sqlite-jdbc` compiles it in). It costs roughly
+ * 1.2–1.8 MB of native code per ABI.
  *
  * Consumers that build their own [AndroidSqliteDriver] instead of calling
- * [createAndroidDriver] **must** pass this as the driver's `factory` argument. Using
- * SQLDelight's default `FrameworkSQLiteOpenHelperFactory` reintroduces the failure above.
+ * [createAndroidDriver] should pass this as the driver's `factory` argument to get ranked
+ * search; using SQLDelight's default `FrameworkSQLiteOpenHelperFactory` still works, but falls
+ * back to `LIKE`-based search.
  */
 fun ampereSqliteOpenHelperFactory(): SupportSQLiteOpenHelper.Factory = OsmerionSQLiteOpenHelperFactory()
 
 /**
  * Creates a SQLDelight Android driver for the given database on Android.
  *
- * The returned driver is already open: the schema is created eagerly so that a failure
+ * The returned driver is already open: the schema is created eagerly, and the FTS5 virtual
+ * tables are installed as a guarded step immediately after (see [FtsSchema]), so a failure
  * surfaces here, with a diagnosable message, rather than as an opaque `SQLiteException`
  * on whichever unrelated query happens to run first.
  *
@@ -63,6 +64,14 @@ fun createAndroidDriver(
         throw AmpereDatabaseInitializationException(dbName, cause)
     }
 
+    // Runs after the SELECT 1 above forces onCreate's transaction to have already committed
+    // (SupportSQLiteOpenHelper.Callback.onOpen would be the equivalent hook), so a missing
+    // fts5 module here only records FtsAvailability.Unavailable (and logs a warning) — it can
+    // no longer roll back the schema created above. Repositories re-derive this same result
+    // lazily on first FTS query, so it's safe to also let it happen here purely for early,
+    // observable logging.
+    FtsSchema.install(driver)
+
     return driver
 }
 
@@ -76,29 +85,14 @@ fun createAndroidDriver(
 class AmpereDatabaseInitializationException(
     dbName: String,
     cause: Throwable,
-) : IllegalStateException(buildMessage(dbName, cause), cause) {
+) : IllegalStateException(buildMessage(dbName), cause) {
 
     private companion object {
-        fun buildMessage(
-            dbName: String,
-            cause: Throwable,
-        ): String = buildString {
+        fun buildMessage(dbName: String): String = buildString {
             append("Could not open or create the ampere-core database '")
             append(dbName)
             append("'. ")
-
-            if (cause.message?.contains("no such module: fts5", ignoreCase = true) == true) {
-                append(
-                    "This SQLite build has no FTS5 module, so creating the schema's virtual " +
-                        "tables rolls back the whole schema. Construct the driver with " +
-                        "link.socket.ampere.data.createAndroidDriver(), or pass " +
-                        "link.socket.ampere.data.ampereSqliteOpenHelperFactory() as the " +
-                        "`factory` argument of AndroidSqliteDriver — the framework SQLite " +
-                        "default does not support FTS5.",
-                )
-            } else {
-                append("Ampere has no persistence without it; this is not recoverable by retrying.")
-            }
+            append("Ampere has no persistence without it; this is not recoverable by retrying.")
         }
     }
 }

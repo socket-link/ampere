@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.environment
 
+import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepositoryImpl
@@ -42,6 +43,11 @@ class EnvironmentOrchestratorFactory(
     private val scope: CoroutineScope,
     private val eventSerialBus: EventSerialBus,
     private val logger: EventLogger = ConsoleEventLogger(),
+    /**
+     * The driver backing [database]. Passed through to [OutcomeMemoryRepositoryImpl] so it can
+     * run ranked FTS5 search; see that class's `driver` parameter for why this is optional.
+     */
+    private val driver: SqlDriver? = null,
 ) {
     /**
      * Create an [EnvironmentOrchestrator] with all dependencies initialized.
@@ -77,6 +83,7 @@ class EnvironmentOrchestratorFactory(
 
         val outcomeMemoryRepository = OutcomeMemoryRepositoryImpl(
             database = database,
+            driver = driver,
         )
 
         // Create a temporary meeting orchestrator for the factory
