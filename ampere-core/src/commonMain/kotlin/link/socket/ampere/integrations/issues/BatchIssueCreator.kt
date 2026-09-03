@@ -16,6 +16,7 @@ import link.socket.ampere.agents.execution.tools.issue.IssueCreateRequest
  * 2. Dependencies are created before dependents
  * 3. Issue numbers are resolved and injected as issues are created
  * 4. Individual failures don't stop the batch process
+ * 5. A batch whose declared edges form a cycle is refused, not reordered
  *
  * Example workflow:
  * ```
@@ -38,6 +39,13 @@ class BatchIssueCreator(
      * is successfully created, its issue number is recorded and made
      * available to subsequent issues that depend on it.
      *
+     * If the `parent` / `dependsOn` edges contain a cycle there is no order that
+     * honours them, so nothing is created: the response carries a single
+     * [IssueCreateError.dependencyCycle] naming the path and `success = false`.
+     * Silently dropping the back-edge (the pre-AMPR-322 behaviour) produced a
+     * `success = true` batch created in an order that violated its own
+     * declared dependencies.
+     *
      * @param request The batch creation request with all issues
      * @return Response containing created issues and any errors
      */
@@ -47,7 +55,14 @@ class BatchIssueCreator(
         val resolved = mutableMapOf<String, Int>() // localId -> issueNumber
 
         // Topologically sort issues: parents before children, dependencies before dependents
-        val sortedIssues = topologicalSort(request.issues)
+        val sortedIssues = when (val sort = topologicalSort(request.issues)) {
+            is SortResult.Sorted -> sort.issues
+            is SortResult.Cycle -> return BatchIssueCreateResponse(
+                success = false,
+                created = emptyList(),
+                errors = listOf(IssueCreateError.dependencyCycle(sort.path)),
+            )
+        }
 
         // Create issues in sorted order
         for (issue in sortedIssues) {
@@ -129,6 +144,14 @@ class BatchIssueCreator(
         )
     }
 
+    /** Outcome of [topologicalSort]: an order that honours every edge, or the first cycle that makes one impossible. */
+    private sealed interface SortResult {
+        data class Sorted(val issues: List<IssueCreateRequest>) : SortResult
+
+        /** [path] is the closed walk, first node repeated last: `a -> b -> a`. */
+        data class Cycle(val path: List<String>) : SortResult
+    }
+
     /**
      * Sort issues topologically so that:
      * 1. Parents come before children
@@ -138,53 +161,57 @@ class BatchIssueCreator(
      * This ensures that when we create an issue, all its dependencies and parent have
      * already been created and have issue numbers.
      *
-     * Handles cycles gracefully by detecting when we encounter a node already in the
-     * current recursion path and skipping it to prevent infinite recursion.
+     * A back-edge (a node already on the current recursion path) means the declared
+     * edges are cyclic. Sorting stops and the cycle is returned as a path; it is
+     * never "repaired" by dropping the edge. Edges to ids that are not in the batch
+     * are ignored here — they cannot be created, and are reported by the provider
+     * step, not the sort.
      *
      * Example:
      * ```
      * Input: [task-2 (depends on task-1, parent epic-1), epic-1, task-1 (parent epic-1)]
-     * Output: [epic-1, task-1, task-2]
+     * Output: Sorted([epic-1, task-1, task-2])
      * ```
      *
      * @param issues Unsorted list of issues to create
-     * @return Issues sorted in creation order
+     * @return Issues sorted in creation order, or the first cycle found
      */
-    private fun topologicalSort(issues: List<IssueCreateRequest>): List<IssueCreateRequest> {
+    private fun topologicalSort(issues: List<IssueCreateRequest>): SortResult {
         val issueMap = issues.associateBy { it.localId }
         val visited = mutableSetOf<String>()
-        val inProgress = mutableSetOf<String>() // Track nodes in current recursion path
+        val path = mutableListOf<String>() // Current recursion path, in order
         val result = mutableListOf<IssueCreateRequest>()
 
-        fun visit(issue: IssueCreateRequest) {
+        // Returns the cycle path on a back-edge, null when the subtree sorted cleanly.
+        fun visit(issue: IssueCreateRequest): List<String>? {
             // Skip if already fully processed
-            if (issue.localId in visited) return
+            if (issue.localId in visited) return null
 
-            // Cycle detection: skip if currently being processed
-            if (issue.localId in inProgress) return
+            // Cycle detection: a node already on the current path is a back-edge
+            val backEdge = path.indexOf(issue.localId)
+            if (backEdge >= 0) return path.subList(backEdge, path.size) + issue.localId
 
-            // Mark as in progress
-            inProgress.add(issue.localId)
+            path.add(issue.localId)
 
-            // Visit parent first (parents must exist before children)
-            issue.parent?.let { parentId ->
-                issueMap[parentId]?.let { visit(it) }
-            }
-
-            // Visit dependencies first (dependencies must exist before dependents)
-            issue.dependsOn.forEach { depId ->
-                issueMap[depId]?.let { visit(it) }
+            // Visit parent first (parents must exist before children), then dependencies
+            val predecessors = listOfNotNull(issue.parent) + issue.dependsOn
+            for (predecessorId in predecessors) {
+                val predecessor = issueMap[predecessorId] ?: continue
+                visit(predecessor)?.let { return it }
             }
 
             // Mark as visited and add to result
             visited.add(issue.localId)
-            inProgress.remove(issue.localId)
+            path.removeAt(path.lastIndex)
             result.add(issue)
+            return null
         }
 
         // Visit all issues (handles disconnected components)
-        issues.forEach { visit(it) }
+        for (issue in issues) {
+            visit(issue)?.let { return SortResult.Cycle(it) }
+        }
 
-        return result
+        return SortResult.Sorted(result)
     }
 }

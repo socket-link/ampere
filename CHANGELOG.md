@@ -8,6 +8,18 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
 
 ### Fixed
 
+- **`BatchIssueCreator` reported `success = true` on a cyclic batch**
+  ([AMPR-322](https://linear.app/miley/issue/AMPR-322)).
+
+  `topologicalSort` detected a back-edge and bare-returned, silently dropping
+  the edge: the batch was created in an order that violated its own declared
+  `dependsOn`/`parent` edges, with no error, no log, and `success = true`.
+  A cyclic batch is now refused before anything is created: `created` is
+  empty, `success = false`, and `errors` holds one
+  `IssueCreateError.dependencyCycle(path)` entry whose new `cyclePath` field
+  (`["a", "b", "a"]`, empty on every other error) names the closed walk. The
+  order is never "repaired". A DAG batch is unchanged.
+
 - **Android: the ampere-core database could never be created**
   ([AMPR-324](https://linear.app/miley/issue/AMPR-324)).
 
@@ -69,6 +81,28 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
   Four-consumer note: `every` is a span and survives a game or simulation
   clock; `until` is wall-clock and does not. A `count`-bounded recurrence is
   the portable form.
+
+- **`CanonWorkItem.dependsOn`, `CanonWorkGraph`, and `SequenceProbe`**
+  ([AMPR-322](https://linear.app/miley/issue/AMPR-322)).
+
+  `dependsOn: List<CanonId>` is the canon's first work-item→work-item edge.
+  It clears the intersection gate without a ruling — a blocking dependency is
+  provider-native on Linear (`blockedBy`/`blocks`), Jira (`issuelinks` of
+  type *Blocks*), and GitHub (sub-issues) — and defaults to empty, so
+  entities serialized before this change decode unchanged. Ids are same-Link
+  `CanonId`s; a missing referent is a graph error, not a serialization error.
+  No Linear/Jira/GitHub binding module exists yet; the provider fields are
+  recorded in the KDoc for when one lands.
+
+  `CanonWorkGraph` (project + milestones + items) is the first canon
+  *composite* value type, assembled by the caller from one Link. It has no
+  `init` guard on purpose: a cyclic plan must be constructible so it can be
+  recorded and then convicted. `SequenceProbe` (`ProbeId("ampere.sequence")`)
+  is the first shipped `Probe`: `Violated("dangling dependsOn: a -> ghost")`
+  for referential integrity, `Violated("cycle: a -> b -> c -> a")` for the
+  first cycle found, `Holds` otherwise — never `Warn`, never `Undetermined`.
+  `ProbeRegistry.registerAmpereProbes()` registers it for Oscilloscope
+  listings. Timing invariants stay Socket-side (decision D17).
 
 - **Probe SPI: `Probe<in S>`, four-valued `Verdict`, `ProbeSuite`, open
   `ProbeRegistry`** ([AMPR-318](https://linear.app/miley/issue/AMPR-318)).

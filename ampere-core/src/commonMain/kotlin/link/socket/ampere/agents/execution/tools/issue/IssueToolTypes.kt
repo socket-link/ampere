@@ -75,21 +75,45 @@ data class CreatedIssue(
 /**
  * Error that occurred while attempting to create an issue.
  *
- * @property localId The client-side identifier of the issue that failed to create
+ * @property localId The client-side identifier of the issue that failed to create.
+ *   For a [dependencyCycle] this is the first issue on the cycle.
  * @property message Description of what went wrong
+ * @property cyclePath When the batch was refused because its declared `parent` /
+ *   `dependsOn` edges form a cycle, the closed path that was found
+ *   (`["a", "b", "a"]`), so a caller can repair the specific edges rather than
+ *   parse [message]. Empty for every other error.
  */
 @Serializable
 data class IssueCreateError(
     val localId: String,
     val message: String,
-)
+    val cyclePath: List<String> = emptyList(),
+) {
+    /** True when this entry reports a dependency cycle rather than a provider failure. */
+    val isDependencyCycle: Boolean get() = cyclePath.isNotEmpty()
+
+    companion object {
+        /**
+         * The error appended when a batch's edges form a cycle. [path] is the
+         * closed walk, first node repeated last: `a -> b -> c -> a`.
+         */
+        fun dependencyCycle(path: List<String>): IssueCreateError = IssueCreateError(
+            localId = path.first(),
+            message = "dependency cycle: ${path.joinToString(" -> ")}",
+            cyclePath = path,
+        )
+    }
+}
 
 /**
  * Response from a batch issue creation request.
  *
  * @property success True if all issues were created successfully
  * @property created List of successfully created issues
- * @property errors List of errors that occurred during creation
+ * @property errors List of errors that occurred during creation. A batch whose
+ *   `parent` / `dependsOn` edges form a cycle is refused before anything is
+ *   created: [created] is empty and [errors] holds exactly one
+ *   [IssueCreateError.dependencyCycle] entry.
  */
 @Serializable
 data class BatchIssueCreateResponse(
