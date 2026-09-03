@@ -148,6 +148,7 @@ class CanonSerializationTest {
             title = "Ship the canon wave",
             status = CanonWorkStatus.IN_PROGRESS,
             providerStatus = "In Review",
+            dependsOn = listOf(CanonId("wi-0")),
         ),
         "canon.project" to CanonProject(
             CanonId("pj"),
@@ -221,6 +222,89 @@ class CanonSerializationTest {
         assertEquals("Pay rent", decoded.title)
         assertNull(decoded.startsAt)
         assertNull(decoded.recurrence)
+    }
+
+    @Test
+    fun `a work item recorded before dependsOn landed still decodes`() {
+        // AMPR-322 added dependsOn with an empty default. A trace written before
+        // that change carries no such key; decoding it must still produce a
+        // CanonWorkItem with no edges rather than fail on a missing field.
+        val current = CanonWorkItem(
+            CanonId("wi"),
+            provenance,
+            title = "Ship the canon wave",
+            status = CanonWorkStatus.TODO,
+            dependsOn = listOf(CanonId("wi-0")),
+        )
+        val encoded = json.encodeToJsonElement(CanonEntity.serializer(), current).jsonObject
+        val preChange = JsonObject(encoded - "dependsOn")
+
+        val decoded = json.decodeFromJsonElement(CanonEntity.serializer(), preChange)
+
+        assertIs<CanonWorkItem>(decoded)
+        assertEquals("Ship the canon wave", decoded.title)
+        assertEquals(emptyList(), decoded.dependsOn)
+    }
+
+    @Test
+    fun `a work graph with two items and one edge round-trips`() {
+        val project = CanonProject(
+            CanonId("pj"),
+            provenance,
+            name = "Chassis & Canon",
+            status = CanonWorkStatus.IN_PROGRESS,
+        )
+        val first = CanonWorkItem(CanonId("wi-1"), provenance, title = "Design", status = CanonWorkStatus.DONE)
+        val second = CanonWorkItem(
+            CanonId("wi-2"),
+            provenance,
+            title = "Build",
+            status = CanonWorkStatus.TODO,
+            projectId = project.canonId,
+            dependsOn = listOf(first.canonId),
+        )
+        val graph = CanonWorkGraph(
+            project = project,
+            milestones = listOf(CanonMilestone(CanonId("ml"), provenance, name = "Beta")),
+            items = listOf(first, second),
+        )
+
+        val encoded = json.encodeToString(CanonWorkGraph.serializer(), graph)
+        val decoded = json.decodeFromString(CanonWorkGraph.serializer(), encoded)
+
+        assertEquals(graph, decoded)
+        assertEquals(listOf(CanonId("wi-1")), decoded.items[1].dependsOn)
+    }
+
+    @Test
+    fun `a cyclic work graph can be constructed and recorded`() {
+        // No init guard by design: a cyclic plan must be representable so a
+        // Probe can convict it after the fact. See CanonWorkGraph's KDoc.
+        val a = CanonWorkItem(
+            CanonId("a"),
+            provenance,
+            title = "A",
+            status = CanonWorkStatus.TODO,
+            dependsOn = listOf(CanonId("b")),
+        )
+        val b = CanonWorkItem(
+            CanonId("b"),
+            provenance,
+            title = "B",
+            status = CanonWorkStatus.TODO,
+            dependsOn = listOf(CanonId("a")),
+        )
+        val graph = CanonWorkGraph(
+            project = CanonProject(CanonId("pj"), provenance, name = "Loop", status = CanonWorkStatus.TODO),
+            items = listOf(a, b),
+        )
+
+        val decoded = json.decodeFromString(
+            CanonWorkGraph.serializer(),
+            json.encodeToString(CanonWorkGraph.serializer(), graph),
+        )
+
+        assertEquals(graph, decoded)
     }
 
     @Test

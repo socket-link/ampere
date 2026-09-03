@@ -301,9 +301,9 @@ class BatchIssueCreatorTest {
     }
 
     @Test
-    fun `handles cycles gracefully`() = runBlocking {
-        // This test ensures we don't infinite loop on circular dependencies
-        // In practice, agents should prevent this, but we should be robust
+    fun `a cyclic batch is refused and reports the cycle path`() = runBlocking {
+        // AMPR-322: the back-edge used to be dropped silently, so the batch reported
+        // success in an order that violated its own declared dependencies.
         val mockProvider = MockIssueTrackerProvider()
         val creator = BatchIssueCreator(mockProvider)
 
@@ -327,11 +327,110 @@ class BatchIssueCreatorTest {
             ),
         )
 
-        // Should complete without hanging
         val response = creator.createBatch(request)
 
-        // Both should be created (cycle detection prevents infinite recursion)
-        assertEquals(2, response.created.size)
+        assertFalse(response.success)
+        assertEquals(emptyList(), response.created)
+        assertEquals(emptyList(), mockProvider.creationOrder, "nothing may be created when the order is unsound")
+
+        val error = response.errors.single()
+        assertTrue(error.isDependencyCycle)
+        assertEquals(listOf("task-1", "task-2", "task-1"), error.cyclePath)
+        assertEquals("task-1", error.localId)
+        assertEquals("dependency cycle: task-1 -> task-2 -> task-1", error.message)
+    }
+
+    @Test
+    fun `a cycle through a parent edge is reported with the full path`() = runBlocking {
+        val mockProvider = MockIssueTrackerProvider()
+        val creator = BatchIssueCreator(mockProvider)
+
+        val request = BatchIssueCreateRequest(
+            repository = "owner/repo",
+            issues = listOf(
+                IssueCreateRequest(
+                    localId = "ok",
+                    type = IssueType.Task,
+                    title = "Unrelated",
+                    body = "Not on the cycle",
+                ),
+                IssueCreateRequest(
+                    localId = "a",
+                    type = IssueType.Task,
+                    title = "A",
+                    body = "Child of c",
+                    parent = "c",
+                ),
+                IssueCreateRequest(
+                    localId = "b",
+                    type = IssueType.Task,
+                    title = "B",
+                    body = "Depends on a",
+                    dependsOn = listOf("a"),
+                ),
+                IssueCreateRequest(
+                    localId = "c",
+                    type = IssueType.Feature,
+                    title = "C",
+                    body = "Depends on b",
+                    dependsOn = listOf("b"),
+                ),
+            ),
+        )
+
+        val response = creator.createBatch(request)
+
+        assertFalse(response.success)
+        assertEquals(emptyList(), response.created)
+        assertEquals(listOf("a", "c", "b", "a"), response.errors.single().cyclePath)
+    }
+
+    @Test
+    fun `a self dependency is a one-node cycle`() = runBlocking {
+        val mockProvider = MockIssueTrackerProvider()
+        val creator = BatchIssueCreator(mockProvider)
+
+        val request = BatchIssueCreateRequest(
+            repository = "owner/repo",
+            issues = listOf(
+                IssueCreateRequest(
+                    localId = "solo",
+                    type = IssueType.Task,
+                    title = "Solo",
+                    body = "Depends on itself",
+                    dependsOn = listOf("solo"),
+                ),
+            ),
+        )
+
+        val response = creator.createBatch(request)
+
+        assertFalse(response.success)
+        assertEquals(listOf("solo", "solo"), response.errors.single().cyclePath)
+    }
+
+    @Test
+    fun `a dependency on an id outside the batch is not a cycle`() = runBlocking {
+        val mockProvider = MockIssueTrackerProvider()
+        val creator = BatchIssueCreator(mockProvider)
+
+        val request = BatchIssueCreateRequest(
+            repository = "owner/repo",
+            issues = listOf(
+                IssueCreateRequest(
+                    localId = "task-1",
+                    type = IssueType.Task,
+                    title = "Task 1",
+                    body = "Depends on something already in the tracker",
+                    dependsOn = listOf("not-in-this-batch"),
+                ),
+            ),
+        )
+
+        val response = creator.createBatch(request)
+
+        assertTrue(response.success)
+        assertEquals(1, response.created.size)
     }
 
     @Test

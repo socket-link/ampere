@@ -146,6 +146,7 @@ data class CanonThirdPartyPlaylist(
  * Lossy on every provider: `priority` (three incompatible scales — Linear's
  * 0–4 ordinal, Jira's named object, GitHub's labels-by-convention), `estimate`,
  * `parent`/`children`, and label colour, since [labels] keeps names only.
+ * The dependency edge is *not* lossy — see [dependsOn].
  *
  * @property dueAt **Lossy by type, not by omission.** Linear `dueDate` and Jira
  *   `duedate` are calendar dates with no time and no zone; adapters normalise to
@@ -167,6 +168,24 @@ data class CanonThirdPartyPlaylist(
  *   routinely exceeds the 32 KiB projection budget — until [CanonProse] gave
  *   it a bounded shape (AMPR-268). The full provider value survives losslessly
  *   in [CanonProvenance.nativePayload] regardless.
+ * @property dependsOn Work items that must finish before this one — canon's
+ *   first work-item→work-item edge (AMPR-322). Provider-native on all three
+ *   work-item providers, so it clears the intersection gate without a ruling:
+ *   Linear `blockedBy`/`blocks` relations, Jira `issuelinks` of type *Blocks*,
+ *   GitHub sub-issues / "blocked by" relations. Every id is a **same-Link**
+ *   [CanonId]: it resolves only within a graph assembled from one Link's
+ *   canon (the [projectId] contract, and the same-Link rule pinned in
+ *   `CanonCrossReferenceContractTest`). Absence of the referent is a *graph*
+ *   error — referential integrity, convicted by `SequenceProbe` over a
+ *   [CanonWorkGraph] — never a serialization error: an item whose dependency
+ *   was never perceived still decodes. Acyclicity is likewise a graph
+ *   invariant checked by the Probe, not an `init` guard, so a cyclic plan can
+ *   be recorded and then convicted rather than being undecodable. Empty by
+ *   default, so entities serialized before this field existed decode
+ *   unchanged. No Linear, Jira, or GitHub binding module exists in this repo
+ *   yet (`ampere-bindings-apple` and `ampere-bindings-android` both leave
+ *   `WORK_ITEM` unbound); the provider field named above is the mapping each
+ *   binding should adopt when it lands.
  */
 @Serializable
 @SerialName("canon.work_item")
@@ -181,6 +200,7 @@ data class CanonWorkItem(
     val dueAt: Instant? = null,
     val labels: List<String> = emptyList(),
     val description: CanonProse? = null,
+    val dependsOn: List<CanonId> = emptyList(),
 ) : CanonEntity {
     override val canonType: CanonType get() = CanonType.WORK_ITEM
 }
