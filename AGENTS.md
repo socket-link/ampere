@@ -31,6 +31,13 @@ This repo's load-bearing primitives are documented as concept cells in
   `Concept-Verified: <ConceptName>` in the commit message. This satisfies
   the validator without requiring a separate `last_verified` bump.
 
+## Changelog
+
+There is no `CHANGELOG.md`. Do not create one, and do not add a changelog entry
+as part of a PR — every parallel PR editing the same "Unreleased" section
+guarantees merge conflicts and resets CI on unrelated branches. Release notes
+are generated at release time from commit/PR history instead.
+
 ## Development Commands
 
 ### Build & Test
