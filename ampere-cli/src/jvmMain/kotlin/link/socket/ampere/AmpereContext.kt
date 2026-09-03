@@ -44,6 +44,7 @@ import link.socket.ampere.api.fromEnvironment
 import link.socket.ampere.config.AmpereConfig
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
+import link.socket.ampere.db.fts.FtsSchema
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.llm.LlmProvider
 
@@ -116,6 +117,7 @@ class AmpereContext(
         scope = scope,
         json = json,
         logger = logger,
+        driver = driver,
     )
 
     /**
@@ -161,7 +163,7 @@ class AmpereContext(
      * Exposed for CLI commands that query agent knowledge.
      */
     val knowledgeRepository: KnowledgeRepository by lazy {
-        KnowledgeRepositoryImpl(database)
+        KnowledgeRepositoryImpl(database, driver)
     }
 
     /**
@@ -464,6 +466,12 @@ class AmpereContext(
                 }
             }
 
+            // FTS5 virtual tables are a separate, guarded step regardless of which branch above
+            // ran (see FtsSchema): a SQLite build without the fts5 module degrades search
+            // instead of taking the whole schema — or this migration — down. IF NOT EXISTS
+            // throughout makes this safe to call unconditionally on every open.
+            FtsSchema.install(driver)
+
             return Database(driver)
         }
 
@@ -517,54 +525,8 @@ class AmpereContext(
             driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_knowledge_tag_tag ON KnowledgeTag(tag)", 0)
             driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_knowledge_tag_knowledge_id ON KnowledgeTag(knowledge_id)", 0)
 
-            // Create FTS table
-            driver.execute(
-                null,
-                """
-                CREATE VIRTUAL TABLE IF NOT EXISTS KnowledgeFts USING fts5(
-                    knowledge_id UNINDEXED,
-                    approach,
-                    learnings,
-                    content=KnowledgeStore,
-                    content_rowid=rowid
-                )
-                """.trimIndent(),
-                0
-            )
-
-            // Create triggers
-            driver.execute(
-                null,
-                """
-                CREATE TRIGGER IF NOT EXISTS knowledge_fts_insert AFTER INSERT ON KnowledgeStore BEGIN
-                    INSERT INTO KnowledgeFts(rowid, knowledge_id, approach, learnings)
-                    VALUES (new.rowid, new.id, new.approach, new.learnings);
-                END
-                """.trimIndent(),
-                0
-            )
-
-            driver.execute(
-                null,
-                """
-                CREATE TRIGGER IF NOT EXISTS knowledge_fts_delete AFTER DELETE ON KnowledgeStore BEGIN
-                    DELETE FROM KnowledgeFts WHERE rowid = old.rowid;
-                END
-                """.trimIndent(),
-                0
-            )
-
-            driver.execute(
-                null,
-                """
-                CREATE TRIGGER IF NOT EXISTS knowledge_fts_update AFTER UPDATE ON KnowledgeStore BEGIN
-                    DELETE FROM KnowledgeFts WHERE rowid = old.rowid;
-                    INSERT INTO KnowledgeFts(rowid, knowledge_id, approach, learnings)
-                    VALUES (new.rowid, new.id, new.approach, new.learnings);
-                END
-                """.trimIndent(),
-                0
-            )
+            // FTS table + triggers are created separately by FtsSchema.install(), guarded
+            // against a missing fts5 module — see the call in createDatabase().
         }
 
         /**

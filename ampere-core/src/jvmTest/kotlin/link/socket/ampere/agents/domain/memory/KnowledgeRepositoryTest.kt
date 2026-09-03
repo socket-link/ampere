@@ -17,6 +17,7 @@ import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
 import link.socket.ampere.db.Database
+import link.socket.ampere.db.fts.FtsSchema
 
 /**
  * Comprehensive test suite for KnowledgeRepository.
@@ -37,8 +38,9 @@ class KnowledgeRepositoryTest {
     fun setUp() {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         Database.Schema.create(driver)
+        FtsSchema.install(driver)
         database = Database(driver)
-        repo = KnowledgeRepositoryImpl(database)
+        repo = KnowledgeRepositoryImpl(database, driver)
     }
 
     @AfterTest

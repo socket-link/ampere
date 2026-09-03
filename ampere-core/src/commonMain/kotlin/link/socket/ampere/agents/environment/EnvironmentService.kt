@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.environment
 
+import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.definition.AgentId
@@ -189,6 +190,9 @@ class EnvironmentService(
          * @param scope The coroutine scope for async operations
          * @param json JSON configuration (defaults to DEFAULT_JSON)
          * @param logger Event logger (defaults to ConsoleEventLogger)
+         * @param driver The driver backing [database], forwarded to [OutcomeMemoryRepository]
+         * so it can run ranked FTS5 search instead of always falling back to `LIKE`. Optional
+         * for source compatibility with existing callers.
          * @return A fully initialized EnvironmentService
          */
         fun create(
@@ -196,6 +200,7 @@ class EnvironmentService(
             scope: CoroutineScope,
             json: Json = DEFAULT_JSON,
             logger: EventLogger = ConsoleEventLogger(),
+            driver: SqlDriver? = null,
         ): EnvironmentService {
             val eventSerialBus = EventSerialBus(scope, logger)
             val factory = EnvironmentOrchestratorFactory(
@@ -204,6 +209,7 @@ class EnvironmentService(
                 scope = scope,
                 eventSerialBus = eventSerialBus,
                 logger = logger,
+                driver = driver,
             )
             val orchestrator = factory.create()
             val eventRelayService = EventRelayServiceImpl(

@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.domain.outcome
 
+import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.RunId
@@ -7,6 +8,9 @@ import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.db.Database
+import link.socket.ampere.db.fts.FtsAvailability
+import link.socket.ampere.db.fts.FtsSchema
+import link.socket.ampere.db.fts.findSimilarOutcomesByText
 import link.socket.ampere.db.memory.OutcomeMemoryStore
 import link.socket.ampere.db.memory.OutcomeMemoryStoreQueries
 import link.socket.ampere.util.ioDispatcher
@@ -16,13 +20,25 @@ import link.socket.ampere.util.ioDispatcher
  *
  * This stores execution outcomes in a searchable database with full-text
  * search capabilities for finding similar past attempts.
+ *
+ * @param driver The driver backing [database]. Required to run the FTS5 `OutcomeMemoryFts`
+ * query (see [link.socket.ampere.db.fts.FtsSchema]), which can no longer be a SQLDelight-typed
+ * query now that the virtual table isn't declared in the `.sq` schema. When `null` (the
+ * default, kept for source compatibility with existing callers), [findSimilarOutcomes] always
+ * uses the `LIKE` fallback rather than attempting FTS.
  */
 class OutcomeMemoryRepositoryImpl(
     private val database: Database,
+    private val driver: SqlDriver? = null,
 ) : OutcomeMemoryRepository {
 
     private val queries: OutcomeMemoryStoreQueries
         get() = database.outcomeMemoryStoreQueries
+
+    // See KnowledgeRepositoryImpl.ftsAvailability for why this is lazy rather than eager.
+    private val ftsAvailability: FtsAvailability? by lazy {
+        driver?.let(FtsSchema::install)
+    }
 
     override suspend fun recordOutcome(
         ticketId: TicketId,
@@ -134,27 +150,29 @@ class OutcomeMemoryRepositoryImpl(
         limit: Int,
     ): Result<List<OutcomeMemory>> = withContext(ioDispatcher) {
         runCatching {
-            // Try FTS search first, fall back to LIKE if FTS fails
-            try {
-                // Convert description to FTS5 query format
-                // Split into keywords and join with OR for broader matching
-                val keywords = description
-                    .split(Regex("\\s+"))
-                    .filter { it.length > 2 } // Skip very short words
-                    .joinToString(" OR ")
+            // Convert description to FTS5 query format: split into keywords and join with OR
+            // for broader matching.
+            val keywords = description
+                .split(Regex("\\s+"))
+                .filter { it.length > 2 } // Skip very short words
+                .joinToString(" OR ")
 
-                if (keywords.isNotEmpty()) {
-                    queries.findSimilarOutcomes(keywords, limit.toLong())
-                        .executeAsList()
-                        .map { row -> mapRowToOutcomeMemory(row) }
-                } else {
-                    emptyList()
+            if (keywords.isEmpty()) {
+                emptyList()
+            } else {
+                // Route on the recorded FTS availability instead of attempting FTS and
+                // catching a failure on every call — a driver without the fts5 module fails
+                // identically every time, so there's nothing to gain from retrying it.
+                when (ftsAvailability) {
+                    is FtsAvailability.Available ->
+                        driver!!.findSimilarOutcomesByText(keywords, limit.toLong())
+                            .map { row -> mapRowToOutcomeMemory(row) }
+
+                    is FtsAvailability.Unavailable, null ->
+                        queries.findSimilarOutcomesLike(description, limit.toLong())
+                            .executeAsList()
+                            .map { row -> mapRowToOutcomeMemory(row) }
                 }
-            } catch (e: Exception) {
-                // Fall back to LIKE-based search if FTS fails
-                queries.findSimilarOutcomesLike(description, limit.toLong())
-                    .executeAsList()
-                    .map { row -> mapRowToOutcomeMemory(row) }
             }
         }
     }

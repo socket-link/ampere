@@ -22,6 +22,7 @@ import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.db.Database
+import link.socket.ampere.db.fts.FtsSchema
 
 /**
  * Comprehensive test suite for OutcomeMemoryRepository.
@@ -39,8 +40,9 @@ class OutcomeMemoryRepositoryTest {
     fun setUp() {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         Database.Schema.create(driver)
+        FtsSchema.install(driver)
         database = Database(driver)
-        repo = OutcomeMemoryRepositoryImpl(database)
+        repo = OutcomeMemoryRepositoryImpl(database, driver)
     }
 
     @AfterTest

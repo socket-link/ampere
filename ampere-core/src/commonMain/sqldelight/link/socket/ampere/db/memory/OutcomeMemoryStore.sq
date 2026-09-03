@@ -1,6 +1,6 @@
 -- Outcome Memory table
 -- Stores execution outcomes for learning and debugging
-CREATE TABLE OutcomeMemoryStore (
+CREATE TABLE IF NOT EXISTS OutcomeMemoryStore (
     id TEXT PRIMARY KEY NOT NULL,
     ticket_id TEXT NOT NULL,
     executor_id TEXT NOT NULL,
@@ -14,36 +14,19 @@ CREATE TABLE OutcomeMemoryStore (
 );
 
 -- Indexes for common queries
-CREATE INDEX idx_outcome_ticket_id ON OutcomeMemoryStore(ticket_id);
-CREATE INDEX idx_outcome_executor_id ON OutcomeMemoryStore(executor_id);
-CREATE INDEX idx_outcome_timestamp ON OutcomeMemoryStore(timestamp DESC);
-CREATE INDEX idx_outcome_success ON OutcomeMemoryStore(success);
-CREATE INDEX idx_outcome_run_id ON OutcomeMemoryStore(run_id);
+CREATE INDEX IF NOT EXISTS idx_outcome_ticket_id ON OutcomeMemoryStore(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_outcome_executor_id ON OutcomeMemoryStore(executor_id);
+CREATE INDEX IF NOT EXISTS idx_outcome_timestamp ON OutcomeMemoryStore(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_outcome_success ON OutcomeMemoryStore(success);
+CREATE INDEX IF NOT EXISTS idx_outcome_run_id ON OutcomeMemoryStore(run_id);
 
--- Full-text search index for similarity matching on approach
--- This enables fuzzy matching for "find similar outcomes"
-CREATE VIRTUAL TABLE OutcomeMemoryFts USING fts5(
-    id UNINDEXED,
-    approach,
-    content=OutcomeMemoryStore,
-    content_rowid=rowid
-);
-
--- Triggers to keep FTS index in sync with main table
-CREATE TRIGGER outcome_fts_insert AFTER INSERT ON OutcomeMemoryStore BEGIN
-    INSERT INTO OutcomeMemoryFts(rowid, id, approach)
-    VALUES (new.rowid, new.id, new.approach);
-END;
-
-CREATE TRIGGER outcome_fts_delete AFTER DELETE ON OutcomeMemoryStore BEGIN
-    DELETE FROM OutcomeMemoryFts WHERE rowid = old.rowid;
-END;
-
-CREATE TRIGGER outcome_fts_update AFTER UPDATE ON OutcomeMemoryStore BEGIN
-    DELETE FROM OutcomeMemoryFts WHERE rowid = old.rowid;
-    INSERT INTO OutcomeMemoryFts(rowid, id, approach)
-    VALUES (new.rowid, new.id, new.approach);
-END;
+-- Full-text search index for similarity matching on approach.
+--
+-- The `OutcomeMemoryFts` virtual table + sync triggers used to be declared here as
+-- `CREATE VIRTUAL TABLE ... USING fts5`. That DDL now lives in
+-- link.socket.ampere.db.fts.FtsSchema, installed as a separate guarded step after
+-- `Schema.create()` returns, so a SQLite build without the fts5 module (e.g. Android's system
+-- SQLite) degrades search instead of taking the whole schema down. See AMPR-325.
 
 -- =============================================================================
 -- OUTCOME MEMORY QUERIES
@@ -86,16 +69,10 @@ getAllOutcomes:
 SELECT * FROM OutcomeMemoryStore
 ORDER BY timestamp DESC;
 
--- Find similar outcomes using full-text search
--- Returns outcomes where the approach text matches the search query
--- Uses FTS5 MATCH for fuzzy matching
-findSimilarOutcomes:
-SELECT o.*
-FROM OutcomeMemoryStore o
-JOIN OutcomeMemoryFts fts ON o.rowid = fts.rowid
-WHERE OutcomeMemoryFts MATCH ?
-ORDER BY fts.rank, o.timestamp DESC
-LIMIT ?;
+-- Full-text search similarity matching.
+-- See link.socket.ampere.db.fts.findSimilarOutcomesByText for the raw-query replacement —
+-- this can no longer be a SQLDelight query since `OutcomeMemoryFts` isn't declared in this
+-- schema.
 
 -- Fallback similarity search using LIKE for simple keyword matching
 -- Used when FTS is not available or for simple queries

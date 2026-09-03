@@ -1,51 +1,14 @@
--- FTS5 virtual table over knowledge_chunks.text for keyword fallback retrieval.
--- Triggers keep the index in sync with knowledge_chunks insert/update/delete.
-
--- FTS5 column names must match the content table (knowledge_chunks).
--- The `id` column is UNINDEXED so it isn't tokenized, only stored.
-CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_chunks_fts USING fts5(
-    id UNINDEXED,
-    text,
-    content=knowledge_chunks,
-    content_rowid=rowid
-);
-
--- For external-content FTS5 tables, deletes use the 'delete' command form
--- (https://sqlite.org/fts5.html#the_delete_command). A plain DELETE FROM fts
--- WHERE rowid = old.rowid would re-read the content table and remove the wrong
--- tokens for AFTER UPDATE triggers because the content row has already changed.
-CREATE TRIGGER IF NOT EXISTS knowledge_chunks_fts_insert
-AFTER INSERT ON knowledge_chunks BEGIN
-    INSERT INTO knowledge_chunks_fts(rowid, id, text)
-    VALUES (new.rowid, new.id, new.text);
-END;
-
-CREATE TRIGGER IF NOT EXISTS knowledge_chunks_fts_delete
-AFTER DELETE ON knowledge_chunks BEGIN
-    INSERT INTO knowledge_chunks_fts(knowledge_chunks_fts, rowid, id, text)
-    VALUES ('delete', old.rowid, old.id, old.text);
-END;
-
-CREATE TRIGGER IF NOT EXISTS knowledge_chunks_fts_update
-AFTER UPDATE ON knowledge_chunks BEGIN
-    INSERT INTO knowledge_chunks_fts(knowledge_chunks_fts, rowid, id, text)
-    VALUES ('delete', old.rowid, old.id, old.text);
-    INSERT INTO knowledge_chunks_fts(rowid, id, text)
-    VALUES (new.rowid, new.id, new.text);
-END;
-
--- =============================================================================
--- FTS QUERIES
--- =============================================================================
-
--- FTS5 keyword match against chunk text. Returns chunks ranked by FTS relevance.
-searchChunksByText:
-SELECT c.*
-FROM knowledge_chunks c
-INNER JOIN knowledge_chunks_fts fts ON c.rowid = fts.rowid
-WHERE knowledge_chunks_fts MATCH :query
-ORDER BY fts.rank
-LIMIT :limit;
+-- FTS5 keyword fallback retrieval over knowledge_chunks.text.
+--
+-- The FTS5 virtual table + sync triggers used to live here as
+-- `CREATE VIRTUAL TABLE ... USING fts5`. SQLite builds without the fts5 module (e.g.
+-- Android's system SQLite) fail that statement, and because SQLDelight emits `Schema.create()`
+-- as one block, that failure used to take the whole schema down with it. The DDL now lives in
+-- link.socket.ampere.db.fts.FtsSchema, installed as a separate guarded step after
+-- `Schema.create()` returns, and the ranked query lives alongside it as a hand-written raw
+-- query (link.socket.ampere.db.fts.searchKnowledgeChunksByText) since SQLDelight has nothing
+-- to type-check `MATCH`/`rank` against once the virtual table isn't declared here. See
+-- AMPR-325.
 
 -- LIKE-based fallback for environments where FTS5 querying is unavailable
 -- or for very short query strings that don't tokenize well.

@@ -5,8 +5,12 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import link.socket.ampere.db.Database
+import link.socket.ampere.db.fts.FtsAvailability
+import link.socket.ampere.db.fts.FtsSchema
+import link.socket.ampere.db.fts.searchKnowledgeChunksByText
 
 class KnowledgeFTSTest {
 
@@ -17,6 +21,10 @@ class KnowledgeFTSTest {
     fun setUp() {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         Database.Schema.create(driver)
+        // The FTS5 virtual tables are no longer part of Schema.create() (see FtsSchema) — they
+        // must be installed as a separate, guarded step. xerial's sqlite-jdbc compiles fts5 in,
+        // so this is expected to always succeed on JVM.
+        assertIs<FtsAvailability.Available>(FtsSchema.install(driver))
         database = Database(driver)
         database.knowledgeQueries.insertDocument(
             id = "doc-1",
@@ -37,9 +45,7 @@ class KnowledgeFTSTest {
         insertChunk("chunk-1", 0, "Lighthouses guide ships safely along the rocky coast.")
         insertChunk("chunk-2", 1, "Modern beacons replaced manual lamp keepers.")
 
-        val matches = database.knowledgeFTSQueries
-            .searchChunksByText("lighthouses", limit = 5)
-            .executeAsList()
+        val matches = driver.searchKnowledgeChunksByText("lighthouses", limit = 5)
 
         assertEquals(listOf("chunk-1"), matches.map { it.id })
     }
@@ -55,14 +61,10 @@ class KnowledgeFTSTest {
             id = "chunk-1",
         )
 
-        val sailing = database.knowledgeFTSQueries
-            .searchChunksByText("sailing", limit = 5)
-            .executeAsList()
+        val sailing = driver.searchKnowledgeChunksByText("sailing", limit = 5)
         assertEquals(listOf("chunk-1"), sailing.map { it.id })
 
-        val docking = database.knowledgeFTSQueries
-            .searchChunksByText("docking", limit = 5)
-            .executeAsList()
+        val docking = driver.searchKnowledgeChunksByText("docking", limit = 5)
         assertTrue(docking.isEmpty())
     }
 
@@ -73,9 +75,7 @@ class KnowledgeFTSTest {
 
         database.knowledgeQueries.deleteChunksForDocument("doc-1")
 
-        val matches = database.knowledgeFTSQueries
-            .searchChunksByText("schooners", limit = 5)
-            .executeAsList()
+        val matches = driver.searchKnowledgeChunksByText("schooners", limit = 5)
         assertTrue(matches.isEmpty())
     }
 
