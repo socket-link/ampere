@@ -9,6 +9,10 @@ import link.socket.ampere.agents.domain.event.EventRegistry.allEventTypes
  * 1. Add it to the [allEventTypes] list
  * 2. It will automatically be available in EventTypeParser and EnvironmentService
  *
+ * The list is hand-maintained, so `EventRegistryCompletenessTest` walks the sealed
+ * [Event] hierarchy and fails when a subtype is missing from it. An event that is not
+ * here is invisible to `subscribeToAll`, the relay, and every recorded trace.
+ *
  * Benefits:
  * - Single place to maintain event type list
  * - Prevents inconsistencies between different parts of the system
@@ -103,6 +107,29 @@ object EventRegistry {
         RoutingEvent.RouteSelected.EVENT_TYPE,
         RoutingEvent.RouteFallback.EVENT_TYPE,
         RoutingEvent.RouteResolved.EVENT_TYPE,
+        RoutingEvent.RouteFloorUnmet.EVENT_TYPE,
+
+        // PlanEvent types
+        PlanEvent.PlanStepStarted.EVENT_TYPE,
+        PlanEvent.PlanStepCompleted.EVENT_TYPE,
+        PlanEvent.TaskAssigned.EVENT_TYPE,
+        PlanEvent.MonitoringStarted.EVENT_TYPE,
+
+        // GitEvent types
+        GitEvent.BranchCreated.EVENT_TYPE,
+        GitEvent.Committed.EVENT_TYPE,
+        GitEvent.Pushed.EVENT_TYPE,
+        GitEvent.PullRequestCreated.EVENT_TYPE,
+        GitEvent.FilesStaged.EVENT_TYPE,
+        GitEvent.OperationFailed.EVENT_TYPE,
+
+        // BenchEvent types
+        BenchEvent.BenchRunStarted.EVENT_TYPE,
+        BenchEvent.ProbeGraded.EVENT_TYPE,
+        BenchEvent.BenchRunCompleted.EVENT_TYPE,
+
+        // ProbeEvent types
+        ProbeEvent.VerdictReached.EVENT_TYPE,
 
         // TelemetryEvent types
         ProviderCallStartedEvent.EVENT_TYPE,

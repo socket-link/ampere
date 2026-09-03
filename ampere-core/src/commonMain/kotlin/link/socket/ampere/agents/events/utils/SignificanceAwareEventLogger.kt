@@ -21,6 +21,7 @@ import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
+import link.socket.ampere.agents.domain.event.ProbeEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
@@ -30,6 +31,7 @@ import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.events.subscription.Subscription
+import link.socket.ampere.probe.Verdict
 
 /**
  * Filters events based on significance and displays rich event details.
@@ -186,6 +188,16 @@ class SignificanceAwareEventLogger(
         is BenchEvent.BenchRunStarted -> EventSignificance.ROUTINE
         is BenchEvent.ProbeGraded -> EventSignificance.ROUTINE
         is BenchEvent.BenchRunCompleted -> EventSignificance.SIGNIFICANT
+
+        // Probe verdicts - a clean pass is routine; anything else is a decision
+        // a human may need to see. An Undetermined is never a quiet pass.
+        is ProbeEvent.VerdictReached -> when (event.verdict) {
+            is Verdict.Holds -> EventSignificance.ROUTINE
+            is Verdict.Warn,
+            is Verdict.Violated,
+            is Verdict.Undetermined,
+            -> EventSignificance.SIGNIFICANT
+        }
 
         // Link lifecycle - resolution is routine, but anything that changes or
         // denies a Plug's access to a wire is a consent-visible fact.

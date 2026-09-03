@@ -8,6 +8,19 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
 
 ### Fixed
 
+- **14 event types were declared but never registered, making them invisible**
+  ([AMPR-321](https://linear.app/miley/issue/AMPR-321)).
+
+  `EventRegistry.allEventTypes` is hand-maintained and is what
+  `EnvironmentService.subscribeToAll`, `EventRelayServiceImpl`, and
+  `TraceRecorder` enumerate. Every `GitEvent` (6), every `PlanEvent` (4), every
+  `BenchEvent` (3), and `RoutingEvent.RouteFloorUnmet` had been left out of it,
+  so they reached no subscriber that did not name their type explicitly and
+  appeared in no recorded trace — a whole Git workflow and a whole bench run
+  were dark. All 14 are now registered. `EventRegistryCompletenessTest` walks
+  the sealed `Event` hierarchy and fails on the next omission rather than
+  leaving it to be found as a hole in a trace.
+
 - **`BatchIssueCreator` reported `success = true` on a cyclic batch**
   ([AMPR-322](https://linear.app/miley/issue/AMPR-322)).
 
@@ -46,6 +59,32 @@ The project is pre-1.0; breaking changes are acceptable and explicitly called ou
   as an opaque per-query exception that callers log as a skip.
 
 ### Added
+
+- **`ProbeEvent.VerdictReached`, and an optional event bus on `ProbeSuite`**
+  ([AMPR-321](https://linear.app/miley/issue/AMPR-321)).
+
+  A Probe's verdict was returned to its caller and nowhere else, so it could
+  not be read back from a trace. The closest existing event,
+  `BenchEvent.ProbeGraded`, carries `probeId`/`passed`/`meanScore` and no
+  subject id at all — "task T3 depends on T7, which is scheduled after it" was
+  unrecoverable. `ProbeEvent.VerdictReached` puts one Probe's judgement of one
+  identified subject on the `EventSerialBus`: `probeId`, `subjectId`, the
+  four-valued `Verdict`, and a small free-form `detail` map. It is
+  primitives-plus-`Verdict` by construction, because a consumer's Probe may
+  judge a subject type Ampere cannot name; the subject itself never crosses the
+  boundary. It lives beside `BenchEvent` in `ampere-core` for the same reason
+  that event does — `Event` is sealed, and Kotlin requires sealed subtypes to
+  share module and package with the base type.
+
+  `ProbeSuite` gains an optional `eventBus` (plus `eventSource`, `now`, and
+  `idGenerator`, all manually injected as everywhere else in Ampere). When it
+  is set, `evaluate` publishes one event per report, in probe order, after
+  every Probe has run. Left null — the default — evaluation is pure and
+  nothing is published, so Bench fixtures and unit tests need no bus.
+  `TraceRecorder` captures the new event with no change, since it subscribes to
+  `EventRegistry.allEventTypes`. Rendering rules, including why an
+  `Undetermined` must never share a treatment with `Holds`, are in
+  `docs/ampere/events.md`.
 
 - **`ampereSqliteOpenHelperFactory()` (Android)**
   ([AMPR-324](https://linear.app/miley/issue/AMPR-324)).
