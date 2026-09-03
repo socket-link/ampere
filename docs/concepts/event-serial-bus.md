@@ -11,7 +11,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/**
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/events/**
 related: [PropelLoop, AgentSurface, CognitionTrace, MemoryProvenance, LinkLayer]
-last_verified: 2026-07-28
+last_verified: 2026-09-02
 ---
 
 # EventSerialBus
@@ -61,12 +61,14 @@ properties for free:
 - `agents/domain/event/Event.kt` and the `event/` package — the sealed `Event` hierarchy.
 - `agents/domain/event/CognitivePhaseEvent.kt` — phase transition events emitted by `PhaseSparkManager` when a bus is wired.
 - `agents/domain/event/LinkEvent.kt` — Link lifecycle (granted, revoked, resolved, resolution failed); see [LinkLayer](link-layer.md).
+- `agents/domain/event/ProbeEvent.kt` — `VerdictReached`, one Probe's judgement of one identified subject; see [Probe](probe.md).
+- `agents/domain/event/EventRegistry.kt` — the hand-maintained list of every event type, and the only thing `subscribeToAll`, the relay, and `TraceRecorder` enumerate.
 - `ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/events/EventStore.sq` — persistence schema (with `run_id` indexes for trace queries).
 
 ## Invariants
 
 - **Direct agent-to-agent method calls are forbidden for coordination.** If agent A needs to influence agent B, A publishes; B subscribes. The only direct calls allowed are within an agent's own services or into stateless helpers. (Read: tests around `AgentReasoning` injecting fakes are fine; an agent calling another agent's `handleX(...)` is not.)
-- **Every event type has a serializer, a registration in the event hierarchy, and a CLI display handler.** New event types must satisfy all three before merge — see the "Agent System Rules" in `AGENTS.md`.
+- **Every event type has a serializer, a registration in the event hierarchy, and a CLI display handler.** New event types must satisfy all three before merge — see the "Agent System Rules" in `AGENTS.md`. Registration means an entry in `EventRegistry.allEventTypes`: an event missing from that list reaches no subscriber that did not name its type and appears in no recorded trace. Fourteen declared events had drifted out of it (AMPR-321); `EventRegistryCompletenessTest` now walks the sealed hierarchy in both directions so the next omission fails there.
 - **Handler exceptions never propagate to the publisher.** The bus swallows and logs handler failures. Publishers cannot rely on subscriber success; if a downstream effect is required, it gets its own event.
 - **The bus does not persist; loggers and stores do.** A change that makes `EventSerialBus.publish` write to a database directly violates the layering — persistence belongs to `EventStore` invoked by an event-aware logger or projector.
 - **`run_id` is propagated through the event chain.** Events emitted within an Arc run carry the originating `run_id` so trace projection can find them. Lossy event handlers that strip `run_id` break time-travel.
@@ -92,7 +94,7 @@ properties for free:
 - **"Just call the other agent's method directly, the event is annoying."** This is how AMPERE became opaque the first time. The cost of an event is one serialized struct; the cost of bypassing one is invisibility.
 - **Catching exceptions inside a handler and silently dropping them.** The bus already swallows handler errors and logs them. Adding a second swallow inside the handler hides real failures from the logger.
 - **Using `runBlocking` inside a handler.** Handlers run on the bus's `CoroutineScope`. Blocking that scope blocks the next dispatch loop. Suspend functions only.
-- **Emitting events outside an agent's `AgentEventApi`.** Direct `bus.publish` calls in domain code skip the source-tagging the api adds, which means the trace can't attribute the event to an agent.
+- **Emitting events outside an agent's `AgentEventApi`.** Direct `bus.publish` calls in domain code skip the source-tagging the api adds, which means the trace can't attribute the event to an agent. A publisher that is genuinely not agent-owned — `ProbeSuite`, which a consumer may drive with no agent in sight — takes an explicit `eventSource` instead, so attribution is carried rather than lost. Taking the bus without taking a source is the actual anti-pattern.
 - **Persisting state in the bus.** The bus is a router. Anything that needs persistence belongs in a store one layer up.
 - **Unsubscribing by event type from a shared consumer.** It reads like "stop listening" and behaves like "nobody listens." Use the `Subscription` handle unless you are certain you are the only subscriber on that type, and say so in a comment if you are.
 - **Exposing `subscribe` across the FFI boundary.** It calls `runBlockingCompat`, so a Swift call from the main thread blocks the UI and can deadlock on Kotlin/Native. Swift gets a Flow or a callback facade, never the bus.
