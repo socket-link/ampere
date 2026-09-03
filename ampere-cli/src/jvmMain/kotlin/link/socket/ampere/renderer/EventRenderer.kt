@@ -30,6 +30,7 @@ import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
+import link.socket.ampere.agents.domain.event.ProbeEvent
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
@@ -41,6 +42,7 @@ import link.socket.ampere.agents.domain.event.SparkRemovedEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
+import link.socket.ampere.probe.Verdict
 
 /**
  * Renders events to terminal with color coding and formatting.
@@ -186,6 +188,14 @@ class EventRenderer(
             is LinkEvent.LinkResolutionFailed -> "🔌" to red
             // Asset resolution: out-of-band, mirroring Link's icon family
             is AssetAccessEvent -> "🖼" to green
+            // Probe verdicts: the colour is the verdict. Undetermined is never
+            // green — it is not decided, and must not read as a pass.
+            is ProbeEvent.VerdictReached -> "⚖" to when (event.verdict) {
+                is Verdict.Holds -> green
+                is Verdict.Warn -> yellow
+                is Verdict.Violated -> red
+                is Verdict.Undetermined -> magenta
+            }
         }
     }
 

@@ -17,10 +17,15 @@ import kotlinx.serialization.json.jsonPrimitive
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.AssetAccessEvent
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventRegistry
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.ProbeEvent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.eval.db.EvalDatabase
+import link.socket.ampere.probe.ProbeId
+import link.socket.ampere.probe.UndeterminedCause
+import link.socket.ampere.probe.Verdict
 
 /** AMPR-183 task 1.4 validation + record -> persist -> load -> replay round-trip. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -171,6 +176,72 @@ class TraceRecorderTest {
             setOf("byteCount"),
             payload.keys.filter { it.contains("byte", ignoreCase = true) }.toSet(),
         )
+    }
+
+    /**
+     * AMPR-321 task 2: the recorder needs no change to capture a new event — it
+     * subscribes to [EventRegistry.allEventTypes], so registering `VerdictReached`
+     * is the whole wiring. What matters is that the verdict survives the trip
+     * through the trace: `subjectId` says what was judged, the [Verdict] subtype
+     * says how, and neither is recoverable from `BenchEvent.ProbeGraded`.
+     */
+    @Test
+    fun `a probe verdict survives recording and decoding from a trace`() = runTest {
+        val handle = recorder.start(runId = "run-6", arcId = "arc-6")
+
+        bus.publish(
+            ProbeEvent.VerdictReached(
+                eventId = "e1",
+                eventSource = source,
+                timestamp = Instant.fromEpochMilliseconds(1),
+                probeId = ProbeId("ampere.sequence"),
+                subjectId = "plan-7",
+                verdict = Verdict.Violated(reason = "cycle: T3 -> T7 -> T3"),
+                detail = mapOf("edge" to "T3 -> T7"),
+            ),
+        )
+
+        val trace = handle.stop().getOrThrow()
+
+        assertEquals(1, trace.size)
+        val decoded = DEFAULT_JSON.decodeFromJsonElement(
+            Event.serializer(),
+            trace.events.single().payload,
+        ) as ProbeEvent.VerdictReached
+
+        assertEquals("plan-7", decoded.subjectId)
+        assertEquals(Verdict.Violated(reason = "cycle: T3 -> T7 -> T3"), decoded.verdict)
+        assertEquals(ProbeId("ampere.sequence"), decoded.probeId)
+        assertEquals(mapOf("edge" to "T3 -> T7"), decoded.detail)
+    }
+
+    @Test
+    fun `an undetermined verdict keeps its cause through a trace`() = runTest {
+        val handle = recorder.start(runId = "run-7", arcId = "arc-7")
+
+        bus.publish(
+            ProbeEvent.VerdictReached(
+                eventId = "e1",
+                eventSource = source,
+                timestamp = Instant.fromEpochMilliseconds(1),
+                probeId = ProbeId("ampere.sequence"),
+                subjectId = "plan-8",
+                verdict = Verdict.Undetermined(
+                    reason = "T7 publishes no schedule",
+                    cause = UndeterminedCause.EVIDENCE_ABSENT,
+                ),
+            ),
+        )
+
+        val trace = handle.stop().getOrThrow()
+        val decoded = DEFAULT_JSON.decodeFromJsonElement(
+            Event.serializer(),
+            trace.events.single().payload,
+        ) as ProbeEvent.VerdictReached
+
+        // An Undetermined must never flatten into a soft pass on the way out.
+        val verdict = decoded.verdict as Verdict.Undetermined
+        assertEquals(UndeterminedCause.EVIDENCE_ABSENT, verdict.cause)
     }
 
     private fun kotlinx.serialization.json.JsonElement.eventId(): String =

@@ -17,6 +17,7 @@ import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
+import link.socket.ampere.agents.domain.event.ProbeEvent
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
@@ -25,6 +26,7 @@ import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
+import link.socket.ampere.probe.Verdict
 
 /**
  * Determines the significance of events for observation purposes.
@@ -139,6 +141,16 @@ object EventCategorizer {
         // A rung floor with no satisfying model is a terminal routing failure:
         // the call cannot proceed, so it warrants immediate human awareness.
         is RoutingEvent.RouteFloorUnmet -> EventSignificance.CRITICAL
+
+        // A Probe verdict: a clean pass is routine, every other outcome is a
+        // decision worth surfacing. An Undetermined is never a quiet pass.
+        is ProbeEvent.VerdictReached -> when (event.verdict) {
+            is Verdict.Holds -> EventSignificance.ROUTINE
+            is Verdict.Warn,
+            is Verdict.Violated,
+            is Verdict.Undetermined,
+            -> EventSignificance.SIGNIFICANT
+        }
     }.let { significance ->
         if (event is ProviderCallCompletedEvent && !event.success) {
             EventSignificance.SIGNIFICANT

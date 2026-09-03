@@ -16,7 +16,10 @@ manifest, a recalled fact — that returns a four-valued `Verdict`: `Holds`,
 `Warn` (decided, bad, not disqualifying), `Violated` (decided, disqualifying),
 or `Undetermined` (not decided; carries an `UndeterminedCause`). A
 `ProbeSuite` runs an ordered list over one subject and yields `ProbeReport`s;
-a `ProbeRegistry` lists Probes for discovery (Oscilloscope), not dispatch.
+a `ProbeRegistry` lists Probes for discovery (Oscilloscope), not dispatch. A
+suite handed an `EventSerialBus` also publishes one
+`ProbeEvent.VerdictReached` per report, so the verdict is legible in the trace
+and not only to whoever called `evaluate`.
 
 `SequenceProbe : Probe<CanonWorkGraph>` and `FreshnessProbe : Probe<Observed>` are the shipped Probes. `Observed` is
 the one-field interface (`observedAt: Instant`) that lets it run over a canon
@@ -44,7 +47,8 @@ type would leave foreign subjects with no base to extend.
 - `probe/SequenceProbe.kt` — dangling `dependsOn` and cycles over a `CanonWorkGraph`.
 - `probe/FreshnessProbe.kt` — per-Probe `maxAge`, injected `now`.
 - `probe/AmpereProbes.kt` — `registerAmpereProbes(freshnessMaxAge, now)`, the one-call wiring for a listing.
-- `commonTest/.../probe/` — `ProbeSuiteTest`, `ProbeSerializationTest`, `SequenceProbeTest`, `FreshnessProbeTest`.
+- `agents/domain/event/ProbeEvent.kt` — `VerdictReached`, the verdict on the bus. It lives in the event package, not here, because `Event` is sealed and Kotlin requires sealed subtypes to share module and package with the base type.
+- `commonTest/.../probe/` — `ProbeSuiteTest`, `ProbeSuiteEventTest`, `ProbeSerializationTest`, `SequenceProbeTest`, `FreshnessProbeTest`.
 
 ## Where `observedAt` binds
 
@@ -64,13 +68,17 @@ and is never re-stamped on receipt, cache hit, or Plan.
 - **`Undetermined` never renders as a soft pass.** A consumer that maps it to "ok" has silently accepted absent evidence.
 - **`observedAt` is bound once, at the source.** Re-stamping on cache hit or Plan would make every cached fact look fresh forever.
 - **`S` stays unconstrained.** A Probe must be able to check a subject type Ampere never imports.
-- **A Probe is not a trace grader.** Grading a recorded run belongs to the eval harness (`EvalCase`, `Meter`s). A freshness verdict cannot be computed from a `MemoryEvent.KnowledgeRecalled` trace alone — it carries no per-fact timestamps — and that is an observability gap, not a reason to move the Probe.
+- **A Probe is not a trace grader.** Grading a recorded run belongs to the eval harness (`EvalCase`, `Meter`s). A freshness verdict cannot be computed from a `MemoryEvent.KnowledgeRecalled` trace alone — it carries no per-fact timestamps — and that is an observability gap, not a reason to move the Probe. `VerdictReached` narrows the gap from the other side: the verdict a Probe reached is now *in* the trace, even though it was never computable *from* it.
+- **A verdict event carries the subject's id, never the subject.** `S` is unconstrained, so a payload holding the subject would either bind the event to Ampere's types or force a foreign type across the boundary. `subjectId`, `probeId`, `Verdict`, and a small `detail` map are the whole payload.
+- **Publishing is opt-in and never partial.** A `ProbeSuite` with no `eventBus` is pure — Bench fixtures and unit tests depend on that. A suite with one publishes after every Probe has run, so a subscriber never sees half a verdict set from a suite that threw halfway through.
+- **A verdict is recomputed, never replayed.** `PlaybackRelay` replays a recorded run's LLM calls; it does not replay verdicts. A Probe re-evaluated against a replayed subject must reach its verdict again, or a stale judgement outlives the code that formed it.
 
 ## Common operations
 
 - **Check a canon entity's freshness** — `FreshnessProbe(maxAge = 24.hours, now = Clock.System::now).evaluate(entity.provenance)`.
 - **Check a consumer-side binding** — implement `Observed` on the binding, copying the source timestamp at bind time; the same Probe instance applies.
 - **Run several Probes over one subject** — `ProbeSuite<Observed>(listOf(freshness, ...)).evaluate(subjectId, subject)`.
+- **Make verdicts visible in the trace** — `ProbeSuite(probes, eventBus = bus)`. `eventSource`, `now`, and `idGenerator` are constructor parameters too, so a test can pin exactly what a published event carries.
 - **Expose Probes for listing** — `ProbeRegistry().registerAmpereProbes(freshnessMaxAge = 24.hours)` registers both shipped Probes; add consumer Probes with `register` afterwards. `all()` feeds the Oscilloscope listing.
 
 ## Anti-patterns
@@ -78,3 +86,5 @@ and is never re-stamped on receipt, cache hit, or Plan.
 - **A `Boolean` verdict.** Two independent recons each needed a third value, and different thirds.
 - **Reading `WebPage.fetchedAt` from Ampere.** It is a Socket type; the isolation check forbids it and the binding already carries the timestamp.
 - **Per-fact tolerances.** Out of scope by design (AMPR-323); a fact does not know how stale is too stale for a given consumer.
+- **Routing on a verdict inside Ampere.** Re-plan, escalation to a human, retry — all consumer-side (Socket decision D21). The event is the signal, not the action.
+- **Reaching for a subject-typed verdict event.** The pull is real — a `VerdictReached<S>` would carry more — and it is exactly what makes the event unusable by a consumer whose subject Ampere cannot name.

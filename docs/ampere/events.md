@@ -94,3 +94,55 @@ on separate event types cannot rely on cross-event ordering at the handler
 level. A consumer that needs both signals together should subscribe to
 `EscalationConsidered` (which carries enough payload to act on its own) rather
 than correlating the two events.
+
+## Probe verdicts
+
+`ProbeEvent.VerdictReached` carries one Probe's judgement of one subject onto the
+bus, so a decision is visible in the trace rather than only returned to whoever
+asked. It is Ampere-owned and primitives-only: the subject itself never crosses
+the boundary, because a consumer's Probe may judge a type Ampere cannot name.
+
+| Field | Meaning |
+| --- | --- |
+| `probeId` | The Probe that reached the verdict. |
+| `subjectId` | Caller-supplied identity of what was judged — a Probe's subject type is unconstrained, so the SPI cannot ask a subject for its own id. |
+| `verdict` | `Holds`, `Warn`, `Violated`, or `Undetermined`, each carrying its `reason`. |
+| `detail` | Free-form key/value for the Oscilloscope. Keep it small; it is stored in every trace that captures the event. |
+
+Publishing is opt-in. A `ProbeSuite` constructed with an `eventBus` publishes one
+event per report, in probe order, after every Probe in the suite has run:
+
+```kotlin
+val suite = ProbeSuite(
+    probes = listOf(SequenceProbe()),
+    eventBus = bus,
+)
+
+// Returns the reports as before, and puts each verdict on the bus.
+val reports = suite.evaluate(subjectId = "plan-7", subject = workGraph)
+```
+
+Leave `eventBus` null — the default — and evaluation stays pure. Bench fixtures
+and unit tests need no bus.
+
+### Rendering a verdict in the Oscilloscope
+
+A verdict event renders with its `subjectId`, not just its `probeId`. "Task T3
+depends on T7, which is scheduled after it" is only legible if the row names T3;
+a stream of `ampere.sequence` rows with no subject is a stream of unattributable
+judgements.
+
+The four verdicts render as **four** states, never as pass/fail with decoration:
+
+| Verdict | Reads as | Rendering |
+| --- | --- | --- |
+| `Holds` | decided, good | Neutral. A clean pass needs no explanation and `reason` is often null. |
+| `Warn` | decided, bad, not disqualifying | Signal Amber. Shows `reason`. |
+| `Violated` | decided, disqualifying | Distinct from `Warn`, and never collapsed into it. Shows `reason`. |
+| `Undetermined` | **not decided** | Visually distinct from `Holds`. Shows `reason` *and* `cause`, because "no published spec" and "the page needed a JS engine" lead to different next actions. |
+
+`Undetermined` is the one that gets rendering wrong most easily. It is not a soft
+pass and must never share a treatment with `Holds`: the Probe convicts but does
+not acquit, and a viewer who reads an `Undetermined` row as "fine" has been told
+the opposite of what happened. Routing on a verdict — re-plan, escalate to a
+human — stays on the consumer side; the event is the signal, not the action.
