@@ -59,7 +59,15 @@ class EmissionReplyRegistry {
     fun getPendingEmissionIds(): Set<EmissionId> = pending.keys.toSet()
 }
 
-/** Process-wide singleton [EmissionReplyRegistry]. */
+/**
+ * Process-wide singleton [EmissionReplyRegistry], used as the default wherever a registry is not
+ * injected (`emission {}`, `ToolAskHuman`, `AgentMessageApi`).
+ *
+ * **Not instance-scoped.** Every `AmpereInstance` in the process shares it, so two instances see
+ * each other's pending emissions, and a reply published on one instance's bus can resume a call
+ * suspended on the other's. Treat the default as a convenience for tests and single-instance
+ * hosts; a host that runs more than one instance should inject its own registry per instance.
+ */
 object GlobalEmissionReplyRegistry {
     val instance: EmissionReplyRegistry = EmissionReplyRegistry()
 }
