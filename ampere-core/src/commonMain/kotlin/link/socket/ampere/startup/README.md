@@ -92,7 +92,6 @@ The `initializeAmpere()` function performs these steps:
 2. **Registers Local Tools** - Discovers and registers all local FunctionTools:
    - `write_code` - Write or modify source code files
    - `read_code` - Read source code files
-   - `ask_human` - Escalate decisions to human operators
    - `create_ticket` - Create tasks in the issue tracking system
    - `run_tests` - Execute test suites
 3. **Emits Events** - Publishes ToolDiscoveryComplete event for observability
