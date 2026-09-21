@@ -11,6 +11,7 @@ import link.socket.ampere.agents.domain.routing.RoutingResolution
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.eval.trace.Trace
+import link.socket.ampere.trace.ReplayWindow
 import link.socket.ampere.trace.WattCost
 
 /**
@@ -33,7 +34,8 @@ sealed interface MissPolicy {
 
 /**
  * Typed failure signalling that an Arc diverged from its recording: the
- * [callIndex]-th model call had no recorded counterpart under [MissPolicy.Error].
+ * [callIndex]-th model call within [window] had no recorded counterpart under
+ * [MissPolicy.Error].
  *
  * Carried as a `Result.failure` value by [PlaybackRelay.replay] (the Result
  * boundary) and thrown by the `CognitiveRelay` methods so the divergence
@@ -42,6 +44,8 @@ sealed interface MissPolicy {
 class PlaybackMiss(
     val callIndex: Int,
     val recordedCallCount: Int,
+    /** The window whose call-index sequence was exhausted; `null` when not supplied. */
+    val window: ReplayWindow? = null,
 ) : Exception(
     "PlaybackRelay diverged: model call #$callIndex has no recorded response " +
         "(trace recorded $recordedCallCount model call(s)).",
@@ -70,11 +74,18 @@ class PlaybackMiss(
  * selection is available for inspection via [recordedCallAt]). Content-faithful
  * replay belongs to the `UpstreamLlmClient` seam in a later ticket.
  *
+ * ### Window
+ * Call indices count within the trace's [ReplayWindow] ([window]). A call-index
+ * sequence only means something when it has an end — "past the recordings" is
+ * what makes a [PlaybackMiss] detectable — so replay needs a bounded window. v1's
+ * bound is the Arc run; see [ReplayWindow] for why that is a projection choice
+ * rather than something baked into the `runId`.
+ *
  * ### Watts
  * A replayed call performs **no live provider invocation**, so it consumes no
  * tokens and therefore zero Watts (RECON-relay §2.4). See [replayedWattCost].
  *
- * @param trace the recorded run to replay.
+ * @param trace the recorded window to replay (in v1, one Arc run).
  * @param missPolicy what to do when the Arc makes more (or different) calls than
  *   were recorded. Defaults to strict [MissPolicy.Error].
  * @param liveDelegate the relay used for branched/delegated calls. Required for
@@ -97,6 +108,9 @@ class PlaybackRelay(
     private val recordedCalls: List<RecordedModelCall> = trace.modelCalls(json)
     private val mutex = Mutex()
     private var nextCallIndex: Int = 0
+
+    /** The window this relay replays; call indices are positions within it. */
+    val window: ReplayWindow get() = trace.window
 
     /** The ordered recorded model calls this relay replays. */
     val recordedCallCount: Int get() = recordedCalls.size
@@ -150,7 +164,7 @@ class PlaybackRelay(
                 RoutingResolution.Success(configuration = fallbackConfiguration, reason = PLAYBACK_REASON),
             )
             missPolicy == MissPolicy.Delegate -> delegate(context, fallbackConfiguration, index)
-            else -> Result.failure(PlaybackMiss(index, recordedCalls.size))
+            else -> Result.failure(PlaybackMiss(index, recordedCalls.size, window))
         }
     }
 

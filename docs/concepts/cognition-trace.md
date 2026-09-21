@@ -29,6 +29,15 @@ and `OutcomeMemoryStore` by `run_id` and assembles an `ArcRunTrace`:
 - `MemoryWriteTrace`s for `KnowledgeStored` / `OutcomeRecorded`, with `MilestoneReached` persisted as a queryable checkpoint event rather than a memory write row.
 - `WattCost` per phase and per invocation, aggregated by `WattCostAggregator`.
 
+What the projection folds is a `ReplayWindow`, not a bare run id. Replay
+walks recorded model calls by call index, and a call-index sequence needs an
+end, so the window has to be bounded. In v1 the only window is
+`ReplayWindow.ArcRun(runId)`: the run id is how a window is currently
+identified, not what a window is. `ArcRunTrace.window`, `ArcRunHandle.window`,
+the eval `Trace.window` and `PlaybackRelay.window` all expose it (AMPR-285).
+A different window shape later (a turn window, say) is a new `ReplayWindow`
+variant, and doesn't quietly change what `runId` means.
+
 This is the glass brain made queryable. It is a *read model* — the trace
 is rebuilt from the underlying event and memory stores; it does not
 mutate them.
@@ -75,7 +84,7 @@ the projection that makes the run *legible*:
 
 ## Common operations
 
-- **Project one run** — `ArcTraceProjection.project(runId)`. Returns `Result<ArcRunTrace>`.
+- **Project one run** — `ArcTraceProjection.project(ReplayWindow.ArcRun(runId), arcId)`, or the `project(runId)` shorthand. Returns `Result<ArcRunTrace>`.
 - **Show run cost** — `arcRunTrace.phases.sumOf { it.wattCost }` (using `WattCost.plus`). For per-phase cost, read `phase.wattCost` directly.
 - **Add a new traced event** — give the event a `cognitivePhase` (where meaningful), persist it through the standard `EventLogger` chain, and (if needed) extend `phaseNameFor` and the relevant builder in `ArcTraceProjection`.
 - **Tag a memory write with a phase** — `MemoryWriteTrace.phaseName` is set by the projector based on the event type. `KnowledgeStored` → `LEARN`, `OutcomeRecorded` → `EXECUTE`. Override only by emitting a different event type, not by post-hoc patching.

@@ -10,6 +10,9 @@ typealias ArcRunId = RunId
 /** The Arc *configuration* identity (e.g. `"startup-saas"`) — distinct from a run instance. */
 typealias ArcId = String
 
+/**
+ * The projection of one [ReplayWindow] — in v1 always an Arc run, so [runId] identifies it.
+ */
 @Serializable
 data class ArcRunTrace(
     val runId: ArcRunId,
@@ -17,7 +20,10 @@ data class ArcRunTrace(
     val startedAt: Instant,
     val endedAt: Instant? = null,
     val phases: List<PropelPhase> = emptyList(),
-)
+) {
+    /** The window this trace covers. Derived from [runId]; not part of the serialized form. */
+    val window: ReplayWindow get() = ReplayWindow.ArcRun(runId)
+}
 
 @Serializable
 data class PropelPhase(

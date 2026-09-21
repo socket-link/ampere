@@ -2,6 +2,7 @@ package link.socket.ampere.eval.trace
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import link.socket.ampere.trace.ReplayWindow
 
 /**
  * A single captured bus event, frozen into an ordered, serializable form.
@@ -35,7 +36,8 @@ data class TraceEvent(
  * replayable event stream. Replay is handled by [TraceCursor].
  *
  * @property id unique identifier for this trace.
- * @property runId the run this trace was recorded for (see RECON-trace.md §3).
+ * @property runId the run this trace was recorded for (see RECON-trace.md §3) —
+ *   in v1, how the trace's [window] is identified.
  * @property arcId the orchestration pathway (Arc) this run belongs to.
  * @property createdAt epoch milliseconds when the trace was recorded.
  * @property events the captured events, in emission order.
@@ -52,6 +54,9 @@ data class Trace(
     val events: List<TraceEvent>,
     val droppedEventCount: Int = 0,
 ) {
+    /** The replay window this trace covers: in v1, the Arc run named by [runId]. Not serialized. */
+    val window: ReplayWindow get() = ReplayWindow.ArcRun(runId)
+
     /** Number of events in the trace. */
     val size: Int get() = events.size
 

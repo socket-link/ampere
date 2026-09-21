@@ -91,6 +91,20 @@ class ArcTraceProjectionTest {
     }
 
     @Test
+    fun `projecting a run window matches projecting its runId`() = runTest {
+        val runId = "run-trace-window"
+        val arcId = "startup-saas"
+
+        seedTrace(runId)
+
+        val byWindow = projection.project(ReplayWindow.ArcRun(runId), arcId = arcId).getOrThrow()
+        val byRunId = projection.project(runId = runId, arcId = arcId).getOrThrow()
+
+        assertEquals(byRunId, byWindow)
+        assertEquals(ReplayWindow.ArcRun(runId), byWindow.window)
+    }
+
+    @Test
     fun `call routed to a Free descriptor records zero Watts`() = runTest {
         val runId = "run-free-provider"
         // Keyed by the completed call's model id, since cost resolution is now
