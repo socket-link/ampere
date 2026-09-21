@@ -4,9 +4,11 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.domain.event.MemoryEvent
@@ -18,7 +20,9 @@ import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.domain.task.TaskId
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
+import link.socket.ampere.agents.events.EventEnvelope
 import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.StoredEvent
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.messages.MessageThreadId
@@ -53,6 +57,13 @@ class EventFilter<E : Event>(
  *
  * This facade hides event creation details and provides convenience publish/subscribe
  * methods that agents can call directly.
+ *
+ * This is the one door into the Field: [publish] persists the event inside its
+ * [EventEnvelope] and only then dispatches it on the bus. Every timestamp the door stamps
+ * comes from [clock], never from `Clock.System` directly, so tests can pin time.
+ *
+ * @property clock the time source for every event this api constructs. Public so the
+ * emission seam can read the same clock.
  */
 class AgentEventApi(
     val agentId: AgentId,
@@ -60,6 +71,7 @@ class AgentEventApi(
     internal val eventSerialBus: EventSerialBus,
     private val logger: EventLogger = ConsoleEventLogger(),
     milestoneTrackerState: MilestoneTrackerState = MilestoneTrackerState(),
+    val clock: Clock = Clock.System,
 ) {
     private val milestoneTracker = MilestoneTracker(this, milestoneTrackerState)
 
@@ -67,9 +79,28 @@ class AgentEventApi(
         milestoneTracker.start()
     }
 
-    /** Persist and publish a pre-constructed event. */
-    suspend fun publish(event: Event) {
-        eventRepository.saveEvent(event)
+    /**
+     * Persist [event] inside its envelope, then publish it on the bus.
+     *
+     * The bus dispatch only happens once the row is committed, and a persist failure is
+     * returned to the caller as well as logged — it is never swallowed (recon C59).
+     *
+     * @param causedBy the event whose handling produced this one, if any (F2).
+     * @param runId the Arc run this event belongs to (F4). Null falls back to the deprecated
+     * per-kind lookup in the repository until every publisher passes it.
+     * @return the [StoredEvent] as recorded, including its assigned `sequence`.
+     */
+    suspend fun publish(
+        event: Event,
+        causedBy: EventId? = null,
+        runId: RunId? = null,
+    ): Result<StoredEvent> =
+        eventRepository
+            .saveEvent(
+                event = event,
+                envelope = EventEnvelope(causedBy = causedBy, runId = runId),
+                recordedAt = clock.now(),
+            )
             .onSuccess {
                 eventSerialBus.publish(event)
             }
@@ -79,7 +110,6 @@ class AgentEventApi(
                     throwable = throwable,
                 )
             }
-    }
 
     /** Publish a TaskCreated event with auto-generated ID and current timestamp. */
     suspend fun publishTaskCreated(
@@ -87,18 +117,20 @@ class AgentEventApi(
         urgency: Urgency,
         description: String,
         assignedTo: AgentId? = null,
+        causedBy: EventId? = null,
+        runId: RunId? = null,
     ) {
         val event = Event.TaskCreated(
             eventId = generateUUID(taskId, agentId),
             urgency = urgency,
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             eventSource = EventSource.Agent(agentId),
             taskId = taskId,
             description = description,
             assignedTo = assignedTo,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     /** Publish a QuestionRaised event with auto-generated ID and current timestamp. */
@@ -106,17 +138,19 @@ class AgentEventApi(
         urgency: Urgency,
         questionText: String,
         context: String,
+        causedBy: EventId? = null,
+        runId: RunId? = null,
     ) {
         val event = Event.QuestionRaised(
             eventId = generateUUID(agentId),
             urgency = urgency,
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             eventSource = EventSource.Agent(agentId),
             questionText = questionText,
             context = context,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     /** Publish a CodeSubmitted event with auto-generated ID and current timestamp. */
@@ -126,11 +160,13 @@ class AgentEventApi(
         changeDescription: String,
         reviewRequired: Boolean = false,
         assignedTo: AgentId? = null,
+        causedBy: EventId? = null,
+        runId: RunId? = null,
     ) {
         val event = Event.CodeSubmitted(
             eventId = generateUUID(agentId),
             urgency = urgency,
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             eventSource = EventSource.Agent(agentId),
             filePath = filePath,
             changeDescription = changeDescription,
@@ -138,7 +174,7 @@ class AgentEventApi(
             assignedTo = assignedTo,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     /**
@@ -151,10 +187,12 @@ class AgentEventApi(
         reason: String,
         context: Map<String, String> = emptyMap(),
         urgency: Urgency = Urgency.HIGH,
+        causedBy: EventId? = null,
+        runId: RunId? = null,
     ) {
         val event = MessageEvent.EscalationRequested(
             eventId = generateUUID(threadId, agentId),
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             eventSource = EventSource.Agent(agentId),
             threadId = threadId,
             reason = reason,
@@ -162,7 +200,7 @@ class AgentEventApi(
             urgency = urgency,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     /** Subscribe to TaskCreated events. */
@@ -312,18 +350,20 @@ class AgentEventApi(
         taskId: TaskId,
         workspace: ExecutionWorkspace? = null,
         urgency: Urgency = Urgency.LOW,
+        causedBy: EventId? = null,
+        runId: RunId? = null,
     ) {
         val event = TaskEvent.TaskStarted(
             eventId = generateUUID(taskId, agentId),
             taskId = taskId,
             eventSource = EventSource.Agent(agentId),
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             assignedTo = agentId,
             workspace = workspace,
             urgency = urgency,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     /** Publish a TaskProgressed event for measurable progress on a task. */
@@ -332,18 +372,20 @@ class AgentEventApi(
         description: String,
         progress: Float? = null,
         urgency: Urgency = Urgency.LOW,
+        causedBy: EventId? = null,
+        runId: RunId? = null,
     ) {
         val event = TaskEvent.TaskProgressed(
             eventId = generateUUID(taskId, agentId),
             taskId = taskId,
             eventSource = EventSource.Agent(agentId),
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             description = description,
             progress = progress,
             urgency = urgency,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     /** Publish a TaskCompleted event when a task finishes successfully. */
@@ -353,19 +395,20 @@ class AgentEventApi(
         taskType: String? = null,
         runId: String? = null,
         urgency: Urgency = Urgency.MEDIUM,
+        causedBy: EventId? = null,
     ) {
         val event = TaskEvent.TaskCompleted(
             eventId = generateUUID(taskId, agentId),
             taskId = taskId,
             eventSource = EventSource.Agent(agentId),
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             summary = summary,
             taskType = taskType,
             runId = runId,
             urgency = urgency,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     /** Publish a TaskFailed event when a task cannot be completed. */
@@ -374,18 +417,19 @@ class AgentEventApi(
         reason: String,
         runId: String? = null,
         urgency: Urgency = Urgency.HIGH,
+        causedBy: EventId? = null,
     ) {
         val event = TaskEvent.TaskFailed(
             eventId = generateUUID(taskId, agentId),
             taskId = taskId,
             eventSource = EventSource.Agent(agentId),
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             reason = reason,
             runId = runId,
             urgency = urgency,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     /**
@@ -399,10 +443,11 @@ class AgentEventApi(
         runId: String? = null,
         milestoneId: String = generateUUID("milestone", agentId),
         urgency: Urgency = Urgency.MEDIUM,
+        causedBy: EventId? = null,
     ) {
         val event = MemoryEvent.MilestoneReached(
             eventId = generateUUID(milestoneId, agentId),
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             eventSource = EventSource.Agent(agentId),
             agentId = agentId,
             milestoneId = milestoneId,
@@ -414,7 +459,7 @@ class AgentEventApi(
             urgency = urgency,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     /** Publish a TaskBlocked event when a task is blocked by another task. */
@@ -423,18 +468,20 @@ class AgentEventApi(
         blockedByTaskId: TaskId,
         reason: String,
         urgency: Urgency = Urgency.MEDIUM,
+        causedBy: EventId? = null,
+        runId: RunId? = null,
     ) {
         val event = TaskEvent.TaskBlocked(
             eventId = generateUUID(taskId, agentId),
             taskId = taskId,
             eventSource = EventSource.Agent(agentId),
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             blockedByTaskId = blockedByTaskId,
             reason = reason,
             urgency = urgency,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     /** Publish a SubtaskCreated event when a task is decomposed. */
@@ -445,12 +492,14 @@ class AgentEventApi(
         assignedTo: AgentId? = null,
         workspace: ExecutionWorkspace? = null,
         urgency: Urgency = Urgency.LOW,
+        causedBy: EventId? = null,
+        runId: RunId? = null,
     ) {
         val event = TaskEvent.SubtaskCreated(
             eventId = generateUUID(subtaskId, agentId),
             taskId = parentTaskId,
             eventSource = EventSource.Agent(agentId),
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             subtaskId = subtaskId,
             description = description,
             assignedTo = assignedTo,
@@ -458,7 +507,7 @@ class AgentEventApi(
             urgency = urgency,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     // ==================== Task Lifecycle Subscription Methods ====================
@@ -543,11 +592,13 @@ class AgentEventApi(
         requiredAutonomy: AgentActionAutonomy,
         mcpServerId: String? = null,
         urgency: Urgency = Urgency.LOW,
+        causedBy: EventId? = null,
+        runId: RunId? = null,
     ) {
         val event = ToolEvent.ToolRegistered(
             eventId = generateUUID(toolId, agentId),
             urgency = urgency,
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             eventSource = EventSource.Agent(agentId),
             toolId = toolId,
             toolName = toolName,
@@ -556,7 +607,7 @@ class AgentEventApi(
             mcpServerId = mcpServerId,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     /** Publish a ToolUnregistered event with auto-generated ID and current timestamp. */
@@ -566,11 +617,13 @@ class AgentEventApi(
         reason: String,
         mcpServerId: String? = null,
         urgency: Urgency = Urgency.MEDIUM,
+        causedBy: EventId? = null,
+        runId: RunId? = null,
     ) {
         val event = ToolEvent.ToolUnregistered(
             eventId = generateUUID(toolId, agentId),
             urgency = urgency,
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             eventSource = EventSource.Agent(agentId),
             toolId = toolId,
             toolName = toolName,
@@ -578,7 +631,7 @@ class AgentEventApi(
             mcpServerId = mcpServerId,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     /** Publish a ToolDiscoveryComplete event with auto-generated ID and current timestamp. */
@@ -588,11 +641,13 @@ class AgentEventApi(
         mcpToolCount: Int,
         mcpServerCount: Int,
         urgency: Urgency = Urgency.LOW,
+        causedBy: EventId? = null,
+        runId: RunId? = null,
     ) {
         val event = ToolEvent.ToolDiscoveryComplete(
             eventId = generateUUID(agentId),
             urgency = urgency,
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             eventSource = EventSource.Agent(agentId),
             totalToolsDiscovered = totalToolsDiscovered,
             functionToolCount = functionToolCount,
@@ -600,7 +655,7 @@ class AgentEventApi(
             mcpServerCount = mcpServerCount,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     // ==================== Tool Event Subscription Methods ====================
@@ -654,10 +709,12 @@ class AgentEventApi(
         permission: PlugPermission,
         reason: PermissionDeniedReason,
         urgency: Urgency = Urgency.HIGH,
+        causedBy: EventId? = null,
+        runId: RunId? = null,
     ) {
         val event = PermissionDeniedEvent(
             eventId = generateUUID("permission-denied", plugId, toolId, agentId),
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             eventSource = EventSource.Agent(agentId),
             urgency = urgency,
             plugId = plugId,
@@ -667,7 +724,7 @@ class AgentEventApi(
             reason = reason,
         )
 
-        publish(event)
+        publish(event, causedBy = causedBy, runId = runId)
     }
 
     fun onPermissionDenied(

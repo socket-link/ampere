@@ -27,6 +27,7 @@ import link.socket.ampere.agents.domain.emission.inputDigest
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.events.EventEnvelope
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
@@ -157,18 +158,65 @@ class EventRepositoryTest {
     }
 
     @Test
-    fun querySinceReturnsAscending() {
+    fun `query since returns persisted order and keeps same-timestamp events in insert order`() {
         runBlocking {
+            val sameInstant = Instant.fromEpochSeconds(2_000)
             val t1 = sampleTask(id = "evt-1", ts = Instant.fromEpochSeconds(1_000))
-            val t2 = sampleTask(id = "evt-2", ts = Instant.fromEpochSeconds(3_000))
-            val q1 = sampleQuestion(id = "evt-3", ts = Instant.fromEpochSeconds(2_000))
+            val q1 = sampleQuestion(id = "evt-3", ts = sameInstant)
+            val t2 = sampleTask(id = "evt-2", ts = sameInstant)
             repo.saveEvent(t1)
-            repo.saveEvent(t2)
             repo.saveEvent(q1)
+            repo.saveEvent(t2)
 
+            // `timestamp` filters; `sequence` orders. Two rows at the same millisecond used to
+            // have undefined order (recon C4); now they come back as they were persisted.
             val since = repo.getEventsSince(Instant.fromEpochSeconds(1_500)).getOrNull()
             assertNotNull(since)
             assertEquals(listOf("evt-3", "evt-2"), since.map { it.eventId })
+        }
+    }
+
+    @Test
+    fun `saveEvent assigns increasing sequences and defaults recorded_at to the event timestamp`() {
+        runBlocking {
+            val first = repo.saveEvent(sampleTask(id = "evt-1", ts = Instant.fromEpochSeconds(1_000))).getOrThrow()
+            val second = repo.saveEvent(sampleTask(id = "evt-2", ts = Instant.fromEpochSeconds(1_000))).getOrThrow()
+
+            assertEquals(1L, first.sequence)
+            assertEquals(2L, second.sequence)
+            assertEquals(Instant.fromEpochSeconds(1_000), first.recordedAt)
+            assertEquals(null, first.causedBy)
+
+            val sinceSecond = repo.getEventsSinceSequence(2L).getOrThrow()
+            assertEquals(listOf("evt-2"), sinceSecond.map { it.event.eventId })
+            assertEquals(2L, sinceSecond.single().sequence)
+        }
+    }
+
+    @Test
+    fun `saveEvent stores the envelope and getEventsCausedBy reads it back`() {
+        runBlocking {
+            val parent = repo.saveEvent(sampleTask(id = "evt-parent")).getOrThrow()
+            val recordedAt = Instant.fromEpochSeconds(9_000)
+            val child = repo.saveEvent(
+                event = sampleQuestion(id = "evt-child", ts = Instant.fromEpochSeconds(1_000)),
+                envelope = EventEnvelope(causedBy = parent.event.eventId, runId = "run-explicit"),
+                recordedAt = recordedAt,
+            ).getOrThrow()
+
+            assertEquals("evt-parent", child.causedBy)
+            assertEquals("run-explicit", child.runId)
+            assertEquals(recordedAt, child.recordedAt)
+            assertEquals(Instant.fromEpochSeconds(1_000), child.event.timestamp)
+
+            val causedBy = repo.getEventsCausedBy("evt-parent").getOrThrow()
+            assertEquals(listOf("evt-child"), causedBy.map { it.event.eventId })
+            assertEquals(recordedAt, causedBy.single().recordedAt)
+
+            val row = database.eventStoreQueries.getEventById("evt-child").executeAsOne()
+            assertEquals("evt-parent", row.caused_by)
+            assertEquals("run-explicit", row.run_id)
+            assertEquals(recordedAt.toEpochMilliseconds(), row.recorded_at)
         }
     }
 
@@ -356,7 +404,7 @@ class EventRepositoryTest {
     }
 
     @Test
-    fun `getEventsWithFilters returns events in chronological order`() {
+    fun `getEventsWithFilters returns events in persisted order not timestamp order`() {
         runBlocking {
             val t1 = Instant.fromEpochSeconds(100)
             val t2 = Instant.fromEpochSeconds(200)
@@ -367,7 +415,7 @@ class EventRepositoryTest {
             repo.saveEvent(sampleTask(id = "evt-last", ts = t3))
             repo.saveEvent(sampleTask(id = "evt-first", ts = t1))
 
-            // Query should return in chronological order (ascending)
+            // The time range filters; the fold order (`sequence`) is the order they were saved in.
             val result = repo.getEventsWithFilters(
                 fromTime = t1,
                 toTime = t3,
@@ -375,9 +423,9 @@ class EventRepositoryTest {
 
             assertNotNull(result)
             assertEquals(3, result.size)
-            assertEquals("evt-first", result[0].eventId)
-            assertEquals("evt-middle", result[1].eventId)
-            assertEquals("evt-last", result[2].eventId)
+            assertEquals("evt-middle", result[0].eventId)
+            assertEquals("evt-last", result[1].eventId)
+            assertEquals("evt-first", result[2].eventId)
         }
     }
 }

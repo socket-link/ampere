@@ -166,6 +166,42 @@ class DatabaseSchemaManagerTest {
     }
 
     @Test
+    fun `migrating from v3 numbers legacy events by timestamp and stamps recorded_at`() {
+        // A v3 database: run_id and Links present, none of the envelope columns yet.
+        val path = legacyDatabase { driver ->
+            Database.Schema.migrate(driver, 1, 3)
+            for ((id, timestamp) in listOf("evt-middle" to 2_000L, "evt-last" to 3_000L, "evt-first" to 1_000L)) {
+                driver.execute(
+                    null,
+                    "INSERT INTO EventStore (event_id, event_type, source_id, timestamp, payload) " +
+                        "VALUES ('$id', 'TaskCreated', 'agent-A', $timestamp, '{}')",
+                    0,
+                )
+            }
+        }
+
+        fileDriver(path).use { driver ->
+            assertEquals(3L, DatabaseSchemaManager.inferLegacyVersion(driver))
+            assertEquals(
+                SchemaState.Migrated(from = 3, to = schemaVersion),
+                DatabaseSchemaManager.ensure(driver).getOrThrow(),
+            )
+
+            val bySequence = query(driver, "SELECT event_id, sequence FROM EventStore ORDER BY sequence") {
+                it.getString(0)!! to it.getLong(1)!!
+            }
+            assertEquals(listOf("evt-first" to 1L, "evt-middle" to 2L, "evt-last" to 3L), bySequence)
+            assertEquals(3, bySequence.map { it.second }.toSet().size)
+            assertEquals(
+                listOf(3L),
+                query(driver, "SELECT COUNT(*) FROM EventStore WHERE recorded_at = timestamp") { it.getLong(0)!! },
+            )
+            assertTrue("idx_event_sequence" in indexes(driver, "EventStore"))
+            assertTrue("idx_event_caused_by" in indexes(driver, "EventStore"))
+        }
+    }
+
+    @Test
     fun `failed migration leaves the legacy database untouched`() {
         // 1.sqm alters OutcomeMemoryStore last, so without it the migration fails partway through.
         val path = legacyDatabase { driver -> driver.execute(null, "DROP TABLE OutcomeMemoryStore", 0) }
@@ -218,6 +254,9 @@ class DatabaseSchemaManagerTest {
     private fun tableExists(driver: SqlDriver, table: String): Boolean =
         query(driver, "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '$table'") { true }
             .isNotEmpty()
+
+    private fun indexes(driver: SqlDriver, table: String): List<String> =
+        query(driver, "SELECT name FROM pragma_index_list('$table')") { it.getString(0)!! }
 
     private fun columns(driver: SqlDriver, table: String): List<String> =
         query(driver, "SELECT name FROM pragma_table_info('$table') ORDER BY cid") { it.getString(0)!! }

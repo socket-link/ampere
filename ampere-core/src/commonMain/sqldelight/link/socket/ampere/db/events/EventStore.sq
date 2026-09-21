@@ -4,89 +4,116 @@ CREATE TABLE EventStore (
   source_id TEXT NOT NULL,
   timestamp INTEGER NOT NULL,
   payload TEXT NOT NULL,
-  run_id TEXT
+  run_id TEXT,
+  sequence INTEGER NOT NULL DEFAULT 0,
+  caused_by TEXT,
+  recorded_at INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX idx_event_type ON EventStore(event_type);
 CREATE INDEX idx_timestamp ON EventStore(timestamp);
 CREATE INDEX idx_event_run_id ON EventStore(run_id);
+CREATE UNIQUE INDEX idx_event_sequence ON EventStore(sequence);
+CREATE INDEX idx_event_caused_by ON EventStore(caused_by);
 
 -- Queries
+--
+-- `sequence` is the fold order. Every list query orders by it; `timestamp` remains a filter
+-- column only, so same-millisecond events keep a defined order.
+
+nextSequence:
+SELECT COALESCE(MAX(sequence), 0) + 1
+FROM EventStore;
 
 insertEvent:
-INSERT INTO EventStore(event_id, event_type, source_id, timestamp, payload)
-VALUES (?, ?, ?, ?, ?);
-
-insertEventWithRunId:
-INSERT INTO EventStore(event_id, event_type, source_id, timestamp, payload, run_id)
-VALUES (?, ?, ?, ?, ?, ?);
+INSERT INTO EventStore(event_id, event_type, source_id, timestamp, payload, run_id, sequence, caused_by, recorded_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 getAllEvents:
-SELECT event_id, event_type, source_id, timestamp, payload, run_id
+SELECT *
 FROM EventStore
-ORDER BY timestamp DESC;
+ORDER BY sequence DESC;
 
 getEventsByType:
-SELECT event_id, event_type, source_id, timestamp, payload, run_id
+SELECT *
 FROM EventStore
 WHERE event_type = ?
-ORDER BY timestamp DESC;
+ORDER BY sequence DESC;
 
 getEventsSince:
-SELECT event_id, event_type, source_id, timestamp, payload, run_id
+SELECT *
 FROM EventStore
 WHERE timestamp >= ?
-ORDER BY timestamp ASC;
+ORDER BY sequence ASC;
+
+getEventsSinceSequence:
+SELECT *
+FROM EventStore
+WHERE sequence >= ?
+ORDER BY sequence ASC;
+
+getEventsBySequenceRange:
+SELECT *
+FROM EventStore
+WHERE sequence >= :fromSequence AND sequence <= :toSequence
+ORDER BY sequence ASC;
+
+getEventsCausedBy:
+SELECT *
+FROM EventStore
+WHERE caused_by = ?
+ORDER BY sequence ASC;
 
 getEventById:
-SELECT event_id, event_type, source_id, timestamp, payload, run_id
+SELECT *
 FROM EventStore
 WHERE event_id = ?
 LIMIT 1;
 
 getEventsBetween:
-SELECT event_id, event_type, source_id, timestamp, payload, run_id
+SELECT *
 FROM EventStore
 WHERE timestamp >= ? AND timestamp <= ?
-ORDER BY timestamp ASC;
+ORDER BY sequence ASC;
 
 getEventsByRunId:
-SELECT event_id, event_type, source_id, timestamp, payload, run_id
+SELECT *
 FROM EventStore
 WHERE run_id = ?
-ORDER BY timestamp ASC;
+ORDER BY sequence ASC;
 
+-- Legacy rows stored run_id as NULL for most event kinds, so the payload match keeps them reachable.
 getEventsByRunIdOrPayload:
-SELECT event_id, event_type, source_id, timestamp, payload, run_id
+SELECT *
 FROM EventStore
 WHERE run_id = :run_id
    OR payload LIKE '%' || :run_id || '%'
-ORDER BY timestamp ASC;
+ORDER BY sequence ASC;
 
 -- Query events with event type filter
 getEventsBetweenWithEventTypes:
-SELECT event_id, event_type, source_id, timestamp, payload, run_id
+SELECT *
 FROM EventStore
 WHERE timestamp >= :fromTime
   AND timestamp <= :toTime
   AND event_type IN :eventTypes
-ORDER BY timestamp ASC;
+ORDER BY sequence ASC;
 
 -- Query events with source ID filter
 getEventsBetweenWithSourceIds:
-SELECT event_id, event_type, source_id, timestamp, payload, run_id
+SELECT *
 FROM EventStore
 WHERE timestamp >= :fromTime
   AND timestamp <= :toTime
   AND source_id IN :sourceIds
-ORDER BY timestamp ASC;
+ORDER BY sequence ASC;
 
 -- Query events with both event type and source ID filters
 getEventsBetweenWithBothFilters:
-SELECT event_id, event_type, source_id, timestamp, payload, run_id
+SELECT *
 FROM EventStore
 WHERE timestamp >= :fromTime
   AND timestamp <= :toTime
   AND event_type IN :eventTypes
   AND source_id IN :sourceIds
-ORDER BY timestamp ASC;
+ORDER BY sequence ASC;

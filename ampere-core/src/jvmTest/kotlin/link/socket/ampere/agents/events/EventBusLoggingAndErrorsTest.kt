@@ -162,6 +162,10 @@ class EventBusLoggingAndErrorsTest {
                 source_id = "agent-X",
                 timestamp = 1L,
                 payload = "{ this is not valid json }",
+                run_id = null,
+                sequence = 1L,
+                caused_by = null,
+                recorded_at = 1L,
             )
 
             val history = runCatching {
