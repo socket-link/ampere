@@ -428,7 +428,8 @@ class AmpereRuntimeTest {
 
     @Test
     fun `manifest survives cancellation of the caller-owned scope even when the sink suspends`() =
-        runBlocking {
+        // Explicit Unit: the block ends in `assertNotNull`, and JUnit rejects a non-void @Test.
+        runBlocking<Unit> {
             val recorded = CompletableDeferred<CompletionManifest>()
             val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
             val runtime = longRunningRuntime(
