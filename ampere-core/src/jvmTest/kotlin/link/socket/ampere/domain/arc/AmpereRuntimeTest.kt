@@ -464,7 +464,7 @@ class AmpereRuntimeTest {
 
     /** Real dispatchers: the second request has to land while the first run is genuinely in flight. */
     @Test
-    fun `a run requested mid flight is refused with a typed rejection`() = runBlocking {
+    fun `a run requested mid flight is refused with a typed rejection`() = runBlocking<Unit> {
         val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         try {
             val runtime = AmpereRuntime(

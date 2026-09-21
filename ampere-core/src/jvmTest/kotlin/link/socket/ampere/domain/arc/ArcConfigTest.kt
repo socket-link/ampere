@@ -170,7 +170,8 @@ class ArcConfigTest {
     fun `ArcConcurrencyPolicy serializes to lowercase in YAML`() {
         ArcConcurrencyPolicy.entries.forEach { policy ->
             val yamlString = yaml.encodeToString(ArcConcurrencyPolicy.serializer(), policy)
-            assertEquals(policy.name.lowercase(), yamlString.trim())
+            // kaml quotes scalar strings, so compare the unquoted value.
+            assertEquals(policy.name.lowercase(), yamlString.trim().trim('"'))
         }
     }
 
