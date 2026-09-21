@@ -127,11 +127,12 @@ data class QualityState(
     }
 
     companion object {
-        val blank = QualityState(
-            outcome = Outcome.blank,
-            task = Task.Blank,
-            plan = Plan.blank,
-        )
+        val blank: QualityState
+            get() = QualityState(
+                outcome = Outcome.blank,
+                task = Task.Blank,
+                plan = Plan.blank,
+            )
     }
 }
 

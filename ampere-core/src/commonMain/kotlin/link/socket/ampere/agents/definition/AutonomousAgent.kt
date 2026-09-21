@@ -2,9 +2,14 @@ package link.socket.ampere.agents.definition
 
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
@@ -250,8 +255,34 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
 
     // ==================== Agent State ====================
 
+    // Lazy because [initialState] is typically a subclass constructor property,
+    // which is not yet assigned while this base class initializes.
+    private val stateRevisions: MutableStateFlow<StateRevision<S>> by lazy {
+        MutableStateFlow(StateRevision(initialState))
+    }
+
+    final override val stateFlow: StateFlow<S> by lazy {
+        RevisionedStateFlow(stateRevisions.asStateFlow())
+    }
+
+    private inline fun updateState(update: S.() -> Unit) {
+        val currentState = getCurrentState()
+        currentState.update()
+        // The state is mutated in place, so re-assigning the same instance would be
+        // conflated away; a fresh revision guarantees collectors see every update.
+        stateRevisions.value = StateRevision(currentState)
+    }
+
+    override fun rememberNewIdea(idea: Idea) = updateState { setNewIdea(idea) }
+
+    override fun rememberNewOutcome(outcome: Outcome) = updateState { setNewOutcome(outcome) }
+
+    override fun rememberNewPerception(perception: Perception<*>) = updateState { setNewPerception(perception) }
+
+    override fun rememberNewPlan(plan: Plan) = updateState { setNewPlan(plan) }
+
     override fun rememberNewTask(task: Task) {
-        super<Agent>.rememberNewTask(task)
+        updateState { setNewTask(task) }
 
         if (task is Task.Blank) {
             return
@@ -260,13 +291,25 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         applyTaskSparkIfMissing(task)
     }
 
+    override fun finishCurrentIdea() = updateState { setNewIdea(Idea.blank) }
+
+    override fun finishCurrentOutcome() = updateState { setNewOutcome(Outcome.blank) }
+
+    override fun finishCurrentPerception() = updateState { setNewPerception(Perception.blank) }
+
+    override fun finishCurrentPlan() = updateState { setNewPlan(Plan.blank) }
+
     override fun finishCurrentTask() {
         val currentTask = getCurrentState().getCurrentMemory().task
         if (currentTask !is Task.Blank) {
             removeTaskSpark(currentTask.id)
         }
-        super<Agent>.finishCurrentTask()
+        updateState { setNewTask(Task.blank) }
     }
+
+    override fun resetCurrentMemory() = updateState { resetCurrentMemoryCell() }
+
+    override fun resetPastMemory() = updateState { resetPastMemoryCell() }
 
     private var agentIsRunning = false
     private var agentRuntimeScope: CoroutineScope? = null
@@ -669,4 +712,30 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         onSparkRemoved(removed)
         return removed
     }
+}
+
+/**
+ * One published version of an agent's state. Deliberately not a data class: identity
+ * equality makes every revision distinct, even though [state] is the same mutable instance.
+ */
+private class StateRevision<S>(val state: S)
+
+/**
+ * Read-only [StateFlow] view that emits the agent's state once per [StateRevision].
+ *
+ * Consecutive emissions may be the same (mutated) state instance, unlike a plain
+ * [MutableStateFlow], which would conflate them.
+ */
+@OptIn(ExperimentalForInheritanceCoroutinesApi::class)
+private class RevisionedStateFlow<S>(
+    private val revisions: StateFlow<StateRevision<S>>,
+) : StateFlow<S> {
+    override val value: S
+        get() = revisions.value.state
+
+    override val replayCache: List<S>
+        get() = revisions.replayCache.map { it.state }
+
+    override suspend fun collect(collector: FlowCollector<S>): Nothing =
+        revisions.collect { collector.emit(it.state) }
 }

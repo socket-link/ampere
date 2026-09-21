@@ -110,17 +110,18 @@ data class ProjectState(
         /**
          * Returns an empty state for initialization.
          */
-        val blank = ProjectState(
-            outcome = Outcome.blank,
-            task = Task.Blank,
-            plan = Plan.blank,
-            activeGoals = emptyList(),
-            workBreakdowns = emptyList(),
-            taskAssignments = emptyMap(),
-            createdIssues = emptyList(),
-            blockedTasks = emptyList(),
-            pendingEscalations = emptyList(),
-        )
+        val blank: ProjectState
+            get() = ProjectState(
+                outcome = Outcome.blank,
+                task = Task.Blank,
+                plan = Plan.blank,
+                activeGoals = emptyList(),
+                workBreakdowns = emptyList(),
+                taskAssignments = emptyMap(),
+                createdIssues = emptyList(),
+                blockedTasks = emptyList(),
+                pendingEscalations = emptyList(),
+            )
     }
 }
 

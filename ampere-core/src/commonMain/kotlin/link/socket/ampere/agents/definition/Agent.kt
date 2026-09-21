@@ -2,9 +2,7 @@ package link.socket.ampere.agents.definition
 
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import link.socket.ampere.agents.config.AgentConfiguration
@@ -259,11 +257,12 @@ sealed interface Agent<S : AgentState> {
         }
     }
 
-    private val _stateFlow: MutableStateFlow<S>
-        get() = MutableStateFlow(initialState)
-
+    /**
+     * This agent's state, emitted once per state update. The state object is mutated in
+     * place, so consecutive emissions may be the same instance. Implementations must return
+     * the same flow on every access.
+     */
     val stateFlow: StateFlow<S>
-        get() = _stateFlow.asStateFlow()
 
     fun getCurrentState(): S = stateFlow.value
     fun getAIModel(): AIModel = agentConfiguration.aiConfiguration.model
@@ -298,76 +297,18 @@ sealed interface Agent<S : AgentState> {
         pastPerceptions.plus(currentPerception)
     }
 
-    fun rememberNewIdea(idea: Idea) {
-        val currentState = getCurrentState()
-        currentState.setNewIdea(idea)
-        _stateFlow.value = currentState
-    }
-
-    fun rememberNewOutcome(outcome: Outcome) {
-        val currentState = getCurrentState()
-        currentState.setNewOutcome(outcome)
-        _stateFlow.value = currentState
-    }
-
-    fun rememberNewPerception(perception: Perception<*>) {
-        val currentState = getCurrentState()
-        currentState.setNewPerception(perception)
-        _stateFlow.value = currentState
-    }
-
-    fun rememberNewPlan(plan: Plan) {
-        val currentState = getCurrentState()
-        currentState.setNewPlan(plan)
-        _stateFlow.value = currentState
-    }
-
-    fun rememberNewTask(task: Task) {
-        val currentState = getCurrentState()
-        currentState.setNewTask(task)
-        _stateFlow.value = currentState
-    }
-
-    fun finishCurrentIdea() {
-        val currentState = getCurrentState()
-        currentState.setNewIdea(Idea.blank)
-        _stateFlow.value = currentState
-    }
-
-    fun finishCurrentOutcome() {
-        val currentState = getCurrentState()
-        currentState.setNewOutcome(Outcome.blank)
-        _stateFlow.value = currentState
-    }
-
-    fun finishCurrentPerception() {
-        val currentState = getCurrentState()
-        currentState.setNewPerception(Perception.blank)
-    }
-
-    fun finishCurrentPlan() {
-        val currentState = getCurrentState()
-        currentState.setNewPlan(Plan.blank)
-        _stateFlow.value = currentState
-    }
-
-    fun finishCurrentTask() {
-        val currentState = getCurrentState()
-        currentState.setNewTask(Task.blank)
-        _stateFlow.value = currentState
-    }
-
-    fun resetCurrentMemory() {
-        val currentState = getCurrentState()
-        currentState.resetCurrentMemoryCell()
-        _stateFlow.value = currentState
-    }
-
-    fun resetPastMemory() {
-        val currentState = getCurrentState()
-        currentState.resetPastMemoryCell()
-        _stateFlow.value = currentState
-    }
+    fun rememberNewIdea(idea: Idea)
+    fun rememberNewOutcome(outcome: Outcome)
+    fun rememberNewPerception(perception: Perception<*>)
+    fun rememberNewPlan(plan: Plan)
+    fun rememberNewTask(task: Task)
+    fun finishCurrentIdea()
+    fun finishCurrentOutcome()
+    fun finishCurrentPerception()
+    fun finishCurrentPlan()
+    fun finishCurrentTask()
+    fun resetCurrentMemory()
+    fun resetPastMemory()
 
     fun resetAllMemory() {
         resetCurrentMemory()
