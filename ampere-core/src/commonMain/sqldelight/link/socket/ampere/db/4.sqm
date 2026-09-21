@@ -1,0 +1,52 @@
+-- The original 1.sqm added KnowledgeStore.run_id with ADD COLUMN, which can only append, so
+-- Android and iOS databases that ran it have run_id last instead of between timestamp and
+-- idea_id. Every `SELECT *` knowledge read maps columns by position, so on those databases each
+-- column after timestamp silently reads its neighbour's value. 1.sqm has since been rewritten,
+-- but SQLite never re-runs a migration below the stored user_version, so rebuild the table here.
+--
+-- Columns are copied by name, so this is correct for either physical order; on a database that
+-- is already in declared order it is a plain copy. rowids are kept so the KnowledgeFts
+-- external-content index still points at the right rows. The FTS triggers go with the old table;
+-- FtsSchema.install recreates them on open. KnowledgeTag rows survive because no driver enables
+-- foreign_keys, so DROP TABLE doesn't cascade.
+--
+-- Cost: O(rows) — the equivalent rebuild in 1.sqm took under two minutes on the 1.1 GB,
+-- ~1M-row CLI database.
+CREATE TABLE KnowledgeStore_v2 (
+    id TEXT PRIMARY KEY NOT NULL,
+    knowledge_type TEXT NOT NULL,
+    approach TEXT NOT NULL,
+    learnings TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    run_id TEXT,
+    idea_id TEXT,
+    outcome_id TEXT,
+    perception_id TEXT,
+    plan_id TEXT,
+    task_id TEXT,
+    task_type TEXT,
+    complexity_level TEXT
+);
+
+INSERT INTO KnowledgeStore_v2 (
+    rowid, id, knowledge_type, approach, learnings, timestamp, run_id,
+    idea_id, outcome_id, perception_id, plan_id, task_id, task_type, complexity_level
+)
+SELECT
+    rowid, id, knowledge_type, approach, learnings, timestamp, run_id,
+    idea_id, outcome_id, perception_id, plan_id, task_id, task_type, complexity_level
+FROM KnowledgeStore;
+
+DROP TABLE KnowledgeStore;
+
+ALTER TABLE KnowledgeStore_v2 RENAME TO KnowledgeStore;
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_type ON KnowledgeStore(knowledge_type);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_timestamp ON KnowledgeStore(timestamp DESC);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_run_id ON KnowledgeStore(run_id);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_task_type ON KnowledgeStore(task_type);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_complexity ON KnowledgeStore(complexity_level);
