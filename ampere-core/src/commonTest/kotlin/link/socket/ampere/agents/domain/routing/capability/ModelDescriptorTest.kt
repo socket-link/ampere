@@ -84,7 +84,7 @@ class ModelDescriptorTest {
         // A LOW-reasoning model must not satisfy a HIGH requirement — the model
         // tier is evaluated directly, not its provider's best model (AMPR-214).
         val haiku = opus.copy(
-            modelName = AIModel_Claude.Haiku_3.name,
+            modelName = AIModel_Claude.Haiku_4_5.name,
             reasoning = RelativeReasoning.LOW,
         )
         assertFalse(haiku.satisfies(CapabilityRequirement(minReasoning = RelativeReasoning.HIGH)))
@@ -179,8 +179,8 @@ class ModelDescriptorTest {
         assertEquals(RelativeReasoning.HIGH, opusDescriptor.reasoning)
         assertEquals(AIProvider_Anthropic.id, opusDescriptor.providerId)
 
-        val haikuDescriptor = assertNotNull(registry.descriptorFor(AIModel_Claude.Haiku_3.name))
-        assertEquals(RelativeReasoning.LOW, haikuDescriptor.reasoning)
+        val flashLiteDescriptor = assertNotNull(registry.descriptorFor(AIModel_Gemini.Flash_Lite_2_5.name))
+        assertEquals(RelativeReasoning.LOW, flashLiteDescriptor.reasoning)
 
         // Gemini's 1M window projects through ModelLimits, not a provider default.
         val proDescriptor = assertNotNull(registry.descriptorFor(AIModel_Gemini.Pro_2_5.name))

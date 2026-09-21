@@ -10,7 +10,7 @@ import kotlinx.serialization.Serializable
  * ```yaml
  * ai:
  *   provider: anthropic
- *   model: sonnet-4
+ *   model: sonnet-5
  *   backups:
  *     - provider: openai
  *       model: gpt-4.1

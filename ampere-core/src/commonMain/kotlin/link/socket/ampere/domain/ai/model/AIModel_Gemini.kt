@@ -46,22 +46,6 @@ sealed class AIModel_Gemini(
         limits = _2_5_Flash_Lite_LIMITS,
     )
 
-    data object Flash_2_0 : AIModel_Gemini(
-        name = _2_0_Flash_NAME,
-        displayName = _2_0_Flash_DISPLAY_NAME,
-        description = _2_0_Flash_DESCRIPTION,
-        features = _2_0_Flash_FEATURES,
-        limits = _2_0_Flash_LIMITS,
-    )
-
-    data object Flash_Lite_2_0 : AIModel_Gemini(
-        name = _2_0_Flash_Lite_NAME,
-        displayName = _2_0_Flash_Lite_DISPLAY_NAME,
-        description = _2_0_Flash_Lite_DESCRIPTION,
-        features = _2_0_Flash_Lite_FEATURES,
-        limits = _2_0_Flash_Lite_LIMITS,
-    )
-
     data object Pro_3_1_Preview : AIModel_Gemini(
         name = _3_1_Pro_Preview_NAME,
         displayName = _3_1_Pro_Preview_DISPLAY_NAME,
@@ -108,13 +92,6 @@ sealed class AIModel_Gemini(
         private val _2_5_Flash_TOOLS: List<ProvidedTool<AITool_Gemini>> = _2_5_Pro_TOOLS
         private val _2_5_Flash_Lite_TOOLS: List<ProvidedTool<AITool_Gemini>> = _2_5_Flash_TOOLS
 
-        private val _2_0_Flash_TOOLS: List<ProvidedTool<AITool_Gemini>> = listOf(
-            ProvidedTool.CodeExecution(AITool_Gemini.CodeExecution),
-            ProvidedTool.WebSearch(AITool_Gemini.WebSearch),
-        )
-
-        private val _2_0_Flash_Lite_TOOLS = emptyList<ProvidedTool<AITool_Gemini>>()
-
         private val _3_1_Pro_Preview_TOOLS: List<ProvidedTool<AITool_Gemini>> = _2_5_Pro_TOOLS
         private val _3_8_Flash_TOOLS: List<ProvidedTool<AITool_Gemini>> = _2_5_Pro_TOOLS
 
@@ -147,24 +124,6 @@ sealed class AIModel_Gemini(
         private const val TIER_3_2_5_FLASH_LITE_RPM = 30000
         private val TIER_3_2_5_FLASH_LITE_RPD = null
 
-        private const val TIER_FREE_2_0_FLASH_RPM = 15
-        private const val TIER_FREE_2_0_FLASH_RPD = 200
-        private const val TIER_1_2_0_FLASH_RPM = 2000
-        private val TIER_1_2_0_FLASH_RPD = null
-        private const val TIER_2_2_0_FLASH_RPM = 10000
-        private val TIER_2_2_0_FLASH_RPD = null
-        private const val TIER_3_2_0_FLASH_RPM = 30000
-        private val TIER_3_2_0_FLASH_RPD = null
-
-        private const val TIER_FREE_2_0_FLASH_LITE_RPM = 30
-        private const val TIER_FREE_2_0_FLASH_LITE_RPD = 200
-        private const val TIER_1_2_0_FLASH_LITE_RPM = 4000
-        private val TIER_1_2_0_FLASH_LITE_RPD = null
-        private const val TIER_2_2_0_FLASH_LITE_RPM = 20000
-        private val TIER_2_2_0_FLASH_LITE_RPD = null
-        private const val TIER_3_2_0_FLASH_LITE_RPM = 30000
-        private val TIER_3_2_0_FLASH_LITE_RPD = null
-
         private val _2_5_Pro_RateLimitsFactory = RateLimitsFactory(
             tierFreeRequestLimits = Pair(TIER_FREE_2_5_PRO_RPM, TIER_FREE_2_5_PRO_RPD),
             tier1RequestLimits = Pair(TIER_1_2_5_PRO_RPM, TIER_1_2_5_PRO_RPD),
@@ -184,20 +143,6 @@ sealed class AIModel_Gemini(
             tier1RequestLimits = Pair(TIER_1_2_5_FLASH_LITE_RPM, TIER_1_2_5_FLASH_LITE_RPD),
             tier2RequestLimits = Pair(TIER_2_2_5_FLASH_LITE_RPM, TIER_2_2_5_FLASH_LITE_RPD),
             tier3RequestLimits = Pair(TIER_3_2_5_FLASH_LITE_RPM, TIER_3_2_5_FLASH_LITE_RPD),
-        )
-
-        private val _2_0_Flash_RateLimitsFactory = RateLimitsFactory(
-            tierFreeRequestLimits = Pair(TIER_FREE_2_0_FLASH_RPM, TIER_FREE_2_0_FLASH_RPD),
-            tier1RequestLimits = Pair(TIER_1_2_0_FLASH_RPM, TIER_1_2_0_FLASH_RPD),
-            tier2RequestLimits = Pair(TIER_2_2_0_FLASH_RPM, TIER_2_2_0_FLASH_RPD),
-            tier3RequestLimits = Pair(TIER_3_2_0_FLASH_RPM, TIER_3_2_0_FLASH_RPD),
-        )
-
-        private val _2_0_Flash_Lite_RateLimitsFactory = RateLimitsFactory(
-            tierFreeRequestLimits = Pair(TIER_FREE_2_0_FLASH_LITE_RPM, TIER_FREE_2_0_FLASH_LITE_RPD),
-            tier1RequestLimits = Pair(TIER_1_2_0_FLASH_LITE_RPM, TIER_1_2_0_FLASH_LITE_RPD),
-            tier2RequestLimits = Pair(TIER_2_2_0_FLASH_LITE_RPM, TIER_2_2_0_FLASH_LITE_RPD),
-            tier3RequestLimits = Pair(TIER_3_2_0_FLASH_LITE_RPM, TIER_3_2_0_FLASH_LITE_RPD),
         )
 
         private val _2_5_Pro_RATE_LIMITS = _2_5_Pro_RateLimitsFactory.createRateLimits(
@@ -221,22 +166,10 @@ sealed class AIModel_Gemini(
             tier3TPM = TokenCount._30m,
         )
 
-        private val _2_0_Flash_RATE_LIMITS = _2_0_Flash_RateLimitsFactory.createRateLimits(
-            tierFreeTPM = TokenCount._1m,
-            tier1TPM = TokenCount._4m,
-            tier2TPM = TokenCount._10m,
-            tier3TPM = TokenCount._30m,
-        )
-
-        private val _2_0_Flash_Lite_RATE_LIMITS = _2_0_Flash_Lite_RateLimitsFactory.createRateLimits(
-            tierFreeTPM = TokenCount._1m,
-            tier1TPM = TokenCount._4m,
-            tier2TPM = TokenCount._10m,
-            tier3TPM = TokenCount._30m,
-        )
-
-        // Google no longer publishes per-tier interactive limits for Gemini 3.x
-        // (they live in AI Studio), so these carry the 2.5 Pro / Flash figures.
+        // Google publishes no per-model RPM/TPM/RPD for any model any more —
+        // the rate-limits page says limits are account-specific and only visible
+        // in AI Studio. These carry the 2.5 Pro / Flash figures as an
+        // approximation; treat them as a hint, not Google's contract.
         private val _3_1_Pro_Preview_RATE_LIMITS = _2_5_Pro_RATE_LIMITS
         private val _3_8_Flash_RATE_LIMITS = _2_5_Flash_RATE_LIMITS
 
@@ -251,13 +184,6 @@ sealed class AIModel_Gemini(
 
         private val _2_5_Flash_TOKEN_LIMITS = _2_5_Pro_TOKEN_LIMITS
         private val _2_5_Flash_Lite_TOKEN_LIMITS = _2_5_Pro_TOKEN_LIMITS
-
-        private val _2_0_Flash_TOKEN_LIMITS = TokenLimits(
-            contextWindow = CONTEXT_WINDOW_TOKENS,
-            maxOutput = TokenCount._8192,
-        )
-
-        private val _2_0_Flash_Lite_TOKEN_LIMITS = _2_0_Flash_TOKEN_LIMITS
 
         private val _3_1_Pro_Preview_TOKEN_LIMITS = TokenLimits(
             contextWindow = CONTEXT_WINDOW_TOKENS,
@@ -281,16 +207,6 @@ sealed class AIModel_Gemini(
         private val _2_5_Flash_Lite_LIMITS = ModelLimits(
             rate = _2_5_Flash_Lite_RATE_LIMITS,
             token = _2_5_Flash_Lite_TOKEN_LIMITS,
-        )
-
-        private val _2_0_Flash_LIMITS = ModelLimits(
-            rate = _2_0_Flash_RATE_LIMITS,
-            token = _2_0_Flash_TOKEN_LIMITS,
-        )
-
-        private val _2_0_Flash_Lite_LIMITS = ModelLimits(
-            rate = _2_0_Flash_Lite_RATE_LIMITS,
-            token = _2_0_Flash_Lite_TOKEN_LIMITS,
         )
 
         private val _3_1_Pro_Preview_LIMITS = ModelLimits(
@@ -317,17 +233,6 @@ sealed class AIModel_Gemini(
         private val _2_5_Flash_CUTOFF = _2_5_Pro_CUTOFF
         private val _2_5_Flash_Lite_CUTOFF = _2_5_Flash_CUTOFF
 
-        private val _2_0_Flash_CUTOFF = GMTDate(
-            year = 2024,
-            month = Month.AUGUST,
-            dayOfMonth = 1,
-            hours = 0,
-            minutes = 0,
-            seconds = 0,
-        )
-
-        private val _2_0_Flash_Lite_CUTOFF = _2_0_Flash_CUTOFF
-
         // Google's Gemini 3 guide gives January 2025 for "Gemini 3 models"; the
         // 3.8 Flash model page lists no cutoff of its own.
         private val _3_1_Pro_Preview_CUTOFF = GMTDate(
@@ -351,8 +256,6 @@ sealed class AIModel_Gemini(
             video = true,
         )
         private val _2_5_Flash_Lite_SUPPORTED_INPUTS = _2_5_Pro_SUPPORTED_INPUTS
-        private val _2_0_Flash_SUPPORTED_INPUTS = _2_5_Flash_SUPPORTED_INPUTS
-        private val _2_0_Flash_Lite_SUPPORTED_INPUTS = _2_0_Flash_SUPPORTED_INPUTS
 
         private val _3_1_Pro_Preview_SUPPORTED_INPUTS = SupportedInputs.ALL
         private val _3_8_Flash_SUPPORTED_INPUTS = SupportedInputs.ALL
@@ -381,22 +284,6 @@ sealed class AIModel_Gemini(
             speed = RelativeSpeed.FAST,
             supportedInputs = _2_5_Flash_Lite_SUPPORTED_INPUTS,
             trainingCutoffDate = _2_5_Flash_Lite_CUTOFF,
-        )
-
-        private val _2_0_Flash_FEATURES = AIModelFeatures(
-            availableTools = _2_0_Flash_TOOLS,
-            reasoningLevel = RelativeReasoning.NORMAL,
-            speed = RelativeSpeed.FAST,
-            supportedInputs = _2_0_Flash_SUPPORTED_INPUTS,
-            trainingCutoffDate = _2_0_Flash_CUTOFF,
-        )
-
-        private val _2_0_Flash_Lite_FEATURES = AIModelFeatures(
-            availableTools = _2_0_Flash_Lite_TOOLS,
-            reasoningLevel = RelativeReasoning.LOW,
-            speed = RelativeSpeed.FAST,
-            supportedInputs = _2_0_Flash_Lite_SUPPORTED_INPUTS,
-            trainingCutoffDate = _2_0_Flash_Lite_CUTOFF,
         )
 
         private val _3_1_Pro_Preview_FEATURES = AIModelFeatures(
@@ -437,18 +324,6 @@ sealed class AIModel_Gemini(
             "A Gemini 2.5 Flash model optimized for cost-efficiency and " +
                 "high throughput."
 
-        private const val _2_0_Flash_NAME = "gemini-2.0-flash"
-        private const val _2_0_Flash_DISPLAY_NAME = "Gemini 2.0 Flash"
-        private const val _2_0_Flash_DESCRIPTION =
-            "Gemini 2.0 Flash delivers next-gen features and improved " +
-                "capabilities, including superior speed, native tool use, and a 1M token context window."
-
-        private const val _2_0_Flash_Lite_NAME = "gemini-2.0-flash-lite"
-        private const val _2_0_Flash_Lite_DISPLAY_NAME = "Gemini 2.0 Flash Lite"
-        private const val _2_0_Flash_Lite_DESCRIPTION =
-            "A Gemini 2.0 Flash model optimized for cost efficiency and " +
-                "low latency."
-
         private const val _3_1_Pro_Preview_NAME = "gemini-3.1-pro-preview"
         private const val _3_1_Pro_Preview_DISPLAY_NAME = "Gemini 3.1 Pro (Preview)"
         private const val _3_1_Pro_Preview_DESCRIPTION =
@@ -474,8 +349,6 @@ sealed class AIModel_Gemini(
                 Pro_2_5,
                 Flash_2_5,
                 Flash_Lite_2_5,
-                Flash_2_0,
-                Flash_Lite_2_0,
                 Pro_3_1_Preview,
                 Flash_3_8,
             )

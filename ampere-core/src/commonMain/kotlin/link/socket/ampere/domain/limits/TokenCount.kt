@@ -29,10 +29,13 @@ enum class TokenCount(val label: String) {
     _160k("160k"),
     _200k("200k"),
     _250k("250k"),
+    _300k("300k"),
     _400k("400k"),
     _450k("450k"),
+    _500k("500k"),
     _800k("800k"),
     _1m("1 million"),
+    _1_5m("1.5 million"),
     _2m("2 million"),
     _3m("3 million"),
     _4m("4 million"),
@@ -46,7 +49,7 @@ enum class TokenCount(val label: String) {
     _400m("400 million"),
     _500m("500 million"),
     _1b("1 billion"),
-    _5b("50 billion"),
+    _5b("5 billion"),
 }
 
 /**
@@ -79,10 +82,13 @@ val TokenCount.numericValue: Long
         TokenCount._160k -> 160_000L
         TokenCount._200k -> 200_000L
         TokenCount._250k -> 250_000L
+        TokenCount._300k -> 300_000L
         TokenCount._400k -> 400_000L
         TokenCount._450k -> 450_000L
+        TokenCount._500k -> 500_000L
         TokenCount._800k -> 800_000L
         TokenCount._1m -> 1_000_000L
+        TokenCount._1_5m -> 1_500_000L
         TokenCount._2m -> 2_000_000L
         TokenCount._3m -> 3_000_000L
         TokenCount._4m -> 4_000_000L

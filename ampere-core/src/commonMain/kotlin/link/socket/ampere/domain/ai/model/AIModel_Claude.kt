@@ -7,7 +7,6 @@ import io.ktor.util.date.Month
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeSpeed
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs
-import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs.Companion.TEXT_AND_IMAGE
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs.Companion.TEXT_IMAGE_AND_PDF
 import link.socket.ampere.domain.limits.ModelLimits
 import link.socket.ampere.domain.limits.RateLimitsFactory
@@ -16,6 +15,14 @@ import link.socket.ampere.domain.limits.TokenLimits
 import link.socket.ampere.domain.tool.AITool_Claude
 import link.socket.ampere.domain.tool.ProvidedTool
 
+/**
+ * The Claude models Ampere ships an entry for.
+ *
+ * Only models Anthropic still serves are listed. Retired IDs are removed rather
+ * than kept as documentation — a model in this catalog is a model the relay may
+ * route to, and routing to a retired ID can only fail (AMPR-326). Use [Custom]
+ * to address a model that has no entry here.
+ */
 sealed class AIModel_Claude(
     override val name: String,
     override val displayName: String,
@@ -23,67 +30,6 @@ sealed class AIModel_Claude(
     override val features: AIModelFeatures,
     override val limits: ModelLimits,
 ) : AIModel(name, displayName, description, features, limits) {
-
-    data object Opus_4_1 : AIModel_Claude(
-        name = Opus_4_1_NAME,
-        displayName = Opus_4_1_DISPLAY_NAME,
-        description = Opus_4_1_DESCRIPTION,
-        features = Opus_4_1_FEATURES,
-        limits = Opus_4_1_LIMITS,
-    )
-
-    data object Opus_4 : AIModel_Claude(
-        name = Opus_4_NAME,
-        displayName = Opus_4_DISPLAY_NAME,
-        description = Opus_4_DESCRIPTION,
-        features = Opus_4_FEATURES,
-        limits = Opus_4_LIMITS,
-    )
-
-    /** Retired by Anthropic on 2026-06-15; requests for `claude-sonnet-4-0` fail. Use [Sonnet_5]. */
-    data object Sonnet_4 : AIModel_Claude(
-        name = Sonnet_4_NAME,
-        displayName = Sonnet_4_DISPLAY_NAME,
-        description = Sonnet_4_DESCRIPTION,
-        features = featuresForSonnet(
-            availableTools = Sonnet_4_TOOLS,
-            supportedInputs = Sonnet_4_SUPPORTED_INPUTS,
-            cutoffDate = Sonnet_4_CUTOFF,
-        ),
-        limits = Sonnet_4_LIMITS,
-    )
-
-    data object Sonnet_3_7 : AIModel_Claude(
-        name = Sonnet_3_7_NAME,
-        displayName = Sonnet_3_7_DISPLAY_NAME,
-        description = Sonnet_3_7_DESCRIPTION,
-        features = featuresForSonnet(
-            availableTools = Sonnet_3_7_TOOLS,
-            supportedInputs = Sonnet_3_7_SUPPORTED_INPUTS,
-            cutoffDate = Sonnet_3_7_CUTOFF,
-        ),
-        limits = Sonnet_3_7_LIMITS,
-    )
-
-    data object Haiku_3_5 : AIModel_Claude(
-        name = Haiku_3_5_NAME,
-        displayName = Haiku_3_5_DISPLAY_NAME,
-        description = Haiku_3_5_DESCRIPTION,
-        features = featuresForHaiku(
-            availableTools = Haiku_3_5_TOOLS,
-            supportedInputs = Haiku_3_5_SUPPORTED_INPUTS,
-            cutoffDate = Haiku_3_5_CUTOFF,
-        ),
-        limits = Haiku_3_5_LIMITS,
-    )
-
-    data object Haiku_3 : AIModel_Claude(
-        name = Haiku_3_NAME,
-        displayName = Haiku_3_DISPLAY_NAME,
-        description = Haiku_3_DESCRIPTION,
-        features = Haiku_3_FEATURES,
-        limits = Haiku_3_LIMITS,
-    )
 
     data object Opus_4_5 : AIModel_Claude(
         name = Opus_4_5_NAME,
@@ -129,7 +75,7 @@ sealed class AIModel_Claude(
             cutoffDate = Opus_4_6_CUTOFF,
             supportsSamplingParameters = true,
         ),
-        limits = CURRENT_GENERATION_OPUS_LIMITS,
+        limits = CURRENT_GENERATION_LIMITS,
     )
 
     data object Opus_4_7 : AIModel_Claude(
@@ -142,7 +88,7 @@ sealed class AIModel_Claude(
             cutoffDate = Opus_4_7_CUTOFF,
             supportsSamplingParameters = false,
         ),
-        limits = CURRENT_GENERATION_OPUS_LIMITS,
+        limits = CURRENT_GENERATION_LIMITS,
     )
 
     data object Opus_4_8 : AIModel_Claude(
@@ -155,7 +101,7 @@ sealed class AIModel_Claude(
             cutoffDate = Opus_4_8_CUTOFF,
             supportsSamplingParameters = false,
         ),
-        limits = CURRENT_GENERATION_OPUS_LIMITS,
+        limits = CURRENT_GENERATION_LIMITS,
     )
 
     data object Opus_5 : AIModel_Claude(
@@ -168,7 +114,7 @@ sealed class AIModel_Claude(
             cutoffDate = Opus_5_CUTOFF,
             supportsSamplingParameters = false,
         ),
-        limits = CURRENT_GENERATION_OPUS_LIMITS,
+        limits = CURRENT_GENERATION_LIMITS,
     )
 
     data object Sonnet_4_6 : AIModel_Claude(
@@ -181,7 +127,7 @@ sealed class AIModel_Claude(
             cutoffDate = Sonnet_4_6_CUTOFF,
             supportsSamplingParameters = true,
         ),
-        limits = CURRENT_GENERATION_SONNET_LIMITS,
+        limits = CURRENT_GENERATION_LIMITS,
     )
 
     data object Sonnet_5 : AIModel_Claude(
@@ -194,7 +140,7 @@ sealed class AIModel_Claude(
             cutoffDate = Sonnet_5_CUTOFF,
             supportsSamplingParameters = false,
         ),
-        limits = CURRENT_GENERATION_SONNET_LIMITS,
+        limits = CURRENT_GENERATION_LIMITS,
     )
 
     data object Fable_5_1 : AIModel_Claude(
@@ -207,7 +153,7 @@ sealed class AIModel_Claude(
             cutoffDate = Fable_5_1_CUTOFF,
             supportsSamplingParameters = false,
         ),
-        limits = CURRENT_GENERATION_OPUS_LIMITS,
+        limits = FABLE_LIMITS,
     )
 
     /**
@@ -231,112 +177,84 @@ sealed class AIModel_Claude(
 
         // ---- Tools ----
 
-        private val Opus_4_1_TOOLS: List<ProvidedTool<AITool_Claude>> = listOf(
+        private val STANDARD_TOOLS: List<ProvidedTool<AITool_Claude>> = listOf(
             ProvidedTool.Bash(AITool_Claude.Bash),
             ProvidedTool.CodeExecution(AITool_Claude.CodeExecution),
             ProvidedTool.TextEditor(AITool_Claude.TextEditor._4),
             ProvidedTool.WebSearch(AITool_Claude.WebSearch),
         )
-        private val Opus_4_TOOLS: List<ProvidedTool<AITool_Claude>> = Opus_4_1_TOOLS
-        private val Sonnet_4_TOOLS: List<ProvidedTool<AITool_Claude>> = Opus_4_TOOLS
 
-        private val Sonnet_3_7_TOOLS: List<ProvidedTool<AITool_Claude>> = listOf(
-            ProvidedTool.Bash(AITool_Claude.Bash),
-            ProvidedTool.CodeExecution(AITool_Claude.CodeExecution),
-            ProvidedTool.TextEditor(AITool_Claude.TextEditor._3_7),
-            ProvidedTool.WebSearch(AITool_Claude.WebSearch),
-        )
-
-        private val Haiku_3_5_TOOLS: List<ProvidedTool<AITool_Claude>> = listOf(
+        private val HAIKU_TOOLS: List<ProvidedTool<AITool_Claude>> = listOf(
             ProvidedTool.CodeExecution(AITool_Claude.CodeExecution),
             ProvidedTool.WebSearch(AITool_Claude.WebSearch),
         )
 
-        private val Haiku_3_TOOLS = emptyList<ProvidedTool<AITool_Claude>>()
-
-        private val Opus_4_5_TOOLS: List<ProvidedTool<AITool_Claude>> = Opus_4_1_TOOLS
-        private val Sonnet_4_5_TOOLS: List<ProvidedTool<AITool_Claude>> = Opus_4_TOOLS
-        private val Haiku_4_5_TOOLS: List<ProvidedTool<AITool_Claude>> = Haiku_3_5_TOOLS
-        private val CURRENT_GENERATION_TOOLS: List<ProvidedTool<AITool_Claude>> = Opus_4_1_TOOLS
+        private val Opus_4_5_TOOLS: List<ProvidedTool<AITool_Claude>> = STANDARD_TOOLS
+        private val Sonnet_4_5_TOOLS: List<ProvidedTool<AITool_Claude>> = STANDARD_TOOLS
+        private val Haiku_4_5_TOOLS: List<ProvidedTool<AITool_Claude>> = HAIKU_TOOLS
+        private val CURRENT_GENERATION_TOOLS: List<ProvidedTool<AITool_Claude>> = STANDARD_TOOLS
 
         // ---- Rate Limits ----
 
-        private const val TIER_FREE_RPM = 5
-        private const val TIER_1_RPM = 50
-        private const val TIER_2_RPM = 1000
-        private const val TIER_3_RPM = 2000
-        private const val TIER_4_RPM = 4000
+        // Anthropic's published tiers are Start / Build / Scale / Custom — there
+        // is no free tier on the API, and Custom publishes no numbers. They map
+        // onto tiers 1-3 here; tier 4+ is left unset rather than invented.
+        private const val TIER_START_RPM = 1000
+        private const val TIER_BUILD_RPM = 5000
+        private const val TIER_SCALE_RPM = 10000
+        private const val TIER_FABLE_BUILD_RPM = 2000
+        private const val TIER_FABLE_SCALE_RPM = 4000
 
-        private val rateLimitsFactory = RateLimitsFactory(
-            tierFreeRequestLimits = Pair(TIER_FREE_RPM, null),
-            tier1RequestLimits = Pair(TIER_1_RPM, null),
-            tier2RequestLimits = Pair(TIER_2_RPM, null),
-            tier3RequestLimits = Pair(TIER_3_RPM, null),
-            tier4RequestLimits = Pair(TIER_4_RPM, null),
+        private val standardRateLimitsFactory = RateLimitsFactory(
+            tier1RequestLimits = Pair(TIER_START_RPM, null),
+            tier2RequestLimits = Pair(TIER_BUILD_RPM, null),
+            tier3RequestLimits = Pair(TIER_SCALE_RPM, null),
         )
 
-        private val Opus_4_1_RATE_LIMITS = rateLimitsFactory.createSeparatedRateLimits(
-            tierFreeTPMs = TokenCount._10k to TokenCount._4k,
-            tier1TPMs = TokenCount._30k to TokenCount._8k,
-            tier2TPMs = TokenCount._450k to TokenCount._90k,
-            tier3TPMs = TokenCount._800k to TokenCount._160k,
-            tier4TPMs = TokenCount._2m to TokenCount._400k,
-        )
-        private val Opus_4_RATE_LIMITS = Opus_4_1_RATE_LIMITS
-        private val Sonnet_4_RATE_LIMITS = Opus_4_RATE_LIMITS
-
-        private val Sonnet_3_7_RATE_LIMITS = rateLimitsFactory.createSeparatedRateLimits(
-            tierFreeTPMs = TokenCount._10k to TokenCount._4k,
-            tier1TPMs = TokenCount._20k to TokenCount._8k,
-            tier2TPMs = TokenCount._40k to TokenCount._16k,
-            tier3TPMs = TokenCount._80k to TokenCount._32k,
-            tier4TPMs = TokenCount._200k to TokenCount._80k,
+        /**
+         * One published row covers Opus 5, Sonnet 5, Haiku 4.5 and the Opus 4.x
+         * / Sonnet 4.x pools. Limits are separate ITPM/OTPM, and for most models
+         * cached input reads don't count toward ITPM.
+         *
+         * These are per-*pool*, not per-model: traffic across Opus 4.8/4.7/4.6/
+         * 4.5 counts against one bucket, as does Sonnet 4.6/4.5. Opus 5 and
+         * Sonnet 5 each have their own.
+         */
+        private val STANDARD_RATE_LIMITS = standardRateLimitsFactory.createSeparatedRateLimits(
+            tier1TPMs = TokenCount._2m to TokenCount._400k,
+            tier2TPMs = TokenCount._5m to TokenCount._1m,
+            tier3TPMs = TokenCount._10m to TokenCount._2m,
         )
 
-        private val Haiku_3_5_RATE_LIMITS = rateLimitsFactory.createSeparatedRateLimits(
-            tierFreeTPMs = TokenCount._25k to TokenCount._5k,
-            tier1TPMs = TokenCount._50k to TokenCount._10k,
-            tier2TPMs = TokenCount._100k to TokenCount._20k,
-            tier3TPMs = TokenCount._200k to TokenCount._40k,
-            tier4TPMs = TokenCount._400k to TokenCount._80k,
+        /** Fable 5.x sits well below the rest, and pools across 5.1 and 5. */
+        private val FABLE_RATE_LIMITS = RateLimitsFactory(
+            tier1RequestLimits = Pair(TIER_START_RPM, null),
+            tier2RequestLimits = Pair(TIER_FABLE_BUILD_RPM, null),
+            tier3RequestLimits = Pair(TIER_FABLE_SCALE_RPM, null),
+        ).createSeparatedRateLimits(
+            tier1TPMs = TokenCount._500k to TokenCount._100k,
+            tier2TPMs = TokenCount._1_5m to TokenCount._300k,
+            tier3TPMs = TokenCount._4m to TokenCount._800k,
         )
-        private val Haiku_3_RATE_LIMITS = Haiku_3_5_RATE_LIMITS
-
-        private val Opus_4_5_RATE_LIMITS = Opus_4_1_RATE_LIMITS
-        private val Sonnet_4_5_RATE_LIMITS = Sonnet_4_RATE_LIMITS
-        private val Haiku_4_5_RATE_LIMITS = Haiku_3_5_RATE_LIMITS
-        private val CURRENT_GENERATION_OPUS_RATE_LIMITS = Opus_4_1_RATE_LIMITS
-        private val CURRENT_GENERATION_SONNET_RATE_LIMITS = Sonnet_4_RATE_LIMITS
 
         // ---- Token Limits ----
 
-        private val CONTEXT_WINDOW_TOKENS = TokenCount._200k
+        private val LEGACY_CONTEXT_WINDOW_TOKENS = TokenCount._200k
 
-        private val Opus_4_1_TOKEN_LIMITS = TokenLimits(
-            contextWindow = CONTEXT_WINDOW_TOKENS,
+        private val Opus_4_5_TOKEN_LIMITS = TokenLimits(
+            contextWindow = LEGACY_CONTEXT_WINDOW_TOKENS,
             maxOutput = TokenCount._32k,
         )
-        private val Opus_4_TOKEN_LIMITS = Opus_4_1_TOKEN_LIMITS
 
-        private val Sonnet_4_TOKEN_LIMITS = TokenLimits(
-            contextWindow = CONTEXT_WINDOW_TOKENS,
+        private val Sonnet_4_5_TOKEN_LIMITS = TokenLimits(
+            contextWindow = LEGACY_CONTEXT_WINDOW_TOKENS,
             maxOutput = TokenCount._64k,
         )
-        private val Sonnet_3_7_TOKEN_LIMITS = Sonnet_4_TOKEN_LIMITS
 
-        private val Haiku_3_5_TOKEN_LIMITS = TokenLimits(
-            contextWindow = CONTEXT_WINDOW_TOKENS,
-            maxOutput = TokenCount._8192,
+        private val Haiku_4_5_TOKEN_LIMITS = TokenLimits(
+            contextWindow = LEGACY_CONTEXT_WINDOW_TOKENS,
+            maxOutput = TokenCount._64k,
         )
-
-        private val Haiku_3_TOKEN_LIMITS = TokenLimits(
-            contextWindow = CONTEXT_WINDOW_TOKENS,
-            maxOutput = TokenCount._4096,
-        )
-
-        private val Opus_4_5_TOKEN_LIMITS = Opus_4_1_TOKEN_LIMITS
-        private val Sonnet_4_5_TOKEN_LIMITS = Sonnet_4_TOKEN_LIMITS
-        private val Haiku_4_5_TOKEN_LIMITS = Haiku_3_5_TOKEN_LIMITS
 
         // 1M context and 128K max output (synchronous Messages API) across the
         // 4.6 generation onward.
@@ -347,101 +265,34 @@ sealed class AIModel_Claude(
 
         // ---- Limits ----
 
-        private val Opus_4_1_LIMITS = ModelLimits(
-            rate = Opus_4_1_RATE_LIMITS,
-            token = Opus_4_1_TOKEN_LIMITS,
-        )
-
-        private val Opus_4_LIMITS = ModelLimits(
-            rate = Opus_4_RATE_LIMITS,
-            token = Opus_4_TOKEN_LIMITS,
-        )
-
-        private val Sonnet_4_LIMITS = ModelLimits(
-            rate = Sonnet_4_RATE_LIMITS,
-            token = Sonnet_4_TOKEN_LIMITS,
-        )
-
-        private val Sonnet_3_7_LIMITS = ModelLimits(
-            rate = Sonnet_3_7_RATE_LIMITS,
-            token = Sonnet_3_7_TOKEN_LIMITS,
-        )
-
-        private val Haiku_3_5_LIMITS = ModelLimits(
-            rate = Haiku_3_5_RATE_LIMITS,
-            token = Haiku_3_5_TOKEN_LIMITS,
-        )
-
-        private val Haiku_3_LIMITS = ModelLimits(
-            rate = Haiku_3_RATE_LIMITS,
-            token = Haiku_3_TOKEN_LIMITS,
-        )
-
         private val Opus_4_5_LIMITS = ModelLimits(
-            rate = Opus_4_5_RATE_LIMITS,
+            rate = STANDARD_RATE_LIMITS,
             token = Opus_4_5_TOKEN_LIMITS,
         )
 
         private val Sonnet_4_5_LIMITS = ModelLimits(
-            rate = Sonnet_4_5_RATE_LIMITS,
+            rate = STANDARD_RATE_LIMITS,
             token = Sonnet_4_5_TOKEN_LIMITS,
         )
 
         private val Haiku_4_5_LIMITS = ModelLimits(
-            rate = Haiku_4_5_RATE_LIMITS,
+            rate = STANDARD_RATE_LIMITS,
             token = Haiku_4_5_TOKEN_LIMITS,
         )
 
-        private val CURRENT_GENERATION_OPUS_LIMITS = ModelLimits(
-            rate = CURRENT_GENERATION_OPUS_RATE_LIMITS,
+        private val CURRENT_GENERATION_LIMITS = ModelLimits(
+            rate = STANDARD_RATE_LIMITS,
             token = CURRENT_GENERATION_TOKEN_LIMITS,
         )
 
-        private val CURRENT_GENERATION_SONNET_LIMITS = ModelLimits(
-            rate = CURRENT_GENERATION_SONNET_RATE_LIMITS,
+        private val FABLE_LIMITS = ModelLimits(
+            rate = FABLE_RATE_LIMITS,
             token = CURRENT_GENERATION_TOKEN_LIMITS,
         )
 
         // ---- Training Cutoffs ----
 
-        private val Opus_4_1_CUTOFF = GMTDate(
-            year = 2025,
-            month = Month.MARCH,
-            dayOfMonth = 1,
-            hours = 0,
-            minutes = 0,
-            seconds = 0,
-        )
-
-        private val Opus_4_CUTOFF = Opus_4_1_CUTOFF
-        private val Sonnet_4_CUTOFF = Opus_4_CUTOFF
-
-        private val Sonnet_3_7_CUTOFF = GMTDate(
-            year = 2024,
-            month = Month.NOVEMBER,
-            dayOfMonth = 1,
-            hours = 0,
-            minutes = 0,
-            seconds = 0,
-        )
-
-        private val Haiku_3_5_CUTOFF = GMTDate(
-            year = 2024,
-            month = Month.JULY,
-            dayOfMonth = 1,
-            hours = 0,
-            minutes = 0,
-            seconds = 0,
-        )
-
-        private val Haiku_3_CUTOFF = GMTDate(
-            year = 2023,
-            month = Month.AUGUST,
-            dayOfMonth = 1,
-            hours = 0,
-            minutes = 0,
-            seconds = 0,
-        )
+        // Reliable knowledge cutoffs, per Anthropic's model pages.
 
         private val Opus_4_5_CUTOFF = GMTDate(
             year = 2025,
@@ -463,14 +314,12 @@ sealed class AIModel_Claude(
 
         private val Haiku_4_5_CUTOFF = GMTDate(
             year = 2025,
-            month = Month.OCTOBER,
+            month = Month.FEBRUARY,
             dayOfMonth = 1,
             hours = 0,
             minutes = 0,
             seconds = 0,
         )
-
-        // Reliable knowledge cutoffs, per Anthropic's model pages.
 
         private val Opus_4_6_CUTOFF = GMTDate(
             year = 2025,
@@ -530,35 +379,12 @@ sealed class AIModel_Claude(
 
         // ---- Supported Inputs ----
 
-        private val Opus_4_1_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
-        private val Opus_4_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
-        private val Sonnet_4_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
-        private val Sonnet_3_7_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
-        private val Haiku_3_5_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
-        private val Haiku_3_SUPPORTED_INPUTS = TEXT_AND_IMAGE
-
         private val Opus_4_5_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
         private val Sonnet_4_5_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
         private val Haiku_4_5_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
         private val CURRENT_GENERATION_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
 
         // ---- Model Features ----
-
-        private val Opus_4_1_FEATURES = AIModelFeatures(
-            availableTools = Opus_4_1_TOOLS,
-            reasoningLevel = RelativeReasoning.HIGH,
-            speed = RelativeSpeed.SLOW,
-            supportedInputs = Opus_4_1_SUPPORTED_INPUTS,
-            trainingCutoffDate = Opus_4_1_CUTOFF,
-        )
-
-        private val Opus_4_FEATURES = AIModelFeatures(
-            availableTools = Opus_4_TOOLS,
-            reasoningLevel = RelativeReasoning.HIGH,
-            speed = RelativeSpeed.SLOW,
-            supportedInputs = Opus_4_SUPPORTED_INPUTS,
-            trainingCutoffDate = Opus_4_CUTOFF,
-        )
 
         private val Opus_4_5_FEATURES = AIModelFeatures(
             availableTools = Opus_4_5_TOOLS,
@@ -611,63 +437,27 @@ sealed class AIModel_Claude(
             supportsSamplingParameters = supportsSamplingParameters,
         )
 
-        // Haiku 3 is older and weaker, so it gets LOW reasoning
-        private val Haiku_3_FEATURES = AIModelFeatures(
-            availableTools = Haiku_3_TOOLS,
-            reasoningLevel = RelativeReasoning.LOW,
-            speed = RelativeSpeed.FAST,
-            supportedInputs = Haiku_3_SUPPORTED_INPUTS,
-            trainingCutoffDate = Haiku_3_CUTOFF,
-        )
-
         // ---- Model Names ----
-
-        private const val Opus_4_1_NAME = "claude-opus-4-1"
-        private const val Opus_4_1_DISPLAY_NAME = "Claude Opus 4.1"
-        private const val Opus_4_1_DESCRIPTION = "Our most capable model. Highest level of intelligence and capability."
-
-        private const val Opus_4_NAME = "claude-opus-4-0"
-        private const val Opus_4_DISPLAY_NAME = "Claude Opus 4"
-        private const val Opus_4_DESCRIPTION = "Our previous flagship model. Very high intelligence and capability."
-
-        private const val Sonnet_4_NAME = "claude-sonnet-4-0"
-        private const val Sonnet_4_DISPLAY_NAME = "Claude Sonnet 4"
-        private const val Sonnet_4_DESCRIPTION = "High-performance model. High intelligence and balanced performance."
-
-        private const val Sonnet_3_7_NAME = "claude-3-7-sonnet-latest"
-        private const val Sonnet_3_7_DISPLAY_NAME = "Claude Sonnet 3.7"
-        private const val Sonnet_3_7_DESCRIPTION =
-            "High-performance model with early extended thinking. " +
-                "High intelligence with toggleable extended thinking."
-
-        private const val Haiku_3_5_NAME = "claude-3-5-haiku-latest"
-        private const val Haiku_3_5_DISPLAY_NAME = "Claude Haiku 3.5"
-        private const val Haiku_3_5_DESCRIPTION = "Our fastest model. Intelligence at blazing speeds."
-
-        private const val Haiku_3_NAME = "claude-3-haiku-20240307"
-        private const val Haiku_3_DISPLAY_NAME = "Claude Haiku 3"
-        private const val Haiku_3_DESCRIPTION =
-            "Fast and compact model for near-instant responsiveness. " +
-                "Quick and accurate targeted performance."
 
         private const val Opus_4_5_NAME = "claude-opus-4-5-20251101"
         private const val Opus_4_5_DISPLAY_NAME = "Claude Opus 4.5"
         private const val Opus_4_5_DESCRIPTION =
-            "Our newest flagship model setting new standards across coding, " +
-                "agents, computer use, and office tasks. Supports an effort " +
-                "parameter for trading compute/tokens for reasoning depth."
+            "Legacy Opus, strong across coding, agents, computer use, and " +
+                "office tasks. Supports an effort parameter for trading " +
+                "compute/tokens for reasoning depth."
 
         private const val Sonnet_4_5_NAME = "claude-sonnet-4-5-20250929"
         private const val Sonnet_4_5_DISPLAY_NAME = "Claude Sonnet 4.5"
         private const val Sonnet_4_5_DESCRIPTION =
-            "The best coding model in the world. Leads OSWorld at 61.4% and " +
-                "maintains concentration for 30+ hours on complex tasks. Features a 1M token context window."
+            "Legacy Sonnet, a strong coding model that maintains concentration " +
+                "for 30+ hours on complex tasks."
 
         private const val Haiku_4_5_NAME = "claude-haiku-4-5"
         private const val Haiku_4_5_DISPLAY_NAME = "Claude Haiku 4.5"
         private const val Haiku_4_5_DESCRIPTION =
-            "Near-frontier coding power at a fraction of the cost. Matches " +
-                "Claude Sonnet 4's performance on coding tasks while being faster and more affordable."
+            "The fastest model, with near-frontier intelligence at a fraction " +
+                "of the cost. Takes manual extended thinking (`budget_tokens`) " +
+                "rather than adaptive thinking."
 
         private const val Opus_4_6_NAME = "claude-opus-4-6"
         private const val Opus_4_6_DISPLAY_NAME = "Claude Opus 4.6"
@@ -711,20 +501,14 @@ sealed class AIModel_Claude(
 
         // ---- Models ----
 
-        // Lazy to avoid the JVM class-init cycle: if any data object (Opus_4_1, etc.)
+        // Lazy to avoid the JVM class-init cycle: if any data object (Opus_5, etc.)
         // is accessed before this companion finishes initializing, the companion's
         // <clinit> would see that object's INSTANCE as null and commit a list with
         // null entries. Lazy defers evaluation until the companion is fully set up.
         val ALL_MODELS by lazy {
             listOf(
-                Opus_4_1,
-                Opus_4,
                 Opus_4_5,
-                Sonnet_4,
-                Sonnet_3_7,
                 Sonnet_4_5,
-                Haiku_3_5,
-                Haiku_3,
                 Haiku_4_5,
                 Opus_4_6,
                 Opus_4_7,

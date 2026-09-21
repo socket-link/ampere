@@ -26,7 +26,7 @@ class UpstreamLlmClientTest {
         agentDefinition = WriteCodeAgent,
         aiConfiguration = AIConfiguration_Default(
             provider = AIProvider_Anthropic,
-            model = AIModel_Claude.Sonnet_4,
+            model = AIModel_Claude.Sonnet_4_6,
         ),
     )
 
@@ -53,7 +53,7 @@ class UpstreamLlmClientTest {
 
         assertEquals("canned-response-text", response)
         val captured = assertNotNull(recorder.lastRequest, "Custom client must be invoked")
-        assertEquals(AIModel_Claude.Sonnet_4.name, captured.model.id)
+        assertEquals(AIModel_Claude.Sonnet_4_6.name, captured.model.id)
         assertEquals(0.7, captured.temperature)
         assertEquals(256, captured.maxTokens)
         assertEquals(2, captured.messages.size)

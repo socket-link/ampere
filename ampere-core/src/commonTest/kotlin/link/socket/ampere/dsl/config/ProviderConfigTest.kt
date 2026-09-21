@@ -19,13 +19,13 @@ class ProviderConfigTest {
     fun `AnthropicConfig apiKey creates runtime provider with injected token`() {
         val configuration = AnthropicConfig(
             apiKey = "anthropic-runtime-key",
-            model = AIModel_Claude.Opus_4_1,
+            model = AIModel_Claude.Opus_5,
         ).toAIConfiguration()
 
         assertEquals("anthropic-runtime-key", configuration.provider.apiToken)
         assertEquals(AIProvider_Anthropic.id, configuration.provider.id)
         assertEquals(AIProvider_Anthropic.name, configuration.provider.name)
-        assertSame(AIModel_Claude.Opus_4_1, configuration.model)
+        assertSame(AIModel_Claude.Opus_5, configuration.model)
         assertNotSame(AIProvider_Anthropic, configuration.provider)
     }
 
@@ -59,7 +59,7 @@ class ProviderConfigTest {
 
     @Test
     fun `provider configs without apiKey keep singleton providers and preserve backup tokens`() {
-        val configuration = AnthropicConfig(model = AIModel_Claude.Sonnet_4)
+        val configuration = AnthropicConfig(model = AIModel_Claude.Sonnet_5)
             .withBackup(
                 OpenAIConfig(
                     apiKey = "backup-openai-key",

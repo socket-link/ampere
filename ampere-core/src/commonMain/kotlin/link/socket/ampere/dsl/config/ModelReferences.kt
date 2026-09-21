@@ -19,16 +19,10 @@ object Claude {
     val Opus4_7 = AIModel_Claude.Opus_4_7
     val Opus4_6 = AIModel_Claude.Opus_4_6
     val Opus4_5 = AIModel_Claude.Opus_4_5
-    val Opus4_1 = AIModel_Claude.Opus_4_1
-    val Opus4 = AIModel_Claude.Opus_4
     val Sonnet5 = AIModel_Claude.Sonnet_5
     val Sonnet4_6 = AIModel_Claude.Sonnet_4_6
     val Sonnet4_5 = AIModel_Claude.Sonnet_4_5
-    val Sonnet4 = AIModel_Claude.Sonnet_4
-    val Sonnet3_7 = AIModel_Claude.Sonnet_3_7
     val Haiku4_5 = AIModel_Claude.Haiku_4_5
-    val Haiku3_5 = AIModel_Claude.Haiku_3_5
-    val Haiku3 = AIModel_Claude.Haiku_3
 }
 
 /**
@@ -45,8 +39,6 @@ object GPT {
     val GPT5_4 = AIModel_OpenAI.GPT_5_4
     val GPT5_4_mini = AIModel_OpenAI.GPT_5_4_mini
     val GPT5_1 = AIModel_OpenAI.GPT_5_1
-    val GPT5_1_Instant = AIModel_OpenAI.GPT_5_1_Chat_Latest
-    val GPT5_1_CodexMax = AIModel_OpenAI.GPT_5_1_Codex_Max
     val GPT5 = AIModel_OpenAI.GPT_5
     val GPT5_mini = AIModel_OpenAI.GPT_5_mini
     val GPT5_nano = AIModel_OpenAI.GPT_5_nano
@@ -79,6 +71,4 @@ object Gemini {
     val Pro2_5 = AIModel_Gemini.Pro_2_5
     val Flash2_5 = AIModel_Gemini.Flash_2_5
     val Flash2_5_Lite = AIModel_Gemini.Flash_Lite_2_5
-    val Flash2 = AIModel_Gemini.Flash_2_0
-    val Flash2_Lite = AIModel_Gemini.Flash_Lite_2_0
 }

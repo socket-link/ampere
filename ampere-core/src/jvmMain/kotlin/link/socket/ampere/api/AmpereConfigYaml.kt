@@ -19,7 +19,7 @@ import link.socket.ampere.dsl.config.ProviderConfig
  * ```yaml
  * ai:
  *   provider: anthropic
- *   model: sonnet-4
+ *   model: sonnet-5
  *   # Optional. Prefer injecting from your runtime environment instead of committing secrets.
  *   apiKey: your-api-key
  *   backups:
@@ -86,16 +86,10 @@ private fun toClaudeModel(model: String): AIModel_Claude = when (model.lowercase
     "opus-4.7" -> AIModel_Claude.Opus_4_7
     "opus-4.6" -> AIModel_Claude.Opus_4_6
     "opus-4.5" -> AIModel_Claude.Opus_4_5
-    "opus-4.1" -> AIModel_Claude.Opus_4_1
-    "opus-4" -> AIModel_Claude.Opus_4
     "sonnet-5" -> AIModel_Claude.Sonnet_5
     "sonnet-4.6" -> AIModel_Claude.Sonnet_4_6
     "sonnet-4.5" -> AIModel_Claude.Sonnet_4_5
-    "sonnet-4" -> AIModel_Claude.Sonnet_4
-    "sonnet-3.7" -> AIModel_Claude.Sonnet_3_7
     "haiku-4.5" -> AIModel_Claude.Haiku_4_5
-    "haiku-3.5" -> AIModel_Claude.Haiku_3_5
-    "haiku-3" -> AIModel_Claude.Haiku_3
     else -> throw IllegalArgumentException("Unknown Claude model: $model")
 }
 
@@ -105,8 +99,6 @@ private fun toOpenAIModel(model: String): AIModel_OpenAI = when (model.lowercase
     "gpt-5.4" -> AIModel_OpenAI.GPT_5_4
     "gpt-5.4-mini" -> AIModel_OpenAI.GPT_5_4_mini
     "gpt-5.1" -> AIModel_OpenAI.GPT_5_1
-    "gpt-5.1-instant" -> AIModel_OpenAI.GPT_5_1_Chat_Latest
-    "gpt-5.1-codex-max" -> AIModel_OpenAI.GPT_5_1_Codex_Max
     "gpt-5" -> AIModel_OpenAI.GPT_5
     "gpt-5-mini" -> AIModel_OpenAI.GPT_5_mini
     "gpt-5-nano" -> AIModel_OpenAI.GPT_5_nano
@@ -126,7 +118,5 @@ private fun toGeminiModel(model: String): AIModel_Gemini = when (model.lowercase
     "pro-2.5" -> AIModel_Gemini.Pro_2_5
     "flash-2.5" -> AIModel_Gemini.Flash_2_5
     "flash-2.5-lite" -> AIModel_Gemini.Flash_Lite_2_5
-    "flash-2" -> AIModel_Gemini.Flash_2_0
-    "flash-2-lite" -> AIModel_Gemini.Flash_Lite_2_0
     else -> throw IllegalArgumentException("Unknown Gemini model: $model")
 }

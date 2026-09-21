@@ -15,7 +15,7 @@ class RoutingEventTest {
     fun `RouteSelected has correct event type`() {
         val decision = RoutingDecision(
             providerName = "Anthropic",
-            modelName = "claude-sonnet-4-0",
+            modelName = "claude-sonnet-5",
             matchedRule = "phase:EXECUTE",
         )
         val event = RoutingEvent.RouteSelected(
@@ -98,7 +98,7 @@ class RoutingEventTest {
             agentId = "agent-1",
             phase = CognitivePhase.EXECUTE,
             failedProvider = "Anthropic",
-            failedModel = "claude-sonnet-4-0",
+            failedModel = "claude-sonnet-5",
             fallbackDecision = fallbackDecision,
             failureReason = "API key invalid",
         )
@@ -124,7 +124,7 @@ class RoutingEventTest {
             agentId = "agent-1",
             phase = null,
             failedProvider = "Anthropic",
-            failedModel = "claude-sonnet-4-0",
+            failedModel = "claude-sonnet-5",
             fallbackDecision = fallbackDecision,
             failureReason = "rate limited",
         )
@@ -133,7 +133,7 @@ class RoutingEventTest {
             formatUrgency = { "[${it.name}]" },
             formatSource = { when (it) { is EventSource.Agent -> it.agentId; else -> "Unknown" } },
         )
-        assertTrue(summary.contains("Anthropic/claude-sonnet-4-0"))
+        assertTrue(summary.contains("Anthropic/claude-sonnet-5"))
         assertTrue(summary.contains("Google/gemini-2.5-flash"))
         assertTrue(summary.contains("rate limited"))
     }

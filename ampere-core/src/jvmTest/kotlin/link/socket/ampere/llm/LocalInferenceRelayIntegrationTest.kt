@@ -58,7 +58,7 @@ class LocalInferenceRelayIntegrationTest {
 
     // Anthropic stands in for the device-gated local provider: free, text-only,
     // no world knowledge.
-    private val localConfig = AIConfiguration_Default(AIProvider_Anthropic, AIModel_Claude.Sonnet_4)
+    private val localConfig = AIConfiguration_Default(AIProvider_Anthropic, AIModel_Claude.Sonnet_5)
 
     // Google stands in for the cloud "grid" provider: metered, full capabilities.
     private val gridConfig = AIConfiguration_Default(AIProvider_Google, AIModel_Gemini.Flash_2_5)
@@ -69,7 +69,7 @@ class LocalInferenceRelayIntegrationTest {
     private fun registry() = InMemoryModelDescriptorRegistry(
         seed = listOf(
             ModelDescriptor(
-                modelName = AIModel_Claude.Sonnet_4.name,
+                modelName = AIModel_Claude.Sonnet_5.name,
                 providerId = AIProvider_Anthropic.id,
                 capabilities = emptySet(),
                 reasoning = RelativeReasoning.LOW,
@@ -153,7 +153,7 @@ class LocalInferenceRelayIntegrationTest {
         assertEquals(1, routeSelections.size, "Expected exactly one RouteSelected event")
         val decision = (routeSelections.first() as RoutingEvent.RouteSelected).decision
         assertEquals(AIProvider_Anthropic.name, decision.providerName)
-        assertEquals(AIModel_Claude.Sonnet_4.name, decision.modelName)
+        assertEquals(AIModel_Claude.Sonnet_5.name, decision.modelName)
         assertEquals("capability:${AIProvider_Anthropic.id}", decision.matchedRule)
     }
 

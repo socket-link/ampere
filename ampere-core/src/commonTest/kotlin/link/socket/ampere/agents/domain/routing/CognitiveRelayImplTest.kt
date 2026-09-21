@@ -24,7 +24,7 @@ class CognitiveRelayImplTest {
 
     private val claudeConfig = AIConfiguration_Default(
         provider = AIProvider_Anthropic,
-        model = AIModel_Claude.Sonnet_4,
+        model = AIModel_Claude.Sonnet_5,
     )
 
     private val geminiConfig = AIConfiguration_Default(
@@ -68,7 +68,7 @@ class CognitiveRelayImplTest {
         val context = RoutingContext(phase = CognitivePhase.EXECUTE)
         val result = relay.resolve(context, openaiConfig)
 
-        assertEquals(AIModel_Claude.Sonnet_4, result.model)
+        assertEquals(AIModel_Claude.Sonnet_5, result.model)
     }
 
     @Test
@@ -85,7 +85,7 @@ class CognitiveRelayImplTest {
         val context = RoutingContext(phase = CognitivePhase.LEARN)
         val result = relay.resolve(context, openaiConfig)
 
-        assertEquals(AIModel_Claude.Sonnet_4, result.model)
+        assertEquals(AIModel_Claude.Sonnet_5, result.model)
     }
 
     @Test
@@ -170,7 +170,7 @@ class CognitiveRelayImplTest {
 
         // After hot-swap: routes to Claude
         val after = relay.resolve(context, openaiConfig)
-        assertEquals(AIModel_Claude.Sonnet_4, after.model)
+        assertEquals(AIModel_Claude.Sonnet_5, after.model)
     }
 
     @Test
@@ -182,7 +182,7 @@ class CognitiveRelayImplTest {
         val context = RoutingContext(phase = CognitivePhase.PERCEIVE)
         val result = relay.resolve(context, claudeConfig)
 
-        assertEquals(AIModel_Claude.Sonnet_4, result.model)
+        assertEquals(AIModel_Claude.Sonnet_5, result.model)
     }
 
     @Test
@@ -202,7 +202,7 @@ class CognitiveRelayImplTest {
             agentRole = "CodeAgent",
             phase = CognitivePhase.PERCEIVE,
         )
-        assertEquals(AIModel_Claude.Sonnet_4, relay.resolve(codeContext, openaiConfig).model)
+        assertEquals(AIModel_Claude.Sonnet_5, relay.resolve(codeContext, openaiConfig).model)
 
         // Phase rule matches for non-CodeAgent
         val perceiveContext = RoutingContext(

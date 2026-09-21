@@ -34,7 +34,7 @@ class CognitiveRelayCapabilityTest {
     // Anthropic stands in for the local provider: text-only, no world knowledge.
     private val localConfig = AIConfiguration_Default(
         provider = AIProvider_Anthropic,
-        model = AIModel_Claude.Sonnet_4,
+        model = AIModel_Claude.Sonnet_5,
     )
 
     // Google stands in for the cloud "grid" provider: full capabilities.
@@ -52,7 +52,7 @@ class CognitiveRelayCapabilityTest {
     private val registry = InMemoryModelDescriptorRegistry(
         seed = listOf(
             ModelDescriptor(
-                modelName = AIModel_Claude.Sonnet_4.name,
+                modelName = AIModel_Claude.Sonnet_5.name,
                 providerId = AIProvider_Anthropic.id,
                 capabilities = emptySet(),
                 reasoning = RelativeReasoning.LOW,
@@ -106,7 +106,7 @@ class CognitiveRelayCapabilityTest {
 
         val result = relay().resolveWithMetadata(context, agentFallback) as RoutingResolution.Success
 
-        assertEquals(AIModel_Claude.Sonnet_4, result.configuration.model)
+        assertEquals(AIModel_Claude.Sonnet_5, result.configuration.model)
         assertEquals("capability:${AIProvider_Anthropic.id}", result.reason)
     }
 
@@ -173,7 +173,7 @@ class CognitiveRelayCapabilityTest {
         // model's own tier, so the LOW model is skipped and the HIGH one wins.
         val lowModelConfig = AIConfiguration_Default(
             provider = AIProvider_Anthropic,
-            model = AIModel_Claude.Haiku_3,
+            model = AIModel_Claude.Haiku_4_5,
         )
         val highModelConfig = AIConfiguration_Default(
             provider = AIProvider_Anthropic,
@@ -182,7 +182,7 @@ class CognitiveRelayCapabilityTest {
         val tierRegistry = InMemoryModelDescriptorRegistry(
             seed = listOf(
                 ModelDescriptor(
-                    modelName = AIModel_Claude.Haiku_3.name,
+                    modelName = AIModel_Claude.Haiku_4_5.name,
                     providerId = AIProvider_Anthropic.id,
                     capabilities = emptySet(),
                     reasoning = RelativeReasoning.LOW,
@@ -218,7 +218,7 @@ class CognitiveRelayCapabilityTest {
         ) as RoutingResolution.Success
 
         assertEquals(AIModel_Claude.Opus_4_5, result.configuration.model)
-        assertFalse(result.configuration.model == AIModel_Claude.Haiku_3)
+        assertFalse(result.configuration.model == AIModel_Claude.Haiku_4_5)
     }
 
     @Test
@@ -228,7 +228,7 @@ class CognitiveRelayCapabilityTest {
         )
 
         assertEquals("Anthropic", decision.providerName)
-        assertEquals(AIModel_Claude.Sonnet_4.name, decision.modelName)
+        assertEquals(AIModel_Claude.Sonnet_5.name, decision.modelName)
         assertEquals("capability:${AIProvider_Anthropic.id}", decision.matchedRule)
         assertFalse(decision.isFallback)
     }
@@ -246,7 +246,7 @@ class CognitiveRelayCapabilityTest {
 
         val fallback = events.filterIsInstance<RoutingEvent.RouteFallback>().single()
         assertEquals(AIProvider_Anthropic.id, fallback.failedProvider)
-        assertEquals(AIModel_Claude.Sonnet_4.name, fallback.failedModel)
+        assertEquals(AIModel_Claude.Sonnet_5.name, fallback.failedModel)
         assertEquals("thermal_throttle", fallback.failureReason)
         assertEquals("Google", fallback.fallbackDecision.providerName)
         assertEquals(AIModel_Gemini.Flash_2_5.name, fallback.fallbackDecision.modelName)

@@ -18,7 +18,7 @@ class AmpereConfigYamlTest {
             """
             ai:
               provider: anthropic
-              model: sonnet-4
+              model: sonnet-5
               apiKey: anthro-from-yaml
               backups:
                 - provider: openai

@@ -19,7 +19,7 @@ import link.socket.ampere.eval.trace.TraceEvent
 class JudgeMeterTest {
 
     private val fallback: AIConfiguration =
-        AIConfiguration_Default(provider = AIProvider_Anthropic, model = AIModel_Claude.Sonnet_4)
+        AIConfiguration_Default(provider = AIProvider_Anthropic, model = AIModel_Claude.Sonnet_5)
 
     @Test
     fun `parses score from stubbed judge response via PlaybackRelay`() = runTest {

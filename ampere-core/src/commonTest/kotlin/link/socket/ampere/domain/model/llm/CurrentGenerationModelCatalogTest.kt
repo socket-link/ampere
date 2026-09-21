@@ -42,9 +42,23 @@ class CurrentGenerationModelCatalogTest {
     }
 
     @Test
-    fun `gemini-3-pro-latest is no longer bundled`() {
-        // Google never served this ID; routing to it could only fail.
-        assertFalse(allModels.any { it.name == "gemini-3-pro-latest" })
+    fun `retired model ids are not bundled`() {
+        // A model in the catalog is one the relay may route to, and routing to a
+        // retired ID can only fail. `gemini-3-pro-latest` never existed at all.
+        val retired = setOf(
+            "gemini-3-pro-latest",
+            "claude-3-7-sonnet-latest",
+            "claude-3-5-haiku-latest",
+            "claude-3-haiku-20240307",
+            "claude-sonnet-4-0",
+            "claude-opus-4-0",
+            "claude-opus-4-1",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+            "gpt-5.1-chat-latest",
+            "gpt-5.1-codex-max",
+        )
+        assertEquals(emptySet(), allModels.map { it.name }.toSet() intersect retired)
     }
 
     @Test
@@ -61,10 +75,12 @@ class CurrentGenerationModelCatalogTest {
             AIModel_Claude.Opus_5,
             AIModel_Claude.Sonnet_5,
             AIModel_Claude.Fable_5_1,
-            AIModel_OpenAI.GPT_5_4,
-            AIModel_OpenAI.GPT_5_4_mini,
             AIModel_OpenAI.GPT_5_5,
             AIModel_OpenAI.GPT_5_6_Sol,
+            // Documented as rejecting temperature outright.
+            AIModel_OpenAI.GPT_5,
+            AIModel_OpenAI.GPT_5_mini,
+            AIModel_OpenAI.GPT_5_nano,
         )
         rejecting.forEach { model ->
             assertFalse(model.features.supportsSamplingParameters, "${model.name} rejects sampling parameters")
@@ -80,6 +96,9 @@ class CurrentGenerationModelCatalogTest {
             AIModel_Claude.Haiku_4_5,
             AIModel_Gemini.Pro_3_1_Preview,
             AIModel_Gemini.Flash_3_8,
+            // Default reasoning effort is `none`, where OpenAI accepts sampling.
+            AIModel_OpenAI.GPT_5_4,
+            AIModel_OpenAI.GPT_5_4_mini,
         )
         accepting.forEach { model ->
             assertTrue(model.features.supportsSamplingParameters, "${model.name} accepts sampling parameters")

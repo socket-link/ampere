@@ -33,7 +33,7 @@ class CognitiveRelayCostTest {
 
     private val anthropicConfig = AIConfiguration_Default(
         provider = AIProvider_Anthropic,
-        model = AIModel_Claude.Sonnet_4,
+        model = AIModel_Claude.Sonnet_5,
     )
     private val googleConfig = AIConfiguration_Default(
         provider = AIProvider_Google,
@@ -79,11 +79,11 @@ class CognitiveRelayCostTest {
     @Test
     fun `tie-break is stable by modelName regardless of rule order`() = runTest {
         // Both models priced identically; Sonnet 4 must win on model name
-        // ("claude-sonnet-4-0" < "gemini-2.5-flash") even though the Google rule
+        // ("claude-sonnet-5" < "gemini-2.5-flash") even though the Google rule
         // is listed first.
         val registry = InMemoryModelDescriptorRegistry(
             seed = listOf(
-                tiedDescriptor(AIModel_Claude.Sonnet_4.name, AIProvider_Anthropic.id),
+                tiedDescriptor(AIModel_Claude.Sonnet_5.name, AIProvider_Anthropic.id),
                 tiedDescriptor(AIModel_Gemini.Flash_2_5.name, AIProvider_Google.id),
             ),
         )
@@ -102,7 +102,7 @@ class CognitiveRelayCostTest {
             fallbackConfiguration = openaiConfig,
         ) as RoutingResolution.Success
 
-        assertEquals(AIModel_Claude.Sonnet_4, result.configuration.model)
+        assertEquals(AIModel_Claude.Sonnet_5, result.configuration.model)
         assertEquals("capability:${AIProvider_Anthropic.id}", result.reason)
     }
 
@@ -111,7 +111,7 @@ class CognitiveRelayCostTest {
         // Anthropic stands in for a local 0W provider; Google is metered.
         val registry = InMemoryModelDescriptorRegistry(
             seed = listOf(
-                capableDescriptor(AIModel_Claude.Sonnet_4.name, AIProvider_Anthropic.id, cost = CostPolicy.Free),
+                capableDescriptor(AIModel_Claude.Sonnet_5.name, AIProvider_Anthropic.id, cost = CostPolicy.Free),
                 capableDescriptor(AIModel_Gemini.Flash_2_5.name, AIProvider_Google.id, costPerWatt = 0.001),
             ),
         )
@@ -130,7 +130,7 @@ class CognitiveRelayCostTest {
             fallbackConfiguration = openaiConfig,
         )
 
-        assertEquals(AIModel_Claude.Sonnet_4, result.model)
+        assertEquals(AIModel_Claude.Sonnet_5, result.model)
     }
 
     @Test
@@ -138,7 +138,7 @@ class CognitiveRelayCostTest {
         // Only Google advertises world knowledge, so there is nothing to compare.
         val registry = InMemoryModelDescriptorRegistry(
             seed = listOf(
-                textOnlyDescriptor(AIModel_Claude.Sonnet_4.name, AIProvider_Anthropic.id),
+                textOnlyDescriptor(AIModel_Claude.Sonnet_5.name, AIProvider_Anthropic.id),
                 capableDescriptor(AIModel_Gemini.Flash_2_5.name, AIProvider_Google.id, costPerWatt = 0.014),
             ),
         )
@@ -182,7 +182,7 @@ class CognitiveRelayCostTest {
             fallbackConfiguration = openaiConfig,
         ) as RoutingResolution.Success
 
-        assertEquals(AIModel_Claude.Sonnet_4, result.configuration.model)
+        assertEquals(AIModel_Claude.Sonnet_5, result.configuration.model)
         assertEquals("phase:PERCEIVE", result.reason)
     }
 
@@ -220,7 +220,7 @@ class CognitiveRelayCostTest {
     fun `single candidate RouteResolved reports no runner-up`() = runBlocking {
         val registry = InMemoryModelDescriptorRegistry(
             seed = listOf(
-                textOnlyDescriptor(AIModel_Claude.Sonnet_4.name, AIProvider_Anthropic.id),
+                textOnlyDescriptor(AIModel_Claude.Sonnet_5.name, AIProvider_Anthropic.id),
                 capableDescriptor(AIModel_Gemini.Flash_2_5.name, AIProvider_Google.id, costPerWatt = 0.014),
             ),
         )

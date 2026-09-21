@@ -61,7 +61,7 @@ data object DocumentationAgent : AgentDefinition.Bundled(
     suggestedAIConfigurationBuilder = {
         aiConfiguration(
             AIModel_Gemini.Flash_2_5,
-            aiConfiguration(AIModel_Claude.Sonnet_4),
+            aiConfiguration(AIModel_Claude.Sonnet_5),
             aiConfiguration(AIModel_OpenAI.GPT_4_1),
         )
     },

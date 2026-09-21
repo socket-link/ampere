@@ -342,16 +342,10 @@ ai:
 | `opus-4.7` | Complex tasks |
 | `opus-4.6` | Complex tasks |
 | `opus-4.5` | Complex tasks |
-| `opus-4.1` | Complex tasks |
-| `opus-4` | Complex tasks |
 | `sonnet-5` | General purpose (recommended) |
 | `sonnet-4.6` | Balanced performance |
 | `sonnet-4.5` | Balanced performance |
-| `sonnet-4` | Retired by Anthropic (2026-06-15) |
-| `sonnet-3.7` | Retired by Anthropic |
 | `haiku-4.5` | Fast, simple tasks |
-| `haiku-3.5` | Fast, simple tasks |
-| `haiku-3` | Fastest, basic tasks |
 
 #### OpenAI (GPT)
 
@@ -396,8 +390,6 @@ ai:
 | `pro-2.5` | High capability |
 | `flash-2.5` | Fast |
 | `flash-2.5-lite` | Fastest |
-| `flash-2` | Retired by Google (2026-06-01) |
-| `flash-2-lite` | Retired by Google (2026-06-01) |
 
 ### Agent Roles
 

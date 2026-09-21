@@ -23,7 +23,7 @@ class EmissionSerializationTest {
         sourceEventId = "evt-1",
         toolInvocationId = "tool-inv-1",
         plugId = "plug-x",
-        modelId = "claude-sonnet-4-0",
+        modelId = "claude-sonnet-5",
         inputDigest = "abcdef0123456789",
     )
 

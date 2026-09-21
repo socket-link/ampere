@@ -32,7 +32,7 @@ class ProviderPricingCatalogTest {
         )
         val anthropicPricing = BundledProviderPricingCatalog.find(
             providerId = "anthropic",
-            modelId = "claude-sonnet-4-0",
+            modelId = "claude-sonnet-5",
         )
         val googlePricing = BundledProviderPricingCatalog.find(
             providerId = "google",

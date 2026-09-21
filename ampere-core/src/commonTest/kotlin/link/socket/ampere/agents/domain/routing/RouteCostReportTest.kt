@@ -52,7 +52,7 @@ class RouteCostReportTest {
         val registry = InMemoryModelDescriptorRegistry(
             seed = listOf(
                 ModelDescriptor(
-                    modelName = AIModel_Claude.Sonnet_4.name,
+                    modelName = AIModel_Claude.Sonnet_5.name,
                     providerId = AIProvider_Anthropic.id,
                     capabilities = emptySet(),
                     reasoning = RelativeReasoning.LOW,

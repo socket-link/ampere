@@ -19,11 +19,11 @@ class LocalUpstreamLlmClientTest {
 
     private val configuration = AIConfiguration_Default(
         provider = AIProvider_Anthropic,
-        model = AIModel_Claude.Sonnet_4,
+        model = AIModel_Claude.Sonnet_5,
     )
 
     private fun request(): ChatCompletionRequest = ChatCompletionRequest(
-        model = ModelId(AIModel_Claude.Sonnet_4.name),
+        model = ModelId(AIModel_Claude.Sonnet_5.name),
         messages = listOf(
             ChatMessage(role = ChatRole.System, content = "You are a calculator."),
             ChatMessage(role = ChatRole.User, content = "What is 2 + 2?"),
