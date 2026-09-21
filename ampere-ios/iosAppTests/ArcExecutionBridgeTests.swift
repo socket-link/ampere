@@ -209,15 +209,15 @@ final class ArcExecutionBridgeTests: XCTestCase {
     func testSecondStartWhileARunIsInFlightIsARefusalNotACrash() async throws {
         let session = makeSession(maxFlowTicks: Int32.max)
         guard let first = try session.tryStart(userGoal: "Implement a very long running goal")
-            as? ArcStartResultStarted else {
+            as? ArcStartResult.Started else {
             return XCTFail("The first run should start")
         }
 
         switch try session.tryStart(userGoal: "A second goal") {
-        case let rejected as ArcStartResultRejected:
+        case let rejected as ArcStartResult.Rejected:
             XCTAssertEqual(rejected.policy, ArcConcurrencyPolicy.reject)
             XCTAssertEqual(rejected.arcName, ArcRegistry.shared.getDefault().name)
-        case is ArcStartResultStarted:
+        case is ArcStartResult.Started:
             XCTFail("A second run must not start while the first is in flight")
         default:
             XCTFail("Unexpected start result")

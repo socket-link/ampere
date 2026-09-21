@@ -18,8 +18,8 @@ import shared
 ///     maxFlowTicks: 100
 /// )
 /// // `tryStart`, not `start`: a run already in flight comes back as a value, not a crash.
-/// guard let started = try session.tryStart(userGoal: goal) as? ArcStartResultStarted else {
-///     return // ArcStartResultRejected: busy; its `policy` says why
+/// guard let started = try session.tryStart(userGoal: goal) as? ArcStartResult.Started else {
+///     return // ArcStartResult.Rejected: busy; its `policy` says why
 /// }
 /// let handle = started.handle
 ///

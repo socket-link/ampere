@@ -40,7 +40,7 @@ const val DEFAULT_EMISSION_REPLAY: Int = 32
  * A value rather than a thrown [ArcRunRejectedException] for the same reason [ArcOutcome] is
  * one: Kotlin/Native only turns a Kotlin exception into a Swift `Error` when the function
  * declares it with `@Throws`, and anything undeclared that crosses the boundary terminates the
- * process. Swift sees the two cases as `ArcStartResultStarted` and `ArcStartResultRejected`.
+ * process. Swift sees the two cases as `ArcStartResult.Started` and `ArcStartResult.Rejected`.
  */
 sealed class ArcStartResult {
     /** The run was dispatched; [handle] observes it. */
@@ -94,9 +94,9 @@ sealed class ArcStartResult {
  *
  * ```swift
  * switch try session.tryStart(userGoal: goal) {
- * case let started as ArcStartResultStarted:
+ * case let started as ArcStartResult.Started:
  *     observe(started.handle)
- * case let rejected as ArcStartResultRejected:
+ * case let rejected as ArcStartResult.Rejected:
  *     // rejected.policy == .reject: a run is already in flight; it carries on untouched.
  *     report("\(rejected.arcName) is busy")
  * default:
