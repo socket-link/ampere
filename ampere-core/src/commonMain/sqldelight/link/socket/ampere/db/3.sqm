@@ -1,0 +1,19 @@
+-- F2 / F4 / F29b: the event envelope. Every persisted event gets a monotonic `sequence`
+-- (the fold order), an optional `caused_by` (the event that produced it), and a
+-- `recorded_at` stamped by the door rather than by the event itself.
+--
+-- SQLite's ADD COLUMN cannot add NOT NULL without a default, so both integer columns default
+-- to 0 and the backfill below fills them in. Legacy rows are numbered in timestamp order with
+-- rowid as the tie-break, and their recorded_at is the only time we have for them: timestamp.
+ALTER TABLE EventStore ADD COLUMN sequence INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE EventStore ADD COLUMN caused_by TEXT;
+ALTER TABLE EventStore ADD COLUMN recorded_at INTEGER NOT NULL DEFAULT 0;
+
+UPDATE EventStore SET
+  sequence = (SELECT COUNT(*) FROM EventStore e2
+              WHERE e2.timestamp < EventStore.timestamp
+                 OR (e2.timestamp = EventStore.timestamp AND e2.rowid <= EventStore.rowid)),
+  recorded_at = timestamp;
+
+CREATE UNIQUE INDEX idx_event_sequence ON EventStore(sequence);
+CREATE INDEX idx_event_caused_by ON EventStore(caused_by);

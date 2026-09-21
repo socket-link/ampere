@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.events.api
 
+import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -15,14 +16,18 @@ class AgentEventApiFactory(
     private val milestoneTrackerStates = mutableMapOf<AgentId, MilestoneTrackerState>()
 
     /**
-     * Create an [AgentEventApi] for the given [agentId].
+     * Create an [AgentEventApi] for the given [agentId], reading time from [clock].
      */
-    fun create(agentId: AgentId): AgentEventApi =
+    fun create(
+        agentId: AgentId,
+        clock: Clock = Clock.System,
+    ): AgentEventApi =
         AgentEventApi(
             agentId = agentId,
             eventRepository = eventRepository,
             eventSerialBus = eventSerialBus,
             logger = logger,
             milestoneTrackerState = milestoneTrackerStates.getOrPut(agentId) { MilestoneTrackerState() },
+            clock = clock,
         )
 }

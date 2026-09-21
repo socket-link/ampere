@@ -60,7 +60,11 @@ class ArcTraceProjection(
             val eventRows = database.eventStoreQueries
                 .getEventsByRunIdOrPayload(run_id = runId)
                 .executeAsList()
-            val events = eventRows.mapNotNull { row -> row.decodeOrNull() }
+            // The fold order is `sequence`, not `timestamp`: same-millisecond events keep the
+            // order the door recorded them in.
+            val events = eventRows
+                .mapNotNull { row -> row.decodeOrNull() }
+                .sortedBy { it.sequence }
 
             val knowledgeRows = database.knowledgeStoreQueries
                 .findKnowledgeByRunId(runId)
@@ -101,6 +105,7 @@ class ArcTraceProjection(
             DecodedEvent(
                 event = json.decodeFromString(Event.serializer(), payload),
                 payload = payload,
+                sequence = sequence,
             )
         } catch (_: SerializationException) {
             null
@@ -301,7 +306,7 @@ class ArcTraceProjection(
         memoryWrites: List<MemoryWriteTrace>,
         toolCalls: List<ToolCallTrace>,
     ): List<PropelPhase> {
-        val eventsByPhase = linkedMapOf<String, MutableList<TraceEvent>>()
+        val eventsByPhase = linkedMapOf<String, MutableList<DecodedEvent>>()
         var activePhase: String? = null
 
         for (decoded in events) {
@@ -309,7 +314,7 @@ class ArcTraceProjection(
             val explicitPhase = phaseNameFor(event, default = activePhase)
             val phaseName = explicitPhase ?: activePhase ?: RUN_PHASE
             eventsByPhase.getOrPut(phaseName) { mutableListOf() }
-                .add(decoded.toTraceEvent())
+                .add(decoded)
 
             activePhase = when (event) {
                 is CognitivePhaseEvent.PhaseEntered -> event.newPhase.name
@@ -330,7 +335,9 @@ class ArcTraceProjection(
             .distinct()
 
         return phaseNames.mapNotNull { phaseName ->
-            val phaseEvents = eventsByPhase[phaseName].orEmpty().sortedBy { it.timestamp }
+            val phaseEvents = eventsByPhase[phaseName].orEmpty()
+                .sortedBy { it.sequence }
+                .map { it.toTraceEvent() }
             val phaseModels = modelInvocations.filter { it.phaseName == phaseName }
             val phaseMemoryWrites = memoryWrites.filter { it.phaseName == phaseName }
             val phaseToolCalls = toolCalls.filter { it.phaseName == phaseName }
@@ -404,6 +411,7 @@ class ArcTraceProjection(
     private data class DecodedEvent(
         val event: Event,
         val payload: String,
+        val sequence: Long,
     )
 
     private companion object {

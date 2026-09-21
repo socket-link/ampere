@@ -272,7 +272,7 @@ class EventStreamServiceTest {
     }
 
     @Test
-    fun `replayEvents returns events in chronological order`() {
+    fun `replayEvents returns events in persisted order`() {
         runBlocking {
             val now = Clock.System.now()
             val t1 = now - 500.milliseconds
@@ -288,7 +288,8 @@ class EventStreamServiceTest {
             eventRepository.saveEvent(event1).getOrThrow()
             eventRepository.saveEvent(event3).getOrThrow()
 
-            // Replay should return in chronological order
+            // The time range filters; replay order is the fold order (`sequence`), i.e. the
+            // order the events were persisted in, not their timestamps.
             val result = service.replayEvents(
                 fromTime = t1 - 100.milliseconds,
                 toTime = t3 + 100.milliseconds,
@@ -297,8 +298,8 @@ class EventStreamServiceTest {
             val events = result.toList()
 
             assertEquals(3, events.size)
-            assertEquals("evt-1", events[0].eventId)
-            assertEquals("evt-2", events[1].eventId)
+            assertEquals("evt-2", events[0].eventId)
+            assertEquals("evt-1", events[1].eventId)
             assertEquals("evt-3", events[2].eventId)
         }
     }

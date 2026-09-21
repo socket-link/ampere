@@ -2,6 +2,7 @@ package link.socket.ampere.agents.environment
 
 import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.Event
@@ -47,6 +48,8 @@ import link.socket.ampere.db.Database
 class EnvironmentService(
     private val orchestrator: EnvironmentOrchestrator,
     val eventRelayService: EventRelayService,
+    /** The clock handed to every [AgentEventApi] this service creates. */
+    val clock: Clock = Clock.System,
 ) {
     /**
      * Access to the meeting repository for querying meeting data.
@@ -98,10 +101,10 @@ class EnvironmentService(
      * - Query event history
      *
      * @param agentId The ID of the agent
-     * @return A new AgentEventApi instance bound to this agent
+     * @return A new AgentEventApi instance bound to this agent, reading time from [clock]
      */
     fun createEventApi(agentId: AgentId): AgentEventApi =
-        orchestrator.eventApiFactory.create(agentId)
+        orchestrator.eventApiFactory.create(agentId, clock)
 
     /**
      * Create an [AgentMeetingsApi] for the given agent.
@@ -193,6 +196,7 @@ class EnvironmentService(
          * @param driver The driver backing [database], forwarded to [OutcomeMemoryRepository]
          * so it can run ranked FTS5 search instead of always falling back to `LIKE`. Optional
          * for source compatibility with existing callers.
+         * @param clock The clock every created [AgentEventApi] reads (defaults to the system clock)
          * @return A fully initialized EnvironmentService
          */
         fun create(
@@ -201,6 +205,7 @@ class EnvironmentService(
             json: Json = DEFAULT_JSON,
             logger: EventLogger = ConsoleEventLogger(),
             driver: SqlDriver? = null,
+            clock: Clock = Clock.System,
         ): EnvironmentService {
             val eventSerialBus = EventSerialBus(scope, logger)
             val factory = EnvironmentOrchestratorFactory(
@@ -216,7 +221,7 @@ class EnvironmentService(
                 eventSerialBus = eventSerialBus,
                 eventRepository = orchestrator.eventRepository,
             )
-            return EnvironmentService(orchestrator, eventRelayService)
+            return EnvironmentService(orchestrator, eventRelayService, clock)
         }
     }
 }

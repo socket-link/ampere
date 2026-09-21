@@ -1,10 +1,13 @@
 package link.socket.ampere.agents.events
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventId
@@ -16,6 +19,7 @@ import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.events.utils.EventSerializationException
 import link.socket.ampere.data.Repository
 import link.socket.ampere.db.Database
+import link.socket.ampere.db.events.EventStore
 import link.socket.ampere.db.events.EventStoreQueries
 import link.socket.ampere.util.ioDispatcher
 
@@ -39,26 +43,86 @@ class EventRepository(
         get() = database.eventStoreQueries
 
     /**
-     * Persist the given [event] by serializing it to JSON and inserting into the event_store table.
+     * Persist the given [event] by serializing it to JSON and inserting it into `EventStore`
+     * inside its [envelope].
+     *
+     * The `sequence` is read and assigned inside one transaction with the insert, under
+     * [sequenceLock], so it is unique and monotonic even when publishers race (a bus handler
+     * publishing while the agent that triggered it publishes its next event). [recordedAt] is
+     * what the door's clock
+     * said at publish; it defaults to the event's own timestamp for direct repository saves,
+     * which mirrors how the migration backfilled legacy rows.
+     *
+     * The envelope's `runId` wins; when it is null the deprecated per-kind [runIdOrNull]
+     * fallback fills `run_id` until every publisher passes it explicitly.
      */
-    suspend fun saveEvent(event: Event): Result<Unit> =
+    @Suppress("DEPRECATION")
+    suspend fun saveEvent(
+        event: Event,
+        envelope: EventEnvelope = EventEnvelope(),
+        recordedAt: Instant = event.timestamp,
+    ): Result<StoredEvent> =
         withContext(ioDispatcher) {
             runCatching {
                 val eventPayload: String = encode(event)
+                val runId = envelope.runId ?: event.runIdOrNull()
 
-                queries.insertEventWithRunId(
-                    event_id = event.eventId,
-                    event_type = event.eventType,
-                    source_id = event.eventSource.getIdentifier(),
-                    timestamp = event.timestamp.toEpochMilliseconds(),
-                    payload = eventPayload,
-                    run_id = event.runIdOrNull(),
-                )
-            }.map { }
+                sequenceLock.withLock {
+                    database.transactionWithResult {
+                        val sequence = queries.nextSequence().executeAsOne()
+                        queries.insertEvent(
+                            event_id = event.eventId,
+                            event_type = event.eventType,
+                            source_id = event.eventSource.getIdentifier(),
+                            timestamp = event.timestamp.toEpochMilliseconds(),
+                            payload = eventPayload,
+                            run_id = runId,
+                            sequence = sequence,
+                            caused_by = envelope.causedBy,
+                            recorded_at = recordedAt.toEpochMilliseconds(),
+                        )
+                        StoredEvent(
+                            event = event,
+                            sequence = sequence,
+                            recordedAt = recordedAt,
+                            causedBy = envelope.causedBy,
+                            runId = runId,
+                        )
+                    }
+                }
+            }
         }
 
     /**
-     * Retrieve all events in reverse chronological order (newest first).
+     * Retrieve every event whose `sequence` is at or after [sequence], in fold order.
+     */
+    suspend fun getEventsSinceSequence(sequence: Long): Result<List<StoredEvent>> =
+        withContext(ioDispatcher) {
+            runCatching {
+                queries
+                    .getEventsSinceSequence(sequence)
+                    .executeAsList()
+            }.map { rows ->
+                rows.map { row -> row.toStoredEvent() }
+            }
+        }
+
+    /**
+     * Retrieve every event whose envelope names [eventId] as its cause, in fold order.
+     */
+    suspend fun getEventsCausedBy(eventId: EventId): Result<List<StoredEvent>> =
+        withContext(ioDispatcher) {
+            runCatching {
+                queries
+                    .getEventsCausedBy(eventId)
+                    .executeAsList()
+            }.map { rows ->
+                rows.map { row -> row.toStoredEvent() }
+            }
+        }
+
+    /**
+     * Retrieve all events newest first, by `sequence`.
      */
     suspend fun getAllEvents(): Result<List<Event>> =
         withContext(ioDispatcher) {
@@ -74,7 +138,7 @@ class EventRepository(
         }
 
     /**
-     * Retrieve all events since the given epoch millis [timestamp], ascending by time.
+     * Retrieve all events whose timestamp is at or after [timestamp], in fold (`sequence`) order.
      */
     suspend fun getEventsSince(timestamp: Instant): Result<List<Event>> =
         withContext(ioDispatcher) {
@@ -126,7 +190,7 @@ class EventRepository(
         }
 
     /**
-     * Retrieve events between [fromTime] and [toTime] (inclusive), ascending by time.
+     * Retrieve events between [fromTime] and [toTime] (inclusive), in fold (`sequence`) order.
      */
     suspend fun getEventsBetween(fromTime: Instant, toTime: Instant): Result<List<Event>> =
         withContext(ioDispatcher) {
@@ -154,7 +218,7 @@ class EventRepository(
      * @param toTime End of time range (inclusive)
      * @param eventTypes Optional set of event type strings to filter by (e.g., "TaskCreated", "QuestionRaised")
      * @param sourceIds Optional set of source IDs to filter by (agent IDs or "human")
-     * @return Result containing list of events matching the criteria, in chronological order
+     * @return Result containing list of events matching the criteria, in fold (`sequence`) order
      */
     suspend fun getEventsWithFilters(
         fromTime: Instant,
@@ -211,6 +275,20 @@ class EventRepository(
             }
         }
 
+    private companion object {
+        /**
+         * Serializes sequence assignment across every [EventRepository] in the process. The
+         * SQLite JDBC drivers do not isolate concurrent transactions from each other (the
+         * in-memory driver shares one connection and one transaction slot across threads; the
+         * file driver's deferred `BEGIN` lets two readers both see the same `MAX(sequence)`),
+         * so the read-then-insert in [saveEvent] has to be serialized here. Process-wide rather
+         * than per instance because the UI's `RepositoryFactory` and the orchestrator can each
+         * hold a repository over the same database. The unique index on `sequence` is the
+         * backstop.
+         */
+        val sequenceLock = Mutex()
+    }
+
     private fun encode(event: Event): String = try {
         json.encodeToString(
             serializer = Event.serializer(),
@@ -227,6 +305,15 @@ class EventRepository(
             cause = throwable,
         )
     }
+
+    private fun EventStore.toStoredEvent(): StoredEvent =
+        StoredEvent(
+            event = decode(payload),
+            sequence = sequence,
+            recordedAt = Instant.fromEpochMilliseconds(recorded_at),
+            causedBy = caused_by,
+            runId = run_id,
+        )
 
     private fun decode(payload: String): Event = try {
         json.decodeFromString(
@@ -246,7 +333,12 @@ class EventRepository(
     }
 }
 
-private fun Event.runIdOrNull(): String? = when (this) {
+/**
+ * The per-kind `run_id` lookup that predates the envelope (recon C9). Only the ten kinds below
+ * ever stored a run id; every other kind stored NULL.
+ */
+@Deprecated("F4: fallback until every publisher passes runId; removed by the W1 lock ticket")
+private fun Event.runIdOrNull(): RunId? = when (this) {
     is ProviderCallStartedEvent -> workflowId
     is ProviderCallCompletedEvent -> workflowId
     is ToolEvent.ToolExecutionStarted -> runId
