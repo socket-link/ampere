@@ -29,8 +29,9 @@ mavenPublishing {
     pom {
         name.set("Ampere Core Test Fixtures")
         description.set(
-            "Shared CanonAdapter test fixtures: FakeNativeStore plus an inheritable " +
-                "Readable/WritableCanonAdapterContract test suite.",
+            "Shared chassis SPI test fixtures: FakeNativeStore plus inheritable " +
+                "Readable/WritableCanonAdapterContract suites, and a versioned reference " +
+                "ExecuteSink with an inheritable ExecuteSinkPreconditionContract.",
         )
         url.set("https://github.com/socket-link/ampere")
         inceptionYear.set("2026")

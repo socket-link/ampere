@@ -46,5 +46,6 @@ How the cognitive substrate meets the user, the platform, and the plug ecosystem
 | [PlugPermissions](plug-permissions.md) | stable | Deterministic gate that runs *before* any plug tool dispatch. Compares manifest + tool-requested permissions against user grants. |
 | [LinkLayer](link-layer.md) | stable | A Plug connects through a Link and powers Arcs. Transport belongs to the Link; Links are directional, shared across Plugs, and resolved at Arc execution time. |
 | [DomainCanon](domain-canon.md) | stable | Closed catalogue of provenance-carrying domain types in three rings. The IR Arc logic compiles against. Write-back preserves-and-merges by construction. |
+| [ChassisSpi](chassis-spi.md) | experimental | The Plug operation boundary: `PerceiveSource`, `ExecuteSink`, `AssetResolver`. Conditional writes via `executeIf` refuse loudly unless the provider enforces them atomically; receipts carry post-write etag and state. |
 | [Probe](probe.md) | experimental | Predicate over a static artifact with a four-valued `Verdict`. `FreshnessProbe : Probe<Observed>` — max-age is on the Probe, stale is `Undetermined(STALE)`, `observedAt` binds once at the source. |
 | [Ampere](ampere.md) | stable | The meta-concept: what makes a framework an AMPERE framework. Glass brain, AniMA agents, electrical metaphor, event-first coordination. |

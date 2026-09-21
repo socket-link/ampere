@@ -2,6 +2,7 @@ package link.socket.ampere.plug.spi
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
@@ -50,5 +51,27 @@ class ExecuteSinkTest {
         assertEquals("r-1", reminderReceipt.handle?.nativeId)
         assertEquals(emptySet(), notify.consumes)
         assertNull(notifyReceipt.handle)
+    }
+
+    @Test
+    fun `a sink that never opted in refuses every precondition by default`() = runTest {
+        val notify: ExecuteSink<SendNotification> = NotifySink()
+
+        val result = notify.executeIf(
+            SendNotification("Standup", "in 5 minutes"),
+            WritePrecondition.MatchVersion("v1"),
+        )
+
+        assertEquals(emptySet(), notify.supportedPreconditions)
+        val failure = assertIs<ExecuteException>(result.exceptionOrNull()).failure
+        val unsupported = assertIs<ExecuteFailure.PreconditionUnsupported>(failure)
+        assertEquals(WritePreconditionKind.MATCH_VERSION, unsupported.kind)
+    }
+
+    @Test
+    fun `a receipt carries no post-write state unless the sink sets it`() = runTest {
+        val receipt = NotifySink().execute(SendNotification("Standup", "in 5 minutes")).getOrThrow()
+
+        assertNull(receipt.postWriteState)
     }
 }
