@@ -6,14 +6,18 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import link.socket.ampere.agents.execution.process.GroupedProcess
+import link.socket.ampere.agents.execution.process.ProcessGroups
 
 /**
  * JVM implementation of StdioProcessHandler using ProcessBuilder.
  *
- * Spawns a child process and communicates via stdin/stdout using buffered streams.
+ * Spawns a child process in its own process group and communicates via stdin/stdout
+ * using buffered streams. Stopping terminates the whole group, so servers launched
+ * through a wrapper (npx, uvx, shell scripts) don't leave their real process behind.
  */
 actual class StdioProcessHandler {
-    private var process: Process? = null
+    private var process: GroupedProcess? = null
     private var reader: BufferedReader? = null
     private var writer: BufferedWriter? = null
 
@@ -23,14 +27,15 @@ actual class StdioProcessHandler {
             val processBuilder = ProcessBuilder(executablePath)
                 .redirectErrorStream(false) // Keep stderr separate for debugging
 
-            process = processBuilder.start()
+            val grouped = ProcessGroups.start(processBuilder)
+            process = grouped
 
             // Set up I/O streams
-            reader = BufferedReader(InputStreamReader(process!!.inputStream))
-            writer = BufferedWriter(OutputStreamWriter(process!!.outputStream))
+            reader = BufferedReader(InputStreamReader(grouped.process.inputStream))
+            writer = BufferedWriter(OutputStreamWriter(grouped.process.outputStream))
 
             // Verify process started successfully
-            if (!process!!.isAlive) {
+            if (!grouped.process.isAlive) {
                 throw McpConnectionException("Process failed to start: $executablePath")
             }
         }
@@ -60,11 +65,8 @@ actual class StdioProcessHandler {
             writer?.close()
             reader?.close()
 
-            // Terminate the process
-            process?.destroy()
-
-            // Wait for termination (with timeout)
-            process?.waitFor()
+            // Terminate the process group: SIGTERM, bounded wait, then SIGKILL
+            process?.terminate()
 
             // Clear references
             writer = null

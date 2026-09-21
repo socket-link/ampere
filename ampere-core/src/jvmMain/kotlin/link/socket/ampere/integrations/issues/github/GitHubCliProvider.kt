@@ -1,9 +1,8 @@
 package link.socket.ampere.integrations.issues.github
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import link.socket.ampere.agents.execution.process.ProcessGroups
 import link.socket.ampere.agents.execution.tools.issue.CreatedIssue
 import link.socket.ampere.agents.execution.tools.issue.IssueCreateRequest
 import link.socket.ampere.integrations.issues.ExistingIssue
@@ -521,11 +520,8 @@ class GitHubCliProvider : IssueTrackerProvider {
      * @return Command result with exit code, stdout, and stderr
      */
     private suspend fun executeGh(vararg args: String): CommandResult =
-        withContext(Dispatchers.IO) {
-            val process = ProcessBuilder("gh", *args)
-                .redirectErrorStream(false)
-                .start()
-
+        ProcessGroups.run(ProcessBuilder("gh", *args).redirectErrorStream(false)) { grouped ->
+            val process = grouped.process
             val stdout = process.inputStream.bufferedReader().readText()
             val stderr = process.errorStream.bufferedReader().readText()
             val exitCode = process.waitFor()
