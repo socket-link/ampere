@@ -2,6 +2,8 @@ package link.socket.ampere.agents.domain.emission
 
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
@@ -11,9 +13,8 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.reasoning.Confidence
+import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
-import link.socket.ampere.agents.events.bus.subscribe
-import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.util.randomUUID
 
 /**
@@ -294,10 +295,14 @@ class EmissionScope(
 /**
  * Run [block] inside an [EmissionScope] backed by [eventSerialBus] and [replyRegistry].
  *
- * Also wires reply-delivery subscribers so that incoming [EmissionEvent.BaseResolved] and
- * [HumanInteractionEvent.InputProvided] events are forwarded to [replyRegistry], resuming
- * any suspended [EmissionScope.ask] / [EmissionScope.askHuman] / [EmissionScope.confirm] calls.
+ * For the duration of [block], one reply-delivery subscriber on [EmissionEvent.Resolved.EVENT_TYPE]
+ * forwards incoming replies to [replyRegistry], resuming any suspended [EmissionScope.ask] /
+ * [EmissionScope.askHuman] / [EmissionScope.confirm] calls. [HumanInteractionEvent.InputProvided]
+ * lists that type among its parents, so the same subscriber receives it. The subscriber is released
+ * when [block] returns, throws, or is cancelled, leaving the bus's handler count where it was.
  *
+ * @param replyRegistry Defaults to [GlobalEmissionReplyRegistry], which is shared by everything in
+ *   the process — see its warning before relying on the default outside tests.
  * @param publish Seam for a host to intercept or wrap outgoing events before they reach
  *   [eventSerialBus] — see [EmissionScope]. Defaults to publishing directly.
  */
@@ -309,19 +314,21 @@ suspend fun <T> emission(
     runId: RunId? = null,
     block: suspend EmissionScope.() -> T,
 ): T {
-    eventSerialBus.subscribe<EmissionEvent.BaseResolved, EventSubscription.ByEventClassType>(
+    val subscription = eventSerialBus.subscribeSuspending(
         agentId = "emission-reply-router",
         eventType = EmissionEvent.Resolved.EVENT_TYPE,
-    ) { event, _ ->
-        replyRegistry.deliver(event)
-    }
+        handler = EventHandler { event, _ ->
+            (event as? EmissionEvent.Resolved)?.let(replyRegistry::deliver)
+        },
+    )
 
-    eventSerialBus.subscribe<HumanInteractionEvent.InputProvided, EventSubscription.ByEventClassType>(
-        agentId = "emission-reply-router-human",
-        eventType = HumanInteractionEvent.InputProvided.EVENT_TYPE,
-    ) { event, _ ->
-        replyRegistry.deliver(event)
+    return try {
+        EmissionScope(eventSource, eventSerialBus, replyRegistry, publish, runId).block()
+    } finally {
+        // Cancellation is a normal exit (e.g. the caller gave up on a reply), and releasing the
+        // subscription needs the bus mutex — which a cancelled coroutine cannot take.
+        withContext(NonCancellable) {
+            eventSerialBus.unsubscribeSuspending(subscription)
+        }
     }
-
-    return EmissionScope(eventSource, eventSerialBus, replyRegistry, publish, runId).block()
 }
