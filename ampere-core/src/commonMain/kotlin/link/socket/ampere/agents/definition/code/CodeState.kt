@@ -128,11 +128,12 @@ data class CodeState(
     }
 
     companion object {
-        val blank = CodeState(
-            outcome = Outcome.blank,
-            task = Task.Blank,
-            plan = Plan.blank,
-        )
+        val blank: CodeState
+            get() = CodeState(
+                outcome = Outcome.blank,
+                task = Task.Blank,
+                plan = Plan.blank,
+            )
     }
 }
 

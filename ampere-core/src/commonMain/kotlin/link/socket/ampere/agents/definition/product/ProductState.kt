@@ -113,15 +113,16 @@ data class ProductState(
         /**
          * Returns an empty perception state.
          */
-        val blank = ProductState(
-            outcome = Outcome.Companion.blank,
-            task = Task.Blank,
-            plan = Plan.Companion.blank,
-            backlogSummary = BacklogSummary.Companion.empty(),
-            agentWorkloads = emptyMap(),
-            upcomingDeadlines = emptyList(),
-            blockedTickets = emptyList(),
-            overdueTickets = emptyList(),
-        )
+        val blank: ProductState
+            get() = ProductState(
+                outcome = Outcome.Companion.blank,
+                task = Task.Blank,
+                plan = Plan.Companion.blank,
+                backlogSummary = BacklogSummary.Companion.empty(),
+                agentWorkloads = emptyMap(),
+                upcomingDeadlines = emptyList(),
+                blockedTickets = emptyList(),
+                overdueTickets = emptyList(),
+            )
     }
 }
