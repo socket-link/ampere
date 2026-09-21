@@ -49,11 +49,21 @@ class AgentTeam private constructor(
     private val config: AgentTeamConfig,
     private val scope: CoroutineScope,
 ) {
+    /**
+     * Replay buffer for late UI subscribers; not an event log.
+     *
+     * Holds [TeamEvent] projections only. Nothing here is persisted or folded into
+     * world state; the durable record is the `Event` stream on the bus.
+     */
     private val _events = MutableSharedFlow<TeamEvent>(replay = 100)
 
     /**
      * Flow of simplified team events.
      * Subscribe to observe agent activities in real-time.
+     *
+     * This is a view of the bus, not the bus. To subscribe to the persisted
+     * `Event` stream that feeds the Field fold, use `EventRelayService` /
+     * `EventSerialBus` instead.
      */
     val events: Flow<TeamEvent> = _events.asSharedFlow()
 
@@ -78,7 +88,8 @@ class AgentTeam private constructor(
         currentGoal = goal
 
         scope.launch {
-            // Emit goal set event
+            // Emit goal set event. UI-only marker: no bus Event corresponds to a DSL
+            // goal assignment, so this is constructed directly (listed in TeamEvent KDoc).
             _events.emit(
                 GoalSet(
                     goal = goal,
@@ -132,6 +143,8 @@ class AgentTeam private constructor(
 
     private suspend fun initializeAgents() {
         config.members.forEach { member ->
+            // UI-only marker: no bus Event corresponds to DSL member initialization
+            // (listed in TeamEvent KDoc).
             _events.emit(
                 AgentInitialized(
                     agent = member.role.name,
@@ -149,6 +162,9 @@ class AgentTeam private constructor(
         } ?: config.members.firstOrNull()
 
         if (coordinator != null) {
+            // UI-only placeholder until the DSL is wired to real agents (see TODO below).
+            // No bus Event is published here, so there is nothing to route through
+            // TeamEventAdapter.adapt (listed in TeamEvent KDoc).
             _events.emit(
                 Planned(
                     agent = coordinator.role.name,
