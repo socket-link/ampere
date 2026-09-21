@@ -40,6 +40,7 @@ sealed class AIModel_Claude(
         limits = Opus_4_LIMITS,
     )
 
+    /** Retired by Anthropic on 2026-06-15; requests for `claude-sonnet-4-0` fail. Use [Sonnet_5]. */
     data object Sonnet_4 : AIModel_Claude(
         name = Sonnet_4_NAME,
         displayName = Sonnet_4_DISPLAY_NAME,
@@ -116,6 +117,116 @@ sealed class AIModel_Claude(
         limits = Haiku_4_5_LIMITS,
     )
 
+    // ---- 4.6 generation onward: dateless IDs are pinned snapshots, not aliases ----
+
+    data object Opus_4_6 : AIModel_Claude(
+        name = Opus_4_6_NAME,
+        displayName = Opus_4_6_DISPLAY_NAME,
+        description = Opus_4_6_DESCRIPTION,
+        features = currentGenerationFeatures(
+            reasoningLevel = RelativeReasoning.HIGH,
+            speed = RelativeSpeed.SLOW,
+            cutoffDate = Opus_4_6_CUTOFF,
+            supportsSamplingParameters = true,
+        ),
+        limits = CURRENT_GENERATION_OPUS_LIMITS,
+    )
+
+    data object Opus_4_7 : AIModel_Claude(
+        name = Opus_4_7_NAME,
+        displayName = Opus_4_7_DISPLAY_NAME,
+        description = Opus_4_7_DESCRIPTION,
+        features = currentGenerationFeatures(
+            reasoningLevel = RelativeReasoning.HIGH,
+            speed = RelativeSpeed.SLOW,
+            cutoffDate = Opus_4_7_CUTOFF,
+            supportsSamplingParameters = false,
+        ),
+        limits = CURRENT_GENERATION_OPUS_LIMITS,
+    )
+
+    data object Opus_4_8 : AIModel_Claude(
+        name = Opus_4_8_NAME,
+        displayName = Opus_4_8_DISPLAY_NAME,
+        description = Opus_4_8_DESCRIPTION,
+        features = currentGenerationFeatures(
+            reasoningLevel = RelativeReasoning.HIGH,
+            speed = RelativeSpeed.SLOW,
+            cutoffDate = Opus_4_8_CUTOFF,
+            supportsSamplingParameters = false,
+        ),
+        limits = CURRENT_GENERATION_OPUS_LIMITS,
+    )
+
+    data object Opus_5 : AIModel_Claude(
+        name = Opus_5_NAME,
+        displayName = Opus_5_DISPLAY_NAME,
+        description = Opus_5_DESCRIPTION,
+        features = currentGenerationFeatures(
+            reasoningLevel = RelativeReasoning.HIGH,
+            speed = RelativeSpeed.NORMAL,
+            cutoffDate = Opus_5_CUTOFF,
+            supportsSamplingParameters = false,
+        ),
+        limits = CURRENT_GENERATION_OPUS_LIMITS,
+    )
+
+    data object Sonnet_4_6 : AIModel_Claude(
+        name = Sonnet_4_6_NAME,
+        displayName = Sonnet_4_6_DISPLAY_NAME,
+        description = Sonnet_4_6_DESCRIPTION,
+        features = currentGenerationFeatures(
+            reasoningLevel = RelativeReasoning.NORMAL,
+            speed = RelativeSpeed.NORMAL,
+            cutoffDate = Sonnet_4_6_CUTOFF,
+            supportsSamplingParameters = true,
+        ),
+        limits = CURRENT_GENERATION_SONNET_LIMITS,
+    )
+
+    data object Sonnet_5 : AIModel_Claude(
+        name = Sonnet_5_NAME,
+        displayName = Sonnet_5_DISPLAY_NAME,
+        description = Sonnet_5_DESCRIPTION,
+        features = currentGenerationFeatures(
+            reasoningLevel = RelativeReasoning.NORMAL,
+            speed = RelativeSpeed.FAST,
+            cutoffDate = Sonnet_5_CUTOFF,
+            supportsSamplingParameters = false,
+        ),
+        limits = CURRENT_GENERATION_SONNET_LIMITS,
+    )
+
+    data object Fable_5_1 : AIModel_Claude(
+        name = Fable_5_1_NAME,
+        displayName = Fable_5_1_DISPLAY_NAME,
+        description = Fable_5_1_DESCRIPTION,
+        features = currentGenerationFeatures(
+            reasoningLevel = RelativeReasoning.HIGH,
+            speed = RelativeSpeed.SLOW,
+            cutoffDate = Fable_5_1_CUTOFF,
+            supportsSamplingParameters = false,
+        ),
+        limits = CURRENT_GENERATION_OPUS_LIMITS,
+    )
+
+    /**
+     * A Claude model Ampere has no bundled entry for, constructed by ID so a
+     * consumer can roll to a new model without waiting on an Ampere release.
+     *
+     * Not part of [ALL_MODELS], so it has no bundled capability rung or
+     * pricing; register a
+     * [ModelDescriptor][link.socket.ampere.agents.domain.routing.capability.ModelDescriptor]
+     * for [name] if the relay should route to it.
+     */
+    data class Custom(
+        override val name: String,
+        override val features: AIModelFeatures,
+        override val limits: ModelLimits,
+        override val displayName: String = name,
+        override val description: String = "",
+    ) : AIModel_Claude(name, displayName, description, features, limits)
+
     companion object Companion {
 
         // ---- Tools ----
@@ -146,6 +257,7 @@ sealed class AIModel_Claude(
         private val Opus_4_5_TOOLS: List<ProvidedTool<AITool_Claude>> = Opus_4_1_TOOLS
         private val Sonnet_4_5_TOOLS: List<ProvidedTool<AITool_Claude>> = Opus_4_TOOLS
         private val Haiku_4_5_TOOLS: List<ProvidedTool<AITool_Claude>> = Haiku_3_5_TOOLS
+        private val CURRENT_GENERATION_TOOLS: List<ProvidedTool<AITool_Claude>> = Opus_4_1_TOOLS
 
         // ---- Rate Limits ----
 
@@ -193,6 +305,8 @@ sealed class AIModel_Claude(
         private val Opus_4_5_RATE_LIMITS = Opus_4_1_RATE_LIMITS
         private val Sonnet_4_5_RATE_LIMITS = Sonnet_4_RATE_LIMITS
         private val Haiku_4_5_RATE_LIMITS = Haiku_3_5_RATE_LIMITS
+        private val CURRENT_GENERATION_OPUS_RATE_LIMITS = Opus_4_1_RATE_LIMITS
+        private val CURRENT_GENERATION_SONNET_RATE_LIMITS = Sonnet_4_RATE_LIMITS
 
         // ---- Token Limits ----
 
@@ -223,6 +337,13 @@ sealed class AIModel_Claude(
         private val Opus_4_5_TOKEN_LIMITS = Opus_4_1_TOKEN_LIMITS
         private val Sonnet_4_5_TOKEN_LIMITS = Sonnet_4_TOKEN_LIMITS
         private val Haiku_4_5_TOKEN_LIMITS = Haiku_3_5_TOKEN_LIMITS
+
+        // 1M context and 128K max output (synchronous Messages API) across the
+        // 4.6 generation onward.
+        private val CURRENT_GENERATION_TOKEN_LIMITS = TokenLimits(
+            contextWindow = TokenCount._1m,
+            maxOutput = TokenCount._128k,
+        )
 
         // ---- Limits ----
 
@@ -269,6 +390,16 @@ sealed class AIModel_Claude(
         private val Haiku_4_5_LIMITS = ModelLimits(
             rate = Haiku_4_5_RATE_LIMITS,
             token = Haiku_4_5_TOKEN_LIMITS,
+        )
+
+        private val CURRENT_GENERATION_OPUS_LIMITS = ModelLimits(
+            rate = CURRENT_GENERATION_OPUS_RATE_LIMITS,
+            token = CURRENT_GENERATION_TOKEN_LIMITS,
+        )
+
+        private val CURRENT_GENERATION_SONNET_LIMITS = ModelLimits(
+            rate = CURRENT_GENERATION_SONNET_RATE_LIMITS,
+            token = CURRENT_GENERATION_TOKEN_LIMITS,
         )
 
         // ---- Training Cutoffs ----
@@ -339,6 +470,64 @@ sealed class AIModel_Claude(
             seconds = 0,
         )
 
+        // Reliable knowledge cutoffs, per Anthropic's model pages.
+
+        private val Opus_4_6_CUTOFF = GMTDate(
+            year = 2025,
+            month = Month.MAY,
+            dayOfMonth = 1,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
+        private val Opus_4_7_CUTOFF = GMTDate(
+            year = 2026,
+            month = Month.JANUARY,
+            dayOfMonth = 1,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
+        private val Opus_4_8_CUTOFF = Opus_4_7_CUTOFF
+
+        private val Opus_5_CUTOFF = GMTDate(
+            year = 2026,
+            month = Month.MAY,
+            dayOfMonth = 1,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
+        private val Sonnet_4_6_CUTOFF = GMTDate(
+            year = 2025,
+            month = Month.AUGUST,
+            dayOfMonth = 1,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
+        private val Sonnet_5_CUTOFF = GMTDate(
+            year = 2026,
+            month = Month.JANUARY,
+            dayOfMonth = 1,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
+        private val Fable_5_1_CUTOFF = GMTDate(
+            year = 2026,
+            month = Month.JUNE,
+            dayOfMonth = 1,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
         // ---- Supported Inputs ----
 
         private val Opus_4_1_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
@@ -351,6 +540,7 @@ sealed class AIModel_Claude(
         private val Opus_4_5_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
         private val Sonnet_4_5_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
         private val Haiku_4_5_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
+        private val CURRENT_GENERATION_SUPPORTED_INPUTS = TEXT_IMAGE_AND_PDF
 
         // ---- Model Features ----
 
@@ -400,6 +590,25 @@ sealed class AIModel_Claude(
             speed = RelativeSpeed.FAST,
             supportedInputs = supportedInputs,
             trainingCutoffDate = cutoffDate,
+        )
+
+        /**
+         * Features for the 4.6 generation onward. [supportsSamplingParameters]
+         * is `false` from Opus 4.7 on: those models reject `temperature` and
+         * `top_p` with a 400, including through the OpenAI-compatible endpoint.
+         */
+        private fun currentGenerationFeatures(
+            reasoningLevel: RelativeReasoning,
+            speed: RelativeSpeed,
+            cutoffDate: GMTDate,
+            supportsSamplingParameters: Boolean,
+        ): AIModelFeatures = AIModelFeatures(
+            availableTools = CURRENT_GENERATION_TOOLS,
+            reasoningLevel = reasoningLevel,
+            speed = speed,
+            supportedInputs = CURRENT_GENERATION_SUPPORTED_INPUTS,
+            trainingCutoffDate = cutoffDate,
+            supportsSamplingParameters = supportsSamplingParameters,
         )
 
         // Haiku 3 is older and weaker, so it gets LOW reasoning
@@ -460,6 +669,46 @@ sealed class AIModel_Claude(
             "Near-frontier coding power at a fraction of the cost. Matches " +
                 "Claude Sonnet 4's performance on coding tasks while being faster and more affordable."
 
+        private const val Opus_4_6_NAME = "claude-opus-4-6"
+        private const val Opus_4_6_DISPLAY_NAME = "Claude Opus 4.6"
+        private const val Opus_4_6_DESCRIPTION =
+            "Previous-generation Opus with adaptive thinking and a 1M token context window."
+
+        private const val Opus_4_7_NAME = "claude-opus-4-7"
+        private const val Opus_4_7_DISPLAY_NAME = "Claude Opus 4.7"
+        private const val Opus_4_7_DESCRIPTION =
+            "Highly autonomous Opus for long-horizon agentic work, knowledge work, and vision. " +
+                "Adaptive thinking only; rejects sampling parameters."
+
+        private const val Opus_4_8_NAME = "claude-opus-4-8"
+        private const val Opus_4_8_DISPLAY_NAME = "Claude Opus 4.8"
+        private const val Opus_4_8_DESCRIPTION =
+            "The most capable model in the Opus 4 series. State-of-the-art on long-horizon " +
+                "agentic work, knowledge work, and memory. Adaptive thinking only; rejects sampling parameters."
+
+        private const val Opus_5_NAME = "claude-opus-5"
+        private const val Opus_5_DISPLAY_NAME = "Claude Opus 5"
+        private const val Opus_5_DESCRIPTION =
+            "For complex agentic coding and enterprise work. Strongest on deep reasoning and " +
+                "long-horizon tasks. Adaptive thinking on by default; rejects sampling parameters."
+
+        private const val Sonnet_4_6_NAME = "claude-sonnet-4-6"
+        private const val Sonnet_4_6_DISPLAY_NAME = "Claude Sonnet 4.6"
+        private const val Sonnet_4_6_DESCRIPTION =
+            "Previous-generation Sonnet with adaptive thinking and a 1M token context window."
+
+        private const val Sonnet_5_NAME = "claude-sonnet-5"
+        private const val Sonnet_5_DISPLAY_NAME = "Claude Sonnet 5"
+        private const val Sonnet_5_DESCRIPTION =
+            "The best combination of speed and intelligence. Near-Opus quality on coding and " +
+                "agentic work. Adaptive thinking on by default; rejects sampling parameters."
+
+        private const val Fable_5_1_NAME = "claude-fable-5-1"
+        private const val Fable_5_1_DISPLAY_NAME = "Claude Fable 5.1"
+        private const val Fable_5_1_DESCRIPTION =
+            "Anthropic's most capable widely released model, for demanding reasoning and " +
+                "long-horizon agentic work. Thinking is always on; rejects sampling parameters."
+
         // ---- Models ----
 
         // Lazy to avoid the JVM class-init cycle: if any data object (Opus_4_1, etc.)
@@ -477,6 +726,13 @@ sealed class AIModel_Claude(
                 Haiku_3_5,
                 Haiku_3,
                 Haiku_4_5,
+                Opus_4_6,
+                Opus_4_7,
+                Opus_4_8,
+                Opus_5,
+                Sonnet_4_6,
+                Sonnet_5,
+                Fable_5_1,
             )
         }
     }

@@ -11,7 +11,7 @@ import link.socket.ampere.dsl.events.Escalated
  * ```
  * // Mode 1: Programmatic configuration
  * val ampere = Ampere.create {
- *     provider(AnthropicConfig(apiKey = "...", model = Claude.Sonnet4))
+ *     provider(AnthropicConfig(apiKey = "...", model = Claude.Sonnet5))
  *     workspace("/path/to/project")
  *     onEscalation { event -> notifySlack(event) }
  * }
@@ -51,9 +51,9 @@ data class AmpereConfig(
          * Set the AI provider configuration.
          *
          * ```
-         * provider(AnthropicConfig(model = Claude.Sonnet4))
-         * provider(OpenAIConfig(apiKey = "...", model = GPT.GPT_4_1))
-         * provider(GeminiConfig(model = Gemini.Flash_2_5))
+         * provider(AnthropicConfig(model = Claude.Sonnet5))
+         * provider(OpenAIConfig(apiKey = "...", model = GPT.GPT5_4))
+         * provider(GeminiConfig(model = Gemini.Flash3_8))
          * ```
          */
         fun provider(config: ProviderConfig) {

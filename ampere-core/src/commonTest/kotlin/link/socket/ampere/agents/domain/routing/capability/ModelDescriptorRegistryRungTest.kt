@@ -63,6 +63,8 @@ class ModelDescriptorRegistryRungTest {
             "o3-mini",
             "gemini-2.0-flash",
             "gemini-2.5-flash",
+            "gemini-3.8-flash",
+            "gpt-5.4-mini",
         )
         expected.forEach { name ->
             assertEquals(CapabilityRung.TWO, descriptors[name]?.rung, "$name should be rung TWO")
@@ -75,6 +77,8 @@ class ModelDescriptorRegistryRungTest {
             "claude-sonnet-4-0",
             "claude-3-7-sonnet-latest",
             "claude-sonnet-4-5-20250929",
+            "claude-sonnet-4-6",
+            "claude-sonnet-5",
             "gpt-4.1",
             "o4-mini",
             "gemini-2.5-pro",
@@ -90,12 +94,20 @@ class ModelDescriptorRegistryRungTest {
             "claude-opus-4-0",
             "claude-opus-4-1",
             "claude-opus-4-5-20251101",
+            "claude-opus-4-6",
+            "claude-opus-4-7",
+            "claude-opus-4-8",
+            "claude-opus-5",
+            "claude-fable-5-1",
             "gpt-5",
             "gpt-5.1",
             "gpt-5.1-chat-latest",
             "gpt-5.1-codex-max",
             "o3",
-            "gemini-3-pro-latest",
+            "gpt-5.4",
+            "gpt-5.5",
+            "gpt-5.6-sol",
+            "gemini-3.1-pro-preview",
         )
         expected.forEach { name ->
             assertEquals(CapabilityRung.FOUR, descriptors[name]?.rung, "$name should be rung FOUR")

@@ -30,16 +30,16 @@ sealed interface ProviderConfig {
  * ```kotlin
  * val config = AnthropicConfig(
  *     apiKey = "your-api-key",
- *     model = Claude.Sonnet4
+ *     model = Claude.Sonnet5
  * )
  * ```
  *
  * @param apiKey Optional runtime API key. When omitted, falls back to the generated KotlinConfig value.
- * @param model The Claude model to use (defaults to Sonnet 4)
+ * @param model The Claude model to use (defaults to Sonnet 5)
  */
 data class AnthropicConfig(
     val apiKey: String? = null,
-    val model: AIModel_Claude = AIModel_Claude.Sonnet_4,
+    val model: AIModel_Claude = AIModel_Claude.Sonnet_5,
     private val backups: List<AIConfiguration> = emptyList(),
 ) : ProviderConfig {
 
@@ -80,11 +80,11 @@ data class AnthropicConfig(
  * ```
  *
  * @param apiKey Optional runtime API key. When omitted, falls back to the generated KotlinConfig value.
- * @param model The OpenAI model to use (defaults to GPT-4.1)
+ * @param model The OpenAI model to use (defaults to GPT-5.4)
  */
 data class OpenAIConfig(
     val apiKey: String? = null,
-    val model: AIModel_OpenAI = AIModel_OpenAI.GPT_4_1,
+    val model: AIModel_OpenAI = AIModel_OpenAI.GPT_5_4,
     private val backups: List<AIConfiguration> = emptyList(),
 ) : ProviderConfig {
 
@@ -125,11 +125,11 @@ data class OpenAIConfig(
  * ```
  *
  * @param apiKey Optional runtime API key. When omitted, falls back to the generated KotlinConfig value.
- * @param model The Gemini model to use (defaults to Flash 2.5)
+ * @param model The Gemini model to use (defaults to Flash 3.8)
  */
 data class GeminiConfig(
     val apiKey: String? = null,
-    val model: AIModel_Gemini = AIModel_Gemini.Flash_2_5,
+    val model: AIModel_Gemini = AIModel_Gemini.Flash_3_8,
     private val backups: List<AIConfiguration> = emptyList(),
 ) : ProviderConfig {
 

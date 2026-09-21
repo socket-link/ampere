@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/ProviderCallStartedEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/ProviderCallCompletedEvent.kt
 related: [PropelLoop, EventSerialBus, CognitionTrace]
-last_verified: 2026-07-28
+last_verified: 2026-09-20
 ---
 
 # CognitiveRelay

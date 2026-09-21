@@ -9,6 +9,7 @@ import com.aallam.openai.api.model.ModelId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.config.AgentConfiguration
@@ -61,6 +62,28 @@ class UpstreamLlmClientTest {
         assertEquals(ChatRole.User, captured.messages[1].role)
         assertEquals("Tell me about migration", captured.messages[1].content)
         assertSame(config.aiConfiguration, recorder.lastConfiguration)
+    }
+
+    @Test
+    fun `temperature is omitted for models that reject sampling parameters`() = runTest {
+        // Opus 5 returns a 400 for any temperature, including through the
+        // OpenAI-compatible endpoint, so the field must be absent, not defaulted.
+        val recorder = RecordingUpstreamClient(cannedResponse = "ok")
+        val service = AgentLLMService(
+            agentConfiguration = config.copy(
+                aiConfiguration = AIConfiguration_Default(
+                    provider = AIProvider_Anthropic,
+                    model = AIModel_Claude.Opus_5,
+                ),
+            ),
+            upstreamLlmClient = recorder,
+        )
+
+        service.call(prompt = "anything", temperature = 0.7)
+
+        val captured = assertNotNull(recorder.lastRequest)
+        assertEquals(AIModel_Claude.Opus_5.name, captured.model.id)
+        assertNull(captured.temperature)
     }
 
     @Test

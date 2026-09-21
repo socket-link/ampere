@@ -1,7 +1,7 @@
 {
   "version": 1,
   "currency": "USD",
-  "publishedAt": "2026-03-02",
+  "publishedAt": "2026-09-20",
   "entries": [
     {
       "providerId": "openai",
@@ -134,6 +134,46 @@
       ]
     },
     {
+      "providerId": "openai",
+      "modelId": "gpt-5.4",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 2.5,
+          "outputUsdPerMillionTokens": 15.0
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.4-mini",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 0.75,
+          "outputUsdPerMillionTokens": 4.5
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.5",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 5.0,
+          "outputUsdPerMillionTokens": 30.0
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.6-sol",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 4.0,
+          "outputUsdPerMillionTokens": 20.0
+        }
+      ]
+    },
+    {
       "providerId": "anthropic",
       "modelId": "claude-opus-4-1",
       "tiers": [
@@ -224,6 +264,76 @@
       ]
     },
     {
+      "providerId": "anthropic",
+      "modelId": "claude-fable-5-1",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 10.0,
+          "outputUsdPerMillionTokens": 50.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-5",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 5.0,
+          "outputUsdPerMillionTokens": 25.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4-8",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 5.0,
+          "outputUsdPerMillionTokens": 25.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4-7",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 5.0,
+          "outputUsdPerMillionTokens": 25.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4-6",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 5.0,
+          "outputUsdPerMillionTokens": 25.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-sonnet-5",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 2.0,
+          "outputUsdPerMillionTokens": 10.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-sonnet-4-6",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 3.0,
+          "outputUsdPerMillionTokens": 15.0
+        }
+      ]
+    },
+    {
       "providerId": "google",
       "modelId": "gemini-2.5-pro",
       "tiers": [
@@ -290,7 +400,7 @@
     },
     {
       "providerId": "google",
-      "modelId": "gemini-3-pro-latest",
+      "modelId": "gemini-3.1-pro-preview",
       "tiers": [
         {
           "maxInputTokens": 200000,
@@ -300,6 +410,16 @@
         {
           "inputUsdPerMillionTokens": 4.0,
           "outputUsdPerMillionTokens": 18.0
+        }
+      ]
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-3.8-flash",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 0.75,
+          "outputUsdPerMillionTokens": 3.75
         }
       ]
     }

@@ -22,6 +22,11 @@ fun AIModel.toKoogLLMModel(): LLModel? = when (this) {
         is AIModel_OpenAI.GPT_5_1 -> null // TODO: Add to koog-agents
         is AIModel_OpenAI.GPT_5_1_Chat_Latest -> null // TODO: Add to koog-agents
         is AIModel_OpenAI.GPT_5_1_Codex_Max -> null // TODO: Add to koog-agents
+        is AIModel_OpenAI.GPT_5_4 -> null // TODO: Add to koog-agents
+        is AIModel_OpenAI.GPT_5_4_mini -> null // TODO: Add to koog-agents
+        is AIModel_OpenAI.GPT_5_5 -> null // TODO: Add to koog-agents
+        is AIModel_OpenAI.GPT_5_6_Sol -> null // TODO: Add to koog-agents
+        is AIModel_OpenAI.Custom -> null
         is AIModel_OpenAI.GPT_4_1 -> OpenAIModels.Chat.GPT4_1
         is AIModel_OpenAI.GPT_4_1_mini -> OpenAIModels.CostOptimized.GPT4_1Mini
         is AIModel_OpenAI.GPT_4o -> OpenAIModels.Chat.GPT4o
@@ -36,7 +41,8 @@ fun AIModel.toKoogLLMModel(): LLModel? = when (this) {
         // is AIModel_Gemini.Flash_Lite_2_5 -> GoogleModels.Gemini2_5FlashLite
         is AIModel_Gemini.Flash_2_0 -> GoogleModels.Gemini2_0Flash
         is AIModel_Gemini.Flash_Lite_2_0 -> GoogleModels.Gemini2_0FlashLite
-        is AIModel_Gemini.Pro_3_0 -> null // TODO: Add to koog-agents
+        is AIModel_Gemini.Pro_3_1_Preview -> null // TODO: Add to koog-agents
+        is AIModel_Gemini.Flash_3_8 -> null // TODO: Add to koog-agents
         else -> null
     }
     is AIModel_Claude -> when (this) {

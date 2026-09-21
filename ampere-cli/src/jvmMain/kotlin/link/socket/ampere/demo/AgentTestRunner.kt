@@ -104,7 +104,7 @@ fun main(escalation: Boolean = false) {
                 eventApiFactory = { agentId -> context.environmentService.createEventApi(agentId) },
                 aiConfiguration = AIConfiguration_Default(
                     provider = AIProvider_Anthropic,
-                    model = AIModel_Claude.Sonnet_4
+                    model = AIModel_Claude.Sonnet_5
                 ),
                 toolWriteCodeFileOverride = writeCodeTool,
                 upstreamLlmClient = BundledUpstreamLlmClient,

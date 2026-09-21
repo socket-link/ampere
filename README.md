@@ -101,7 +101,7 @@ val team = AgentTeam.create {
     config(
         AnthropicConfig(
             apiKey = System.getenv("ANTHROPIC_API_KEY"),
-            model = Claude.Sonnet4,
+            model = Claude.Sonnet5,
         ),
     )
 

@@ -149,11 +149,13 @@ object ConfigParser {
 
     private val MODELS_BY_PROVIDER = mapOf(
         "anthropic" to setOf(
-            "opus-4.5", "opus-4.1", "opus-4",
-            "sonnet-4.5", "sonnet-4", "sonnet-3.7",
+            "fable-5.1",
+            "opus-5", "opus-4.8", "opus-4.7", "opus-4.6", "opus-4.5", "opus-4.1", "opus-4",
+            "sonnet-5", "sonnet-4.6", "sonnet-4.5", "sonnet-4", "sonnet-3.7",
             "haiku-4.5", "haiku-3.5", "haiku-3",
         ),
         "openai" to setOf(
+            "gpt-5.6-sol", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini",
             "gpt-5.1", "gpt-5.1-instant", "gpt-5.1-codex-max",
             "gpt-5", "gpt-5-mini", "gpt-5-nano",
             "gpt-4.1", "gpt-4.1-mini",
@@ -161,8 +163,8 @@ object ConfigParser {
             "o4-mini", "o3", "o3-mini",
         ),
         "gemini" to setOf(
-            "pro-3", "pro-2.5",
-            "flash-2.5", "flash-2.5-lite",
+            "pro-3.1-preview", "pro-3", "flash-3.8",
+            "pro-2.5", "flash-2.5", "flash-2.5-lite",
             "flash-2", "flash-2-lite",
         ),
     )

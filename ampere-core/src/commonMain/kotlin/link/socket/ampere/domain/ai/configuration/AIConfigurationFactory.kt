@@ -18,15 +18,15 @@ import link.socket.ampere.domain.ai.provider.AIProvider_OpenAI
  *
  * Example using DSL (preferred):
  * ```kotlin
- * val config = AnthropicConfig(model = Claude.Sonnet4)
- *     .withBackup(OpenAIConfig(model = GPT.GPT4_1))
+ * val config = AnthropicConfig(model = Claude.Sonnet5)
+ *     .withBackup(OpenAIConfig(model = GPT.GPT5_4))
  * ```
  *
  * Example using factory (internal use):
  * ```kotlin
  * val config = AIConfigurationFactory.aiConfiguration(
- *     AIModel_Claude.Sonnet_4,
- *     AIConfigurationFactory.aiConfiguration(AIModel_OpenAI.GPT_4_1),
+ *     AIModel_Claude.Sonnet_5,
+ *     AIConfigurationFactory.aiConfiguration(AIModel_OpenAI.GPT_5_4),
  * )
  * ```
  */
@@ -34,22 +34,22 @@ object AIConfigurationFactory {
 
     /**
      * Creates a default configuration with multiple provider fallbacks.
-     * Order: Gemini Flash -> Claude Sonnet -> GPT-4.1
+     * Order: Gemini 3.8 Flash -> Claude Sonnet 5 -> GPT-5.4
      */
     fun getDefaultConfiguration(): AIConfiguration =
         AIConfiguration_WithBackups(
             configurations = listOf(
                 AIConfiguration_Default(
                     provider = AIProvider_Google,
-                    model = AIModel_Gemini.Flash_2_5,
+                    model = AIModel_Gemini.Flash_3_8,
                 ),
                 AIConfiguration_Default(
                     provider = AIProvider_Anthropic,
-                    model = AIModel_Claude.Sonnet_4,
+                    model = AIModel_Claude.Sonnet_5,
                 ),
                 AIConfiguration_Default(
                     provider = AIProvider_OpenAI,
-                    model = AIModel_OpenAI.GPT_4_1,
+                    model = AIModel_OpenAI.GPT_5_4,
                 ),
             ),
         )
