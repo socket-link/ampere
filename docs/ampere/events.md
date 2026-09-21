@@ -5,6 +5,19 @@ AMPERE exposes cognitive and coordination state changes as typed `Event` values 
 from an agent-owned workflow so events are persisted and source attribution stays
 consistent.
 
+## `Event` versus `TeamEvent`
+
+`Event` is the input to the Field fold: every persisted `Event` on the bus is part
+of the durable world-state record, and the fold over them is deterministic.
+`TeamEvent` (`link.socket.ampere.dsl.events`) is a DSL view of that stream, not a
+second event hierarchy. `TeamEventAdapter.adapt` projects a published `Event` into
+a `TeamEvent`; the projection is never persisted and never enters the fold. To
+subscribe to the record itself, use `EventRelayService.subscribeToLiveEvents` or
+`EventSerialBus`. To observe a team's activity in the DSL, collect
+`AgentTeam.events`, whose replay buffer exists for late UI subscribers and is not
+an event log. `TeamEventBoundaryTest` enforces that no `commonMain` code outside
+`dsl/` references `TeamEvent`.
+
 ## Threshold-driven cognitive escalation
 
 `CognitiveEvent.EscalationFired` is emitted when an agent's normalized

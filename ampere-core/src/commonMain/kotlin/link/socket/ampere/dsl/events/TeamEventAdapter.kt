@@ -12,11 +12,21 @@ import link.socket.ampere.agents.domain.outcome.StepOutcome
  *
  * This adapter bridges the gap between the internal event system (30+ event types)
  * and the user-friendly DSL events (Perceived, Recalled, Planned, Executed, Escalated).
+ *
+ * [TeamEvent] is a view layer over [Event]: the adapter reads a published `Event`
+ * and returns a projection of it. It never publishes, persists, or feeds anything
+ * back into the event bus or the Field fold. See the KDoc on [TeamEvent] for the
+ * rule and the list of UI-only variants the adapter does not produce.
  */
 class TeamEventAdapter {
 
     /**
      * Convert an internal event to a TeamEvent, or null if not relevant for the DSL.
+     *
+     * The only sanctioned producer of [TeamEvent] from an [Event]. Any other
+     * construction of a `TeamEvent` subtype is UI-only and must be listed in the
+     * [TeamEvent] KDoc; do not add new construction sites that mirror a bus event
+     * without routing them through here.
      */
     fun adapt(event: Event): TeamEvent? = when (event) {
         // Memory events
