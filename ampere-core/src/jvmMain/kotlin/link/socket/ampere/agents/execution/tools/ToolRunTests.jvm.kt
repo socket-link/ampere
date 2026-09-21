@@ -1,9 +1,11 @@
 package link.socket.ampere.agents.execution.tools
 
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.execution.process.ProcessGroups
 import link.socket.ampere.agents.execution.request.ExecutionContext
 
 actual suspend fun executeRunTests(
@@ -23,14 +25,15 @@ actual suspend fun executeRunTests(
         args.add("--tests")
         args.add(filePath)
 
-        val process = ProcessBuilder()
-            .directory(File(rootDirectory))
-            .command(args)
-            .redirectErrorStream(true)
-            .start()
-
-        val output = process.inputStream.bufferedReader().readText()
-        val exitCode = process.waitFor()
+        val (output, exitCode) = ProcessGroups.run(
+            ProcessBuilder()
+                .directory(File(rootDirectory))
+                .command(args)
+                .redirectErrorStream(true),
+        ) { grouped ->
+            val output = grouped.process.inputStream.bufferedReader().readText()
+            output to grouped.process.waitFor()
+        }
 
         if (exitCode == 0) {
             ExecutionOutcome.CodeReading.Success(
@@ -54,6 +57,8 @@ actual suspend fun executeRunTests(
                 ),
             )
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         ExecutionOutcome.CodeReading.Failure(
             executorId = context.executorId,

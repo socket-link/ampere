@@ -1,8 +1,7 @@
 package link.socket.ampere.integrations.git
 
 import java.io.File
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import link.socket.ampere.agents.execution.process.ProcessGroups
 import link.socket.ampere.agents.execution.tools.git.BranchCreateRequest
 import link.socket.ampere.agents.execution.tools.git.CommitRequest
 import link.socket.ampere.agents.execution.tools.git.CreatedBranch
@@ -335,12 +334,12 @@ class GitCliProvider(
      * @return Command result with exit code, stdout, and stderr
      */
     private suspend fun execute(command: String, vararg args: String): CommandResult =
-        withContext(Dispatchers.IO) {
-            val process = ProcessBuilder(command, *args)
+        ProcessGroups.run(
+            ProcessBuilder(command, *args)
                 .directory(workingDirectory)
-                .redirectErrorStream(false)
-                .start()
-
+                .redirectErrorStream(false),
+        ) { grouped ->
+            val process = grouped.process
             val stdout = process.inputStream.bufferedReader().readText()
             val stderr = process.errorStream.bufferedReader().readText()
             val exitCode = process.waitFor()
