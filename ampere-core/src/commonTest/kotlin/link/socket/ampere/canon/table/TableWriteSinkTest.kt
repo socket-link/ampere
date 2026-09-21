@@ -11,6 +11,8 @@ import link.socket.ampere.canon.CanonId
 import link.socket.ampere.canon.CanonType
 import link.socket.ampere.link.LinkId
 import link.socket.ampere.plug.spi.ExecuteReceipt
+import link.socket.ampere.plug.spi.ExecuteSink
+import link.socket.ampere.plug.spi.ExecuteSinkPreconditionContract
 
 class TableWriteSinkTest {
 
@@ -114,4 +116,20 @@ class TableWriteSinkTest {
             TableWriteIntent.UpdateCell(tableId, TableRowRef.Position(0), "col", "v").requiredCapability,
         )
     }
+}
+
+/** A table sink keeps [ExecuteSink.executeIf]'s default, so it must refuse every precondition. */
+class TableWriteSinkPreconditionContractTest : ExecuteSinkPreconditionContract<TableWriteIntent>() {
+
+    override fun sink(): ExecuteSink<TableWriteIntent> =
+        object : TableWriteSink(setOf(TableWriteCapability.APPEND_ROW, TableWriteCapability.UPDATE_CELL)) {
+            override suspend fun appendRow(intent: TableWriteIntent.AppendRow): Result<ExecuteReceipt> =
+                error("a refused precondition must never reach the transport")
+
+            override suspend fun updateCell(intent: TableWriteIntent.UpdateCell): Result<ExecuteReceipt> =
+                error("a refused precondition must never reach the transport")
+        }
+
+    override fun command(): TableWriteIntent =
+        TableWriteIntent.UpdateCell(CanonId("table-1"), TableRowRef.Position(0), "status", "Done")
 }
