@@ -150,20 +150,36 @@ class AmpereContextTest {
         context.close()
     }
 
+    /**
+     * AMPR-356: points `user.home` at a temp dir so the no-arg constructor never opens
+     * (and, since AMPR-333, migrates) the developer's real `~/.ampere/ampere.db`.
+     * `defaultDatabasePath()` reads the property at call time, so no production hook is
+     * needed. The swap is process-global; it is safe because JUnit parallel execution is
+     * not enabled (Gradle's `maxParallelForks` runs test classes in separate JVMs).
+     */
     @Test
-    fun `default database path uses home directory`() {
-        val context = AmpereContext()
+    fun `default database path uses home directory`(@TempDir tempDir: File) {
+        val originalHome = System.getProperty("user.home")
+        System.setProperty("user.home", tempDir.absolutePath)
         try {
-            val homeDir = System.getProperty("user.home")
-            val expectedPath = File(homeDir, ".ampere/ampere.db")
+            val context = AmpereContext()
+            try {
+                val expectedPath = File(tempDir, ".ampere/ampere.db")
 
-            // The database should exist after context creation
-            assertTrue(
-                expectedPath.exists(),
-                "Database should be created at default path: ${expectedPath.absolutePath}"
-            )
+                // The database should exist after context creation
+                assertTrue(
+                    expectedPath.exists(),
+                    "Database should be created at default path: ${expectedPath.absolutePath}"
+                )
+            } finally {
+                context.close()
+            }
         } finally {
-            context.close()
+            if (originalHome != null) {
+                System.setProperty("user.home", originalHome)
+            } else {
+                System.clearProperty("user.home")
+            }
         }
     }
 }
