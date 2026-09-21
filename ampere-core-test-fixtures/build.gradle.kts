@@ -30,8 +30,9 @@ mavenPublishing {
         name.set("Ampere Core Test Fixtures")
         description.set(
             "Shared chassis SPI test fixtures: FakeNativeStore plus inheritable " +
-                "Readable/WritableCanonAdapterContract suites, and a versioned reference " +
-                "ExecuteSink with an inheritable ExecuteSinkPreconditionContract.",
+                "Readable/WritableCanonAdapterContract suites, a versioned reference " +
+                "ExecuteSink with an inheritable ExecuteSinkPreconditionContract, and an " +
+                "inheritable PerceiveSourceContract.",
         )
         url.set("https://github.com/socket-link/ampere")
         inceptionYear.set("2026")
@@ -102,8 +103,8 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                // `api` — consumers extend CanonAdapterContract, so they need
-                // ampere-core's adapter/canon types and kotlin-test/coroutines-test
+                // `api` — consumers extend the contract suites, so they need
+                // ampere-core's SPI/adapter/canon types and kotlin-test/coroutines-test
                 // (used by the inherited @Test methods) on their own classpath.
                 api(project(":ampere-core"))
                 // `kotlin("test")` only substitutes the per-target test

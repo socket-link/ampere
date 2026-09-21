@@ -26,22 +26,23 @@ class PerceiveSourceTest {
 
     /** A canon-bearing source: emits PERSON, T is a real CanonEntity. */
     private class ContactsSource(
-        private val page: PerceivePage<CanonPerson>,
+        private val people: List<CanonPerson>,
+        private val failures: List<CanonConversionFailure> = emptyList(),
     ) : PerceiveSource<CanonPerson> {
         override val emits: Set<CanonType> = setOf(CanonType.PERSON)
         override suspend fun perceive(query: PerceiveQuery): Result<PerceivePage<CanonPerson>> =
-            Result.success(page)
+            Result.success(PerceivePage.unfiltered(query, people, partialFailures = failures))
     }
 
     data class NotificationPayload(val title: String, val body: String)
 
     /** A canon-external source: emits nothing, T has no CanonEntity base. */
     private class NotificationSource(
-        private val page: PerceivePage<NotificationPayload>,
+        private val notifications: List<NotificationPayload>,
     ) : PerceiveSource<NotificationPayload> {
         override val emits: Set<CanonType> = emptySet()
         override suspend fun perceive(query: PerceiveQuery): Result<PerceivePage<NotificationPayload>> =
-            Result.success(page)
+            Result.success(PerceivePage.unfiltered(query, notifications))
     }
 
     @Test
@@ -51,9 +52,9 @@ class PerceiveSourceTest {
             provenance = provenance("person-1"),
             displayName = "Ada Lovelace",
         )
-        val contacts: PerceiveSource<CanonPerson> = ContactsSource(PerceivePage(entities = listOf(person)))
+        val contacts: PerceiveSource<CanonPerson> = ContactsSource(listOf(person))
         val notifications: PerceiveSource<NotificationPayload> =
-            NotificationSource(PerceivePage(entities = listOf(NotificationPayload("Reminder", "Standup in 5"))))
+            NotificationSource(listOf(NotificationPayload("Reminder", "Standup in 5")))
 
         val query = PerceiveQuery(linkId = linkId)
 
@@ -77,7 +78,7 @@ class PerceiveSourceTest {
                 reason = "empty",
             ),
         )
-        val source = ContactsSource(PerceivePage(entities = listOf(ok), partialFailures = failures))
+        val source = ContactsSource(listOf(ok), failures)
 
         val result = source.perceive(PerceiveQuery(linkId = linkId)).getOrThrow()
 
@@ -93,7 +94,7 @@ class PerceiveSourceTest {
             version = "1.0.0",
             emits = setOf(CanonType.PERSON, CanonType.EMAIL_MESSAGE),
         )
-        val source: PerceiveSource<CanonPerson> = ContactsSource(PerceivePage(entities = emptyList()))
+        val source: PerceiveSource<CanonPerson> = ContactsSource(emptyList())
 
         assertTrue(source.emits != manifest.emits)
         assertEquals(setOf(CanonType.EMAIL_MESSAGE), manifest.emits - source.emits)
