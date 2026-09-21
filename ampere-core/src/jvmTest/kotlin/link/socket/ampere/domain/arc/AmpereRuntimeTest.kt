@@ -5,6 +5,7 @@ import kotlin.io.path.writeText
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -424,6 +425,78 @@ class AmpereRuntimeTest {
         // The `isRunning` guard must reset in the finally, so a second call is accepted.
         assertIs<ArcOutcome.Completed>(runtime.execute("First goal"))
         assertIs<ArcOutcome.Completed>(runtime.execute("Second goal"))
+    }
+
+    @Test
+    fun `concurrency policy defaults to REJECT`() {
+        val runtime = AmpereRuntime(
+            arcConfig = ArcRegistry.getDefault(),
+            projectDir = createTempDirectory("runtime-policy-default").toString().toPath(),
+            agentScope = idleScope,
+        )
+
+        assertEquals(ArcConcurrencyPolicy.REJECT, runtime.getArcConfig().concurrency)
+    }
+
+    @Test
+    fun `runtime refuses to be built for an unimplemented concurrency policy`() {
+        val unimplemented = ArcConcurrencyPolicy.entries.filterNot { it.isImplemented }
+        assertEquals(
+            listOf(ArcConcurrencyPolicy.SUPERSEDE, ArcConcurrencyPolicy.QUEUE, ArcConcurrencyPolicy.PARALLEL),
+            unimplemented,
+        )
+
+        unimplemented.forEach { policy ->
+            val thrown = assertFailsWith<IllegalArgumentException> {
+                AmpereRuntime(
+                    arcConfig = ArcConfig(
+                        name = "declared-arc",
+                        agents = listOf(ArcAgentConfig(role = "code")),
+                        concurrency = policy,
+                    ),
+                    projectDir = createTempDirectory("runtime-policy-unimplemented").toString().toPath(),
+                    agentScope = idleScope,
+                )
+            }
+            assertTrue(thrown.message.orEmpty().contains(policy.name), "Message should name $policy")
+        }
+    }
+
+    /** Real dispatchers: the second request has to land while the first run is genuinely in flight. */
+    @Test
+    fun `a run requested mid flight is refused with a typed rejection`() = runBlocking<Unit> {
+        val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        try {
+            val runtime = AmpereRuntime(
+                arcConfig = ArcConfig(
+                    name = "reject-arc",
+                    agents = listOf(ArcAgentConfig(role = "code")),
+                ),
+                projectDir = arcProjectDir("runtime-reject").toString().toPath(),
+                agentScope = callerScope,
+                maxFlowTicks = Int.MAX_VALUE,
+            )
+
+            val run = callerScope.async { runtime.execute("Implement a very long running goal") }
+            withTimeout(60_000) {
+                while ((runtime.flowPhase?.getCurrentTick() ?: 0) < 1) {
+                    delay(5)
+                }
+            }
+
+            val rejected = assertFailsWith<ArcRunRejectedException> {
+                runtime.execute("A second goal")
+            }
+            assertEquals(ArcConcurrencyPolicy.REJECT, rejected.policy)
+            assertEquals("reject-arc", rejected.arcName)
+
+            // The refusal must not disturb the run that holds the runtime.
+            assertTrue(runtime.isRunning())
+            runtime.cancel()
+            withTimeout(60_000) { assertIs<ArcOutcome.Cancelled>(run.await()) }
+        } finally {
+            callerScope.cancel()
+        }
     }
 
     /** A temp dir with the AGENTS.md/README.md that ChargePhase requires to produce a context. */

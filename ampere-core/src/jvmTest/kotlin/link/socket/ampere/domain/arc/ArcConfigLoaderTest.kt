@@ -280,6 +280,30 @@ class ArcConfigLoaderTest {
     }
 
     @Test
+    fun `merge concurrency uses override when non-default`() {
+        val base = ArcConfig(name = "base", agents = emptyList())
+        val override = ArcConfig(
+            name = "override",
+            agents = emptyList(),
+            concurrency = ArcConcurrencyPolicy.QUEUE,
+        )
+
+        assertEquals(ArcConcurrencyPolicy.QUEUE, ArcConfigLoader.merge(base, override).concurrency)
+    }
+
+    @Test
+    fun `merge concurrency preserves base when override is default`() {
+        val base = ArcConfig(
+            name = "base",
+            agents = emptyList(),
+            concurrency = ArcConcurrencyPolicy.PARALLEL,
+        )
+        val override = ArcConfig(name = "override", agents = emptyList())
+
+        assertEquals(ArcConcurrencyPolicy.PARALLEL, ArcConfigLoader.merge(base, override).concurrency)
+    }
+
+    @Test
     fun `full merge scenario with startup-saas`() {
         val userConfig = ArcConfig(
             name = "startup-saas",
