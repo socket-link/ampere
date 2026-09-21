@@ -24,6 +24,7 @@ import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
+import link.socket.ampere.agents.execution.tools.ASK_HUMAN_TOOL_ID
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.tools.registry.ToolRegistry
 import link.socket.ampere.agents.tools.registry.ToolRegistryRepository
@@ -131,7 +132,6 @@ class ToolInitializerTest {
 
         assertTrue(toolIds.contains("write_code"), "Should contain write_code tool")
         assertTrue(toolIds.contains("read_code"), "Should contain read_code tool")
-        assertTrue(toolIds.contains("ask_human"), "Should contain ask_human tool")
         assertTrue(toolIds.contains("create_ticket"), "Should contain create_ticket tool")
         assertTrue(toolIds.contains("run_tests"), "Should contain run_tests tool")
     }
@@ -155,13 +155,6 @@ class ToolInitializerTest {
             "ReadCode should be FULLY_AUTONOMOUS",
         )
 
-        // AskHuman requires ASK_BEFORE_ACTION
-        assertEquals(
-            AgentActionAutonomy.ASK_BEFORE_ACTION,
-            toolMap["ask_human"]?.requiredAgentAutonomy,
-            "AskHuman should require ASK_BEFORE_ACTION",
-        )
-
         // CreateTicket requires ACT_WITH_NOTIFICATION
         assertEquals(
             AgentActionAutonomy.ACT_WITH_NOTIFICATION,
@@ -174,6 +167,16 @@ class ToolInitializerTest {
             AgentActionAutonomy.FULLY_AUTONOMOUS,
             toolMap["run_tests"]?.requiredAgentAutonomy,
             "RunTests should be FULLY_AUTONOMOUS",
+        )
+    }
+
+    @Test
+    fun `createLocalToolSet does not include an ask_human tool`() {
+        val toolIds = createLocalToolSet().map { it.id }
+
+        assertFalse(
+            ASK_HUMAN_TOOL_ID in toolIds,
+            "ask_human must come from ToolAskHuman wired to a bus; a local placeholder would fake a human reply",
         )
     }
 
@@ -215,14 +218,14 @@ class ToolInitializerTest {
             assertTrue(result.isSuccess, "Initialization should succeed")
             val initResult = result.getOrThrow()
 
-            assertEquals(5, initResult.totalTools, "Should have 5 total tools")
-            assertEquals(5, initResult.successfulRegistrations, "All 5 tools should register successfully")
+            assertEquals(4, initResult.totalTools, "Should have 4 total tools")
+            assertEquals(4, initResult.successfulRegistrations, "All 4 tools should register successfully")
             assertEquals(0, initResult.failedRegistrations, "No tools should fail registration")
             assertTrue(initResult.isFullSuccess, "Should be a full success")
 
             // Verify tools are in registry
             val allTools = registry.getAllTools()
-            assertEquals(5, allTools.size, "Registry should contain all 5 tools")
+            assertEquals(4, allTools.size, "Registry should contain all 4 tools")
         } catch (e: NotImplementedError) {
             println("Skipping test: ${e.message}")
         }
@@ -261,7 +264,7 @@ class ToolInitializerTest {
 
             // Verify tools are still accessible
             val allTools = registry.getAllTools()
-            assertEquals(5, allTools.size, "Should still have 5 tools after re-initialization")
+            assertEquals(4, allTools.size, "Should still have 4 tools after re-initialization")
         } catch (e: NotImplementedError) {
             println("Skipping test: ${e.message}")
         }
@@ -378,16 +381,6 @@ class ToolInitializerTest {
             "Should return CodeReading.Success",
         )
         assertEquals(2, success.readFiles.size, "Should have read 2 files")
-    }
-
-    @Test
-    fun `AskHuman tool execution returns success outcome`() = runTest {
-        val tools = createLocalToolSet()
-        val askHumanTool = tools.requireFunctionTool<ExecutionContext>("ask_human")
-
-        val outcome = askHumanTool.execute(createTestExecutionRequest())
-
-        assertIs<ExecutionOutcome.NoChanges.Success>(outcome, "Should return NoChanges.Success")
     }
 
     @Test

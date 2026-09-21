@@ -38,6 +38,11 @@ import link.socket.ampere.agents.tools.registry.ToolRegistry
  * themselves delegate to service classes for the real implementation, keeping this
  * factory clean and focused on tool definitions.
  *
+ * `ask_human` is deliberately absent: the only implementation is
+ * [link.socket.ampere.agents.execution.tools.ToolAskHuman], which needs an
+ * [link.socket.ampere.agents.events.bus.EventSerialBus] that a human-facing surface
+ * listens on. Callers that have one wire it themselves (see `AgentFactory`).
+ *
  * @return List of all local FunctionTools
  */
 fun createLocalToolSet(): List<FunctionTool<*>> {
@@ -65,19 +70,6 @@ fun createLocalToolSet(): List<FunctionTool<*>> {
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             executionFunction = { request ->
                 executeReadCode(request)
-            },
-        ),
-
-        // AskHuman tool - Escalates decisions to human operators
-        FunctionTool<ExecutionContext>(
-            id = "ask_human",
-            name = "Ask Human",
-            description = "Escalates a decision or question to a human operator for approval or guidance. " +
-                "Use this when facing ambiguous requirements, risky operations, " +
-                "or when explicit human judgment is needed.",
-            requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
-            executionFunction = { request ->
-                executeAskHuman(request)
             },
         ),
 
@@ -276,26 +268,6 @@ private suspend fun executeReadCode(
         executionStartTimestamp = now,
         executionEndTimestamp = now,
         readFiles = request.context.filePathsToRead.map { it to "// File content placeholder" },
-    )
-}
-
-/**
- * Executes the AskHuman tool.
- * This is a placeholder implementation that will be replaced with actual human escalation logic.
- */
-private suspend fun executeAskHuman(
-    request: ExecutionRequest<ExecutionContext>,
-): Outcome {
-    // TODO: Implement actual human escalation logic
-    // This should integrate with the escalation system
-    val now = Clock.System.now()
-    return ExecutionOutcome.NoChanges.Success(
-        executorId = request.context.executorId,
-        ticketId = request.context.ticket.id,
-        taskId = request.context.task.id,
-        executionStartTimestamp = now,
-        executionEndTimestamp = now,
-        message = "AskHuman tool executed (placeholder): ${request.context.instructions}",
     )
 }
 
