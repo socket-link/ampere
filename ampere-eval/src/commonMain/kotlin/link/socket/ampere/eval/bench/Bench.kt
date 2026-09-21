@@ -32,6 +32,8 @@ import okio.Path
  * @param liveModeEnabled explicit opt-in flag for [RunMode.Live] (AMPR-186 task 4.4); defaults
  *   `false` so [RunMode.Live] is refused unless a caller deliberately enables it. CI wiring
  *   never sets this, which is what keeps Live mode out of CI (ticket 5, out of scope here).
+ * @param clock Stamps this bench's own [BenchEvent]s and is injected into every Arc it runs
+ *   (AMPR-335), so a fixed clock makes a run deterministic in time as well as in scheduling.
  */
 class Bench(
     private val projectDir: Path,
@@ -41,6 +43,7 @@ class Bench(
     private val liveModeEnabled: Boolean = false,
     private val source: EventSource = EventSource.Human,
     private val maxFlowTicks: Int = 100,
+    private val clock: Clock = Clock.System,
 ) {
 
     suspend fun run(suite: List<EvalCase>, mode: RunMode): Result<BenchReport> {
@@ -56,7 +59,7 @@ class Bench(
                 eventId = generateUUID("bench-started", runId),
                 runId = runId,
                 eventSource = source,
-                timestamp = Clock.System.now(),
+                timestamp = clock.now(),
                 mode = mode.toString(),
                 probeCount = suite.size,
             ),
@@ -69,7 +72,7 @@ class Bench(
                     eventId = generateUUID("probe-graded", runId, case.id),
                     runId = runId,
                     eventSource = source,
-                    timestamp = Clock.System.now(),
+                    timestamp = clock.now(),
                     probeId = case.id,
                     passed = result.passed,
                     meanScore = result.readings.map { it.score }.average().takeUnless { it.isNaN() } ?: 0.0,
@@ -86,7 +89,7 @@ class Bench(
                 eventId = generateUUID("bench-completed", runId),
                 runId = runId,
                 eventSource = source,
-                timestamp = Clock.System.now(),
+                timestamp = clock.now(),
                 passRate = report.passRate,
                 probeCount = results.size,
             ),
@@ -206,6 +209,7 @@ class Bench(
             cognitiveRelay = relay,
             executor = NoOpExecutor(),
             maxFlowTicks = maxFlowTicks,
+            clock = clock,
         ).execute(case.seed.userGoal)
     }
 

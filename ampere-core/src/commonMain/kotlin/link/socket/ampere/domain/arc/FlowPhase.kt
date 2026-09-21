@@ -6,6 +6,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.Agent
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.memory.MemoryContext
@@ -37,11 +38,18 @@ enum class TerminationReason {
     ERROR,
 }
 
+/**
+ * State shared by every agent across the ticks of one Flow.
+ *
+ * @param clock The Arc's single clock (AMPR-335). Anything on the tick that needs "now" reads
+ *   it here, so an injected clock governs the whole run.
+ */
 data class SharedContext(
     val goalTree: GoalTree,
     var currentGoal: GoalNode,
     val completedGoals: MutableList<GoalNode> = mutableListOf(),
     val agentOutcomes: MutableMap<String, MutableList<Outcome>> = mutableMapOf(),
+    val clock: Clock = Clock.System,
 ) {
     fun recordOutcome(agentId: String, outcome: Outcome) {
         agentOutcomes.getOrPut(agentId) { mutableListOf() }.add(outcome)
@@ -62,15 +70,17 @@ class FlowPhase(
     private val agents: List<Agent<*>>,
     private val goalTree: GoalTree,
     private val maxTicks: Int = 100,
+    private val clock: Clock = Clock.System,
 ) {
     // Volatile because [stop] is called from another thread while the tick loop is running, and
     // [getCurrentTick]/[snapshot] are read from another thread while it is still ticking.
     @Volatile
     private var currentTick = 0
 
-    private val sharedContext = SharedContext(
+    internal val sharedContext = SharedContext(
         goalTree = goalTree,
         currentGoal = goalTree.root,
+        clock = clock,
     )
     private val barrierMutex = Mutex()
 

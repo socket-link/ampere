@@ -33,6 +33,7 @@ class PulsePhase(
     private val flowResult: FlowResult,
     private val projectContext: ProjectContext,
     private val goalTree: GoalTree,
+    private val clock: Clock = Clock.System,
 ) {
     suspend fun execute(): PulseResult {
         // 1. Evaluate success criteria
@@ -149,7 +150,7 @@ class PulsePhase(
                         outcomeId = outcome.id,
                         approach = "Arc: ${arcConfig.name}",
                         learnings = "Agent $agentId completed task successfully",
-                        timestamp = Clock.System.now(),
+                        timestamp = clock.now(),
                     )
 
                     learnings.add(

@@ -100,6 +100,12 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
                 implementation("app.cash.sqldelight:sqlite-driver:2.2.1")
+                // MutableClock (AMPR-335). The fixtures module pins the JUnit4 kotlin-test
+                // artifact for its inheritable contract suites; this module runs on the JUnit
+                // Platform, so drop it rather than put two kotlin-test frameworks on the path.
+                implementation(project(":ampere-core-test-fixtures")) {
+                    exclude(group = "org.jetbrains.kotlin", module = "kotlin-test-junit")
+                }
             }
         }
     }

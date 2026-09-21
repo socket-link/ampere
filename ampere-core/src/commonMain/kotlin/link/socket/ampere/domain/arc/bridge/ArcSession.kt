@@ -9,6 +9,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.emission.Emission
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.relay.DEFAULT_EMISSION_BUFFER_CAPACITY
@@ -196,6 +197,26 @@ class ArcSession(
             arcConfig: ArcConfig,
             projectDirPath: String,
             maxFlowTicks: Int,
+        ): ArcSession = create(
+            arcConfig = arcConfig,
+            projectDirPath = projectDirPath,
+            maxFlowTicks = maxFlowTicks,
+            clock = Clock.System,
+        )
+
+        /**
+         * [create], with the clock the constructed runtime's Arc tick reads (AMPR-335).
+         *
+         * A separate overload rather than a defaulted parameter: the Objective-C export drops
+         * Kotlin defaults, and the three-argument form is the one Swift already calls.
+         *
+         * @param clock Passed to the [AmpereRuntime] this session constructs.
+         */
+        fun create(
+            arcConfig: ArcConfig,
+            projectDirPath: String,
+            maxFlowTicks: Int,
+            clock: Clock,
         ): ArcSession {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -206,6 +227,7 @@ class ArcSession(
                     projectDir = projectDirPath.toPath(),
                     agentScope = scope,
                     maxFlowTicks = maxFlowTicks,
+                    clock = clock,
                 ),
                 eventSerialBus = EventSerialBus(scope = scope),
             )

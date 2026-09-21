@@ -8,6 +8,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.events.api.EventHandler
@@ -17,6 +18,7 @@ import link.socket.ampere.eval.meter.Meter
 import link.socket.ampere.eval.meter.Reading
 import link.socket.ampere.eval.meter.Tolerance
 import link.socket.ampere.eval.trace.Trace
+import link.socket.ampere.time.MutableClock
 import okio.Path.Companion.toPath
 
 /** AMPR-186 tasks 4.3 and 4.5 validation. */
@@ -67,6 +69,32 @@ class BenchTest {
         val redReport = bench.run(strictSuite, RunMode.Replay).getOrThrow()
         assertTrue(!redReport.results.single().passed)
         assertTrue(redReport.passRate < 1.0)
+    }
+
+    @Test
+    fun `an injected clock stamps every BenchEvent with its time`() = runTest {
+        val bus = EventSerialBus(scope = CoroutineScope(Dispatchers.Unconfined))
+        val observed = mutableListOf<BenchEvent>()
+        subscribeToBenchEvents(bus) { observed.add(it) }
+
+        val fixed = Instant.parse("2026-01-01T00:00:00Z")
+        val bench = Bench(
+            projectDir = testProjectDir(),
+            eventBus = bus,
+            maxFlowTicks = 1,
+            clock = MutableClock(fixed),
+        )
+
+        val suite = listOf(
+            probe(id = "probe-1", arcId = "startup-saas", tolerance = Tolerance(minScore = 0.5)),
+            probe(id = "probe-2", arcId = "devops-pipeline", tolerance = Tolerance(minScore = 0.5)),
+        )
+        bench.run(suite, RunMode.Replay).getOrThrow()
+
+        val graded = observed.filterIsInstance<BenchEvent.ProbeGraded>()
+        assertEquals(2, graded.size)
+        assertEquals(listOf(fixed, fixed), graded.map { it.timestamp })
+        assertTrue(observed.all { it.timestamp == fixed })
     }
 
     private fun subscribeToBenchEvents(bus: EventSerialBus, onEvent: (BenchEvent) -> Unit) {
