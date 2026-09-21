@@ -17,8 +17,10 @@ import link.socket.ampere.agents.events.relay.DEFAULT_EMISSION_BUFFER_CAPACITY
 import link.socket.ampere.agents.events.relay.emissions
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.domain.arc.AmpereRuntime
+import link.socket.ampere.domain.arc.ArcConcurrencyPolicy
 import link.socket.ampere.domain.arc.ArcConfig
 import link.socket.ampere.domain.arc.ArcOutcome
+import link.socket.ampere.domain.arc.ArcRunRejectedException
 import link.socket.ampere.trace.ArcRunId
 import link.socket.ampere.trace.ArcTraceProjection
 import okio.Path.Companion.toPath
@@ -31,6 +33,31 @@ import okio.Path.Companion.toPath
  * Charge phase.
  */
 const val DEFAULT_EMISSION_REPLAY: Int = 32
+
+/**
+ * What [ArcSession.tryStart] hands back: a run, or the reason there is none (AMPR-357).
+ *
+ * A value rather than a thrown [ArcRunRejectedException] for the same reason [ArcOutcome] is
+ * one: Kotlin/Native only turns a Kotlin exception into a Swift `Error` when the function
+ * declares it with `@Throws`, and anything undeclared that crosses the boundary terminates the
+ * process. Swift sees the two cases as `ArcStartResultStarted` and `ArcStartResultRejected`.
+ */
+sealed class ArcStartResult {
+    /** The run was dispatched; [handle] observes it. */
+    class Started(val handle: ArcRunHandle) : ArcStartResult()
+
+    /**
+     * The Arc's declared concurrency policy refused the run. The run already in flight is
+     * untouched.
+     *
+     * @property arcName The Arc whose runtime refused the run.
+     * @property policy The declared policy that produced the refusal.
+     */
+    class Rejected(
+        val arcName: String,
+        val policy: ArcConcurrencyPolicy,
+    ) : ArcStartResult()
+}
 
 /**
  * Starts Arcs and hands back a handle to each one.
@@ -60,6 +87,25 @@ const val DEFAULT_EMISSION_REPLAY: Int = 32
  * defer { session.close() }
  * let handle = session.start(userGoal: "Add a health check endpoint")
  * ```
+ *
+ * [start] cannot be caught from Swift: its refusal is an undeclared Kotlin exception there, and
+ * it terminates the process. A caller that may fire while a run is in flight — an App Intent,
+ * say — uses [tryStart] and switches on the value:
+ *
+ * ```swift
+ * switch try session.tryStart(userGoal: goal) {
+ * case let started as ArcStartResultStarted:
+ *     observe(started.handle)
+ * case let rejected as ArcStartResultRejected:
+ *     // rejected.policy == .reject: a run is already in flight; it carries on untouched.
+ *     report("\(rejected.arcName) is busy")
+ * default:
+ *     break
+ * }
+ * ```
+ *
+ * The `try` is for a blank goal only, which [tryStart] declares with `@Throws` — bad input is a
+ * Swift `Error`, a busy runtime is a value.
  *
  * @param scope Caller-owned. Its lifetime bounds every run this session starts.
  * @param runtime The Arc runtime to drive.
@@ -128,7 +174,37 @@ class ArcSession(
      */
     fun start(userGoal: String, runId: ArcRunId): ArcRunHandle {
         require(userGoal.isNotBlank()) { "User goal cannot be blank" }
-        val claim = runtime.admitRun()
+        return dispatch(runtime.admitRun(), userGoal, runId)
+    }
+
+    /**
+     * [start], with a refusal returned as [ArcStartResult.Rejected] instead of thrown — the form
+     * Swift can handle (AMPR-357). Starts under a freshly generated run identity.
+     *
+     * @throws IllegalArgumentException if [userGoal] is blank
+     */
+    @Throws(IllegalArgumentException::class)
+    fun tryStart(userGoal: String): ArcStartResult = tryStart(userGoal, generateUUID("arc-run"))
+
+    /**
+     * [start] under [runId], with a refusal returned as [ArcStartResult.Rejected] instead of
+     * thrown.
+     *
+     * @throws IllegalArgumentException if [userGoal] is blank
+     */
+    @Throws(IllegalArgumentException::class)
+    fun tryStart(userGoal: String, runId: ArcRunId): ArcStartResult {
+        require(userGoal.isNotBlank()) { "User goal cannot be blank" }
+        val claim = try {
+            runtime.admitRun()
+        } catch (e: ArcRunRejectedException) {
+            return ArcStartResult.Rejected(arcName = e.arcName, policy = e.policy)
+        }
+        return ArcStartResult.Started(dispatch(claim, userGoal, runId))
+    }
+
+    /** Dispatch the run [claim] admitted. Callers have already validated [userGoal]. */
+    private fun dispatch(claim: AmpereRuntime.RunClaim, userGoal: String, runId: ArcRunId): ArcRunHandle {
 
         val emissions: MutableSharedFlow<Emission>
         val pump: Job

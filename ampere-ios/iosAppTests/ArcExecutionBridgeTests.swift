@@ -203,6 +203,39 @@ final class ArcExecutionBridgeTests: XCTestCase {
         XCTAssertFalse(kind is EmissionKindSensor)
     }
 
+    /// An App Intent can fire while a run is in flight (AMPR-357). `tryStart` hands the refusal
+    /// back as a value Swift can switch on — `start` would terminate the process instead — and
+    /// the run that holds the runtime carries on.
+    func testSecondStartWhileARunIsInFlightIsARefusalNotACrash() async throws {
+        let session = makeSession(maxFlowTicks: Int32.max)
+        guard let first = try session.tryStart(userGoal: "Implement a very long running goal")
+            as? ArcStartResultStarted else {
+            return XCTFail("The first run should start")
+        }
+
+        switch try session.tryStart(userGoal: "A second goal") {
+        case let rejected as ArcStartResultRejected:
+            XCTAssertEqual(rejected.policy, ArcConcurrencyPolicy.reject)
+            XCTAssertEqual(rejected.arcName, ArcRegistry.shared.getDefault().name)
+        case is ArcStartResultStarted:
+            XCTFail("A second run must not start while the first is in flight")
+        default:
+            XCTFail("Unexpected start result")
+        }
+
+        XCTAssertTrue(first.handle.isActive, "The refusal must leave the first run untouched")
+        let outcome = try await first.handle.cancel()
+        XCTAssertTrue(outcome is ArcOutcomeCancelled, "Expected Cancelled, got \(outcome)")
+        XCTAssertEqual(outcome.runId, first.handle.runId)
+    }
+
+    /// A blank goal is bad input, not a busy runtime: `tryStart` declares it with `@Throws`, so
+    /// it arrives as a Swift `Error` rather than an uncaught Kotlin exception.
+    func testBlankGoalIsASwiftError() throws {
+        let session = makeSession(maxFlowTicks: 1)
+        XCTAssertThrowsError(try session.tryStart(userGoal: "   "))
+    }
+
     /// Cancelling the consuming `Task` releases the bus subscription rather than leaking it.
     func testCancellingTheConsumerReleasesTheObservation() async throws {
         let session = makeSession(maxFlowTicks: Int32.max)

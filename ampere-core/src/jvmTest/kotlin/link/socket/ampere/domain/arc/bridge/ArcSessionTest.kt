@@ -552,6 +552,42 @@ class ArcSessionTest {
         runtime.releaseClaim(runtime.admitRun())
     }
 
+    @Test
+    fun `tryStart returns a refusal as a value and leaves the in-flight run untouched`() = runBlocking<Unit> {
+        val projectDir = arcProjectDir("bridge-try-start")
+        val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+        try {
+            val bus = EventSerialBus(scope = callerScope)
+            val runtime = AmpereRuntime(
+                arcConfig = arcConfig("bridge-try-start-arc"),
+                projectDir = projectDir.toString().toPath(),
+                agentScope = callerScope,
+                maxFlowTicks = Int.MAX_VALUE,
+            )
+            val session = ArcSession(scope = callerScope, runtime = runtime, eventSerialBus = bus)
+
+            assertFailsWithMessage<IllegalArgumentException>("User goal cannot be blank") {
+                session.tryStart("   ")
+            }
+
+            val started = assertIs<ArcStartResult.Started>(session.tryStart("Implement a very long running goal"))
+            awaitFlowUnderway(runtime)
+
+            val rejected = assertIs<ArcStartResult.Rejected>(session.tryStart("A second goal"))
+            assertEquals(ArcConcurrencyPolicy.REJECT, rejected.policy)
+            assertEquals("bridge-try-start-arc", rejected.arcName)
+            assertTrue(runtime.isRunning(), "The refusal must leave the in-flight run untouched")
+            assertTrue(started.handle.isActive)
+
+            val outcome = withTimeout(timeoutMillis) { started.handle.cancel() }
+            assertIs<ArcOutcome.Cancelled>(outcome)
+            assertEquals(started.handle.runId, outcome.runId)
+        } finally {
+            callerScope.cancel()
+        }
+    }
+
     private inline fun <reified T : Throwable> assertFailsWithMessage(
         expected: String,
         block: () -> Unit,
