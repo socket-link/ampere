@@ -82,6 +82,12 @@ sqldelight {
     databases {
         create("Database") {
             packageName.set("link.socket.ampere.db")
+            // `N.db` files here are schema snapshots at version N. Migrations are compiled against
+            // them, and verifySqlDelightMigration replays every later .sqm onto each snapshot and
+            // fails if the result differs from a fresh .sq schema. 1.db is the schema just before
+            // 1.sqm, so it covers the whole migration chain.
+            schemaOutputDirectory.set(file("src/commonMain/sqldelight/databases"))
+            verifyMigrations.set(true)
         }
     }
 }
@@ -358,6 +364,10 @@ val verifyCoreNeutrality = tasks.register("verifyCoreNeutrality") {
 }
 
 tasks.named("check") { dependsOn(verifyCoreNeutrality) }
+
+// SQLDelight only hangs migration verification off `check`, which CI doesn't run; CI gates on
+// :ampere-core:jvmTest, so hang it there too or a .sqm that diverges from the .sq still merges.
+tasks.named("jvmTest") { dependsOn("verifySqlDelightMigration") }
 
 ktlint {
     android.set(true)

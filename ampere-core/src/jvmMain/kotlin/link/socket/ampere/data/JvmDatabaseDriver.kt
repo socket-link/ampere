@@ -1,7 +1,6 @@
 package link.socket.ampere.data
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
-import link.socket.ampere.db.Database
 import link.socket.ampere.db.fts.FtsSchema
 
 /** Creates a SQLDelight JDBC driver for the given database on JVM. */
@@ -22,12 +21,10 @@ fun createJvmDriver(
     driver.execute(null, "PRAGMA busy_timeout=5000", 0) // Wait up to 5s on locks
     driver.execute(null, "PRAGMA cache_size=-64000", 0) // 64MB cache
 
-    // Ensure schema exists on first open. If it already exists, creation will simply fail and be ignored.
-    runCatching {
-        Database.Schema.create(driver)
-    }
+    // Unlike the Android and iOS drivers, JdbcSqliteDriver doesn't create or migrate the schema.
+    DatabaseSchemaManager.ensure(driver).getOrThrow()
 
-    // FTS5 virtual tables are no longer part of Schema.create() (see FtsSchema) so a SQLite
+    // FTS5 virtual tables are no longer part of the SQLDelight schema (see FtsSchema) so a SQLite
     // build without the fts5 module degrades search instead of taking the whole schema down.
     // xerial's sqlite-jdbc, used here, compiles fts5 in, so this is expected to always succeed
     // on JVM — but installing it the same guarded way as every other platform keeps the

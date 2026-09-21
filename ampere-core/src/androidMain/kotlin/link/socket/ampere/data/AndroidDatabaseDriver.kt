@@ -36,6 +36,9 @@ fun ampereSqliteOpenHelperFactory(): SupportSQLiteOpenHelper.Factory = OsmerionS
  * surfaces here, with a diagnosable message, rather than as an opaque `SQLiteException`
  * on whichever unrelated query happens to run first.
  *
+ * The driver receives [Database.Schema] and creates or migrates it itself off `PRAGMA
+ * user_version`, so Android doesn't go through the JVM's `DatabaseSchemaManager`.
+ *
  * @throws AmpereDatabaseInitializationException if the database cannot be opened or created.
  */
 fun createAndroidDriver(

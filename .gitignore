@@ -1,5 +1,7 @@
 *.iml
 *.db
+# SQLDelight schema snapshots that verifySqlDelightMigration checks migrations against.
+!ampere-core/src/commonMain/sqldelight/databases/*.db
 .gradle
 .kotlin/
 .ampere

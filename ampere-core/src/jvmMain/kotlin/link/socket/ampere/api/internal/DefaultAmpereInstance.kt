@@ -24,6 +24,7 @@ import link.socket.ampere.api.service.PricingService
 import link.socket.ampere.api.service.StatusService
 import link.socket.ampere.api.service.ThreadService
 import link.socket.ampere.api.service.TicketService
+import link.socket.ampere.data.DatabaseSchemaManager
 import link.socket.ampere.db.Database
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.dsl.events.Escalated
@@ -53,11 +54,7 @@ internal class DefaultAmpereInstance(
     }
 
     private val database: Database = run {
-        try {
-            Database.Schema.create(driver)
-        } catch (_: Exception) {
-            // Schema may already exist
-        }
+        DatabaseSchemaManager.ensure(driver).getOrThrow()
         Database(driver)
     }
 
