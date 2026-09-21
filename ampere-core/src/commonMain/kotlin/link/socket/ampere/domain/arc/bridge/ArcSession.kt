@@ -38,8 +38,11 @@ const val DEFAULT_EMISSION_REPLAY: Int = 32
  * caller that cannot hold a `CoroutineScope` — which is every Swift call site, and the reason
  * App Intents are blocked without it.
  *
- * One run at a time per [runtime]: [start] rejects a goal while a run is in flight, matching
- * [AmpereRuntime.execute]'s own contract.
+ * A goal that arrives while a run is in flight is handled by the Arc's declared
+ * [ArcConfig.concurrency] policy — the same check [AmpereRuntime.execute] applies. Under the
+ * default, [ArcConcurrencyPolicy.REJECT][link.socket.ampere.domain.arc.ArcConcurrencyPolicy.REJECT],
+ * [start] refuses it with an
+ * [ArcRunRejectedException][link.socket.ampere.domain.arc.ArcRunRejectedException].
  *
  * ### Swift
  *
@@ -114,11 +117,12 @@ class ArcSession(
      * the returned handle cannot miss the run's opening.
      *
      * @throws IllegalArgumentException if [userGoal] is blank
-     * @throws IllegalStateException if [runtime] is already executing
+     * @throws link.socket.ampere.domain.arc.ArcRunRejectedException if the Arc's concurrency
+     *   policy refuses a run while [runtime] is already executing
      */
     fun start(userGoal: String, runId: ArcRunId): ArcRunHandle {
         require(userGoal.isNotBlank()) { "User goal cannot be blank" }
-        check(!runtime.isRunning()) { "Runtime is already executing" }
+        runtime.admitRun()
 
         val emissions = MutableSharedFlow<Emission>(replay = emissionReplay)
 

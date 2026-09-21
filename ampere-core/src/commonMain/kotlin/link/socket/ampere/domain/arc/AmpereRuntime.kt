@@ -75,6 +75,16 @@ class AmpereRuntime(
      */
     private val eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
 ) {
+    init {
+        // Declared-but-unimplemented policies fail here, at construction, rather than on the
+        // second trigger — a runtime that silently rejected under a `supersede` declaration
+        // would be lying about its contract.
+        require(arcConfig.concurrency.isImplemented) {
+            "Arc '${arcConfig.name}' declares concurrency policy ${arcConfig.concurrency}, " +
+                "which is not implemented; only ${ArcConcurrencyPolicy.REJECT} is supported"
+        }
+    }
+
     private var chargeResult: ChargeResult? = null
     private var flowResult: FlowResult? = null
 
@@ -117,11 +127,11 @@ class AmpereRuntime(
      *   freshly generated id so existing callers keep working unchanged. It is echoed back on
      *   every [ArcOutcome], including the cancelled and failed ones.
      * @return The terminal [ArcOutcome] of the run
-     * @throws IllegalStateException if already running
+     * @throws ArcRunRejectedException if a run is already in flight — see [admitRun]
      * @throws IllegalArgumentException if goal is blank
      */
     suspend fun execute(userGoal: String, runId: ArcRunId = generateUUID("arc-run")): ArcOutcome {
-        require(!isRunning) { "Runtime is already executing" }
+        admitRun()
         require(userGoal.isNotBlank()) { "User goal cannot be blank" }
 
         stopRequested = false
@@ -283,6 +293,28 @@ class AmpereRuntime(
     fun cancel() {
         cancelRequested = true
         runJob?.cancel(CancellationException(CANCELLATION_MESSAGE))
+    }
+
+    /**
+     * Apply the Arc's declared [ArcConfig.concurrency] policy to a new run request (AMPR-284).
+     *
+     * The one place the answer to "a run is requested while one is in flight" lives: [execute]
+     * and the Swift bridge's `ArcSession.start` both ask here rather than checking [isRunning]
+     * themselves.
+     *
+     * @throws ArcRunRejectedException if a run is in flight under [ArcConcurrencyPolicy.REJECT]
+     */
+    internal fun admitRun() {
+        when (val policy = arcConfig.concurrency) {
+            ArcConcurrencyPolicy.REJECT ->
+                if (isRunning) throw ArcRunRejectedException(arcConfig.name, policy)
+
+            // Unreachable: the constructor refuses an unimplemented policy.
+            ArcConcurrencyPolicy.SUPERSEDE,
+            ArcConcurrencyPolicy.QUEUE,
+            ArcConcurrencyPolicy.PARALLEL,
+            -> error("Concurrency policy $policy is not implemented")
+        }
     }
 
     /**

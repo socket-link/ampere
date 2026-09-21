@@ -17,6 +17,11 @@ data class ArcConfig(
      * lowers it — see [minimumRungFor]. Null leaves the Arc unconstrained.
      */
     val minimumRung: CapabilityRung? = null,
+    /**
+     * What a runtime for this Arc does with a run requested while another is in flight
+     * (AMPR-284). [ArcConcurrencyPolicy.REJECT] is the only implemented policy and the default.
+     */
+    val concurrency: ArcConcurrencyPolicy = ArcConcurrencyPolicy.REJECT,
 )
 
 /**

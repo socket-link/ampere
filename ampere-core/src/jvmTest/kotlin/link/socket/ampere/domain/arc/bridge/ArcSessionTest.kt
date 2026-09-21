@@ -32,8 +32,10 @@ import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.domain.arc.AmpereRuntime
 import link.socket.ampere.domain.arc.ArcAgentConfig
+import link.socket.ampere.domain.arc.ArcConcurrencyPolicy
 import link.socket.ampere.domain.arc.ArcConfig
 import link.socket.ampere.domain.arc.ArcOutcome
+import link.socket.ampere.domain.arc.ArcRunRejectedException
 import link.socket.ampere.domain.arc.OrchestrationConfig
 import link.socket.ampere.domain.arc.OrchestrationType
 import link.socket.ampere.domain.arc.TerminationReason
@@ -395,9 +397,13 @@ class ArcSessionTest {
             val handle = session.start("Implement a very long running goal")
             awaitFlowUnderway(runtime)
 
-            assertFailsWithMessage<IllegalStateException>("Runtime is already executing") {
+            // The default declared policy is REJECT, and the refusal is typed (AMPR-284).
+            val rejected = kotlin.test.assertFailsWith<ArcRunRejectedException> {
                 session.start("A second goal")
             }
+            assertEquals(ArcConcurrencyPolicy.REJECT, rejected.policy)
+            assertEquals("bridge-guards-arc", rejected.arcName)
+            assertTrue(runtime.isRunning(), "The refusal must leave the in-flight run untouched")
 
             withTimeout(timeoutMillis) { handle.cancel() }
         } finally {

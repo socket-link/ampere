@@ -53,6 +53,7 @@ object ArcConfigLoader {
      * - name: always use base name (arc identity)
      * - description: user override if provided, otherwise base
      * - orchestration: user override if non-default, otherwise base
+     * - concurrency: user override if non-default, otherwise base
      * - agents: merge by role, combining sparks
      */
     fun merge(base: ArcConfig, override: ArcConfig): ArcConfig {
@@ -61,6 +62,11 @@ object ArcConfigLoader {
             description = override.description ?: base.description,
             agents = mergeAgents(base.agents, override.agents),
             orchestration = mergeOrchestration(base.orchestration, override.orchestration),
+            concurrency = if (override.concurrency == ArcConcurrencyPolicy.REJECT) {
+                base.concurrency
+            } else {
+                override.concurrency
+            },
         )
     }
 

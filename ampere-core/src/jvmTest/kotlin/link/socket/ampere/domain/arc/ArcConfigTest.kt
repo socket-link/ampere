@@ -140,6 +140,41 @@ class ArcConfigTest {
     }
 
     @Test
+    fun `concurrency defaults to reject when absent from YAML`() {
+        val yamlInput = """
+            name: minimal
+            agents:
+              - role: code
+        """.trimIndent()
+
+        val config = yaml.decodeFromString(ArcConfig.serializer(), yamlInput)
+
+        assertEquals(ArcConcurrencyPolicy.REJECT, config.concurrency)
+    }
+
+    @Test
+    fun `deserialize YAML config with declared concurrency policy`() {
+        val yamlInput = """
+            name: superseding
+            agents:
+              - role: code
+            concurrency: supersede
+        """.trimIndent()
+
+        val config = yaml.decodeFromString(ArcConfig.serializer(), yamlInput)
+
+        assertEquals(ArcConcurrencyPolicy.SUPERSEDE, config.concurrency)
+    }
+
+    @Test
+    fun `ArcConcurrencyPolicy serializes to lowercase in YAML`() {
+        ArcConcurrencyPolicy.entries.forEach { policy ->
+            val yamlString = yaml.encodeToString(ArcConcurrencyPolicy.serializer(), policy)
+            assertEquals(policy.name.lowercase(), yamlString.trim())
+        }
+    }
+
+    @Test
     fun `full arc config roundtrip with all fields`() {
         val original = ArcConfig(
             name = "security-audit",
