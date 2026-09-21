@@ -109,21 +109,60 @@ sealed class AIModel_OpenAI(
         limits = GPT_5_1_LIMITS,
     )
 
-    data object GPT_5_1_Chat_Latest : AIModel_OpenAI(
-        name = GPT_5_1_Chat_Latest_NAME,
-        displayName = GPT_5_1_Chat_Latest_DISPLAY_NAME,
-        description = GPT_5_1_Chat_Latest_DESCRIPTION,
-        features = GPT_5_1_Chat_Latest_FEATURES,
-        limits = GPT_5_1_Chat_Latest_LIMITS,
+    data object GPT_5_4 : AIModel_OpenAI(
+        name = GPT_5_4_NAME,
+        displayName = GPT_5_4_DISPLAY_NAME,
+        description = GPT_5_4_DESCRIPTION,
+        features = GPT_5_4_FEATURES,
+        limits = GPT_5_4_LIMITS,
     )
 
-    data object GPT_5_1_Codex_Max : AIModel_OpenAI(
-        name = GPT_5_1_Codex_Max_NAME,
-        displayName = GPT_5_1_Codex_Max_DISPLAY_NAME,
-        description = GPT_5_1_Codex_Max_DESCRIPTION,
-        features = GPT_5_1_Codex_Max_FEATURES,
-        limits = GPT_5_1_Codex_Max_LIMITS,
+    data object GPT_5_4_mini : AIModel_OpenAI(
+        name = GPT_5_4_mini_NAME,
+        displayName = GPT_5_4_mini_DISPLAY_NAME,
+        description = GPT_5_4_mini_DESCRIPTION,
+        features = GPT_5_4_mini_FEATURES,
+        limits = GPT_5_4_mini_LIMITS,
     )
+
+    /**
+     * Defaults to reasoning effort `medium`. From GPT-5.4 on, Chat Completions
+     * rejects tool calls at any effort other than `none`, and Ampere sends no
+     * effort — so use [GPT_5_4] for tool-calling agents.
+     */
+    data object GPT_5_5 : AIModel_OpenAI(
+        name = GPT_5_5_NAME,
+        displayName = GPT_5_5_DISPLAY_NAME,
+        description = GPT_5_5_DESCRIPTION,
+        features = GPT_5_5_FEATURES,
+        limits = GPT_5_5_LIMITS,
+    )
+
+    /** Same Chat Completions tool-calling caveat as [GPT_5_5]. */
+    data object GPT_5_6_Sol : AIModel_OpenAI(
+        name = GPT_5_6_Sol_NAME,
+        displayName = GPT_5_6_Sol_DISPLAY_NAME,
+        description = GPT_5_6_Sol_DESCRIPTION,
+        features = GPT_5_6_Sol_FEATURES,
+        limits = GPT_5_6_Sol_LIMITS,
+    )
+
+    /**
+     * An OpenAI model Ampere has no bundled entry for, constructed by ID so a
+     * consumer can roll to a new model without waiting on an Ampere release.
+     *
+     * Not part of [ALL_MODELS], so it has no bundled capability rung or
+     * pricing; register a
+     * [ModelDescriptor][link.socket.ampere.agents.domain.routing.capability.ModelDescriptor]
+     * for [name] if the relay should route to it.
+     */
+    data class Custom(
+        override val name: String,
+        override val features: AIModelFeatures,
+        override val limits: ModelLimits,
+        override val displayName: String = name,
+        override val description: String = "",
+    ) : AIModel_OpenAI(name, displayName, description, features, limits)
 
     companion object Companion {
 
@@ -162,12 +201,6 @@ sealed class AIModel_OpenAI(
         private val o3_mini_TOOLS: List<ProvidedTool<AITool_OpenAI>> = listOf()
 
         private val GPT_5_1_TOOLS: List<ProvidedTool<AITool_OpenAI>> = GPT_5_TOOLS
-        private val GPT_5_1_Chat_Latest_TOOLS: List<ProvidedTool<AITool_OpenAI>> = GPT_5_TOOLS
-        private val GPT_5_1_Codex_Max_TOOLS: List<ProvidedTool<AITool_OpenAI>> = listOf(
-            ProvidedTool.CodeExecution(AITool_OpenAI.CodeExecution),
-            ProvidedTool.FileSearch(AITool_OpenAI.FileSearch),
-            ProvidedTool.MCP(AITool_OpenAI.MCP),
-        )
 
         // ---- Rate Limits ----
 
@@ -262,14 +295,50 @@ sealed class AIModel_OpenAI(
         )
 
         private val GPT_5_1_RATE_LIMITS = GPT_5_RATE_LIMITS
-        private val GPT_5_1_Chat_Latest_RATE_LIMITS = GPT_5_RATE_LIMITS
-        private val GPT_5_1_Codex_Max_RATE_LIMITS = nonFreeRateLimitsFactory.createRateLimits(
-            tier1TPM = TokenCount._30k,
-            tier2TPM = TokenCount._450k,
-            tier3TPM = TokenCount._800k,
-            tier4TPM = TokenCount._2m,
+
+        // Published per-model, tiers 1-5; OpenAI lists no free tier for these.
+        private const val TIER_1_5_4_RPM = 500
+        private const val TIER_2_5_4_RPM = 5000
+        private const val TIER_3_5_4_RPM = 5000
+        private const val TIER_4_5_4_RPM = 10000
+        private const val TIER_5_5_4_RPM = 15000
+        private const val TIER_5_5_4_mini_RPM = 30000
+
+        private val currentGenerationRateLimitsFactory = RateLimitsFactory(
+            tier1RequestLimits = Pair(TIER_1_5_4_RPM, null),
+            tier2RequestLimits = Pair(TIER_2_5_4_RPM, null),
+            tier3RequestLimits = Pair(TIER_3_5_4_RPM, null),
+            tier4RequestLimits = Pair(TIER_4_5_4_RPM, null),
+            tier5RequestLimits = Pair(TIER_5_5_4_RPM, null),
+        )
+
+        // One published table covers gpt-5.4, gpt-5.5 and gpt-5.6-sol. (5.4 and
+        // 5.5 also publish a separate, lower Long Context table for requests
+        // over 272K input tokens, which this model doesn't represent.)
+        private val GPT_5_4_RATE_LIMITS = currentGenerationRateLimitsFactory.createRateLimits(
+            tier1TPM = TokenCount._500k,
+            tier2TPM = TokenCount._1m,
+            tier3TPM = TokenCount._2m,
+            tier4TPM = TokenCount._4m,
             tier5TPM = TokenCount._40m,
         )
+
+        private val GPT_5_4_mini_RATE_LIMITS = RateLimitsFactory(
+            tier1RequestLimits = Pair(TIER_1_5_4_RPM, null),
+            tier2RequestLimits = Pair(TIER_2_5_4_RPM, null),
+            tier3RequestLimits = Pair(TIER_3_5_4_RPM, null),
+            tier4RequestLimits = Pair(TIER_4_5_4_RPM, null),
+            tier5RequestLimits = Pair(TIER_5_5_4_mini_RPM, null),
+        ).createRateLimits(
+            tier1TPM = TokenCount._500k,
+            tier2TPM = TokenCount._2m,
+            tier3TPM = TokenCount._4m,
+            tier4TPM = TokenCount._10m,
+            tier5TPM = TokenCount._180m,
+        )
+
+        private val GPT_5_5_RATE_LIMITS = GPT_5_4_RATE_LIMITS
+        private val GPT_5_6_Sol_RATE_LIMITS = GPT_5_4_RATE_LIMITS
 
         // ---- Token Limits ----
 
@@ -311,8 +380,15 @@ sealed class AIModel_OpenAI(
         private val o3_mini_TOKEN_LIMITS = o3_TOKEN_LIMITS
 
         private val GPT_5_1_TOKEN_LIMITS = GPT_5_TOKEN_LIMITS
-        private val GPT_5_1_Chat_Latest_TOKEN_LIMITS = GPT_5_TOKEN_LIMITS
-        private val GPT_5_1_Codex_Max_TOKEN_LIMITS = GPT_5_TOKEN_LIMITS
+
+        // OpenAI lists 1,050,000 tokens; TokenCount's nearest step is 1M.
+        private val GPT_5_4_TOKEN_LIMITS = TokenLimits(
+            contextWindow = TokenCount._1m,
+            maxOutput = GPT_5_MAX_OUTPUT_TOKENS,
+        )
+        private val GPT_5_4_mini_TOKEN_LIMITS = GPT_5_TOKEN_LIMITS
+        private val GPT_5_5_TOKEN_LIMITS = GPT_5_4_TOKEN_LIMITS
+        private val GPT_5_6_Sol_TOKEN_LIMITS = GPT_5_4_TOKEN_LIMITS
 
         // ---- Limits ----
 
@@ -368,14 +444,24 @@ sealed class AIModel_OpenAI(
             token = GPT_5_1_TOKEN_LIMITS,
         )
 
-        private val GPT_5_1_Chat_Latest_LIMITS = ModelLimits(
-            rate = GPT_5_1_Chat_Latest_RATE_LIMITS,
-            token = GPT_5_1_Chat_Latest_TOKEN_LIMITS,
+        private val GPT_5_4_LIMITS = ModelLimits(
+            rate = GPT_5_4_RATE_LIMITS,
+            token = GPT_5_4_TOKEN_LIMITS,
         )
 
-        private val GPT_5_1_Codex_Max_LIMITS = ModelLimits(
-            rate = GPT_5_1_Codex_Max_RATE_LIMITS,
-            token = GPT_5_1_Codex_Max_TOKEN_LIMITS,
+        private val GPT_5_4_mini_LIMITS = ModelLimits(
+            rate = GPT_5_4_mini_RATE_LIMITS,
+            token = GPT_5_4_mini_TOKEN_LIMITS,
+        )
+
+        private val GPT_5_5_LIMITS = ModelLimits(
+            rate = GPT_5_5_RATE_LIMITS,
+            token = GPT_5_5_TOKEN_LIMITS,
+        )
+
+        private val GPT_5_6_Sol_LIMITS = ModelLimits(
+            rate = GPT_5_6_Sol_RATE_LIMITS,
+            token = GPT_5_6_Sol_TOKEN_LIMITS,
         )
 
         // ---- Training Cutoffs ----
@@ -451,8 +537,34 @@ sealed class AIModel_OpenAI(
             seconds = 0,
         )
 
-        private val GPT_5_1_Chat_Latest_CUTOFF = GPT_5_1_CUTOFF
-        private val GPT_5_1_Codex_Max_CUTOFF = GPT_5_1_CUTOFF
+        private val GPT_5_4_CUTOFF = GMTDate(
+            year = 2025,
+            month = Month.AUGUST,
+            dayOfMonth = 31,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
+        private val GPT_5_4_mini_CUTOFF = GPT_5_4_CUTOFF
+
+        private val GPT_5_5_CUTOFF = GMTDate(
+            year = 2025,
+            month = Month.DECEMBER,
+            dayOfMonth = 1,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
+        private val GPT_5_6_Sol_CUTOFF = GMTDate(
+            year = 2026,
+            month = Month.FEBRUARY,
+            dayOfMonth = 16,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
 
         // ---- Supported Inputs ----
 
@@ -468,10 +580,23 @@ sealed class AIModel_OpenAI(
         private val o3_mini_SUPPORTED_INPUTS = TEXT
 
         private val GPT_5_1_SUPPORTED_INPUTS = TEXT_AND_IMAGE
-        private val GPT_5_1_Chat_Latest_SUPPORTED_INPUTS = TEXT_AND_IMAGE
-        private val GPT_5_1_Codex_Max_SUPPORTED_INPUTS = TEXT_AND_IMAGE
+
+        private val GPT_5_4_SUPPORTED_INPUTS = TEXT_AND_IMAGE
+        private val GPT_5_4_mini_SUPPORTED_INPUTS = TEXT_AND_IMAGE
+        private val GPT_5_5_SUPPORTED_INPUTS = TEXT_AND_IMAGE
+        private val GPT_5_6_Sol_SUPPORTED_INPUTS = TEXT_AND_IMAGE
 
         // ---- Model Features ----
+
+        // OpenAI: "The following parameters are only supported when using
+        // GPT-5.4 with reasoning effort set to `none`: temperature, top_p,
+        // logprobs. Requests that include these fields will raise an error ...
+        // for older GPT-5 models such as gpt-5, gpt-5-mini, or gpt-5-nano."
+        // gpt-5/-mini/-nano reject them outright; gpt-5.1 and gpt-5.4 accept
+        // them at their default effort (`none`), so those keep sampling on.
+        // Omitting the fields is accepted at every effort, so where the docs are
+        // silent (gpt-5.5, gpt-5.6-sol, the o-series) we omit rather than risk
+        // an error.
 
         private val GPT_5_FEATURES = AIModelFeatures(
             availableTools = GPT_5_TOOLS,
@@ -479,6 +604,7 @@ sealed class AIModel_OpenAI(
             speed = AIModelFeatures.RelativeSpeed.SLOW,
             supportedInputs = GPT_5_SUPPORTED_INPUTS,
             trainingCutoffDate = GPT_5_CUTOFF,
+            supportsSamplingParameters = false,
         )
 
         private val GPT_5_mini_FEATURES = AIModelFeatures(
@@ -487,6 +613,7 @@ sealed class AIModel_OpenAI(
             speed = AIModelFeatures.RelativeSpeed.FAST,
             supportedInputs = GPT_5_mini_SUPPORTED_INPUTS,
             trainingCutoffDate = GPT_5_mini_CUTOFF,
+            supportsSamplingParameters = false,
         )
 
         private val GPT_5_nano_FEATURES = AIModelFeatures(
@@ -495,6 +622,7 @@ sealed class AIModel_OpenAI(
             speed = AIModelFeatures.RelativeSpeed.FAST,
             supportedInputs = GPT_5_nano_SUPPORTED_INPUTS,
             trainingCutoffDate = GPT_5_nano_CUTOFF,
+            supportsSamplingParameters = false,
         )
 
         private val GPT_4_1_FEATURES = AIModelFeatures(
@@ -535,6 +663,7 @@ sealed class AIModel_OpenAI(
             speed = AIModelFeatures.RelativeSpeed.NORMAL,
             supportedInputs = o4_mini_SUPPORTED_INPUTS,
             trainingCutoffDate = o4_mini_CUTOFF,
+            supportsSamplingParameters = false,
         )
 
         private val o3_FEATURES = AIModelFeatures(
@@ -543,6 +672,7 @@ sealed class AIModel_OpenAI(
             speed = AIModelFeatures.RelativeSpeed.SLOW,
             supportedInputs = o3_SUPPORTED_INPUTS,
             trainingCutoffDate = o3_CUTOFF,
+            supportsSamplingParameters = false,
         )
 
         private val o3_mini_FEATURES = AIModelFeatures(
@@ -551,6 +681,7 @@ sealed class AIModel_OpenAI(
             speed = AIModelFeatures.RelativeSpeed.FAST,
             supportedInputs = o3_mini_SUPPORTED_INPUTS,
             trainingCutoffDate = o3_mini_CUTOFF,
+            supportsSamplingParameters = false,
         )
 
         private val GPT_5_1_FEATURES = AIModelFeatures(
@@ -561,20 +692,42 @@ sealed class AIModel_OpenAI(
             trainingCutoffDate = GPT_5_1_CUTOFF,
         )
 
-        private val GPT_5_1_Chat_Latest_FEATURES = AIModelFeatures(
-            availableTools = GPT_5_1_Chat_Latest_TOOLS,
-            reasoningLevel = AIModelFeatures.RelativeReasoning.HIGH,
-            speed = AIModelFeatures.RelativeSpeed.FAST,
-            supportedInputs = GPT_5_1_Chat_Latest_SUPPORTED_INPUTS,
-            trainingCutoffDate = GPT_5_1_Chat_Latest_CUTOFF,
-        )
-
-        private val GPT_5_1_Codex_Max_FEATURES = AIModelFeatures(
-            availableTools = GPT_5_1_Codex_Max_TOOLS,
+        // GPT-5.2 onward accepts `temperature`/`top_p` only at reasoning effort
+        // `none`, and Ampere doesn't send an effort — so the per-model default
+        // decides. 5.4 and 5.4-mini default to `none` and keep sampling; 5.5 and
+        // 5.6 Sol default to `medium`, where the docs are silent, so they omit.
+        private val GPT_5_4_FEATURES = AIModelFeatures(
+            availableTools = GPT_5_TOOLS,
             reasoningLevel = AIModelFeatures.RelativeReasoning.HIGH,
             speed = AIModelFeatures.RelativeSpeed.NORMAL,
-            supportedInputs = GPT_5_1_Codex_Max_SUPPORTED_INPUTS,
-            trainingCutoffDate = GPT_5_1_Codex_Max_CUTOFF,
+            supportedInputs = GPT_5_4_SUPPORTED_INPUTS,
+            trainingCutoffDate = GPT_5_4_CUTOFF,
+        )
+
+        private val GPT_5_4_mini_FEATURES = AIModelFeatures(
+            availableTools = GPT_5_mini_TOOLS,
+            reasoningLevel = AIModelFeatures.RelativeReasoning.NORMAL,
+            speed = AIModelFeatures.RelativeSpeed.FAST,
+            supportedInputs = GPT_5_4_mini_SUPPORTED_INPUTS,
+            trainingCutoffDate = GPT_5_4_mini_CUTOFF,
+        )
+
+        private val GPT_5_5_FEATURES = AIModelFeatures(
+            availableTools = GPT_5_TOOLS,
+            reasoningLevel = AIModelFeatures.RelativeReasoning.HIGH,
+            speed = AIModelFeatures.RelativeSpeed.SLOW,
+            supportedInputs = GPT_5_5_SUPPORTED_INPUTS,
+            trainingCutoffDate = GPT_5_5_CUTOFF,
+            supportsSamplingParameters = false,
+        )
+
+        private val GPT_5_6_Sol_FEATURES = AIModelFeatures(
+            availableTools = GPT_5_TOOLS,
+            reasoningLevel = AIModelFeatures.RelativeReasoning.HIGH,
+            speed = AIModelFeatures.RelativeSpeed.SLOW,
+            supportedInputs = GPT_5_6_Sol_SUPPORTED_INPUTS,
+            trainingCutoffDate = GPT_5_6_Sol_CUTOFF,
+            supportsSamplingParameters = false,
         )
 
         // ---- Model Names ----
@@ -652,18 +805,27 @@ sealed class AIModel_OpenAI(
             "GPT-5.1 is OpenAI's flagship model with configurable reasoning " +
                 "modes and enhanced capabilities for coding and agentic tasks."
 
-        private const val GPT_5_1_Chat_Latest_NAME = "gpt-5.1-chat-latest"
-        private const val GPT_5_1_Chat_Latest_DISPLAY_NAME = "GPT-5.1 Instant"
-        private const val GPT_5_1_Chat_Latest_DESCRIPTION =
-            "GPT-5.1 Instant uses adaptive reasoning to decide when to think " +
-                "before responding, offering fast responses while maintaining accuracy on complex tasks."
+        private const val GPT_5_4_NAME = "gpt-5.4"
+        private const val GPT_5_4_DISPLAY_NAME = "GPT-5.4"
+        private const val GPT_5_4_DESCRIPTION =
+            "GPT-5.4 is a frontier reasoning model for coding and agentic tasks with a 1M token context window."
 
-        private const val GPT_5_1_Codex_Max_NAME = "gpt-5.1-codex-max"
-        private const val GPT_5_1_Codex_Max_DISPLAY_NAME = "GPT-5.1 Codex Max"
-        private const val GPT_5_1_Codex_Max_DESCRIPTION =
-            "GPT-5.1 Codex Max is a specialized model for agentic coding " +
-                "tasks, featuring compaction technology for working across " +
-                "millions of tokens in long-running agent loops."
+        private const val GPT_5_4_mini_NAME = "gpt-5.4-mini"
+        private const val GPT_5_4_mini_DISPLAY_NAME = "GPT-5.4 mini"
+        private const val GPT_5_4_mini_DESCRIPTION =
+            "A faster, cost-efficient version of GPT-5.4 for well-defined tasks."
+
+        private const val GPT_5_5_NAME = "gpt-5.5"
+        private const val GPT_5_5_DISPLAY_NAME = "GPT-5.5"
+        private const val GPT_5_5_DESCRIPTION =
+            "GPT-5.5 is a frontier reasoning model for complex coding, agentic, and professional work."
+
+        // Pinned rather than the `gpt-5.6` alias, which OpenAI routes to Sol today
+        // but can repoint.
+        private const val GPT_5_6_Sol_NAME = "gpt-5.6-sol"
+        private const val GPT_5_6_Sol_DISPLAY_NAME = "GPT-5.6 Sol"
+        private const val GPT_5_6_Sol_DESCRIPTION =
+            "GPT-5.6 Sol is the flagship of the GPT-5.6 family for reasoning-heavy coding and agentic work."
 
         // ---- Models ----
 
@@ -677,8 +839,10 @@ sealed class AIModel_OpenAI(
                 GPT_5_mini,
                 GPT_5_nano,
                 GPT_5_1,
-                GPT_5_1_Chat_Latest,
-                GPT_5_1_Codex_Max,
+                GPT_5_4,
+                GPT_5_4_mini,
+                GPT_5_5,
+                GPT_5_6_Sol,
                 GPT_4_1,
                 GPT_4_1_mini,
                 GPT_4o,

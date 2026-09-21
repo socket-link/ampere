@@ -34,7 +34,7 @@ data object ComparePromptsAgent : AgentDefinition.Bundled(
     suggestedAIConfigurationBuilder = {
         aiConfiguration(
             AIModel_OpenAI.o3_mini,
-            aiConfiguration(AIModel_Claude.Opus_4_1),
+            aiConfiguration(AIModel_Claude.Opus_5),
             aiConfiguration(AIModel_Gemini.Pro_2_5),
         )
     },

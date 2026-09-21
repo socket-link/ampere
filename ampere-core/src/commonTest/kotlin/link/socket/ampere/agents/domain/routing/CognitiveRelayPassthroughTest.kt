@@ -15,7 +15,7 @@ class CognitiveRelayPassthroughTest {
 
     private val claudeConfig = AIConfiguration_Default(
         provider = AIProvider_Anthropic,
-        model = AIModel_Claude.Sonnet_4,
+        model = AIModel_Claude.Sonnet_5,
     )
 
     private val geminiConfig = AIConfiguration_Default(
@@ -32,7 +32,7 @@ class CognitiveRelayPassthroughTest {
         )
 
         val result = CognitiveRelayPassthrough.resolve(context, claudeConfig)
-        assertEquals(AIModel_Claude.Sonnet_4, result.model)
+        assertEquals(AIModel_Claude.Sonnet_5, result.model)
     }
 
     @Test

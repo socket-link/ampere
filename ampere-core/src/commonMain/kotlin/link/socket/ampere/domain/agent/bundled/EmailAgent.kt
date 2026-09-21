@@ -29,8 +29,8 @@ data object EmailAgent : AgentDefinition.Bundled(
     prompt = PROMPT,
     suggestedAIConfigurationBuilder = {
         aiConfiguration(
-            AIModel_Gemini.Flash_Lite_2_0,
-            aiConfiguration(AIModel_Claude.Haiku_3_5),
+            AIModel_Gemini.Flash_Lite_2_5,
+            aiConfiguration(AIModel_Claude.Haiku_4_5),
             aiConfiguration(AIModel_OpenAI.GPT_4o_mini),
         )
     },

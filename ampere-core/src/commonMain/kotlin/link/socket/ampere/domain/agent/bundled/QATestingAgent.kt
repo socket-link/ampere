@@ -73,7 +73,7 @@ data object QATestingAgent : AgentDefinition.Bundled(
         aiConfiguration(
             AIModel_OpenAI.GPT_5_mini,
             aiConfiguration(AIModel_Gemini.Flash_2_5),
-            aiConfiguration(AIModel_Claude.Sonnet_4),
+            aiConfiguration(AIModel_Claude.Sonnet_5),
         )
     },
 ) {

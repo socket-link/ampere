@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_WithBackups
+import link.socket.ampere.domain.ai.model.AIModel_Gemini
 
 class AmpereConfigYamlTest {
 
@@ -17,7 +18,7 @@ class AmpereConfigYamlTest {
             """
             ai:
               provider: anthropic
-              model: sonnet-4
+              model: sonnet-5
               apiKey: anthro-from-yaml
               backups:
                 - provider: openai
@@ -39,6 +40,39 @@ class AmpereConfigYamlTest {
             assertEquals(
                 listOf("anthropic", "openai"),
                 aiConfiguration.configurations.map { it.provider.id },
+            )
+        } finally {
+            configFile.deleteIfExists()
+        }
+    }
+
+    @Test
+    fun `fromYaml resolves current generation model keys`() {
+        val configFile = Files.createTempFile("ampere-config", ".yaml")
+        configFile.writeText(
+            """
+            ai:
+              provider: anthropic
+              model: opus-5
+              backups:
+                - provider: openai
+                  model: gpt-5.4
+                - provider: gemini
+                  model: flash-3.8
+                - provider: gemini
+                  model: pro-3
+            """.trimIndent(),
+        )
+
+        try {
+            val config = AmpereConfig.Builder().apply {
+                fromYaml(configFile.toString())
+            }.build()
+
+            val aiConfiguration = assertIs<AIConfiguration_WithBackups>(config.provider.toAIConfiguration())
+            assertEquals(
+                listOf("claude-opus-5", "gpt-5.4", "gemini-3.8-flash", AIModel_Gemini.Pro_3_1_Preview.name),
+                aiConfiguration.configurations.map { it.model.name },
             )
         } finally {
             configFile.deleteIfExists()

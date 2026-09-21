@@ -27,7 +27,7 @@ import link.socket.ampere.domain.ai.provider.AIProvider_OpenAI
 class DispatchingUpstreamLlmClientTest {
 
     // Anthropic stands in for a free, device-gated local provider.
-    private val localConfig = AIConfiguration_Default(AIProvider_Anthropic, AIModel_Claude.Sonnet_4)
+    private val localConfig = AIConfiguration_Default(AIProvider_Anthropic, AIModel_Claude.Sonnet_5)
 
     // Google stands in for a metered cloud provider.
     private val cloudConfig = AIConfiguration_Default(AIProvider_Google, AIModel_Gemini.Flash_2_5)
@@ -37,7 +37,7 @@ class DispatchingUpstreamLlmClientTest {
 
     private fun registry() = InMemoryModelDescriptorRegistry(
         seed = listOf(
-            descriptor(AIModel_Claude.Sonnet_4.name, AIProvider_Anthropic.id, cost = CostPolicy.Free, gated = true),
+            descriptor(AIModel_Claude.Sonnet_5.name, AIProvider_Anthropic.id, cost = CostPolicy.Free, gated = true),
             descriptor(AIModel_Gemini.Flash_2_5.name, AIProvider_Google.id, cost = CostPolicy.Metered, gated = false),
             descriptor(AIModel_OpenAI.GPT_4_1.name, AIProvider_OpenAI.id, cost = CostPolicy.Metered, gated = true),
         ),

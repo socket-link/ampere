@@ -22,7 +22,7 @@ class McpConfigTest {
         val yaml = """
             ai:
               provider: anthropic
-              model: sonnet-4
+              model: sonnet-5
             team:
               - role: engineer
             mcp:
@@ -74,7 +74,7 @@ class McpConfigTest {
         val yaml = """
             ai:
               provider: anthropic
-              model: sonnet-4
+              model: sonnet-5
             team:
               - role: engineer
         """.trimIndent()
@@ -91,7 +91,7 @@ class McpConfigTest {
         val yaml = """
             ai:
               provider: anthropic
-              model: sonnet-4
+              model: sonnet-5
             team:
               - role: engineer
             mcp:

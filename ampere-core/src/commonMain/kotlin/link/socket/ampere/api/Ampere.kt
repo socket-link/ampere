@@ -6,7 +6,7 @@ package link.socket.ampere.api
  * ```
  * // Programmatic configuration
  * val ampere = Ampere.create {
- *     provider(AnthropicConfig(model = Claude.Sonnet4))
+ *     provider(AnthropicConfig(model = Claude.Sonnet5))
  *     workspace("/path/to/project")
  *     onEscalation { event -> println("${event.agent} needs help: ${event.reason}") }
  * }

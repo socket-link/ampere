@@ -215,7 +215,7 @@ interface LLMAgent {
             model = model.toClientModelId(),
             messages = messages,
             tools = tools.ifEmpty { null },
-            topP = 0.2,
+            topP = 0.2.takeIf { model.features.supportsSamplingParameters },
         )
     }
 }

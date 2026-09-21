@@ -94,7 +94,7 @@ class GoalHandler(
         // Use provided AI configuration or fall back to default
         val effectiveAiConfig = aiConfiguration ?: AIConfiguration_Default(
             provider = AIProvider_Anthropic,
-            model = AIModel_Claude.Sonnet_4
+            model = AIModel_Claude.Sonnet_5
         )
 
         val agentFactory = AgentFactory(

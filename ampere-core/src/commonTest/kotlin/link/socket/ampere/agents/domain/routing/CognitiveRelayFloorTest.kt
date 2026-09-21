@@ -33,7 +33,7 @@ class CognitiveRelayFloorTest {
 
     private val lowRungConfig = AIConfiguration_Default(
         provider = AIProvider_Anthropic,
-        model = AIModel_Claude.Sonnet_4,
+        model = AIModel_Claude.Sonnet_5,
     )
 
     private val highRungConfig = AIConfiguration_Default(
@@ -50,7 +50,7 @@ class CognitiveRelayFloorTest {
     private val lowRungRegistry = InMemoryModelDescriptorRegistry(
         seed = listOf(
             ModelDescriptor(
-                modelName = AIModel_Claude.Sonnet_4.name,
+                modelName = AIModel_Claude.Sonnet_5.name,
                 providerId = AIProvider_Anthropic.id,
                 capabilities = emptySet(),
                 reasoning = RelativeReasoning.LOW,
@@ -76,7 +76,7 @@ class CognitiveRelayFloorTest {
     private val highRungRegistry = InMemoryModelDescriptorRegistry(
         seed = listOf(
             ModelDescriptor(
-                modelName = AIModel_Claude.Sonnet_4.name,
+                modelName = AIModel_Claude.Sonnet_5.name,
                 providerId = AIProvider_Anthropic.id,
                 capabilities = emptySet(),
                 reasoning = RelativeReasoning.LOW,

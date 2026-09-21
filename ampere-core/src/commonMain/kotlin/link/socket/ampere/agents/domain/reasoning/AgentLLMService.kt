@@ -125,7 +125,10 @@ class AgentLLMService(
      *
      * @param prompt The user prompt to send
      * @param systemMessage Optional system message to set context
-     * @param temperature Response randomness (0.0 = deterministic, 1.0 = creative)
+     * @param temperature Response randomness (0.0 = deterministic, 1.0 = creative).
+     *   Not sent to models whose
+     *   [AIModelFeatures.supportsSamplingParameters][link.socket.ampere.domain.ai.model.AIModelFeatures.supportsSamplingParameters]
+     *   is `false`.
      * @param maxTokens Maximum tokens in response
      * @param routingContext Optional routing context for CognitiveRelay-based model selection
      * @return The raw LLM response text
@@ -264,7 +267,8 @@ class AgentLLMService(
         val request = ChatCompletionRequest(
             model = model.toClientModelId(),
             messages = messages,
-            temperature = temperature,
+            // Omitted, not defaulted, for models that 400 on any sampling parameter.
+            temperature = temperature.takeIf { model.features.supportsSamplingParameters },
             maxTokens = maxTokens,
         )
 

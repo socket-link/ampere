@@ -33,7 +33,7 @@ class PlaybackRelayTest {
 
     private val source = EventSource.Agent("agent-1")
     private val fallback: AIConfiguration =
-        AIConfiguration_Default(provider = AIProvider_Anthropic, model = AIModel_Claude.Sonnet_4)
+        AIConfiguration_Default(provider = AIProvider_Anthropic, model = AIModel_Claude.Sonnet_5)
     private val ctx = RoutingContext(phase = CognitivePhase.PLAN, agentId = "agent-1", workflowId = "wf")
 
     // region — task 2.1: extraction

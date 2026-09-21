@@ -183,7 +183,7 @@ class AgentTeam private constructor(
          * Example:
          * ```kotlin
          * val team = AgentTeam.create {
-         *     config(AnthropicConfig(model = Claude.Sonnet4))
+         *     config(AnthropicConfig(model = Claude.Sonnet5))
          *     agent(ProductManager) { personality { directness = 0.8 } }
          *     agent(Engineer) { personality { creativity = 0.7 } }
          *     agent(QATester)

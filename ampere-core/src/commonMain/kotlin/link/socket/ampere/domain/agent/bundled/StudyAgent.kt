@@ -32,7 +32,7 @@ data object StudyAgent : AgentDefinition.Bundled(
     prompt = PROMPT,
     suggestedAIConfigurationBuilder = {
         aiConfiguration(
-            AIModel_Claude.Sonnet_4,
+            AIModel_Claude.Sonnet_5,
             aiConfiguration(AIModel_OpenAI.GPT_4_1),
             aiConfiguration(AIModel_Gemini.Flash_2_5),
         )

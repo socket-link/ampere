@@ -86,7 +86,7 @@ data object ReleaseManagementAgent : AgentDefinition.Bundled(
     ),
     suggestedAIConfigurationBuilder = {
         aiConfiguration(
-            AIModel_Claude.Opus_4_1,
+            AIModel_Claude.Opus_5,
             aiConfiguration(AIModel_OpenAI.GPT_4_1),
             aiConfiguration(AIModel_Gemini.Pro_2_5),
         )

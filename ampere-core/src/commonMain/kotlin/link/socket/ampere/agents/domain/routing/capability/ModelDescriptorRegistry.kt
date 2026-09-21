@@ -195,19 +195,21 @@ class InMemoryModelDescriptorRegistry(
          */
         internal val MODEL_RUNGS: Map<String, CapabilityRung> = mapOf(
             // ── Anthropic / Claude ────────────────────────────────────────────
-            "claude-3-haiku-20240307" to CapabilityRung.ONE,
-            "claude-3-5-haiku-latest" to CapabilityRung.TWO,
             "claude-haiku-4-5" to CapabilityRung.TWO,
-            "claude-sonnet-4-0" to CapabilityRung.THREE,
-            "claude-3-7-sonnet-latest" to CapabilityRung.THREE,
             "claude-sonnet-4-5-20250929" to CapabilityRung.THREE,
-            "claude-opus-4-0" to CapabilityRung.FOUR,
-            "claude-opus-4-1" to CapabilityRung.FOUR,
+            "claude-sonnet-4-6" to CapabilityRung.THREE,
+            "claude-sonnet-5" to CapabilityRung.THREE,
             "claude-opus-4-5-20251101" to CapabilityRung.FOUR,
+            "claude-opus-4-6" to CapabilityRung.FOUR,
+            "claude-opus-4-7" to CapabilityRung.FOUR,
+            "claude-opus-4-8" to CapabilityRung.FOUR,
+            "claude-opus-5" to CapabilityRung.FOUR,
+            "claude-fable-5-1" to CapabilityRung.FOUR,
             // ── OpenAI / GPT ──────────────────────────────────────────────────
             "gpt-5-nano" to CapabilityRung.ONE,
             "gpt-4o-mini" to CapabilityRung.ONE,
             "gpt-5-mini" to CapabilityRung.TWO,
+            "gpt-5.4-mini" to CapabilityRung.TWO,
             "gpt-4.1-mini" to CapabilityRung.TWO,
             "gpt-4o" to CapabilityRung.TWO,
             "o3-mini" to CapabilityRung.TWO,
@@ -215,16 +217,16 @@ class InMemoryModelDescriptorRegistry(
             "o4-mini" to CapabilityRung.THREE,
             "gpt-5" to CapabilityRung.FOUR,
             "gpt-5.1" to CapabilityRung.FOUR,
-            "gpt-5.1-chat-latest" to CapabilityRung.FOUR,
-            "gpt-5.1-codex-max" to CapabilityRung.FOUR,
+            "gpt-5.4" to CapabilityRung.FOUR,
+            "gpt-5.5" to CapabilityRung.FOUR,
+            "gpt-5.6-sol" to CapabilityRung.FOUR,
             "o3" to CapabilityRung.FOUR,
             // ── Google / Gemini ───────────────────────────────────────────────
-            "gemini-2.0-flash-lite" to CapabilityRung.ONE,
             "gemini-2.5-flash-lite" to CapabilityRung.ONE,
-            "gemini-2.0-flash" to CapabilityRung.TWO,
             "gemini-2.5-flash" to CapabilityRung.TWO,
+            "gemini-3.8-flash" to CapabilityRung.TWO,
             "gemini-2.5-pro" to CapabilityRung.THREE,
-            "gemini-3-pro-latest" to CapabilityRung.FOUR,
+            "gemini-3.1-pro-preview" to CapabilityRung.FOUR,
         )
 
         /**

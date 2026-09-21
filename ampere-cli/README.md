@@ -294,14 +294,14 @@ The CLI automatically loads configuration from these locations (in order of prec
 # AI Provider Configuration
 ai:
   provider: anthropic           # anthropic, openai, or gemini
-  model: sonnet-4               # Model name (see list below)
+  model: sonnet-5               # Model name (see list below)
 
   # Optional: Fallback providers (tried in order if primary fails)
   backups:
     - provider: openai
-      model: gpt-4.1
+      model: gpt-5.4
     - provider: gemini
-      model: flash-2.5
+      model: flash-3.8
 
 # Team Composition
 team:
@@ -330,38 +330,43 @@ goal: "Build a user authentication system"
 ```yaml
 ai:
   provider: anthropic
-  model: sonnet-4    # Recommended for most tasks
+  model: sonnet-5    # Recommended for most tasks
 ```
 
 **Available models:**
 | Model | Best For |
 |-------|----------|
-| `opus-4.5` | Complex reasoning, research |
-| `opus-4.1` | Complex tasks |
-| `opus-4` | Complex tasks |
+| `fable-5.1` | Most capable, demanding long-horizon work |
+| `opus-5` | Complex reasoning, agentic coding |
+| `opus-4.8` | Complex reasoning, research |
+| `opus-4.7` | Complex tasks |
+| `opus-4.6` | Complex tasks |
+| `opus-4.5` | Complex tasks |
+| `sonnet-5` | General purpose (recommended) |
+| `sonnet-4.6` | Balanced performance |
 | `sonnet-4.5` | Balanced performance |
-| `sonnet-4` | General purpose (recommended) |
-| `sonnet-3.7` | Cost-effective |
 | `haiku-4.5` | Fast, simple tasks |
-| `haiku-3.5` | Fast, simple tasks |
-| `haiku-3` | Fastest, basic tasks |
 
 #### OpenAI (GPT)
 
 ```yaml
 ai:
   provider: openai
-  model: gpt-4.1    # Recommended
+  model: gpt-5.4    # Recommended
 ```
 
 **Available models:**
 | Model | Best For |
 |-------|----------|
-| `gpt-5.1` | Most capable |
+| `gpt-5.6-sol` | Most capable |
+| `gpt-5.5` | Frontier reasoning |
+| `gpt-5.4` | Frontier reasoning (recommended) |
+| `gpt-5.4-mini` | Balanced |
+| `gpt-5.1` | High capability |
 | `gpt-5` | High capability |
 | `gpt-5-mini` | Balanced |
 | `gpt-5-nano` | Fast, efficient |
-| `gpt-4.1` | Reliable (recommended) |
+| `gpt-4.1` | Reliable |
 | `gpt-4.1-mini` | Cost-effective |
 | `gpt-4o` | Optimized |
 | `gpt-4o-mini` | Fast |
@@ -374,18 +379,17 @@ ai:
 ```yaml
 ai:
   provider: gemini
-  model: flash-2.5    # Recommended for speed
+  model: flash-3.8    # Recommended for speed
 ```
 
 **Available models:**
 | Model | Best For |
 |-------|----------|
-| `pro-3` | Most capable |
+| `pro-3.1-preview` | Most capable (`pro-3` is an alias) |
+| `flash-3.8` | Fast (recommended) |
 | `pro-2.5` | High capability |
-| `flash-2.5` | Fast (recommended) |
+| `flash-2.5` | Fast |
 | `flash-2.5-lite` | Fastest |
-| `flash-2` | Balanced |
-| `flash-2-lite` | Efficient |
 
 ### Agent Roles
 
@@ -430,12 +434,12 @@ Configure automatic failover when the primary provider fails:
 ```yaml
 ai:
   provider: anthropic
-  model: sonnet-4
+  model: sonnet-5
   backups:
     - provider: openai
-      model: gpt-4.1
+      model: gpt-5.4
     - provider: gemini
-      model: flash-2.5
+      model: flash-3.8
 ```
 
 When Anthropic fails, OpenAI is tried. If OpenAI fails, Gemini is tried.
@@ -446,7 +450,7 @@ When Anthropic fails, OpenAI is tried. If OpenAI fails, Gemini is tried.
 ```yaml
 ai:
   provider: anthropic
-  model: sonnet-4
+  model: sonnet-5
 
 team:
   - role: engineer
@@ -456,10 +460,10 @@ team:
 ```yaml
 ai:
   provider: anthropic
-  model: sonnet-4
+  model: sonnet-5
   backups:
     - provider: openai
-      model: gpt-4.1
+      model: gpt-5.4
 
 team:
   - role: product-manager

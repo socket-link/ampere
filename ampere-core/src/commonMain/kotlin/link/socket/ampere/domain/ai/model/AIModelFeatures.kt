@@ -4,6 +4,12 @@ import io.ktor.util.date.GMTDate
 import kotlinx.serialization.Serializable
 import link.socket.ampere.domain.tool.ProvidedTool
 
+/**
+ * @property supportsSamplingParameters Whether the model accepts non-default
+ *   sampling parameters (`temperature`, `top_p`). Models that reject them with
+ *   a 400 (Claude Opus 4.7+, Sonnet 5, Fable 5.x; OpenAI reasoning models) set
+ *   this to `false`, and Ampere omits those fields from the request.
+ */
 @Serializable
 data class AIModelFeatures(
     val availableTools: List<ProvidedTool<*>>,
@@ -11,6 +17,7 @@ data class AIModelFeatures(
     val speed: RelativeSpeed,
     val supportedInputs: SupportedInputs,
     val trainingCutoffDate: GMTDate,
+    val supportsSamplingParameters: Boolean = true,
 ) {
     @Serializable
     enum class RelativeReasoning {

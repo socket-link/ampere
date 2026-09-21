@@ -27,7 +27,7 @@ data object TravelAgent : AgentDefinition.Bundled(
     prompt = PROMPT,
     suggestedAIConfigurationBuilder = {
         aiConfiguration(
-            AIModel_Claude.Sonnet_4,
+            AIModel_Claude.Sonnet_5,
             aiConfiguration(AIModel_OpenAI.GPT_5_mini),
             aiConfiguration(AIModel_Gemini.Flash_2_5),
         )

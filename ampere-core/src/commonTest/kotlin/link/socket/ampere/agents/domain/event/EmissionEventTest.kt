@@ -41,7 +41,7 @@ class EmissionEventTest {
         sourceEventId = "src-1",
         toolInvocationId = null,
         plugId = "plug-x",
-        modelId = "claude-sonnet-4-0",
+        modelId = "claude-sonnet-5",
         inputDigest = "deadbeefdeadbeef",
     )
 
