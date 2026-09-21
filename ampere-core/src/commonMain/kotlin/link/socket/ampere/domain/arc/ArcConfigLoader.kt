@@ -1,5 +1,7 @@
 package link.socket.ampere.domain.arc
 
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
+
 /**
  * Loads Arc configurations with three-tier precedence:
  * 1. User-defined overrides from `.ampere/arc.yaml`
@@ -55,10 +57,14 @@ object ArcConfigLoader {
      * - orchestration: user override if non-default, otherwise base
      * - concurrency: user override if non-default, otherwise base
      * - agents: merge by role, combining sparks
+     * - minimumRung: the stricter of base and override, so an override can raise
+     *   a floor but never lower it (AMPR-360)
+     *
+     * Built from `base.copy(...)` so a field added to [ArcConfig] without a merge
+     * rule keeps the base value instead of silently resetting to its default.
      */
     fun merge(base: ArcConfig, override: ArcConfig): ArcConfig {
-        return ArcConfig(
-            name = base.name,
+        return base.copy(
             description = override.description ?: base.description,
             agents = mergeAgents(base.agents, override.agents),
             orchestration = mergeOrchestration(base.orchestration, override.orchestration),
@@ -67,6 +73,7 @@ object ArcConfigLoader {
             } else {
                 override.concurrency
             },
+            minimumRung = stricterFloor(base.minimumRung, override.minimumRung),
         )
     }
 
@@ -95,10 +102,20 @@ object ArcConfigLoader {
     private fun mergeAgent(base: ArcAgentConfig, override: ArcAgentConfig): ArcAgentConfig {
         val mergedSparks = RoleSparkMapping.getAllSparks(base.role, override.sparks)
 
-        return ArcAgentConfig(
-            role = base.role,
+        return base.copy(
             sparks = mergedSparks,
+            minimumRung = stricterFloor(base.minimumRung, override.minimumRung),
         )
+    }
+
+    /** Same composition as [minimumRungFor]: the higher floor wins; null means none. */
+    private fun stricterFloor(
+        base: CapabilityRung?,
+        override: CapabilityRung?,
+    ): CapabilityRung? = when {
+        base == null -> override
+        override == null -> base
+        else -> maxOf(base, override)
     }
 
     private fun mergeOrchestration(

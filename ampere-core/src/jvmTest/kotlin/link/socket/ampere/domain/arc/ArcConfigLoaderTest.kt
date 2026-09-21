@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 
 class ArcConfigLoaderTest {
 
@@ -333,5 +334,67 @@ class ArcConfigLoaderTest {
         assertEquals(listOf("owasp"), securityAgent.sparks)
 
         assertEquals(listOf("pm", "code", "security", "qa"), config.orchestration.order)
+    }
+
+    private fun arc(floor: CapabilityRung?, agentFloor: CapabilityRung? = null) = ArcConfig(
+        name = "test",
+        agents = listOf(ArcAgentConfig(role = "Code", minimumRung = agentFloor)),
+        minimumRung = floor,
+    )
+
+    @Test
+    fun `merge keeps base arc floor when override declares none`() {
+        val merged = ArcConfigLoader.merge(arc(CapabilityRung.THREE), arc(null))
+        assertEquals(CapabilityRung.THREE, merged.minimumRung)
+    }
+
+    @Test
+    fun `merge lets override raise arc floor`() {
+        val merged = ArcConfigLoader.merge(arc(CapabilityRung.TWO), arc(CapabilityRung.FOUR))
+        assertEquals(CapabilityRung.FOUR, merged.minimumRung)
+    }
+
+    @Test
+    fun `merge never lets override lower arc floor`() {
+        val merged = ArcConfigLoader.merge(arc(CapabilityRung.FOUR), arc(CapabilityRung.ONE))
+        assertEquals(CapabilityRung.FOUR, merged.minimumRung)
+    }
+
+    @Test
+    fun `merge keeps override arc floor when base declares none`() {
+        val merged = ArcConfigLoader.merge(arc(null), arc(CapabilityRung.THREE))
+        assertEquals(CapabilityRung.THREE, merged.minimumRung)
+    }
+
+    @Test
+    fun `merge keeps base agent floor when override agent declares none`() {
+        val merged = ArcConfigLoader.merge(arc(null, CapabilityRung.THREE), arc(null, null))
+        assertEquals(CapabilityRung.THREE, merged.agents.single().minimumRung)
+    }
+
+    @Test
+    fun `merge lets override raise agent floor`() {
+        val merged = ArcConfigLoader.merge(arc(null, CapabilityRung.TWO), arc(null, CapabilityRung.FOUR))
+        assertEquals(CapabilityRung.FOUR, merged.agents.single().minimumRung)
+    }
+
+    @Test
+    fun `merge never lets override lower agent floor`() {
+        val merged = ArcConfigLoader.merge(arc(null, CapabilityRung.FOUR), arc(null, CapabilityRung.ONE))
+        assertEquals(CapabilityRung.FOUR, merged.agents.single().minimumRung)
+    }
+
+    @Test
+    fun `merge with identical configs is a fixed point`() {
+        // Guards against a new ArcConfig/ArcAgentConfig field being dropped by merge:
+        // merging a fully-populated config with itself must return it unchanged.
+        val full = ArcConfig(
+            name = "test",
+            description = "d",
+            agents = listOf(ArcAgentConfig(role = "custom", sparks = listOf("x"), minimumRung = CapabilityRung.TWO)),
+            orchestration = OrchestrationConfig(type = OrchestrationType.SEQUENTIAL, order = listOf("custom")),
+            minimumRung = CapabilityRung.THREE,
+        )
+        assertEquals(full, ArcConfigLoader.merge(full, full))
     }
 }
