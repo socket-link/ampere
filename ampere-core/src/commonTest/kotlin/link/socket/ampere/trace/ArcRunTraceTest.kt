@@ -2,6 +2,7 @@ package link.socket.ampere.trace
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlinx.datetime.Instant
 import kotlinx.serialization.encodeToString
 import link.socket.ampere.data.DEFAULT_JSON
@@ -60,5 +61,17 @@ class ArcRunTraceTest {
         val decoded = DEFAULT_JSON.decodeFromString(ArcRunTrace.serializer(), encoded)
 
         assertEquals(trace, decoded)
+    }
+
+    @Test
+    fun `window is the run and stays out of the serialized form`() {
+        val trace = ArcRunTrace(
+            runId = "run-123",
+            arcId = "startup-saas",
+            startedAt = Instant.fromEpochMilliseconds(1_000),
+        )
+
+        assertEquals(ReplayWindow.ArcRun("run-123"), trace.window)
+        assertFalse("window" in DEFAULT_JSON.encodeToString(trace))
     }
 }

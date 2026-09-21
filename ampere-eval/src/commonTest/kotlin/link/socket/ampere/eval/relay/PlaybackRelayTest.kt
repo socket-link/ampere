@@ -26,6 +26,7 @@ import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.eval.trace.Trace
 import link.socket.ampere.eval.trace.TraceEvent
+import link.socket.ampere.trace.ReplayWindow
 import link.socket.ampere.trace.WattCost
 
 /** AMPR-184 tasks 2.1–2.4 validation. */
@@ -120,6 +121,14 @@ class PlaybackRelayTest {
         assertTrue(error is PlaybackMiss)
         assertEquals(1, error.callIndex)
         assertEquals(1, error.recordedCallCount)
+        assertEquals(relay.window, error.window)
+    }
+
+    @Test
+    fun `relay window is the recorded run`() {
+        val trace = traceOfCalls(1)
+
+        assertEquals(ReplayWindow.ArcRun(trace.runId), PlaybackRelay(trace).window)
     }
 
     @Test

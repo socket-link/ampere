@@ -12,6 +12,7 @@ import link.socket.ampere.domain.arc.ArcOutcome
 import link.socket.ampere.trace.ArcRunId
 import link.socket.ampere.trace.ArcRunTrace
 import link.socket.ampere.trace.ArcTraceProjection
+import link.socket.ampere.trace.ReplayWindow
 
 /**
  * A running Arc, as seen from outside the coroutine world.
@@ -44,6 +45,9 @@ class ArcRunHandle internal constructor(
     private val emissions: Flow<Emission>,
     private val traceProjection: ArcTraceProjection?,
 ) {
+    /** The replay window this run's trace covers — in v1, the run itself. */
+    val window: ReplayWindow get() = ReplayWindow.ArcRun(runId)
+
     /**
      * Suspend until the run reaches a terminal [ArcOutcome].
      *
@@ -139,7 +143,7 @@ class ArcRunHandle internal constructor(
      * Null when the session was built without an [ArcTraceProjection], or when the run wrote no
      * rows at all (a runtime configured without an event API persists no telemetry).
      */
-    suspend fun trace(): ArcRunTrace? = traceProjection?.project(runId)?.getOrNull()
+    suspend fun trace(): ArcRunTrace? = traceProjection?.project(window, arcId = runId)?.getOrNull()
 
     /** True while the run is still in flight. */
     val isActive: Boolean

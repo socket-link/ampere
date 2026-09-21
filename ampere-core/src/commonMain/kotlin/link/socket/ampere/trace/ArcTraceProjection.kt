@@ -22,16 +22,37 @@ import link.socket.ampere.db.memory.KnowledgeStore
 import link.socket.ampere.db.memory.OutcomeMemoryStore
 import link.socket.ampere.util.ioDispatcher
 
+/**
+ * Folds the rows recorded within one [ReplayWindow] into an [ArcRunTrace].
+ *
+ * The window, not a bare run id, is what this projects. In v1 the only window is
+ * [ReplayWindow.ArcRun], so the run id is how the rows are looked up; the `runId`
+ * overloads are shorthand for that window.
+ */
 class ArcTraceProjection(
     private val database: Database,
     private val json: Json = DEFAULT_JSON,
     private val wattCostAggregator: WattCostAggregator = WattCostAggregator(),
     private val modelDescriptorRegistry: ModelDescriptorRegistry? = null,
 ) {
+    /** Shorthand for projecting the [ReplayWindow.ArcRun] of [runId], with [runId] standing in as the arc id. */
     suspend fun project(runId: ArcRunId): Result<ArcRunTrace> =
-        project(runId = runId, arcId = runId)
+        project(window = ReplayWindow.ArcRun(runId), arcId = runId)
+
+    /** Shorthand for projecting the [ReplayWindow.ArcRun] of [runId]. */
+    suspend fun project(
+        runId: ArcRunId,
+        arcId: ArcId,
+    ): Result<ArcRunTrace> = project(window = ReplayWindow.ArcRun(runId), arcId = arcId)
 
     suspend fun project(
+        window: ReplayWindow,
+        arcId: ArcId,
+    ): Result<ArcRunTrace> = when (window) {
+        is ReplayWindow.ArcRun -> projectRun(runId = window.runId, arcId = arcId)
+    }
+
+    private suspend fun projectRun(
         runId: ArcRunId,
         arcId: ArcId,
     ): Result<ArcRunTrace> = withContext(ioDispatcher) {
