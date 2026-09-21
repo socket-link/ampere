@@ -43,6 +43,8 @@ import link.socket.ampere.api.AmpereInstance
 import link.socket.ampere.api.fromEnvironment
 import link.socket.ampere.config.AmpereConfig
 import link.socket.ampere.data.DEFAULT_JSON
+import link.socket.ampere.data.DatabaseSchemaManager
+import link.socket.ampere.data.DatabaseSchemaManager.SchemaState
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.fts.FtsSchema
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
@@ -57,7 +59,7 @@ import link.socket.ampere.domain.llm.LlmProvider
  *
  * This class:
  * - Initializes the database connection
- * - Creates the database schema
+ * - Creates or migrates the database schema
  * - Sets up the coroutine scope for async operations
  * - Creates the EnvironmentService with all orchestrators and repositories
  * - Provides access to services for CLI commands
@@ -436,116 +438,32 @@ class AmpereContext(
         }
 
         /**
-         * Create the database instance and initialize the schema if needed.
+         * Create the database instance, creating or migrating the schema to the current version.
+         *
+         * @throws Exception if the schema can't be brought current. There's no partial fallback:
+         * a CLI running against a half-built schema only fails later, on some unrelated query.
          */
         private fun createDatabase(
             logger: EventLogger,
             driver: JdbcSqliteDriver,
         ): Database {
-            // Check if all required tables exist
-            val eventStoreExists = tableExists(driver, "EventStore")
-            val knowledgeStoreExists = tableExists(driver, "KnowledgeStore")
-
-            if (!eventStoreExists) {
-                // Full schema doesn't exist, create it
-                logger.logInfo("Database schema doesn't exist, creating all tables...")
-                try {
-                    Database.Schema.create(driver)
-                    logger.logInfo("Database schema created successfully")
-                } catch (e: Exception) {
-                    logger.logError("Error creating database schema: ${e.message}")
-                }
-            } else if (!knowledgeStoreExists) {
-                // EventStore exists but KnowledgeStore doesn't - need to add new tables
-                logger.logInfo("Adding KnowledgeStore tables to existing database...")
-                try {
-                    createKnowledgeStoreTables(driver)
-                    logger.logInfo("KnowledgeStore tables created successfully")
-                } catch (e: Exception) {
-                    logger.logError("Error creating KnowledgeStore tables: ${e.message}")
-                }
+            val state = DatabaseSchemaManager.ensure(driver).getOrElse { cause ->
+                logger.logError("Error bringing the database schema up to date: ${cause.message}", cause)
+                throw cause
+            }
+            when (state) {
+                SchemaState.Created -> logger.logInfo("Database schema created")
+                is SchemaState.Migrated ->
+                    logger.logInfo("Database schema migrated from v${state.from} to v${state.to}")
+                SchemaState.Current -> Unit
             }
 
-            // FTS5 virtual tables are a separate, guarded step regardless of which branch above
-            // ran (see FtsSchema): a SQLite build without the fts5 module degrades search
-            // instead of taking the whole schema — or this migration — down. IF NOT EXISTS
-            // throughout makes this safe to call unconditionally on every open.
+            // FTS5 virtual tables are a separate, guarded step (see FtsSchema): a SQLite build
+            // without the fts5 module degrades search instead of taking the whole schema down.
+            // IF NOT EXISTS throughout makes this safe to call unconditionally on every open.
             FtsSchema.install(driver)
 
             return Database(driver)
-        }
-
-        /**
-         * Manually create KnowledgeStore tables for existing databases.
-         */
-        private fun createKnowledgeStoreTables(driver: JdbcSqliteDriver) {
-            // Create KnowledgeStore table
-            driver.execute(
-                null,
-                """
-                CREATE TABLE IF NOT EXISTS KnowledgeStore (
-                    id TEXT PRIMARY KEY NOT NULL,
-                    knowledge_type TEXT NOT NULL,
-                    approach TEXT NOT NULL,
-                    learnings TEXT NOT NULL,
-                    timestamp INTEGER NOT NULL,
-                    idea_id TEXT,
-                    outcome_id TEXT,
-                    perception_id TEXT,
-                    plan_id TEXT,
-                    task_id TEXT,
-                    task_type TEXT,
-                    complexity_level TEXT
-                )
-                """.trimIndent(),
-                0
-            )
-
-            // Create indexes
-            driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_knowledge_type ON KnowledgeStore(knowledge_type)", 0)
-            driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_knowledge_timestamp ON KnowledgeStore(timestamp DESC)", 0)
-            driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_knowledge_task_type ON KnowledgeStore(task_type)", 0)
-            driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_knowledge_complexity ON KnowledgeStore(complexity_level)", 0)
-
-            // Create KnowledgeTag table
-            driver.execute(
-                null,
-                """
-                CREATE TABLE IF NOT EXISTS KnowledgeTag (
-                    knowledge_id TEXT NOT NULL,
-                    tag TEXT NOT NULL,
-                    PRIMARY KEY (knowledge_id, tag),
-                    FOREIGN KEY (knowledge_id) REFERENCES KnowledgeStore(id) ON DELETE CASCADE
-                )
-                """.trimIndent(),
-                0
-            )
-
-            // Create tag indexes
-            driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_knowledge_tag_tag ON KnowledgeTag(tag)", 0)
-            driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_knowledge_tag_knowledge_id ON KnowledgeTag(knowledge_id)", 0)
-
-            // FTS table + triggers are created separately by FtsSchema.install(), guarded
-            // against a missing fts5 module — see the call in createDatabase().
-        }
-
-        /**
-         * Check if a table exists in the database.
-         */
-        private fun tableExists(driver: JdbcSqliteDriver, tableName: String): Boolean {
-            return try {
-                driver.executeQuery(
-                    identifier = null,
-                    sql = "SELECT name FROM sqlite_master WHERE type='table' AND name='$tableName'",
-                    mapper = { cursor ->
-                        app.cash.sqldelight.db.QueryResult.Value(cursor.next().value)
-                    },
-                    parameters = 0,
-                    binders = null
-                ).value
-            } catch (e: Exception) {
-                false
-            }
         }
     }
 }

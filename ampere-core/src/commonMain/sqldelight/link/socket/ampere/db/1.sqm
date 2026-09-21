@@ -2,9 +2,49 @@ ALTER TABLE EventStore ADD COLUMN run_id TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_event_run_id ON EventStore(run_id);
 
-ALTER TABLE KnowledgeStore ADD COLUMN run_id TEXT;
+-- KnowledgeStore.sq declares run_id between timestamp and idea_id, but ADD COLUMN can only
+-- append, and the generated `SELECT *` queries read columns by position — an appended run_id
+-- would shift every column after timestamp. Rebuild the table in declared order instead,
+-- keeping rowids so the KnowledgeFts external-content index still points at the right rows.
+-- The FTS triggers go with the old table; FtsSchema.install recreates them on open.
+CREATE TABLE KnowledgeStore_v2 (
+    id TEXT PRIMARY KEY NOT NULL,
+    knowledge_type TEXT NOT NULL,
+    approach TEXT NOT NULL,
+    learnings TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    run_id TEXT,
+    idea_id TEXT,
+    outcome_id TEXT,
+    perception_id TEXT,
+    plan_id TEXT,
+    task_id TEXT,
+    task_type TEXT,
+    complexity_level TEXT
+);
+
+INSERT INTO KnowledgeStore_v2 (
+    rowid, id, knowledge_type, approach, learnings, timestamp,
+    idea_id, outcome_id, perception_id, plan_id, task_id, task_type, complexity_level
+)
+SELECT
+    rowid, id, knowledge_type, approach, learnings, timestamp,
+    idea_id, outcome_id, perception_id, plan_id, task_id, task_type, complexity_level
+FROM KnowledgeStore;
+
+DROP TABLE KnowledgeStore;
+
+ALTER TABLE KnowledgeStore_v2 RENAME TO KnowledgeStore;
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_type ON KnowledgeStore(knowledge_type);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_timestamp ON KnowledgeStore(timestamp DESC);
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_run_id ON KnowledgeStore(run_id);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_task_type ON KnowledgeStore(task_type);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_complexity ON KnowledgeStore(complexity_level);
 
 ALTER TABLE OutcomeMemoryStore ADD COLUMN run_id TEXT;
 
