@@ -205,7 +205,6 @@ class ArcSession(
 
     /** Dispatch the run [claim] admitted. Callers have already validated [userGoal]. */
     private fun dispatch(claim: AmpereRuntime.RunClaim, userGoal: String, runId: ArcRunId): ArcRunHandle {
-
         val emissions: MutableSharedFlow<Emission>
         val pump: Job
         try {
