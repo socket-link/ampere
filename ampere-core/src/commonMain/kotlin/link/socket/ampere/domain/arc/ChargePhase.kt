@@ -1,6 +1,7 @@
 package link.socket.ampere.domain.arc
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.Agent
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.SparkAgentFactory
@@ -75,6 +76,8 @@ data class GoalNode(
  * @param agentScope Caller-owned scope that every agent spawned here is bound to. Required, and
  *   deliberately not defaulted: agents spawned onto an implicit scope have no owner and no
  *   cancellation path, which is the orphaned-coroutine hole this parameter exists to close.
+ * @param clock The Arc's clock (AMPR-335). Charge reads no time today; it takes the clock so
+ *   any time it comes to read is the run's time rather than wall-clock.
  */
 class ChargePhase(
     private val arcConfig: ArcConfig,
@@ -88,6 +91,8 @@ class ChargePhase(
     private val runId: ArcRunId? = null,
     /** Optional per-agent [AgentEventApi] factory (AMPR-240), threaded into spawned agents. */
     private val eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
+    @Suppress("unused")
+    private val clock: Clock = Clock.System,
 ) {
     suspend fun execute(userGoal: String): ChargeResult {
         require(userGoal.isNotBlank()) { "ChargePhase requires a non-empty user goal." }

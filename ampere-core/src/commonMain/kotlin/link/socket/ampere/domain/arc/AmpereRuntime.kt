@@ -12,6 +12,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.events.api.AgentEventApi
@@ -74,6 +75,12 @@ class AmpereRuntime(
      * API, no persisted telemetry).
      */
     private val eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
+    /**
+     * The one clock the Arc tick reads (AMPR-335), handed to every phase and exposed to agents
+     * as [SharedContext.clock]. Inject a fixed or test-driven clock to make a run's time
+     * deterministic.
+     */
+    private val clock: Clock = Clock.System,
 ) {
     private var chargeResult: ChargeResult? = null
     private var flowResult: FlowResult? = null
@@ -228,6 +235,7 @@ class AmpereRuntime(
         upstreamLlmClient = upstreamLlmClient,
         runId = runId,
         eventApiFactory = eventApiFactory,
+        clock = clock,
     )
 
     private suspend fun executeFlow(chargeResult: ChargeResult): FlowResult {
@@ -236,6 +244,7 @@ class AmpereRuntime(
             agents = chargeResult.agents,
             goalTree = chargeResult.goalTree,
             maxTicks = maxFlowTicks,
+            clock = clock,
         )
         flowPhase = phase
 
@@ -253,6 +262,7 @@ class AmpereRuntime(
             flowResult = flowResult,
             projectContext = chargeResult.projectContext,
             goalTree = chargeResult.goalTree,
+            clock = clock,
         )
         return pulsePhase.execute()
     }
@@ -305,6 +315,7 @@ class AmpereRuntime(
          * @param projectDirPath The project directory as a string path
          * @param agentScope Caller-owned scope that spawned agents are bound to
          * @param maxFlowTicks Maximum ticks for the flow phase
+         * @param clock The clock the Arc tick reads
          * @return AmpereRuntime configured with the specified Arc
          */
         fun create(
@@ -312,12 +323,14 @@ class AmpereRuntime(
             projectDirPath: String,
             agentScope: CoroutineScope,
             maxFlowTicks: Int = 100,
+            clock: Clock = Clock.System,
         ): AmpereRuntime {
             return AmpereRuntime(
                 arcConfig = arcConfig,
                 projectDir = projectDirPath.toPath(),
                 agentScope = agentScope,
                 maxFlowTicks = maxFlowTicks,
+                clock = clock,
             )
         }
 
