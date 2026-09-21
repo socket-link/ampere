@@ -10,9 +10,11 @@ import link.socket.ampere.trace.ArcRunId
  * - [Completed] — all three phases ran to the end. Inspect [Completed.success] for whether the
  *   Pulse evaluation considered the goal met; a `Completed` Arc can still be an unsuccessful one.
  * - [Failed] — a phase threw. The failure is carried in [Failed.cause] alongside whatever
- *   partial phase results were produced before it.
+ *   partial phase results were produced before it, and a [CompletionManifest] says what did
+ *   *not* happen.
  * - [Cancelled] — the run was cancelled cooperatively (via `AmpereRuntime.cancel()` or by
- *   cancelling the caller-owned scope). Partial phase results are carried the same way.
+ *   cancelling the caller-owned scope). Partial phase results are carried the same way, and a
+ *   [CompletionManifest] says what did *not* happen.
  *
  * [chargeResult] and [flowResult] are non-null on [Completed] and best-effort on the other two,
  * so a caller can always report how far the Arc got.
@@ -45,17 +47,31 @@ sealed interface ArcOutcome {
         val success: Boolean get() = pulseResult.success
     }
 
-    /** A phase threw a non-cancellation [Throwable]. */
+    /**
+     * A phase threw a non-cancellation [Throwable].
+     *
+     * Like [Cancelled], the run did not close its loop — Pulse either never ran or did not finish
+     * — so [manifest] records what did and did not happen in place of a `Knowledge` entry.
+     */
     data class Failed(
         override val runId: ArcRunId,
         val cause: Throwable,
+        val manifest: CompletionManifest,
         override val chargeResult: ChargeResult? = null,
         override val flowResult: FlowResult? = null,
     ) : ArcOutcome
 
-    /** The run was cancelled before it could finish. */
+    /**
+     * The run was cancelled before it could finish.
+     *
+     * Pulse did not run, so no `Knowledge` was captured and the run did not close its loop.
+     * [manifest] is the record it leaves instead: which phases ran, which tick Flow reached, what
+     * was produced, and which intended goals never happened. See [CompletionManifest] for why
+     * this is a distinct record rather than a `Knowledge` entry.
+     */
     data class Cancelled(
         override val runId: ArcRunId,
+        val manifest: CompletionManifest,
         override val chargeResult: ChargeResult? = null,
         override val flowResult: FlowResult? = null,
     ) : ArcOutcome

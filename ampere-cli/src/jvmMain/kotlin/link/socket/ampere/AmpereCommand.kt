@@ -674,11 +674,11 @@ class AmpereCommand(
                         }
                     }
                     is ArcOutcome.Cancelled -> {
-                        jazzPane.setFailed("Arc cancelled at tick ${outcome.flowResult?.finalTick ?: 0}")
+                        jazzPane.setFailed("Arc ${outcome.manifest.summary()}")
                         updateStatus(StatusBar.SystemStatus.ATTENTION_NEEDED)
                     }
                     is ArcOutcome.Failed -> {
-                        jazzPane.setFailed("Arc execution failed: ${outcome.cause.message}")
+                        jazzPane.setFailed("Arc ${outcome.manifest.summary()}: ${outcome.cause.message}")
                         updateStatus(StatusBar.SystemStatus.ATTENTION_NEEDED)
                     }
                 }
@@ -838,9 +838,9 @@ class AmpereCommand(
                 }
             }
             is ArcOutcome.Cancelled ->
-                System.err.println("Arc cancelled at tick ${outcome.flowResult?.finalTick ?: 0}")
+                System.err.println("Arc ${outcome.manifest.summary()}")
             is ArcOutcome.Failed ->
-                System.err.println("Arc execution failed: ${outcome.cause.message}")
+                System.err.println("Arc ${outcome.manifest.summary()}: ${outcome.cause.message}")
         }
     }
 
