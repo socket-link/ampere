@@ -1,6 +1,9 @@
 package link.socket.ampere.domain.arc
 
 import kotlin.concurrent.Volatile
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableJob
@@ -57,6 +60,7 @@ import okio.Path.Companion.toPath
  * val outcome = runtime.execute("Implement user authentication")
  * ```
  */
+@OptIn(ExperimentalAtomicApi::class)
 class AmpereRuntime(
     private val arcConfig: ArcConfig,
     private val projectDir: Path,
@@ -95,12 +99,15 @@ class AmpereRuntime(
     private var chargeResult: ChargeResult? = null
     private var flowResult: FlowResult? = null
 
+    /**
+     * Admission and liveness in one atomic cell (AMPR-358), so claiming the runtime is a single
+     * compare-and-set rather than a read followed by a later write. See [RunState].
+     */
+    private val runState = AtomicReference(RunState.IDLE)
+
     // `stop()` and `cancel()` are called from whatever thread owns the UI or the shutdown hook,
     // never from the Arc's own coroutine — so everything they touch, and everything they are
     // observed through, has to be volatile to be visible across that boundary.
-    @Volatile
-    private var isRunning = false
-
     @Volatile
     private var stopRequested = false
 
@@ -137,20 +144,44 @@ class AmpereRuntime(
      * @throws ArcRunRejectedException if a run is already in flight — see [admitRun]
      * @throws IllegalArgumentException if goal is blank
      */
-    suspend fun execute(userGoal: String, runId: ArcRunId = generateUUID("arc-run")): ArcOutcome {
-        admitRun()
-        require(userGoal.isNotBlank()) { "User goal cannot be blank" }
+    suspend fun execute(userGoal: String, runId: ArcRunId = generateUUID("arc-run")): ArcOutcome =
+        execute(admitRun(), userGoal, runId)
 
-        stopRequested = false
-        cancelRequested = false
-        chargeResult = null
-        flowResult = null
-        flowPhase = null
+    /**
+     * Execute a run already admitted by [admitRun], spending [claim].
+     *
+     * Never re-checks admission — the claim *is* the admission. That is what lets
+     * `ArcSession.start` refuse synchronously and then dispatch the run knowing it cannot be
+     * refused a second time. The claim is released in the `finally` below however the run ends,
+     * including a blank [userGoal].
+     *
+     * @throws IllegalStateException if [claim] was issued by another runtime or already spent
+     */
+    internal suspend fun execute(claim: RunClaim, userGoal: String, runId: ArcRunId): ArcOutcome {
+        check(claim.runtime === this) { "Run claim belongs to a different runtime" }
+        check(claim.spend()) { "Run claim has already been spent" }
 
-        // Published last, and read by callers as the signal that this run's state is reset —
-        // so a `cancel()` that observes `isRunning` cannot have its flag wiped by the lines above.
-        isRunning = true
+        try {
+            require(userGoal.isNotBlank()) { "User goal cannot be blank" }
 
+            stopRequested = false
+            cancelRequested = false
+            chargeResult = null
+            flowResult = null
+            flowPhase = null
+
+            // Published last, and read by callers as the signal that this run's state is reset —
+            // so a `cancel()` that observes `isRunning()` cannot have its flag wiped by the lines
+            // above. The claim is already held, so this is a plain store, not a second admission.
+            runState.store(RunState.RUNNING)
+
+            return runAdmitted(userGoal, runId)
+        } finally {
+            runState.store(RunState.IDLE)
+        }
+    }
+
+    private suspend fun runAdmitted(userGoal: String, runId: ArcRunId): ArcOutcome {
         // A per-run child of the caller-owned scope: cancellable on its own (so `cancel()` does
         // not touch the caller), and cancelled + joined in the `finally` below so the run leaves
         // nothing alive behind it. SupervisorJob so one agent's failure cannot tear down the
@@ -179,7 +210,6 @@ class AmpereRuntime(
                 job.cancelAndJoin()
             }
             runJob = null
-            isRunning = false
         }
     }
 
@@ -312,12 +342,24 @@ class AmpereRuntime(
      * and the Swift bridge's `ArcSession.start` both ask here rather than checking [isRunning]
      * themselves.
      *
-     * @throws ArcRunRejectedException if a run is in flight under [ArcConcurrencyPolicy.REJECT]
+     * **Atomic (AMPR-358).** Admission is a single compare-and-set that claims the runtime, not a
+     * check followed by a later write. Of any number of concurrent requests, from any threads,
+     * exactly one is admitted and every other one gets an [ArcRunRejectedException]. The runtime
+     * stays claimed from the moment this returns until the admitted run's [execute] returns.
+     *
+     * The returned [RunClaim] must be handed to [execute], which releases it when the run ends,
+     * or — if the run is abandoned before it is dispatched — to [releaseClaim]. A claim that
+     * reaches neither leaves the runtime refusing every later run.
+     *
+     * @throws ArcRunRejectedException if a run is claimed or in flight under
+     *   [ArcConcurrencyPolicy.REJECT]
      */
-    internal fun admitRun() {
+    internal fun admitRun(): RunClaim {
         when (val policy = arcConfig.concurrency) {
             ArcConcurrencyPolicy.REJECT ->
-                if (isRunning) throw ArcRunRejectedException(arcConfig.name, policy)
+                if (!runState.compareAndSet(RunState.IDLE, RunState.CLAIMED)) {
+                    throw ArcRunRejectedException(arcConfig.name, policy)
+                }
 
             // Unreachable: the constructor refuses an unimplemented policy.
             ArcConcurrencyPolicy.SUPERSEDE,
@@ -325,12 +367,45 @@ class AmpereRuntime(
             ArcConcurrencyPolicy.PARALLEL,
             -> error("Concurrency policy $policy is not implemented")
         }
+        return RunClaim(this)
+    }
+
+    /**
+     * Give back a [claim] that will never reach [execute]. A no-op for a claim [execute] has
+     * already spent — that run releases the runtime itself.
+     */
+    internal fun releaseClaim(claim: RunClaim) {
+        check(claim.runtime === this) { "Run claim belongs to a different runtime" }
+        if (claim.spend()) {
+            runState.compareAndSet(RunState.CLAIMED, RunState.IDLE)
+        }
     }
 
     /**
      * Check if the runtime is currently executing.
+     *
+     * True only once a run's per-run state has been reset — not while a run is merely admitted —
+     * so a caller that sees `true` can [cancel] and know the request will not be wiped.
      */
-    fun isRunning(): Boolean = isRunning
+    fun isRunning(): Boolean = runState.load() == RunState.RUNNING
+
+    /**
+     * Proof that [admitRun] admitted one run on [runtime]. Spent exactly once: by [execute], or
+     * by [releaseClaim] when the run is abandoned before dispatch.
+     */
+    internal class RunClaim internal constructor(internal val runtime: AmpereRuntime) {
+        private val spent = AtomicBoolean(false)
+
+        /** True for the first caller only. */
+        internal fun spend(): Boolean = spent.compareAndSet(false, true)
+    }
+
+    /**
+     * - [IDLE]: nothing admitted; [admitRun] may claim.
+     * - [CLAIMED]: a run is admitted but has not reset its per-run state yet.
+     * - [RUNNING]: the run's state is reset; [isRunning] is true and [cancel] is safe to issue.
+     */
+    private enum class RunState { IDLE, CLAIMED, RUNNING }
 
     /**
      * Get the current Arc configuration.

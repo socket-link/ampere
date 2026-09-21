@@ -1,5 +1,8 @@
 package link.socket.ampere.domain.arc
 
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeText
 import kotlin.test.AfterTest
@@ -13,7 +16,9 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.job
@@ -497,6 +502,74 @@ class AmpereRuntimeTest {
         } finally {
             callerScope.cancel()
         }
+    }
+
+    /**
+     * AMPR-358: admission is one compare-and-set, so of N requests released at the same instant on
+     * N threads exactly one is admitted. Under the old read-then-write guard several could be.
+     */
+    @Test
+    fun `concurrent executes admit exactly one run and reject the rest`() = runBlocking<Unit> {
+        val requests = 16
+        val callers = Executors.newFixedThreadPool(requests).asCoroutineDispatcher()
+        val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        try {
+            val runtime = AmpereRuntime(
+                arcConfig = ArcConfig(
+                    name = "atomic-admission-arc",
+                    agents = listOf(ArcAgentConfig(role = "code")),
+                ),
+                projectDir = arcProjectDir("runtime-atomic-admission").toString().toPath(),
+                agentScope = callerScope,
+                maxFlowTicks = Int.MAX_VALUE,
+            )
+
+            // One thread per request, all parked on the barrier, so the requests genuinely race.
+            val barrier = CyclicBarrier(requests)
+            val rejections = AtomicInteger()
+            val attempts = List(requests) { index ->
+                async(callers) {
+                    barrier.await()
+                    try {
+                        runtime.execute("Implement a very long running goal $index")
+                    } catch (e: ArcRunRejectedException) {
+                        rejections.incrementAndGet()
+                        e
+                    }
+                }
+            }
+
+            // The admitted run never finishes on its own; end it once every loser has been refused.
+            withTimeout(60_000) {
+                while (rejections.get() < requests - 1 || !runtime.isRunning()) {
+                    delay(5)
+                }
+            }
+            runtime.cancel()
+            val results = withTimeout(60_000) { attempts.awaitAll() }
+
+            assertEquals(requests - 1, results.count { it is ArcRunRejectedException })
+            assertEquals(1, results.count { it is ArcOutcome.Cancelled }, "Exactly one run is admitted: $results")
+            assertFalse(runtime.isRunning())
+        } finally {
+            callerScope.cancel()
+            callers.close()
+        }
+    }
+
+    @Test
+    fun `a blank goal releases the admission it claimed`() = runBlocking<Unit> {
+        val runtime = AmpereRuntime(
+            arcConfig = ArcRegistry.getDefault(),
+            projectDir = createTempDirectory("runtime-blank-release").toString().toPath(),
+            agentScope = idleScope,
+        )
+
+        assertFailsWith<IllegalArgumentException> { runtime.execute("   ") }
+
+        // Claimable again: the refused goal did not leave the runtime claimed.
+        runtime.releaseClaim(runtime.admitRun())
+        runtime.releaseClaim(runtime.admitRun())
     }
 
     /** A temp dir with the AGENTS.md/README.md that ChargePhase requires to produce a context. */

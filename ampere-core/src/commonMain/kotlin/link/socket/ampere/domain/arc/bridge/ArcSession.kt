@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
@@ -117,32 +118,47 @@ class ArcSession(
      * The Emission subscription is registered *before* this returns, so an observer attached on
      * the returned handle cannot miss the run's opening.
      *
+     * Admission is decided here, synchronously, before a handle exists (AMPR-358): of any number
+     * of concurrent calls, exactly one returns a handle and the rest throw. A handle is never
+     * returned for a run that is then refused.
+     *
      * @throws IllegalArgumentException if [userGoal] is blank
      * @throws link.socket.ampere.domain.arc.ArcRunRejectedException if the Arc's concurrency
      *   policy refuses a run while [runtime] is already executing
      */
     fun start(userGoal: String, runId: ArcRunId): ArcRunHandle {
         require(userGoal.isNotBlank()) { "User goal cannot be blank" }
-        runtime.admitRun()
+        val claim = runtime.admitRun()
 
-        val emissions = MutableSharedFlow<Emission>(replay = emissionReplay)
+        val emissions: MutableSharedFlow<Emission>
+        val pump: Job
+        try {
+            emissions = MutableSharedFlow(replay = emissionReplay)
 
-        // UNDISPATCHED so the bus subscription is registered on the calling thread, before this
-        // function returns. Dispatching it would open a window in which the first tick's
-        // Emissions are published to nobody.
-        val pump = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            eventSerialBus
-                .emissions(
-                    runId = runId,
-                    capacity = emissionCapacity,
-                    onDropped = onEmissionsDropped,
-                )
-                .collect { emissions.emit(it) }
+            // UNDISPATCHED so the bus subscription is registered on the calling thread, before
+            // this function returns. Dispatching it would open a window in which the first
+            // tick's Emissions are published to nobody.
+            pump = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                eventSerialBus
+                    .emissions(
+                        runId = runId,
+                        capacity = emissionCapacity,
+                        onDropped = onEmissionsDropped,
+                    )
+                    .collect { emissions.emit(it) }
+            }
+        } catch (e: Throwable) {
+            runtime.releaseClaim(claim)
+            throw e
         }
 
-        val outcome = scope.async {
+        // UNDISPATCHED so `execute` takes ownership of the claim before this function returns.
+        // An UNDISPATCHED coroutine starts even if [scope] is already cancelled, which is what
+        // guarantees the claim reaches `execute`'s `finally` — a dispatched start could be
+        // cancelled before it ran and leave the runtime claimed forever.
+        val outcome = scope.async(start = CoroutineStart.UNDISPATCHED) {
             try {
-                runtime.execute(userGoal, runId)
+                runtime.execute(claim, userGoal, runId)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {

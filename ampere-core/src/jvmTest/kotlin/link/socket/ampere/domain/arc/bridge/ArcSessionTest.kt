@@ -1,5 +1,8 @@
 package link.socket.ampere.domain.arc.bridge
 
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeText
 import kotlin.test.Test
@@ -14,6 +17,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -409,6 +415,141 @@ class ArcSessionTest {
         } finally {
             callerScope.cancel()
         }
+    }
+
+    /**
+     * AMPR-358: a refused `start` throws; it never hands back a handle that later resolves to
+     * `Failed`. Half the racers go through the bridge and half straight to `execute`, and the
+     * two paths share one admission — exactly one request, from either, gets the runtime.
+     */
+    @Test
+    fun `concurrent start and execute calls admit exactly one run`() = runBlocking<Unit> {
+        val requests = 16
+        val callers = Executors.newFixedThreadPool(requests).asCoroutineDispatcher()
+        val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+        try {
+            val runtime = AmpereRuntime(
+                arcConfig = arcConfig("bridge-atomic-arc"),
+                projectDir = arcProjectDir("bridge-atomic").toString().toPath(),
+                agentScope = callerScope,
+                maxFlowTicks = Int.MAX_VALUE,
+            )
+            val session = ArcSession(
+                scope = callerScope,
+                runtime = runtime,
+                eventSerialBus = EventSerialBus(scope = callerScope),
+            )
+
+            // One thread per request, all parked on the barrier, so the requests genuinely race.
+            val barrier = CyclicBarrier(requests)
+            val rejections = AtomicInteger()
+            val attempts = List(requests) { index ->
+                async(callers) {
+                    barrier.await()
+                    try {
+                        if (index % 2 == 0) {
+                            session.start("Implement a very long running goal $index")
+                        } else {
+                            runtime.execute("Implement a very long running goal $index")
+                        }
+                    } catch (e: ArcRunRejectedException) {
+                        rejections.incrementAndGet()
+                        e
+                    }
+                }
+            }
+
+            // An admitted `execute` never returns on its own; end it once every loser is refused.
+            withTimeout(timeoutMillis) {
+                while (rejections.get() < requests - 1 || !runtime.isRunning()) {
+                    delay(5)
+                }
+            }
+            runtime.cancel()
+            val results = withTimeout(timeoutMillis) { attempts.awaitAll() }
+
+            assertEquals(requests - 1, results.count { it is ArcRunRejectedException })
+            val admitted = results.filterNot { it is ArcRunRejectedException }
+            assertEquals(1, admitted.size, "Exactly one run is admitted: $results")
+            val outcome = when (val winner = admitted.single()) {
+                is ArcRunHandle -> withTimeout(timeoutMillis) { winner.await() }
+                else -> winner
+            }
+            assertIs<ArcOutcome.Cancelled>(outcome, "The admitted run must end Cancelled, never Failed")
+        } finally {
+            callerScope.cancel()
+            callers.close()
+        }
+    }
+
+    @Test
+    fun `concurrent starts return exactly one handle and refuse the rest synchronously`() = runBlocking<Unit> {
+        val requests = 16
+        val callers = Executors.newFixedThreadPool(requests).asCoroutineDispatcher()
+        val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+        try {
+            val runtime = AmpereRuntime(
+                arcConfig = arcConfig("bridge-atomic-start-arc"),
+                projectDir = arcProjectDir("bridge-atomic-start").toString().toPath(),
+                agentScope = callerScope,
+                maxFlowTicks = Int.MAX_VALUE,
+            )
+            val session = ArcSession(
+                scope = callerScope,
+                runtime = runtime,
+                eventSerialBus = EventSerialBus(scope = callerScope),
+            )
+
+            val barrier = CyclicBarrier(requests)
+            val results = withTimeout(timeoutMillis) {
+                List(requests) { index ->
+                    async(callers) {
+                        barrier.await()
+                        runCatching { session.start("Implement a very long running goal $index") }
+                    }
+                }.awaitAll()
+            }
+
+            val handles = results.mapNotNull { it.getOrNull() }
+            assertEquals(1, handles.size, "Exactly one start returns a handle: $results")
+            results.mapNotNull { it.exceptionOrNull() }.forEach { assertIs<ArcRunRejectedException>(it) }
+
+            // The one handle drives the one run: its cancel reaches the run it was issued for.
+            assertIs<ArcOutcome.Cancelled>(withTimeout(timeoutMillis) { handles.single().cancel() })
+            assertFalse(runtime.isRunning())
+        } finally {
+            callerScope.cancel()
+            callers.close()
+        }
+    }
+
+    /**
+     * `start` claims the runtime before its run is dispatched. If the run could then be cancelled
+     * before it began, nothing would release the claim and every later run would be refused.
+     */
+    @Test
+    fun `a start on an already cancelled scope still releases its admission`() = runBlocking<Unit> {
+        val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        val runtime = AmpereRuntime(
+            arcConfig = arcConfig("bridge-cancelled-scope-arc"),
+            projectDir = arcProjectDir("bridge-cancelled-scope").toString().toPath(),
+            agentScope = callerScope,
+        )
+        val session = ArcSession(
+            scope = callerScope,
+            runtime = runtime,
+            eventSerialBus = EventSerialBus(scope = callerScope),
+        )
+        callerScope.cancel()
+
+        val handle = session.start("Implement a goal that never gets to run")
+        withTimeout(timeoutMillis) { runCatching { handle.await() } }
+
+        assertFalse(handle.isActive)
+        // Claimable again, so the abandoned run did give its admission back.
+        runtime.releaseClaim(runtime.admitRun())
     }
 
     private inline fun <reified T : Throwable> assertFailsWithMessage(
