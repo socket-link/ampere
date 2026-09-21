@@ -1,0 +1,69 @@
+-- Knowledge.sq's four tables and PlugGrants.sq's PlugGrants were added to the .sq files without a
+-- migration, so databases created before them never got them. Definitions are copied from those
+-- files; IF NOT EXISTS makes this a no-op on databases that already have them.
+
+CREATE TABLE IF NOT EXISTS knowledge_documents (
+    id TEXT PRIMARY KEY NOT NULL,
+    title TEXT NOT NULL,
+    source_uri TEXT,
+    imported_at INTEGER NOT NULL,
+    content_hash TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_documents_imported_at
+    ON knowledge_documents(imported_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_documents_content_hash
+    ON knowledge_documents(content_hash);
+
+CREATE TABLE IF NOT EXISTS knowledge_chunks (
+    id TEXT PRIMARY KEY NOT NULL,
+    document_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    char_start INTEGER NOT NULL,
+    char_end INTEGER NOT NULL,
+    FOREIGN KEY (document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+    UNIQUE (document_id, chunk_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_document_id
+    ON knowledge_chunks(document_id);
+
+CREATE TABLE IF NOT EXISTS knowledge_embeddings (
+    chunk_id TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    vector_blob BLOB NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (chunk_id, model_id),
+    FOREIGN KEY (chunk_id) REFERENCES knowledge_chunks(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_embeddings_model_id
+    ON knowledge_embeddings(model_id);
+
+CREATE TABLE IF NOT EXISTS document_scopes (
+    document_id TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    PRIMARY KEY (document_id, scope),
+    FOREIGN KEY (document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_scopes_scope
+    ON document_scopes(scope);
+
+CREATE TABLE IF NOT EXISTS PlugGrants (
+  plug_id TEXT NOT NULL,
+  permission_json TEXT NOT NULL,
+  granted_at INTEGER NOT NULL,
+  PRIMARY KEY (plug_id, permission_json)
+);
+
+CREATE INDEX IF NOT EXISTS idx_plug_grants_plug_id ON PlugGrants(plug_id);
+
+-- Databases created between the grant schema landing and its PluginGrants -> PlugGrants rename
+-- (AMPR-220, no migration) still have the old table. Its rows are not carried over: no production
+-- code ever constructed a grant store, so the table can only be empty, and a grant nothing could
+-- read since the rename should be asked for again rather than silently restored. Dropping the
+-- table drops idx_plugin_grants_plugin_id with it.
+DROP TABLE IF EXISTS PluginGrants;
