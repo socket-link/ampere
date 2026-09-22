@@ -5,12 +5,11 @@ import java.io.InputStreamReader
 import java.io.PrintWriter
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.EventSource
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.events.surface.AgentSurface
@@ -23,9 +22,10 @@ import link.socket.ampere.agents.events.utils.generateUUID
 /**
  * Generic terminal renderer for [AgentSurface] events.
  *
- * Subscribes to [AgentSurfaceEvent.Requested.EVENT_TYPE] on the supplied bus,
+ * Subscribes to [AgentSurfaceEvent.Requested.EVENT_TYPE] on the door's bus,
  * renders each surface variant to [output], reads input from [input], and
- * publishes [AgentSurfaceEvent.Responded] with the matching `correlationId`.
+ * publishes [AgentSurfaceEvent.Responded] with the matching `correlationId`
+ * through [eventApi], so every response is persisted before it is dispatched (F1).
  *
  * No Compose / SwiftUI / UIKit dependencies — usable on every JVM target
  * AMPERE runs on, including non-TTY environments (with [ansi] = false).
@@ -39,35 +39,35 @@ import link.socket.ampere.agents.events.utils.generateUUID
  * treated as cancel.
  */
 class AgentSurfaceCliRenderer(
-    private val bus: EventSerialBus,
+    private val eventApi: AgentEventApi,
     private val agentId: AgentId = "cli-surface-renderer",
     private val input: BufferedReader = BufferedReader(InputStreamReader(System.`in`)),
     private val output: PrintWriter = PrintWriter(System.out, true),
     private val ansi: Boolean = true,
     private val cancelToken: String = ":cancel",
     private val readSecret: () -> String? = ::defaultReadSecret,
-    private val now: () -> Instant = { Clock.System.now() },
+    private val now: () -> Instant = { eventApi.clock.now() },
 ) {
 
     private val mutex = Mutex()
 
-    /** Subscribe to surface requests. Idempotent for a given `(bus, agentId)` pair. */
+    /** Subscribe to surface requests. Idempotent for a given `(eventApi, agentId)` pair. */
     fun start() {
-        bus.subscribe<AgentSurfaceEvent.Requested, EventSubscription.ByEventClassType>(
+        eventApi.eventSerialBus.subscribe<AgentSurfaceEvent.Requested, EventSubscription.ByEventClassType>(
             agentId = agentId,
             eventType = AgentSurfaceEvent.Requested.EVENT_TYPE,
         ) { event, _ ->
             val response = mutex.withLock {
                 renderSurface(event.surface)
             }
-            bus.publish(
+            eventApi.publish(
                 AgentSurfaceEvent.Responded(
                     eventId = generateUUID(event.correlationId, agentId),
                     timestamp = now(),
                     eventSource = EventSource.Agent(agentId),
                     response = response,
                 ),
-            )
+            ).getOrThrow()
         }
     }
 
