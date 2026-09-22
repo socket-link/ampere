@@ -64,11 +64,15 @@ class EventFilter<E : Event>(
  *
  * @property clock the time source for every event this api constructs. Public so the
  * emission seam can read the same clock.
+ * @property eventSerialBus the bus this door dispatches on. Exposed for *subscribing* only —
+ * the emission reply router, `TraceRecorder`, and surface renderers register handlers here.
+ * Nothing outside this class publishes on it: every event enters through [publish] so the
+ * store sees exactly what the bus sees (F1).
  */
 class AgentEventApi(
     val agentId: AgentId,
     private val eventRepository: EventRepository,
-    internal val eventSerialBus: EventSerialBus,
+    val eventSerialBus: EventSerialBus,
     private val logger: EventLogger = ConsoleEventLogger(),
     milestoneTrackerState: MilestoneTrackerState = MilestoneTrackerState(),
     val clock: Clock = Clock.System,

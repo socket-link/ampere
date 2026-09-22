@@ -13,6 +13,8 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.reasoning.Confidence
+import link.socket.ampere.agents.events.StoredEvent
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.util.randomUUID
@@ -35,13 +37,17 @@ import link.socket.ampere.util.randomUUID
  *
  * [publish] is the seam a host uses to intercept or wrap outgoing events —
  * for example to carry [Emission.surfaces] to its own renderers — before
- * they reach [eventSerialBus]. It defaults to publishing directly.
+ * they reach the door. A failure inside it propagates out of the builder
+ * that triggered it; nothing here swallows a failed publish.
+ *
+ * Every timestamp this scope stamps comes from [clock] — the door's clock
+ * when built through [emission] — so a pinned clock pins the Emissions too.
  */
 class EmissionScope(
     private val eventSource: EventSource,
-    private val eventSerialBus: EventSerialBus,
     private val replyRegistry: EmissionReplyRegistry,
-    private val publish: suspend (Event) -> Unit = eventSerialBus::publish,
+    private val publish: suspend (Event) -> Unit,
+    private val clock: Clock,
     /**
      * Ambient Arc-run identity (AMPR-240), used to populate
      * [EmissionProvenance.runId] on every Emission built by this scope that
@@ -63,7 +69,7 @@ class EmissionScope(
         publish(
             EmissionEvent.BaseProduced(
                 eventId = randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = clock.now(),
                 eventSource = eventSource,
                 emission = emission,
             ),
@@ -100,7 +106,7 @@ class EmissionScope(
             confidence = confidence,
             provenance = provenance ?: defaultProvenance(payload),
             dedupKey = dedupKey,
-            producedAt = Clock.System.now(),
+            producedAt = clock.now(),
             surfaces = surfaces,
         )
         return ask(emission, timeout)
@@ -137,7 +143,7 @@ class EmissionScope(
             affordances = AffordanceBuilder().apply(affordances).build(),
             provenance = provenance ?: defaultProvenance(payload),
             dedupKey = null,
-            producedAt = Clock.System.now(),
+            producedAt = clock.now(),
             surfaces = surfaces,
         )
         return ask(emission.copy(dedupKey = dedupKey ?: emission.computeDedupKey()), timeout)
@@ -160,7 +166,7 @@ class EmissionScope(
                 kind = EmissionKind.Prose,
                 payload = payload,
                 provenance = provenance ?: defaultProvenance(payload),
-                producedAt = Clock.System.now(),
+                producedAt = clock.now(),
                 surfaces = surfaces,
             ),
         )
@@ -185,7 +191,7 @@ class EmissionScope(
                 kind = EmissionKind.Sensor,
                 payload = payload,
                 provenance = provenance ?: defaultProvenance(payload),
-                producedAt = Clock.System.now(),
+                producedAt = clock.now(),
                 surfaces = surfaces,
             ),
         )
@@ -195,7 +201,7 @@ class EmissionScope(
         publish(
             EmissionEvent.BaseProduced(
                 eventId = randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = clock.now(),
                 eventSource = eventSource,
                 emission = emission,
             ),
@@ -252,14 +258,14 @@ class EmissionScope(
             confidence = null,
             provenance = provenance ?: defaultProvenance(payload),
             dedupKey = null,
-            producedAt = Clock.System.now(),
+            producedAt = clock.now(),
             surfaces = surfaces,
         )
 
         val requestId = randomUUID()
         val inputRequested = HumanInteractionEvent.InputRequested(
             eventId = randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = clock.now(),
             eventSource = eventSource,
             urgency = urgency,
             emission = emission,
@@ -277,7 +283,7 @@ class EmissionScope(
             publish(
                 HumanInteractionEvent.RequestTimedOut(
                     eventId = randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = clock.now(),
                     eventSource = eventSource,
                     urgency = urgency,
                     emissionId = emission.id,
@@ -293,28 +299,87 @@ class EmissionScope(
 }
 
 /**
- * Run [block] inside an [EmissionScope] backed by [eventSerialBus] and [replyRegistry].
+ * Run [block] inside an [EmissionScope] that publishes through the door [eventApi]
+ * and awaits replies via [replyRegistry].
+ *
+ * Every event the scope produces goes through [AgentEventApi.publish] — persisted to the
+ * `EventStore` inside its envelope (tagged with [runId]) and only then dispatched on the
+ * bus — so a fold over the store sees what a live subscriber sees (F1). A publish failure
+ * is not swallowed: it propagates out of the builder that produced the event, and so out
+ * of [block].
  *
  * For the duration of [block], one reply-delivery subscriber on [EmissionEvent.Resolved.EVENT_TYPE]
  * forwards incoming replies to [replyRegistry], resuming any suspended [EmissionScope.ask] /
  * [EmissionScope.askHuman] / [EmissionScope.confirm] calls. [HumanInteractionEvent.InputProvided]
- * lists that type among its parents, so the same subscriber receives it. The subscriber is released
- * when [block] returns, throws, or is cancelled, leaving the bus's handler count where it was.
+ * lists that type among its parents, so the same subscriber receives it. The subscriber is registered
+ * on [eventApi]'s bus and released when [block] returns, throws, or is cancelled, leaving the bus's
+ * handler count where it was.
  *
  * @param replyRegistry Defaults to [GlobalEmissionReplyRegistry], which is shared by everything in
  *   the process — see its warning before relying on the default outside tests.
- * @param publish Seam for a host to intercept or wrap outgoing events before they reach
- *   [eventSerialBus] — see [EmissionScope]. Defaults to publishing directly.
+ * @param runId Ambient Arc-run identity: stamped onto every Emission's default provenance and onto
+ *   the envelope of every event published through the door.
+ * @param publish Seam for a host to intercept or wrap outgoing events before they reach the door —
+ *   see [EmissionScope]. Defaults to `eventApi.publish(event, runId = runId)`; a host that wraps
+ *   should still forward to the door and return its result, so the event is persisted.
  */
+suspend fun <T> emission(
+    eventSource: EventSource,
+    eventApi: AgentEventApi,
+    replyRegistry: EmissionReplyRegistry = GlobalEmissionReplyRegistry.instance,
+    runId: RunId? = null,
+    publish: suspend (Event) -> Result<StoredEvent> = { eventApi.publish(it, runId = runId) },
+    block: suspend EmissionScope.() -> T,
+): T = withReplyRouter(eventApi.eventSerialBus, replyRegistry) {
+    EmissionScope(
+        eventSource = eventSource,
+        replyRegistry = replyRegistry,
+        publish = { event -> publish(event).getOrThrow() },
+        clock = eventApi.clock,
+        runId = runId,
+    ).block()
+}
+
+/**
+ * Bus-only variant of [emission] kept for the publishers set (b) of F1 has not migrated yet
+ * (`AgentMessageApi`, AMPR-338). Events produced here are dispatched live but **never
+ * persisted**, which is the C2 defect F1 removes; nothing new should call this.
+ *
+ * Removed by the F1 lock (AMPR-340), when `EventSerialBus.publish` goes internal.
+ */
+@Deprecated(
+    message = "Bypasses the EventStore: events are dispatched but never persisted (F1/C2). " +
+        "Pass an AgentEventApi instead. Kept only until AMPR-338 migrates AgentMessageApi; " +
+        "removed by the AMPR-340 lock.",
+    replaceWith = ReplaceWith("emission(eventSource, eventApi, replyRegistry, runId, block = block)"),
+)
 suspend fun <T> emission(
     eventSource: EventSource,
     eventSerialBus: EventSerialBus,
     replyRegistry: EmissionReplyRegistry = GlobalEmissionReplyRegistry.instance,
-    publish: suspend (Event) -> Unit = eventSerialBus::publish,
     runId: RunId? = null,
     block: suspend EmissionScope.() -> T,
+): T = withReplyRouter(eventSerialBus, replyRegistry) {
+    EmissionScope(
+        eventSource = eventSource,
+        replyRegistry = replyRegistry,
+        publish = { event -> eventSerialBus.publish(event) },
+        clock = Clock.System,
+        runId = runId,
+    ).block()
+}
+
+/**
+ * Holds the single reply-router subscription on [bus] for the duration of [block] and releases
+ * it on every exit path (AMPR-332). Shared by both [emission] overloads so the subscribe /
+ * unsubscribe behaviour is identical whichever door the scope publishes through.
+ */
+private suspend fun <T> withReplyRouter(
+    bus: EventSerialBus,
+    replyRegistry: EmissionReplyRegistry,
+    block: suspend () -> T,
 ): T {
-    val subscription = eventSerialBus.subscribeSuspending(
+    val subscription = bus.subscribeSuspending(
         agentId = "emission-reply-router",
         eventType = EmissionEvent.Resolved.EVENT_TYPE,
         handler = EventHandler { event, _ ->
@@ -323,12 +388,12 @@ suspend fun <T> emission(
     )
 
     return try {
-        EmissionScope(eventSource, eventSerialBus, replyRegistry, publish, runId).block()
+        block()
     } finally {
         // Cancellation is a normal exit (e.g. the caller gave up on a reply), and releasing the
         // subscription needs the bus mutex — which a cancelled coroutine cannot take.
         withContext(NonCancellable) {
-            eventSerialBus.unsubscribeSuspending(subscription)
+            bus.unsubscribeSuspending(subscription)
         }
     }
 }

@@ -26,6 +26,7 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.tickets.TicketOrchestrator
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionContext
+import link.socket.ampere.agents.execution.tools.ASK_HUMAN_TOOL_ID
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.execution.tools.ToolAskHuman
 import link.socket.ampere.agents.execution.tools.ToolCreateIssues
@@ -139,15 +140,23 @@ class AgentFactory(
             ),
         )
 
+    // F1a (AMPR-337): the tool publishes through a door built by [eventApiFactory] instead of
+    // straight onto the bus. The [eventSerialBus] presence check is kept so the tool is offered
+    // exactly where it was before; set (c) (AMPR-339) owns this constructor and can collapse the
+    // two gates once it threads `createEventApi` through every factory.
     private val toolAskHuman: Tool<ExecutionContext.NoChanges>? =
-        eventSerialBus?.let {
-            ToolAskHuman(
-                requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
-                eventSerialBus = it,
-                parameterStrategy = link.socket.ampere.agents.definition.project.ProjectParams.HumanEscalation(
-                    agentRole = "Project Manager",
-                ),
-            )
+        if (eventSerialBus == null) {
+            null
+        } else {
+            eventApiFactory?.let { createEventApi ->
+                ToolAskHuman(
+                    requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
+                    eventApi = createEventApi(ASK_HUMAN_TOOL_ID),
+                    parameterStrategy = link.socket.ampere.agents.definition.project.ProjectParams.HumanEscalation(
+                        agentRole = "Project Manager",
+                    ),
+                )
+            }
         }
 
     private val effectiveAiConfiguration: AIConfiguration

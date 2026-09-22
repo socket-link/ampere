@@ -9,9 +9,12 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
@@ -27,7 +30,9 @@ import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.Task
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.InMemoryEventApi
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.events.tickets.Ticket
@@ -47,14 +52,20 @@ import link.socket.ampere.util.randomUUID
  * - Published events are HumanInteractionEvent.InputRequested instances
  * - Subscribers on base EmissionEvent.Produced receive HumanInteractionEvent.InputRequested
  * - GlobalEmissionReplyRegistry is reachable as the shared registry singleton
+ * - Every event `askHuman` produces is in the EventStore as well as on the bus (F1a, AMPR-337)
+ *
+ * Door-backed cases use `runBlocking`: the door persists on a real IO dispatcher, which
+ * `runTest`'s virtual time would skip straight past.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class HumanEscalationFlowTest {
+
+    private val doorScope = TestScope(UnconfinedTestDispatcher())
 
     private fun newRegistry() = EmissionReplyRegistry()
 
-    private fun newBus(scope: CoroutineScope) = EventSerialBus(
-        scope = scope,
-    )
+    private fun newDoor(): Pair<AgentEventApi, EventRepository> =
+        InMemoryEventApi.create(agentId = "test-agent", scope = doorScope)
 
     private fun createTestContext(instructions: String): ExecutionContext.NoChanges {
         return ExecutionContext.NoChanges(
@@ -151,12 +162,12 @@ class HumanEscalationFlowTest {
     // ── EmissionScope.askHuman ──────────────────────────────────────────────
 
     @Test
-    fun `askHuman publishes HumanInteractionEvent InputRequested`() = runTest {
-        val bus = newBus(backgroundScope)
+    fun `askHuman publishes HumanInteractionEvent InputRequested`() = runBlocking<Unit> {
+        val (api, repository) = newDoor()
         val registry = newRegistry()
         val receivedEvent = CompletableDeferred<HumanInteractionEvent.InputRequested>()
 
-        bus.subscribe<HumanInteractionEvent.InputRequested, EventSubscription.ByEventClassType>(
+        api.eventSerialBus.subscribe<HumanInteractionEvent.InputRequested, EventSubscription.ByEventClassType>(
             agentId = "test-sub",
             eventType = HumanInteractionEvent.InputRequested.EVENT_TYPE,
         ) { event, _ ->
@@ -166,7 +177,7 @@ class HumanEscalationFlowTest {
         }
 
         val askDeferred = async {
-            emission(EventSource.Agent("test-agent"), bus, registry) {
+            emission(EventSource.Agent("test-agent"), api, registry) {
                 askHuman(
                     prompt = "Should we proceed?",
                     agentId = "test-agent",
@@ -196,15 +207,18 @@ class HumanEscalationFlowTest {
             ),
         )
         askDeferred.await()
+
+        val stored = repository.getEventsByType(HumanInteractionEvent.InputRequested.EVENT_TYPE).getOrThrow()
+        assertEquals(listOf(published.eventId), stored.map { it.eventId })
     }
 
     @Test
-    fun `base EmissionProduced subscriber receives InputRequested via polymorphic dispatch`() = runTest {
-        val bus = newBus(backgroundScope)
+    fun `base EmissionProduced subscriber receives InputRequested via polymorphic dispatch`() = runBlocking<Unit> {
+        val (api, _) = newDoor()
         val registry = newRegistry()
         val baseReceived = CompletableDeferred<EmissionEvent>()
 
-        bus.subscribe<EmissionEvent, EventSubscription.ByEventClassType>(
+        api.eventSerialBus.subscribe<EmissionEvent, EventSubscription.ByEventClassType>(
             agentId = "base-sub",
             eventType = EmissionEvent.Produced.EVENT_TYPE,
         ) { event, _ ->
@@ -214,7 +228,7 @@ class HumanEscalationFlowTest {
         }
 
         val askDeferred = async {
-            emission(EventSource.Agent("test-agent"), bus, registry) {
+            emission(EventSource.Agent("test-agent"), api, registry) {
                 askHuman(
                     prompt = "Polymorphism check",
                     agentId = "test-agent",
@@ -240,12 +254,12 @@ class HumanEscalationFlowTest {
     }
 
     @Test
-    fun `askHuman timeout publishes RequestTimedOut event`() = runTest {
-        val bus = newBus(backgroundScope)
+    fun `askHuman timeout publishes RequestTimedOut event`() = runBlocking<Unit> {
+        val (api, repository) = newDoor()
         val registry = newRegistry()
         val timedOutEvent = CompletableDeferred<HumanInteractionEvent.RequestTimedOut>()
 
-        bus.subscribe<HumanInteractionEvent.RequestTimedOut, EventSubscription.ByEventClassType>(
+        api.eventSerialBus.subscribe<HumanInteractionEvent.RequestTimedOut, EventSubscription.ByEventClassType>(
             agentId = "timeout-sub",
             eventType = HumanInteractionEvent.RequestTimedOut.EVENT_TYPE,
         ) { event, _ ->
@@ -255,7 +269,7 @@ class HumanEscalationFlowTest {
         }
 
         val caught = try {
-            emission(EventSource.Agent("test-agent"), bus, registry) {
+            emission(EventSource.Agent("test-agent"), api, registry) {
                 askHuman(
                     prompt = "Will timeout",
                     agentId = "test-agent",
@@ -270,6 +284,9 @@ class HumanEscalationFlowTest {
         assertNotNull(caught)
         val timeoutEvent = withTimeout(5.seconds) { timedOutEvent.await() }
         assertEquals(0L, timeoutEvent.timeoutMinutes) // 100ms → 0 minutes
+
+        val storedTimeouts = repository.getEventsByType(HumanInteractionEvent.RequestTimedOut.EVENT_TYPE).getOrThrow()
+        assertEquals(listOf(timeoutEvent.eventId), storedTimeouts.map { it.eventId })
     }
 
     // ── GlobalEmissionReplyRegistry singleton ───────────────────────────────
