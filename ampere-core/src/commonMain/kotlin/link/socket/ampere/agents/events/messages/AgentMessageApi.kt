@@ -3,6 +3,7 @@ package link.socket.ampere.agents.events.messages
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.Principal
 import link.socket.ampere.agents.domain.emission.ConsoleSurfaceIO
 import link.socket.ampere.agents.domain.emission.DefaultSurfacePolicy
 import link.socket.ampere.agents.domain.emission.EmissionReplyRegistry
@@ -282,10 +283,14 @@ class AgentMessageApi(
             .ifEmpty { null }
 
         try {
+            // A root: the escalation serves a thread, not another Emission. No principal reaches
+            // the message api yet, so this is ambient authority until D5 decides otherwise.
             val reply = emission(
                 eventSource = EventSource.Agent(agentId),
                 eventApi = eventApi,
                 replyRegistry = emissionReplyRegistry,
+                principal = Principal.Ambient,
+                parentEmissionId = null,
             ) {
                 askHuman(
                     prompt = reason,

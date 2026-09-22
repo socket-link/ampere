@@ -2,10 +2,15 @@ package link.socket.ampere.agents.domain.emission
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import link.socket.ampere.agents.domain.Principal
 import link.socket.ampere.agents.domain.reasoning.Confidence
 
 class EmissionSerializationTest {
@@ -25,6 +30,8 @@ class EmissionSerializationTest {
         plugId = "plug-x",
         modelId = "claude-sonnet-5",
         inputDigest = "abcdef0123456789",
+        parentEmissionId = "parent-emission",
+        principal = Principal.Ambient,
     )
 
     private fun emission(payload: EmissionPayload, kind: EmissionKind): Emission = Emission(
@@ -127,5 +134,51 @@ class EmissionSerializationTest {
         assertEquals("run-1", decoded.provenance.runId)
         assertEquals("plug-x", decoded.provenance.plugId)
         assertEquals("abcdef0123456789", decoded.provenance.inputDigest)
+        assertEquals("parent-emission", decoded.provenance.parentEmissionId)
+        assertEquals(Principal.Ambient, decoded.provenance.principal)
     }
+
+    @Test
+    fun `principal is written under its stable SerialName`() {
+        val encoded = json.encodeToString(EmissionProvenance.serializer(), baseProvenance)
+
+        assertTrue(encoded.contains("\"principal\":{\"type\":\"Principal.Ambient\"}"), encoded)
+    }
+
+    @Test
+    fun `a payload written before the causal edge decodes as a root under ambient authority`() {
+        val current = json.encodeToJsonElement(Emission.serializer(), rootEmission()).jsonObject
+        val legacyProvenance = JsonObject(
+            current.getValue("provenance").jsonObject - "parentEmissionId" - "principal",
+        )
+        val legacy = JsonObject(current + ("provenance" to legacyProvenance))
+
+        val decoded = json.decodeFromJsonElement(Emission.serializer(), legacy)
+
+        assertNull(decoded.provenance.parentEmissionId)
+        assertEquals(Principal.Ambient, decoded.provenance.principal)
+        assertEquals("run-1", decoded.provenance.runId)
+        assertEquals("abcdef0123456789", decoded.provenance.inputDigest)
+    }
+
+    @Test
+    fun `a root still writes both keys when the Json skips defaults`() {
+        // A consumer's Json need not encode defaults. The edge and the principal are written
+        // anyway, so a root's explicit null stays distinguishable from a pre-edge payload.
+        val sparse = Json { encodeDefaults = false }
+
+        val provenance = sparse.encodeToJsonElement(Emission.serializer(), rootEmission())
+            .jsonObject
+            .getValue("provenance")
+            .jsonObject
+
+        assertEquals(JsonNull, provenance["parentEmissionId"])
+        assertEquals(JsonPrimitive("Principal.Ambient"), provenance["principal"]?.jsonObject?.get("type"))
+        assertNull(provenance["plugId"], "ordinary defaults are still skipped")
+    }
+
+    private fun rootEmission(): Emission = emission(
+        payload = EmissionPayload.Prose(text = "x", format = ProseFormat.PLAIN),
+        kind = EmissionKind.Prose,
+    ).let { it.copy(provenance = it.provenance.copy(parentEmissionId = null, plugId = null)) }
 }

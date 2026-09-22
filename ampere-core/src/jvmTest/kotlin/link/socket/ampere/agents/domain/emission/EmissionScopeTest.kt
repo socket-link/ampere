@@ -17,6 +17,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.Principal
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
@@ -75,7 +76,7 @@ class EmissionScopeTest {
             ) { event, _ -> published.complete(event) }
 
             val askDeferred = async {
-                emission(source, api, registry) {
+                emission(source, api, registry, principal = Principal.Ambient, parentEmissionId = null) {
                     ask(
                         prompt = "Proceed?",
                         affordances = {
@@ -110,7 +111,7 @@ class EmissionScopeTest {
             ) { event, _ -> published.complete(event) }
 
             val askDeferred = async {
-                emission(source, api, registry) {
+                emission(source, api, registry, principal = Principal.Ambient, parentEmissionId = null) {
                     ask(prompt = "Proceed?", timeout = 5.seconds)
                 }
             }
@@ -137,7 +138,7 @@ class EmissionScopeTest {
             ) { event, _ -> published.complete(event) }
 
             val confirmDeferred = async {
-                emission(source, api, registry) {
+                emission(source, api, registry, principal = Principal.Ambient, parentEmissionId = null) {
                     confirm(
                         action = "Delete branch",
                         dangerLevel = DangerLevel.HIGH,
@@ -169,7 +170,7 @@ class EmissionScopeTest {
                 eventType = EmissionEvent.Produced.EVENT_TYPE,
             ) { event, _ -> published.complete(event) }
 
-            val result = emission(source, api, registry) {
+            val result = emission(source, api, registry, principal = Principal.Ambient, parentEmissionId = null) {
                 emit(text = "Build finished", format = ProseFormat.PLAIN)
             }
 
@@ -185,7 +186,7 @@ class EmissionScopeTest {
             val (api, _) = door()
             val registry = EmissionReplyRegistry()
 
-            val result = emission(source, api, registry) {
+            val result = emission(source, api, registry, principal = Principal.Ambient, parentEmissionId = null) {
                 sense(label = "cpu", value = "42", unit = "%")
             }
 
@@ -200,11 +201,16 @@ class EmissionScopeTest {
             val (api, _) = door()
             val registry = EmissionReplyRegistry()
 
-            val result = emission(source, api, registry) {
+            val result = emission(source, api, registry, principal = Principal.Ambient, parentEmissionId = null) {
                 sense(
                     label = "cpu",
                     value = "42",
-                    provenance = EmissionProvenance(runId = "run-1", inputDigest = "ignored"),
+                    provenance = EmissionProvenance(
+                        runId = "run-1",
+                        inputDigest = "ignored",
+                        parentEmissionId = null,
+                        principal = Principal.Ambient,
+                    ),
                 )
             }
 
@@ -223,6 +229,8 @@ class EmissionScopeTest {
                 eventApi = api,
                 replyRegistry = registry,
                 runId = "ambient-run-id",
+                principal = Principal.Ambient,
+                parentEmissionId = null,
             ) {
                 sense(label = "cpu", value = "42")
             }
@@ -247,7 +255,7 @@ class EmissionScopeTest {
             ) { event, _ -> published.complete(event) }
 
             val askDeferred = async {
-                emission(source, api, registry) {
+                emission(source, api, registry, principal = Principal.Ambient, parentEmissionId = null) {
                     askHuman(prompt = "Proceed?", agentId = "test-agent", timeout = 5.seconds)
                 }
             }
@@ -274,7 +282,7 @@ class EmissionScopeTest {
             ) { event, _ -> published.complete(event) }
 
             val askDeferred = async {
-                emission(source, api, registry) {
+                emission(source, api, registry, principal = Principal.Ambient, parentEmissionId = null) {
                     askHuman(prompt = "Proceed?", agentId = "test-agent", timeout = 5.seconds)
                 }
             }
@@ -303,7 +311,7 @@ class EmissionScopeTest {
                 eventType = EmissionEvent.Produced.EVENT_TYPE,
             ) { event, _ -> published.complete(event) }
 
-            val result = emission(source, api, registry) {
+            val result = emission(source, api, registry, principal = Principal.Ambient, parentEmissionId = null) {
                 sense(label = "cpu", value = "42")
             }
 
@@ -319,7 +327,7 @@ class EmissionScopeTest {
             val (api, _) = door()
             val registry = EmissionReplyRegistry()
 
-            val result = emission(source, api, registry) {
+            val result = emission(source, api, registry, principal = Principal.Ambient, parentEmissionId = null) {
                 sense(label = "cpu", value = "42", surfaces = listOf(Surface.Push, Surface.Console))
             }
 
@@ -342,6 +350,8 @@ class EmissionScopeTest {
                     intercepted.add(event)
                     api.publish(event)
                 },
+                principal = Principal.Ambient,
+                parentEmissionId = null,
             ) {
                 sense(label = "cpu", value = "42")
             }
@@ -365,6 +375,8 @@ class EmissionScopeTest {
                     eventApi = api,
                     replyRegistry = registry,
                     publish = { Result.failure(IllegalStateException("store unavailable")) },
+                    principal = Principal.Ambient,
+                    parentEmissionId = null,
                 ) {
                     sense(label = "cpu", value = "42")
                 }
@@ -372,6 +384,119 @@ class EmissionScopeTest {
 
             assertEquals("store unavailable", failure.message)
             assertTrue(repository.getAllEvents().getOrThrow().isEmpty())
+        }
+    }
+
+    @Test
+    fun `a root scope stamps its principal and a null parent on every Emission`() = runBlocking<Unit> {
+        coroutineScope {
+            val (api, _) = door()
+
+            val built = emission(
+                eventSource = source,
+                eventApi = api,
+                replyRegistry = EmissionReplyRegistry(),
+                principal = Principal.Ambient,
+                parentEmissionId = null,
+            ) {
+                listOf(emit(text = "narration"), sense(label = "cpu", value = "42"))
+            }
+
+            built.forEach { emission ->
+                assertNull(emission.provenance.parentEmissionId)
+                assertEquals(Principal.Ambient, emission.provenance.principal)
+            }
+        }
+    }
+
+    @Test
+    fun `a scope opened with a parent stamps it on the Emission and in the EventStore`() = runBlocking<Unit> {
+        coroutineScope {
+            val (api, repository) = door()
+
+            val built = emission(
+                eventSource = source,
+                eventApi = api,
+                replyRegistry = EmissionReplyRegistry(),
+                principal = Principal.Ambient,
+                parentEmissionId = "upstream-emission",
+            ) {
+                emit(text = "follow-up")
+            }
+
+            assertEquals("upstream-emission", built.provenance.parentEmissionId)
+            val stored = repository.getEventsByType(EmissionEvent.Produced.EVENT_TYPE).getOrThrow()
+            val storedProvenance = assertIs<EmissionEvent.BaseProduced>(stored.single()).emission.provenance
+            assertEquals("upstream-emission", storedProvenance.parentEmissionId)
+            assertEquals(Principal.Ambient, storedProvenance.principal)
+        }
+    }
+
+    @Test
+    fun `inServiceOf nests into a causal tree without leaking into the enclosing scope`() = runBlocking<Unit> {
+        coroutineScope {
+            val (api, _) = door()
+
+            val tree = emission(
+                eventSource = source,
+                eventApi = api,
+                replyRegistry = EmissionReplyRegistry(),
+                runId = "run-7",
+                principal = Principal.Ambient,
+                parentEmissionId = null,
+            ) {
+                val root = emit(text = "root")
+                val (child, grandchild) = inServiceOf(root.id) {
+                    val first = emit(text = "child")
+                    first to inServiceOf(first.id) { sense(label = "depth", value = "2") }
+                }
+                val sibling = emit(text = "sibling")
+                listOf(root, child, grandchild, sibling)
+            }
+            val (root, child, grandchild, sibling) = tree
+
+            assertNull(root.provenance.parentEmissionId)
+            assertEquals(root.id, child.provenance.parentEmissionId)
+            assertEquals(child.id, grandchild.provenance.parentEmissionId)
+            assertNull(sibling.provenance.parentEmissionId, "leaving inServiceOf restores the root")
+            tree.forEach { emission ->
+                assertEquals("run-7", emission.provenance.runId)
+                assertEquals(Principal.Ambient, emission.provenance.principal)
+            }
+        }
+    }
+
+    @Test
+    fun `a reply through the door resumes an ask made inside inServiceOf`() = runBlocking<Unit> {
+        coroutineScope {
+            val (api, _) = door()
+            val narrated = CompletableDeferred<Emission>()
+            val published = CompletableDeferred<EmissionEvent.BaseProduced>()
+
+            api.eventSerialBus.subscribe<EmissionEvent.BaseProduced, EventSubscription.ByEventClassType>(
+                agentId = "test-sub",
+                eventType = EmissionEvent.Produced.EVENT_TYPE,
+            ) { event, _ ->
+                when (event.emission.kind) {
+                    EmissionKind.Prose -> narrated.complete(event.emission)
+                    EmissionKind.Decision -> published.complete(event)
+                    else -> Unit
+                }
+            }
+
+            val reply = async {
+                emission(source, api, EmissionReplyRegistry(), principal = Principal.Ambient, parentEmissionId = null) {
+                    val narration = emit(text = "about to ask")
+                    inServiceOf(narration.id) { ask(prompt = "Proceed?", timeout = 5.seconds) }
+                }
+            }
+
+            val event = withTimeout(5.seconds) { published.await() }
+            assertEquals(narrated.await().id, event.emission.provenance.parentEmissionId)
+
+            api.publish(resolvedFor(event.emission.id)).getOrThrow()
+
+            assertEquals(event.emission.id, withTimeout(5.seconds) { reply.await() }.emissionId)
         }
     }
 }

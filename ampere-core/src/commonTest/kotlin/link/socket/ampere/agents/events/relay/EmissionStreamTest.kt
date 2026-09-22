@@ -11,6 +11,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.Principal
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.emission.Emission
 import link.socket.ampere.agents.domain.emission.EmissionKind
@@ -35,7 +36,12 @@ class EmissionStreamTest {
         id = "emission-$text",
         kind = EmissionKind.Prose,
         payload = EmissionPayload.Prose(text = text, format = ProseFormat.PLAIN),
-        provenance = EmissionProvenance(runId = runId, inputDigest = "digest-$text"),
+        provenance = EmissionProvenance(
+            runId = runId,
+            inputDigest = "digest-$text",
+            parentEmissionId = null,
+            principal = Principal.Ambient,
+        ),
         producedAt = Clock.System.now(),
     )
 

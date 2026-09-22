@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.Principal
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.emission.EmissionReplyRegistry
 import link.socket.ampere.agents.domain.emission.EmissionTimeout
@@ -177,7 +178,13 @@ class HumanEscalationFlowTest {
         }
 
         val askDeferred = async {
-            emission(EventSource.Agent("test-agent"), api, registry) {
+            emission(
+                eventSource = EventSource.Agent("test-agent"),
+                eventApi = api,
+                replyRegistry = registry,
+                principal = Principal.Ambient,
+                parentEmissionId = null,
+            ) {
                 askHuman(
                     prompt = "Should we proceed?",
                     agentId = "test-agent",
@@ -228,7 +235,13 @@ class HumanEscalationFlowTest {
         }
 
         val askDeferred = async {
-            emission(EventSource.Agent("test-agent"), api, registry) {
+            emission(
+                eventSource = EventSource.Agent("test-agent"),
+                eventApi = api,
+                replyRegistry = registry,
+                principal = Principal.Ambient,
+                parentEmissionId = null,
+            ) {
                 askHuman(
                     prompt = "Polymorphism check",
                     agentId = "test-agent",
@@ -269,7 +282,13 @@ class HumanEscalationFlowTest {
         }
 
         val caught = try {
-            emission(EventSource.Agent("test-agent"), api, registry) {
+            emission(
+                eventSource = EventSource.Agent("test-agent"),
+                eventApi = api,
+                replyRegistry = registry,
+                principal = Principal.Ambient,
+                parentEmissionId = null,
+            ) {
                 askHuman(
                     prompt = "Will timeout",
                     agentId = "test-agent",

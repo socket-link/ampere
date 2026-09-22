@@ -9,6 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.Principal
 
 class SurfacePolicyConsoleFallbackTest {
 
@@ -37,7 +38,11 @@ class SurfacePolicyConsoleFallbackTest {
                 Affordance(id = "yes", label = "Yes", signalPayload = kotlinx.serialization.json.JsonPrimitive("yes")),
                 Affordance(id = "no", label = "No", signalPayload = kotlinx.serialization.json.JsonPrimitive("no")),
             ),
-            provenance = EmissionProvenance(inputDigest = inputDigest(payload)),
+            provenance = EmissionProvenance(
+                inputDigest = inputDigest(payload),
+                parentEmissionId = null,
+                principal = Principal.Ambient,
+            ),
             producedAt = Instant.fromEpochMilliseconds(0),
         )
     }
@@ -51,7 +56,11 @@ class SurfacePolicyConsoleFallbackTest {
                 id = "emission-unreachable",
                 kind = EmissionKind.Decision,
                 payload = EmissionPayload.Decision(prompt = "?"),
-                provenance = EmissionProvenance(inputDigest = "digest"),
+                provenance = EmissionProvenance(
+                    inputDigest = "digest",
+                    parentEmissionId = null,
+                    principal = Principal.Ambient,
+                ),
                 producedAt = Instant.fromEpochMilliseconds(0),
                 surfaces = listOf(Surface.Push, Surface.Foreground),
             ),
