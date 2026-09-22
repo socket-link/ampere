@@ -16,6 +16,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import link.socket.ampere.data.DatabaseSchemaManager.SchemaState
 import link.socket.ampere.db.Database
+import link.socket.ampere.db.fts.FtsAvailability
+import link.socket.ampere.db.fts.FtsSchema
 
 class DatabaseSchemaManagerTest {
 
@@ -90,7 +92,8 @@ class DatabaseSchemaManagerTest {
 
     @Test
     fun `migrated legacy tables match a freshly created schema column for column`() {
-        val migratedTables = listOf("EventStore", "KnowledgeStore", "OutcomeMemoryStore", "Links", "LinkGrants")
+        val migratedTables = listOf("EventStore", "KnowledgeStore", "OutcomeMemoryStore", "Links", "LinkGrants") +
+            UNMIGRATED_SQ_TABLES
         val fresh = inMemoryDriver().use { driver ->
             DatabaseSchemaManager.ensure(driver).getOrThrow()
             migratedTables.associateWith { tableShape(driver, it) }
@@ -194,6 +197,81 @@ class DatabaseSchemaManagerTest {
                 listOf(42L),
                 query(driver, "SELECT rowid FROM KnowledgeStore WHERE id = 'k-1'") { it.getLong(0)!! },
             )
+        }
+    }
+
+    @Test
+    fun `legacy database gains the tables added to sq files without a migration`() {
+        fileDriver(legacyDatabase()).use { driver ->
+            DatabaseSchemaManager.ensure(driver).getOrThrow()
+
+            for (table in UNMIGRATED_SQ_TABLES) {
+                assertTrue(tableExists(driver, table), "$table should exist")
+            }
+            // Its knowledge_chunks triggers are what failed on legacy databases before 5.sqm.
+            assertEquals(FtsAvailability.Available, FtsSchema.install(driver))
+        }
+    }
+
+    @Test
+    fun `legacy database that already has the unmigrated tables keeps their rows`() {
+        // What the old path built after those tables landed: a v3 schema that already has them,
+        // user_version 0. Migrating 5 -> 6 runs only 5.sqm, which adds exactly those tables.
+        val path = legacyDatabase { driver ->
+            Database.Schema.migrate(driver, 1, 3)
+            Database.Schema.migrate(driver, 5, 6)
+            driver.execute(
+                null,
+                "INSERT INTO knowledge_documents VALUES ('doc-1', 'Title', NULL, 1000, 'hash')",
+                0,
+            )
+            driver.execute(null, "INSERT INTO PlugGrants VALUES ('plug-1', '{}', 1000)", 0)
+        }
+
+        fileDriver(path).use { driver ->
+            assertEquals(3L, DatabaseSchemaManager.inferLegacyVersion(driver))
+            DatabaseSchemaManager.ensure(driver).getOrThrow()
+
+            assertEquals(
+                listOf("doc-1"),
+                query(driver, "SELECT id FROM knowledge_documents") { it.getString(0)!! },
+            )
+            assertEquals(
+                listOf("plug-1"),
+                query(driver, "SELECT plug_id FROM PlugGrants") { it.getString(0)!! },
+            )
+        }
+    }
+
+    @Test
+    fun `orphaned PluginGrants table is replaced by PlugGrants`() {
+        // Databases built between the grant schema landing and its rename (AMPR-220).
+        val path = legacyDatabase { driver ->
+            Database.Schema.migrate(driver, 1, 3)
+            driver.execute(
+                null,
+                """
+                CREATE TABLE PluginGrants (
+                  plugin_id TEXT NOT NULL,
+                  permission_json TEXT NOT NULL,
+                  granted_at INTEGER NOT NULL,
+                  PRIMARY KEY (plugin_id, permission_json)
+                )
+                """.trimIndent(),
+                0,
+            )
+            driver.execute(null, "CREATE INDEX idx_plugin_grants_plugin_id ON PluginGrants(plugin_id)", 0)
+        }
+
+        fileDriver(path).use { driver ->
+            DatabaseSchemaManager.ensure(driver).getOrThrow()
+
+            assertFalse(tableExists(driver, "PluginGrants"))
+            assertTrue(
+                query(driver, "SELECT 1 FROM sqlite_master WHERE name = 'idx_plugin_grants_plugin_id'") { true }
+                    .isEmpty(),
+            )
+            assertTrue(tableExists(driver, "PlugGrants"))
         }
     }
 
@@ -358,6 +436,15 @@ class DatabaseSchemaManagerTest {
             "CREATE INDEX IF NOT EXISTS idx_knowledge_run_id ON KnowledgeStore(run_id)",
             "ALTER TABLE OutcomeMemoryStore ADD COLUMN run_id TEXT",
             "CREATE INDEX IF NOT EXISTS idx_outcome_run_id ON OutcomeMemoryStore(run_id)",
+        )
+
+        /** Tables added to `.sq` files without a migration until 5.sqm created them. */
+        val UNMIGRATED_SQ_TABLES = listOf(
+            "knowledge_documents",
+            "knowledge_chunks",
+            "knowledge_embeddings",
+            "document_scopes",
+            "PlugGrants",
         )
 
         val PRE_RUN_ID_DDL = listOf(
