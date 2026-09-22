@@ -131,6 +131,9 @@ object EventRegistry {
         // ProbeEvent types
         ProbeEvent.VerdictReached.EVENT_TYPE,
 
+        // ArcRunEvent types
+        ArcRunEvent.CompletionManifestRecorded.EVENT_TYPE,
+
         // TelemetryEvent types
         ProviderCallStartedEvent.EVENT_TYPE,
         ProviderCallCompletedEvent.EVENT_TYPE,

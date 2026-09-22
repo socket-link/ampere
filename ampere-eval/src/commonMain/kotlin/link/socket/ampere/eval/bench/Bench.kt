@@ -14,9 +14,11 @@ import link.socket.ampere.domain.arc.AmpereRuntime
 import link.socket.ampere.domain.arc.ArcConfig
 import link.socket.ampere.domain.arc.ArcOutcome
 import link.socket.ampere.domain.arc.ArcRegistry
+import link.socket.ampere.domain.arc.CompletionManifest
 import link.socket.ampere.eval.meter.Reading
 import link.socket.ampere.eval.relay.MissPolicy
 import link.socket.ampere.eval.relay.PlaybackRelay
+import link.socket.ampere.eval.trace.RecordingHandle
 import link.socket.ampere.eval.trace.Trace
 import link.socket.ampere.eval.trace.TraceRecorder
 import okio.Path
@@ -164,10 +166,11 @@ class Bench(
         val handle = recorder.start(runId = runId, arcId = case.arcId)
 
         // The recording handle must be closed even if the bench coroutine is cancelled, so stop
-        // it in a `finally` rather than only on the happy path.
+        // it in a `finally` rather than only on the happy path. A run that is cut short leaves its
+        // manifest in the recording before it gets there.
         var traceResult: Result<Trace>? = null
         val outcome = try {
-            runArc(arcConfig, case, relay)
+            runArc(arcConfig, case, relay) { manifest -> recordManifest(manifest, handle) }
         } finally {
             traceResult = withContext(NonCancellable) { handle.stop() }
         }
@@ -203,12 +206,14 @@ class Bench(
      * it, and cancelling the bench cancels the Arc instead of leaving detached agents behind.
      * Cancellation is not caught here — [AmpereRuntime.execute] already returns
      * [ArcOutcome.Cancelled] for its own cancellation and rethrows the caller's, and swallowing
-     * the latter is exactly what the old `runCatching` did wrong.
+     * the latter is exactly what the old `runCatching` did wrong. A bench cancelled mid-run still
+     * gets its [CompletionManifest] to [completionManifestSink] before that rethrow.
      */
     private suspend fun runArc(
         arcConfig: ArcConfig,
         case: EvalCase,
         relay: CognitiveRelay,
+        completionManifestSink: (suspend (CompletionManifest) -> Unit)? = null,
     ): ArcOutcome = coroutineScope {
         AmpereRuntime(
             arcConfig = arcConfig,
@@ -218,7 +223,25 @@ class Bench(
             executor = NoOpExecutor(),
             maxFlowTicks = maxFlowTicks,
             clock = clock,
+            completionManifestSink = completionManifestSink,
         ).execute(case.seed.userGoal)
+    }
+
+    /**
+     * The live-mode manifest sink (AMPR-359). A case's recorded trace is what outlives the bench,
+     * so a cancelled or failed run's manifest goes into it, next to the events of the run it
+     * closes out. It is also published through [eventApi] like every other bench event — stored
+     * under the Arc run's own id, where that run's `ArcTraceProjection` looks for it.
+     *
+     * Captured into [recording] directly as well: bus dispatch is asynchronous, and the recording
+     * stops the moment the run returns, so a manifest left to the bus alone could miss the trace it
+     * belongs to. The bus copy, if it arrives in time, is deduplicated. A failed write is logged by
+     * the door; the recording holds the manifest either way.
+     */
+    private suspend fun recordManifest(manifest: CompletionManifest, recording: RecordingHandle) {
+        val event = manifest.toEvent(eventSource = source, timestamp = clock.now())
+        recording.capture(event)
+        eventApi.publish(event, runId = event.runId)
     }
 
     private suspend fun grade(case: EvalCase, trace: Trace): EvalCaseResult {

@@ -244,6 +244,22 @@ class TraceRecorderTest {
         assertEquals(UndeterminedCause.EVIDENCE_ABSENT, verdict.cause)
     }
 
+    @Test
+    fun `an event captured directly and delivered by the bus is recorded once`() = runTest {
+        val handle = recorder.start(runId = "run-8", arcId = "arc-8")
+        val (first, last) = events(2)
+
+        bus.publish(first)
+        // The owner's own last word, taken out of the dispatch race — and then published, so the
+        // bus delivers a second copy.
+        handle.capture(last)
+        bus.publish(last)
+
+        val trace = handle.stop().getOrThrow()
+
+        assertEquals(listOf("e1", "e2"), trace.events.map { it.payload.eventId() })
+    }
+
     private fun kotlinx.serialization.json.JsonElement.eventId(): String =
         DEFAULT_JSON.decodeFromJsonElement(Event.serializer(), this).eventId
 }

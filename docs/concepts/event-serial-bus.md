@@ -11,7 +11,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/**
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/events/**
 related: [PropelLoop, AgentSurface, CognitionTrace, MemoryProvenance, LinkLayer]
-last_verified: 2026-09-02
+last_verified: 2026-09-21
 ---
 
 # EventSerialBus
@@ -62,6 +62,7 @@ properties for free:
 - `agents/domain/event/CognitivePhaseEvent.kt` — phase transition events emitted by `PhaseSparkManager` when a bus is wired.
 - `agents/domain/event/LinkEvent.kt` — Link lifecycle (granted, revoked, resolved, resolution failed); see [LinkLayer](link-layer.md).
 - `agents/domain/event/ProbeEvent.kt` — `VerdictReached`, one Probe's judgement of one identified subject; see [Probe](probe.md).
+- `agents/domain/event/ArcRunEvent.kt` — run-level signals from the Arc runtime itself. `CompletionManifestRecorded` carries a cancelled or failed run's manifest into the store, published through an `AgentEventApi` under `CompletionManifestSink.DEFAULT_AGENT_ID`; see [CognitionTrace](cognition-trace.md).
 - `agents/domain/event/EventRegistry.kt` — the hand-maintained list of every event type, and the only thing `subscribeToAll`, the relay, and `TraceRecorder` enumerate.
 - `ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/events/EventStore.sq` — persistence schema (with `run_id` indexes for trace queries).
 

@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/trace/ArcRunTrace.kt
   - docs/AGENT_LIFECYCLE.md
 related: [CognitiveRelay, MemoryProvenance, SparkSystem, CognitionTrace, EventSerialBus]
-last_verified: 2026-06-04
+last_verified: 2026-09-21
 ---
 
 # PROPEL Loop
@@ -66,7 +66,7 @@ single point at which we emit telemetry.
 
 - **Recall precedes Plan.** No `Plan` may be generated without first calling `AgentMemoryService.recallRelevantKnowledge` and feeding the result into `PlanGenerator`. Skipping Recall when context "feels obvious" is the canonical failure mode.
 - **Each phase emits its own boundary events.** `CognitivePhaseEvent.PhaseEntered` / `PhaseExited` mark phase transitions when the phase manager has a bus; `ProviderCallStartedEvent` / `ProviderCallCompletedEvent` carry a `cognitivePhase`; memory writes carry the phase that produced them; tool calls are tagged via the active phase. `ArcTraceProjection` relies on this to bucket activity per phase. A phase that runs without emitting boundary events is invisible to the trace, which is equivalent to it not having run.
-- **The loop closes through `Knowledge`.** Every successful Arc run ends with `KnowledgeExtractor` writing at least one `Knowledge` entry tagged with the `run_id`. An Arc run that produced outcomes but no Knowledge entry has not closed the loop and will not contribute to future Recall.
+- **The loop closes through `Knowledge`.** Every successful Arc run ends with `KnowledgeExtractor` writing at least one `Knowledge` entry tagged with the `run_id`. An Arc run that produced outcomes but no Knowledge entry has not closed the loop and will not contribute to future Recall. A run that is cancelled, or where a phase throws, does not close it and is not credited with a `Knowledge` entry: it leaves a `CompletionManifest` instead (AMPR-282), persisted as `ArcRunEvent.CompletionManifestRecorded` and read back as `ArcRunTrace.completion` (AMPR-359).
 - **Phase order is fixed.** Perceive → Recall → Observe → Plan → Execute → Learn. The declaration order in `CognitivePhase` matches the PROPEL acronym; `enumValues<CognitivePhase>()` yields the cycle. New phases are added by extending the enum and updating every service that switches on it; phases are never reordered or skipped per call site.
 - **Observe is not a side-effect of Plan.** When recalled `Knowledge` contradicts an `Idea` or current state has drifted since the last run, that contradiction must be resolved in Observe and recorded in the Plan's rationale, not silently dropped during Plan generation.
 

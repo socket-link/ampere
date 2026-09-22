@@ -6,6 +6,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.TimeSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -15,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
+import link.socket.ampere.agents.domain.event.ArcRunEvent
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
@@ -29,6 +31,7 @@ import link.socket.ampere.agents.domain.routing.capability.CostPolicy
 import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.capability.ProviderCapability
+import link.socket.ampere.agents.events.EventEnvelope
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.api.model.TokenUsage
@@ -36,6 +39,9 @@ import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs
+import link.socket.ampere.domain.arc.ArcPhase
+import link.socket.ampere.domain.arc.CompletionRecord
+import link.socket.ampere.domain.arc.TerminationReason
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ArcTraceProjectionTest {
@@ -250,6 +256,66 @@ class ArcTraceProjectionTest {
         val projectedOutcome = assertNotNull(memoryWrites.firstOrNull { it.id == storedOutcome.id })
         assertEquals("EXECUTE", projectedOutcome.phaseName)
         assertEquals("Run tests after writing trace code", projectedOutcome.approach)
+    }
+
+    @Test
+    fun `a completion manifest folds into the run it closes out and leaves its phases alone`() = runTest {
+        val runId = "run-trace-cancelled"
+        seedTrace(runId)
+        val record = cancelledRecord(runId)
+        saveManifest(record, at = Instant.fromEpochMilliseconds(2_000))
+
+        val trace = projection.project(runId).getOrThrow()
+
+        assertEquals(record, trace.completion)
+        assertEquals(Instant.fromEpochMilliseconds(2_000), trace.endedAt, "The run ended where it closed out")
+
+        val run = assertNotNull(trace.phases.firstOrNull { it.name == "RUN" })
+        assertEquals(listOf("manifest-$runId"), run.events.map { it.eventId })
+        assertEquals(
+            listOf("PLAN", "EXECUTE", "LEARN", "RUN"),
+            trace.phases.map { it.name },
+            "The run's own record joins the run envelope; the PROPEL phases are as they were",
+        )
+    }
+
+    @Test
+    fun `a run that wrote no manifest has no completion`() = runTest {
+        seedTrace("run-trace-completed")
+
+        assertNull(projection.project("run-trace-completed").getOrThrow().completion)
+    }
+
+    @Test
+    fun `a run does not borrow the manifest of a run whose id contains its own`() = runTest {
+        // The legacy payload match finds `run-short` inside `run-short-2`'s manifest row.
+        seedTrace("run-short")
+        saveManifest(cancelledRecord("run-short-2"), at = Instant.fromEpochMilliseconds(2_000))
+
+        assertNull(projection.project("run-short").getOrThrow().completion)
+        assertEquals("run-short-2", projection.project("run-short-2").getOrThrow().completion?.runId)
+    }
+
+    private fun cancelledRecord(runId: String) = CompletionRecord(
+        runId = runId,
+        endedBy = TerminationReason.CANCELLED,
+        phasesStarted = listOf(ArcPhase.CHARGE, ArcPhase.FLOW),
+        phasesCompleted = listOf(ArcPhase.CHARGE),
+        phasesNotRun = listOf(ArcPhase.PULSE),
+        reachedTick = 3,
+        unmetGoals = listOf(CompletionRecord.Goal(id = "goal-0", description = "Ship it")),
+    )
+
+    private suspend fun saveManifest(record: CompletionRecord, at: Instant) {
+        eventRepository.saveEvent(
+            ArcRunEvent.CompletionManifestRecorded(
+                eventId = "manifest-${record.runId}",
+                timestamp = at,
+                eventSource = EventSource.Agent("ampere.arc-runtime"),
+                record = record,
+            ),
+            envelope = EventEnvelope(runId = record.runId),
+        ).getOrThrow()
     }
 
     private suspend fun seedTrace(runId: String) {

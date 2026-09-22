@@ -12,12 +12,18 @@ import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import link.socket.ampere.cli.goal.ARC_SETTLE_GRACE
+import link.socket.ampere.cli.goal.ArcShutdownHook
 import link.socket.ampere.cli.goal.GoalHandler
 import link.socket.ampere.cli.layout.AgentFocusPane
 import link.socket.ampere.cli.layout.AgentMemoryPane
@@ -49,6 +55,7 @@ import link.socket.ampere.domain.arc.AmpereRuntime
 import link.socket.ampere.domain.arc.ArcConfig
 import link.socket.ampere.domain.arc.ArcOutcome
 import link.socket.ampere.domain.arc.ArcRegistry
+import link.socket.ampere.domain.arc.CompletionManifestSink
 import link.socket.ampere.repl.TerminalFactory
 
 /**
@@ -270,6 +277,7 @@ class AmpereCommand(
                             goal = goal!!,
                             arcConfig = selectedArc,
                             agentScope = agentScope,
+                            manifestSink = context.completionManifestSink,
                             jazzPane = jazzPane,
                         ) { status -> systemStatus = status }
                     } else {
@@ -514,7 +522,7 @@ class AmpereCommand(
             LogCapture.stop()
             presenter.stop()
             inputHandler.close()
-            agentScope.cancel()
+            cancelAndSettle(agentScope)
             restoreTerminal()
             println("\nAMPERE stopped")
         }
@@ -633,6 +641,7 @@ class AmpereCommand(
         goal: String,
         arcConfig: ArcConfig,
         agentScope: CoroutineScope,
+        manifestSink: CompletionManifestSink,
         jazzPane: CognitiveProgressPane,
         updateStatus: (StatusBar.SystemStatus) -> Unit,
     ) {
@@ -643,7 +652,9 @@ class AmpereCommand(
                     arcConfig = arcConfig,
                     projectDirPath = projectDirPath,
                     agentScope = agentScope,
+                    completionManifestSink = manifestSink::record,
                 )
+                val shutdownHook = ArcShutdownHook(cancelRun = runtime::cancel).install()
 
                 jazzPane.setPhase(CognitiveProgressPane.Phase.INITIALIZING, "Charging: Analyzing project...")
                 updateStatus(StatusBar.SystemStatus.THINKING)
@@ -653,7 +664,14 @@ class AmpereCommand(
                 jazzPane.setPhase(CognitiveProgressPane.Phase.PLAN, "Flow: Executing agent loop...")
                 updateStatus(StatusBar.SystemStatus.WORKING)
 
-                when (val outcome = runtime.execute(goal)) {
+                // Settled once `execute` returns, with a cut-short run's manifest already written.
+                val outcome = try {
+                    runtime.execute(goal)
+                } finally {
+                    shutdownHook.release()
+                }
+
+                when (outcome) {
                     is ArcOutcome.Completed -> {
                         val charge = outcome.chargeResult
                         jazzPane.setPhase(
@@ -736,7 +754,12 @@ class AmpereCommand(
                 goal != null -> {
                     val effectiveGoal = goal!!
                     if (useArcPhases) {
-                        executeArcPhasesHeadless(effectiveGoal, selectedArc, agentScope)
+                        executeArcPhasesHeadless(
+                            goal = effectiveGoal,
+                            arcConfig = selectedArc,
+                            agentScope = agentScope,
+                            manifestSink = context.completionManifestSink,
+                        )
                         isOneShot = true
                     } else {
                         val goalHandler = GoalHandler(
@@ -803,7 +826,7 @@ class AmpereCommand(
             System.err.println("Error: ${e.message}")
             throw e
         } finally {
-            agentScope.cancel()
+            cancelAndSettle(agentScope)
             println("AMPERE stopped")
         }
     }
@@ -812,17 +835,27 @@ class AmpereCommand(
         goal: String,
         arcConfig: ArcConfig,
         agentScope: CoroutineScope,
+        manifestSink: CompletionManifestSink,
     ) {
         val projectDirPath = File(System.getProperty("user.dir")).absolutePath
         val runtime = AmpereRuntime.create(
             arcConfig = arcConfig,
             projectDirPath = projectDirPath,
             agentScope = agentScope,
+            completionManifestSink = manifestSink::record,
         )
+        val shutdownHook = ArcShutdownHook(cancelRun = runtime::cancel).install()
 
         // `execute()` runs Charge itself; a preceding `executeChargeOnly` would double the
-        // project scan and spawn a second full set of agents for the same goal.
-        when (val outcome = runtime.execute(goal)) {
+        // project scan and spawn a second full set of agents for the same goal. Settled once it
+        // returns, with a cut-short run's manifest already written.
+        val outcome = try {
+            runtime.execute(goal)
+        } finally {
+            shutdownHook.release()
+        }
+
+        when (outcome) {
             is ArcOutcome.Completed -> {
                 val charge = outcome.chargeResult
                 println(
@@ -841,6 +874,19 @@ class AmpereCommand(
                 System.err.println("Arc ${outcome.manifest.summary()}")
             is ArcOutcome.Failed ->
                 System.err.println("Arc ${outcome.manifest.summary()}: ${outcome.cause.message}")
+        }
+    }
+
+    /**
+     * Cancel [agentScope] and wait — at most [ARC_SETTLE_GRACE] — for what it was running to unwind.
+     *
+     * An Arc run cancelled here is cancelled by its caller, so no outcome comes back to carry its
+     * completion manifest: the run writes the manifest itself as it unwinds (AMPR-359). Returning
+     * before it has would let the context close the database under that write.
+     */
+    private suspend fun cancelAndSettle(agentScope: CoroutineScope) {
+        withContext(NonCancellable) {
+            withTimeoutOrNull(ARC_SETTLE_GRACE) { agentScope.coroutineContext.job.cancelAndJoin() }
         }
     }
 

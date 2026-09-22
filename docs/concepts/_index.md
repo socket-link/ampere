@@ -22,7 +22,7 @@ How the agent thinks: the loop, the routing, the memory, the differentiation, th
 | [MemoryProvenance](memory-provenance.md) | stable | Episodic (Outcome) and semantic (Knowledge) memory cells. Every cell is timestamped, attributable, and indexed by `run_id` for time-travel. |
 | [SparkSystem](spark-system.md) | stable | Cellular differentiation: Sparks layer onto a single agent class to narrow capability. Sparks can only narrow, never expand. |
 | [DreamCycle](dream-cycle.md) | experimental | Async memory consolidation. Target shape only — no implementation yet. |
-| [CognitionTrace](cognition-trace.md) | stable | Per-`run_id` Arc trace projection: phases, model invocations, memory writes, tool calls, Watt cost. The glass-brain read model. |
+| [CognitionTrace](cognition-trace.md) | stable | Per-`run_id` Arc trace projection: phases, model invocations, memory writes, tool calls, Watt cost, and the completion manifest of a run cut short. The glass-brain read model. |
 
 ## Coordination
 

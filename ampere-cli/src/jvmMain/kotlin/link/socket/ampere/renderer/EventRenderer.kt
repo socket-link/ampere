@@ -13,6 +13,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
+import link.socket.ampere.agents.domain.event.ArcRunEvent
 import link.socket.ampere.agents.domain.event.AssetAccessEvent
 import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
@@ -42,6 +43,7 @@ import link.socket.ampere.agents.domain.event.SparkRemovedEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
+import link.socket.ampere.domain.arc.TerminationReason
 import link.socket.ampere.probe.Verdict
 
 /**
@@ -195,6 +197,12 @@ class EventRenderer(
                 is Verdict.Warn -> yellow
                 is Verdict.Violated -> red
                 is Verdict.Undetermined -> magenta
+            }
+            // An Arc run that did not close its loop: red when it failed, amber when it was
+            // cancelled — either way, the record of what it left undone.
+            is ArcRunEvent.CompletionManifestRecorded -> "🧾" to when (event.record.endedBy) {
+                TerminationReason.ERROR -> red
+                else -> yellow
             }
         }
     }
