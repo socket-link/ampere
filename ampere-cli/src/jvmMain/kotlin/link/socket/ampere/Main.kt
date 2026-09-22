@@ -86,8 +86,8 @@ fun main(args: Array<String>) {
     val agentFactory = AgentFactory(
         scope = context.scope,
         ticketOrchestrator = environmentService.ticketOrchestrator,
-        memoryServiceFactory = { agentId -> context.createMemoryService(agentId) },
-        eventApiFactory = { agentId -> environmentService.createEventApi(agentId) },
+        knowledgeRepository = context.knowledgeRepository,
+        createEventApi = environmentService::createEventApi,
         issueTrackerProvider = issueTrackerProvider,
         repository = repository,
         aiConfiguration = aiConfiguration,

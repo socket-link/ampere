@@ -12,7 +12,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.event.EventSource
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.InMemoryEventApi
 import link.socket.ampere.agents.tools.mcp.connection.McpServerConnection
 import link.socket.ampere.agents.tools.mcp.protocol.InitializeResult
 import link.socket.ampere.agents.tools.mcp.protocol.McpToolDescriptor
@@ -42,7 +42,6 @@ class McpServerManagerTest {
     private lateinit var driver: JdbcSqliteDriver
     private lateinit var database: Database
     private lateinit var registry: ToolRegistry
-    private lateinit var eventBus: EventSerialBus
     private lateinit var mcpManager: McpServerManager
     private val scope = CoroutineScope(Dispatchers.Default)
     private val json = Json { ignoreUnknownKeys = true }
@@ -61,19 +60,20 @@ class McpServerManagerTest {
             database = database,
         )
 
-        eventBus = EventSerialBus(scope = scope)
+        // One door for both components (F1, AMPR-339); the id is what the store attributes to.
+        val (eventApi, _) = InMemoryEventApi.create(agentId = "test-agent", scope = scope)
         val eventSource = EventSource.Agent(agentId = "test-agent")
 
         registry = ToolRegistry(
             repository = repository,
-            eventBus = eventBus,
+            eventApi = eventApi,
             eventSource = eventSource,
         )
 
         // Create MCP manager
         mcpManager = McpServerManager(
             toolRegistry = registry,
-            eventBus = eventBus,
+            eventApi = eventApi,
             eventSource = eventSource,
             logger = Logger.withTag("McpServerManagerTest"),
         )

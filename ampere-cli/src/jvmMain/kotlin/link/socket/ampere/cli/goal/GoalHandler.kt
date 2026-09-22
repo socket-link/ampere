@@ -100,8 +100,8 @@ class GoalHandler(
         val agentFactory = AgentFactory(
             scope = agentScope,
             ticketOrchestrator = context.environmentService.ticketOrchestrator,
-            memoryServiceFactory = { agentId -> context.createMemoryService(agentId) },
-            eventApiFactory = { agentId -> context.environmentService.createEventApi(agentId) },
+            knowledgeRepository = context.knowledgeRepository,
+            createEventApi = context.environmentService::createEventApi,
             aiConfiguration = effectiveAiConfig,
             toolWriteCodeFileOverride = writeCodeTool,
             upstreamLlmClient = BundledUpstreamLlmClient,

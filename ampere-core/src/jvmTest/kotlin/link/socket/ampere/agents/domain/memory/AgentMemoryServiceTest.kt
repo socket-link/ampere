@@ -24,7 +24,7 @@ import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.InMemoryEventApi
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.db.Database
@@ -48,7 +48,9 @@ class AgentMemoryServiceTest {
 
     private lateinit var driver: JdbcSqliteDriver
     private lateinit var knowledgeRepository: KnowledgeRepository
-    private lateinit var eventBus: EventSerialBus
+
+    /** The service's door (F1, AMPR-339): tests subscribe on its bus and read its store. */
+    private lateinit var door: InMemoryEventApi.Handle
     private lateinit var service: AgentMemoryService
 
     // Track emitted events for verification
@@ -64,10 +66,11 @@ class AgentMemoryServiceTest {
         FtsSchema.install(driver)
         val database = Database(driver)
         knowledgeRepository = KnowledgeRepositoryImpl(database, driver)
-        eventBus = EventSerialBus(testScope)
+        door = InMemoryEventApi.open(agentId = agentId, scope = testScope)
         now = Clock.System.now()
 
         // Subscribe to all MemoryEvents to track emissions
+        val eventBus = door.bus
         eventBus.subscribe<MemoryEvent.KnowledgeStored, EventSubscription.ByEventClassType>(
             agentId = agentId,
             eventType = MemoryEvent.KnowledgeStored.EVENT_TYPE,
@@ -85,7 +88,7 @@ class AgentMemoryServiceTest {
         service = AgentMemoryService(
             agentId = agentId,
             knowledgeRepository = knowledgeRepository,
-            eventBus = eventBus,
+            eventApi = door.api,
         )
 
         // Clear event tracking
@@ -95,7 +98,36 @@ class AgentMemoryServiceTest {
     @AfterTest
     fun tearDown() {
         driver.close()
+        door.close()
     }
+
+    // ==================== Test 0: Persistence through the door (F1 / F9 / F11) ====================
+
+    /**
+     * Load-bearing for F9/F11 (AMPR-339 step 2): `KnowledgeStored` must be a persisted event
+     * whose `eventSource` is the holding agent, so provenance can be read back from the store.
+     */
+    @Test
+    fun `storeKnowledge persists KnowledgeStored attributed to the holding agent`() {
+        runBlocking {
+            val knowledge = Knowledge.FromTask(
+                taskId = "task-holder",
+                approach = "Persist first",
+                learnings = "The store sees what the bus sees",
+                timestamp = now,
+            )
+
+            val entry = service.storeKnowledge(knowledge, runId = "run-holder").getOrThrow()
+
+            val stored = door.repository.getEventsByType(MemoryEvent.KnowledgeStored.EVENT_TYPE).getOrThrow()
+            assertEquals(1, stored.size)
+            val event = assertIs<MemoryEvent.KnowledgeStored>(stored.single())
+            assertEquals(EventSource.Agent(agentId), event.eventSource)
+            assertEquals(entry.id, event.knowledgeId)
+            assertEquals("run-holder", event.runId)
+        }
+    }
+
     // ==================== Test 1: Round-trip Persistence ====================
 
     @Test

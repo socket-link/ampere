@@ -18,8 +18,8 @@ import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.events.InMemoryEventApi
 import link.socket.ampere.agents.events.bus.EventSerialBus
-import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.execution.request.ExecutionContext
@@ -47,11 +47,13 @@ class ToolRegistryTest {
     private val testScope = TestScope(UnconfinedTestDispatcher())
     private val json: Json = DEFAULT_JSON
     private val eventSource = EventSource.Agent("test-agent")
-    private val eventSerialBusFactory = EventSerialBusFactory(testScope)
 
     private lateinit var driver: JdbcSqliteDriver
     private lateinit var database: Database
     private lateinit var repository: ToolRegistryRepository
+
+    /** The registry's door (F1, AMPR-339): its bus is what the tests subscribe on. */
+    private lateinit var door: InMemoryEventApi.Handle
     private lateinit var eventBus: EventSerialBus
     private lateinit var registry: ToolRegistry
 
@@ -61,13 +63,15 @@ class ToolRegistryTest {
         Database.Schema.create(driver)
         database = Database(driver)
         repository = ToolRegistryRepository(json, testScope, database)
-        eventBus = eventSerialBusFactory.create()
-        registry = ToolRegistry(repository, eventBus, eventSource)
+        door = InMemoryEventApi.open(agentId = "tool-registry", scope = testScope)
+        eventBus = door.bus
+        registry = ToolRegistry(repository, door.api, eventSource)
     }
 
     @AfterTest
     fun tearDown() {
         driver.close()
+        door.close()
     }
 
     // ==================== Test Helper Functions ====================
@@ -171,6 +175,18 @@ class ToolRegistryTest {
             assertEquals(ToolMetadata.TYPE_FUNCTION, event.toolType)
             assertEquals(AgentActionAutonomy.ACT_WITH_NOTIFICATION, event.requiredAutonomy)
             assertNull(event.mcpServerId)
+        }
+    }
+
+    @Test
+    fun `register tool persists ToolRegistered through the door`() {
+        runBlocking {
+            registry.registerTool(createFunctionTool("tool-1", "Test Tool", "A test tool")).getOrThrow()
+
+            val stored = door.repository.getEventsByType(ToolEvent.ToolRegistered.EVENT_TYPE).getOrThrow()
+            val event = stored.single() as ToolEvent.ToolRegistered
+            assertEquals("tool-1", event.toolId)
+            assertEquals(eventSource, event.eventSource)
         }
     }
 
@@ -385,7 +401,7 @@ class ToolRegistryTest {
             registry.registerTool(tool2).getOrThrow()
 
             // Create a fresh registry instance (simulating restart)
-            val freshRegistry = ToolRegistry(repository, eventBus, eventSource)
+            val freshRegistry = ToolRegistry(repository, door.api, eventSource)
 
             // Before loading, the new registry should be empty
             assertEquals(0, freshRegistry.getAllTools().size)
@@ -429,7 +445,7 @@ class ToolRegistryTest {
             registry.registerTool(createMcpTool("m1", "MCP 1", "desc", "server-1")).getOrThrow()
 
             // Emit discovery complete
-            registry.emitDiscoveryComplete(mcpServerCount = 1)
+            registry.emitDiscoveryComplete(mcpServerCount = 1).getOrThrow()
 
             val event = received.await()
             assertEquals(3, event.totalToolsDiscovered)
@@ -502,7 +518,7 @@ class ToolRegistryTest {
             assertEquals(0, registry.getAllTools().size)
 
             // Create fresh registry and verify database is empty
-            val freshRegistry = ToolRegistry(repository, eventBus, eventSource)
+            val freshRegistry = ToolRegistry(repository, door.api, eventSource)
             freshRegistry.loadPersistedTools().getOrThrow()
             assertEquals(0, freshRegistry.getAllTools().size)
         }

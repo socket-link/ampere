@@ -100,8 +100,8 @@ fun main(escalation: Boolean = false) {
             val agentFactory = AgentFactory(
                 scope = agentScope,
                 ticketOrchestrator = context.environmentService.ticketOrchestrator,
-                memoryServiceFactory = { agentId -> context.createMemoryService(agentId) },
-                eventApiFactory = { agentId -> context.environmentService.createEventApi(agentId) },
+                knowledgeRepository = context.knowledgeRepository,
+                createEventApi = context.environmentService::createEventApi,
                 aiConfiguration = AIConfiguration_Default(
                     provider = AIProvider_Anthropic,
                     model = AIModel_Claude.Sonnet_5
@@ -386,7 +386,7 @@ private suspend fun handleTicketAssignment(
     eventApi: AgentEventApi,
     escalation: Boolean = false,
 ) {
-    val phaseSparkManager = PhaseSparkManager(agent, enabled = true)
+    val phaseSparkManager = PhaseSparkManager(agent, enabled = true, eventApi = eventApi)
 
     try {
 

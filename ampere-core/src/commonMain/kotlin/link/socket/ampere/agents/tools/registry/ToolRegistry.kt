@@ -8,7 +8,7 @@ import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.ToolEvent
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.tools.McpServerId
 import link.socket.ampere.agents.execution.tools.McpTool
@@ -33,10 +33,20 @@ import link.socket.ampere.agents.execution.tools.ToolId
  * - Load persisted tools on startup
  *
  * Thread-safety: All public methods are protected by a mutex for safe concurrent access.
+ *
+ * Events leave through [eventApi] (F1, AMPR-339): the door persists each one to the
+ * `EventStore` before dispatching it, so `ToolRegistered` / `ToolUnregistered` /
+ * `ToolDiscoveryComplete` are durable. Production builds the door as
+ * `environmentService.createEventApi("tool-registry")`. A persist failure folds into the
+ * `Result` of the mutating call that produced it.
+ *
+ * @param eventApi the one door every event leaves through.
+ * @param eventSource attribution stamped on every event (kept separate from the door's
+ *   identity; F13 will revisit).
  */
 class ToolRegistry(
     private val repository: ToolRegistryRepository,
-    private val eventBus: EventSerialBus,
+    private val eventApi: AgentEventApi,
     private val eventSource: EventSource,
 ) {
     // In-memory cache for fast lookups
@@ -68,7 +78,7 @@ class ToolRegistry(
         val metadata = ToolMetadata.fromTool(tool, timestamp)
 
         // Persist to database
-        repository.saveTool(metadata).onSuccess {
+        repository.saveTool(metadata).mapCatching {
             // Add to cache
             toolCache[tool.id] = metadata
 
@@ -88,7 +98,8 @@ class ToolRegistry(
                 },
             )
 
-            eventBus.publish(event)
+            eventApi.publish(event).getOrThrow()
+            Unit
         }
     }
 
@@ -111,7 +122,7 @@ class ToolRegistry(
         // Get metadata before removing
         val metadata = toolCache[toolId]
 
-        repository.deleteTool(toolId).onSuccess {
+        repository.deleteTool(toolId).mapCatching {
             // Remove from cache
             toolCache.remove(toolId)
 
@@ -128,8 +139,9 @@ class ToolRegistry(
                     mcpServerId = metadata.mcpServerId,
                 )
 
-                eventBus.publish(event)
+                eventApi.publish(event).getOrThrow()
             }
+            Unit
         }
     }
 
@@ -149,7 +161,7 @@ class ToolRegistry(
         // Get all tools for this server before removing
         val toolsToRemove = toolCache.values.filter { it.mcpServerId == serverId }
 
-        repository.deleteToolsByMcpServer(serverId).onSuccess {
+        repository.deleteToolsByMcpServer(serverId).mapCatching {
             // Remove from cache and emit events
             toolsToRemove.forEach { metadata ->
                 toolCache.remove(metadata.id)
@@ -165,8 +177,9 @@ class ToolRegistry(
                     mcpServerId = serverId,
                 )
 
-                eventBus.publish(event)
+                eventApi.publish(event).getOrThrow()
             }
+            Unit
         }
     }
 
@@ -289,8 +302,9 @@ class ToolRegistry(
      * all MCP servers have been queried and function tools have been initialized).
      *
      * @param mcpServerCount Number of MCP servers successfully connected
+     * @return the door's persist result, so a caller can fold it in
      */
-    suspend fun emitDiscoveryComplete(mcpServerCount: Int = 0) {
+    suspend fun emitDiscoveryComplete(mcpServerCount: Int = 0): Result<Unit> {
         val stats = mutex.withLock {
             val functionCount = toolCache.values.count { it.isFunctionTool() }
             val mcpCount = toolCache.values.count { it.isMcpTool() }
@@ -308,6 +322,8 @@ class ToolRegistry(
             mcpServerCount = mcpServerCount,
         )
 
-        eventBus.publish(event)
+        // Published outside the lock, as before: the door persists on IO and dispatches
+        // handlers that may re-enter the registry.
+        return eventApi.publish(event).map { }
     }
 }

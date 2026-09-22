@@ -9,14 +9,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
-import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.SparkBasedAgent
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.event.Event
-import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.execution.AutonomousWorkLoop
 import link.socket.ampere.agents.execution.WorkLoopConfig
 import link.socket.ampere.agents.execution.issue.CodeIssueWorkflow
@@ -187,24 +185,6 @@ class AmpereContext(
             knowledgeRepository = knowledgeRepository,
             workspace = workspace?.baseDirectory,
             database = database,
-        )
-    }
-
-    /**
-     * Create an agent memory service for the specified agent.
-     *
-     * This factory method creates per-agent memory service instances that share
-     * the same underlying repository. This allows agents to learn from each other's
-     * experiences while maintaining agent-specific filtering and event tracking.
-     *
-     * @param agentId The ID of the agent that will use this memory service
-     * @return A configured AgentMemoryService instance
-     */
-    fun createMemoryService(agentId: AgentId): AgentMemoryService {
-        return AgentMemoryService(
-            agentId = agentId,
-            knowledgeRepository = knowledgeRepository,
-            eventBus = environmentService.eventBus
         )
     }
 
@@ -386,7 +366,7 @@ class AmpereContext(
             workflow = workflow,
             config = config,
             scope = scope,
-            eventApiFactory = { agentId -> environmentService.createEventApi(agentId) },
+            eventApiFactory = environmentService::createEventApi,
         )
         return autonomousWorkLoop
     }

@@ -114,7 +114,7 @@ class ChargePhase(
                 executor = executor,
                 upstreamLlmClient = upstreamLlmClient,
                 runId = runId,
-                eventApiFactory = eventApiFactory,
+                createEventApi = eventApiFactory,
             ),
         ).spawn(arcConfig, projectContext)
 

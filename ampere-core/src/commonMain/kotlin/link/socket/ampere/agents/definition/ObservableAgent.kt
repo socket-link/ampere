@@ -39,6 +39,10 @@ abstract class ObservableAgent<S : AgentState>(
     private val observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
 ) : AutonomousAgent<S>() {
 
+    /** The agent's own door, so phase brackets are attributed to this agent (F1, AMPR-339). */
+    override val phaseSparkEventApi: AgentEventApi?
+        get() = eventApi
+
     /**
      * Emits a SparkAppliedEvent when a Spark is pushed onto the stack.
      */

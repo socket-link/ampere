@@ -17,6 +17,8 @@ import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
@@ -28,6 +30,7 @@ import link.socket.ampere.agents.execution.tools.ASK_HUMAN_TOOL_ID
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.tools.registry.ToolRegistry
 import link.socket.ampere.agents.tools.registry.ToolRegistryRepository
+import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 
 /**
@@ -92,12 +95,16 @@ class ToolInitializerTest {
             scope = scope,
             database = database,
         )
-        val eventBus = EventSerialBus(scope = scope)
         val eventSource = EventSource.Agent(agentId = "test-source")
+        val eventApi = AgentEventApi(
+            agentId = "test-source",
+            eventRepository = EventRepository(DEFAULT_JSON, scope, database),
+            eventSerialBus = EventSerialBus(scope = scope),
+        )
 
         return ToolRegistry(
             repository = repository,
-            eventBus = eventBus,
+            eventApi = eventApi,
             eventSource = eventSource,
         )
     }
