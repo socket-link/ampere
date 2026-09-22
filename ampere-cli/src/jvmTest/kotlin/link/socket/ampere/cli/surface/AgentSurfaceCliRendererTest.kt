@@ -1,5 +1,6 @@
 package link.socket.ampere.cli.surface
 
+import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import java.io.BufferedReader
 import java.io.PrintWriter
 import java.io.StringReader
@@ -9,11 +10,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.surface.AgentSurface
 import link.socket.ampere.agents.events.surface.AgentSurfaceField
@@ -21,16 +26,24 @@ import link.socket.ampere.agents.events.surface.AgentSurfaceFieldValue
 import link.socket.ampere.agents.events.surface.AgentSurfaceResponse
 import link.socket.ampere.agents.events.surface.awaitSurfaceResponse
 import link.socket.ampere.agents.events.surface.emitSurfaceRequest
+import link.socket.ampere.data.DEFAULT_JSON
+import link.socket.ampere.data.DatabaseSchemaManager
+import link.socket.ampere.db.Database
 
 /**
  * End-to-end tests for [AgentSurfaceCliRenderer]: a real [EventSerialBus] with
  * the renderer subscribed, emitting through `emitSurfaceRequest`, awaiting via
  * `awaitSurfaceResponse`, and reading rendered output verbatim.
+ *
+ * The renderer publishes through an [AgentEventApi] door (F1a, AMPR-337), so each
+ * harness builds one over an in-memory SQLite database on top of the test's bus. Bodies
+ * use `runBlocking`: the door persists on a real IO dispatcher, which `runTest`'s virtual
+ * time would skip straight past while `awaitSurfaceResponse` is still waiting.
  */
 class AgentSurfaceCliRendererTest {
 
     @Test
-    fun `Confirmation accepts on input '1'`() = runTest {
+    fun `Confirmation accepts on input '1'`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(
                 stdin = "1\n",
@@ -57,7 +70,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Confirmation accepts on input 'y'`() = runTest {
+    fun `Confirmation accepts on input 'y'`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(stdin = "y\n", bus = EventSerialBus(scope = this))
             val response = harness.driveTo(
@@ -71,7 +84,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Confirmation cancels on input '2'`() = runTest {
+    fun `Confirmation cancels on input '2'`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(stdin = "2\n", bus = EventSerialBus(scope = this))
             val response = harness.driveTo(
@@ -86,7 +99,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Confirmation cancels on empty input`() = runTest {
+    fun `Confirmation cancels on empty input`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(stdin = "\n", bus = EventSerialBus(scope = this))
             val response = harness.driveTo(
@@ -101,7 +114,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Choice single-select picks by number`() = runTest {
+    fun `Choice single-select picks by number`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(stdin = "2\n", bus = EventSerialBus(scope = this))
             val response = harness.driveTo(
@@ -122,7 +135,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Choice multi-select picks comma-separated numbers`() = runTest {
+    fun `Choice multi-select picks comma-separated numbers`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(stdin = "1, 3\n", bus = EventSerialBus(scope = this))
             val response = harness.driveTo(
@@ -147,7 +160,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Choice rejects disabled option and re-prompts`() = runTest {
+    fun `Choice rejects disabled option and re-prompts`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(stdin = "3\n1\n", bus = EventSerialBus(scope = this))
             val response = harness.driveTo(
@@ -170,7 +183,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Choice cancels on cancel token`() = runTest {
+    fun `Choice cancels on cancel token`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(stdin = ":cancel\n", bus = EventSerialBus(scope = this))
             val response = harness.driveTo(
@@ -185,7 +198,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Form collects typed values from each field`() = runTest {
+    fun `Form collects typed values from each field`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(
                 stdin = "feature/test\n\nyes\n1\n",
@@ -229,7 +242,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Form re-prompts a field that fails validation`() = runTest {
+    fun `Form re-prompts a field that fails validation`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(
                 stdin = "ab\nfeature\n1\n",
@@ -259,7 +272,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Form cancels with cancel token mid-field`() = runTest {
+    fun `Form cancels with cancel token mid-field`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(stdin = ":cancel\n", bus = EventSerialBus(scope = this))
             val response = harness.driveTo(
@@ -281,7 +294,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Form Secret field reads via injected readSecret`() = runTest {
+    fun `Form Secret field reads via injected readSecret`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(
                 stdin = "1\n",
@@ -311,7 +324,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Form Number field rejects non-integer when integerOnly is set`() = runTest {
+    fun `Form Number field rejects non-integer when integerOnly is set`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(
                 stdin = "2.5\n3\n1\n",
@@ -341,7 +354,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Card with actions resolves chosenAction`() = runTest {
+    fun `Card with actions resolves chosenAction`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(stdin = "2\n", bus = EventSerialBus(scope = this))
             val response = harness.driveTo(
@@ -373,7 +386,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Card without actions cancels on enter`() = runTest {
+    fun `Card without actions cancels on enter`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(stdin = "\n", bus = EventSerialBus(scope = this))
             val response = harness.driveTo(
@@ -389,7 +402,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `Card with actions dismisses on '0'`() = runTest {
+    fun `Card with actions dismisses on '0'`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(stdin = "0\n", bus = EventSerialBus(scope = this))
             val response = harness.driveTo(
@@ -408,7 +421,7 @@ class AgentSurfaceCliRendererTest {
     }
 
     @Test
-    fun `concurrent surface emits are serialised by the renderer`() = runTest {
+    fun `concurrent surface emits are serialised by the renderer`() = runBlocking<Unit> {
         coroutineScope {
             val harness = harness(stdin = "1\n2\n", bus = EventSerialBus(scope = this))
 
@@ -450,7 +463,7 @@ class AgentSurfaceCliRendererTest {
     ): RendererHarness {
         val outBuffer = StringWriter()
         val renderer = AgentSurfaceCliRenderer(
-            bus = bus,
+            eventApi = inMemoryDoor(bus),
             agentId = "renderer-test",
             input = BufferedReader(StringReader(stdin)),
             output = PrintWriter(outBuffer, true),
@@ -460,6 +473,17 @@ class AgentSurfaceCliRendererTest {
         )
         renderer.start()
         return RendererHarness(bus, outBuffer)
+    }
+
+    /** A door over a fresh in-memory database that dispatches on [bus]. */
+    private fun inMemoryDoor(bus: EventSerialBus): AgentEventApi {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        DatabaseSchemaManager.ensure(driver).getOrThrow()
+        return AgentEventApi(
+            agentId = "cli-surface",
+            eventRepository = EventRepository(DEFAULT_JSON, CoroutineScope(Dispatchers.Unconfined), Database(driver)),
+            eventSerialBus = bus,
+        )
     }
 
     private class RendererHarness(

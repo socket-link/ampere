@@ -7,7 +7,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import link.socket.ampere.agents.config.AgentActionAutonomy
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.InMemoryEventApi
 import link.socket.ampere.agents.execution.tools.ToolAskHuman
 import link.socket.ampere.agents.execution.tools.ToolReadCodebase
 import link.socket.ampere.agents.execution.tools.ToolRunTests
@@ -25,7 +25,7 @@ class AgentSystemIntegrationTest {
             val tools = mapOf(
                 "ask_human" to ToolAskHuman(
                     AgentActionAutonomy.FULLY_AUTONOMOUS,
-                    eventSerialBus = EventSerialBus(scope = scope),
+                    eventApi = InMemoryEventApi.create(agentId = "ask-human", scope = scope).first,
                 ),
                 "write_code_file" to ToolWriteCodeFile(AgentActionAutonomy.SELF_CORRECTING),
                 "read_codebase" to ToolReadCodebase(AgentActionAutonomy.ASK_BEFORE_ACTION),

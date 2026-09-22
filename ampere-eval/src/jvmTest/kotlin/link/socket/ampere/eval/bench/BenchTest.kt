@@ -1,5 +1,6 @@
 package link.socket.ampere.eval.bench
 
+import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeText
 import kotlin.test.Test
@@ -8,12 +9,18 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.subscription.Subscription
+import link.socket.ampere.data.DEFAULT_JSON
+import link.socket.ampere.data.DatabaseSchemaManager
+import link.socket.ampere.db.Database
 import link.socket.ampere.eval.meter.Meter
 import link.socket.ampere.eval.meter.Reading
 import link.socket.ampere.eval.meter.Tolerance
@@ -21,18 +28,41 @@ import link.socket.ampere.eval.trace.Trace
 import link.socket.ampere.time.MutableClock
 import okio.Path.Companion.toPath
 
-/** AMPR-186 tasks 4.3 and 4.5 validation. */
+/**
+ * AMPR-186 tasks 4.3 and 4.5 validation.
+ *
+ * F1a (AMPR-337): [Bench] publishes through an [AgentEventApi] door, so each test builds one over
+ * an in-memory `EventStore` and asserts the store sees what the bus sees.
+ */
 class BenchTest {
+
+    /** A door over a fresh in-memory database, dispatching inline so observers see events in order. */
+    private class Door(val api: AgentEventApi, val repository: EventRepository, val bus: EventSerialBus)
+
+    private fun openDoor(clock: Clock = Clock.System): Door {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        DatabaseSchemaManager.ensure(driver).getOrThrow()
+        val bus = EventSerialBus(scope = scope)
+        val repository = EventRepository(DEFAULT_JSON, scope, Database(driver))
+        val api = AgentEventApi(
+            agentId = "bench",
+            eventRepository = repository,
+            eventSerialBus = bus,
+            clock = clock,
+        )
+        return Door(api, repository, bus)
+    }
 
     @Test
     fun `2-probe suite runs green and deterministic in Replay mode`() = runTest {
-        val bus = EventSerialBus(scope = CoroutineScope(Dispatchers.Unconfined))
+        val door = openDoor()
         val observed = mutableListOf<BenchEvent>()
-        subscribeToBenchEvents(bus) { observed.add(it) }
+        subscribeToBenchEvents(door.bus) { observed.add(it) }
 
         val bench = Bench(
             projectDir = testProjectDir(),
-            eventBus = bus,
+            eventApi = door.api,
             maxFlowTicks = 1,
         )
 
@@ -53,11 +83,39 @@ class BenchTest {
     }
 
     @Test
-    fun `tightening a probe's Tolerance flips it red deterministically`() = runTest {
-        val bus = EventSerialBus(scope = CoroutineScope(Dispatchers.Unconfined))
+    fun `a Replay run persists every BenchEvent under its run id`() = runTest {
+        val door = openDoor()
         val bench = Bench(
             projectDir = testProjectDir(),
-            eventBus = bus,
+            eventApi = door.api,
+            maxFlowTicks = 1,
+        )
+
+        val suite = listOf(
+            probe(id = "probe-1", arcId = "startup-saas", tolerance = Tolerance(minScore = 0.5)),
+            probe(id = "probe-2", arcId = "devops-pipeline", tolerance = Tolerance(minScore = 0.5)),
+        )
+        bench.run(suite, RunMode.Replay).getOrThrow()
+
+        val graded = door.repository.getEventsByType(BenchEvent.ProbeGraded.EVENT_TYPE).getOrThrow()
+        assertEquals(2, graded.size)
+        assertEquals(setOf("probe-1", "probe-2"), graded.map { (it as BenchEvent.ProbeGraded).probeId }.toSet())
+
+        assertEquals(1, door.repository.getEventsByType(BenchEvent.BenchRunStarted.EVENT_TYPE).getOrThrow().size)
+        assertEquals(1, door.repository.getEventsByType(BenchEvent.BenchRunCompleted.EVENT_TYPE).getOrThrow().size)
+
+        val benchRunId = (graded.first() as BenchEvent.ProbeGraded).runId
+        val stored = door.repository.getEventsSinceSequence(0).getOrThrow().filter { it.event is BenchEvent }
+        assertEquals(4, stored.size)
+        assertTrue(stored.all { it.runId == benchRunId })
+    }
+
+    @Test
+    fun `tightening a probe's Tolerance flips it red deterministically`() = runTest {
+        val door = openDoor()
+        val bench = Bench(
+            projectDir = testProjectDir(),
+            eventApi = door.api,
             maxFlowTicks = 1,
         )
 
@@ -73,16 +131,15 @@ class BenchTest {
 
     @Test
     fun `an injected clock stamps every BenchEvent with its time`() = runTest {
-        val bus = EventSerialBus(scope = CoroutineScope(Dispatchers.Unconfined))
-        val observed = mutableListOf<BenchEvent>()
-        subscribeToBenchEvents(bus) { observed.add(it) }
-
         val fixed = Instant.parse("2026-01-01T00:00:00Z")
+        val door = openDoor(clock = MutableClock(fixed))
+        val observed = mutableListOf<BenchEvent>()
+        subscribeToBenchEvents(door.bus) { observed.add(it) }
+
         val bench = Bench(
             projectDir = testProjectDir(),
-            eventBus = bus,
+            eventApi = door.api,
             maxFlowTicks = 1,
-            clock = MutableClock(fixed),
         )
 
         val suite = listOf(
@@ -95,6 +152,10 @@ class BenchTest {
         assertEquals(2, graded.size)
         assertEquals(listOf(fixed, fixed), graded.map { it.timestamp })
         assertTrue(observed.all { it.timestamp == fixed })
+
+        // The door's recorded_at comes from the same clock the bench defaulted to.
+        val stored = door.repository.getEventsSinceSequence(0).getOrThrow().filter { it.event is BenchEvent }
+        assertTrue(stored.all { it.recordedAt == fixed })
     }
 
     private fun subscribeToBenchEvents(bus: EventSerialBus, onEvent: (BenchEvent) -> Unit) {

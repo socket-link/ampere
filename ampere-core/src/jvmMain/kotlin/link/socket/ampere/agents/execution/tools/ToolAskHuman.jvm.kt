@@ -4,7 +4,7 @@ import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.emission.EmissionReplyRegistry
 import link.socket.ampere.agents.domain.emission.GlobalEmissionReplyRegistry
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.execution.ParameterStrategy
 
 /**
@@ -21,12 +21,12 @@ import link.socket.ampere.agents.execution.ParameterStrategy
  */
 fun ToolAskHumanJvm(
     requiredAgentAutonomy: AgentActionAutonomy,
-    eventSerialBus: EventSerialBus,
+    eventApi: AgentEventApi,
     replyRegistry: EmissionReplyRegistry = GlobalEmissionReplyRegistry.instance,
     parameterStrategy: ParameterStrategy? = null,
 ): FunctionTool<link.socket.ampere.agents.execution.request.ExecutionContext.NoChanges> = ToolAskHuman(
     requiredAgentAutonomy = requiredAgentAutonomy,
-    eventSerialBus = eventSerialBus,
+    eventApi = eventApi,
     replyRegistry = replyRegistry,
     parameterStrategy = parameterStrategy,
     onInputRequested = { event ->

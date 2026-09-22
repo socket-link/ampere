@@ -333,7 +333,8 @@ class MultiAgentDemoRunner(
             timestamp = Clock.System.now(),
             urgency = Urgency.MEDIUM,
         )
-        context.environmentService.eventBus.publish(event)
+        // Through the coordinator's door so the delegation is persisted, not just dispatched (F1).
+        coordinatorEventApi.publish(event).getOrThrow()
     }
 
     private suspend fun emitTaskCompletedEvent(

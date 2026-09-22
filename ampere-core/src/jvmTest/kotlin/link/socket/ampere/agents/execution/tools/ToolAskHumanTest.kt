@@ -5,9 +5,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.Urgency
@@ -20,7 +23,9 @@ import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.Task
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.InMemoryEventApi
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.subscribe
 import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.events.tickets.Ticket
@@ -32,7 +37,18 @@ import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.util.randomUUID
 
+/**
+ * F1a (AMPR-337): the tool publishes through an [AgentEventApi] door, so it runs in jvmTest
+ * where [InMemoryEventApi] can build one. Bodies use `runBlocking`: the door persists on a
+ * real IO dispatcher, which `runTest`'s virtual time would skip straight past.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ToolAskHumanTest {
+
+    private val doorScope = TestScope(UnconfinedTestDispatcher())
+
+    private fun door(): Pair<AgentEventApi, EventRepository> =
+        InMemoryEventApi.create(agentId = "test-agent", scope = doorScope)
 
     private fun makeContext(instructions: String) = ExecutionContext.NoChanges(
         executorId = "test-executor",
@@ -57,28 +73,28 @@ class ToolAskHumanTest {
     )
 
     private fun makeTool(
-        bus: EventSerialBus,
+        api: AgentEventApi,
         registry: EmissionReplyRegistry,
         onProduced: suspend (HumanInteractionEvent.InputRequested) -> Unit = {},
     ) = ToolAskHuman(
         requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
-        eventSerialBus = bus,
+        eventApi = api,
         replyRegistry = registry,
         onInputRequested = onProduced,
     )
 
     @Test
-    fun `tool publishes HumanInteractionEvent InputRequested on execute`() = runTest {
-        val bus = EventSerialBus(scope = this)
+    fun `tool publishes HumanInteractionEvent InputRequested on execute`() = runBlocking<Unit> {
+        val (api, _) = door()
         val registry = EmissionReplyRegistry()
         val capturedEvents = mutableListOf<HumanInteractionEvent.InputRequested>()
 
-        bus.subscribe<HumanInteractionEvent.InputRequested, EventSubscription.ByEventClassType>(
+        api.eventSerialBus.subscribe<HumanInteractionEvent.InputRequested, EventSubscription.ByEventClassType>(
             agentId = "test-sub",
             eventType = HumanInteractionEvent.InputRequested.EVENT_TYPE,
         ) { event, _ -> capturedEvents.add(event) }
 
-        val tool = makeTool(bus, registry)
+        val tool = makeTool(api, registry)
         val ctx = makeContext("Should we proceed?")
 
         val deferred = async {
@@ -116,13 +132,47 @@ class ToolAskHumanTest {
     }
 
     @Test
-    fun `tool returns failure on timeout`() = runTest {
-        val bus = EventSerialBus(scope = this)
+    fun `tool persists InputRequested through the door`() = runBlocking<Unit> {
+        val (api, repository) = door()
+        val registry = EmissionReplyRegistry()
+        val capturedEvents = mutableListOf<HumanInteractionEvent.InputRequested>()
+
+        api.eventSerialBus.subscribe<HumanInteractionEvent.InputRequested, EventSubscription.ByEventClassType>(
+            agentId = "test-sub",
+            eventType = HumanInteractionEvent.InputRequested.EVENT_TYPE,
+        ) { event, _ -> capturedEvents.add(event) }
+
+        val tool = makeTool(api, registry)
+        val deferred = async {
+            tool.execute(ExecutionRequest(makeContext("Persist me"), ExecutionConstraints()))
+        }
+
+        delay(200.milliseconds)
+        val event = capturedEvents.single()
+        registry.deliver(
+            EmissionEvent.BaseResolved(
+                eventId = randomUUID(),
+                timestamp = Clock.System.now(),
+                eventSource = EventSource.Human,
+                urgency = Urgency.HIGH,
+                emissionId = event.emissionId,
+                affordanceId = "free-text",
+            ),
+        )
+        deferred.await()
+
+        val stored = repository.getEventsByType(HumanInteractionEvent.InputRequested.EVENT_TYPE).getOrThrow()
+        assertEquals(listOf(event.eventId), stored.map { it.eventId })
+    }
+
+    @Test
+    fun `tool returns failure on timeout`() = runBlocking<Unit> {
+        val (api, _) = door()
         val registry = EmissionReplyRegistry()
 
         val tool = ToolAskHuman(
             requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
-            eventSerialBus = bus,
+            eventApi = api,
             replyRegistry = registry,
         )
 
@@ -132,13 +182,13 @@ class ToolAskHumanTest {
     }
 
     @Test
-    fun `onInputRequested callback is invoked before suspension`() = runTest {
-        val bus = EventSerialBus(scope = this)
+    fun `onInputRequested callback is invoked before suspension`() = runBlocking<Unit> {
+        val (api, _) = door()
         val registry = EmissionReplyRegistry()
         var callbackFired = false
         var callbackEvent: HumanInteractionEvent.InputRequested? = null
 
-        val tool = makeTool(bus, registry) { event ->
+        val tool = makeTool(api, registry) { event ->
             callbackFired = true
             callbackEvent = event
         }
@@ -166,10 +216,11 @@ class ToolAskHumanTest {
     }
 
     @Test
-    fun `ToolAskHuman requires EventSerialBus and EmissionReplyRegistry`() {
+    fun `ToolAskHuman requires AgentEventApi and EmissionReplyRegistry`() {
+        val (api, _) = door()
         val tool = ToolAskHuman(
             requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
-            eventSerialBus = EventSerialBus(scope = kotlinx.coroutines.GlobalScope),
+            eventApi = api,
             replyRegistry = GlobalEmissionReplyRegistry.instance,
         )
         assertEquals(ASK_HUMAN_TOOL_ID, tool.id)
