@@ -17,7 +17,11 @@ import shared
 ///     projectDirPath: projectPath,
 ///     maxFlowTicks: 100
 /// )
-/// let handle = session.start(userGoal: goal)
+/// // `tryStart`, not `start`: a run already in flight comes back as a value, not a crash.
+/// guard let started = try session.tryStart(userGoal: goal) as? ArcStartResult.Started else {
+///     return // ArcStartResult.Rejected: busy; its `policy` says why
+/// }
+/// let handle = started.handle
 ///
 /// Task { for await emission in handle.emissions { await reporter.update(emission) } }
 /// let outcome = try await handle.outcome()
