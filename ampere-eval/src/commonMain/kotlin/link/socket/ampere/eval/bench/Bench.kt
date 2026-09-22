@@ -7,7 +7,7 @@ import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.NoOpExecutor
 import link.socket.ampere.domain.arc.AmpereRuntime
@@ -29,21 +29,26 @@ import okio.Path
  * Arcs run with tools in effect-free mode ([NoOpExecutor]) for every case, regardless of
  * [RunMode] — a bench run never performs a real tool side effect.
  *
+ * @param eventApi the door every [BenchEvent] is published through: persisted to the
+ *   `EventStore` under the bench run's id, then dispatched on the bus (F1). A Live-mode
+ *   [TraceRecorder] should subscribe on `eventApi.eventSerialBus`, so the store and the trace
+ *   see the same stream. A failed publish fails the run rather than being dropped.
  * @param liveModeEnabled explicit opt-in flag for [RunMode.Live] (AMPR-186 task 4.4); defaults
  *   `false` so [RunMode.Live] is refused unless a caller deliberately enables it. CI wiring
  *   never sets this, which is what keeps Live mode out of CI (ticket 5, out of scope here).
  * @param clock Stamps this bench's own [BenchEvent]s and is injected into every Arc it runs
  *   (AMPR-335), so a fixed clock makes a run deterministic in time as well as in scheduling.
+ *   Defaults to the door's clock, so the events and their `recorded_at` agree.
  */
 class Bench(
     private val projectDir: Path,
-    private val eventBus: EventSerialBus,
+    private val eventApi: AgentEventApi,
     private val liveRelay: CognitiveRelay? = null,
     private val traceRecorder: TraceRecorder? = null,
     private val liveModeEnabled: Boolean = false,
     private val source: EventSource = EventSource.Human,
     private val maxFlowTicks: Int = 100,
-    private val clock: Clock = Clock.System,
+    private val clock: Clock = eventApi.clock,
 ) {
 
     suspend fun run(suite: List<EvalCase>, mode: RunMode): Result<BenchReport> {
@@ -54,7 +59,7 @@ class Bench(
         }
 
         val runId = generateUUID("bench-run")
-        eventBus.publish(
+        eventApi.publish(
             BenchEvent.BenchRunStarted(
                 eventId = generateUUID("bench-started", runId),
                 runId = runId,
@@ -63,11 +68,12 @@ class Bench(
                 mode = mode.toString(),
                 probeCount = suite.size,
             ),
-        )
+            runId = runId,
+        ).getOrElse { return Result.failure(it) }
 
         val results = suite.map { case ->
             val result = runCase(runId, case, mode)
-            eventBus.publish(
+            eventApi.publish(
                 BenchEvent.ProbeGraded(
                     eventId = generateUUID("probe-graded", runId, case.id),
                     runId = runId,
@@ -77,14 +83,15 @@ class Bench(
                     passed = result.passed,
                     meanScore = result.readings.map { it.score }.average().takeUnless { it.isNaN() } ?: 0.0,
                 ),
-            )
+                runId = runId,
+            ).getOrElse { return Result.failure(it) }
             result
         }
 
         val passRate = if (results.isEmpty()) 0.0 else results.count { it.passed }.toDouble() / results.size
         val report = BenchReport(results = results, passRate = passRate)
 
-        eventBus.publish(
+        eventApi.publish(
             BenchEvent.BenchRunCompleted(
                 eventId = generateUUID("bench-completed", runId),
                 runId = runId,
@@ -93,7 +100,8 @@ class Bench(
                 passRate = report.passRate,
                 probeCount = results.size,
             ),
-        )
+            runId = runId,
+        ).getOrElse { return Result.failure(it) }
 
         return Result.success(report)
     }
