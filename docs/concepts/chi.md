@@ -10,7 +10,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/pause/AgentPause.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/HumanInteractionEvent.kt
 related: [Emission, AgentPause, MessageEvent, EventSerialBus]
-last_verified: 2026-08-30
+last_verified: 2026-09-22
 ---
 
 # CHI (Computer-Human Interface)
@@ -87,7 +87,7 @@ The three remaining uncoordinated CHI paths:
   - **Shape:** blocking suspend, no bus emission, console-only surface, 30-min hard-coded timeout.
 
 - **Path 2 — `MessageEvent.EscalationRequested` (thread escalation).**
-  - `ampere-core/.../agents/events/messages/AgentMessageApi.kt:151` — `escalateToHuman(threadId, reason, context, awaitReply)` transitions the thread to `EventStatus.WaitingForHuman` and publishes `EscalationRequested` + `ThreadStatusChanged`.
+  - `ampere-core/.../agents/events/messages/AgentMessageApi.kt` — `escalateToHuman(threadId, reason, context, awaitReply, causedBy): Result<Unit>` transitions the thread to `EventStatus.WaitingForHuman` and publishes `EscalationRequested` + `ThreadStatusChanged` through the `AgentEventApi` door (persisted to `EventStore` before dispatch, F1; `causedBy` links the request to the event that prompted it, F2). A persist failure is returned, not retried.
   - `ampere-core/.../agents/domain/event/MessageEvent.kt:86` — the event itself (`threadId`, `reason`, `context`, `urgency`).
   - `ampere-core/.../agents/events/escalation/EscalationEventHandler.kt` — subscribes to `EscalationRequested` and calls `humanNotifier.notifyEscalation(...)`.
   - `ampere-core/.../agents/events/escalation/DefaultEscalationPolicy.kt` — keyword-based classification into the `Escalation` sealed hierarchy.
@@ -127,7 +127,7 @@ The three remaining uncoordinated CHI paths:
 Today (use the path that fits the lifecycle, do not mix them):
 
 - **Block an executing tool waiting on a person** — call `ToolAskHuman` from a tool definition with `requiredAgentAutonomy` set; the JVM `actual` will print to console and block on `GlobalHumanResponseRegistry`. Respond out-of-band with `./ampere-cli/ampere respond <requestId> "<text>"`.
-- **Escalate a conversational thread** — `agentMessageApi.escalateToHuman(threadId, reason, context, awaitReply)`. Status transitions to `WaitingForHuman`, two message events publish, and `EscalationEventHandler` fires `humanNotifier.notifyEscalation(...)`. With the default `awaitReply = true`, the API also emits `HumanInteractionEvent.InputRequested` and suspends for the paired reply; use `awaitReply = false` when the caller must return after the durable transition.
+- **Escalate a conversational thread** — `agentMessageApi.escalateToHuman(threadId, reason, context, awaitReply, causedBy)`. Status transitions to `WaitingForHuman`, two message events persist and publish through the door, and `EscalationEventHandler` fires `humanNotifier.notifyEscalation(...)`. With the default `awaitReply = true`, the API also emits `HumanInteractionEvent.InputRequested` and suspends for the paired reply; use `awaitReply = false` when the caller must return after the durable transition.
 - **Construct a typed pause descriptor** — build an `AgentPause(correlationId, reason, urgency, suggestedChannels, timeoutMillis, fallbackUrl?)`. The dispatching infrastructure ships in a later wave; for now the contract is consumed by per-Arc override UI and unit tests.
 - **Classify an escalation reason** — `DefaultEscalationPolicy` maps free-text reasons into the `Escalation` sealed hierarchy (`Discussion`, `Decision`, `Budget`, `Priorities`, `Scope`, `External`) and an `EscalationProcess`.
 

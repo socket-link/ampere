@@ -4,6 +4,7 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -46,8 +47,8 @@ class MessageRouterTest {
         eventRepository = EventRepository(DEFAULT_JSON, scope, database)
         messageRepository = MessageRepository(DEFAULT_JSON, scope, database)
         eventSerialBus = eventSerialBusFactory.create()
-        agentMessageApiFactory = AgentMessageApiFactory(messageRepository, eventSerialBus)
         agentEventApiFactory = AgentEventApiFactory(eventRepository, eventSerialBus)
+        agentMessageApiFactory = AgentMessageApiFactory(messageRepository, agentEventApiFactory)
         escalationEventHandler = EscalationEventHandler(scope, eventSerialBus)
     }
 
@@ -60,7 +61,11 @@ class MessageRouterTest {
     fun `routes thread and channel events to subscribed agents`() {
         runBlocking {
             val routerApi = agentMessageApiFactory.create("router-agent")
-            val router = MessageRouter(routerApi, escalationEventHandler, eventSerialBus)
+            val router = MessageRouter(
+                messageApi = routerApi,
+                escalationEventHandler = escalationEventHandler,
+                eventApi = agentEventApiFactory.create("router-agent"),
+            )
 
             val targetAgent = "agent-subscriber"
             val channel = MessageChannel.Public.Engineering
@@ -99,6 +104,23 @@ class MessageRouterTest {
             assertTrue(notifications.any { it.event.eventType == MessageEvent.ThreadCreated.EVENT_TYPE })
             // And one for a message posted in the channel
             assertTrue(notifications.any { it.event.eventType == MessageEvent.MessagePosted.EVENT_TYPE })
+
+            // F1: every notification went through the door and is in the EventStore
+            val storedNotifications = eventRepository
+                .getEventsByType(NotificationEvent.ToAgent.EVENT_TYPE)
+                .getOrThrow()
+            assertEquals(notifications.size, storedNotifications.size)
+
+            // F2: the thread-created notification is caused by the ThreadCreated it routed
+            val threadCreated = eventRepository
+                .getEventsByType(MessageEvent.ThreadCreated.EVENT_TYPE)
+                .getOrThrow()
+                .single()
+            val causedByThreadCreated = eventRepository.getEventsCausedBy(threadCreated.eventId).getOrThrow()
+            assertTrue(
+                causedByThreadCreated.any { it.event.eventType == NotificationEvent.ToAgent.EVENT_TYPE },
+                "caused: ${causedByThreadCreated.map { it.event.eventType }}",
+            )
         }
     }
 }

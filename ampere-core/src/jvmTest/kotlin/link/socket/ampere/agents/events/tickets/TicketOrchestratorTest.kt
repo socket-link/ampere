@@ -1,6 +1,5 @@
 package link.socket.ampere.agents.events.tickets
 
-import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -15,8 +14,11 @@ import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.MeetingEvent
+import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.status.TicketStatus
+import link.socket.ampere.agents.events.InMemoryEventApi
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.escalation.Escalation
@@ -26,12 +28,15 @@ import link.socket.ampere.agents.events.meetings.MeetingSchedulingService
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
 import link.socket.ampere.data.DEFAULT_JSON
-import link.socket.ampere.db.Database
 
+/**
+ * F1b (AMPR-338): the orchestrator publishes through an [link.socket.ampere.agents.events.api.AgentEventApi]
+ * door, so the test runs on [InMemoryEventApi] and can assert what reached the `EventStore`.
+ * Bodies use `runBlocking`: the door persists on a real IO dispatcher.
+ */
 class TicketOrchestratorTest {
 
-    private lateinit var driver: JdbcSqliteDriver
-    private lateinit var database: Database
+    private lateinit var handle: InMemoryEventApi.Handle
 
     private lateinit var messageRepository: MessageRepository
     private lateinit var meetingRepository: MeetingRepository
@@ -52,20 +57,19 @@ class TicketOrchestratorTest {
 
     @BeforeTest
     fun setUp() {
-        driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
-        Database.Schema.create(driver)
-        database = Database.Companion(driver)
+        handle = InMemoryEventApi.open(agentId = stubOrchestratorAgentId, scope = testScope)
+        val database = handle.database
 
         messageRepository = MessageRepository(DEFAULT_JSON, testScope, database)
         meetingRepository = MeetingRepository(DEFAULT_JSON, testScope, database)
         ticketRepository = TicketRepository(database)
 
-        eventSerialBus = EventSerialBus(testScope)
-        messageApi = AgentMessageApi(stubOrchestratorAgentId, messageRepository, eventSerialBus)
+        eventSerialBus = handle.bus
+        messageApi = AgentMessageApi(stubOrchestratorAgentId, messageRepository, handle.api)
 
         meetingOrchestrator = MeetingOrchestrator(
             repository = meetingRepository,
-            eventSerialBus = eventSerialBus,
+            eventApi = handle.api,
             messageApi = messageApi,
         )
 
@@ -76,7 +80,7 @@ class TicketOrchestratorTest {
 
         ticketOrchestrator = TicketOrchestrator(
             ticketRepository = ticketRepository,
-            eventSerialBus = eventSerialBus,
+            eventApi = handle.api,
             messageApi = messageApi,
             meetingSchedulingService = meetingSchedulingService,
         )
@@ -116,7 +120,7 @@ class TicketOrchestratorTest {
 
     @AfterTest
     fun tearDown() {
-        driver.close()
+        handle.close()
     }
 
     // ==================== createTicket Tests ====================
@@ -161,6 +165,13 @@ class TicketOrchestratorTest {
             assertTrue(createdEvents.isNotEmpty(), "TicketCreated event should be published")
             assertEquals(ticket.id, createdEvents.first().ticketId)
             assertEquals("Test Ticket", createdEvents.first().title)
+
+            // F1: the event went through the door, so exactly one row is in the EventStore
+            val storedCreated = handle.repository
+                .getEventsByType(TicketEvent.TicketCreated.EVENT_TYPE)
+                .getOrThrow()
+            assertEquals(1, storedCreated.size)
+            assertEquals(ticket.id, assertIs<TicketEvent.TicketCreated>(storedCreated.single()).ticketId)
         }
     }
 
@@ -488,6 +499,50 @@ class TicketOrchestratorTest {
             assertEquals(ticket.id, blockedEvents.first().ticketId)
             assertEquals(blockReason, blockedEvents.first().blockingReason)
             assertEquals(Urgency.HIGH, blockedEvents.first().urgency)
+        }
+    }
+
+    @Test
+    fun `blockTicket persists TicketBlocked and links the meeting and escalation it causes`() {
+        runBlocking {
+            val createResult = ticketOrchestrator.createTicket(
+                title = "Block Chain Test",
+                description = "Test",
+                type = TicketType.TASK,
+                priority = TicketPriority.HIGH,
+                createdByAgentId = stubCreatorAgentId,
+            )
+            val (ticket, _) = createResult.getOrNull()!!
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.Ready, stubCreatorAgentId)
+            ticketOrchestrator.transitionTicketStatus(ticket.id, TicketStatus.InProgress, stubCreatorAgentId)
+
+            val result = ticketOrchestrator.blockTicket(
+                ticketId = ticket.id,
+                blockingReason = "Needs a license",
+                escalationType = Escalation.Budget.ResourceAllocation,
+                reportedByAgentId = stubCreatorAgentId,
+            )
+            assertTrue(result.isSuccess)
+
+            // The blocked event is in the store
+            val blocked = assertIs<TicketEvent.TicketBlocked>(
+                handle.repository.getEventsByType(TicketEvent.TicketBlocked.EVENT_TYPE).getOrThrow().single(),
+            )
+            assertEquals(ticket.id, blocked.ticketId)
+
+            // F2: the blocker meeting, its ticket-side record, and the escalation are caused by it
+            val causedByBlocked = handle.repository.getEventsCausedBy(blocked.eventId).getOrThrow()
+            assertTrue(causedByBlocked.all { it.causedBy == blocked.eventId })
+            val causedTypes = causedByBlocked.map { it.event.eventType }.toSet()
+            assertTrue(TicketEvent.TicketMeetingScheduled.EVENT_TYPE in causedTypes, "types: $causedTypes")
+            assertTrue(MeetingEvent.MeetingScheduled.EVENT_TYPE in causedTypes, "types: $causedTypes")
+            assertTrue(MessageEvent.EscalationRequested.EVENT_TYPE in causedTypes, "types: $causedTypes")
+
+            // Every status change along the way was persisted too
+            val storedStatusChanges = handle.repository
+                .getEventsByType(TicketEvent.TicketStatusChanged.EVENT_TYPE)
+                .getOrThrow()
+            assertEquals(2, storedStatusChanges.size)
         }
     }
 

@@ -20,6 +20,8 @@ import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.domain.task.MeetingTask.AgendaItem
+import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.escalation.Escalation
@@ -65,11 +67,16 @@ class TicketMeetingIntegrationTest {
         ticketRepository = TicketRepository(database)
 
         eventSerialBus = EventSerialBus(testScope)
-        messageApi = AgentMessageApi(stubOrchestratorAgentId, messageRepository, eventSerialBus)
+        val eventApi = AgentEventApi(
+            agentId = stubOrchestratorAgentId,
+            eventRepository = EventRepository(DEFAULT_JSON, testScope, database),
+            eventSerialBus = eventSerialBus,
+        )
+        messageApi = AgentMessageApi(stubOrchestratorAgentId, messageRepository, eventApi)
 
         meetingOrchestrator = MeetingOrchestrator(
             repository = meetingRepository,
-            eventSerialBus = eventSerialBus,
+            eventApi = eventApi,
             messageApi = messageApi,
         )
 
@@ -80,7 +87,7 @@ class TicketMeetingIntegrationTest {
 
         ticketOrchestrator = TicketOrchestrator(
             ticketRepository = ticketRepository,
-            eventSerialBus = eventSerialBus,
+            eventApi = eventApi,
             messageApi = messageApi,
             meetingSchedulingService = meetingSchedulingService,
         )

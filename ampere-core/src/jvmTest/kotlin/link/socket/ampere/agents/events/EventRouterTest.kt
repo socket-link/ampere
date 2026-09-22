@@ -51,7 +51,7 @@ class EventRouterTest {
     @Test
     fun `routes TaskCreated to subscribed agents as NotificationEvent`() = runBlocking {
         val routerApi = agentEventApiFactory.create("router-agent")
-        val router = EventRouter(routerApi, eventSerialBus)
+        val router = EventRouter(routerApi)
 
         val targetAgent = "agent-b"
         router.subscribeToEventClassType(targetAgent, Event.TaskCreated.EVENT_TYPE)
@@ -84,5 +84,17 @@ class EventRouterTest {
         assertIs<NotificationEvent.ToAgent<*>>(n)
         assertEquals(targetAgent, (n.eventSource as EventSource.Agent).agentId)
         assertEquals(Event.TaskCreated.EVENT_TYPE, n.event.eventType)
+
+        // F1: the notification went through the door and is in the EventStore
+        val storedNotifications = eventRepository
+            .getEventsByType(NotificationEvent.ToAgent.EVENT_TYPE)
+            .getOrThrow()
+        assertEquals(1, storedNotifications.size)
+        assertEquals(n.eventId, storedNotifications.single().eventId)
+
+        // F2: it is caused by the TaskCreated it routed
+        val taskCreated = eventRepository.getEventsByType(Event.TaskCreated.EVENT_TYPE).getOrThrow().single()
+        val causedByTask = eventRepository.getEventsCausedBy(taskCreated.eventId).getOrThrow()
+        assertEquals(listOf(n.eventId), causedByTask.map { it.event.eventId })
     }
 }

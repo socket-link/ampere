@@ -12,6 +12,8 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.task.AssignedTo
+import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.agents.events.messages.AgentMessageApi
@@ -50,11 +52,16 @@ class AgentMeetingsApiTest {
         eventSerialBus = eventSerialBusFactory.create()
         meetingRepository = MeetingRepository(json, scope, database)
         messageRepository = MessageRepository(json, scope, database)
-        messageApi = AgentMessageApi(stubAgentId, messageRepository, eventSerialBus)
+        val eventApi = AgentEventApi(
+            agentId = stubAgentId,
+            eventRepository = EventRepository(json, scope, database),
+            eventSerialBus = eventSerialBus,
+        )
+        messageApi = AgentMessageApi(stubAgentId, messageRepository, eventApi)
 
         meetingOrchestrator = MeetingOrchestrator(
             repository = meetingRepository,
-            eventSerialBus = eventSerialBus,
+            eventApi = eventApi,
             messageApi = messageApi,
         )
 

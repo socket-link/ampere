@@ -3,14 +3,23 @@ package link.socket.ampere.agents.events.messages
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.domain.event.NotificationEvent
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.escalation.EscalationEventHandler
 import link.socket.ampere.agents.events.subscription.MessageSubscription
 
+/**
+ * Fans message events out to the agents subscribed to their channel as
+ * [NotificationEvent.ToAgent]s.
+ *
+ * Every notification is published through the door ([AgentEventApi.publish], F1) with
+ * `causedBy` set to the message event it notifies about (F2). The handlers here return `Unit`,
+ * so a notification that fails to persist is logged by the door and not dispatched; there is
+ * no caller to return it to.
+ */
 class MessageRouter(
     private val messageApi: AgentMessageApi,
     private val escalationEventHandler: EscalationEventHandler,
-    private val eventSerialBus: EventSerialBus,
+    private val eventApi: AgentEventApi,
 ) {
     private val messagesByChannelsSubscriptions = mutableMapOf<AgentId, MessageSubscription.ByChannels>()
     private val messagesByThreadsSubscriptions = mutableMapOf<AgentId, MessageSubscription.ByThreads>()
@@ -26,7 +35,7 @@ class MessageRouter(
                             agentId = agentId,
                             event = event,
                             subscription = subscription,
-                        ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
+                        ).let { notificationEvent -> eventApi.publish(notificationEvent, causedBy = event.eventId) }
                     }
 
                     messageApi.onChannelMessagePosted(channel) { event, subscription ->
@@ -34,7 +43,7 @@ class MessageRouter(
                             agentId = agentId,
                             event = event,
                             subscription = subscription,
-                        ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
+                        ).let { notificationEvent -> eventApi.publish(notificationEvent, causedBy = event.eventId) }
                     }
 
                     messageApi.onThreadStatusChanged { event, subscription ->
@@ -42,7 +51,7 @@ class MessageRouter(
                             agentId = agentId,
                             event = event,
                             subscription = subscription,
-                        ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
+                        ).let { notificationEvent -> eventApi.publish(notificationEvent, causedBy = event.eventId) }
                     }
                 }
             }

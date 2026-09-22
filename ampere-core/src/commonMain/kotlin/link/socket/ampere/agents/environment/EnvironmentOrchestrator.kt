@@ -54,6 +54,12 @@ class EnvironmentOrchestrator(
          * Used when the orchestrator needs to perform operations that require an agent context.
          */
         private const val SYSTEM_AGENT_ID: AgentId = "SYSTEM_ORCHESTRATOR"
+
+        /** Door id for the events [MeetingOrchestrator] publishes. */
+        private const val MEETING_ORCHESTRATOR_ID: AgentId = "meeting-orchestrator"
+
+        /** Door id for the events [TicketOrchestrator] publishes. */
+        private const val TICKET_ORCHESTRATOR_ID: AgentId = "ticket-orchestrator"
     }
 
     /**
@@ -71,7 +77,7 @@ class EnvironmentOrchestrator(
      */
     val meetingOrchestrator: MeetingOrchestrator = MeetingOrchestrator(
         repository = meetingRepository,
-        eventSerialBus = eventSerialBus,
+        eventApi = eventApiFactory.create(MEETING_ORCHESTRATOR_ID),
         messageApi = systemMessageApi,
         logger = logger,
     )
@@ -84,18 +90,18 @@ class EnvironmentOrchestrator(
      */
     val ticketOrchestrator: TicketOrchestrator = TicketOrchestrator(
         ticketRepository = ticketRepository,
-        eventSerialBus = eventSerialBus,
+        eventApi = eventApiFactory.create(TICKET_ORCHESTRATOR_ID),
         messageApi = systemMessageApi,
         meetingSchedulingService = createMeetingSchedulingService(),
         logger = logger,
     )
 
     /**
-     * The event router that routes events to subscribed agents.
+     * The event router that routes events to subscribed agents, publishing its notifications
+     * through the system door.
      */
     val eventRouter: EventRouter = EventRouter(
         eventApi = systemEventApi,
-        eventSerialBus = eventSerialBus,
     )
 
     /**

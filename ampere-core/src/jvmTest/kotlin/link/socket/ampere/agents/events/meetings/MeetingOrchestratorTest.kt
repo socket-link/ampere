@@ -1,10 +1,10 @@
 package link.socket.ampere.agents.events.meetings
 
-import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -17,25 +17,31 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MeetingEvent
+import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.outcome.MeetingOutcome
 import link.socket.ampere.agents.domain.status.MeetingStatus
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.domain.task.MeetingTask.AgendaItem
+import link.socket.ampere.agents.events.InMemoryEventApi
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
-import link.socket.ampere.db.Database
 import link.socket.ampere.util.randomUUID
 
+/**
+ * F1b (AMPR-338): the orchestrator publishes through an [link.socket.ampere.agents.events.api.AgentEventApi]
+ * door, so the test runs on [InMemoryEventApi] and can assert what reached the `EventStore`.
+ * Bodies use `runBlocking`: the door persists on a real IO dispatcher.
+ */
 class MeetingOrchestratorTest {
 
-    private lateinit var driver: JdbcSqliteDriver
-    private lateinit var database: Database
+    private lateinit var handle: InMemoryEventApi.Handle
     private lateinit var meetingRepository: MeetingRepository
     private lateinit var messageRepository: MessageRepository
     private lateinit var eventSerialBus: EventSerialBus
@@ -57,14 +63,13 @@ class MeetingOrchestratorTest {
 
     @BeforeTest
     fun setUp() {
-        driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
-        Database.Schema.create(driver)
-        database = Database.Companion(driver)
+        handle = InMemoryEventApi.open(agentId = orchestratorAgentId, scope = testScope)
+        val database = handle.database
 
         meetingRepository = MeetingRepository(stubJson, testScope, database)
         messageRepository = MessageRepository(stubJson, testScope, database)
-        eventSerialBus = EventSerialBus(testScope)
-        messageApi = AgentMessageApi(orchestratorAgentId, messageRepository, eventSerialBus)
+        eventSerialBus = handle.bus
+        messageApi = AgentMessageApi(orchestratorAgentId, messageRepository, handle.api)
 
         // Subscribe to capture published events
         eventSerialBus.subscribe(
@@ -98,7 +103,7 @@ class MeetingOrchestratorTest {
 
         orchestrator = MeetingOrchestrator(
             repository = meetingRepository,
-            eventSerialBus = eventSerialBus,
+            eventApi = handle.api,
             messageApi = messageApi,
         )
 
@@ -107,7 +112,7 @@ class MeetingOrchestratorTest {
 
     @AfterTest
     fun tearDown() {
-        driver.close()
+        handle.close()
     }
 
     // ==================== Helper Methods ====================
@@ -171,6 +176,57 @@ class MeetingOrchestratorTest {
             val scheduledEvent = publishedEvents.filterIsInstance<MeetingEvent.MeetingScheduled>()
             assertTrue(scheduledEvent.isNotEmpty(), "MeetingScheduled event should be published")
             assertEquals(meeting.id, scheduledEvent.first().meeting.id)
+
+            // F1: the event went through the door, so exactly one row is in the EventStore
+            val stored = handle.repository
+                .getEventsByType(MeetingEvent.MeetingScheduled.EVENT_TYPE)
+                .getOrThrow()
+            assertEquals(1, stored.size)
+            assertEquals(meeting.id, assertIs<MeetingEvent.MeetingScheduled>(stored.single()).meeting.id)
+        }
+    }
+
+    @Test
+    fun `scheduleMeeting persists MeetingScheduled caused by the triggering event`() {
+        runBlocking {
+            // The event that led to this meeting, already in the store
+            val trigger = Event.TaskCreated(
+                eventId = randomUUID(),
+                urgency = Urgency.HIGH,
+                timestamp = Clock.System.now(),
+                eventSource = EventSource.Agent("agent-alpha"),
+                taskId = "task-needing-a-meeting",
+                description = "Decide the approach",
+                assignedTo = null,
+            )
+            handle.api.publish(trigger).getOrThrow()
+
+            val meeting = createTestMeeting().copy(creationTriggeredBy = trigger)
+
+            val result = orchestrator.scheduleMeeting(meeting, stubScheduledBy)
+            assertTrue(result.isSuccess)
+
+            // F2: MeetingScheduled.causedBy == meeting.creationTriggeredBy?.eventId, round-tripped
+            val causedByTrigger = handle.repository.getEventsCausedBy(trigger.eventId).getOrThrow()
+            val scheduled = causedByTrigger.single { it.event is MeetingEvent.MeetingScheduled }
+            assertEquals(trigger.eventId, scheduled.causedBy)
+            assertEquals(meeting.id, assertIs<MeetingEvent.MeetingScheduled>(scheduled.event).meeting.id)
+
+            // The meeting's discussion thread is caused by the same trigger
+            assertTrue(causedByTrigger.any { it.event is MessageEvent.ThreadCreated })
+        }
+    }
+
+    @Test
+    fun `scheduleMeeting without a trigger persists MeetingScheduled with no cause`() {
+        runBlocking {
+            val meeting = createTestMeeting()
+
+            assertTrue(orchestrator.scheduleMeeting(meeting, stubScheduledBy).isSuccess)
+
+            val stored = handle.repository.getEventsSinceSequence(0L).getOrThrow()
+            val scheduled = stored.single { it.event is MeetingEvent.MeetingScheduled }
+            assertNull(scheduled.causedBy)
         }
     }
 

@@ -8,7 +8,7 @@ import link.socket.ampere.agents.domain.status.MeetingStatus
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.domain.task.MeetingTask
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageChannel
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
@@ -17,12 +17,18 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.util.randomUUID
 
 /**
- * Service layer that coordinates meeting lifecycle operations, integrates with EventBus
- * for event publishing, and handles MessageThread creation for meeting discussions.
+ * Service layer that coordinates meeting lifecycle operations, publishes meeting events through
+ * the door ([AgentEventApi.publish], F1), and handles MessageThread creation for meeting
+ * discussions.
+ *
+ * Every event leaves through [eventApi], so it is persisted to the `EventStore` before any
+ * subscriber sees it. The repository write commits first; a persist failure of the event that
+ * follows is folded into the method's [Result] and not retried. `MeetingScheduled` is caused by
+ * [Meeting.creationTriggeredBy] when the meeting was triggered by an event (F2).
  */
 class MeetingOrchestrator(
     private val repository: MeetingRepository,
-    private val eventSerialBus: EventSerialBus,
+    private val eventApi: AgentEventApi,
     private val messageApi: AgentMessageApi,
     private val logger: EventLogger = ConsoleEventLogger(),
 ) {
@@ -86,6 +92,7 @@ class MeetingOrchestrator(
             participants = participants,
             channel = MessageChannel.Public.Engineering, // Default to engineering channel for meetings
             initialMessageContent = buildScheduledMessage(meeting),
+            causedBy = meeting.creationTriggeredBy?.eventId,
         )
 
         // Update meeting with thread information and scheduling
@@ -113,14 +120,17 @@ class MeetingOrchestrator(
         val createdMeeting = createdMeetingResult.getOrNull()
         requireNotNull(createdMeeting) { "Failed to persist meeting ${meeting.id}" }
 
-        // Publish MeetingScheduled event
-        eventSerialBus.publish(
-            MeetingEvent.MeetingScheduled(
-                eventId = generateUUID(createdMeeting.id),
-                meeting = createdMeeting,
-                eventSource = scheduledBy,
-            ),
-        )
+        // Publish MeetingScheduled event through the door, caused by whatever triggered the meeting
+        eventApi
+            .publish(
+                MeetingEvent.MeetingScheduled(
+                    eventId = generateUUID(createdMeeting.id),
+                    meeting = createdMeeting,
+                    eventSource = scheduledBy,
+                ),
+                causedBy = meeting.creationTriggeredBy?.eventId,
+            )
+            .onFailure { throwable -> return Result.failure(throwable) }
 
         return createdMeetingResult
     }
@@ -185,16 +195,18 @@ class MeetingOrchestrator(
             return Result.failure(updateResult.exceptionOrNull() ?: Exception("Failed to update meeting status"))
         }
 
-        // Publish MeetingStarted event
-        eventSerialBus.publish(
-            MeetingEvent.MeetingStarted(
-                eventId = randomUUID(),
-                meetingId = meetingId,
-                threadId = thread.id,
-                eventSource = EventSource.Agent(messageApi.agentId),
-                timestamp = now,
-            ),
-        )
+        // Publish MeetingStarted event through the door
+        eventApi
+            .publish(
+                MeetingEvent.MeetingStarted(
+                    eventId = randomUUID(),
+                    meetingId = meetingId,
+                    threadId = thread.id,
+                    eventSource = EventSource.Agent(messageApi.agentId),
+                    timestamp = now,
+                ),
+            )
+            .onFailure { throwable -> return Result.failure(throwable) }
 
         return Result.success(Unit)
     }
@@ -249,16 +261,17 @@ class MeetingOrchestrator(
         // Create the updated agenda item
         val updatedItem = nextItem.copy(status = TaskStatus.InProgress)
 
-        // Publish AgendaItemStarted event
-        eventSerialBus.publish(
-            MeetingEvent.AgendaItemStarted(
-                eventId = randomUUID(),
-                meetingId = meetingId,
-                agendaItem = updatedItem,
-                eventSource = EventSource.Agent(messageApi.agentId),
-                timestamp = Clock.System.now(),
-            ),
+        // Publish AgendaItemStarted event through the door
+        val agendaItemStarted = MeetingEvent.AgendaItemStarted(
+            eventId = randomUUID(),
+            meetingId = meetingId,
+            agendaItem = updatedItem,
+            eventSource = EventSource.Agent(messageApi.agentId),
+            timestamp = Clock.System.now(),
         )
+        eventApi
+            .publish(agendaItemStarted)
+            .onFailure { throwable -> return Result.failure(throwable) }
 
         // Post a message to the meeting thread about the agenda item
         messageApi.postMessage(
@@ -266,6 +279,7 @@ class MeetingOrchestrator(
             content =
             "Now discussing: ${nextItem.title}" +
                 (nextItem.assignedTo?.let { " (assigned to ${it.getIdentifier()})" } ?: ""),
+            causedBy = agendaItemStarted.eventId,
         )
 
         return Result.success(updatedItem)
@@ -325,22 +339,24 @@ class MeetingOrchestrator(
             return Result.failure(updateResult.exceptionOrNull() ?: Exception("Failed to update meeting status"))
         }
 
-        // Publish MeetingCompleted event
-        eventSerialBus.publish(
-            MeetingEvent.MeetingCompleted(
-                eventId = randomUUID(),
-                meetingId = meetingId,
-                outcomes = outcomes,
-                eventSource = EventSource.Agent(messageApi.agentId),
-                timestamp = now,
-            ),
+        // Publish MeetingCompleted event through the door
+        val completed = MeetingEvent.MeetingCompleted(
+            eventId = randomUUID(),
+            meetingId = meetingId,
+            outcomes = outcomes,
+            eventSource = EventSource.Agent(messageApi.agentId),
+            timestamp = now,
         )
+        eventApi
+            .publish(completed)
+            .onFailure { throwable -> return Result.failure(throwable) }
 
         // Post summary message to the meeting thread
         val summaryMessage = buildCompletedMessage(meeting, outcomes)
         messageApi.postMessage(
             threadId = inProgressStatus.messagingDetails.messageThreadId,
             content = summaryMessage,
+            causedBy = completed.eventId,
         )
 
         return Result.success(Unit)

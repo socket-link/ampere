@@ -5,6 +5,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.status.EventStatus
@@ -13,7 +14,7 @@ import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.domain.task.MeetingTask
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.escalation.Escalation
 import link.socket.ampere.agents.events.meetings.Meeting
 import link.socket.ampere.agents.events.meetings.MeetingId
@@ -29,12 +30,18 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.util.randomUUID
 
 /**
- * Service layer that coordinates ticket lifecycle operations, integrates with EventBus
- * for event publishing, and handles MessageThread creation for ticket discussions.
+ * Service layer that coordinates ticket lifecycle operations, publishes ticket events through
+ * the door ([AgentEventApi.publish], F1), and handles MessageThread creation for ticket
+ * discussions.
+ *
+ * Every event leaves through [eventApi], so it is persisted to the `EventStore` before any
+ * subscriber sees it. The repository write commits first; a persist failure of the event that
+ * follows is folded into the method's [Result] and not retried (C49 — merging the two ticket
+ * write paths is W3's job).
  */
 class TicketOrchestrator(
     private val ticketRepository: TicketRepository,
-    private val eventSerialBus: EventSerialBus,
+    private val eventApi: AgentEventApi,
     private val messageApi: AgentMessageApi,
     private val meetingSchedulingService: MeetingSchedulingService,
     private val logger: EventLogger = ConsoleEventLogger(),
@@ -103,20 +110,22 @@ class TicketOrchestrator(
             initialMessageContent = buildTicketCreatedMessage(createdTicket),
         )
 
-        // Publish TicketCreated event
-        eventSerialBus.publish(
-            TicketEvent.TicketCreated(
-                eventId = randomUUID(),
-                ticketId = createdTicket.id,
-                title = createdTicket.title,
-                description = createdTicket.description,
-                ticketType = createdTicket.type,
-                priority = createdTicket.priority,
-                eventSource = EventSource.Agent(createdByAgentId),
-                timestamp = now,
-                urgency = priorityToUrgency(createdTicket.priority),
-            ),
-        )
+        // Publish TicketCreated event through the door
+        eventApi
+            .publish(
+                TicketEvent.TicketCreated(
+                    eventId = randomUUID(),
+                    ticketId = createdTicket.id,
+                    title = createdTicket.title,
+                    description = createdTicket.description,
+                    ticketType = createdTicket.type,
+                    priority = createdTicket.priority,
+                    eventSource = EventSource.Agent(createdByAgentId),
+                    timestamp = now,
+                    urgency = priorityToUrgency(createdTicket.priority),
+                ),
+            )
+            .onFailure { throwable -> return Result.failure(throwable) }
 
         return Result.success(createdTicket to thread)
     }
@@ -186,30 +195,34 @@ class TicketOrchestrator(
         val updatedTicket = updatedTicketResult.getOrNull()
             ?: return Result.failure(TicketError.TicketNotFound(ticketId))
 
-        // Publish TicketStatusChanged event
-        eventSerialBus.publish(
-            TicketEvent.TicketStatusChanged(
-                eventId = randomUUID(),
-                ticketId = ticketId,
-                previousStatus = previousStatus,
-                newStatus = newStatus,
-                eventSource = EventSource.Agent(actorAgentId),
-                timestamp = now,
-                urgency = priorityToUrgency(updatedTicket.priority),
-            ),
+        // Publish TicketStatusChanged event through the door
+        val statusChanged = TicketEvent.TicketStatusChanged(
+            eventId = randomUUID(),
+            ticketId = ticketId,
+            previousStatus = previousStatus,
+            newStatus = newStatus,
+            eventSource = EventSource.Agent(actorAgentId),
+            timestamp = now,
+            urgency = priorityToUrgency(updatedTicket.priority),
         )
+        eventApi
+            .publish(statusChanged)
+            .onFailure { throwable -> return Result.failure(throwable) }
 
         // Post status update message to ticket thread
         getOrCreateTicketThread(updatedTicket)?.let { thread ->
             // If transitioning from BLOCKED, reopen the thread to allow posting messages
             // (the thread is in WAITING_FOR_HUMAN status after blocking)
             if (previousStatus == TicketStatus.Blocked) {
-                messageApi.reopenThread(thread.id)
+                messageApi
+                    .reopenThread(thread.id, causedBy = statusChanged.eventId)
+                    .onFailure { throwable -> return Result.failure(throwable) }
             }
 
             messageApi.postMessage(
                 threadId = thread.id,
                 content = buildStatusChangedMessage(updatedTicket, previousStatus, newStatus, actorAgentId),
+                causedBy = statusChanged.eventId,
             )
         }
 
@@ -270,23 +283,25 @@ class TicketOrchestrator(
         val updatedTicket = updatedTicketResult.getOrNull()
             ?: return Result.failure(TicketError.TicketNotFound(ticketId))
 
-        // Publish TicketAssigned event
-        eventSerialBus.publish(
-            TicketEvent.TicketAssigned(
-                eventId = randomUUID(),
-                ticketId = ticketId,
-                assignedTo = targetAgentId,
-                eventSource = EventSource.Agent(assignerAgentId),
-                timestamp = now,
-                urgency = priorityToUrgency(updatedTicket.priority),
-            ),
+        // Publish TicketAssigned event through the door
+        val assigned = TicketEvent.TicketAssigned(
+            eventId = randomUUID(),
+            ticketId = ticketId,
+            assignedTo = targetAgentId,
+            eventSource = EventSource.Agent(assignerAgentId),
+            timestamp = now,
+            urgency = priorityToUrgency(updatedTicket.priority),
         )
+        eventApi
+            .publish(assigned)
+            .onFailure { throwable -> return Result.failure(throwable) }
 
         // Post assignment notification to ticket thread
         getOrCreateTicketThread(updatedTicket)?.let { thread ->
             messageApi.postMessage(
                 threadId = thread.id,
                 content = buildAssignmentMessage(updatedTicket, targetAgentId, assignerAgentId),
+                causedBy = assigned.eventId,
             )
         }
 
@@ -369,17 +384,19 @@ class TicketOrchestrator(
         val updatedTicket = updatedTicketResult.getOrNull()
             ?: return Result.failure(TicketError.TicketNotFound(ticketId))
 
-        // Publish TicketBlocked event
-        eventSerialBus.publish(
-            TicketEvent.TicketBlocked(
-                eventId = randomUUID(),
-                ticketId = ticketId,
-                blockingReason = blockingReason,
-                eventSource = EventSource.Agent(reportedByAgentId),
-                timestamp = now,
-                urgency = Urgency.HIGH,
-            ),
+        // Publish TicketBlocked event through the door. Everything that follows — the
+        // blocker meeting and the escalation — is caused by this event.
+        val blocked = TicketEvent.TicketBlocked(
+            eventId = randomUUID(),
+            ticketId = ticketId,
+            blockingReason = blockingReason,
+            eventSource = EventSource.Agent(reportedByAgentId),
+            timestamp = now,
+            urgency = Urgency.HIGH,
         )
+        eventApi
+            .publish(blocked)
+            .onFailure { throwable -> return Result.failure(throwable) }
 
         // Automatically schedule a meeting based on escalation type
         // This must happen BEFORE escalation so the meeting message can be posted in the thread before it becomes blocked
@@ -416,6 +433,7 @@ class TicketOrchestrator(
                     agendaItems = agendaItems,
                     requiredParticipants = requiredParticipants,
                     optionalParticipants = null,
+                    triggeredBy = blocked,
                 )
             } else {
                 logger.logError(
@@ -427,17 +445,20 @@ class TicketOrchestrator(
         // Create escalation message in the ticket thread requesting human intervention
         // This happens AFTER meeting scheduling, so that the thread gets put into WAITING_FOR_HUMAN status
         getOrCreateTicketThread(updatedTicket)?.let { thread ->
-            messageApi.escalateToHuman(
-                threadId = thread.id,
-                reason = "Ticket blocked: $blockingReason",
-                context = mapOf(
-                    "ticketId" to ticketId,
-                    "ticketTitle" to updatedTicket.title,
-                    "reportedBy" to reportedByAgentId,
-                    "priority" to updatedTicket.priority.name,
-                ),
-                awaitReply = false,
-            )
+            messageApi
+                .escalateToHuman(
+                    threadId = thread.id,
+                    reason = "Ticket blocked: $blockingReason",
+                    context = mapOf(
+                        "ticketId" to ticketId,
+                        "ticketTitle" to updatedTicket.title,
+                        "reportedBy" to reportedByAgentId,
+                        "priority" to updatedTicket.priority.name,
+                    ),
+                    awaitReply = false,
+                    causedBy = blocked.eventId,
+                )
+                .onFailure { throwable -> return Result.failure(throwable) }
         }
 
         return Result.success(updatedTicket)
@@ -451,6 +472,9 @@ class TicketOrchestrator(
      * @param agendaItems The agenda items to discuss.
      * @param requiredParticipants The participants required for the meeting.
      * @param scheduledTime The time the meeting is scheduled for.
+     * @param triggeredBy The event that led to this meeting, if any. It becomes the meeting's
+     * `creationTriggeredBy` (so `MeetingScheduled` is caused by it) and the `causedBy` of the
+     * `TicketMeetingScheduled` event and thread message this method produces.
      * @return Result containing the meeting ID or an error.
      */
     suspend fun scheduleTicketMeeting(
@@ -460,6 +484,7 @@ class TicketOrchestrator(
         agendaItems: List<MeetingTask.AgendaItem>,
         requiredParticipants: List<AssignedTo>,
         optionalParticipants: List<AssignedTo>?,
+        triggeredBy: Event? = null,
     ): Result<MeetingId> {
         // Retrieve ticket to get context
         val ticketResult = ticketRepository.getTicket(ticketId)
@@ -486,6 +511,7 @@ class TicketOrchestrator(
                 requiredParticipants = requiredParticipants,
                 optionalParticipants = optionalParticipants,
             ),
+            creationTriggeredBy = triggeredBy,
         )
 
         // Schedule the meeting using MeetingSchedulingService
@@ -520,27 +546,33 @@ class TicketOrchestrator(
         getOrCreateTicketThread(ticket)?.let { thread ->
             // Reopen thread if it's waiting for human (e.g., after escalation in blockTicket)
             if (thread.status == EventStatus.WaitingForHuman) {
-                messageApi.reopenThread(thread.id)
+                messageApi
+                    .reopenThread(thread.id, causedBy = triggeredBy?.eventId)
+                    .onFailure { throwable -> return Result.failure(throwable) }
             }
             messageApi.postMessage(
                 threadId = thread.id,
                 content = buildMeetingScheduledMessage(ticket, scheduledMeeting, scheduledTime, requiredParticipants),
+                causedBy = triggeredBy?.eventId,
             )
         }
 
-        // Publish TicketMeetingScheduled event
-        eventSerialBus.publish(
-            TicketEvent.TicketMeetingScheduled(
-                eventId = randomUUID(),
-                ticketId = ticketId,
-                meetingId = scheduledMeeting.id,
-                scheduledTime = scheduledTime,
-                requiredParticipants = requiredParticipants,
-                eventSource = EventSource.Agent(messageApi.agentId),
-                timestamp = now,
-                urgency = priorityToUrgency(ticket.priority),
-            ),
-        )
+        // Publish TicketMeetingScheduled event through the door
+        eventApi
+            .publish(
+                TicketEvent.TicketMeetingScheduled(
+                    eventId = randomUUID(),
+                    ticketId = ticketId,
+                    meetingId = scheduledMeeting.id,
+                    scheduledTime = scheduledTime,
+                    requiredParticipants = requiredParticipants,
+                    eventSource = EventSource.Agent(messageApi.agentId),
+                    timestamp = now,
+                    urgency = priorityToUrgency(ticket.priority),
+                ),
+                causedBy = triggeredBy?.eventId,
+            )
+            .onFailure { throwable -> return Result.failure(throwable) }
 
         return Result.success(scheduledMeeting.id)
     }
