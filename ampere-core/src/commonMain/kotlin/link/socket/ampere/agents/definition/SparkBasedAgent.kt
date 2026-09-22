@@ -41,6 +41,8 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.plug.PlugManifest
+import link.socket.ampere.plug.permission.UserGrants
 import link.socket.ampere.util.ioDispatcher
 import link.socket.ampere.util.runBlockingCompat
 
@@ -129,6 +131,16 @@ open class SparkBasedAgent<S : AgentState>(
      */
     @Transient
     private val _runId: RunId? = null,
+    /**
+     * Persisted-grant source for [link.socket.ampere.plug.permission.PlugPermissionGate]
+     * (AMPR-348). When set, plug tools this agent dispatches are gated against
+     * the caller's real grants instead of [ExecutionSettingsBuilder]'s
+     * deny-all default. Null preserves the pre-existing behavior — every
+     * plug tool with `requiredPermissions` is denied — which stays correct
+     * for callers with no grant store (tests, headless use).
+     */
+    @Transient
+    private val _userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
 ) : ObservableAgent<S>(_eventApi, _observabilityScope) {
 
     @Transient
@@ -206,6 +218,9 @@ open class SparkBasedAgent<S : AgentState>(
             agentRole = "Spark-Based Agent (${affinity.name})"
             availableTools = requiredTools
             executor = _executor
+            _userGrantProvider?.let { provider ->
+                execution { userGrants(provider) }
+            }
         }
     }
 
@@ -439,6 +454,7 @@ open class SparkBasedAgent<S : AgentState>(
             reasoningOverride: AgentReasoning? = null,
             cognitiveRelay: CognitiveRelay? = null,
             minimumRung: CapabilityRung? = null,
+            userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
         ): SparkBasedAgent<CodeState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -459,6 +475,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _reasoningOverride = reasoningOverride,
                 _cognitiveRelay = cognitiveRelay,
                 _minimumRung = minimumRung,
+                _userGrantProvider = userGrantProvider,
             )
             agent.spark<SparkBasedAgent<CodeState>>(roleSpark)
             return agent
@@ -504,6 +521,7 @@ open class SparkBasedAgent<S : AgentState>(
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
+            userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
         ): SparkBasedAgent<ProductState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -522,6 +540,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _upstreamLlmClient = upstreamLlmClient,
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
+                _userGrantProvider = userGrantProvider,
             )
             agent.spark<SparkBasedAgent<ProductState>>(roleSpark)
             return agent
@@ -554,6 +573,7 @@ open class SparkBasedAgent<S : AgentState>(
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
+            userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
         ): SparkBasedAgent<ProjectState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -572,6 +592,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _upstreamLlmClient = upstreamLlmClient,
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
+                _userGrantProvider = userGrantProvider,
             )
             agent.spark<SparkBasedAgent<ProjectState>>(roleSpark)
             return agent
@@ -604,6 +625,7 @@ open class SparkBasedAgent<S : AgentState>(
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
+            userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
         ): SparkBasedAgent<QualityState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -622,6 +644,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _upstreamLlmClient = upstreamLlmClient,
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
+                _userGrantProvider = userGrantProvider,
             )
             agent.spark<SparkBasedAgent<QualityState>>(roleSpark)
             return agent

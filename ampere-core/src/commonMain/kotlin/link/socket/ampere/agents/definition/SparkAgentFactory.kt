@@ -20,8 +20,12 @@ import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescript
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
+import link.socket.ampere.db.Database
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.plug.PlugManifest
+import link.socket.ampere.plug.permission.SqlDelightUserGrantStore
+import link.socket.ampere.plug.permission.UserGrants
 
 /**
  * Factory for creating agents with Spark-based cognitive differentiation.
@@ -50,6 +54,11 @@ import link.socket.ampere.llm.UpstreamLlmClient
  *   [link.socket.ampere.llm.BundledUpstreamLlmClient] to opt into the direct call.
  * @param runId Ambient Arc-run identity (AMPR-240) handed to created agents so their LLM calls carry it as
  *   `RoutingContext.workflowId` and therefore reach `ProviderCallStartedEvent`/`ProviderCallCompletedEvent`.
+ * @param database Backing store for a persisted [link.socket.ampere.plug.permission.UserGrantStore]
+ *   (AMPR-348). When set, agents this factory creates gate plug-tool dispatch against the caller's
+ *   real grants (via [SqlDelightUserGrantStore]) instead of the deny-all default every
+ *   `requiredPermissions` tool otherwise falls back to. Null preserves that deny-all default, which
+ *   stays correct where no persisted store exists (tests, headless use).
  */
 class SparkAgentFactory(
     private val scope: CoroutineScope,
@@ -61,9 +70,22 @@ class SparkAgentFactory(
     private val executor: Executor? = null,
     private val upstreamLlmClient: UpstreamLlmClient? = null,
     private val runId: RunId? = null,
+    private val database: Database? = null,
 ) {
     private val effectiveSparkRegistry: SparkRegistry
         get() = sparkRegistry ?: DefaultSparkCatalog.registry
+
+    /**
+     * Provider sourced from [database] (AMPR-348), threaded into every agent this
+     * factory creates. Null when no database was supplied.
+     */
+    private val userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = database?.let { db ->
+        val store = SqlDelightUserGrantStore(db)
+        val provider: suspend (PlugManifest) -> UserGrants = { manifest ->
+            store.listGrants(manifest.id).getOrDefault(UserGrants())
+        }
+        provider
+    }
 
     /**
      * Fallback relay used only for agents that declare a rung floor (AMPR-232).
@@ -233,6 +255,7 @@ class SparkAgentFactory(
             _executor = executor,
             _upstreamLlmClient = upstreamLlmClient,
             _runId = runId,
+            _userGrantProvider = userGrantProvider,
         )
     }
 

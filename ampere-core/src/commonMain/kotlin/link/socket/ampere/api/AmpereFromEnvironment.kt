@@ -19,6 +19,7 @@ import link.socket.ampere.api.internal.DefaultPricingService
 import link.socket.ampere.api.internal.DefaultStatusService
 import link.socket.ampere.api.internal.DefaultThreadService
 import link.socket.ampere.api.internal.DefaultTicketService
+import link.socket.ampere.db.Database
 import link.socket.ampere.llm.BundledUpstreamLlmClient
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.memory.MemoryStore
@@ -62,6 +63,12 @@ import link.socket.ampere.memory.MemoryStore
  *   registry (AMPR-231). Null keeps the bundled cloud catalog. Has no effect
  *   if a caller constructs agents with their own [AgentFactory] supplying a
  *   [link.socket.ampere.agents.domain.routing.CognitiveRelay] directly.
+ * @param database Backing store for a persisted
+ *   [link.socket.ampere.plug.permission.UserGrantStore] (AMPR-348). When
+ *   supplied, [boundAgentFactory] gates plug-tool dispatch against the
+ *   caller's real grants instead of the deny-all default every
+ *   `requiredPermissions` tool otherwise falls back to. Null preserves that
+ *   default, which stays correct for callers with no persisted store.
  */
 @AmpereStableApi
 fun Ampere.fromEnvironment(
@@ -72,6 +79,7 @@ fun Ampere.fromEnvironment(
     upstreamLlmClient: UpstreamLlmClient? = null,
     agentScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
     modelDescriptorSource: ModelDescriptorSource? = null,
+    database: Database? = null,
 ): AmpereInstance {
     val sdkEventApi = environmentService.createEventApi("sdk-cli")
 
@@ -142,6 +150,7 @@ fun Ampere.fromEnvironment(
         eventSerialBus = environmentService.eventBus,
         upstreamLlmClient = upstreamLlmClient,
         modelDescriptorSource = modelDescriptorSource,
+        database = database,
     )
 
     return object : AmpereInstance {

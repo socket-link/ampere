@@ -347,6 +347,12 @@ class AgentReasoning private constructor(
                 executor = null,
                 taskFactory = DefaultTaskFactory,
                 parameterStrategies = emptyMap(),
+                // Deny-all is correct and permanent here, not an oversight (AMPR-348):
+                // `config = null` below means `toolExecutionEngine` is never built
+                // (it requires a non-null `llmService`), so this provider can never
+                // actually be invoked. It exists only to satisfy `ReasoningSettings`'
+                // non-nullable field, and mirrors the same safe fallback production
+                // callers get when they don't wire a `UserGrantStore`.
                 userGrantProvider = { UserGrants() },
             )
             return AgentReasoning(

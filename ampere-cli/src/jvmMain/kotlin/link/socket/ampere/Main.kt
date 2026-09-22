@@ -95,6 +95,9 @@ fun main(args: Array<String>) {
         // The CLI is a first-party tool talking to providers with the
         // operator's own keys, so it opts into the direct-provider call.
         upstreamLlmClient = BundledUpstreamLlmClient,
+        // Gates plug-tool dispatch against the persisted grant store instead
+        // of the deny-all default (AMPR-348).
+        database = context.database,
     )
 
     // Create agents based on team configuration (or defaults if no config)
