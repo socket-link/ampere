@@ -39,6 +39,11 @@ import link.socket.ampere.db.Database
  * harness builds one over an in-memory SQLite database on top of the test's bus. Bodies
  * use `runBlocking`: the door persists on a real IO dispatcher, which `runTest`'s virtual
  * time would skip straight past while `awaitSurfaceResponse` is still waiting.
+ *
+ * `awaitSurfaceResponse` timeouts are 15s, not the usual few-second test timeout: this is
+ * real wall-clock time on a real dispatcher since AMPR-337, and 5s was observed to be too
+ * tight on a loaded CI runner even though every response completes in well under 1s locally
+ * — the door's SQLite write is real I/O, not a mock.
  */
 class AgentSurfaceCliRendererTest {
 
@@ -429,14 +434,14 @@ class AgentSurfaceCliRendererTest {
                 harness.bus.awaitSurfaceResponse(
                     awaiterAgentId = "plug-a",
                     correlationId = "first",
-                    timeout = 5.seconds,
+                    timeout = 15.seconds,
                 )
             }
             val second = async {
                 harness.bus.awaitSurfaceResponse(
                     awaiterAgentId = "plug-b",
                     correlationId = "second",
-                    timeout = 5.seconds,
+                    timeout = 15.seconds,
                 )
             }
 
@@ -496,7 +501,7 @@ class AgentSurfaceCliRendererTest {
                 bus.awaitSurfaceResponse(
                     awaiterAgentId = plug,
                     correlationId = surface.correlationId,
-                    timeout = 5.seconds,
+                    timeout = 15.seconds,
                 )
             }
             bus.emitSurfaceRequest(
