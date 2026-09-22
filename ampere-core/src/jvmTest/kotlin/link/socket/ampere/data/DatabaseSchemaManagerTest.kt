@@ -140,6 +140,64 @@ class DatabaseSchemaManagerTest {
     }
 
     @Test
+    fun `knowledge appended run_id by the original 1_sqm is rebuilt in declared order`() {
+        // What Android and iOS databases look like after the original 1.sqm, which appended
+        // KnowledgeStore.run_id with ADD COLUMN, and then 2.sqm: stamped v3, run_id last.
+        val path = legacyDatabase { driver ->
+            ORIGINAL_1_SQM.forEach { driver.execute(null, it, 0) }
+            Database.Schema.migrate(driver, 2, 3)
+            driver.execute(
+                null,
+                """
+                INSERT INTO KnowledgeStore (
+                    rowid, id, knowledge_type, approach, learnings, timestamp, run_id,
+                    idea_id, outcome_id, perception_id, plan_id, task_id, task_type, complexity_level
+                ) VALUES (
+                    42, 'k-1', 'FROM_IDEA', 'approach', 'learnings', 1000, 'run-1',
+                    'idea-1', 'outcome-1', 'perception-1', 'plan-1', 'task-1', 'refactor', 'SIMPLE'
+                )
+                """.trimIndent(),
+                0,
+            )
+        }
+
+        fileDriver(path).use { driver ->
+            DatabaseSchemaManager.writeUserVersion(driver, 3)
+            assertEquals("run_id", columns(driver, "KnowledgeStore").last())
+
+            assertEquals(
+                SchemaState.Migrated(from = 3, to = schemaVersion),
+                DatabaseSchemaManager.ensure(driver).getOrThrow(),
+            )
+
+            val fresh = inMemoryDriver().use { freshDriver ->
+                DatabaseSchemaManager.ensure(freshDriver).getOrThrow()
+                tableShape(freshDriver, "KnowledgeStore")
+            }
+            assertEquals(fresh, tableShape(driver, "KnowledgeStore"))
+
+            val row = Database(driver).knowledgeStoreQueries.getKnowledgeById("k-1").executeAsOne()
+            assertEquals("k-1", row.id)
+            assertEquals("FROM_IDEA", row.knowledge_type)
+            assertEquals("approach", row.approach)
+            assertEquals("learnings", row.learnings)
+            assertEquals(1000L, row.timestamp)
+            assertEquals("run-1", row.run_id)
+            assertEquals("idea-1", row.idea_id)
+            assertEquals("outcome-1", row.outcome_id)
+            assertEquals("perception-1", row.perception_id)
+            assertEquals("plan-1", row.plan_id)
+            assertEquals("task-1", row.task_id)
+            assertEquals("refactor", row.task_type)
+            assertEquals("SIMPLE", row.complexity_level)
+            assertEquals(
+                listOf(42L),
+                query(driver, "SELECT rowid FROM KnowledgeStore WHERE id = 'k-1'") { it.getLong(0)!! },
+            )
+        }
+    }
+
+    @Test
     fun `legacy database with run_id but no Links migrates from v2`() {
         // What the old path built between 1.sqm and 2.sqm: run_id present, no Links.
         val path = legacyDatabase { driver -> Database.Schema.migrate(driver, 1, 2) }
@@ -292,6 +350,16 @@ class DatabaseSchemaManagerTest {
         ).value
 
     private companion object {
+        /** 1.sqm as first shipped (AMPR-152), before AMPR-333 rewrote it to rebuild KnowledgeStore. */
+        val ORIGINAL_1_SQM = listOf(
+            "ALTER TABLE EventStore ADD COLUMN run_id TEXT",
+            "CREATE INDEX IF NOT EXISTS idx_event_run_id ON EventStore(run_id)",
+            "ALTER TABLE KnowledgeStore ADD COLUMN run_id TEXT",
+            "CREATE INDEX IF NOT EXISTS idx_knowledge_run_id ON KnowledgeStore(run_id)",
+            "ALTER TABLE OutcomeMemoryStore ADD COLUMN run_id TEXT",
+            "CREATE INDEX IF NOT EXISTS idx_outcome_run_id ON OutcomeMemoryStore(run_id)",
+        )
+
         val PRE_RUN_ID_DDL = listOf(
             """
             CREATE TABLE EventStore (
