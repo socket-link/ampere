@@ -1,6 +1,5 @@
 package link.socket.ampere.agents.execution.tools
 
-import java.io.File
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
@@ -12,14 +11,14 @@ actual suspend fun executeWriteCodeFile(
 ): ExecutionOutcome.CodeChanged {
     val executionStartTimestamp = Clock.System.now()
 
-    // TODO: Use resolveFileSafely
     val rootDirectory = context.workspace.baseDirectory
 
     // TODO: Handle writing multiple files
     val (filePath, content) = context.instructionsPerFilePath.first()
 
     return try {
-        val file = File(rootDirectory, filePath)
+        // Reject any path that resolves outside the workspace root (e.g. `../`).
+        val file = resolveFileSafely(rootDirectory, filePath)
 
         file.parentFile?.let { parent ->
             if (!parent.exists()) {
@@ -41,6 +40,20 @@ actual suspend fun executeWriteCodeFile(
                 compilation = null,
                 linting = null,
                 tests = null,
+            ),
+        )
+    } catch (e: SecurityException) {
+        // Nothing was written: the path was rejected before any filesystem mutation.
+        ExecutionOutcome.CodeChanged.Failure(
+            executorId = context.executorId,
+            ticketId = context.ticket.id,
+            taskId = context.task.id,
+            executionStartTimestamp = executionStartTimestamp,
+            executionEndTimestamp = Clock.System.now(),
+            partiallyChangedFiles = emptyList(),
+            error = ExecutionError(
+                type = ExecutionError.Type.WORKSPACE_ERROR,
+                message = "Access outside root directory is not allowed: $filePath. \n ${e.message}",
             ),
         )
     } catch (e: Exception) {
