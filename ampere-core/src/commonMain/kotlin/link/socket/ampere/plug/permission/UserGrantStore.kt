@@ -19,6 +19,7 @@ interface UserGrantStore {
     suspend fun revoke(
         plugId: PlugId,
         permission: PlugPermission,
+        revokedAt: Instant = Clock.System.now(),
     ): Result<Unit>
 
     suspend fun listGrants(plugId: PlugId): Result<UserGrants>
@@ -58,12 +59,21 @@ class SqlDelightUserGrantStore(
     override suspend fun revoke(
         plugId: PlugId,
         permission: PlugPermission,
+        revokedAt: Instant,
     ): Result<Unit> =
         withContext(ioDispatcher) {
             runCatching {
+                val permissionJson = encode(permission)
+                val existingGrantedAt = queries.listGrants(plugId.value)
+                    .executeAsList()
+                    .firstOrNull { it.permission_json == permissionJson }
+                    ?.granted_at
+
                 queries.revokeGrant(
                     plug_id = plugId.value,
-                    permission_json = encode(permission),
+                    permission_json = permissionJson,
+                    granted_at = existingGrantedAt ?: revokedAt.toEpochMilliseconds(),
+                    revoked_at = revokedAt.toEpochMilliseconds(),
                 )
             }.map { }
         }
@@ -71,11 +81,14 @@ class SqlDelightUserGrantStore(
     override suspend fun listGrants(plugId: PlugId): Result<UserGrants> =
         withContext(ioDispatcher) {
             runCatching {
-                val granted = queries.listGrants(plugId.value)
+                val (revoked, granted) = queries.listGrants(plugId.value)
                     .executeAsList()
-                    .map { row -> decode(row.permission_json) }
+                    .partition { row -> row.revoked_at != null }
 
-                UserGrants(granted = granted)
+                UserGrants(
+                    granted = granted.map { row -> decode(row.permission_json) },
+                    revoked = revoked.map { row -> decode(row.permission_json) },
+                )
             }
         }
 

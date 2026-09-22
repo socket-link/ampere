@@ -11,6 +11,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import link.socket.ampere.db.Database
 import link.socket.ampere.plug.PlugId
+import link.socket.ampere.plug.PlugManifest
 
 class UserGrantStoreTest {
 
@@ -46,19 +47,70 @@ class UserGrantStoreTest {
     }
 
     @Test
-    fun `revoke removes persisted grant`() = runTest {
+    fun `revoke leaves a tombstone instead of deleting the grant`() = runTest {
+        val plugId = PlugId("plug-1")
         val permission = PlugPermission.NativeAction("open-url")
 
         store.grant(
-            plugId = PlugId("plug-1"),
+            plugId = plugId,
             permission = permission,
             grantedAt = Instant.fromEpochMilliseconds(1_000),
         ).getOrThrow()
-        store.revoke(PlugId("plug-1"), permission).getOrThrow()
+        store.revoke(
+            plugId = plugId,
+            permission = permission,
+            revokedAt = Instant.fromEpochMilliseconds(2_000),
+        ).getOrThrow()
 
-        val grants = store.listGrants(PlugId("plug-1")).getOrThrow()
+        val grants = store.listGrants(plugId).getOrThrow()
 
         assertEquals(emptyList(), grants.granted)
-        assertFalse(store.hasGrant(PlugId("plug-1"), permission).getOrThrow())
+        assertEquals(listOf(permission), grants.revoked)
+        assertFalse(store.hasGrant(plugId, permission).getOrThrow())
+    }
+
+    @Test
+    fun `gate denies a revoked permission as revoked, not missing`() = runTest {
+        val plugId = PlugId("plug-1")
+        val permission = PlugPermission.NativeAction("open-url")
+        val manifest = PlugManifest(
+            id = plugId,
+            name = "Plug",
+            version = "1.0.0",
+            requiredPermissions = listOf(permission),
+        )
+        val toolCall = PlugToolCall(plugId = plugId, toolId = "open-url")
+
+        store.grant(plugId, permission, Instant.fromEpochMilliseconds(1_000)).getOrThrow()
+        store.revoke(plugId, permission, Instant.fromEpochMilliseconds(2_000)).getOrThrow()
+
+        val grants = store.listGrants(plugId).getOrThrow()
+        val result = PlugPermissionGate.check(toolCall, manifest, grants)
+
+        assertEquals(GateResult.DenyRevoked(permission), result)
+    }
+
+    @Test
+    fun `re-granting a revoked permission clears the tombstone`() = runTest {
+        val plugId = PlugId("plug-1")
+        val permission = PlugPermission.NativeAction("open-url")
+        val manifest = PlugManifest(
+            id = plugId,
+            name = "Plug",
+            version = "1.0.0",
+            requiredPermissions = listOf(permission),
+        )
+        val toolCall = PlugToolCall(plugId = plugId, toolId = "open-url")
+
+        store.grant(plugId, permission, Instant.fromEpochMilliseconds(1_000)).getOrThrow()
+        store.revoke(plugId, permission, Instant.fromEpochMilliseconds(2_000)).getOrThrow()
+        store.grant(plugId, permission, Instant.fromEpochMilliseconds(3_000)).getOrThrow()
+
+        val grants = store.listGrants(plugId).getOrThrow()
+
+        assertEquals(listOf(permission), grants.granted)
+        assertEquals(emptyList(), grants.revoked)
+        assertTrue(store.hasGrant(plugId, permission).getOrThrow())
+        assertEquals(GateResult.Allow, PlugPermissionGate.check(toolCall, manifest, grants))
     }
 }
