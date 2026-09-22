@@ -133,6 +133,11 @@ kotlin {
 
 tasks.named<Test>("jvmTest") {
     useJUnitPlatform()
+    // Full assertion messages in CI logs; "AssertionFailedError at Foo.kt:123" alone is not diagnosable.
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
 }
 
 // Allow SQLite JDBC (and other libs) to call restricted native methods without warnings

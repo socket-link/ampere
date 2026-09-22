@@ -9,9 +9,8 @@ import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
-import link.socket.ampere.agents.events.bus.subscribe
-import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.events.utils.generateUUID
 
 /**
@@ -47,6 +46,12 @@ suspend fun EventSerialBus.emitSurfaceRequest(
  * first match for [correlationId] and ignores other events. Callers should
  * not assume the underlying handler is unregistered when this function
  * returns.
+ *
+ * Registers through [EventSerialBus.subscribeSuspending]: the blocking
+ * [EventSerialBus.subscribe] nests a `runBlocking` inside the caller's
+ * coroutine, which on an event-loop thread re-entrantly runs whatever is
+ * already queued — including the responder's handler — before the awaiter
+ * is registered, so a response could be dispatched to nobody.
  */
 suspend fun EventSerialBus.awaitSurfaceResponse(
     awaiterAgentId: AgentId,
@@ -55,14 +60,16 @@ suspend fun EventSerialBus.awaitSurfaceResponse(
 ): AgentSurfaceResponse {
     val deferred = CompletableDeferred<AgentSurfaceResponse>()
 
-    subscribe<AgentSurfaceEvent.Responded, EventSubscription.ByEventClassType>(
+    subscribeSuspending(
         agentId = awaiterAgentId,
         eventType = AgentSurfaceEvent.Responded.EVENT_TYPE,
-    ) { event, _ ->
-        if (event.correlationId == correlationId && !deferred.isCompleted) {
-            deferred.complete(event.response)
-        }
-    }
+        handler = EventHandler { event, _ ->
+            val responded = event as AgentSurfaceEvent.Responded
+            if (responded.correlationId == correlationId && !deferred.isCompleted) {
+                deferred.complete(responded.response)
+            }
+        },
+    )
 
     return if (timeout == null) {
         deferred.await()
