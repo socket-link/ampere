@@ -48,6 +48,7 @@ import link.socket.ampere.data.DatabaseSchemaManager.SchemaState
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.fts.FtsSchema
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
+import link.socket.ampere.domain.arc.CompletionManifestSink
 import link.socket.ampere.domain.llm.LlmProvider
 
 /**
@@ -204,6 +205,18 @@ class AmpereContext(
             agentId = agentId,
             knowledgeRepository = knowledgeRepository,
             eventBus = environmentService.eventBus
+        )
+    }
+
+    /**
+     * Where every Arc run this CLI starts writes its completion manifest (AMPR-359): this
+     * context's event store, under the run's id, so what a cancelled or failed run did and did not
+     * do can be read back after the process is gone. Built on first use.
+     */
+    val completionManifestSink: CompletionManifestSink by lazy {
+        CompletionManifestSink(
+            eventApi = environmentService.createEventApi(CompletionManifestSink.DEFAULT_AGENT_ID),
+            logger = logger,
         )
     }
 

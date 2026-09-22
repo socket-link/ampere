@@ -1,6 +1,7 @@
 package link.socket.ampere.cli.watch.presentation
 
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
+import link.socket.ampere.agents.domain.event.ArcRunEvent
 import link.socket.ampere.agents.domain.event.AssetAccessEvent
 import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
@@ -26,6 +27,7 @@ import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
+import link.socket.ampere.domain.arc.TerminationReason
 import link.socket.ampere.probe.Verdict
 
 /**
@@ -150,6 +152,13 @@ object EventCategorizer {
             is Verdict.Violated,
             is Verdict.Undetermined,
             -> EventSignificance.SIGNIFICANT
+        }
+
+        // An Arc run that did not close its loop. A failure needs a human; a cancellation was
+        // usually asked for, but what it left undone is still worth seeing.
+        is ArcRunEvent.CompletionManifestRecorded -> when (event.record.endedBy) {
+            TerminationReason.ERROR -> EventSignificance.CRITICAL
+            else -> EventSignificance.SIGNIFICANT
         }
     }.let { significance ->
         if (event is ProviderCallCompletedEvent && !event.success) {

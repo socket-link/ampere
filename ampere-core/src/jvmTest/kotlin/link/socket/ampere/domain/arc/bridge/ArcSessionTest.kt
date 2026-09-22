@@ -1,5 +1,6 @@
 package link.socket.ampere.domain.arc.bridge
 
+import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -13,6 +14,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,11 +38,13 @@ import link.socket.ampere.agents.domain.emission.ProseFormat
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.db.Database
 import link.socket.ampere.domain.arc.AmpereRuntime
 import link.socket.ampere.domain.arc.ArcAgentConfig
 import link.socket.ampere.domain.arc.ArcConcurrencyPolicy
 import link.socket.ampere.domain.arc.ArcConfig
 import link.socket.ampere.domain.arc.ArcOutcome
+import link.socket.ampere.domain.arc.ArcPhase
 import link.socket.ampere.domain.arc.ArcRunRejectedException
 import link.socket.ampere.domain.arc.OrchestrationConfig
 import link.socket.ampere.domain.arc.OrchestrationType
@@ -379,6 +383,63 @@ class ArcSessionTest {
 
         // close() is idempotent, so a Swift deinit can call it without tracking whether it ran.
         session.close()
+    }
+
+    /** AMPR-359: the Swift entry point, given somewhere to keep what its runs leave behind. */
+    @Test
+    fun `a database-backed session keeps a cancelled run's manifest for trace to read`() = runBlocking<Unit> {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { Database.Schema.create(it) }
+        val session = ArcSession.create(
+            arcConfig = arcConfig("bridge-persist-arc"),
+            projectDirPath = arcProjectDir("bridge-persist").toString(),
+            maxFlowTicks = Int.MAX_VALUE,
+            database = Database(driver),
+        )
+
+        try {
+            val handle = session.start("Implement a very long running goal")
+            val outcome = withTimeout(timeoutMillis) { assertIs<ArcOutcome.Cancelled>(handle.cancel()) }
+
+            // `cancel` returns once the run has settled, and a cancelled run's manifest is written
+            // before that — so the trace can be read straight away.
+            val trace = assertNotNull(handle.trace(), "A session with a database folds its runs' rows")
+            assertEquals(outcome.manifest.toRecord(), trace.completion)
+        } finally {
+            session.close()
+            driver.close()
+        }
+    }
+
+    /**
+     * Closing the session cancels its run from outside, so no outcome comes back to carry the
+     * manifest. The run still writes it as it unwinds.
+     */
+    @Test
+    fun `closing a database-backed session still leaves the cancelled run's manifest`() = runBlocking<Unit> {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { Database.Schema.create(it) }
+        val session = ArcSession.create(
+            arcConfig = arcConfig("bridge-persist-close-arc"),
+            projectDirPath = arcProjectDir("bridge-persist-close").toString(),
+            maxFlowTicks = Int.MAX_VALUE,
+            database = Database(driver),
+        )
+
+        try {
+            val handle = session.start("Implement a very long running goal")
+            session.close()
+
+            // `await` returns only once the run has settled — after its manifest is written.
+            val ended = withTimeout(timeoutMillis) { runCatching { handle.await() } }
+            assertIs<CancellationException>(ended.exceptionOrNull(), "The caller was cancelled: no outcome")
+
+            val completion = assertNotNull(handle.trace()?.completion)
+            assertEquals(handle.runId, completion.runId)
+            assertEquals(TerminationReason.CANCELLED, completion.endedBy)
+            assertTrue(ArcPhase.PULSE in completion.phasesNotRun, "Pulse never ran, so no Knowledge")
+        } finally {
+            session.close()
+            driver.close()
+        }
     }
 
     @Test

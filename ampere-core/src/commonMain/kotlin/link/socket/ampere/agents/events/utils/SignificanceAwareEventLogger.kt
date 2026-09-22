@@ -3,6 +3,7 @@ package link.socket.ampere.agents.events.utils
 import co.touchlab.kermit.Logger
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
+import link.socket.ampere.agents.domain.event.ArcRunEvent
 import link.socket.ampere.agents.domain.event.AssetAccessEvent
 import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
@@ -31,6 +32,7 @@ import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.events.subscription.Subscription
+import link.socket.ampere.domain.arc.TerminationReason
 import link.socket.ampere.probe.Verdict
 
 /**
@@ -208,6 +210,13 @@ class SignificanceAwareEventLogger(
 
         // Asset resolution - routine, mirroring LinkResolved.
         is AssetAccessEvent -> EventSignificance.ROUTINE
+
+        // An Arc run that did not close its loop - a failure needs a human; a cancellation
+        // was usually asked for, but what it left undone is still worth seeing.
+        is ArcRunEvent.CompletionManifestRecorded -> when (event.record.endedBy) {
+            TerminationReason.ERROR -> EventSignificance.CRITICAL
+            else -> EventSignificance.SIGNIFICANT
+        }
     }
 
     private fun formatUrgency(urgency: Urgency): String = when (urgency) {

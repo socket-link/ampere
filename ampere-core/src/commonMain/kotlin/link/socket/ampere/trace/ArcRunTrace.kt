@@ -3,6 +3,7 @@ package link.socket.ampere.trace
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.RunId
+import link.socket.ampere.domain.arc.CompletionRecord
 
 /** The identity of one Arc execution. Alias of [RunId] (see AMPR-240) — same value, trace-package name. */
 typealias ArcRunId = RunId
@@ -12,6 +13,10 @@ typealias ArcId = String
 
 /**
  * The projection of one [ReplayWindow] — in v1 always an Arc run, so [runId] identifies it.
+ *
+ * @property completion What a run that did not close its loop — cancelled, or failed — left in
+ *   place of a `Knowledge` entry: its persisted completion manifest (AMPR-359). `null` for a run
+ *   that completed, and for one whose manifest was never written.
  */
 @Serializable
 data class ArcRunTrace(
@@ -20,6 +25,7 @@ data class ArcRunTrace(
     val startedAt: Instant,
     val endedAt: Instant? = null,
     val phases: List<PropelPhase> = emptyList(),
+    val completion: CompletionRecord? = null,
 ) {
     /** The window this trace covers. Derived from [runId]; not part of the serialized form. */
     val window: ReplayWindow get() = ReplayWindow.ArcRun(runId)

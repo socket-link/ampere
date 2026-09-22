@@ -12,18 +12,24 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.emission.Emission
+import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.relay.DEFAULT_EMISSION_BUFFER_CAPACITY
 import link.socket.ampere.agents.events.relay.emissions
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.data.DEFAULT_JSON
+import link.socket.ampere.db.Database
 import link.socket.ampere.domain.arc.AmpereRuntime
 import link.socket.ampere.domain.arc.ArcConcurrencyPolicy
 import link.socket.ampere.domain.arc.ArcConfig
 import link.socket.ampere.domain.arc.ArcOutcome
 import link.socket.ampere.domain.arc.ArcRunRejectedException
 import link.socket.ampere.domain.arc.CompletionManifest
+import link.socket.ampere.domain.arc.CompletionManifestSink
 import link.socket.ampere.domain.arc.TerminationReason
 import link.socket.ampere.trace.ArcRunId
+import link.socket.ampere.trace.ArcRunTrace
 import link.socket.ampere.trace.ArcTraceProjection
 import okio.Path.Companion.toPath
 
@@ -328,8 +334,73 @@ class ArcSession(
             projectDirPath: String,
             maxFlowTicks: Int,
             clock: Clock,
+        ): ArcSession = build(arcConfig, projectDirPath, maxFlowTicks, clock, database = null)
+
+        /**
+         * [create], keeping what the session's runs leave behind in [database] (AMPR-359).
+         *
+         * A run that is cancelled or fails writes its [CompletionManifest] there as it settles —
+         * including one whose session is closed under it, which returns no outcome at all — and
+         * [ArcRunHandle.trace] reads it back as [ArcRunTrace.completion]. Without a database the
+         * manifest lives only on the returned outcome.
+         *
+         * [ArcSession.close] cancels a run still in flight, and that run writes its manifest as it
+         * unwinds, so keep [database]'s driver open until the run has settled: `await` or `cancel`
+         * its handle first when the record matters.
+         *
+         * From Swift, open the database with `createIosDriver`:
+         * ```swift
+         * let driver = IOSDatabaseDriverKt.createIosDriver(dbName: "ampere.db")
+         * let session = ArcSession.companion.create(
+         *     arcConfig: ArcRegistry.shared.getDefault(),
+         *     projectDirPath: projectPath,
+         *     maxFlowTicks: 100,
+         *     database: DatabaseCompanion.shared.invoke(driver: driver)
+         * )
+         * ```
+         *
+         * @param database Where manifests are written and traces are read from. Its schema must
+         *   already be current, as every platform's driver factory leaves it.
+         */
+        fun create(
+            arcConfig: ArcConfig,
+            projectDirPath: String,
+            maxFlowTicks: Int,
+            database: Database,
+        ): ArcSession = build(arcConfig, projectDirPath, maxFlowTicks, Clock.System, database)
+
+        /** [create] with both a [clock] and a [database]; see the overloads that take one each. */
+        fun create(
+            arcConfig: ArcConfig,
+            projectDirPath: String,
+            maxFlowTicks: Int,
+            clock: Clock,
+            database: Database,
+        ): ArcSession = build(arcConfig, projectDirPath, maxFlowTicks, clock, database)
+
+        private fun build(
+            arcConfig: ArcConfig,
+            projectDirPath: String,
+            maxFlowTicks: Int,
+            clock: Clock,
+            database: Database?,
         ): ArcSession {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val bus = EventSerialBus(scope = scope)
+
+            // The event api subscribes to the bus as it is built. Safe on a caller's thread here —
+            // Swift's main one included — because nothing else holds this bus yet, so the lock it
+            // takes is never contended.
+            val manifestSink = database?.let {
+                CompletionManifestSink(
+                    eventApi = AgentEventApi(
+                        agentId = CompletionManifestSink.DEFAULT_AGENT_ID,
+                        eventRepository = EventRepository(DEFAULT_JSON, scope, it),
+                        eventSerialBus = bus,
+                        clock = clock,
+                    ),
+                )
+            }
 
             val session = ArcSession(
                 scope = scope,
@@ -339,8 +410,10 @@ class ArcSession(
                     agentScope = scope,
                     maxFlowTicks = maxFlowTicks,
                     clock = clock,
+                    completionManifestSink = manifestSink?.let { it::record },
                 ),
-                eventSerialBus = EventSerialBus(scope = scope),
+                eventSerialBus = bus,
+                traceProjection = database?.let { ArcTraceProjection(it) },
             )
             session.ownedScope = scope
 

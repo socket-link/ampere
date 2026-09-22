@@ -134,14 +134,17 @@ class ArcRunHandle internal constructor(
 
     /**
      * Fold this run's persisted rows into a trace: phases, model invocations, memory writes,
-     * tool calls, and the Watt cost actually incurred.
+     * tool calls, and the Watt cost actually incurred. For a run that was cancelled or failed,
+     * [ArcRunTrace.completion] is the manifest of what it did and did not do (AMPR-359).
      *
      * Call it after [await] or [cancel]. Both guarantee that every agent coroutine — including
      * the `NonCancellable` blocks that settle cost records for cancelled LLM calls — has
-     * completed, so the fold sees actuals rather than a half-written ledger.
+     * completed, and that a cancelled or failed run's manifest has been written, so the fold
+     * sees actuals rather than a half-written ledger.
      *
      * Null when the session was built without an [ArcTraceProjection], or when the run wrote no
-     * rows at all (a runtime configured without an event API persists no telemetry).
+     * rows at all (a runtime configured without an event API persists no telemetry, and a run
+     * that completed writes no manifest).
      */
     suspend fun trace(): ArcRunTrace? = traceProjection?.project(window, arcId = runId)?.getOrNull()
 
