@@ -98,8 +98,13 @@ class AmpereContext(
 
     /**
      * Database instance with all queries.
+     *
+     * Exposed (not private) so callers constructing an [link.socket.ampere.agents.definition.AgentFactory]
+     * or [link.socket.ampere.agents.definition.SparkAgentFactory] can wire a persisted
+     * [link.socket.ampere.plug.permission.UserGrantStore] into agents built from this
+     * context (AMPR-348).
      */
-    private val database: Database = createDatabase(logger, driver)
+    val database: Database = createDatabase(logger, driver)
 
     /**
      * Coroutine scope for async operations.
@@ -180,6 +185,7 @@ class AmpereContext(
             environmentService = environmentService,
             knowledgeRepository = knowledgeRepository,
             workspace = workspace?.baseDirectory,
+            database = database,
         )
     }
 

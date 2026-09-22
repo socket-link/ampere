@@ -83,6 +83,7 @@ class MultiAgentDemoRunner(
                 model = AIModel_Claude.Sonnet_5
             ),
             upstreamLlmClient = BundledUpstreamLlmClient,
+            database = context.database,
         )
         val coordinator = coordinatorFactory.create<SparkBasedAgent<ProjectState>>(AgentType.PROJECT)
         val coordinatorEventApi = context.environmentService.createEventApi(coordinator.id)
@@ -100,6 +101,7 @@ class MultiAgentDemoRunner(
             ),
             toolWriteCodeFileOverride = writeCodeTool,
             upstreamLlmClient = BundledUpstreamLlmClient,
+            database = context.database,
         )
         val worker = workerFactory.create<SparkBasedAgent<CodeState>>(AgentType.CODE)
         val workerEventApi = context.environmentService.createEventApi(worker.id)
