@@ -12,7 +12,10 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -377,6 +380,159 @@ class AmpereRuntimeTest {
             }
         }
 
+    /**
+     * The first tests of cancellation behaviour on this path (AMPR-282). Real dispatchers, for the
+     * same reason as the test above.
+     */
+    @Test
+    fun `cancelled run carries a manifest of what did not happen and hands it to the sink`() =
+        runBlocking {
+            val recorded = CompletableDeferred<CompletionManifest>()
+            val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+            try {
+                val runtime = longRunningRuntime(
+                    prefix = "runtime-cancel-manifest",
+                    agentScope = callerScope,
+                    sink = { recorded.complete(it) },
+                )
+
+                val run = callerScope.async { runtime.execute("Implement a very long running goal") }
+                awaitFlowUnderway(runtime)
+                runtime.cancel()
+
+                val outcome = withTimeout(60_000) { assertIs<ArcOutcome.Cancelled>(run.await()) }
+                val manifest = outcome.manifest
+
+                assertEquals(outcome.runId, manifest.runId)
+                assertEquals(TerminationReason.CANCELLED, manifest.endedBy)
+                assertNull(manifest.failure)
+                assertEquals(listOf(ArcPhase.CHARGE, ArcPhase.FLOW), manifest.phasesStarted)
+                assertEquals(listOf(ArcPhase.CHARGE), manifest.phasesCompleted)
+                assertEquals(listOf(ArcPhase.PULSE), manifest.phasesNotRun, "Pulse is skipped, so no Knowledge")
+                assertEquals(ArcPhase.FLOW, manifest.endedDuring)
+                assertEquals(outcome.flowResult?.finalTick, manifest.reachedTick)
+                assertTrue((manifest.reachedTick ?: 0) >= 1)
+                assertEquals(outcome.flowResult?.agentOutcomes, manifest.producedOutcomes)
+
+                // "What is missing" is answerable: the intended goals split exactly into met and unmet.
+                val unmet = assertNotNull(manifest.unmetGoals, "Charge finished, so intended goals are known")
+                val intended = assertNotNull(outcome.chargeResult).goalTree.allNodes()
+                assertEquals(intended.toSet(), (manifest.completedGoals + unmet).toSet())
+                assertTrue(manifest.completedGoals.none { it in unmet })
+
+                assertEquals(manifest, withTimeout(1_000) { recorded.await() })
+            } finally {
+                callerScope.cancel()
+            }
+        }
+
+    @Test
+    fun `manifest survives cancellation of the caller-owned scope even when the sink suspends`() =
+        // Explicit Unit: the block ends in `assertNotNull`, and JUnit rejects a non-void @Test.
+        runBlocking<Unit> {
+            val recorded = CompletableDeferred<CompletionManifest>()
+            val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+            val runtime = longRunningRuntime(
+                prefix = "runtime-cancel-caller",
+                agentScope = callerScope,
+                sink = { manifest ->
+                    // Would throw at once on a cancelled coroutine; only NonCancellable lets it run.
+                    delay(50)
+                    recorded.complete(manifest)
+                },
+            )
+
+            val run = callerScope.async { runtime.execute("Implement a very long running goal") }
+            awaitFlowUnderway(runtime)
+
+            // Cancelling the caller's own scope: `execute` rethrows, so no outcome is returned —
+            // the sink is the only place this run's record can land.
+            callerScope.cancel()
+            assertFailsWith<CancellationException> { run.await() }
+
+            val manifest = withTimeout(10_000) { recorded.await() }
+            assertEquals(ArcPhase.FLOW, manifest.endedDuring)
+            assertEquals(listOf(ArcPhase.PULSE), manifest.phasesNotRun)
+            assertNotNull(manifest.unmetGoals)
+        }
+
+    @Test
+    fun `a throwing sink does not turn a cancellation into a failure`() = runBlocking {
+        val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        try {
+            val runtime = longRunningRuntime(
+                prefix = "runtime-cancel-sink-throws",
+                agentScope = callerScope,
+                sink = { error("sink unavailable") },
+            )
+
+            val run = callerScope.async { runtime.execute("Implement a very long running goal") }
+            awaitFlowUnderway(runtime)
+            runtime.cancel()
+
+            val outcome = withTimeout(60_000) { assertIs<ArcOutcome.Cancelled>(run.await()) }
+            assertEquals(ArcPhase.FLOW, outcome.manifest.endedDuring)
+        } finally {
+            callerScope.cancel()
+        }
+    }
+
+    @Test
+    fun `a Charge failure carries a manifest that leaves intended goals unknown`() = runTest {
+        val recorded = mutableListOf<CompletionManifest>()
+        val runtime = AmpereRuntime(
+            arcConfig = ArcRegistry.getDefault(),
+            // No README/AGENTS.md, so Charge rejects the project context.
+            projectDir = createTempDirectory("runtime-charge-fails").toString().toPath(),
+            agentScope = backgroundScope,
+            completionManifestSink = { recorded += it },
+        )
+
+        val outcome = assertIs<ArcOutcome.Failed>(runtime.execute("Implement a goal"))
+        val manifest = outcome.manifest
+
+        assertIs<IllegalArgumentException>(outcome.cause)
+        assertEquals(TerminationReason.ERROR, manifest.endedBy)
+        assertEquals("IllegalArgumentException: ${outcome.cause.message}", manifest.failure)
+        assertEquals(ArcPhase.CHARGE, manifest.endedDuring)
+        assertEquals(listOf(ArcPhase.FLOW, ArcPhase.PULSE), manifest.phasesNotRun)
+        assertNull(manifest.reachedTick)
+        assertNull(manifest.unmetGoals, "No goal tree was built, so what is missing is unknown, not nothing")
+        assertEquals(listOf(manifest), recorded)
+    }
+
+    @Test
+    fun `a Flow failure carries a manifest naming the goals that did not happen`() = runTest {
+        val recorded = mutableListOf<CompletionManifest>()
+        val runtime = AmpereRuntime(
+            arcConfig = ArcConfig(
+                name = "parallel-arc",
+                agents = listOf(ArcAgentConfig(role = "code")),
+                // FlowPhase supports SEQUENTIAL only, so Flow throws once Charge has finished.
+                orchestration = OrchestrationConfig(
+                    type = OrchestrationType.PARALLEL,
+                    order = listOf("code"),
+                ),
+            ),
+            projectDir = arcProjectDir("runtime-flow-fails").toString().toPath(),
+            agentScope = backgroundScope,
+            completionManifestSink = { recorded += it },
+        )
+
+        val outcome = assertIs<ArcOutcome.Failed>(runtime.execute("Implement a goal"))
+        val manifest = outcome.manifest
+
+        assertEquals(TerminationReason.ERROR, outcome.flowResult?.terminationReason)
+        assertEquals(TerminationReason.ERROR, manifest.endedBy)
+        assertEquals(listOf(ArcPhase.CHARGE, ArcPhase.FLOW), manifest.phasesStarted)
+        assertEquals(listOf(ArcPhase.CHARGE), manifest.phasesCompleted)
+        assertEquals(ArcPhase.FLOW, manifest.endedDuring)
+        assertEquals(listOf(ArcPhase.PULSE), manifest.phasesNotRun, "Pulse never ran, so no Knowledge")
+        assertEquals(0, manifest.reachedTick)
+        assertEquals(assertNotNull(outcome.chargeResult).goalTree.allNodes(), manifest.unmetGoals)
+        assertEquals(listOf(manifest), recorded)
+    }
+
     @Test
     fun `stop between ticks yields a completed outcome with MANUAL_STOP`() = runBlocking {
         val tempDir = arcProjectDir("runtime-stop")
@@ -570,6 +726,35 @@ class AmpereRuntimeTest {
         // Claimable again: the refused goal did not leave the runtime claimed.
         runtime.releaseClaim(runtime.admitRun())
         runtime.releaseClaim(runtime.admitRun())
+    }
+
+    /** A single-agent runtime whose Flow cannot finish before a cancel lands. */
+    private fun longRunningRuntime(
+        prefix: String,
+        agentScope: CoroutineScope,
+        sink: suspend (CompletionManifest) -> Unit,
+    ): AmpereRuntime = AmpereRuntime(
+        arcConfig = ArcConfig(
+            name = "cancel-arc",
+            agents = listOf(ArcAgentConfig(role = "code")),
+            orchestration = OrchestrationConfig(
+                type = OrchestrationType.SEQUENTIAL,
+                order = listOf("code"),
+            ),
+        ),
+        projectDir = arcProjectDir(prefix).toString().toPath(),
+        agentScope = agentScope,
+        maxFlowTicks = Int.MAX_VALUE,
+        completionManifestSink = sink,
+    )
+
+    /** Wait until Flow has completed a tick, so a cancel after this is genuinely mid-Flow. */
+    private suspend fun awaitFlowUnderway(runtime: AmpereRuntime) {
+        withTimeout(60_000) {
+            while ((runtime.flowPhase?.getCurrentTick() ?: 0) < 1) {
+                delay(5)
+            }
+        }
     }
 
     /** A temp dir with the AGENTS.md/README.md that ChargePhase requires to produce a context. */

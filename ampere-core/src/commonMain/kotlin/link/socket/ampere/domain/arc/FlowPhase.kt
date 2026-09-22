@@ -91,14 +91,14 @@ class FlowPhase(
     private var terminationReason: TerminationReason? = null
 
     suspend fun execute(): FlowResult {
-        require(agents.isNotEmpty()) { "FlowPhase requires at least one agent" }
-
-        val orchestrationType = arcConfig.orchestration.type
-        require(orchestrationType == OrchestrationType.SEQUENTIAL) {
-            "FlowPhase currently only supports SEQUENTIAL orchestration"
-        }
-
         try {
+            // Inside the `try` so a rejected configuration is labelled ERROR in the snapshot,
+            // not the MANUAL_STOP fallback.
+            require(agents.isNotEmpty()) { "FlowPhase requires at least one agent" }
+            require(arcConfig.orchestration.type == OrchestrationType.SEQUENTIAL) {
+                "FlowPhase currently only supports SEQUENTIAL orchestration"
+            }
+
             while (!isComplete && currentTick < maxTicks) {
                 // The tick loop is the Arc's cancellation point: a tick can be long and an
                 // inner suspend call may never hit one, so check explicitly every tick.

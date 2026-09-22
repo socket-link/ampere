@@ -50,6 +50,13 @@ import okio.Path.Companion.toPath
  * - [cancel] is a real coroutine cancellation. Flow stops at its next cancellation point,
  *   Pulse is skipped, and the outcome is [ArcOutcome.Cancelled].
  *
+ * A cancelled or failed run owes no `Knowledge` entry — it did not close its loop, and saying
+ * otherwise would blunt the PropelLoop invariant. It owes a [CompletionManifest] instead
+ * (AMPR-282): built once the run has settled, carried on [ArcOutcome.Cancelled] and
+ * [ArcOutcome.Failed], and handed to [completionManifestSink] under [NonCancellable] so the record
+ * survives the ending that caused it — including cancellation of the caller-owned scope, where no
+ * outcome is returned.
+ *
  * Example usage:
  * ```kotlin
  * val runtime = AmpereRuntime(
@@ -85,6 +92,16 @@ class AmpereRuntime(
      * deterministic.
      */
     private val clock: Clock = Clock.System,
+    /**
+     * Optional destination for the [CompletionManifest] of every cancelled or failed run
+     * (AMPR-282).
+     *
+     * Invoked under [NonCancellable], so it may suspend even though the run is being torn down.
+     * Called before the caller's own cancellation is rethrown, so it sees runs that end without
+     * returning an [ArcOutcome] at all. A sink that throws is swallowed: a failed record must not
+     * change how the run is reported.
+     */
+    private val completionManifestSink: (suspend (CompletionManifest) -> Unit)? = null,
 ) {
     init {
         // Declared-but-unimplemented policies fail here, at construction, rather than on the
@@ -104,6 +121,10 @@ class AmpereRuntime(
      * compare-and-set rather than a read followed by a later write. See [RunState].
      */
     private val runState = AtomicReference(RunState.IDLE)
+
+    /** The furthest phase this run has entered, for the [CompletionManifest] of an unfinished run. */
+    @Volatile
+    private var reachedPhase: ArcPhase? = null
 
     // `stop()` and `cancel()` are called from whatever thread owns the UI or the shutdown hook,
     // never from the Arc's own coroutine — so everything they touch, and everything they are
@@ -168,6 +189,7 @@ class AmpereRuntime(
             cancelRequested = false
             chargeResult = null
             flowResult = null
+            reachedPhase = null
             flowPhase = null
 
             // Published last, and read by callers as the signal that this run's state is reset —
@@ -196,14 +218,27 @@ class AmpereRuntime(
         }
 
         try {
-            return runScope.async { runArc(userGoal, runId, runScope) }.await()
+            val attempt = runScope.async { runArc(userGoal, runId, runScope) }.await()
+            return attempt.getOrElse { cause ->
+                ArcOutcome.Failed(
+                    runId = runId,
+                    cause = cause,
+                    manifest = closeOut(job, runId, TerminationReason.ERROR, cause),
+                    chargeResult = chargeResult,
+                    flowResult = partialFlow(),
+                )
+            }
         } catch (e: CancellationException) {
-            // If the *caller* was cancelled this is not ours to swallow — rethrow it.
+            val manifest = closeOut(job, runId, TerminationReason.CANCELLED, cause = null)
+
+            // If the *caller* was cancelled this is not ours to swallow — rethrow it. The
+            // manifest is already written by now; only the returned outcome is lost.
             coroutineContext.ensureActive()
             return ArcOutcome.Cancelled(
                 runId = runId,
+                manifest = manifest,
                 chargeResult = chargeResult,
-                flowResult = flowResult ?: flowPhase?.snapshot(),
+                flowResult = partialFlow(),
             )
         } finally {
             withContext(NonCancellable) {
@@ -213,37 +248,87 @@ class AmpereRuntime(
         }
     }
 
+    /**
+     * Run the three phases. A phase that throws is returned as a failed [Result] rather than
+     * thrown, so [execute] gets the original throwable (not a stack-recovered copy from `await`)
+     * and can close the run out after it has settled. Cancellation still propagates.
+     */
     private suspend fun runArc(
         userGoal: String,
         runId: ArcRunId,
         runScope: CoroutineScope,
-    ): ArcOutcome = try {
+    ): Result<ArcOutcome.Completed> = try {
         // Phase 1: Charge - Initialize project context and spawn agents
+        reachedPhase = ArcPhase.CHARGE
         val charge = executeCharge(userGoal, runId, runScope)
         chargeResult = charge
 
         // Phase 2: Flow - Execute agent loop
+        reachedPhase = ArcPhase.FLOW
         val flow = executeFlow(charge)
         flowResult = flow
 
         // Phase 3: Pulse - Evaluate and capture learnings
+        reachedPhase = ArcPhase.PULSE
         val pulse = executePulse(charge, flow)
 
-        ArcOutcome.Completed(
-            runId = runId,
-            chargeResult = charge,
-            flowResult = flow,
-            pulseResult = pulse,
+        Result.success(
+            ArcOutcome.Completed(
+                runId = runId,
+                chargeResult = charge,
+                flowResult = flow,
+                pulseResult = pulse,
+            ),
         )
     } catch (e: CancellationException) {
         throw e
     } catch (e: Throwable) {
-        ArcOutcome.Failed(
+        Result.failure(e)
+    }
+
+    /**
+     * Close out a run that ended without closing its loop: settle it, build its
+     * [CompletionManifest], and hand that to [completionManifestSink].
+     *
+     * The run is settled first so the manifest sees every outcome the run recorded rather than a
+     * snapshot racing the last of its coroutines. Both writes are [NonCancellable], so this
+     * completes even when the caller itself is being cancelled.
+     */
+    private suspend fun closeOut(
+        job: Job,
+        runId: ArcRunId,
+        endedBy: TerminationReason,
+        cause: Throwable?,
+    ): CompletionManifest {
+        withContext(NonCancellable) { job.cancelAndJoin() }
+
+        val manifest = CompletionManifest.fromIncompleteRun(
             runId = runId,
-            cause = e,
+            endedBy = endedBy,
+            cause = cause,
+            reachedPhase = reachedPhase,
             chargeResult = chargeResult,
-            flowResult = flowResult ?: flowPhase?.snapshot(),
+            flowResult = partialFlow(),
+            flowCompleted = flowResult != null,
         )
+        withContext(NonCancellable) { recordManifest(manifest) }
+        return manifest
+    }
+
+    /** Flow's own result if it finished, otherwise a snapshot of how far it got. */
+    private fun partialFlow(): FlowResult? = flowResult ?: flowPhase?.snapshot()
+
+    /** Hand [manifest] to [completionManifestSink]. Must be called under [NonCancellable]. */
+    private suspend fun recordManifest(manifest: CompletionManifest) {
+        val sink = completionManifestSink ?: return
+        try {
+            sink(manifest)
+        } catch (_: Throwable) {
+            // Under NonCancellable a CancellationException here is the sink's own (a timeout it
+            // set, say), not the run's — the run's is already being handled. Swallowing it too
+            // keeps `execute` from throwing for a cancellation it has already turned into a
+            // value. Best-effort by contract: the manifest is still carried on the outcome.
+        }
     }
 
     /**

@@ -21,6 +21,8 @@ import link.socket.ampere.domain.arc.ArcConcurrencyPolicy
 import link.socket.ampere.domain.arc.ArcConfig
 import link.socket.ampere.domain.arc.ArcOutcome
 import link.socket.ampere.domain.arc.ArcRunRejectedException
+import link.socket.ampere.domain.arc.CompletionManifest
+import link.socket.ampere.domain.arc.TerminationReason
 import link.socket.ampere.trace.ArcRunId
 import link.socket.ampere.trace.ArcTraceProjection
 import okio.Path.Companion.toPath
@@ -238,8 +240,22 @@ class ArcSession(
                 throw e
             } catch (e: Throwable) {
                 // `execute` maps Arc-level failures itself; this catches the ones it cannot,
-                // so an unexpected throw cannot tear down the caller's session scope.
-                ArcOutcome.Failed(runId = runId, cause = e)
+                // so an unexpected throw cannot tear down the caller's session scope. Such a throw
+                // comes from outside the run's phases, so the manifest can only honestly say that
+                // nothing is known to have started.
+                ArcOutcome.Failed(
+                    runId = runId,
+                    cause = e,
+                    manifest = CompletionManifest.fromIncompleteRun(
+                        runId = runId,
+                        endedBy = TerminationReason.ERROR,
+                        cause = e,
+                        reachedPhase = null,
+                        chargeResult = null,
+                        flowResult = null,
+                        flowCompleted = false,
+                    ),
+                )
             }
         }
 
