@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/MemoryEvent.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/memory/**
 related: [PropelLoop, CognitionTrace, EventSerialBus, DreamCycle]
-last_verified: 2026-05-31
+last_verified: 2026-09-23
 ---
 
 # Memory Provenance
@@ -69,6 +69,7 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 - **Append-only.** Outcomes and knowledge entries are never updated in place. Corrections happen by inserting a new entry; the original stays for audit. A query that mutates a stored row is a violation.
 - **Every entry carries `run_id`.** Outcomes and knowledge entries are written with the `run_id` of the Arc that produced them. An entry without a `run_id` is invisible to `ArcTraceProjection` and thus orphaned from the trace.
 - **Knowledge is distilled by `KnowledgeExtractor`, not by tools.** Tool implementations write `ExecutionOutcome`s; the Loop phase's `KnowledgeExtractor` produces `Knowledge`. Tools that write directly into `KnowledgeRepository` skip the cognitive distillation step and pollute the semantic store with raw observations.
+- **A knowledge entry records one source, not a lineage.** Each row carries exactly one of `idea_id`, `outcome_id`, `perception_id`, `plan_id`, `task_id` — the id of the element it was distilled from — and no reference to a parent entry. Those elements have no tables of their own, and `OutcomeMemoryStore.id` is `generateUUID(ticketId, executorId)`, a different id space from `ExecutionOutcome.id`, so a source id resolves to no row at all. Entries relate to each other through `run_id`, never through source ids; `KnowledgeService.provenance` returns that single hop (AMPR-350).
 - **Recall queries Knowledge first.** `AgentMemoryService.recallRelevantKnowledge` is the canonical Recall entry point. Domain code that goes straight to `OutcomeMemoryRepository` for in-loop reasoning is bypassing the semantic layer for performance reasons that don't exist.
 - **Outcome variants are tool-agnostic.** `ExecutionOutcome.CodeChanged` does not depend on which executor produced it; the same outcome shape is comparable across implementations. A new tool that needs a bespoke outcome variant must justify why an existing variant doesn't fit.
 - **`Failure` outcomes are first-class learning signal.** They are stored, indexed, and recalled equally with `Success`. A change that filters failures out of recall (e.g., "only show successful approaches") loses the most valuable training signal.
@@ -90,4 +91,5 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 - **Using `KnowledgeStored` as a milestone flag.** Routine memory writes are high volume. Publish `MilestoneReached` as a sibling event when the semantic payload represents a meaningful checkpoint.
 - **Recall by ticket id alone.** `MemoryContext` is built from task type, tags, and description for a reason. Ticket-id recall returns *only* this ticket's prior runs, missing the cross-ticket pattern recognition that's the point.
 - **Filtering failures out of recall.** Failures teach what not to do. A "successful approaches only" filter erases that signal.
+- **Reading a source id as a knowledge id.** `getKnowledgeById(entry.outcomeId)` can never match: a knowledge id is `generateUUID("knowledge-<type>", sourceId)`, which is a random prefix, and a source id names an `Idea`/`Outcome`/`Perception`/`Plan`/`Task`. The pre-AMPR-350 `provenance()` walked a "chain" this way and broke on its first iteration every time, returning a one-entry trail that looked plausible. To relate several entries, query by `run_id`.
 - **Stripping `run_id` when persisting.** A common refactoring trap: a helper drops the `run_id` parameter "because it's not used downstream". `ArcTraceProjection` is downstream. Keep it.

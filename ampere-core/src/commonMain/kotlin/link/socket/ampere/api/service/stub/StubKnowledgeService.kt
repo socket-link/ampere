@@ -5,12 +5,14 @@ import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
+import link.socket.ampere.api.model.KnowledgeProvenance
 import link.socket.ampere.api.service.KnowledgeService
 
 /**
  * Stub implementation of [KnowledgeService] for testing and parallel development.
  *
- * Store returns a stub entry; recall and provenance return empty lists.
+ * Store returns a stub entry; recall and search return empty lists; provenance reports
+ * not-found, since the stub keeps nothing to trace.
  */
 class StubKnowledgeService : KnowledgeService {
 
@@ -53,6 +55,6 @@ class StubKnowledgeService : KnowledgeService {
     override suspend fun tags(knowledgeId: String): Result<List<String>> =
         Result.success(emptyList())
 
-    override suspend fun provenance(knowledgeId: String): Result<List<KnowledgeEntry>> =
-        Result.success(emptyList())
+    override suspend fun provenance(knowledgeId: String): Result<KnowledgeProvenance> =
+        Result.failure(IllegalArgumentException("Stub: knowledge not found: $knowledgeId"))
 }
