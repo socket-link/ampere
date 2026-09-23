@@ -3,8 +3,9 @@ package link.socket.ampere.startup
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.Json
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.EventSource
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.tools.initializeLocalTools
 import link.socket.ampere.agents.tools.mcp.McpDiscoveryResult
 import link.socket.ampere.agents.tools.mcp.McpServerConfiguration
@@ -42,6 +43,9 @@ import link.socket.ampere.db.Database
  * @param database The SQLDelight database for persistence
  * @param json The JSON serializer for data operations
  * @param scope The coroutine scope for async operations
+ * @param createEventApi Builds the door each component publishes through (F1, AMPR-339);
+ *   production value is `environmentService::createEventApi`. The registry gets
+ *   `"tool-registry"`, the MCP manager `"mcp-server-manager"`.
  * @param mcpServerConfigs Optional list of MCP server configurations to discover
  * @param logger Optional logger for observability
  * @return Result containing the initialized ToolRegistry, ServerManager, and initialization stats
@@ -50,6 +54,7 @@ suspend fun initializeAmpere(
     database: Database,
     json: Json,
     scope: CoroutineScope,
+    createEventApi: (AgentId) -> AgentEventApi,
     mcpServerConfigs: List<McpServerConfiguration> = emptyList(),
     logger: Logger = Logger.withTag("AmpereStartup"),
 ): Result<AmpereStartupResult> {
@@ -58,7 +63,7 @@ suspend fun initializeAmpere(
     return try {
         // Create the tool registry
         logger.i { "Creating tool registry..." }
-        val (registry, eventBus, eventSource) = createToolRegistry(database, json, scope)
+        val (registry, eventSource) = createToolRegistry(database, json, scope, createEventApi)
 
         // Initialize local function tools
         logger.i { "Initializing local function tools..." }
@@ -75,7 +80,7 @@ suspend fun initializeAmpere(
         logger.i { "Creating MCP server manager..." }
         val mcpManager = McpServerManager(
             toolRegistry = registry,
-            eventBus = eventBus,
+            eventApi = createEventApi(MCP_SERVER_MANAGER_DOOR_ID),
             eventSource = eventSource,
             logger = logger,
         )
@@ -112,7 +117,7 @@ suspend fun initializeAmpere(
         logger.i { "Emitting final tool discovery complete event..." }
         registry.emitDiscoveryComplete(
             mcpServerCount = mcpDiscoveryResult?.successfulServers ?: 0,
-        )
+        ).getOrThrow()
 
         val totalTools = toolInitResult.successfulRegistrations +
             (mcpDiscoveryResult?.totalToolsDiscovered ?: 0)
@@ -145,34 +150,40 @@ suspend fun initializeAmpere(
     }
 }
 
+/** Door identity for the [ToolRegistry] built by [initializeAmpere]. */
+const val TOOL_REGISTRY_DOOR_ID: AgentId = "tool-registry"
+
+/** Door identity for the [McpServerManager] built by [initializeAmpere]. */
+const val MCP_SERVER_MANAGER_DOOR_ID: AgentId = "mcp-server-manager"
+
 /**
  * Creates and configures the ToolRegistry.
  *
  * @param database The SQLDelight database for persistence
  * @param json The JSON serializer
  * @param scope The coroutine scope
- * @return Triple of (ToolRegistry, EventSerialBus, EventSource)
+ * @param createEventApi Builds the registry's door
+ * @return Pair of (ToolRegistry, EventSource)
  */
 private fun createToolRegistry(
     database: Database,
     json: Json,
     scope: CoroutineScope,
-): Triple<ToolRegistry, EventSerialBus, EventSource> {
+    createEventApi: (AgentId) -> AgentEventApi,
+): Pair<ToolRegistry, EventSource> {
     val repository = ToolRegistryRepository(
         json = json,
         scope = scope,
         database = database,
     )
 
-    val eventBus = EventSerialBus(scope = scope)
-
     val eventSource = EventSource.Agent(agentId = "ampere-system")
 
     val registry = ToolRegistry(
         repository = repository,
-        eventBus = eventBus,
+        eventApi = createEventApi(TOOL_REGISTRY_DOOR_ID),
         eventSource = eventSource,
     )
 
-    return Triple(registry, eventBus, eventSource)
+    return registry to eventSource
 }

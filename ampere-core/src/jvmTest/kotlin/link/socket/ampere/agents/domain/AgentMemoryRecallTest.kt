@@ -29,7 +29,7 @@ import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.InMemoryEventApi
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.db.Database
@@ -56,7 +56,6 @@ class AgentMemoryRecallTest {
     private val testScope = TestScope(UnconfinedTestDispatcher())
 
     private lateinit var driver: JdbcSqliteDriver
-    private lateinit var eventBus: EventSerialBus
     private lateinit var memoryService: AgentMemoryService
     private lateinit var testAgent: TestAgentWithMemory
 
@@ -70,13 +69,13 @@ class AgentMemoryRecallTest {
         FtsSchema.install(driver)
         val database = Database(driver)
         val knowledgeRepository = KnowledgeRepositoryImpl(database, driver)
-        eventBus = EventSerialBus(testScope)
+        val (eventApi, _) = InMemoryEventApi.create(agentId = agentId, scope = testScope)
         now = Clock.System.now()
 
         memoryService = AgentMemoryService(
             agentId = agentId,
             knowledgeRepository = knowledgeRepository,
-            eventBus = eventBus,
+            eventApi = eventApi,
         )
 
         testAgent = TestAgentWithMemory(

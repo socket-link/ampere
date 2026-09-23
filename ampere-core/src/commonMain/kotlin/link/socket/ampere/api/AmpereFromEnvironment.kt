@@ -146,7 +146,7 @@ fun Ampere.fromEnvironment(
     val boundAgentFactory = AgentFactory(
         scope = agentScope,
         ticketOrchestrator = environmentService.ticketOrchestrator,
-        eventApiFactory = { agentId -> environmentService.createEventApi(agentId) },
+        createEventApi = environmentService::createEventApi,
         eventSerialBus = environmentService.eventBus,
         upstreamLlmClient = upstreamLlmClient,
         modelDescriptorSource = modelDescriptorSource,

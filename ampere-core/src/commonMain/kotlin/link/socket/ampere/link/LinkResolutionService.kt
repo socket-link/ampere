@@ -4,7 +4,7 @@ import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.LinkEvent
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.plug.PlugId
 import link.socket.ampere.plug.PlugManifest
@@ -24,13 +24,14 @@ import link.socket.ampere.plug.PlugManifest
  * [LinkResolutionGate], and all storage goes through [LinkStore]. Nothing here
  * touches the database directly.
  *
- * @param eventBus Optional. Without it the service still resolves; it just goes
- *   unobserved. Mirrors [link.socket.ampere.agents.domain.routing.CognitiveRelayImpl].
+ * @param eventApi Optional door (F1, AMPR-339). With one, every lifecycle event is
+ *   persisted to the `EventStore` before it is dispatched, and a persist failure fails the
+ *   call that produced it. Without it the service still resolves; it just goes unobserved.
  */
 class LinkResolutionService(
     private val linkStore: LinkStore,
     private val platform: PlatformTarget,
-    private val eventBus: EventSerialBus? = null,
+    private val eventApi: AgentEventApi? = null,
     private val clock: Clock = Clock.System,
 ) {
 
@@ -64,11 +65,7 @@ class LinkResolutionService(
             .filterNot { it.requirement.optional }
 
         resolutions.forEach { resolution ->
-            when (resolution) {
-                is LinkResolution.Resolved -> emitResolved(plugId, resolution, agentId)
-                is LinkResolution.Failed -> emitFailed(plugId, resolution, agentId)
-                is LinkResolution.Skipped -> Unit
-            }
+            announce(plugId, resolution, agentId).getOrElse { return Result.failure(it) }
         }
 
         if (failures.isNotEmpty()) {
@@ -96,11 +93,7 @@ class LinkResolutionService(
 
         val resolution = LinkResolutionGate.resolve(requirement, links, grants, platform)
 
-        when (resolution) {
-            is LinkResolution.Resolved -> emitResolved(plugId, resolution, agentId)
-            is LinkResolution.Failed -> emitFailed(plugId, resolution, agentId)
-            is LinkResolution.Skipped -> Unit
-        }
+        announce(plugId, resolution, agentId).getOrElse { return Result.failure(it) }
 
         return Result.success(resolution)
     }
@@ -116,7 +109,7 @@ class LinkResolutionService(
 
         linkStore.grant(plugId, linkId, clock.now()).getOrElse { return Result.failure(it) }
 
-        eventBus?.publish(
+        publish(
             LinkEvent.LinkGranted(
                 eventId = generateUUID("link"),
                 timestamp = clock.now(),
@@ -125,7 +118,7 @@ class LinkResolutionService(
                 plugId = plugId.value,
                 transport = link.transport,
             ),
-        )
+        ).getOrElse { return Result.failure(it) }
 
         return Result.success(Unit)
     }
@@ -142,7 +135,7 @@ class LinkResolutionService(
         val now = clock.now()
         val affected = linkStore.revokeLink(linkId, now).getOrElse { return Result.failure(it) }
 
-        eventBus?.publish(
+        publish(
             LinkEvent.LinkRevoked(
                 eventId = generateUUID("link"),
                 timestamp = now,
@@ -151,7 +144,7 @@ class LinkResolutionService(
                 scope = RevocationScope.LINK,
                 affectedPlugIds = affected,
             ),
-        )
+        ).getOrElse { return Result.failure(it) }
 
         return Result.success(affected)
     }
@@ -165,7 +158,7 @@ class LinkResolutionService(
         val now = clock.now()
         linkStore.revokeGrant(plugId, linkId, now).getOrElse { return Result.failure(it) }
 
-        eventBus?.publish(
+        publish(
             LinkEvent.LinkRevoked(
                 eventId = generateUUID("link"),
                 timestamp = now,
@@ -174,17 +167,32 @@ class LinkResolutionService(
                 scope = RevocationScope.PLUG_GRANT,
                 affectedPlugIds = listOf(plugId.value),
             ),
-        )
+        ).getOrElse { return Result.failure(it) }
 
         return Result.success(Unit)
     }
+
+    /** Report one resolution through the door; `Skipped` is silent, as before. */
+    private suspend fun announce(
+        plugId: PlugId,
+        resolution: LinkResolution,
+        agentId: AgentId?,
+    ): Result<Unit> = when (resolution) {
+        is LinkResolution.Resolved -> emitResolved(plugId, resolution, agentId)
+        is LinkResolution.Failed -> emitFailed(plugId, resolution, agentId)
+        is LinkResolution.Skipped -> Result.success(Unit)
+    }
+
+    /** No door → no event and a success, exactly as the bus-less path behaved. */
+    private suspend fun publish(event: LinkEvent): Result<Unit> =
+        eventApi?.publish(event)?.map { } ?: Result.success(Unit)
 
     private suspend fun emitResolved(
         plugId: PlugId,
         resolution: LinkResolution.Resolved,
         agentId: AgentId?,
-    ) {
-        eventBus?.publish(
+    ): Result<Unit> =
+        publish(
             LinkEvent.LinkResolved(
                 eventId = generateUUID("link"),
                 timestamp = clock.now(),
@@ -195,14 +203,13 @@ class LinkResolutionService(
                 transport = resolution.link.transport,
             ),
         )
-    }
 
     private suspend fun emitFailed(
         plugId: PlugId,
         resolution: LinkResolution.Failed,
         agentId: AgentId?,
-    ) {
-        eventBus?.publish(
+    ): Result<Unit> =
+        publish(
             LinkEvent.LinkResolutionFailed(
                 eventId = generateUUID("link"),
                 timestamp = clock.now(),
@@ -212,7 +219,6 @@ class LinkResolutionService(
                 failure = resolution.failure,
             ),
         )
-    }
 
     private fun sourceFor(agentId: AgentId?): EventSource =
         agentId?.let { EventSource.Agent(it) } ?: EventSource.Human

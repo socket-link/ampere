@@ -11,6 +11,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.DefaultPhaseSparkLibrar
 import link.socket.ampere.agents.domain.cognition.sparks.LanguageSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
+import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.routing.CapabilityRoutingDefaults
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
@@ -60,9 +61,11 @@ enum class AgentType {
 /**
  * Factory for creating agents with proper dependency injection and Spark initialization.
  *
- * All agents created through this factory share the same scope and have access
- * to the event bus through the eventApiFactory, ensuring consistent event
- * handling across the application.
+ * All agents created through this factory share the same scope and publish
+ * through a door built by [createEventApi] (F1, AMPR-339): one `AgentEventApi`
+ * per agent id, persisting every event before it reaches the bus. The same door
+ * is handed to the agent's `AgentMemoryService` and to `ToolAskHuman`, so the
+ * agent, its memory, and its tools all attribute to the same holder.
  *
  * **Spark Integration (Ticket #226)**:
  * Each agent is initialized with a proper Spark stack based on their type:
@@ -73,8 +76,10 @@ enum class AgentType {
  *
  * @param scope Coroutine scope for agent async operations (should be shared with EnvironmentService)
  * @param ticketOrchestrator For ticket management
- * @param memoryServiceFactory Creates per-agent memory services connected to the shared event bus
- * @param eventApiFactory Creates per-agent event APIs for publishing events to the shared bus
+ * @param knowledgeRepository Backing store for per-agent [AgentMemoryService]s. Null (or no
+ *   [createEventApi]) leaves agents without long-term memory, as before.
+ * @param createEventApi Builds the door for an agent id; production value is
+ *   `environmentService::createEventApi`. Null builds agents with no door (tests, headless use).
  * @param issueTrackerProvider Optional GitHub/issue tracker integration
  * @param repository Optional repository name for issue tracking
  * @param aiConfiguration Optional AI configuration for model selection
@@ -86,8 +91,8 @@ enum class AgentType {
 class AgentFactory(
     private val scope: CoroutineScope,
     private val ticketOrchestrator: TicketOrchestrator,
-    private val memoryServiceFactory: ((AgentId) -> AgentMemoryService)? = null,
-    private val eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
+    private val knowledgeRepository: KnowledgeRepository? = null,
+    private val createEventApi: ((AgentId) -> AgentEventApi)? = null,
     private val issueTrackerProvider: IssueTrackerProvider? = null,
     private val repository: String? = null,
     private val aiConfiguration: AIConfiguration? = null,
@@ -95,6 +100,12 @@ class AgentFactory(
     private val toolWriteCodeFileOverride: Tool<ExecutionContext.Code.WriteCode>? = null,
     private val cognitiveConfig: CognitiveConfig = CognitiveConfig(),
     private val llmProvider: LlmProvider? = null,
+    /**
+     * Bus handed to the default [CognitiveRelayImpl] for its routing events.
+     * Nothing else in this factory publishes on it (F1, AMPR-339): every other
+     * event leaves through a door from [createEventApi]. The relay is set (b)'s
+     * to move.
+     */
     private val eventSerialBus: EventSerialBus? = null,
     /**
      * Relay override for the activated CODE path (AMPR-219). Null builds the
@@ -165,24 +176,32 @@ class AgentFactory(
             ),
         )
 
-    // F1a (AMPR-337): the tool publishes through a door built by [eventApiFactory] instead of
-    // straight onto the bus. The [eventSerialBus] presence check is kept so the tool is offered
-    // exactly where it was before; set (c) (AMPR-339) owns this constructor and can collapse the
-    // two gates once it threads `createEventApi` through every factory.
+    // F1 (AMPR-337 / AMPR-339): the tool publishes through a door built by [createEventApi];
+    // it is offered exactly when a door exists.
     private val toolAskHuman: Tool<ExecutionContext.NoChanges>? =
-        if (eventSerialBus == null) {
-            null
-        } else {
-            eventApiFactory?.let { createEventApi ->
-                ToolAskHuman(
-                    requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
-                    eventApi = createEventApi(ASK_HUMAN_TOOL_ID),
-                    parameterStrategy = link.socket.ampere.agents.definition.project.ProjectParams.HumanEscalation(
-                        agentRole = "Project Manager",
-                    ),
-                )
-            }
+        createEventApi?.let { door ->
+            ToolAskHuman(
+                requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
+                eventApi = door(ASK_HUMAN_TOOL_ID),
+                parameterStrategy = link.socket.ampere.agents.definition.project.ProjectParams.HumanEscalation(
+                    agentRole = "Project Manager",
+                ),
+            )
         }
+
+    /**
+     * Per-agent memory service sharing the agent's own door (F9/F11: `KnowledgeStored`
+     * is attributed to the holder). Null when there is no repository or no door.
+     */
+    private fun createMemoryService(agentId: AgentId, eventApi: AgentEventApi?): AgentMemoryService? {
+        val repository = knowledgeRepository ?: return null
+        val door = eventApi ?: return null
+        return AgentMemoryService(
+            agentId = agentId,
+            knowledgeRepository = repository,
+            eventApi = door,
+        )
+    }
 
     private val effectiveAiConfiguration: AIConfiguration
         get() = aiConfiguration ?: AIConfigurationFactory.getDefaultConfiguration()
@@ -263,9 +282,9 @@ class AgentFactory(
      * to the shared event bus using the agent's identity.
      *
      * @param agentId The ID of the agent
-     * @return AgentEventApi or null if no eventApiFactory was provided
+     * @return AgentEventApi or null if no createEventApi was provided
      */
-    fun getEventApiFor(agentId: AgentId): AgentEventApi? = eventApiFactory?.invoke(agentId)
+    fun getEventApiFor(agentId: AgentId): AgentEventApi? = createEventApi?.invoke(agentId)
 
     /**
      * Creates an agent of the specified type with appropriate Sparks applied.
@@ -323,8 +342,8 @@ class AgentFactory(
     private fun createAgent(agentType: AgentType): AutonomousAgent<out AgentState> = when (agentType) {
         AgentType.CODE -> {
             val agentId = generateUUID("SparkBasedAgent-Code")
-            val eventApi = eventApiFactory?.invoke(agentId)
-            val memoryService = memoryServiceFactory?.invoke(agentId)
+            val eventApi = createEventApi?.invoke(agentId)
+            val memoryService = createMemoryService(agentId, eventApi)
             SparkBasedAgent.Code(
                 sparkRegistry = phaseSparkLibrary,
                 agentId = agentId,
@@ -354,8 +373,8 @@ class AgentFactory(
         }
         AgentType.PRODUCT -> {
             val agentId = generateUUID("SparkBasedAgent-Product")
-            val eventApi = eventApiFactory?.invoke(agentId)
-            val memoryService = memoryServiceFactory?.invoke(agentId)
+            val eventApi = createEventApi?.invoke(agentId)
+            val memoryService = createMemoryService(agentId, eventApi)
             SparkBasedAgent.Product(
                 sparkRegistry = phaseSparkLibrary,
                 agentId = agentId,
@@ -370,8 +389,8 @@ class AgentFactory(
         }
         AgentType.PROJECT -> {
             val agentId = generateUUID("SparkBasedAgent-Project")
-            val eventApi = eventApiFactory?.invoke(agentId)
-            val memoryService = memoryServiceFactory?.invoke(agentId)
+            val eventApi = createEventApi?.invoke(agentId)
+            val memoryService = createMemoryService(agentId, eventApi)
             SparkBasedAgent.Project(
                 sparkRegistry = phaseSparkLibrary,
                 agentId = agentId,
@@ -387,8 +406,8 @@ class AgentFactory(
         }
         AgentType.QUALITY -> {
             val agentId = generateUUID("SparkBasedAgent-Quality")
-            val eventApi = eventApiFactory?.invoke(agentId)
-            val memoryService = memoryServiceFactory?.invoke(agentId)
+            val eventApi = createEventApi?.invoke(agentId)
+            val memoryService = createMemoryService(agentId, eventApi)
             SparkBasedAgent.Quality(
                 sparkRegistry = phaseSparkLibrary,
                 agentId = agentId,

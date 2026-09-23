@@ -34,6 +34,7 @@ import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.domain.task.TaskId
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
@@ -326,7 +327,18 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
      * preserving pre-existing single-built-in-spark behavior.
      */
     protected open fun createPhaseSparkManager(): PhaseSparkManager<S> =
-        PhaseSparkManager.create(this, agentConfiguration.cognitiveConfig.phaseSparks)
+        PhaseSparkManager.create(
+            agent = this,
+            phaseConfig = agentConfiguration.cognitiveConfig.phaseSparks,
+            eventApi = phaseSparkEventApi,
+        )
+
+    /**
+     * The door the phase-spark manager publishes `PhaseEntered` / `PhaseExited` through
+     * (F1, AMPR-339). Null here — the base agent has no door; [ObservableAgent] supplies its own.
+     */
+    protected open val phaseSparkEventApi: AgentEventApi?
+        get() = null
 
     private fun taskTextFor(task: Task): String {
         if (task is Task.Blank) return ""

@@ -76,8 +76,8 @@ class MultiAgentDemoRunner(
         val coordinatorFactory = AgentFactory(
             scope = agentScope,
             ticketOrchestrator = context.environmentService.ticketOrchestrator,
-            memoryServiceFactory = { agentId -> context.createMemoryService(agentId) },
-            eventApiFactory = { agentId -> context.environmentService.createEventApi(agentId) },
+            knowledgeRepository = context.knowledgeRepository,
+            createEventApi = context.environmentService::createEventApi,
             aiConfiguration = AIConfiguration_Default(
                 provider = AIProvider_Anthropic,
                 model = AIModel_Claude.Sonnet_5
@@ -93,8 +93,8 @@ class MultiAgentDemoRunner(
         val workerFactory = AgentFactory(
             scope = agentScope,
             ticketOrchestrator = context.environmentService.ticketOrchestrator,
-            memoryServiceFactory = { agentId -> context.createMemoryService(agentId) },
-            eventApiFactory = { agentId -> context.environmentService.createEventApi(agentId) },
+            knowledgeRepository = context.knowledgeRepository,
+            createEventApi = context.environmentService::createEventApi,
             aiConfiguration = AIConfiguration_Default(
                 provider = AIProvider_Anthropic,
                 model = AIModel_Claude.Sonnet_5

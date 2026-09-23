@@ -4,7 +4,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.ProbeEvent
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 
 /**
@@ -13,18 +13,20 @@ import link.socket.ampere.agents.events.utils.generateUUID
  * The caller supplies [evaluate]'s `subjectId` because [S] is unconstrained
  * and the SPI cannot ask the subject for its own identity.
  *
- * Pass an [eventBus] to make the verdicts visible in the trace: [evaluate] then
+ * Pass an [eventApi] to make the verdicts visible in the trace: [evaluate] then
  * publishes one [ProbeEvent.VerdictReached] per report, in probe order, after
- * every Probe has run. Left null — the default for Bench fixtures and unit
- * tests — evaluation is pure and nothing is published.
+ * every Probe has run. The door persists each verdict to the `EventStore` before
+ * dispatching it (F1, AMPR-339). Left null — the default for Bench fixtures and
+ * unit tests — evaluation is pure and nothing is published.
  *
  * Wiring is manual, as everywhere else in Ampere: [eventSource], [now], and
  * [idGenerator] are constructor parameters so a test can pin what a published
- * event carries.
+ * event carries (F13 will revisit whether the door's identity should replace
+ * [eventSource]).
  */
 class ProbeSuite<in S>(
     private val probes: List<Probe<S>>,
-    private val eventBus: EventSerialBus? = null,
+    private val eventApi: AgentEventApi? = null,
     private val eventSource: EventSource = EventSource.Agent(DEFAULT_SOURCE_ID),
     private val now: () -> Instant = { Clock.System.now() },
     private val idGenerator: () -> String = { generateUUID() },
@@ -40,10 +42,11 @@ class ProbeSuite<in S>(
         }
 
         // Published after the whole suite runs, so a subscriber never sees a
-        // partial verdict set from a suite that threw halfway through.
-        eventBus?.let { bus ->
+        // partial verdict set from a suite that threw halfway through. The door
+        // logs a persist failure; the reports are still returned.
+        eventApi?.let { api ->
             reports.forEach { report ->
-                bus.publish(
+                api.publish(
                     ProbeEvent.VerdictReached(
                         eventId = idGenerator(),
                         eventSource = eventSource,

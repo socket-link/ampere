@@ -7,7 +7,7 @@ import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.ToolEvent
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.tools.McpServerId
 import link.socket.ampere.agents.execution.tools.McpTool
@@ -48,10 +48,19 @@ import link.socket.ampere.agents.tools.registry.ToolRegistry
  * - Graceful degradation ensures maximum availability
  *
  * Thread-safety: All public methods are protected by a mutex.
+ *
+ * The per-server `ToolDiscoveryComplete` leaves through [eventApi] (F1, AMPR-339), so it is
+ * persisted before it is dispatched. Production builds the door as
+ * `environmentService.createEventApi("mcp-server-manager")`. A persist failure is logged and
+ * does not fail the discovery that produced it — the tools are already registered.
+ *
+ * @param eventApi the one door every event leaves through.
+ * @param eventSource attribution stamped on every event (kept separate from the door's
+ *   identity; F13 will revisit).
  */
 class McpServerManager(
     private val toolRegistry: ToolRegistry,
-    private val eventBus: EventSerialBus,
+    private val eventApi: AgentEventApi,
     private val eventSource: EventSource,
     private val logger: Logger = Logger.withTag("McpServerManager"),
     private val connectionFactory: ((McpServerConfiguration) -> McpServerConnection)? = null,
@@ -398,7 +407,9 @@ class McpServerManager(
             mcpServerCount = 1, // Single server in this event
         )
 
-        eventBus.publish(event)
+        eventApi.publish(event).onFailure { error ->
+            logger.w(error) { "Failed to persist discovery-complete event for $serverName ($serverId)" }
+        }
     }
 }
 

@@ -21,6 +21,7 @@ import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.events.InMemoryEventApi
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.tickets.Ticket
@@ -50,6 +51,9 @@ class McpIntegrationTest {
     private lateinit var driver: JdbcSqliteDriver
     private lateinit var database: Database
     private lateinit var registry: ToolRegistry
+
+    /** One door for registry and manager (F1, AMPR-339); tests subscribe on its bus. */
+    private lateinit var door: InMemoryEventApi.Handle
     private lateinit var eventBus: EventSerialBus
     private lateinit var mcpManager: McpServerManager
     private val scope = CoroutineScope(Dispatchers.Default)
@@ -73,12 +77,13 @@ class McpIntegrationTest {
             database = database,
         )
 
-        eventBus = EventSerialBus(scope = scope)
+        door = InMemoryEventApi.open(agentId = "integration-test", scope = scope)
+        eventBus = door.bus
         val eventSource = EventSource.Agent(agentId = "integration-test")
 
         registry = ToolRegistry(
             repository = repository,
-            eventBus = eventBus,
+            eventApi = door.api,
             eventSource = eventSource,
         )
 
@@ -109,6 +114,7 @@ class McpIntegrationTest {
         registry.clear()
         mcpManager.disconnectAll()
         driver.close()
+        door.close()
     }
 
     private fun createMcpManagerWithMockConnection(
@@ -117,7 +123,7 @@ class McpIntegrationTest {
         val eventSource = EventSource.Agent(agentId = "integration-test")
         return McpServerManager(
             toolRegistry = registry,
-            eventBus = eventBus,
+            eventApi = door.api,
             eventSource = eventSource,
             logger = logger,
             connectionFactory = { config -> mockConnections[config.id]!! },

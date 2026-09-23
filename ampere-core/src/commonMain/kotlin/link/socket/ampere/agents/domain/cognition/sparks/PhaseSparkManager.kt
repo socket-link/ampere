@@ -8,7 +8,7 @@ import link.socket.ampere.agents.definition.AutonomousAgent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.state.AgentState
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.util.getEnvironmentVariable
 
@@ -23,25 +23,32 @@ import link.socket.ampere.util.getEnvironmentVariable
  *
  * Phase Sparks are disabled by default to maintain backward compatibility.
  * Enable via [PhaseSparkConfig], the `enabled` property, or environment variable `AMPERE_PHASE_SPARKS`.
+ *
+ * Phase brackets are published through [eventApi] (F1, AMPR-339): every `PhaseEntered` /
+ * `PhaseExited` is persisted before it is dispatched, which is what lets a run's phase history
+ * be replayed from the store (F18). The api is the owning agent's own door, so the events are
+ * attributed to that agent. Left null — agents built without a door — phases still apply and
+ * nothing is published. Because the door is a suspending seam, phase entry and cleanup are
+ * suspending too.
  */
 class PhaseSparkManager<S : AgentState> private constructor(
     private val agent: AutonomousAgent<S>,
     val enabled: Boolean,
     private val activePhases: Set<CognitivePhase>,
     private val library: PhaseSparkLibrary?,
-    private val eventBus: EventSerialBus?,
+    private val eventApi: AgentEventApi?,
 ) {
     constructor(
         agent: AutonomousAgent<S>,
         enabled: Boolean = isPhaseSparkEnabled(),
         activePhases: Set<CognitivePhase> = DEFAULT_PHASES,
-        eventBus: EventSerialBus? = null,
+        eventApi: AgentEventApi? = null,
     ) : this(
         agent = agent,
         enabled = enabled,
         activePhases = activePhases,
         library = null,
-        eventBus = eventBus,
+        eventApi = eventApi,
     )
 
     private var appliedSparks: MutableList<PhaseSpark> = mutableListOf()
@@ -49,15 +56,15 @@ class PhaseSparkManager<S : AgentState> private constructor(
     private var currentPhaseNestingDepth: Int = 0
     private var withPhaseNestingDepth: Int = 0
 
-    fun enterPhase(phase: CognitivePhase) {
+    suspend fun enterPhase(phase: CognitivePhase) {
         enterPhaseInternal(phase, selectionContext = null)
     }
 
-    internal fun enterPhase(phase: CognitivePhase, selectionContext: SparkSelectionContext?) {
+    internal suspend fun enterPhase(phase: CognitivePhase, selectionContext: SparkSelectionContext?) {
         enterPhaseInternal(phase, selectionContext)
     }
 
-    private fun enterPhaseInternal(
+    private suspend fun enterPhaseInternal(
         phase: CognitivePhase,
         selectionContext: SparkSelectionContext?,
         nestingDepth: Int = 0,
@@ -147,7 +154,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
         }
     }
 
-    fun cleanup() {
+    suspend fun cleanup() {
         if (!enabled) return
         removeAppliedSparks()
     }
@@ -159,7 +166,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
 
     private fun isPhaseEnabled(phase: CognitivePhase): Boolean = activePhases.contains(phase)
 
-    private fun removeAppliedSparks(
+    private suspend fun removeAppliedSparks(
         restoredToPhase: CognitivePhase? = null,
         nestingDepth: Int = currentPhaseNestingDepth,
     ) {
@@ -179,13 +186,13 @@ class PhaseSparkManager<S : AgentState> private constructor(
         )
     }
 
-    private fun publishPhaseEntered(
+    private suspend fun publishPhaseEntered(
         oldPhase: CognitivePhase?,
         newPhase: CognitivePhase,
         nestingDepth: Int,
     ) {
-        eventBus?.let { bus ->
-            bus.publishAsync(
+        eventApi?.let { api ->
+            api.publish(
                 CognitivePhaseEvent.PhaseEntered(
                     eventId = generateUUID(agent.id, newPhase.name, nestingDepth.toString()),
                     timestamp = Clock.System.now(),
@@ -199,13 +206,13 @@ class PhaseSparkManager<S : AgentState> private constructor(
         }
     }
 
-    private fun publishPhaseExited(
+    private suspend fun publishPhaseExited(
         exitedPhase: CognitivePhase,
         restoredToPhase: CognitivePhase?,
         nestingDepth: Int,
     ) {
-        eventBus?.let { bus ->
-            bus.publishAsync(
+        eventApi?.let { api ->
+            api.publish(
                 CognitivePhaseEvent.PhaseExited(
                     eventId = generateUUID(agent.id, exitedPhase.name, nestingDepth.toString()),
                     timestamp = Clock.System.now(),
@@ -242,35 +249,35 @@ class PhaseSparkManager<S : AgentState> private constructor(
         fun <S : AgentState> create(
             agent: AutonomousAgent<S>,
             phaseConfig: PhaseSparkConfig? = null,
-            eventBus: EventSerialBus? = null,
-        ): PhaseSparkManager<S> = createInternal(agent, phaseConfig, library = null, eventBus = eventBus)
+            eventApi: AgentEventApi? = null,
+        ): PhaseSparkManager<S> = createInternal(agent, phaseConfig, library = null, eventApi = eventApi)
 
         internal fun <S : AgentState> createWithLibrary(
             agent: AutonomousAgent<S>,
             phaseConfig: PhaseSparkConfig? = null,
             library: PhaseSparkLibrary? = null,
-            eventBus: EventSerialBus? = null,
-        ): PhaseSparkManager<S> = createInternal(agent, phaseConfig, library, eventBus)
+            eventApi: AgentEventApi? = null,
+        ): PhaseSparkManager<S> = createInternal(agent, phaseConfig, library, eventApi)
 
         internal fun <S : AgentState> internalCreate(
             agent: AutonomousAgent<S>,
             enabled: Boolean,
             activePhases: Set<CognitivePhase> = DEFAULT_PHASES,
             library: PhaseSparkLibrary? = null,
-            eventBus: EventSerialBus? = null,
+            eventApi: AgentEventApi? = null,
         ): PhaseSparkManager<S> = PhaseSparkManager(
             agent = agent,
             enabled = enabled,
             activePhases = activePhases,
             library = library,
-            eventBus = eventBus,
+            eventApi = eventApi,
         )
 
         private fun <S : AgentState> createInternal(
             agent: AutonomousAgent<S>,
             phaseConfig: PhaseSparkConfig?,
             library: PhaseSparkLibrary?,
-            eventBus: EventSerialBus?,
+            eventApi: AgentEventApi?,
         ): PhaseSparkManager<S> {
             val enabledFromConfig = phaseConfig?.enabled ?: false
             val enabled = enabledFromConfig || isPhaseSparkEnabled()
@@ -280,7 +287,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
                 enabled = enabled,
                 activePhases = phases,
                 library = library,
-                eventBus = eventBus,
+                eventApi = eventApi,
             )
         }
     }

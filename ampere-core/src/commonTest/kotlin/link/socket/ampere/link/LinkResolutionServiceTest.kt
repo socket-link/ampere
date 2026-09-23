@@ -7,16 +7,9 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.domain.event.LinkEvent
-import link.socket.ampere.agents.events.bus.EventSerialBus
-import link.socket.ampere.agents.events.bus.subscribe
-import link.socket.ampere.agents.events.subscription.EventSubscription
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.canon.CanonType
 import link.socket.ampere.plug.PlugId
 import link.socket.ampere.plug.PlugManifest
@@ -51,8 +44,8 @@ class LinkResolutionServiceTest {
     private fun service(
         store: LinkStore,
         platform: PlatformTarget = PlatformTarget.ANDROID,
-        bus: EventSerialBus? = null,
-    ) = LinkResolutionService(linkStore = store, platform = platform, eventBus = bus)
+        api: AgentEventApi? = null,
+    ) = LinkResolutionService(linkStore = store, platform = platform, eventApi = api)
 
     @Test
     fun `resolution returns the Link keyed by requirement name`() = runTest {
@@ -209,115 +202,28 @@ class LinkResolutionServiceTest {
     }
 
     // -----------------------------------------------------------------
-    // Bus lifecycle
+    // Door lifecycle: the with-door half (persisted + dispatched events) lives in jvmTest as
+    // LinkResolutionServicePersistenceTest, where an AgentEventApi can be built (F1, AMPR-339).
     // -----------------------------------------------------------------
 
     @Test
-    fun `a successful resolution announces itself on the bus`() = runTest {
-        coroutineScope {
-            val bus = EventSerialBus(scope = this)
-            val received = CompletableDeferred<LinkEvent.LinkResolved>()
-
-            bus.subscribe<LinkEvent.LinkResolved, EventSubscription.ByEventClassType>(
-                agentId = "observer",
-                eventType = LinkEvent.LinkResolved.EVENT_TYPE,
-            ) { event, _ ->
-                if (!received.isCompleted) received.complete(event)
-            }
-
-            val store = InMemoryLinkStore(listOf(googleLink))
-            store.grant(PlugId("calendar-plug"), googleLink.id, Instant.fromEpochMilliseconds(1))
-
-            service(store, bus = bus)
-                .resolve(PlugId("calendar-plug"), manifest(calendarRequirement))
-                .getOrThrow()
-
-            val seen = withTimeout(5.seconds) { received.await() }
-            assertEquals("calendar", seen.requirementName)
-            assertEquals(googleLink.id, seen.linkId)
-            assertEquals(Transport.OAUTH_REST, seen.transport)
-        }
-    }
-
-    @Test
-    fun `a failed resolution is never silent`() = runTest {
-        coroutineScope {
-            val bus = EventSerialBus(scope = this)
-            val received = CompletableDeferred<LinkEvent.LinkResolutionFailed>()
-
-            bus.subscribe<LinkEvent.LinkResolutionFailed, EventSubscription.ByEventClassType>(
-                agentId = "observer",
-                eventType = LinkEvent.LinkResolutionFailed.EVENT_TYPE,
-            ) { event, _ ->
-                if (!received.isCompleted) received.complete(event)
-            }
-
-            service(InMemoryLinkStore(), bus = bus)
-                .resolve(PlugId("calendar-plug"), manifest(calendarRequirement))
-
-            val seen = withTimeout(5.seconds) { received.await() }
-            assertIs<LinkResolutionFailure.MissingLink>(seen.failure)
-            assertEquals(LinkEvent.LinkResolutionFailed.NO_LINK, seen.linkId)
-        }
-    }
-
-    @Test
-    fun `an ungranted Link is announced with the id consent would be asked on`() = runTest {
-        coroutineScope {
-            val bus = EventSerialBus(scope = this)
-            val received = CompletableDeferred<LinkEvent.LinkResolutionFailed>()
-
-            bus.subscribe<LinkEvent.LinkResolutionFailed, EventSubscription.ByEventClassType>(
-                agentId = "observer",
-                eventType = LinkEvent.LinkResolutionFailed.EVENT_TYPE,
-            ) { event, _ ->
-                if (!received.isCompleted) received.complete(event)
-            }
-
-            service(InMemoryLinkStore(listOf(googleLink)), bus = bus)
-                .resolve(PlugId("stranger-plug"), manifest(calendarRequirement))
-
-            val seen = withTimeout(5.seconds) { received.await() }
-            val failure = assertIs<LinkResolutionFailure.UngrantedLink>(seen.failure)
-            assertEquals(googleLink.id, failure.linkId)
-            assertEquals(googleLink.id, seen.linkId)
-        }
-    }
-
-    @Test
-    fun `a revocation announces its blast radius`() = runTest {
-        coroutineScope {
-            val bus = EventSerialBus(scope = this)
-            val received = CompletableDeferred<LinkEvent.LinkRevoked>()
-
-            bus.subscribe<LinkEvent.LinkRevoked, EventSubscription.ByEventClassType>(
-                agentId = "observer",
-                eventType = LinkEvent.LinkRevoked.EVENT_TYPE,
-            ) { event, _ ->
-                if (!received.isCompleted) received.complete(event)
-            }
-
-            val store = InMemoryLinkStore(listOf(googleLink))
-            store.grant(PlugId("calendar-plug"), googleLink.id, Instant.fromEpochMilliseconds(1))
-            store.grant(PlugId("gmail-plug"), googleLink.id, Instant.fromEpochMilliseconds(2))
-
-            service(store, bus = bus).revokeLink(googleLink.id).getOrThrow()
-
-            val seen = withTimeout(5.seconds) { received.await() }
-            assertEquals(RevocationScope.LINK, seen.scope)
-            assertEquals(setOf("calendar-plug", "gmail-plug"), seen.affectedPlugIds.toSet())
-        }
-    }
-
-    @Test
-    fun `resolution works with no bus wired`() = runTest {
+    fun `resolution works with no door wired`() = runTest {
         val store = InMemoryLinkStore(listOf(googleLink))
         store.grant(PlugId("calendar-plug"), googleLink.id, Instant.fromEpochMilliseconds(1))
 
         assertTrue(
-            service(store, bus = null)
+            service(store, api = null)
                 .resolve(PlugId("calendar-plug"), manifest(calendarRequirement))
                 .isSuccess,
         )
+    }
+
+    @Test
+    fun `grant and revoke work with no door wired`() = runTest {
+        val store = InMemoryLinkStore(listOf(googleLink))
+        val service = service(store, api = null)
+
+        service.grant(PlugId("calendar-plug"), googleLink.id).getOrThrow()
+        assertEquals(listOf("calendar-plug"), service.revokeLink(googleLink.id).getOrThrow())
     }
 }

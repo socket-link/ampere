@@ -10,6 +10,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.LanguageSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
 import link.socket.ampere.agents.domain.cognition.sparks.RoleSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
+import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.routing.CapabilityRoutingDefaults
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
@@ -43,8 +44,10 @@ import link.socket.ampere.plug.permission.UserGrants
  *   default like `CoroutineScope(Dispatchers.Default)` would hand every created agent a detached
  *   scope with no parent Job, no owner, and no cancellation path — a `GlobalScope` in all but
  *   name. Pass the scope whose lifetime the agents should share.
- * @param eventApiFactory Creates per-agent event APIs for publishing events
- * @param memoryServiceFactory Creates per-agent memory services
+ * @param createEventApi Builds the door for an agent id (F1, AMPR-339); production value is
+ *   `environmentService::createEventApi`. Null builds agents with no door (tests, headless use).
+ * @param knowledgeRepository Backing store for per-agent [AgentMemoryService]s, each built on the
+ *   agent's own door. Null (or no [createEventApi]) leaves agents without long-term memory.
  * @param defaultAiConfiguration Default AI configuration for agents
  * @param sparkRegistry Optional declarative spark registry; defaults to bundled fixtures
  * @param cognitiveRelay Optional relay injected into created agents (e.g. a `PlaybackRelay` for eval Bench runs)
@@ -62,8 +65,8 @@ import link.socket.ampere.plug.permission.UserGrants
  */
 class SparkAgentFactory(
     private val scope: CoroutineScope,
-    private val eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
-    private val memoryServiceFactory: ((AgentId) -> AgentMemoryService)? = null,
+    private val createEventApi: ((AgentId) -> AgentEventApi)? = null,
+    private val knowledgeRepository: KnowledgeRepository? = null,
     private val defaultAiConfiguration: AIConfiguration? = null,
     private val sparkRegistry: SparkRegistry? = null,
     private val cognitiveRelay: CognitiveRelay? = null,
@@ -85,6 +88,20 @@ class SparkAgentFactory(
             store.listGrants(manifest.id).getOrDefault(UserGrants())
         }
         provider
+    }
+
+    /**
+     * Per-agent memory service sharing the agent's own door (F9/F11: `KnowledgeStored`
+     * is attributed to the holder). Null when there is no repository or no door.
+     */
+    private fun createMemoryService(agentId: AgentId, eventApi: AgentEventApi?): AgentMemoryService? {
+        val repository = knowledgeRepository ?: return null
+        val door = eventApi ?: return null
+        return AgentMemoryService(
+            agentId = agentId,
+            knowledgeRepository = repository,
+            eventApi = door,
+        )
     }
 
     /**
@@ -239,8 +256,8 @@ class SparkAgentFactory(
         affinity: CognitiveAffinity,
         minimumRung: CapabilityRung? = null,
     ): SparkBasedAgent<CodeState> {
-        val eventApi = eventApiFactory?.invoke(id)
-        val memoryService = memoryServiceFactory?.invoke(id)
+        val eventApi = createEventApi?.invoke(id)
+        val memoryService = createMemoryService(id, eventApi)
 
         return SparkBasedAgent(
             agentId = id,

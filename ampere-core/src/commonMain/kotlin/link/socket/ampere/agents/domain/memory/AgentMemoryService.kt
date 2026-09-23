@@ -10,7 +10,7 @@ import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.util.ioDispatcher
 
@@ -23,11 +23,19 @@ import link.socket.ampere.util.ioDispatcher
  * It complements AgentState's in-memory knowledge tracking with long-term
  * storage and context-based retrieval capabilities. When an agent wants to
  * learn from history beyond the current session, it queries this service.
+ *
+ * Every event this service emits goes through [eventApi] (F1, AMPR-339): the door persists
+ * it to the `EventStore` before dispatching it on the bus, so `KnowledgeStored` is a durable
+ * record whose `eventSource` names the holding agent (the F9/F11 provenance anchor).
+ *
+ * @param agentId the agent whose memory this is; also the door's identity, so the two must
+ *   agree — factories build the door with `createEventApi(agentId)`.
+ * @param eventApi the one door every event leaves through.
  */
 class AgentMemoryService(
     private val agentId: AgentId,
     private val knowledgeRepository: KnowledgeRepository,
-    private val eventBus: EventSerialBus,
+    private val eventApi: AgentEventApi,
 ) {
 
     /**
@@ -36,13 +44,16 @@ class AgentMemoryService(
      * This is called when an agent extracts learnings from an experience—it
      * preserves that knowledge for retrieval in future similar contexts.
      *
-     * Emits a [MemoryEvent.KnowledgeStored] event upon successful storage.
+     * Emits a [MemoryEvent.KnowledgeStored] event upon successful storage. The event is
+     * persisted through the door before this returns; a persist failure fails the result,
+     * so a caller never sees a stored entry whose provenance record is missing.
      *
      * @param knowledge The knowledge to persist
      * @param tags Optional tags for categorization and filtering
      * @param taskType Optional task type for context-based retrieval
      * @param complexityLevel Optional complexity level for similarity matching
-     * @param runId Optional Arc run correlation ID for trace projection
+     * @param runId Optional Arc run correlation ID for trace projection; also stamped on
+     *   the event's envelope (F4)
      * @return Result containing the stored KnowledgeEntry or an error
      */
     suspend fun storeKnowledge(
@@ -61,8 +72,8 @@ class AgentMemoryService(
             runId = runId,
         )
 
-        // Emit event on success
-        result.onSuccess { entry ->
+        // Emit event on success; a door failure folds into the result
+        result.mapCatching { entry ->
             // Extract source ID based on knowledge type
             val sourceId = when (knowledge) {
                 is Knowledge.FromIdea -> knowledge.ideaId
@@ -86,10 +97,9 @@ class AgentMemoryService(
                 runId = runId,
             )
 
-            eventBus.publish(event)
+            eventApi.publish(event, runId = runId).getOrThrow()
+            entry
         }
-
-        result
     }
 
     /**
@@ -205,7 +215,7 @@ class AgentMemoryService(
                 retrievedKnowledge = retrievedSummaries,
             )
 
-            eventBus.publish(event)
+            eventApi.publish(event).getOrThrow()
 
             scoredKnowledge
         }
