@@ -10,6 +10,8 @@ import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.EventStoreEvent
+import link.socket.ampere.agents.domain.event.EventStoreFailure
 import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
@@ -67,7 +69,9 @@ class EventFilter<E : Event>(
  * @property eventSerialBus the bus this door dispatches on. Exposed for *subscribing* only —
  * the emission reply router, `TraceRecorder`, and surface renderers register handlers here.
  * Nothing outside this class publishes on it: every event enters through [publish] so the
- * store sees exactly what the bus sees (F1).
+ * store sees exactly what the bus sees (F1). The one event the store does *not* see is
+ * [EventStoreEvent.PersistenceFailed], which exists to report that the store could not see
+ * something; see [publish].
  */
 class AgentEventApi(
     val agentId: AgentId,
@@ -88,6 +92,13 @@ class AgentEventApi(
      *
      * The bus dispatch only happens once the row is committed, and a persist failure is
      * returned to the caller as well as logged — it is never swallowed (recon C59).
+     *
+     * A failure also goes out on the bus as [EventStoreEvent.PersistenceFailed] (AMPR-301).
+     * That one event is dispatched *without* being persisted first, breaking this method's own
+     * rule on purpose: the store is what just failed, so the alternative to an unpersisted
+     * signal is no signal — the silent divergence the AMPR-291 fate table flagged, where the
+     * durable record and what actually happened part ways with nothing to say so. It cannot
+     * recurse, because nothing about it goes back through [publish].
      *
      * @param causedBy the event whose handling produced this one, if any (F2).
      * @param runId the Arc run this event belongs to (F4). Null falls back to the deprecated
@@ -112,6 +123,17 @@ class AgentEventApi(
                 logger.logError(
                     message = "Failed to create event ${event.eventType} id=${event.eventId}",
                     throwable = throwable,
+                )
+                eventSerialBus.publish(
+                    EventStoreEvent.PersistenceFailed(
+                        eventId = generateUUID("event-store-persistence-failed", agentId),
+                        timestamp = clock.now(),
+                        eventSource = EventSource.Agent(agentId),
+                        failedEventId = event.eventId,
+                        failedEventType = event.eventType,
+                        failure = EventStoreFailure.classify(throwable),
+                        reason = throwable.message ?: throwable::class.simpleName.orEmpty(),
+                    ),
                 )
             }
 

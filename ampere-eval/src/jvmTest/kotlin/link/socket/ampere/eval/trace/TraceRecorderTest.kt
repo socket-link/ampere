@@ -26,6 +26,7 @@ import link.socket.ampere.eval.db.EvalDatabase
 import link.socket.ampere.probe.ProbeId
 import link.socket.ampere.probe.UndeterminedCause
 import link.socket.ampere.probe.Verdict
+import link.socket.ampere.util.TRUNCATION_MARKER
 
 /** AMPR-183 task 1.4 validation + record -> persist -> load -> replay round-trip. */
 @OptIn(ExperimentalCoroutinesApi::class)

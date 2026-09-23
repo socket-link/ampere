@@ -8,6 +8,7 @@ import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventStoreEvent
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
@@ -69,6 +70,9 @@ object EventCategorizer {
         is PermissionDeniedEvent,
         is LinkEvent.LinkRevoked,
         is LinkEvent.LinkResolutionFailed,
+        // The store refused a write (AMPR-301): something happened that the Field has no
+        // record of, and nothing downstream can recover it.
+        is EventStoreEvent.PersistenceFailed,
         is TaskEvent.TaskFailed -> EventSignificance.CRITICAL
 
         // Significant events represent state changes worth noting

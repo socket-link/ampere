@@ -29,6 +29,9 @@ data class EventEnvelope(
  * [Event.timestamp] — is the fold order.
  * @property recordedAt the door's clock at publish; [Event.timestamp] is whatever the publisher
  * put on the event and is left untouched.
+ * @property truncated whether the stored payload's oversized string leaves were cut to fit
+ * [EventStoreBudget.MAX_EVENT_BYTES] (AMPR-301). [event] is the caller's own object and is
+ * never the truncated one — this says only that what the *row* holds is shorter than it was.
  */
 data class StoredEvent(
     val event: Event,
@@ -36,4 +39,5 @@ data class StoredEvent(
     val recordedAt: Instant,
     val causedBy: EventId?,
     val runId: RunId?,
+    val truncated: Boolean = false,
 )

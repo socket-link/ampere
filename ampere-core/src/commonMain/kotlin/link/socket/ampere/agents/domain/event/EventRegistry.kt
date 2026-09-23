@@ -141,6 +141,9 @@ object EventRegistry {
         // PermissionEvent types
         PermissionDeniedEvent.EVENT_TYPE,
 
+        // EventStoreEvent types
+        EventStoreEvent.PersistenceFailed.EVENT_TYPE,
+
         // LinkEvent types
         LinkEvent.LinkGranted.EVENT_TYPE,
         LinkEvent.LinkRevoked.EVENT_TYPE,

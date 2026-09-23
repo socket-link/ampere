@@ -25,7 +25,7 @@ object TraceBudget {
 
     /**
      * Max chars any single string leaf in an event's serialized payload may
-     * carry before [truncateStringLeaves] cuts it. `Event` is a sealed
+     * carry before `truncateStringLeaves` cuts it. `Event` is a sealed
      * *interface* spread across ~24 files, each with its own free-text fields
      * (description, context, prompt, preview, ...); bounding leaf length
      * generically, from the serialized [kotlinx.serialization.json.JsonElement],

@@ -205,6 +205,7 @@ class EventRepositoryTest {
                 sequence = 1,
                 caused_by = null,
                 recorded_at = 2_000_000,
+                truncated = 0L,
             )
             repo.saveEvent(proseProduced("evt-new", "emission-new", parentEmissionId = "emission-legacy"))
                 .getOrThrow()

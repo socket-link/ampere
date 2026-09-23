@@ -1,0 +1,25 @@
+-- AMPR-301 (F3 of the AMPR-291 fate table): EventStore had no size budget, no drop policy and
+-- no rotation, so the production event log was an unbounded disk-full generator sitting inside
+-- the disk-full interruption mode. This adds the two things the budget needs on disk.
+--
+-- `truncated` flags a row whose oversized string leaves were cut to fit
+-- EventStoreBudget.MAX_EVENT_BYTES, so a shortened payload is never mistaken for what the
+-- publisher actually sent. ADD COLUMN can only append, and every EventStore query reads the
+-- table with SELECT *, so EventStore.sq declares it last to match — see 4.sqm for what a
+-- mismatch between declared and physical order costs.
+ALTER TABLE EventStore ADD COLUMN truncated INTEGER NOT NULL DEFAULT 0;
+
+-- The rotation marker. Definition copied from EventStorePruning.sq; IF NOT EXISTS keeps this a
+-- no-op on a database that already has it.
+CREATE TABLE IF NOT EXISTS EventStorePruning (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pruned_at INTEGER NOT NULL,
+  dropped_count INTEGER NOT NULL,
+  dropped_bytes INTEGER NOT NULL,
+  first_sequence INTEGER NOT NULL,
+  last_sequence INTEGER NOT NULL,
+  store_bytes_before INTEGER NOT NULL,
+  store_bytes_after INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_store_pruning_pruned_at ON EventStorePruning(pruned_at);
