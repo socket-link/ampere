@@ -1,0 +1,6 @@
+-- AMPR-347: PlugGrants gained revoked_at so a revoked permission leaves a tombstone instead of
+-- looking identical to one that was never granted. ADD COLUMN is safe here (unlike KnowledgeStore
+-- in 1.sqm/4.sqm) because every PlugGrants.sq query lists its columns explicitly rather than
+-- using SELECT *, so the appended physical position doesn't matter, and it's declared last in the
+-- .sq file to match where ADD COLUMN puts it.
+ALTER TABLE PlugGrants ADD COLUMN revoked_at INTEGER;

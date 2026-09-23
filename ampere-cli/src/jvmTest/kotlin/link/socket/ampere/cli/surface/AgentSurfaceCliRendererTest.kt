@@ -5,6 +5,7 @@ import java.io.BufferedReader
 import java.io.PrintWriter
 import java.io.StringReader
 import java.io.StringWriter
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -40,8 +41,20 @@ import link.socket.ampere.db.Database
  * harness builds one over an in-memory SQLite database on top of the test's bus. Bodies
  * use `runBlocking`: the door persists on a real IO dispatcher, which `runTest`'s virtual
  * time would skip straight past while `awaitSurfaceResponse` is still waiting.
+ *
+ * See [AWAIT_TIMEOUT] and the `UNDISPATCHED` awaiters below for how these cases stay reliable
+ * under CI scheduling noise. Each test's in-memory driver is also closed in [closeDoorDriver];
+ * left open, it and its `EventRepository` would outlive the test — one more thing competing
+ * for the door's real IO dispatcher on a loaded runner.
  */
 class AgentSurfaceCliRendererTest {
+
+    private var driver: JdbcSqliteDriver? = null
+
+    @AfterTest
+    fun closeDoorDriver() {
+        driver?.close()
+    }
 
     @Test
     fun `Confirmation accepts on input '1'`() = runBlocking<Unit> {
@@ -484,11 +497,12 @@ class AgentSurfaceCliRendererTest {
 
     /** A door over a fresh in-memory database that dispatches on [bus]. */
     private fun inMemoryDoor(bus: EventSerialBus): AgentEventApi {
-        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
-        DatabaseSchemaManager.ensure(driver).getOrThrow()
+        val doorDriver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        driver = doorDriver
+        DatabaseSchemaManager.ensure(doorDriver).getOrThrow()
         return AgentEventApi(
             agentId = "cli-surface",
-            eventRepository = EventRepository(DEFAULT_JSON, CoroutineScope(Dispatchers.Unconfined), Database(driver)),
+            eventRepository = EventRepository(DEFAULT_JSON, CoroutineScope(Dispatchers.Unconfined), Database(doorDriver)),
             eventSerialBus = bus,
         )
     }
