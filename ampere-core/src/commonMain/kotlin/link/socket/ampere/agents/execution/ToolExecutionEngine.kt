@@ -3,6 +3,7 @@ package link.socket.ampere.agents.execution
 import kotlinx.coroutines.flow.last
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
@@ -56,6 +57,11 @@ import link.socket.ampere.plug.permission.UserGrants
  * @property llmService The LLM service for generating parameters
  * @property executor The executor for running tools
  * @property executorId ID of the executor/agent running tools
+ * @property runId Ambient Arc-run identity (AMPR-351), stamped onto every request this
+ *   engine dispatches so run-attributable tools — today
+ *   [ToolAskHuman][link.socket.ampere.agents.execution.tools.ToolAskHuman] — can carry it
+ *   into the output they produce. Null leaves dispatched requests unattributed, which is
+ *   correct for tool calls made outside a run.
  */
 class ToolExecutionEngine(
     private val llmService: AgentLLMService,
@@ -63,6 +69,7 @@ class ToolExecutionEngine(
     private val executorId: ExecutorId,
     private val eventApi: AgentEventApi? = null,
     private val userGrantProvider: suspend (PlugManifest) -> UserGrants = { UserGrants() },
+    private val runId: RunId? = null,
 ) {
 
     private val strategies = mutableMapOf<String, ParameterStrategy>()
@@ -165,6 +172,11 @@ class ToolExecutionEngine(
 
     /**
      * Executes the tool through the executor framework.
+     *
+     * The single funnel every dispatch path reaches, and so where the run id is stamped
+     * (AMPR-351): a [ParameterStrategy] builds a fresh [ExecutionRequest] to carry its
+     * generated parameters, dropping whatever [originalRequest] stated, so re-stamping
+     * here — rather than before enrichment — is what actually reaches the tool.
      */
     private suspend fun executeViaExecutor(
         tool: Tool<*>,
@@ -172,6 +184,9 @@ class ToolExecutionEngine(
         startTime: Instant,
         originalRequest: ExecutionRequest<*>,
     ): ExecutionOutcome {
+        // The caller's own run wins over this engine's: a request that already names a run
+        // was dispatched by something closer to it than the reasoning unit that built us.
+        val runScopedRequest = enrichedRequest.withRunId(originalRequest.runId ?: runId)
         return try {
             when (tool) {
                 is FunctionTool<*> -> {
@@ -179,7 +194,7 @@ class ToolExecutionEngine(
                     val typedTool = tool as Tool<ExecutionContext>
 
                     @Suppress("UNCHECKED_CAST")
-                    val typedRequest = enrichedRequest as ExecutionRequest<ExecutionContext>
+                    val typedRequest = runScopedRequest as ExecutionRequest<ExecutionContext>
 
                     val statusFlow = executor.execute(typedRequest, typedTool)
                     val finalStatus = statusFlow.last()

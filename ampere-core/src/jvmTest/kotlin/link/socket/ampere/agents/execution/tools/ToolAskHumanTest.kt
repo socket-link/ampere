@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -209,6 +210,83 @@ class ToolAskHumanTest {
                 eventSource = EventSource.Human,
                 urgency = Urgency.HIGH,
                 emissionId = callbackEvent!!.emissionId,
+                affordanceId = "free-text",
+            ),
+        )
+        deferred.await()
+    }
+
+    /**
+     * AMPR-351: the Emission (and so the human reply it collects) is linked back to the
+     * Arc run that asked. The run reaches the tool on the request, because the tool is
+     * built once per agent and reused across runs.
+     */
+    @Test
+    fun `emission provenance carries the run id named by the request`() = runBlocking<Unit> {
+        val (api, _) = door()
+        val registry = EmissionReplyRegistry()
+        val capturedEvents = mutableListOf<HumanInteractionEvent.InputRequested>()
+
+        api.eventSerialBus.subscribe<HumanInteractionEvent.InputRequested, EventSubscription.ByEventClassType>(
+            agentId = "test-sub",
+            eventType = HumanInteractionEvent.InputRequested.EVENT_TYPE,
+        ) { event, _ -> capturedEvents.add(event) }
+
+        val tool = makeTool(api, registry)
+        val deferred = async {
+            tool.execute(
+                ExecutionRequest(
+                    context = makeContext("Attribute me"),
+                    constraints = ExecutionConstraints(),
+                    runId = "arc-run-1",
+                ),
+            )
+        }
+
+        delay(200.milliseconds)
+        val event = capturedEvents.single()
+        assertEquals("arc-run-1", event.emission.provenance.runId)
+
+        registry.deliver(
+            EmissionEvent.BaseResolved(
+                eventId = randomUUID(),
+                timestamp = Clock.System.now(),
+                eventSource = EventSource.Human,
+                urgency = Urgency.HIGH,
+                emissionId = event.emissionId,
+                affordanceId = "free-text",
+            ),
+        )
+        deferred.await()
+    }
+
+    @Test
+    fun `emission provenance run id stays null for a request outside a run`() = runBlocking<Unit> {
+        val (api, _) = door()
+        val registry = EmissionReplyRegistry()
+        val capturedEvents = mutableListOf<HumanInteractionEvent.InputRequested>()
+
+        api.eventSerialBus.subscribe<HumanInteractionEvent.InputRequested, EventSubscription.ByEventClassType>(
+            agentId = "test-sub",
+            eventType = HumanInteractionEvent.InputRequested.EVENT_TYPE,
+        ) { event, _ -> capturedEvents.add(event) }
+
+        val tool = makeTool(api, registry)
+        val deferred = async {
+            tool.execute(ExecutionRequest(makeContext("No run here"), ExecutionConstraints()))
+        }
+
+        delay(200.milliseconds)
+        val event = capturedEvents.single()
+        assertNull(event.emission.provenance.runId)
+
+        registry.deliver(
+            EmissionEvent.BaseResolved(
+                eventId = randomUUID(),
+                timestamp = Clock.System.now(),
+                eventSource = EventSource.Human,
+                urgency = Urgency.HIGH,
+                emissionId = event.emissionId,
                 affordanceId = "free-text",
             ),
         )

@@ -4,6 +4,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Principal
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.emission.ConsoleSurfaceIO
 import link.socket.ampere.agents.domain.emission.DefaultSurfacePolicy
 import link.socket.ampere.agents.domain.emission.EmissionReplyRegistry
@@ -204,6 +205,12 @@ class AgentMessageApi(
      * re-transition (CHI cell invariant).
      *
      * @param causedBy the event whose handling requested this escalation, if any.
+     * @param runId the Arc run this escalation is part of (AMPR-351). Stamped onto the
+     * Emission's [link.socket.ampere.agents.domain.emission.EmissionProvenance] and onto the
+     * envelope of every event the Emission scope publishes, so the escalation and the human
+     * reply it collects are linked to the run that asked. A parameter rather than a
+     * constructor field because one [AgentMessageApi] serves an agent across every run it
+     * takes part in; null is the honest answer for an escalation raised outside a run.
      * @return failure when the thread is missing, the status transition or a publish in step 2
      * did not persist (the transition stands — it is not retried), or the awaited reply timed
      * out; success once the escalation is durable (and, with [awaitReply], answered).
@@ -214,6 +221,7 @@ class AgentMessageApi(
         context: Map<String, String> = emptyMap(),
         awaitReply: Boolean = true,
         causedBy: EventId? = null,
+        runId: RunId? = null,
     ): Result<Unit> {
         val thread = messageRepository
             .findThreadById(threadId)
@@ -289,6 +297,7 @@ class AgentMessageApi(
                 eventSource = EventSource.Agent(agentId),
                 eventApi = eventApi,
                 replyRegistry = emissionReplyRegistry,
+                runId = runId,
                 principal = Principal.Ambient,
                 parentEmissionId = null,
             ) {
