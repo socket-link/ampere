@@ -1,6 +1,5 @@
 package link.socket.ampere.agents.execution.tools
 
-import java.io.File
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
@@ -60,19 +59,4 @@ actual suspend fun executeReadCodebase(
             ),
         )
     }
-}
-
-private fun resolveFileSafely(
-    rootDirectory: String,
-    path: String,
-): File {
-    val base = File(rootDirectory).canonicalFile
-    val target = File(base, path).canonicalFile
-
-    // Ensure that the target path stays within the base directory of the workspace
-    if (!target.path.startsWith(base.path + File.separator) && target != base) {
-        throw SecurityException("Access outside root directory is not allowed: $path")
-    }
-
-    return target
 }

@@ -105,6 +105,9 @@ class GoalHandler(
             aiConfiguration = effectiveAiConfig,
             toolWriteCodeFileOverride = writeCodeTool,
             upstreamLlmClient = BundledUpstreamLlmClient,
+            // Gates plug-tool dispatch against the persisted grant store instead
+            // of the deny-all default (AMPR-348).
+            database = context.database,
         )
 
         // Create spark-based code agent

@@ -5,12 +5,18 @@ import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.event.ArcRunEvent
 import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.events.EventRepository
@@ -21,10 +27,17 @@ import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.data.DatabaseSchemaManager
 import link.socket.ampere.db.Database
+import link.socket.ampere.domain.arc.ArcPhase
+import link.socket.ampere.domain.arc.TerminationReason
+import link.socket.ampere.eval.db.EvalDatabase
 import link.socket.ampere.eval.meter.Meter
 import link.socket.ampere.eval.meter.Reading
 import link.socket.ampere.eval.meter.Tolerance
+import link.socket.ampere.eval.relay.MissPolicy
+import link.socket.ampere.eval.relay.PlaybackRelay
 import link.socket.ampere.eval.trace.Trace
+import link.socket.ampere.eval.trace.TraceRecorder
+import link.socket.ampere.eval.trace.TraceService
 import link.socket.ampere.time.MutableClock
 import okio.Path.Companion.toPath
 
@@ -36,11 +49,16 @@ import okio.Path.Companion.toPath
  */
 class BenchTest {
 
-    /** A door over a fresh in-memory database, dispatching inline so observers see events in order. */
+    /**
+     * A door over a fresh in-memory database. Its bus dispatches inline, so observers see events in
+     * order, unless [openDoor] is handed another scope.
+     */
     private class Door(val api: AgentEventApi, val repository: EventRepository, val bus: EventSerialBus)
 
-    private fun openDoor(clock: Clock = Clock.System): Door {
-        val scope = CoroutineScope(Dispatchers.Unconfined)
+    private fun openDoor(
+        clock: Clock = Clock.System,
+        scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined),
+    ): Door {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         DatabaseSchemaManager.ensure(driver).getOrThrow()
         val bus = EventSerialBus(scope = scope)
@@ -157,6 +175,57 @@ class BenchTest {
         val stored = door.repository.getEventsSinceSequence(0).getOrThrow().filter { it.event is BenchEvent }
         assertTrue(stored.all { it.recordedAt == fixed })
     }
+
+    /**
+     * AMPR-359: a live case whose Arc fails leaves its completion manifest in the trace recorded
+     * for it, which is what outlives the bench.
+     *
+     * The door's bus dispatches onto a scheduler nobody advances, so bus delivery can never reach
+     * the recorder: the manifest gets into the trace through the recording itself, or not at all.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a failed live case records its completion manifest in the case's trace`() = runTest {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { EvalDatabase.Schema.create(it) }
+        try {
+            val door = openDoor(scope = CoroutineScope(StandardTestDispatcher(TestCoroutineScheduler())))
+            val traceService = TraceService(EvalDatabase(driver))
+            val bench = Bench(
+                // No README or AGENTS.md, so Charge refuses the project and the run fails.
+                projectDir = createTempDirectory("bench-live-fails").toString().toPath(),
+                eventApi = door.api,
+                liveRelay = PlaybackRelay(trace = emptyTrace(), missPolicy = MissPolicy.Error),
+                traceRecorder = TraceRecorder(door.bus, traceService),
+                liveModeEnabled = true,
+                maxFlowTicks = 1,
+            )
+
+            val suite = listOf(probe(id = "probe-live", arcId = "startup-saas", tolerance = Tolerance(minScore = 0.5)))
+            val result = bench.run(suite, RunMode.Live).getOrThrow().results.single()
+
+            assertFalse(result.passed)
+            val recorded = result.trace.events.single { it.type == ArcRunEvent.CompletionManifestRecorded.EVENT_TYPE }
+            val manifest = assertIs<ArcRunEvent.CompletionManifestRecorded>(
+                DEFAULT_JSON.decodeFromJsonElement(Event.serializer(), recorded.payload),
+            ).record
+            assertEquals(TerminationReason.ERROR, manifest.endedBy)
+            assertEquals(ArcPhase.CHARGE, manifest.endedDuring)
+            assertNull(manifest.unmetGoals, "Charge never built a goal tree, so what was left undone is unknown")
+
+            // Durable: the persisted trace carries it too.
+            assertEquals(result.trace, traceService.load(result.trace.id).getOrThrow())
+
+            // And the door stored it, under the Arc run's own id rather than the bench run's.
+            val stored = door.repository.getEventsSinceSequence(0).getOrThrow().single { it.event is ArcRunEvent }
+            assertEquals(manifest.runId, stored.runId)
+            assertEquals(manifest, (stored.event as ArcRunEvent.CompletionManifestRecorded).record)
+        } finally {
+            driver.close()
+        }
+    }
+
+    private fun emptyTrace(): Trace =
+        Trace(id = "t-empty", runId = "r-empty", arcId = "startup-saas", createdAt = 0L, events = emptyList())
 
     private fun subscribeToBenchEvents(bus: EventSerialBus, onEvent: (BenchEvent) -> Unit) {
         val handler = EventHandler<Event, Subscription> { event, _ -> onEvent(event as BenchEvent) }

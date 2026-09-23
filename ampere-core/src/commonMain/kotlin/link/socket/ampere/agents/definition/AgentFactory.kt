@@ -38,12 +38,16 @@ import link.socket.ampere.agents.execution.tools.git.ToolCreatePullRequest
 import link.socket.ampere.agents.execution.tools.git.ToolGitStatus
 import link.socket.ampere.agents.execution.tools.git.ToolPush
 import link.socket.ampere.agents.execution.tools.git.ToolStageFiles
+import link.socket.ampere.db.Database
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.integrations.issues.IssueTrackerProvider
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.plug.PlugManifest
+import link.socket.ampere.plug.permission.SqlDelightUserGrantStore
+import link.socket.ampere.plug.permission.UserGrants
 import link.socket.ampere.util.runBlockingCompat
 
 enum class AgentType {
@@ -126,9 +130,30 @@ class AgentFactory(
      * to opt into that call.
      */
     private val upstreamLlmClient: UpstreamLlmClient? = null,
+    /**
+     * Backing store for a persisted [link.socket.ampere.plug.permission.UserGrantStore]
+     * (AMPR-348). When set, every agent this factory creates gates plug-tool
+     * dispatch against the caller's real grants (via [SqlDelightUserGrantStore])
+     * instead of the deny-all default every `requiredPermissions` tool otherwise
+     * falls back to. Null preserves that deny-all default, which stays correct
+     * where no persisted store exists (tests, headless use).
+     */
+    private val database: Database? = null,
 ) {
     private val toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode> =
         toolWriteCodeFileOverride ?: ToolWriteCodeFile(AgentActionAutonomy.ASK_BEFORE_ACTION)
+
+    /**
+     * Provider sourced from [database] (AMPR-348), threaded into every agent
+     * this factory creates. Null when no database was supplied.
+     */
+    private val userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = database?.let { db ->
+        val store = SqlDelightUserGrantStore(db)
+        val provider: suspend (PlugManifest) -> UserGrants = { manifest ->
+            store.listGrants(manifest.id).getOrDefault(UserGrants())
+        }
+        provider
+    }
 
     private val toolCreateIssues: Tool<ExecutionContext.IssueManagement> =
         ToolCreateIssues(
@@ -314,6 +339,7 @@ class AgentFactory(
                 // PROJECT, and QUALITY keep the dormant (null relay) behavior.
                 cognitiveRelay = effectiveCognitiveRelay,
                 minimumRung = codeAgentMinimumRung,
+                userGrantProvider = userGrantProvider,
                 tools = buildSet {
                     add(toolWriteCodeFile)
                     add(ToolReadCodeFile(AgentActionAutonomy.FULLY_AUTONOMOUS))
@@ -339,6 +365,7 @@ class AgentFactory(
                 llmProvider = llmProvider,
                 observabilityScope = scope,
                 upstreamLlmClient = upstreamLlmClient,
+                userGrantProvider = userGrantProvider,
             )
         }
         AgentType.PROJECT -> {
@@ -354,6 +381,7 @@ class AgentFactory(
                 llmProvider = llmProvider,
                 observabilityScope = scope,
                 upstreamLlmClient = upstreamLlmClient,
+                userGrantProvider = userGrantProvider,
                 tools = setOfNotNull(toolCreateIssues, toolAskHuman),
             )
         }
@@ -370,6 +398,7 @@ class AgentFactory(
                 llmProvider = llmProvider,
                 observabilityScope = scope,
                 upstreamLlmClient = upstreamLlmClient,
+                userGrantProvider = userGrantProvider,
             )
         }
     }

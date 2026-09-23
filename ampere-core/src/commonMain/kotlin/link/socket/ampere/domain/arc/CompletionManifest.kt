@@ -1,6 +1,11 @@
 package link.socket.ampere.domain.arc
 
+import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.event.ArcRunEvent
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.trace.ArcRunId
 
 /** The three phases of an Arc lifecycle, in the order they run. */
@@ -63,26 +68,41 @@ data class CompletionManifest(
      * complete. Phases run strictly in order, so everything before it finished.
      */
     val endedDuring: ArcPhase
-        get() = ArcPhase.entries.first { it !in phasesCompleted }
+        get() = firstUnfinishedPhase(phasesCompleted)
 
     /** Whether the set of intended goals is known, i.e. Charge got far enough to build a goal tree. */
     val intendedGoalsKnown: Boolean
         get() = unmetGoals != null
 
     /** One line for logs and status bars: where the run stopped and what it left undone. */
-    fun summary(): String = buildString {
-        append(if (endedBy == TerminationReason.CANCELLED) "cancelled" else "failed")
-        append(" during ${endedDuring.name}")
-        reachedTick?.let { append(" at tick $it") }
-        val unmet = unmetGoals
-        if (unmet == null) {
-            append("; intended goals unknown")
-        } else {
-            val total = completedGoals.size + unmet.size
-            append("; ${completedGoals.size}/$total goals met")
-        }
-        append("; not run: ${phasesNotRun.joinToString { it.name }}")
-    }
+    fun summary(): String = completionSummary(
+        endedBy = endedBy,
+        endedDuring = endedDuring,
+        reachedTick = reachedTick,
+        goalsMet = completedGoals.size,
+        goalsUnmet = unmetGoals?.size,
+        phasesNotRun = phasesNotRun,
+    )
+
+    /**
+     * The bounded, serializable form of this manifest that is persisted (AMPR-359). See
+     * [CompletionRecord] for what it keeps of each field and why.
+     */
+    fun toRecord(): CompletionRecord = CompletionRecord.of(this)
+
+    /**
+     * The event that carries [toRecord] into the event store and onto the bus, stamped [timestamp]
+     * and attributed to [eventSource]. A failed run is published at [Urgency.HIGH], a cancelled one
+     * at [Urgency.MEDIUM].
+     */
+    fun toEvent(eventSource: EventSource, timestamp: Instant): ArcRunEvent.CompletionManifestRecorded =
+        ArcRunEvent.CompletionManifestRecorded(
+            eventId = generateUUID("completion-manifest", runId),
+            timestamp = timestamp,
+            eventSource = eventSource,
+            record = toRecord(),
+            urgency = if (endedBy == TerminationReason.ERROR) Urgency.HIGH else Urgency.MEDIUM,
+        )
 
     companion object {
         /**
@@ -132,4 +152,37 @@ data class CompletionManifest(
             )
         }
     }
+}
+
+/**
+ * The first phase not in [completed]. Phases run strictly in order, so everything before it
+ * finished — which is what makes it the phase an unfinished run ended during.
+ */
+internal fun firstUnfinishedPhase(completed: List<ArcPhase>): ArcPhase =
+    ArcPhase.entries.first { it !in completed }
+
+/**
+ * The one-line account shared by [CompletionManifest.summary] and [CompletionRecord.summary], so a
+ * persisted record reads exactly as the manifest it was made from did.
+ *
+ * @param goalsUnmet `null` when the intended goals are unknown, which the line says rather than
+ *   reporting a total it does not have.
+ */
+internal fun completionSummary(
+    endedBy: TerminationReason,
+    endedDuring: ArcPhase,
+    reachedTick: Int?,
+    goalsMet: Int,
+    goalsUnmet: Int?,
+    phasesNotRun: List<ArcPhase>,
+): String = buildString {
+    append(if (endedBy == TerminationReason.CANCELLED) "cancelled" else "failed")
+    append(" during ${endedDuring.name}")
+    reachedTick?.let { append(" at tick $it") }
+    if (goalsUnmet == null) {
+        append("; intended goals unknown")
+    } else {
+        append("; $goalsMet/${goalsMet + goalsUnmet} goals met")
+    }
+    append("; not run: ${phasesNotRun.joinToString { it.name }}")
 }

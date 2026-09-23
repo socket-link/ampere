@@ -20,7 +20,9 @@ import link.socket.ampere.data.DEFAULT_JSON
  * recording channel. The recorder subscribes to every known event type
  * ([EventRegistry.allEventTypes], the same source of truth the live relay uses),
  * buffers events in emission order for the recording window, and on stop builds
- * and persists a [Trace] via [TraceService].
+ * and persists a [Trace] via [TraceService]. [RecordingHandle.capture] is not a
+ * second channel: it only takes an event the recording's owner publishes itself
+ * out of the race between bus dispatch and [RecordingHandle.stop].
  *
  * Scoping note (see RECON-trace.md §3): the base `Event` does not carry a
  * `runId`, so events are scoped to a run by the *recording window* (start→stop),
@@ -96,6 +98,21 @@ class RecordingHandle internal constructor(
     private val maxTraceBytes: Int,
     private val maxStringFieldChars: Int,
 ) {
+    /**
+     * Record [event] now, rather than whenever the bus gets round to delivering it.
+     *
+     * For an owner that publishes [event] itself as the window closes — a run's
+     * completion manifest, written as the run settles (AMPR-359). Bus dispatch is
+     * asynchronous, so an event published just before [stop] can still be in
+     * flight when the recording closes; this takes it out of that race. The bus
+     * copy, if it arrives in time, is deduplicated by event id like any event
+     * dispatched to more than one type. Publish [event] as well — this is not a
+     * way to record events the bus never carried.
+     */
+    fun capture(event: Event) {
+        buffer.trySend(event)
+    }
+
     /**
      * Stop recording, build the [Trace] from buffered events (in emission order),
      * persist it via the [TraceService], and return it.

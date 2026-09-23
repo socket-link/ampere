@@ -363,10 +363,6 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
             // Recall relevant knowledge from past similar tasks
             val relevantKnowledge = recallRelevantKnowledgeForTask(currentTask)
 
-            relevantKnowledge.map { knowledge ->
-                knowledge.knowledge.learnings
-            }
-
             val plan = phaseSparkManager.withPhase(
                 CognitivePhase.PLAN,
                 SparkSelectionContext(phase = CognitivePhase.PLAN, text = taskText),

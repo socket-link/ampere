@@ -4,6 +4,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import link.socket.ampere.agents.domain.event.ArcRunEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.MemoryEvent
@@ -90,12 +91,22 @@ class ArcTraceProjection(
                 ?: error("No trace timestamps found for runId=$runId")
             val endedAt = phases.mapNotNull { it.endedAt }.maxOrNull()
 
+            // A run closes out once, so there is one manifest per run; the last wins should a
+            // caller have reused a run id. Matched on the record's own run id, because the payload
+            // fallback above also matches runs whose ids merely contain this one.
+            val completion = events
+                .map { it.event }
+                .filterIsInstance<ArcRunEvent.CompletionManifestRecorded>()
+                .lastOrNull { it.runId == runId }
+                ?.record
+
             ArcRunTrace(
                 runId = runId,
                 arcId = arcId,
                 startedAt = startedAt,
                 endedAt = endedAt,
                 phases = phases,
+                completion = completion,
             )
         }
     }
@@ -321,6 +332,8 @@ class ArcTraceProjection(
                 is CognitivePhaseEvent.PhaseExited -> event.restoredToPhase?.name
                 is SparkAppliedEvent -> event.phaseSparkName() ?: activePhase
                 is SparkRemovedEvent -> null
+                // A run-level record is not a phase transition.
+                is ArcRunEvent -> activePhase
                 else -> explicitPhase ?: activePhase
             }
         }
@@ -395,6 +408,9 @@ class ArcTraceProjection(
         is ToolEvent.ToolExecutionCompleted -> default ?: EXECUTE_PHASE
         is SparkAppliedEvent -> event.phaseSparkName() ?: default
         is SparkRemovedEvent -> event.phaseSparkName() ?: default
+        // The run's own record belongs to the run envelope, not to whichever PROPEL phase happened
+        // to be active when the run was cut short.
+        is ArcRunEvent -> RUN_PHASE
         else -> default
     }
 

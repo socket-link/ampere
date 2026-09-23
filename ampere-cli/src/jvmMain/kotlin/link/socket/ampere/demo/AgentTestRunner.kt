@@ -108,6 +108,7 @@ fun main(escalation: Boolean = false) {
                 ),
                 toolWriteCodeFileOverride = writeCodeTool,
                 upstreamLlmClient = BundledUpstreamLlmClient,
+                database = context.database,
             )
 
             // Create CodeWriterAgent

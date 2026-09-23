@@ -48,6 +48,7 @@ import link.socket.ampere.data.DatabaseSchemaManager.SchemaState
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.fts.FtsSchema
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
+import link.socket.ampere.domain.arc.CompletionManifestSink
 import link.socket.ampere.domain.llm.LlmProvider
 
 /**
@@ -98,8 +99,13 @@ class AmpereContext(
 
     /**
      * Database instance with all queries.
+     *
+     * Exposed (not private) so callers constructing an [link.socket.ampere.agents.definition.AgentFactory]
+     * or [link.socket.ampere.agents.definition.SparkAgentFactory] can wire a persisted
+     * [link.socket.ampere.plug.permission.UserGrantStore] into agents built from this
+     * context (AMPR-348).
      */
-    private val database: Database = createDatabase(logger, driver)
+    val database: Database = createDatabase(logger, driver)
 
     /**
      * Coroutine scope for async operations.
@@ -180,6 +186,7 @@ class AmpereContext(
             environmentService = environmentService,
             knowledgeRepository = knowledgeRepository,
             workspace = workspace?.baseDirectory,
+            database = database,
         )
     }
 
@@ -198,6 +205,18 @@ class AmpereContext(
             agentId = agentId,
             knowledgeRepository = knowledgeRepository,
             eventBus = environmentService.eventBus
+        )
+    }
+
+    /**
+     * Where every Arc run this CLI starts writes its completion manifest (AMPR-359): this
+     * context's event store, under the run's id, so what a cancelled or failed run did and did not
+     * do can be read back after the process is gone. Built on first use.
+     */
+    val completionManifestSink: CompletionManifestSink by lazy {
+        CompletionManifestSink(
+            eventApi = environmentService.createEventApi(CompletionManifestSink.DEFAULT_AGENT_ID),
+            logger = logger,
         )
     }
 

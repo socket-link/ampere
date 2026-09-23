@@ -167,6 +167,34 @@ final class ArcExecutionBridgeTests: XCTestCase {
         XCTAssertTrue(again is ArcOutcomeCancelled)
     }
 
+    /// A session given a database keeps what a cancelled run left undone (AMPR-359): `trace()`
+    /// reads the run's completion manifest back — the record an intent or a Live Activity can show
+    /// after the fact.
+    func testCancelledRunLeavesItsManifestInTheSessionDatabase() async throws {
+        let driver = IOSDatabaseDriverKt.createIosDriver(dbName: "arc-bridge-\(UUID().uuidString).db")
+        defer { driver.close() }
+
+        let session = ArcSession.companion.create(
+            arcConfig: ArcRegistry.shared.getDefault(),
+            projectDirPath: projectDir.path,
+            maxFlowTicks: Int32.max,
+            database: DatabaseCompanion.shared.invoke(driver: driver)
+        )
+        self.session = session
+
+        let handle = session.start(userGoal: "Implement a very long running goal")
+        let outcome = try await handle.cancel()
+        XCTAssertTrue(outcome is ArcOutcomeCancelled, "Expected Cancelled, got \(outcome)")
+
+        let completion = try await handle.trace()?.completion
+        XCTAssertEqual(completion?.runId, handle.runId)
+        XCTAssertEqual(completion?.endedBy, TerminationReason.cancelled)
+        XCTAssertTrue(
+            completion?.phasesNotRun.contains(ArcPhase.pulse) ?? false,
+            "Pulse never ran, so no Knowledge was captured"
+        )
+    }
+
     /// Phase-2 empirical check 1: an App Intent's `perform()` is not guaranteed to run on the
     /// main actor, so the exported suspend functions have to work off it.
     func testSuspendFunctionsWorkOffTheMainActor() async throws {

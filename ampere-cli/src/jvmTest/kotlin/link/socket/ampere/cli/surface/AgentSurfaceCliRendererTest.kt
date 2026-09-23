@@ -12,6 +12,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -41,13 +42,10 @@ import link.socket.ampere.db.Database
  * use `runBlocking`: the door persists on a real IO dispatcher, which `runTest`'s virtual
  * time would skip straight past while `awaitSurfaceResponse` is still waiting.
  *
- * `awaitSurfaceResponse` timeouts are 15s, not the usual few-second test timeout: this is
- * real wall-clock time on a real dispatcher since AMPR-337, and every response completes in
- * well under 1s locally — the door's SQLite write is real I/O, not a mock. Each test's
- * in-memory driver is closed in [closeDoorDriver]; left open, it and its `EventRepository`
- * outlive the test, and on a CI runner that leak was enough to eventually starve later
- * tests' own door writes past even a 15s wait (observed as two unrelated tests timing out
- * per run, never the same two twice, and never reproducing locally).
+ * See [AWAIT_TIMEOUT] and the `UNDISPATCHED` awaiters below for how these cases stay reliable
+ * under CI scheduling noise. Each test's in-memory driver is also closed in [closeDoorDriver];
+ * left open, it and its `EventRepository` would outlive the test — one more thing competing
+ * for the door's real IO dispatcher on a loaded runner.
  */
 class AgentSurfaceCliRendererTest {
 
@@ -441,18 +439,19 @@ class AgentSurfaceCliRendererTest {
         coroutineScope {
             val harness = harness(stdin = "1\n2\n", bus = EventSerialBus(scope = this))
 
-            val first = async {
+            // UNDISPATCHED for the same reason as `driveTo`: subscribed before anything is emitted.
+            val first = async(start = CoroutineStart.UNDISPATCHED) {
                 harness.bus.awaitSurfaceResponse(
                     awaiterAgentId = "plug-a",
                     correlationId = "first",
-                    timeout = 15.seconds,
+                    timeout = AWAIT_TIMEOUT,
                 )
             }
-            val second = async {
+            val second = async(start = CoroutineStart.UNDISPATCHED) {
                 harness.bus.awaitSurfaceResponse(
                     awaiterAgentId = "plug-b",
                     correlationId = "second",
-                    timeout = 15.seconds,
+                    timeout = AWAIT_TIMEOUT,
                 )
             }
 
@@ -470,6 +469,11 @@ class AgentSurfaceCliRendererTest {
             assertIs<AgentSurfaceResponse.Submitted>(firstResponse)
             assertIs<AgentSurfaceResponse.Cancelled>(secondResponse)
         }
+    }
+
+    private companion object {
+        /** See [RendererHarness.driveTo]: a bound on a hang, not a pace for a healthy run. */
+        val AWAIT_TIMEOUT = 30.seconds
     }
 
     private fun harness(
@@ -509,11 +513,19 @@ class AgentSurfaceCliRendererTest {
     ) {
         suspend fun driveTo(surface: AgentSurface): AgentSurfaceResponse = coroutineScope {
             val plug = "plug-driver"
-            val deferred = async {
+
+            // UNDISPATCHED so the awaiter is subscribed before the request is emitted. The bus
+            // drops a response that nobody is listening for, and the renderer can reply the
+            // moment it sees the request.
+            val deferred = async(start = CoroutineStart.UNDISPATCHED) {
                 bus.awaitSurfaceResponse(
                     awaiterAgentId = plug,
                     correlationId = surface.correlationId,
-                    timeout = 15.seconds,
+                    // Wall clock, spent on a runner where every module's tests run in up to
+                    // eight JVMs at once and each of these cases migrates a database of its own.
+                    // A response late by a scheduling hiccup arrives as `TimedOut` and fails the
+                    // assertion below, so this bounds a hang rather than paces a healthy run.
+                    timeout = AWAIT_TIMEOUT,
                 )
             }
             bus.emitSurfaceRequest(

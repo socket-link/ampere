@@ -94,7 +94,8 @@ class AmpereRuntime(
     private val clock: Clock = Clock.System,
     /**
      * Optional destination for the [CompletionManifest] of every cancelled or failed run
-     * (AMPR-282).
+     * (AMPR-282). [CompletionManifestSink.record] is the production one: it persists the manifest
+     * into the event store, where the run's trace picks it up (AMPR-359).
      *
      * Invoked under [NonCancellable], so it may suspend even though the run is being torn down.
      * Called before the caller's own cancellation is rethrown, so it sees runs that end without
@@ -508,6 +509,8 @@ class AmpereRuntime(
          * @param agentScope Caller-owned scope that spawned agents are bound to
          * @param maxFlowTicks Maximum ticks for the flow phase
          * @param clock The clock the Arc tick reads
+         * @param completionManifestSink Where a cancelled or failed run's manifest goes; see the
+         *   constructor parameter of the same name
          * @return AmpereRuntime configured with the specified Arc
          */
         fun create(
@@ -516,6 +519,7 @@ class AmpereRuntime(
             agentScope: CoroutineScope,
             maxFlowTicks: Int = 100,
             clock: Clock = Clock.System,
+            completionManifestSink: (suspend (CompletionManifest) -> Unit)? = null,
         ): AmpereRuntime {
             return AmpereRuntime(
                 arcConfig = arcConfig,
@@ -523,6 +527,7 @@ class AmpereRuntime(
                 agentScope = agentScope,
                 maxFlowTicks = maxFlowTicks,
                 clock = clock,
+                completionManifestSink = completionManifestSink,
             )
         }
 
