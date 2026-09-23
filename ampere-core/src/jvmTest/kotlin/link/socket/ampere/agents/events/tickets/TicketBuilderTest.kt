@@ -16,6 +16,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.status.TicketStatus
+import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
@@ -55,11 +57,16 @@ class TicketBuilderTest {
         ticketRepository = TicketRepository(database)
 
         eventSerialBus = EventSerialBus(testScope)
-        messageApi = AgentMessageApi(stubOrchestratorAgentId, messageRepository, eventSerialBus)
+        val eventApi = AgentEventApi(
+            agentId = stubOrchestratorAgentId,
+            eventRepository = EventRepository(DEFAULT_JSON, testScope, database),
+            eventSerialBus = eventSerialBus,
+        )
+        messageApi = AgentMessageApi(stubOrchestratorAgentId, messageRepository, eventApi)
 
         meetingOrchestrator = MeetingOrchestrator(
             repository = meetingRepository,
-            eventSerialBus = eventSerialBus,
+            eventApi = eventApi,
             messageApi = messageApi,
         )
 
@@ -70,7 +77,7 @@ class TicketBuilderTest {
 
         ticketOrchestrator = TicketOrchestrator(
             ticketRepository = ticketRepository,
-            eventSerialBus = eventSerialBus,
+            eventApi = eventApi,
             messageApi = messageApi,
             meetingSchedulingService = meetingSchedulingService,
         )

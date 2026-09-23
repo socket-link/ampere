@@ -56,7 +56,7 @@ class EventSubscriptionTest {
     @Test
     fun `event router merge and unsubscribe semantics`() {
         val api = AgentEventApiFactory(eventRepository, eventSerialBus).create(agentId)
-        val router = EventRouter(api, eventSerialBus)
+        val router = EventRouter(api)
 
         // Subscribe to TaskCreated, then to QuestionRaised
         router.subscribeToEventClassType(agentId, Event.TaskCreated.EVENT_TYPE)

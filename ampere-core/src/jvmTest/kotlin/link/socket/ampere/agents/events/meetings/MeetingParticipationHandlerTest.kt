@@ -26,6 +26,8 @@ import link.socket.ampere.agents.domain.status.MeetingStatus
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.domain.task.MeetingTask.AgendaItem
+import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
@@ -84,11 +86,16 @@ class MeetingParticipationHandlerTest {
         meetingRepository = MeetingRepository(stubJson, testScope, database)
         messageRepository = MessageRepository(stubJson, testScope, database)
         eventSerialBus = EventSerialBus(testScope)
-        messageApi = AgentMessageApi(orchestratorAgentId, messageRepository, eventSerialBus)
+        val eventApi = AgentEventApi(
+            agentId = orchestratorAgentId,
+            eventRepository = EventRepository(stubJson, testScope, database),
+            eventSerialBus = eventSerialBus,
+        )
+        messageApi = AgentMessageApi(orchestratorAgentId, messageRepository, eventApi)
 
         orchestrator = MeetingOrchestrator(
             repository = meetingRepository,
-            eventSerialBus = eventSerialBus,
+            eventApi = eventApi,
             messageApi = messageApi,
         )
 

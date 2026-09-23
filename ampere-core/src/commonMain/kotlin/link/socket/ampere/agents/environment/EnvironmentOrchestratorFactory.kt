@@ -10,7 +10,6 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.meetings.AgentMeetingsApiFactory
 import link.socket.ampere.agents.events.meetings.MeetingOrchestrator
 import link.socket.ampere.agents.events.meetings.MeetingRepository
-import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.AgentMessageApiFactory
 import link.socket.ampere.agents.events.messages.MessageRepository
 import link.socket.ampere.agents.events.tickets.TicketRepository
@@ -86,27 +85,29 @@ class EnvironmentOrchestratorFactory(
             driver = driver,
         )
 
-        // Create a temporary meeting orchestrator for the factory
-        // Note: The actual meeting orchestrator will be created by EnvironmentOrchestrator
-        val tempMeetingOrchestrator = createTemporaryMeetingOrchestrator(
-            meetingRepository = meetingRepository,
-            messageRepository = messageRepository,
-        )
-
-        // Create API factories
-        val meetingApiFactory = AgentMeetingsApiFactory(
-            meetingOrchestrator = tempMeetingOrchestrator,
+        // Create API factories. The event api factory comes first: it is the door every
+        // other publisher in the environment goes through (F1).
+        val eventApiFactory = AgentEventApiFactory(
+            eventRepository = eventRepository,
+            eventSerialBus = eventSerialBus,
             logger = logger,
         )
 
         val messageApiFactory = AgentMessageApiFactory(
             messageRepository = messageRepository,
-            eventSerialBus = eventSerialBus,
+            eventApiFactory = eventApiFactory,
         )
 
-        val eventApiFactory = AgentEventApiFactory(
-            eventRepository = eventRepository,
-            eventSerialBus = eventSerialBus,
+        // Create a temporary meeting orchestrator for the factory
+        // Note: The actual meeting orchestrator will be created by EnvironmentOrchestrator
+        val tempMeetingOrchestrator = createTemporaryMeetingOrchestrator(
+            meetingRepository = meetingRepository,
+            messageApiFactory = messageApiFactory,
+            eventApiFactory = eventApiFactory,
+        )
+
+        val meetingApiFactory = AgentMeetingsApiFactory(
+            meetingOrchestrator = tempMeetingOrchestrator,
             logger = logger,
         )
 
@@ -145,21 +146,17 @@ class EnvironmentOrchestratorFactory(
      */
     private fun createTemporaryMeetingOrchestrator(
         meetingRepository: MeetingRepository,
-        messageRepository: MessageRepository,
-    ): MeetingOrchestrator {
-        // Create a temporary message API for the orchestrator
-        val tempMessageApi = AgentMessageApi(
-            agentId = "TEMP_FACTORY_AGENT",
-            messageRepository = messageRepository,
-            eventSerialBus = eventSerialBus,
+        messageApiFactory: AgentMessageApiFactory,
+        eventApiFactory: AgentEventApiFactory,
+    ): MeetingOrchestrator =
+        MeetingOrchestrator(
+            repository = meetingRepository,
+            eventApi = eventApiFactory.create(TEMP_FACTORY_AGENT_ID),
+            messageApi = messageApiFactory.create(TEMP_FACTORY_AGENT_ID),
             logger = logger,
         )
 
-        return MeetingOrchestrator(
-            repository = meetingRepository,
-            eventSerialBus = eventSerialBus,
-            messageApi = tempMessageApi,
-            logger = logger,
-        )
+    private companion object {
+        const val TEMP_FACTORY_AGENT_ID = "TEMP_FACTORY_AGENT"
     }
 }

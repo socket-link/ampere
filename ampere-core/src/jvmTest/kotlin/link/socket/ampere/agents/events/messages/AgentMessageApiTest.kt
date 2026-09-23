@@ -5,6 +5,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -17,6 +18,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.status.EventStatus
 import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.api.AgentEventApiFactory
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.data.DEFAULT_JSON
@@ -46,7 +48,10 @@ class AgentMessageApiTest {
         eventRepository = EventRepository(json, scope, database)
         messageRepository = MessageRepository(json, scope, database)
         eventSerialBus = eventSerialBusFactory.create()
-        agentMessageApiFactory = AgentMessageApiFactory(messageRepository, eventSerialBus)
+        agentMessageApiFactory = AgentMessageApiFactory(
+            messageRepository = messageRepository,
+            eventApiFactory = AgentEventApiFactory(eventRepository, eventSerialBus),
+        )
     }
 
     @AfterTest
@@ -264,6 +269,66 @@ class AgentMessageApiTest {
             } finally {
                 escalationJob.cancelAndJoin()
             }
+        }
+    }
+
+    @Test
+    fun `thread events are persisted through the door with causedBy links`() {
+        runBlocking {
+            val api = agentMessageApiFactory.create(stubAgentId)
+
+            val thread = api.createThread(
+                participants = setOf(stubAgentId2),
+                channel = MessageChannel.Public.Engineering,
+                initialMessageContent = "Kickoff",
+            )
+            api.postMessage(threadId = thread.id, content = "Update")
+
+            // F1: ThreadCreated and both MessagePosted rows are in the EventStore
+            val storedThreadCreated = eventRepository
+                .getEventsByType(MessageEvent.ThreadCreated.EVENT_TYPE)
+                .getOrThrow()
+            assertEquals(1, storedThreadCreated.size)
+            val threadCreated = assertIs<MessageEvent.ThreadCreated>(storedThreadCreated.single())
+            assertEquals(thread.id, threadCreated.thread.id)
+
+            val storedPosted = eventRepository
+                .getEventsByType(MessageEvent.MessagePosted.EVENT_TYPE)
+                .getOrThrow()
+                .map { assertIs<MessageEvent.MessagePosted>(it) }
+            assertEquals(listOf("Kickoff", "Update"), storedPosted.map { it.message.content }.sorted())
+
+            // F2: the initial message is caused by the thread creation
+            val causedByCreation = eventRepository.getEventsCausedBy(threadCreated.eventId).getOrThrow()
+            assertEquals(1, causedByCreation.size)
+            val initialPosted = assertIs<MessageEvent.MessagePosted>(causedByCreation.single().event)
+            assertEquals("Kickoff", initialPosted.message.content)
+
+            // Escalation (fire-and-forget) persists EscalationRequested, and the status change it causes
+            val escalation = api.escalateToHuman(
+                threadId = thread.id,
+                reason = "Need approval",
+                awaitReply = false,
+            )
+            assertTrue(escalation.isSuccess)
+
+            val escalationRequested = assertIs<MessageEvent.EscalationRequested>(
+                eventRepository.getEventsByType(MessageEvent.EscalationRequested.EVENT_TYPE).getOrThrow().single(),
+            )
+            assertEquals(thread.id, escalationRequested.threadId)
+            val causedByEscalation = eventRepository.getEventsCausedBy(escalationRequested.eventId).getOrThrow()
+            val statusChanged = assertIs<MessageEvent.ThreadStatusChanged>(causedByEscalation.single().event)
+            assertEquals(EventStatus.WaitingForHuman, statusChanged.newStatus)
+
+            // Resolving persists a second status change, caused by whatever the caller names
+            val resolved = api.resolveThread(thread.id, causedBy = escalationRequested.eventId)
+            assertTrue(resolved.isSuccess)
+            val storedStatusChanges = eventRepository
+                .getEventsByType(MessageEvent.ThreadStatusChanged.EVENT_TYPE)
+                .getOrThrow()
+                .map { assertIs<MessageEvent.ThreadStatusChanged>(it) }
+            assertEquals(2, storedStatusChanges.size)
+            assertTrue(storedStatusChanges.any { it.newStatus == EventStatus.Resolved })
         }
     }
 

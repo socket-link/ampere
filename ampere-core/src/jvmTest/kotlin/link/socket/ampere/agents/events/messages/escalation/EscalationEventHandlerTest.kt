@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.api.AgentEventApiFactory
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.agents.events.escalation.EscalationEventHandler
@@ -39,6 +40,7 @@ class EscalationEventHandlerTest {
     private lateinit var eventRepository: EventRepository
     private lateinit var messageRepository: MessageRepository
     private lateinit var eventSerialBus: EventSerialBus
+    private lateinit var eventApiFactory: AgentEventApiFactory
     private lateinit var apiFactory: AgentMessageApiFactory
     private lateinit var eventHandler: EscalationEventHandler
 
@@ -47,7 +49,7 @@ class EscalationEventHandlerTest {
     private fun getMessageRouter(api: AgentMessageApi) = MessageRouter(
         messageApi = api,
         escalationEventHandler = eventHandler,
-        eventSerialBus = eventSerialBus,
+        eventApi = eventApiFactory.create(api.agentId),
     )
 
     @BeforeTest
@@ -58,7 +60,8 @@ class EscalationEventHandlerTest {
         eventRepository = EventRepository(DEFAULT_JSON, scope, database)
         messageRepository = MessageRepository(DEFAULT_JSON, scope, database)
         eventSerialBus = eventSerialBusFactory.create()
-        apiFactory = AgentMessageApiFactory(messageRepository, eventSerialBus)
+        eventApiFactory = AgentEventApiFactory(eventRepository, eventSerialBus)
+        apiFactory = AgentMessageApiFactory(messageRepository, eventApiFactory)
         eventHandler = EscalationEventHandler(scope, eventSerialBus)
     }
 

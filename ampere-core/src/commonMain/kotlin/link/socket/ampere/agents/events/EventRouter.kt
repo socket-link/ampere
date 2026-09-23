@@ -5,12 +5,19 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.events.api.AgentEventApi
-import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.subscription.EventSubscription
 
+/**
+ * Fans task, question and code events out to the agents subscribed to their type as
+ * [NotificationEvent.ToAgent]s.
+ *
+ * Every notification is published through the door ([AgentEventApi.publish], F1) with
+ * `causedBy` set to the event it notifies about (F2). The handlers here return `Unit`, so a
+ * notification that fails to persist is logged by the door and not dispatched; there is no
+ * caller to return it to.
+ */
 class EventRouter(
     private val eventApi: AgentEventApi,
-    private val eventSerialBus: EventSerialBus,
 ) {
     private val eventsByEventClassTypeSubscriptions = mutableMapOf<AgentId, EventSubscription.ByEventClassType>()
 
@@ -21,7 +28,7 @@ class EventRouter(
                     agentId = agentId,
                     event = event,
                     subscription = subscription,
-                ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
+                ).let { notificationEvent -> eventApi.publish(notificationEvent, causedBy = event.eventId) }
             }
         }
 
@@ -31,7 +38,7 @@ class EventRouter(
                     agentId = agentId,
                     event = event,
                     subscription = subscription,
-                ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
+                ).let { notificationEvent -> eventApi.publish(notificationEvent, causedBy = event.eventId) }
             }
         }
 
@@ -41,7 +48,7 @@ class EventRouter(
                     agentId = agentId,
                     event = event,
                     subscription = subscription,
-                ).let { notificationEvent -> eventSerialBus.publish(notificationEvent) }
+                ).let { notificationEvent -> eventApi.publish(notificationEvent, causedBy = event.eventId) }
             }
         }
     }
