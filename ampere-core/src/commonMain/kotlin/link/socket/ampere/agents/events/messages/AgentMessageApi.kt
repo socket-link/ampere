@@ -135,6 +135,29 @@ class AgentMessageApi(
         threadId: MessageThreadId,
         content: String,
         causedBy: EventId? = null,
+    ): Message = postMessageFrom(
+        threadId = threadId,
+        sender = MessageSender.fromSenderId(agentId),
+        content = content,
+        causedBy = causedBy,
+    )
+
+    /**
+     * Post a message attributed to [sender] rather than to this API's own agent.
+     *
+     * Only the escalation reply path (step 4 of [escalateToHuman]) uses this, so the human's
+     * words persist as [MessageSender.Human] and anything reading the thread afterwards —
+     * prompt history, the CLI and watch renderers, Recall — can tell them apart from the
+     * escalating agent's own output. [MessageEvent.MessagePosted] derives its `eventSource`
+     * from the message's sender, so the published event carries [EventSource.Human] too.
+     *
+     * The public [postMessage] keeps attributing to the calling agent.
+     */
+    private suspend fun postMessageFrom(
+        threadId: MessageThreadId,
+        sender: MessageSender,
+        content: String,
+        causedBy: EventId? = null,
     ): Message {
         val thread = messageRepository
             .findThreadById(threadId)
@@ -156,7 +179,7 @@ class AgentMessageApi(
         val message = Message(
             id = randomUUID(),
             threadId = threadId,
-            sender = MessageSender.fromSenderId(agentId),
+            sender = sender,
             content = content,
             timestamp = now,
             metadata = null,
@@ -331,7 +354,13 @@ class AgentMessageApi(
                 ?: ""
 
             if (responseText.isNotEmpty()) {
-                postMessage(threadId, responseText, causedBy = reply.eventId)
+                // The reply is the human's, not this agent's (AMPR-344).
+                postMessageFrom(
+                    threadId = threadId,
+                    sender = MessageSender.Human,
+                    content = responseText,
+                    causedBy = reply.eventId,
+                )
             }
         } catch (e: link.socket.ampere.agents.domain.emission.EmissionTimeout) {
             logger.logError(message = "Escalation for thread $threadId timed out: ${e.message}")
