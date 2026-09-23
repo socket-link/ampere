@@ -9,13 +9,17 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import link.socket.ampere.agents.domain.Principal
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.emission.Affordance
 import link.socket.ampere.agents.domain.emission.DangerLevel
@@ -23,6 +27,7 @@ import link.socket.ampere.agents.domain.emission.Emission
 import link.socket.ampere.agents.domain.emission.EmissionKind
 import link.socket.ampere.agents.domain.emission.EmissionPayload
 import link.socket.ampere.agents.domain.emission.EmissionProvenance
+import link.socket.ampere.agents.domain.emission.ProseFormat
 import link.socket.ampere.agents.domain.emission.inputDigest
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
@@ -129,6 +134,8 @@ class EventRepositoryTest {
                         plugId = "plug-1",
                         modelId = "model-1",
                         inputDigest = digest,
+                        parentEmissionId = null,
+                        principal = Principal.Ambient,
                     ),
                     dedupKey = digest,
                     producedAt = Instant.fromEpochSeconds(1_000),
@@ -139,6 +146,77 @@ class EventRepositoryTest {
 
             val row = database.eventStoreQueries.getEventById("evt-emission-produced").executeAsOne()
             assertEquals("run-emission-1", row.run_id)
+        }
+    }
+
+    private fun proseProduced(eventId: String, emissionId: String, parentEmissionId: String?) =
+        EmissionEvent.BaseProduced(
+            eventId = eventId,
+            timestamp = Instant.fromEpochSeconds(2_000),
+            eventSource = stubEventSourceA,
+            emission = Emission(
+                id = emissionId,
+                kind = EmissionKind.Prose,
+                payload = EmissionPayload.Prose(text = emissionId, format = ProseFormat.PLAIN),
+                provenance = EmissionProvenance(
+                    runId = "run-lineage",
+                    inputDigest = "digest-$emissionId",
+                    parentEmissionId = parentEmissionId,
+                    principal = Principal.Ambient,
+                ),
+                producedAt = Instant.fromEpochSeconds(2_000),
+            ),
+        )
+
+    @Test
+    fun `an Emission keeps its causal parent and principal through the EventStore`() {
+        runBlocking {
+            repo.saveEvent(proseProduced("evt-child", "emission-child", parentEmissionId = "emission-root"))
+                .getOrThrow()
+
+            val loaded = assertIs<EmissionEvent.BaseProduced>(repo.getEventById("evt-child").getOrThrow())
+            assertEquals("emission-root", loaded.emission.provenance.parentEmissionId)
+            assertEquals(Principal.Ambient, loaded.emission.provenance.principal)
+        }
+    }
+
+    @Test
+    fun `an Emission row written before the causal edge still reads back as an ambient root`() {
+        runBlocking {
+            // Rebuild the pre-AMPR-283 payload shape: today's JSON minus the two new keys.
+            val current = stubJson.encodeToJsonElement(
+                Event.serializer(),
+                proseProduced("evt-legacy", "emission-legacy", parentEmissionId = null),
+            ).jsonObject
+            val emission = current.getValue("emission").jsonObject
+            val legacyProvenance = JsonObject(
+                emission.getValue("provenance").jsonObject - "parentEmissionId" - "principal",
+            )
+            val legacyPayload = JsonObject(
+                current + ("emission" to JsonObject(emission + ("provenance" to legacyProvenance))),
+            )
+            database.eventStoreQueries.insertEvent(
+                event_id = "evt-legacy",
+                event_type = EmissionEvent.Produced.EVENT_TYPE,
+                source_id = stubEventSourceA.getIdentifier(),
+                timestamp = 2_000_000,
+                payload = legacyPayload.toString(),
+                run_id = "run-lineage",
+                sequence = 1,
+                caused_by = null,
+                recorded_at = 2_000_000,
+            )
+            repo.saveEvent(proseProduced("evt-new", "emission-new", parentEmissionId = "emission-legacy"))
+                .getOrThrow()
+
+            // One undecodable row would fail the whole read, not just its own entry.
+            val provenances = repo.getAllEvents().getOrThrow()
+                .filterIsInstance<EmissionEvent.BaseProduced>()
+                .associate { it.emission.id to it.emission.provenance }
+
+            assertNull(provenances.getValue("emission-legacy").parentEmissionId)
+            assertEquals(Principal.Ambient, provenances.getValue("emission-legacy").principal)
+            assertEquals("emission-legacy", provenances.getValue("emission-new").parentEmissionId)
         }
     }
 

@@ -2,6 +2,7 @@ package link.socket.ampere.agents.domain.event
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -14,6 +15,7 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import link.socket.ampere.agents.domain.Principal
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.emission.Affordance
 import link.socket.ampere.agents.domain.emission.Emission
@@ -60,6 +62,8 @@ class HumanInteractionEventSpecializationTest {
             plugId = null,
             modelId = null,
             inputDigest = "deadbeefdeadbeef",
+            parentEmissionId = null,
+            principal = Principal.Ambient,
         ),
         dedupKey = null,
         producedAt = now,
@@ -102,6 +106,21 @@ class HumanInteractionEventSpecializationTest {
         val event = inputRequested()
         assertEquals("em-1", event.emissionId)
         assertEquals("em-1", event.emission.id)
+    }
+
+    @Test
+    fun `InputRequested summary names the causal parent only when there is one`() {
+        val formatUrgency: (Urgency) -> String = { "[${it.name}]" }
+        val formatSource: (EventSource) -> String = { "agent" }
+        val root = inputRequested()
+        val child = root.copy(
+            emission = root.emission.copy(
+                provenance = root.emission.provenance.copy(parentEmissionId = "em-parent"),
+            ),
+        )
+
+        assertFalse(root.getSummary(formatUrgency, formatSource).contains("parent="))
+        assertTrue(child.getSummary(formatUrgency, formatSource).contains("parent=em-parent"))
     }
 
     // ── Bus polymorphic delivery ────────────────────────────────────────────

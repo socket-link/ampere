@@ -6,6 +6,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.Principal
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.EmissionEvent
@@ -42,6 +43,12 @@ import link.socket.ampere.util.randomUUID
  *
  * Every timestamp this scope stamps comes from [clock] — the door's clock
  * when built through [emission] — so a pinned clock pins the Emissions too.
+ *
+ * Every Emission this scope builds records the scope's [principal] and
+ * [parentEmissionId] (AMPR-283). Neither has a default, so a scope is always
+ * opened with both stated: a root scope says `parentEmissionId = null` out
+ * loud. Use [inServiceOf] to produce Emissions caused by another one, so the
+ * nesting of the DSL is the causal tree.
  */
 class EmissionScope(
     private val eventSource: EventSource,
@@ -55,6 +62,17 @@ class EmissionScope(
      * provenance for callers outside an Arc run.
      */
     private val runId: RunId? = null,
+    /**
+     * On whose authority this scope's Emissions are produced, stamped into
+     * [EmissionProvenance.principal] for every Emission built without its
+     * own `provenance`. See [Principal] for what can be stated today.
+     */
+    private val principal: Principal,
+    /**
+     * The Emission this scope's Emissions are produced in service of, stamped
+     * into [EmissionProvenance.parentEmissionId]. `null` means they are roots.
+     */
+    private val parentEmissionId: EmissionId?,
 ) {
 
     /**
@@ -209,9 +227,38 @@ class EmissionScope(
         return emission
     }
 
-    /** Provenance for callers that don't supply their own — carries the ambient [runId], if any. */
+    /**
+     * Run [block] in a scope whose Emissions are children of [parentEmissionId].
+     *
+     * The child scope shares this one's reply registry, [publish] seam, [clock], run
+     * and [principal]; only the causal parent changes. Nesting records causality,
+     * not delegation, so no authority changes hands here. Replies still route,
+     * because the reply subscriber belongs to the enclosing [emission] block.
+     */
+    suspend fun <T> inServiceOf(
+        parentEmissionId: EmissionId,
+        block: suspend EmissionScope.() -> T,
+    ): T = EmissionScope(
+        eventSource = eventSource,
+        replyRegistry = replyRegistry,
+        publish = publish,
+        clock = clock,
+        runId = runId,
+        principal = principal,
+        parentEmissionId = parentEmissionId,
+    ).block()
+
+    /**
+     * Provenance for callers that don't supply their own — carries the ambient
+     * [runId] (if any), [principal], and [parentEmissionId].
+     */
     private fun defaultProvenance(payload: EmissionPayload): EmissionProvenance =
-        EmissionProvenance(runId = runId, inputDigest = inputDigest(payload))
+        EmissionProvenance(
+            runId = runId,
+            inputDigest = inputDigest(payload),
+            parentEmissionId = parentEmissionId,
+            principal = principal,
+        )
 
     /**
      * Publish a human-interaction [Emission] and suspend until the reply arrives.
@@ -227,8 +274,8 @@ class EmissionScope(
      * @param taskId Optional task attribution (preserved in the event)
      * @param affordances Builder for response options; defaults to a single free-text affordance
      * @param surfaces Ordered surface-delivery intent; see [Emission.surfaces]
-     * @param provenance Attribution for this Emission; defaults to digest-only (no run/workflow/tool
-     *   attribution) when the caller doesn't have richer context to supply
+     * @param provenance Attribution for this Emission; defaults to the scope's run, principal and
+     *   parent (no workflow/tool attribution) when the caller doesn't have richer context to supply
      * @param urgency Urgency of this request (drives surface-priority defaults)
      * @param timeout How long to wait before timing out
      * @param onProduced Called synchronously after the event is published but before suspension;
@@ -322,6 +369,10 @@ class EmissionScope(
  * @param publish Seam for a host to intercept or wrap outgoing events before they reach the door —
  *   see [EmissionScope]. Defaults to `eventApi.publish(event, runId = runId)`; a host that wraps
  *   should still forward to the door and return its result, so the event is persisted.
+ * @param principal On whose authority [block]'s Emissions are produced. Required: there is no
+ *   principal to infer, so the caller states it, even when the honest answer is [Principal.Ambient].
+ * @param parentEmissionId The Emission that [block]'s Emissions are produced in service of, or
+ *   `null` to declare them roots. Required, so that `null` is a decision rather than an omission.
  */
 suspend fun <T> emission(
     eventSource: EventSource,
@@ -329,6 +380,8 @@ suspend fun <T> emission(
     replyRegistry: EmissionReplyRegistry = GlobalEmissionReplyRegistry.instance,
     runId: RunId? = null,
     publish: suspend (Event) -> Result<StoredEvent> = { eventApi.publish(it, runId = runId) },
+    principal: Principal,
+    parentEmissionId: EmissionId?,
     block: suspend EmissionScope.() -> T,
 ): T = withReplyRouter(eventApi.eventSerialBus, replyRegistry) {
     EmissionScope(
@@ -337,6 +390,8 @@ suspend fun <T> emission(
         publish = { event -> publish(event).getOrThrow() },
         clock = eventApi.clock,
         runId = runId,
+        principal = principal,
+        parentEmissionId = parentEmissionId,
     ).block()
 }
 
@@ -351,13 +406,18 @@ suspend fun <T> emission(
     message = "Bypasses the EventStore: events are dispatched but never persisted (F1/C2). " +
         "Pass an AgentEventApi instead. Kept only until AMPR-338 migrates AgentMessageApi; " +
         "removed by the AMPR-340 lock.",
-    replaceWith = ReplaceWith("emission(eventSource, eventApi, replyRegistry, runId, block = block)"),
+    replaceWith = ReplaceWith(
+        "emission(eventSource, eventApi, replyRegistry, runId, principal = principal, " +
+            "parentEmissionId = parentEmissionId, block = block)",
+    ),
 )
 suspend fun <T> emission(
     eventSource: EventSource,
     eventSerialBus: EventSerialBus,
     replyRegistry: EmissionReplyRegistry = GlobalEmissionReplyRegistry.instance,
     runId: RunId? = null,
+    principal: Principal,
+    parentEmissionId: EmissionId?,
     block: suspend EmissionScope.() -> T,
 ): T = withReplyRouter(eventSerialBus, replyRegistry) {
     EmissionScope(
@@ -366,6 +426,8 @@ suspend fun <T> emission(
         publish = { event -> eventSerialBus.publish(event) },
         clock = Clock.System,
         runId = runId,
+        principal = principal,
+        parentEmissionId = parentEmissionId,
     ).block()
 }
 

@@ -7,10 +7,15 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.JsonPrimitive
+import link.socket.ampere.agents.domain.Principal
 
 class EmissionDigestTest {
 
-    private val provenance = EmissionProvenance(inputDigest = "irrelevant")
+    private val provenance = EmissionProvenance(
+        inputDigest = "irrelevant",
+        parentEmissionId = null,
+        principal = Principal.Ambient,
+    )
     private val producedAt = Instant.fromEpochMilliseconds(0)
 
     @Test

@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.Principal
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
@@ -76,7 +77,9 @@ class EmissionSubscriptionLifecycleTest {
             val registry = EmissionReplyRegistry()
 
             repeat(3) { i ->
-                emission(source, bus, registry) { sense(label = "cpu", value = "$i") }
+                emission(source, bus, registry, principal = Principal.Ambient, parentEmissionId = null) {
+                    sense(label = "cpu", value = "$i")
+                }
             }
 
             assertEquals(0, logger.liveHandlers(EmissionEvent.Resolved.EVENT_TYPE))
@@ -93,7 +96,9 @@ class EmissionSubscriptionLifecycleTest {
             val produced = CompletableDeferred<EmissionEvent.BaseProduced>()
 
             repeat(3) { i ->
-                emission(source, bus, registry) { sense(label = "cpu", value = "$i") }
+                emission(source, bus, registry, principal = Principal.Ambient, parentEmissionId = null) {
+                    sense(label = "cpu", value = "$i")
+                }
             }
 
             bus.subscribe<EmissionEvent.BaseProduced, EventSubscription.ByEventClassType>(
@@ -102,7 +107,9 @@ class EmissionSubscriptionLifecycleTest {
             ) { event, _ -> if (event.emission.kind == EmissionKind.Decision) produced.complete(event) }
 
             val reply = async {
-                emission(source, bus, registry) { ask(prompt = "Proceed?", timeout = 5.seconds) }
+                emission(source, bus, registry, principal = Principal.Ambient, parentEmissionId = null) {
+                    ask(prompt = "Proceed?", timeout = 5.seconds)
+                }
             }
 
             val event = withTimeout(5.seconds) { produced.await() }
@@ -128,7 +135,7 @@ class EmissionSubscriptionLifecycleTest {
             val requested = CompletableDeferred<HumanInteractionEvent.InputRequested>()
 
             val reply = async {
-                emission(source, bus, registry) {
+                emission(source, bus, registry, principal = Principal.Ambient, parentEmissionId = null) {
                     askHuman(
                         prompt = "Which branch?",
                         agentId = "test-agent",
@@ -166,7 +173,13 @@ class EmissionSubscriptionLifecycleTest {
             val bus = EventSerialBus(scope = this, logger = logger)
 
             val result = runCatching {
-                emission<Unit>(source, bus, EmissionReplyRegistry()) { error("boom") }
+                emission<Unit>(
+                    eventSource = source,
+                    eventSerialBus = bus,
+                    replyRegistry = EmissionReplyRegistry(),
+                    principal = Principal.Ambient,
+                    parentEmissionId = null,
+                ) { error("boom") }
             }
 
             assertIs<IllegalStateException>(result.exceptionOrNull())
@@ -189,7 +202,13 @@ class EmissionSubscriptionLifecycleTest {
             val job = launch {
                 // The cancelled ask surfaces as EmissionTimeout; keep it from failing the test scope.
                 runCatching {
-                    emission(source, bus, EmissionReplyRegistry()) {
+                    emission(
+                        eventSource = source,
+                        eventSerialBus = bus,
+                        replyRegistry = EmissionReplyRegistry(),
+                        principal = Principal.Ambient,
+                        parentEmissionId = null,
+                    ) {
                         ask(prompt = "Proceed?", timeout = 30.minutes)
                     }
                 }

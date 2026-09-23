@@ -29,6 +29,7 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.Principal
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.emission.Emission
 import link.socket.ampere.agents.domain.emission.EmissionKind
@@ -105,7 +106,12 @@ class ArcSessionTest {
                 id = "emission-$text",
                 kind = EmissionKind.Prose,
                 payload = EmissionPayload.Prose(text = text, format = ProseFormat.PLAIN),
-                provenance = EmissionProvenance(runId = runId, inputDigest = "digest-$text"),
+                provenance = EmissionProvenance(
+                    runId = runId,
+                    inputDigest = "digest-$text",
+                    parentEmissionId = null,
+                    principal = Principal.Ambient,
+                ),
                 producedAt = Clock.System.now(),
             ),
         )

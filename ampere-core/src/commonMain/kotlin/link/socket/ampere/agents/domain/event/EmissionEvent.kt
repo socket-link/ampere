@@ -74,6 +74,7 @@ sealed interface EmissionEvent : Event {
             append("Emission produced: ")
             append(emission.kind::class.simpleName ?: "Unknown")
             append(" (id=${emission.id})")
+            emission.provenance.parentEmissionId?.let { append(" parent=$it") }
             emission.dedupKey?.let { append(" dedup=$it") }
             append(" ${formatUrgency(urgency)}")
             append(" from ${formatSource(eventSource)}")

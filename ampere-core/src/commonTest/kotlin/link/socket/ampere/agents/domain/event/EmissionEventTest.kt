@@ -2,6 +2,7 @@ package link.socket.ampere.agents.domain.event
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -13,6 +14,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import link.socket.ampere.agents.domain.Principal
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.emission.Affordance
 import link.socket.ampere.agents.domain.emission.DangerLevel
@@ -43,6 +45,8 @@ class EmissionEventTest {
         plugId = "plug-x",
         modelId = "claude-sonnet-5",
         inputDigest = "deadbeefdeadbeef",
+        parentEmissionId = null,
+        principal = Principal.Ambient,
     )
 
     private fun confirmationEmission() = Emission(
@@ -138,6 +142,25 @@ class EmissionEventTest {
         assertTrue(summary.contains("Confirmation"))
         assertTrue(summary.contains("em-1"))
         assertTrue(summary.contains("agent-1"))
+        assertFalse(summary.contains("parent="), "a root names no parent")
+    }
+
+    @Test
+    fun `BaseProduced summary names the causal parent of a child Emission`() {
+        val child = confirmationEmission().let {
+            it.copy(provenance = it.provenance.copy(parentEmissionId = "em-parent"))
+        }
+        val event = EmissionEvent.BaseProduced(
+            eventId = "evt-1",
+            timestamp = now,
+            eventSource = EventSource.Agent("agent-1"),
+            emission = child,
+        )
+        val summary = event.getSummary(
+            formatUrgency = { "[${it.name}]" },
+            formatSource = { (it as? EventSource.Agent)?.agentId ?: "human" },
+        )
+        assertTrue(summary.contains("parent=em-parent"), summary)
     }
 
     @Test

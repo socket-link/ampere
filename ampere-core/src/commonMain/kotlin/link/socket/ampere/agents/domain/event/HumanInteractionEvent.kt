@@ -69,6 +69,7 @@ sealed interface HumanInteractionEvent : EmissionEvent {
             append("Human input requested by $agentId")
             val prompt = (emission.payload as? EmissionPayload.Decision)?.prompt
             prompt?.let { append(": $it") }
+            emission.provenance.parentEmissionId?.let { append(" parent=$it") }
             append(" ${formatUrgency(urgency)}")
         }
 

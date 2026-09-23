@@ -2,6 +2,7 @@ package link.socket.ampere.agents.execution.tools
 
 import kotlin.time.Duration.Companion.minutes
 import link.socket.ampere.agents.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.Principal
 import link.socket.ampere.agents.domain.emission.EmissionReplyRegistry
 import link.socket.ampere.agents.domain.emission.EmissionTimeout
 import link.socket.ampere.agents.domain.emission.GlobalEmissionReplyRegistry
@@ -52,7 +53,15 @@ fun ToolAskHuman(
         val eventSource = EventSource.Agent(context.executorId)
 
         try {
-            val reply = emission(eventSource, eventApi, replyRegistry) {
+            // A root: the tool asks on behalf of a task, not of another Emission. No principal
+            // reaches tool dispatch yet, so this is ambient authority until D5 decides otherwise.
+            val reply = emission(
+                eventSource = eventSource,
+                eventApi = eventApi,
+                replyRegistry = replyRegistry,
+                principal = Principal.Ambient,
+                parentEmissionId = null,
+            ) {
                 askHuman(
                     prompt = context.instructions,
                     agentId = context.executorId,

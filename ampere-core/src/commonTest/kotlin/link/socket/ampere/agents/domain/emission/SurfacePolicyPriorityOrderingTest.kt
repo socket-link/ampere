@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.Principal
 import link.socket.ampere.agents.domain.Urgency
 
 class SurfacePolicyPriorityOrderingTest {
@@ -17,7 +18,11 @@ class SurfacePolicyPriorityOrderingTest {
             id = "emission-1",
             kind = EmissionKind.Decision,
             payload = payload,
-            provenance = EmissionProvenance(inputDigest = inputDigest(payload)),
+            provenance = EmissionProvenance(
+                inputDigest = inputDigest(payload),
+                parentEmissionId = null,
+                principal = Principal.Ambient,
+            ),
             producedAt = Instant.fromEpochMilliseconds(0),
             surfaces = surfaces,
             fallbackUrl = fallbackUrl,

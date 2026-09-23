@@ -77,7 +77,9 @@ final class ArcExecutionBridgeTests: XCTestCase {
                     toolInvocationId: nil,
                     plugId: nil,
                     modelId: nil,
-                    inputDigest: "digest-\(text)"
+                    inputDigest: "digest-\(text)",
+                    parentEmissionId: nil,
+                    principal: PrincipalAmbient()
                 ),
                 dedupKey: nil,
                 producedAt: Kotlinx_datetimeInstant.Companion.shared.fromEpochMilliseconds(
