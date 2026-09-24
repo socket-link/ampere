@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
@@ -15,10 +16,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.status.EventStatus
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
+import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.data.DEFAULT_JSON
@@ -329,6 +332,85 @@ class AgentMessageApiTest {
                 .map { assertIs<MessageEvent.ThreadStatusChanged>(it) }
             assertEquals(2, storedStatusChanges.size)
             assertTrue(storedStatusChanges.any { it.newStatus == EventStatus.Resolved })
+        }
+    }
+
+    /**
+     * AMPR-351: an escalation raised inside an Arc run produces an Emission attributed to
+     * that run, so the escalation and the human reply it collects can be traced back to it.
+     */
+    @Test
+    fun `escalation emission carries the run id the caller named`() {
+        runBlocking {
+            val api = agentMessageApiFactory.create(stubAgentId)
+            val produced = mutableListOf<HumanInteractionEvent.InputRequested>()
+
+            eventSerialBus.subscribe(
+                agentId = "run-id-subscriber",
+                eventType = HumanInteractionEvent.InputRequested.EVENT_TYPE,
+                handler = EventHandler { event, _ ->
+                    produced += event as HumanInteractionEvent.InputRequested
+                },
+            )
+
+            val thread = api.createThread(
+                participants = emptySet(),
+                channel = MessageChannel.Public.Engineering,
+                initialMessageContent = "Kickoff",
+            )
+
+            // escalateToHuman suspends until the human replies; we only need the Emission it
+            // produces on the way in, so the call is launched and cancelled rather than awaited.
+            val escalationJob = launch {
+                api.escalateToHuman(
+                    threadId = thread.id,
+                    reason = "Need approval",
+                    runId = "arc-run-2",
+                )
+            }
+
+            try {
+                delay(200)
+                assertEquals("arc-run-2", produced.single().emission.provenance.runId)
+            } finally {
+                escalationJob.cancelAndJoin()
+            }
+        }
+    }
+
+    @Test
+    fun `escalation emission has no run id when raised outside a run`() {
+        runBlocking {
+            val api = agentMessageApiFactory.create(stubAgentId)
+            val produced = mutableListOf<HumanInteractionEvent.InputRequested>()
+
+            eventSerialBus.subscribe(
+                agentId = "no-run-id-subscriber",
+                eventType = HumanInteractionEvent.InputRequested.EVENT_TYPE,
+                handler = EventHandler { event, _ ->
+                    produced += event as HumanInteractionEvent.InputRequested
+                },
+            )
+
+            val thread = api.createThread(
+                participants = emptySet(),
+                channel = MessageChannel.Public.Engineering,
+                initialMessageContent = "Kickoff",
+            )
+
+            val escalationJob = launch {
+                api.escalateToHuman(
+                    threadId = thread.id,
+                    reason = "Need approval",
+                )
+            }
+
+            try {
+                delay(200)
+                assertNull(produced.single().emission.provenance.runId)
+            } finally {
+                escalationJob.cancelAndJoin()
+            }
         }
     }
 

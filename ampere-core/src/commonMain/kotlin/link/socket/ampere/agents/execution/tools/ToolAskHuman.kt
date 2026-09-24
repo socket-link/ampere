@@ -26,6 +26,11 @@ const val ASK_HUMAN_TOOL_ID: String = "ask_human"
  * callback runs synchronously after the event is published, before suspension —
  * use it for surface-specific side effects such as printing a console banner.
  *
+ * The Emission is attributed to the run named by [ExecutionRequest.runId]
+ * (AMPR-351), so the human reply it collects can be traced back to the Arc run
+ * that asked for it. The tool is built once per agent and reused across runs, so
+ * the run is read per call off the request rather than captured here.
+ *
  * @param requiredAgentAutonomy Minimum autonomy level required to use this tool.
  * @param eventApi The door emission events are published through; replies are
  *   awaited on its bus. Its clock stamps the outcome timestamps.
@@ -55,10 +60,14 @@ fun ToolAskHuman(
         try {
             // A root: the tool asks on behalf of a task, not of another Emission. No principal
             // reaches tool dispatch yet, so this is ambient authority until D5 decides otherwise.
+            // The run comes off the request (AMPR-351) — it is the only thing the dispatch path
+            // hands this function — so an ask made inside an Arc run is linked back to it, and one
+            // made outside a run stays honestly unattributed.
             val reply = emission(
                 eventSource = eventSource,
                 eventApi = eventApi,
                 replyRegistry = replyRegistry,
+                runId = executionRequest.runId,
                 principal = Principal.Ambient,
                 parentEmissionId = null,
             ) {

@@ -79,6 +79,9 @@ class AgentReasoning private constructor(
             executorId = settings.executorId,
             eventApi = eventApi,
             userGrantProvider = settings.userGrantProvider,
+            // AMPR-351: the run reaches tools on the request the engine dispatches, which
+            // is how ToolAskHuman's Emissions get a non-null EmissionProvenance.runId.
+            runId = runId,
         ).also { engine ->
             settings.parameterStrategies.forEach { (toolId, strategy) ->
                 engine.registerStrategy(toolId, strategy)
