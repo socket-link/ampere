@@ -5,6 +5,7 @@ import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
+import link.socket.ampere.api.model.KnowledgeProvenance
 import link.socket.ampere.api.service.KnowledgeService
 
 internal class DefaultKnowledgeService(
@@ -54,27 +55,31 @@ internal class DefaultKnowledgeService(
     override suspend fun tags(knowledgeId: String): Result<List<String>> =
         knowledgeRepository.getTagsForKnowledge(knowledgeId)
 
-    override suspend fun provenance(knowledgeId: String): Result<List<KnowledgeEntry>> {
-        return try {
-            val entry = knowledgeRepository.getKnowledgeById(knowledgeId).getOrThrow()
-                ?: return Result.failure(IllegalArgumentException("Knowledge not found: $knowledgeId"))
-
-            // Build provenance trail by following source IDs
-            val trail = mutableListOf(entry)
-            var current = entry
-
-            // Follow the chain: each entry may reference an idea, outcome, or perception
-            // that in turn has associated knowledge entries
-            while (true) {
-                val sourceId = current.ideaId ?: current.outcomeId ?: current.perceptionId ?: break
-                val source = knowledgeRepository.getKnowledgeById(sourceId).getOrNull() ?: break
-                trail.add(source)
-                current = source
-            }
-
-            Result.success(trail)
-        } catch (e: Exception) {
-            Result.failure(e)
+    // One hop, and deliberately so: a knowledge row names the element it was distilled
+    // from and nothing else. There is no parent-entry column, and no table holds the
+    // Idea/Outcome/Perception/Plan/Task a source id addresses, so there is no second step
+    // to take. Walking source ids through getKnowledgeById — as this did before AMPR-350 —
+    // reads them as knowledge ids, which they never are.
+    override suspend fun provenance(knowledgeId: String): Result<KnowledgeProvenance> =
+        knowledgeRepository.getKnowledgeById(knowledgeId).mapCatching { entry ->
+            val found = requireNotNull(entry) { "Knowledge not found: $knowledgeId" }
+            KnowledgeProvenance(
+                entry = found,
+                sourceType = found.knowledgeType,
+                sourceId = found.sourceId(),
+            )
         }
-    }
+}
+
+/**
+ * The id of the cognitive element this entry was distilled from, read from the column
+ * its own [KnowledgeType] discriminator points at. Null only for a row that recorded no
+ * source id.
+ */
+private fun KnowledgeEntry.sourceId(): String? = when (knowledgeType) {
+    KnowledgeType.FROM_IDEA -> ideaId
+    KnowledgeType.FROM_OUTCOME -> outcomeId
+    KnowledgeType.FROM_PERCEPTION -> perceptionId
+    KnowledgeType.FROM_PLAN -> planId
+    KnowledgeType.FROM_TASK -> taskId
 }

@@ -4,6 +4,7 @@ import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
+import link.socket.ampere.api.model.KnowledgeProvenance
 
 /**
  * SDK service for persistent knowledge and memory.
@@ -105,18 +106,29 @@ interface KnowledgeService {
     suspend fun tags(knowledgeId: String): Result<List<String>>
 
     /**
-     * Get the provenance (origin trail) of a specific knowledge entry.
+     * Get the recorded origin of a specific knowledge entry.
      *
-     * Traces back through the chain of ideas, outcomes, and perceptions
-     * that produced this knowledge.
+     * Returns the entry together with the one cognitive element it was distilled
+     * from — the idea, outcome, perception, plan or task named by
+     * [KnowledgeProvenance.sourceType] and [KnowledgeProvenance.sourceId].
+     *
+     * This is a single hop, not a trail. A knowledge row records one source id and
+     * no parent entry, and the elements a source id addresses have no rows of their
+     * own, so there is nothing further to follow. Entries produced by the same Arc
+     * run are related through their `run_id` instead, which `ArcTraceProjection`
+     * reads to rebuild that run.
+     *
+     * Before AMPR-350 this returned a `List<KnowledgeEntry>` documented as an
+     * ordered trail. It never returned more than the one entry: it looked source ids
+     * up as knowledge ids, which cannot match.
      *
      * ```
-     * val trail = ampere.knowledge.provenance("knowledge-456")
-     * trail.forEach { println("${it.knowledgeType}: ${it.approach}") }
+     * val origin = ampere.knowledge.provenance("knowledge-456").getOrThrow()
+     * println("${origin.entry.approach} came from ${origin.sourceType}: ${origin.sourceId}")
      * ```
      *
      * @param knowledgeId The ID of the knowledge entry to trace
-     * @return Ordered list from most recent to original source
+     * @return The entry and its source reference, or a failure if no entry has that ID
      */
-    suspend fun provenance(knowledgeId: String): Result<List<KnowledgeEntry>>
+    suspend fun provenance(knowledgeId: String): Result<KnowledgeProvenance>
 }

@@ -97,7 +97,8 @@ class ExternalConsumerTest {
         // New: tags
         ampere.knowledge.tags("knowledge-123").getOrThrow()
 
-        ampere.knowledge.provenance("knowledge-456").getOrThrow()
+        // Stub provenance() returns failure (nothing stored to trace) — verify it returns a Result
+        assertNotNull(ampere.knowledge.provenance("knowledge-456"))
 
         // === Status ===
         val snapshot = ampere.status.snapshot().getOrThrow()

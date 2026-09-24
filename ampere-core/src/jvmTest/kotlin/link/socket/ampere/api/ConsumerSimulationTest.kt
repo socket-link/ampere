@@ -36,6 +36,7 @@ import link.socket.ampere.api.model.AgentSnapshot
 import link.socket.ampere.api.model.AgentState
 import link.socket.ampere.api.model.HealthLevel
 import link.socket.ampere.api.model.HealthStatus
+import link.socket.ampere.api.model.KnowledgeProvenance
 import link.socket.ampere.api.model.ModelPricing
 import link.socket.ampere.api.model.OutcomeStats
 import link.socket.ampere.api.model.PricingDataVersion
@@ -234,7 +235,20 @@ class ConsumerSimulationTest {
             limit: Int,
         ) = Result.success(emptyList<KnowledgeEntry>())
         override suspend fun tags(knowledgeId: String) = Result.success(emptyList<String>())
-        override suspend fun provenance(knowledgeId: String) = Result.success(emptyList<KnowledgeEntry>())
+        override suspend fun provenance(knowledgeId: String) = Result.success(
+            KnowledgeProvenance(
+                entry = KnowledgeEntry(
+                    id = knowledgeId,
+                    knowledgeType = KnowledgeType.FROM_OUTCOME,
+                    approach = "test",
+                    learnings = "test",
+                    timestamp = now,
+                    outcomeId = "outcome-1",
+                ),
+                sourceType = KnowledgeType.FROM_OUTCOME,
+                sourceId = "outcome-1",
+            ),
+        )
     }
 
     private val stubStatusService = object : StatusService {
@@ -465,9 +479,11 @@ class ConsumerSimulationTest {
         val tags = stubKnowledgeService.tags("knowledge-123").getOrThrow()
         assertNotNull(tags)
 
-        // Provenance
-        val trail = stubKnowledgeService.provenance("knowledge-456").getOrThrow()
-        assertNotNull(trail)
+        // Provenance: the entry plus the one element it was distilled from
+        val origin = stubKnowledgeService.provenance("knowledge-456").getOrThrow()
+        assertEquals("knowledge-456", origin.entry.id)
+        assertEquals(KnowledgeType.FROM_OUTCOME, origin.sourceType)
+        assertEquals("outcome-1", origin.sourceId)
     }
 
     @Test
