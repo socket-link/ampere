@@ -13,6 +13,7 @@ import link.socket.ampere.knowledge.KnowledgeScope
 import link.socket.ampere.knowledge.KnowledgeStore
 import link.socket.ampere.knowledge.QueryMode
 import link.socket.ampere.plug.PlugManifest
+import link.socket.ampere.plug.permission.PlugPermission
 
 /**
  * Plug-callable knowledge query primitive (W2.3 / AMPR-156).
@@ -77,9 +78,16 @@ internal val knowledgeQueryToolJson: Json = Json {
 }
 
 /**
- * Direct typed entry point used by tests and by callers that already have a
- * typed [KnowledgeQueryRequest]. The tool factory delegates to this after
- * decoding the request from JSON.
+ * Direct typed entry point used by tests and by internal callers that
+ * already have a typed [KnowledgeQueryRequest] and are not plug-originated.
+ * Mirrors [KnowledgeStore.query]'s contract verbatim: empty
+ * [KnowledgeQueryRequest.scopes] disables scope filtering rather than
+ * resolving to any particular grant.
+ *
+ * Plug-originated calls dispatch through the [KnowledgeQueryTool] factory's
+ * `executionFunction` instead, which resolves empty scopes to the plug's
+ * granted scopes and denies scopes the plug was not granted — see
+ * [grantedKnowledgeScopes].
  */
 suspend fun executeKnowledgeQuery(
     store: KnowledgeStore,
@@ -105,10 +113,16 @@ suspend fun executeKnowledgeQuery(
  * the tool stays a thin permission-gated facade.
  *
  * @param store The on-device knowledge store. Same instance per plug.
- * @param plugManifest Manifest of the plug that owns this tool. The
- *        manifest's `requiredPermissions` should include at least one
+ * @param plugManifest Manifest of the plug that owns this tool. Required —
+ *        a plug-callable knowledge query has no meaning without a manifest to
+ *        gate scopes against, so there is no manifest-less overload. A tool
+ *        that bypasses gating entirely should call [executeKnowledgeQuery]
+ *        directly instead of going through this factory. The manifest's
+ *        `requiredPermissions`
  *        [PlugPermission.KnowledgeQuery][link.socket.ampere.plug.permission.PlugPermission.KnowledgeQuery]
- *        so the gate can match the requested scope.
+ *        entries define the plug's granted scopes: a request naming any
+ *        other scope is denied, and an empty request resolves to exactly
+ *        this set rather than to "no filter".
  * @param requiredAgentAutonomy Minimum autonomy level. Defaults to
  *        [AgentActionAutonomy.FULLY_AUTONOMOUS] because the tool reads only
  *        and the permission gate enforces scope.
@@ -116,7 +130,7 @@ suspend fun executeKnowledgeQuery(
 @Suppress("FunctionName")
 fun KnowledgeQueryTool(
     store: KnowledgeStore,
-    plugManifest: PlugManifest? = null,
+    plugManifest: PlugManifest,
     requiredAgentAutonomy: AgentActionAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
     json: Json = knowledgeQueryToolJson,
 ): FunctionTool<ExecutionContext.NoChanges> {
@@ -129,6 +143,7 @@ fun KnowledgeQueryTool(
         executionFunction = { executionRequest ->
             executeAsOutcome(
                 store = store,
+                plugManifest = plugManifest,
                 executionRequest = executionRequest,
                 json = json,
             )
@@ -138,48 +153,74 @@ fun KnowledgeQueryTool(
 
 private suspend fun executeAsOutcome(
     store: KnowledgeStore,
+    plugManifest: PlugManifest,
     executionRequest: ExecutionRequest<ExecutionContext.NoChanges>,
     json: Json,
 ): ExecutionOutcome.NoChanges {
     val context = executionRequest.context
     val startTimestamp = Clock.System.now()
 
+    fun failure(message: String) = ExecutionOutcome.NoChanges.Failure(
+        executorId = context.executorId,
+        ticketId = context.ticket.id,
+        taskId = context.task.id,
+        executionStartTimestamp = startTimestamp,
+        executionEndTimestamp = Clock.System.now(),
+        message = message,
+    )
+
+    fun success(response: KnowledgeQueryResponse) = ExecutionOutcome.NoChanges.Success(
+        executorId = context.executorId,
+        ticketId = context.ticket.id,
+        taskId = context.task.id,
+        executionStartTimestamp = startTimestamp,
+        executionEndTimestamp = Clock.System.now(),
+        message = json.encodeToString(KnowledgeQueryResponse.serializer(), response),
+    )
+
     val request = runCatching {
         json.decodeFromString(KnowledgeQueryRequest.serializer(), context.instructions)
     }.getOrElse { error ->
-        return ExecutionOutcome.NoChanges.Failure(
-            executorId = context.executorId,
-            ticketId = context.ticket.id,
-            taskId = context.task.id,
-            executionStartTimestamp = startTimestamp,
-            executionEndTimestamp = Clock.System.now(),
-            message = "knowledge_query: invalid request payload — ${error.message}",
+        return failure("knowledge_query: invalid request payload — ${error.message}")
+    }
+
+    val grantedScopes = plugManifest.grantedKnowledgeScopes()
+    val deniedScopes = request.scopes - grantedScopes
+    if (deniedScopes.isNotEmpty()) {
+        return failure(
+            "knowledge_query: plug '${plugManifest.id.value}' was not granted scope(s) " +
+                deniedScopes.joinToString { it.name },
         )
     }
 
-    return executeKnowledgeQuery(store, request).fold(
-        onSuccess = { response ->
-            ExecutionOutcome.NoChanges.Success(
-                executorId = context.executorId,
-                ticketId = context.ticket.id,
-                taskId = context.task.id,
-                executionStartTimestamp = startTimestamp,
-                executionEndTimestamp = Clock.System.now(),
-                message = json.encodeToString(KnowledgeQueryResponse.serializer(), response),
-            )
-        },
-        onFailure = { error ->
-            ExecutionOutcome.NoChanges.Failure(
-                executorId = context.executorId,
-                ticketId = context.ticket.id,
-                taskId = context.task.id,
-                executionStartTimestamp = startTimestamp,
-                executionEndTimestamp = Clock.System.now(),
-                message = "knowledge_query: store query failed — ${error.message}",
-            )
-        },
+    // An empty request resolves to the plug's granted scopes rather than to
+    // KnowledgeStore.query's own "no filter" default — see grantedKnowledgeScopes.
+    if (request.scopes.isEmpty() && grantedScopes.isEmpty()) {
+        return success(KnowledgeQueryResponse(hits = emptyList()))
+    }
+    val gatedRequest = request.copy(scopes = request.scopes.ifEmpty { grantedScopes })
+
+    return executeKnowledgeQuery(store, gatedRequest).fold(
+        onSuccess = { response -> success(response) },
+        onFailure = { error -> failure("knowledge_query: store query failed — ${error.message}") },
     )
 }
+
+/**
+ * The [KnowledgeScope]s [this] manifest's declared
+ * [PlugPermission.KnowledgeQuery] entries authorize.
+ *
+ * [link.socket.ampere.plug.permission.PlugPermissionGate] already requires
+ * every one of [PlugManifest.requiredPermissions] to be granted (and not
+ * revoked) before any of this plug's tools dispatch, so by the time a
+ * [KnowledgeQueryTool] call reaches [executeAsOutcome] this set is
+ * guaranteed to be the plug's actually-granted scopes, not merely its
+ * declared ones.
+ */
+private fun PlugManifest.grantedKnowledgeScopes(): Set<KnowledgeScope> =
+    requiredPermissions
+        .filterIsInstance<PlugPermission.KnowledgeQuery>()
+        .mapTo(mutableSetOf()) { KnowledgeScope(it.scope) }
 
 private fun KnowledgeQueryResult.toHit(): KnowledgeQueryHit =
     KnowledgeQueryHit(

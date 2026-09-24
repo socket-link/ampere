@@ -40,7 +40,7 @@ class KnowledgeQueryToolTest {
     @Test
     fun `factory builds a FunctionTool with the canonical metadata`() {
         val store = InMemoryKnowledgeStore()
-        val tool = KnowledgeQueryTool(store = store)
+        val tool = KnowledgeQueryTool(store = store, plugManifest = manifest("pl-1"))
 
         assertEquals(KNOWLEDGE_QUERY_TOOL_ID, tool.id)
         assertEquals(KNOWLEDGE_QUERY_TOOL_NAME, tool.name)
@@ -68,6 +68,7 @@ class KnowledgeQueryToolTest {
         val store = InMemoryKnowledgeStore()
         val tool = KnowledgeQueryTool(
             store = store,
+            plugManifest = manifest("pl-1"),
             requiredAgentAutonomy = AgentActionAutonomy.ASK_BEFORE_ACTION,
         )
         assertEquals(AgentActionAutonomy.ASK_BEFORE_ACTION, tool.requiredAgentAutonomy)
@@ -80,8 +81,13 @@ class KnowledgeQueryToolTest {
         store.addDocument(makeDocument("d2", "Beach sand erosion patterns.")).getOrThrow()
         store.chunkAndEmbed("d1", InMemoryKnowledgeStore.DEFAULT_MODEL_ID).getOrThrow()
         store.chunkAndEmbed("d2", InMemoryKnowledgeStore.DEFAULT_MODEL_ID).getOrThrow()
+        store.setDocumentScopes("d1", setOf(KnowledgeScope.Work)).getOrThrow()
+        store.setDocumentScopes("d2", setOf(KnowledgeScope.Work)).getOrThrow()
 
-        val tool = KnowledgeQueryTool(store = store)
+        val tool = KnowledgeQueryTool(
+            store = store,
+            plugManifest = manifest("pl-1", PlugPermission.KnowledgeQuery("work")),
+        )
         val outcome = tool.execute(executionRequestFor(KnowledgeQueryRequest(text = "lighthouses")))
 
         val success = assertIs<ExecutionOutcome.NoChanges.Success>(outcome)
@@ -109,7 +115,10 @@ class KnowledgeQueryToolTest {
         store.chunkAndEmbed("d1", InMemoryKnowledgeStore.DEFAULT_MODEL_ID).getOrThrow()
         store.setDocumentScopes("d1", setOf(KnowledgeScope.Work)).getOrThrow()
 
-        val tool = KnowledgeQueryTool(store = store)
+        val tool = KnowledgeQueryTool(
+            store = store,
+            plugManifest = manifest("pl-1", PlugPermission.KnowledgeQuery("work")),
+        )
         val outcome = tool.execute(
             executionRequestFor(
                 KnowledgeQueryRequest(
@@ -136,7 +145,10 @@ class KnowledgeQueryToolTest {
         store.setDocumentScopes("work-doc", setOf(KnowledgeScope.Work)).getOrThrow()
         store.setDocumentScopes("personal-doc", setOf(KnowledgeScope.Personal)).getOrThrow()
 
-        val tool = KnowledgeQueryTool(store = store)
+        val tool = KnowledgeQueryTool(
+            store = store,
+            plugManifest = manifest("pl-1", PlugPermission.KnowledgeQuery("work")),
+        )
         val outcome = tool.execute(
             executionRequestFor(
                 KnowledgeQueryRequest(
@@ -149,6 +161,92 @@ class KnowledgeQueryToolTest {
         val success = assertIs<ExecutionOutcome.NoChanges.Success>(outcome)
         val response = json.decodeFromString(KnowledgeQueryResponse.serializer(), success.message)
         assertEquals(listOf("work-doc"), response.hits.map { it.documentId })
+    }
+
+    @Test
+    fun `a scope the plug was granted is allowed`() = runTest {
+        val store = InMemoryKnowledgeStore()
+        store.addDocument(makeDocument("work-doc", "Lighthouse work meeting.")).getOrThrow()
+        store.chunkAndEmbed("work-doc", InMemoryKnowledgeStore.DEFAULT_MODEL_ID).getOrThrow()
+        store.setDocumentScopes("work-doc", setOf(KnowledgeScope.Work)).getOrThrow()
+
+        val tool = KnowledgeQueryTool(
+            store = store,
+            plugManifest = manifest("pl-1", PlugPermission.KnowledgeQuery("work")),
+        )
+        val outcome = tool.execute(
+            executionRequestFor(
+                KnowledgeQueryRequest(text = "lighthouse", scopes = setOf(KnowledgeScope.Work)),
+            ),
+        )
+
+        val success = assertIs<ExecutionOutcome.NoChanges.Success>(outcome)
+        val response = json.decodeFromString(KnowledgeQueryResponse.serializer(), success.message)
+        assertEquals(listOf("work-doc"), response.hits.map { it.documentId })
+    }
+
+    @Test
+    fun `a scope the plug was not granted is denied`() = runTest {
+        val store = InMemoryKnowledgeStore()
+        store.addDocument(makeDocument("personal-doc", "Lighthouse vacation diary.")).getOrThrow()
+        store.chunkAndEmbed("personal-doc", InMemoryKnowledgeStore.DEFAULT_MODEL_ID).getOrThrow()
+        store.setDocumentScopes("personal-doc", setOf(KnowledgeScope.Personal)).getOrThrow()
+
+        // Manifest only grants "work" — the plug never declared "personal".
+        val tool = KnowledgeQueryTool(
+            store = store,
+            plugManifest = manifest("pl-1", PlugPermission.KnowledgeQuery("work")),
+        )
+        val outcome = tool.execute(
+            executionRequestFor(
+                KnowledgeQueryRequest(text = "lighthouse", scopes = setOf(KnowledgeScope.Personal)),
+            ),
+        )
+
+        val failure = assertIs<ExecutionOutcome.NoChanges.Failure>(outcome)
+        assertTrue(
+            failure.message.contains("not granted", ignoreCase = true),
+            "Failure message should call out the missing grant, got: ${failure.message}",
+        )
+    }
+
+    @Test
+    fun `an empty request never returns a document tagged only with an ungranted scope`() = runTest {
+        val store = InMemoryKnowledgeStore()
+        store.addDocument(makeDocument("work-doc", "Lighthouse work meeting.")).getOrThrow()
+        store.addDocument(makeDocument("personal-doc", "Lighthouse vacation diary.")).getOrThrow()
+        store.chunkAndEmbed("work-doc", InMemoryKnowledgeStore.DEFAULT_MODEL_ID).getOrThrow()
+        store.chunkAndEmbed("personal-doc", InMemoryKnowledgeStore.DEFAULT_MODEL_ID).getOrThrow()
+        store.setDocumentScopes("work-doc", setOf(KnowledgeScope.Work)).getOrThrow()
+        store.setDocumentScopes("personal-doc", setOf(KnowledgeScope.Personal)).getOrThrow()
+
+        // Manifest only grants "work" — an empty request must resolve to that
+        // set, not to "every scope" (the InMemoryKnowledgeStore's own no-filter
+        // default for an empty scopes set).
+        val tool = KnowledgeQueryTool(
+            store = store,
+            plugManifest = manifest("pl-1", PlugPermission.KnowledgeQuery("work")),
+        )
+        val outcome = tool.execute(executionRequestFor(KnowledgeQueryRequest(text = "lighthouse")))
+
+        val success = assertIs<ExecutionOutcome.NoChanges.Success>(outcome)
+        val response = json.decodeFromString(KnowledgeQueryResponse.serializer(), success.message)
+        assertEquals(listOf("work-doc"), response.hits.map { it.documentId })
+    }
+
+    @Test
+    fun `an empty request returns nothing when the plug has no granted scopes`() = runTest {
+        val store = InMemoryKnowledgeStore()
+        store.addDocument(makeDocument("work-doc", "Lighthouse work meeting.")).getOrThrow()
+        store.chunkAndEmbed("work-doc", InMemoryKnowledgeStore.DEFAULT_MODEL_ID).getOrThrow()
+        store.setDocumentScopes("work-doc", setOf(KnowledgeScope.Work)).getOrThrow()
+
+        val tool = KnowledgeQueryTool(store = store, plugManifest = manifest("pl-1"))
+        val outcome = tool.execute(executionRequestFor(KnowledgeQueryRequest(text = "lighthouse")))
+
+        val success = assertIs<ExecutionOutcome.NoChanges.Success>(outcome)
+        val response = json.decodeFromString(KnowledgeQueryResponse.serializer(), success.message)
+        assertTrue(response.hits.isEmpty())
     }
 
     @Test
@@ -208,7 +306,7 @@ class KnowledgeQueryToolTest {
 
     @Test
     fun `tool returns failure outcome when the request payload is malformed`() = runTest {
-        val tool = KnowledgeQueryTool(store = InMemoryKnowledgeStore())
+        val tool = KnowledgeQueryTool(store = InMemoryKnowledgeStore(), plugManifest = manifest("pl-1"))
         val outcome = tool.execute(rawExecutionRequest("not valid json"))
 
         val failure = assertIs<ExecutionOutcome.NoChanges.Failure>(outcome)
