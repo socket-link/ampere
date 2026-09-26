@@ -17,6 +17,7 @@ import link.socket.ampere.agents.tools.mcp.protocol.ContentItem
  *
  * It handles:
  * - Looking up the active connection for a tool's server
+ * - Translating the execution request into `tools/call` arguments via [McpCallArguments]
  * - Invoking the tool via the MCP protocol
  * - Converting MCP ToolCallResult to the internal Outcome type
  * - Graceful error handling for connection failures, server errors, and timeouts
@@ -79,10 +80,12 @@ class McpToolExecutor(
             )
         }
 
-        // Invoke the tool via the MCP protocol
+        // Invoke the tool via the MCP protocol. The arguments come from the request —
+        // passing `tool.inputSchema` here sent the tool its own schema where its arguments
+        // belong, so every call taking parameters at all was wrong (AMPR-341).
         val result = connection.invokeTool(
             toolName = tool.remoteToolName,
-            arguments = tool.inputSchema,
+            arguments = McpCallArguments.forRequest(request),
         )
 
         val endTime = Clock.System.now()
