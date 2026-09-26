@@ -71,8 +71,9 @@ class ToolInvoker<C : ExecutionContext>(
                 invocationId = invocationId,
                 toolId = tool.id,
                 toolName = tool.name,
+                runId = request.runId,
             )
-            api.publish(startedEvent)
+            api.publish(startedEvent, runId = request.runId)
         }
 
         // Delegate actual execution to the tool
@@ -150,8 +151,9 @@ class ToolInvoker<C : ExecutionContext>(
                     is ToolInvocationResult.Failed -> invocationResult.error
                     else -> null
                 },
+                runId = request.runId,
             )
-            api.publish(completedEvent)
+            api.publish(completedEvent, runId = request.runId)
         }
 
         return invocationResult

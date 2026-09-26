@@ -92,6 +92,17 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
             }
         }
+        val jvmTest by getting {
+            dependencies {
+                // InMemoryEventDoor (AMPR-340): the bridge test publishes through
+                // AgentEventApi, which needs a JDBC store, so it lives in jvmTest. The
+                // fixtures module pins the JUnit4 kotlin-test artifact; this module runs on
+                // the JUnit Platform, so drop it rather than put two on the path.
+                implementation(project(":ampere-core-test-fixtures")) {
+                    exclude(group = "org.jetbrains.kotlin", module = "kotlin-test-junit")
+                }
+            }
+        }
     }
 }
 

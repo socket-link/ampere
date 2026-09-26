@@ -145,30 +145,32 @@ class EventEnvelopeTest {
     }
 
     @Test
-    fun `explicit runId wins over the deprecated per-kind fallback`() {
+    fun `run_id is exactly the runId the publisher passed`() {
         runBlocking {
+            // The ProviderCall publisher passes its workflowId as the run id (F4).
             val stored = handle.api
-                .publish(providerCallCompleted("evt-explicit", workflowId = "wf-fallback"), runId = "run-explicit")
+                .publish(providerCallCompleted("evt-explicit", workflowId = "wf-1"), runId = "wf-1")
                 .getOrThrow()
 
-            assertEquals("run-explicit", stored.runId)
+            assertEquals("wf-1", stored.runId)
             val row = handle.database.eventStoreQueries.getEventById("evt-explicit").executeAsOne()
-            assertEquals("run-explicit", row.run_id)
+            assertEquals("wf-1", row.run_id)
         }
     }
 
     @Test
-    fun `without an explicit runId the deprecated fallback still stores run_id`() {
+    fun `without an explicit runId run_id is NULL even for a kind the old fallback covered`() {
         runBlocking {
+            // Before AMPR-340 the repository would have inferred "wf-fallback" from the event's
+            // own workflowId. The publisher is now the only source of run_id.
             val stored = handle.api
                 .publish(providerCallCompleted("evt-fallback", workflowId = "wf-fallback"))
                 .getOrThrow()
 
-            assertEquals("wf-fallback", stored.runId)
+            assertNull(stored.runId)
             val row = handle.database.eventStoreQueries.getEventById("evt-fallback").executeAsOne()
-            assertEquals("wf-fallback", row.run_id)
+            assertNull(row.run_id)
 
-            // A kind the fallback never covered stays NULL, as before.
             val plain = handle.api.publish(taskCreated("evt-plain")).getOrThrow()
             assertNull(plain.runId)
         }

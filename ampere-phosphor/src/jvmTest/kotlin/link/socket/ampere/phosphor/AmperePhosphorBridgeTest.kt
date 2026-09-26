@@ -22,6 +22,7 @@ import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MilestoneCategory
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
+import link.socket.ampere.agents.events.InMemoryEventDoor
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.phosphor.lumos.LumosGlyph
 import link.socket.phosphor.lumos.VoxelFrameBuilder
@@ -30,6 +31,10 @@ import link.socket.phosphor.runtime.CognitiveSceneRuntime
 import link.socket.phosphor.runtime.SceneConfiguration
 import link.socket.phosphor.signal.AtmosphereState
 
+/**
+ * jvmTest since AMPR-340: the bridge listens on the bus, and events reach the bus only through
+ * the [InMemoryEventDoor], which needs a JDBC store.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AmperePhosphorBridgeTest {
 
@@ -37,6 +42,7 @@ class AmperePhosphorBridgeTest {
     private val longTransitionTickSeconds = 0.001f
 
     private val scope = TestScope(UnconfinedTestDispatcher())
+    private lateinit var door: InMemoryEventDoor.Handle
     private lateinit var bus: EventSerialBus
     private lateinit var runtime: CognitiveSceneRuntime
     private lateinit var voxelFrameBuilder: VoxelFrameBuilder
@@ -44,7 +50,8 @@ class AmperePhosphorBridgeTest {
 
     @BeforeTest
     fun setUp() {
-        bus = EventSerialBus(scope)
+        door = InMemoryEventDoor.open(agentId = "phosphor-test-door", scope = scope)
+        bus = door.bus
         runtime = CognitiveSceneRuntime(
             SceneConfiguration(
                 width = 8,
@@ -70,11 +77,16 @@ class AmperePhosphorBridgeTest {
     @AfterTest
     fun tearDown() {
         bridge.stop()
+        door.close()
+    }
+
+    private suspend fun publish(event: Event) {
+        door.api.publish(event).getOrThrow()
     }
 
     @Test
     fun `single phase transition drives runtime to expected atmosphere`() = runBlocking {
-        bus.publish(phaseEntered(newPhase = CognitivePhase.EXECUTE))
+        publish(phaseEntered(newPhase = CognitivePhase.EXECUTE))
 
         completeInFlightTransition()
         assertEquals(AtmospherePresets.READY, runtime.currentAtmosphere)
@@ -82,12 +94,12 @@ class AmperePhosphorBridgeTest {
 
     @Test
     fun `three rapid phase transitions coalesce to the latest target`() = runBlocking {
-        bus.publish(phaseEntered(newPhase = CognitivePhase.PLAN, suffix = "a"))
+        publish(phaseEntered(newPhase = CognitivePhase.PLAN, suffix = "a"))
         // PLAN -> THINKING transition is now in flight. Advance only slightly so
         // the choreographer still reports activeTransition != null.
         runtime.update(longTransitionTickSeconds)
-        bus.publish(phaseEntered(newPhase = CognitivePhase.PERCEIVE, suffix = "b"))
-        bus.publish(phaseEntered(newPhase = CognitivePhase.EXECUTE, suffix = "c"))
+        publish(phaseEntered(newPhase = CognitivePhase.PERCEIVE, suffix = "b"))
+        publish(phaseEntered(newPhase = CognitivePhase.EXECUTE, suffix = "c"))
 
         completeInFlightTransition()
         bridge.onFrameTick()
@@ -98,12 +110,12 @@ class AmperePhosphorBridgeTest {
 
     @Test
     fun `escalation fired during transition yanks runtime to UNCERTAIN`() = runBlocking {
-        bus.publish(phaseEntered(newPhase = CognitivePhase.PLAN))
+        publish(phaseEntered(newPhase = CognitivePhase.PLAN))
         runtime.update(longTransitionTickSeconds)
         // A pending PERCEIVE target — should be cleared by the escalation override.
-        bus.publish(phaseEntered(newPhase = CognitivePhase.PERCEIVE, suffix = "b"))
+        publish(phaseEntered(newPhase = CognitivePhase.PERCEIVE, suffix = "b"))
 
-        bus.publish(escalationFired())
+        publish(escalationFired())
 
         completeInFlightTransition()
         assertEquals(AtmospherePresets.UNCERTAIN, runtime.currentAtmosphere)
@@ -116,9 +128,9 @@ class AmperePhosphorBridgeTest {
 
     @Test
     fun `three rapid EscalationFired events queue three QUESTION glyphs in order`() = runBlocking {
-        bus.publish(escalationFired(suffix = "a"))
-        bus.publish(escalationFired(suffix = "b"))
-        bus.publish(escalationFired(suffix = "c"))
+        publish(escalationFired(suffix = "a"))
+        publish(escalationFired(suffix = "b"))
+        publish(escalationFired(suffix = "c"))
 
         // Each queueGlyph replaces the previous active glyph, but our
         // verification is that the builder accepted three queue calls without
@@ -132,7 +144,7 @@ class AmperePhosphorBridgeTest {
 
     @Test
     fun `TaskCompleted event queues a CHECK glyph`() = runBlocking {
-        bus.publish(taskCompleted())
+        publish(taskCompleted())
 
         val snapshot = runtime.update(0.001f)
         val frame = voxelFrameBuilder.build(snapshot, 0.001f)
@@ -141,7 +153,7 @@ class AmperePhosphorBridgeTest {
 
     @Test
     fun `MilestoneReached event queues a STAR glyph`() = runBlocking {
-        bus.publish(milestoneReached())
+        publish(milestoneReached())
 
         val snapshot = runtime.update(0.001f)
         val frame = voxelFrameBuilder.build(snapshot, 0.001f)
@@ -150,7 +162,7 @@ class AmperePhosphorBridgeTest {
 
     @Test
     fun `TaskFailed queues an EXCLAIM glyph`() = runBlocking {
-        bus.publish(taskFailed())
+        publish(taskFailed())
 
         val snapshot = runtime.update(0.001f)
         val frame = voxelFrameBuilder.build(snapshot, 0.001f)
@@ -159,7 +171,7 @@ class AmperePhosphorBridgeTest {
 
     @Test
     fun `failing ToolExecutionCompleted queues an EXCLAIM glyph`() = runBlocking {
-        bus.publish(toolCompleted(success = false))
+        publish(toolCompleted(success = false))
 
         val snapshot = runtime.update(0.001f)
         val frame = voxelFrameBuilder.build(snapshot, 0.001f)
@@ -168,7 +180,7 @@ class AmperePhosphorBridgeTest {
 
     @Test
     fun `successful ToolExecutionCompleted does not queue a glyph`() = runBlocking {
-        bus.publish(toolCompleted(success = true))
+        publish(toolCompleted(success = true))
 
         val snapshot = runtime.update(0.001f)
         val frame = voxelFrameBuilder.build(snapshot, 0.001f)
@@ -193,7 +205,7 @@ class AmperePhosphorBridgeTest {
             strategy = perceiveAsReady,
         ).also { it.start() }
 
-        bus.publish(phaseEntered(newPhase = CognitivePhase.PERCEIVE))
+        publish(phaseEntered(newPhase = CognitivePhase.PERCEIVE))
 
         completeInFlightTransition()
         assertEquals(AtmospherePresets.READY, runtime.currentAtmosphere)
@@ -203,7 +215,7 @@ class AmperePhosphorBridgeTest {
 
     @Test
     fun `concurrent publishes do not lose the final pending atmosphere`() = runBlocking {
-        bus.publish(phaseEntered(newPhase = CognitivePhase.PLAN, suffix = "seed"))
+        publish(phaseEntered(newPhase = CognitivePhase.PLAN, suffix = "seed"))
         runtime.update(longTransitionTickSeconds)
         // Choreographer is now mid-transition. Fire several events in parallel.
 
@@ -215,7 +227,7 @@ class AmperePhosphorBridgeTest {
             CognitivePhase.LEARN,
         )
         val publishes = phases.mapIndexed { index, phase ->
-            scope.async { bus.publish(phaseEntered(newPhase = phase, suffix = "p$index")) }
+            scope.async { publish(phaseEntered(newPhase = phase, suffix = "p$index")) }
         }
         publishes.awaitAll()
 

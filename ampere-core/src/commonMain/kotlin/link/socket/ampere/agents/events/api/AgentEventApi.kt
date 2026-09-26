@@ -88,7 +88,19 @@ class AgentEventApi(
     }
 
     /**
-     * Persist [event] inside its envelope, then publish it on the bus.
+     * The door: persist [event] inside its envelope, then dispatch it on the bus.
+     *
+     * This is the only way an [Event] enters the system (F1, AMPR-340). `EventSerialBus.publish`
+     * is `internal` and, within `ampere-core`, `EventDoorBoundaryTest` allows it to be called
+     * only from this file — so the store sees exactly what the bus sees. Obtain an instance
+     * with `EnvironmentService.createEventApi(agentId)`, or hold the one your agent was built
+     * with. The envelope columns and what assigns them:
+     *
+     * - `sequence` — the store, inside the insert transaction; unique and monotonic.
+     * - `recorded_at` — this door's [clock] at publish; the event's own `timestamp` is untouched.
+     * - `caused_by` — [causedBy], the publisher's statement of which event it is reacting to.
+     * - `run_id` — [runId], the publisher's statement of the Arc run. There is no fallback:
+     *   what you pass is what is stored, and null is stored as NULL.
      *
      * The bus dispatch only happens once the row is committed, and a persist failure is
      * returned to the caller as well as logged — it is never swallowed (recon C59).
@@ -100,9 +112,11 @@ class AgentEventApi(
      * durable record and what actually happened part ways with nothing to say so. It cannot
      * recurse, because nothing about it goes back through [publish].
      *
-     * @param causedBy the event whose handling produced this one, if any (F2).
-     * @param runId the Arc run this event belongs to (F4). Null falls back to the deprecated
-     * per-kind lookup in the repository until every publisher passes it.
+     * @param causedBy the event whose handling produced this one, if any (F2). Pass the id of
+     * the event you are handling; leave it null only for an event with no trigger.
+     * @param runId the Arc run this event belongs to (F4). Pass the run id you hold — from
+     * `ExecutionRequest.runId`, `RoutingContext.workflowId`, or the `emission(…, runId)` scope;
+     * an event carrying its own `runId` field passes that same value here.
      * @return the [StoredEvent] as recorded, including its assigned `sequence`.
      */
     suspend fun publish(

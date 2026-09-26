@@ -31,8 +31,9 @@ mavenPublishing {
         description.set(
             "Shared chassis SPI test fixtures: FakeNativeStore plus inheritable " +
                 "Readable/WritableCanonAdapterContract suites, a versioned reference " +
-                "ExecuteSink with an inheritable ExecuteSinkPreconditionContract, and an " +
-                "inheritable PerceiveSourceContract.",
+                "ExecuteSink with an inheritable ExecuteSinkPreconditionContract, an " +
+                "inheritable PerceiveSourceContract, and a JVM InMemoryEventDoor for " +
+                "publishing events through AgentEventApi in tests.",
         )
         url.set("https://github.com/socket-link/ampere")
         inceptionYear.set("2026")
@@ -121,6 +122,8 @@ kotlin {
                 // The bare `kotlin-test` jvm variant has no `@Test` annotation —
                 // that comes from the JUnit4 actual-provider artifact.
                 api("org.jetbrains.kotlin:kotlin-test-junit:${findProperty("kotlin.version")}")
+                // InMemoryEventDoor hands consumers a JdbcSqliteDriver-backed door (AMPR-340).
+                api("app.cash.sqldelight:sqlite-driver:2.2.1")
             }
         }
         val androidMain by getting {

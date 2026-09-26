@@ -3,7 +3,7 @@ package link.socket.ampere.plug.spi
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.event.AssetAccessEvent
 import link.socket.ampere.agents.domain.event.EventSource
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.canon.CanonAssetRef
 import link.socket.ampere.link.LinkOperation
@@ -20,17 +20,19 @@ import link.socket.ampere.plug.PlugId
  *    it, and this Plug's grant on it, are both still standing. A
  *    [CanonAssetRef.Url] has no Link and skips the check entirely.
  * 2. **Out-of-band but not invisible.** Every successful resolution records a
- *    lightweight [AssetAccessEvent] on the bus — no payload bytes.
+ *    lightweight [AssetAccessEvent] through the event door — no payload bytes.
  *
  * Orchestration only, mirroring [link.socket.ampere.link.LinkResolutionService]:
- * the matching policy lives in [LinkResolutionGate], and [eventBus] is
- * optional — without it, resolution still happens, it just goes unobserved.
+ * the matching policy lives in [LinkResolutionGate], and [eventApi] is
+ * optional — without it, resolution still happens, it just goes unrecorded.
+ * A persist failure of the access record does not fail the resolution: the
+ * door already reports it on the bus as `EventStoreEvent.PersistenceFailed`.
  */
 class ConsentEnforcingAssetResolver(
     private val delegate: AssetResolver,
     private val plugId: PlugId,
     private val linkStore: LinkStore,
-    private val eventBus: EventSerialBus? = null,
+    private val eventApi: AgentEventApi? = null,
     private val eventSource: EventSource = EventSource.Agent(plugId.value),
     private val clock: Clock = Clock.System,
 ) : AssetResolver {
@@ -53,7 +55,7 @@ class ConsentEnforcingAssetResolver(
         }
 
         return delegate.resolve(ref, spec).onSuccess { bytes ->
-            eventBus?.publishAsync(
+            eventApi?.publish(
                 AssetAccessEvent(
                     eventId = generateUUID("asset"),
                     timestamp = clock.now(),

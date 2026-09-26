@@ -396,45 +396,8 @@ suspend fun <T> emission(
 }
 
 /**
- * Bus-only variant of [emission] kept for the publishers set (b) of F1 has not migrated yet
- * (`AgentMessageApi`, AMPR-338). Events produced here are dispatched live but **never
- * persisted**, which is the C2 defect F1 removes; nothing new should call this.
- *
- * Removed by the F1 lock (AMPR-340), when `EventSerialBus.publish` goes internal.
- */
-@Deprecated(
-    message = "Bypasses the EventStore: events are dispatched but never persisted (F1/C2). " +
-        "Pass an AgentEventApi instead. Kept only until AMPR-338 migrates AgentMessageApi; " +
-        "removed by the AMPR-340 lock.",
-    replaceWith = ReplaceWith(
-        "emission(eventSource, eventApi, replyRegistry, runId, principal = principal, " +
-            "parentEmissionId = parentEmissionId, block = block)",
-    ),
-)
-suspend fun <T> emission(
-    eventSource: EventSource,
-    eventSerialBus: EventSerialBus,
-    replyRegistry: EmissionReplyRegistry = GlobalEmissionReplyRegistry.instance,
-    runId: RunId? = null,
-    principal: Principal,
-    parentEmissionId: EmissionId?,
-    block: suspend EmissionScope.() -> T,
-): T = withReplyRouter(eventSerialBus, replyRegistry) {
-    EmissionScope(
-        eventSource = eventSource,
-        replyRegistry = replyRegistry,
-        publish = { event -> eventSerialBus.publish(event) },
-        clock = Clock.System,
-        runId = runId,
-        principal = principal,
-        parentEmissionId = parentEmissionId,
-    ).block()
-}
-
-/**
  * Holds the single reply-router subscription on [bus] for the duration of [block] and releases
- * it on every exit path (AMPR-332). Shared by both [emission] overloads so the subscribe /
- * unsubscribe behaviour is identical whichever door the scope publishes through.
+ * it on every exit path (AMPR-332).
  */
 private suspend fun <T> withReplyRouter(
     bus: EventSerialBus,

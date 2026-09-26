@@ -21,9 +21,9 @@ import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.agents.domain.routing.capability.DefaultModelDescriptorSource
 import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorSource
+import link.socket.ampere.agents.domain.routing.routingEventSink
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.events.api.AgentEventApi
-import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.tickets.TicketOrchestrator
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.request.ExecutionContext
@@ -100,13 +100,6 @@ class AgentFactory(
     private val toolWriteCodeFileOverride: Tool<ExecutionContext.Code.WriteCode>? = null,
     private val cognitiveConfig: CognitiveConfig = CognitiveConfig(),
     private val llmProvider: LlmProvider? = null,
-    /**
-     * Bus handed to the default [CognitiveRelayImpl] for its routing events.
-     * Nothing else in this factory publishes on it (F1, AMPR-339): every other
-     * event leaves through a door from [createEventApi]. The relay is set (b)'s
-     * to move.
-     */
-    private val eventSerialBus: EventSerialBus? = null,
     /**
      * Relay override for the activated CODE path (AMPR-219). Null builds the
      * default cloud relay ([effectiveCognitiveRelay]); tests inject a custom
@@ -213,7 +206,8 @@ class AgentFactory(
      * [CognitiveRelayImpl] over the on-device Rung 0 floor plus the bundled
      * cloud catalog ([CapabilityRoutingDefaults.defaultCapabilityRules] +
      * [InMemoryModelDescriptorRegistry]'s default seed), publishing routing
-     * events on the shared [eventSerialBus]. Selection stays cost-aware; the
+     * events through a door from [createEventApi] (F1, AMPR-340) — or routing
+     * silently when the factory has none. Selection stays cost-aware; the
      * agent's declared [codeAgentMinimumRung] is the floor it must clear. No
      * [link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine] is
      * bound here (AMPR-203/225: `:ampere-core` binds none), so the on-device
@@ -228,7 +222,7 @@ class AgentFactory(
     private val effectiveCognitiveRelay: CognitiveRelay by lazy {
         cognitiveRelay ?: CognitiveRelayImpl(
             initialConfig = RelayConfig(rules = CapabilityRoutingDefaults.defaultCapabilityRules()),
-            eventBus = eventSerialBus,
+            publish = createEventApi?.invoke(COGNITIVE_RELAY_AGENT_ID)?.routingEventSink(),
             registry = InMemoryModelDescriptorRegistry(
                 // Loaded eagerly (mirrors phaseSparkLibrary below) so a supplied
                 // source governs routing immediately, not only after a future
@@ -469,5 +463,12 @@ class AgentFactory(
          * Claude Sonnet, GPT-4.1 all sit at THREE or above).
          */
         val DEFAULT_CODE_AGENT_RUNG: CapabilityRung = CapabilityRung.THREE
+
+        /**
+         * Agent id of the door the shared [CognitiveRelayImpl] publishes through (AMPR-340).
+         * The relay serves every agent this factory makes, so its events are attributed per
+         * call from `RoutingContext.agentId`; the door's own id only names the publisher.
+         */
+        const val COGNITIVE_RELAY_AGENT_ID: AgentId = "cognitive-relay"
     }
 }

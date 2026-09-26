@@ -4,16 +4,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Instant
-import link.socket.ampere.agents.domain.event.AssetAccessEvent
-import link.socket.ampere.agents.events.bus.EventSerialBus
-import link.socket.ampere.agents.events.bus.subscribe
-import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.canon.CanonAssetRef
 import link.socket.ampere.canon.CanonType
 import link.socket.ampere.link.CredentialRef
@@ -25,6 +17,11 @@ import link.socket.ampere.link.LinkId
 import link.socket.ampere.link.Transport
 import link.socket.ampere.plug.PlugId
 
+/**
+ * Consent gating. The access-event cases live in jvmTest
+ * (`ConsentEnforcingAssetResolverEventTest`): since AMPR-340 the resolver records through an
+ * [link.socket.ampere.agents.events.api.AgentEventApi] door, which needs a store.
+ */
 class ConsentEnforcingAssetResolverTest {
 
     private val photosLink = Link(
@@ -121,59 +118,11 @@ class ConsentEnforcingAssetResolverTest {
     }
 
     @Test
-    fun `a successful resolution records an access event with no payload bytes`() = runTest {
-        coroutineScope {
-            val bus = EventSerialBus(scope = this)
-            val received = CompletableDeferred<AssetAccessEvent>()
-
-            bus.subscribe<AssetAccessEvent, EventSubscription.ByEventClassType>(
-                agentId = "observer",
-                eventType = AssetAccessEvent.EVENT_TYPE,
-            ) { event, _ ->
-                if (!received.isCompleted) received.complete(event)
-            }
-
-            val store = InMemoryLinkStore(listOf(photosLink))
-            store.grant(plugId, photosLink.id, Instant.fromEpochMilliseconds(1))
-            val delegate = StubResolver(Result.success(stubBytes))
-            val resolver = ConsentEnforcingAssetResolver(delegate, plugId, store, eventBus = bus)
-
-            resolver.resolve(handle, AssetSpec()).getOrThrow()
-
-            val seen = withTimeout(5.seconds) { received.await() }
-            assertEquals(photosLink.id, seen.linkId)
-            assertEquals(plugId.value, seen.plugId)
-            assertEquals(stubBytes.bytes.size.toLong(), seen.byteCount)
-        }
-    }
-
-    @Test
-    fun `a refused resolution never reaches the bus`() = runTest {
-        coroutineScope {
-            val bus = EventSerialBus(scope = this)
-            var eventCount = 0
-
-            bus.subscribe<AssetAccessEvent, EventSubscription.ByEventClassType>(
-                agentId = "observer",
-                eventType = AssetAccessEvent.EVENT_TYPE,
-            ) { _, _ -> eventCount++ }
-
-            val store = InMemoryLinkStore()
-            val delegate = StubResolver(Result.success(stubBytes))
-            val resolver = ConsentEnforcingAssetResolver(delegate, plugId, store, eventBus = bus)
-
-            resolver.resolve(handle, AssetSpec())
-
-            assertEquals(0, eventCount)
-        }
-    }
-
-    @Test
-    fun `resolution works with no bus wired`() = runTest {
+    fun `resolution works with no door wired`() = runTest {
         val store = InMemoryLinkStore(listOf(photosLink))
         store.grant(plugId, photosLink.id, Instant.fromEpochMilliseconds(1))
         val delegate = StubResolver(Result.success(stubBytes))
-        val resolver = ConsentEnforcingAssetResolver(delegate, plugId, store, eventBus = null)
+        val resolver = ConsentEnforcingAssetResolver(delegate, plugId, store, eventApi = null)
 
         assertTrue(resolver.resolve(handle, AssetSpec()).isSuccess)
     }

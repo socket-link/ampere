@@ -28,6 +28,7 @@ import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.domain.routing.CognitiveRelayImpl
 import link.socket.ampere.agents.domain.routing.RelayConfig
 import link.socket.ampere.agents.domain.routing.RoutingFloorUnmetException
+import link.socket.ampere.agents.domain.routing.busRoutingEventSink
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
 import link.socket.ampere.agents.events.api.EventHandler
@@ -68,7 +69,7 @@ class SparkBasedAgentRelayActivationTest {
     private fun productionLikeRelay(eventBus: EventSerialBus): CognitiveRelay =
         CognitiveRelayImpl(
             initialConfig = RelayConfig(rules = CapabilityRoutingDefaults.cloudCapabilityRules()),
-            eventBus = eventBus,
+            publish = eventBus.busRoutingEventSink(),
             registry = InMemoryModelDescriptorRegistry(),
         )
 

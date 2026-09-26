@@ -40,6 +40,10 @@ internal typealias SubscriptionMap = MutableMap<EventType, Subscription>
  * - Handlers are invoked asynchronously using the provided [CoroutineScope]
  * - Persistence is handled by higher-level APIs; EventBus only dispatches events to subscribers
  *
+ * The public surface of this class is *subscription*. Publishing is `internal` and reserved
+ * for [link.socket.ampere.agents.events.api.AgentEventApi], the one door through which an
+ * event enters the system (persisted first, dispatched second). See `docs/ampere/events.md`.
+ *
  * ### Choosing a subscribe/unsubscribe overload
  *
  * [subscribe] and [unsubscribe] are non-suspending, which they buy by taking the bus mutex
@@ -60,11 +64,17 @@ class EventSerialBus(
     private val mutex = Mutex()
 
     /**
-     * Publish an [event] to all subscribers of its exact KClass.
+     * Dispatch an [event] to all subscribers of its exact KClass.
      * - Handlers are launched asynchronously on [scope].
      * - Any individual handler failures are swallowed to avoid impacting other subscribers.
+     *
+     * `internal` (AMPR-340, F1): the bus only dispatches, it never persists, so nothing outside
+     * `ampere-core` may put an event on it directly. Publishers go through
+     * [link.socket.ampere.agents.events.api.AgentEventApi.publish], which writes the row and
+     * only then calls this. Inside the module, `EventDoorBoundaryTest` holds the same line
+     * for every main source set.
      */
-    suspend fun publish(event: Event) {
+    internal suspend fun publish(event: Event) {
         // Collect all event types to dispatch to: own type + parent types for polymorphic delivery.
         val dispatchTypes = buildSet {
             add(event.eventType)
@@ -100,11 +110,11 @@ class EventSerialBus(
     }
 
     /**
-     * Publish an [event] from a synchronous call site without blocking the
+     * Dispatch an [event] from a synchronous call site without blocking the
      * caller. The event is still routed through [publish], so handler snapshot
-     * and dispatch semantics stay centralized.
+     * and dispatch semantics stay centralized. `internal` for the same reason as [publish].
      */
-    fun publishAsync(event: Event) {
+    internal fun publishAsync(event: Event) {
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             publish(event)
         }

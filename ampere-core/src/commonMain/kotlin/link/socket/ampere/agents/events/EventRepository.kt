@@ -12,16 +12,10 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import link.socket.ampere.agents.domain.RunId
-import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.domain.event.EventStoreFailure
 import link.socket.ampere.agents.domain.event.EventType
-import link.socket.ampere.agents.domain.event.MemoryEvent
-import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
-import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
-import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.events.utils.EventSerializationException
 import link.socket.ampere.data.Repository
 import link.socket.ampere.db.Database
@@ -104,8 +98,9 @@ class EventRepository(
      * said at publish; it defaults to the event's own timestamp for direct repository saves,
      * which mirrors how the migration backfilled legacy rows.
      *
-     * The envelope's `runId` wins; when it is null the deprecated per-kind [runIdOrNull]
-     * fallback fills `run_id` until every publisher passes it explicitly.
+     * `run_id` is exactly `envelope.runId` (F4). The publisher is the only party that knows
+     * which Arc run an event belongs to, so nothing here infers it from the event's fields;
+     * a null envelope run id is stored as NULL.
      *
      * [EventStoreBudget] is enforced here, on the way in (AMPR-301). A payload over
      * [maxEventBytes] has its oversized string leaves cut and the row is flagged `truncated`;
@@ -115,7 +110,6 @@ class EventRepository(
      * write is announced there too, since the caller's [Result] is the only other thing that
      * knows about it.
      */
-    @Suppress("DEPRECATION")
     suspend fun saveEvent(
         event: Event,
         envelope: EventEnvelope = EventEnvelope(),
@@ -124,7 +118,7 @@ class EventRepository(
         withContext(ioDispatcher) {
             runCatching {
                 val encoded = encodeWithinBudget(event)
-                val runId = envelope.runId ?: event.runIdOrNull()
+                val runId = envelope.runId
 
                 sequenceLock.withLock {
                     val stored = database.transactionWithResult {
@@ -570,23 +564,4 @@ class EventRepository(
             cause = throwable,
         )
     }
-}
-
-/**
- * The per-kind `run_id` lookup that predates the envelope (recon C9). Only the ten kinds below
- * ever stored a run id; every other kind stored NULL.
- */
-@Deprecated("F4: fallback until every publisher passes runId; removed by the W1 lock ticket")
-private fun Event.runIdOrNull(): RunId? = when (this) {
-    is ProviderCallStartedEvent -> workflowId
-    is ProviderCallCompletedEvent -> workflowId
-    is ToolEvent.ToolExecutionStarted -> runId
-    is ToolEvent.ToolExecutionCompleted -> runId
-    is MemoryEvent.KnowledgeStored -> runId
-    is MemoryEvent.KnowledgeRecalled -> runId
-    is MemoryEvent.MilestoneReached -> runId
-    is link.socket.ampere.agents.domain.event.TaskEvent.TaskCompleted -> runId
-    is link.socket.ampere.agents.domain.event.TaskEvent.TaskFailed -> runId
-    is EmissionEvent.Produced -> emission.provenance.runId
-    else -> null
 }
