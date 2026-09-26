@@ -407,6 +407,51 @@ val verifyCoreNeutrality = tasks.register("verifyCoreNeutrality") {
 
 tasks.named("check") { dependsOn(verifyCoreNeutrality) }
 
+// AMPR-365: a published bundle pins the minimum `ampereVersion` whose canon it names, and the
+// host compares that pin against AMPERE_RUNTIME_VERSION at import. That makes the running
+// version a fact commonMain has to see, and `ampereVersion` in gradle.properties — the
+// published Maven coordinate — is where it is declared. Nothing derives one from the other
+// (the generated KotlinConfig is local.properties-only, i.e. per-developer values), so this
+// guard is what keeps them from drifting: a release that bumps the property and forgets the
+// constant would ship a host that rejects bundles pinned to the version it actually is.
+val verifyAmpereVersionConstant = tasks.register("verifyAmpereVersionConstant") {
+    group = "verification"
+    description = "Fails if AMPERE_RUNTIME_VERSION drifts from gradle.properties' ampereVersion " +
+        "(AMPR-365)."
+
+    val versionFile = layout.projectDirectory
+        .file("src/commonMain/kotlin/link/socket/ampere/AmpereVersion.kt")
+    val declaredVersion = ampereVersion
+
+    inputs.file(versionFile)
+    inputs.property("ampereVersion", declaredVersion)
+
+    doLast {
+        val constantPattern = Regex("""AMPERE_RUNTIME_VERSION:\s*String\s*=\s*"([^"]*)"""")
+        val file = versionFile.asFile
+        val constant = constantPattern.find(file.readText())?.groupValues?.get(1)
+            ?: throw GradleException(
+                "Could not find AMPERE_RUNTIME_VERSION in ${file.relativeTo(projectDir)}. It is " +
+                    "the single source of the running version for bundle import (AMPR-365); if " +
+                    "it moved, point this task at its new home.",
+            )
+
+        if (constant != declaredVersion) {
+            throw GradleException(
+                "AMPERE_RUNTIME_VERSION is \"$constant\" but gradle.properties declares " +
+                    "ampereVersion=$declaredVersion. A host whose runtime version lags the " +
+                    "release it ships rejects bundles pinned to the version it actually is " +
+                    "(AMPR-365). Update ${file.relativeTo(projectDir)} to \"$declaredVersion\".",
+            )
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(verifyAmpereVersionConstant) }
+// CI gates on :ampere-core:jvmTest rather than `check`, same reason verifySqlDelightMigration
+// hangs off jvmTest below.
+tasks.named("jvmTest") { dependsOn(verifyAmpereVersionConstant) }
+
 // SQLDelight only hangs migration verification off `check`, which CI doesn't run; CI gates on
 // :ampere-core:jvmTest, so hang it there too or a .sqm that diverges from the .sq still merges.
 tasks.named("jvmTest") { dependsOn("verifySqlDelightMigration") }
