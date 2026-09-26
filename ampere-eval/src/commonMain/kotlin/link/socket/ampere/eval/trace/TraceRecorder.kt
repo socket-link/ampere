@@ -14,6 +14,7 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.util.serializedByteSize
 import link.socket.ampere.util.truncateStringLeaves
+import link.socket.ampere.version.AMPERE_VERSION
 
 /**
  * Captures a run's `EventSerialBus` stream into a [Trace].
@@ -36,6 +37,10 @@ import link.socket.ampere.util.truncateStringLeaves
  * @param maxEventBytes AMPR-267 per-event budget; see [TraceBudget.MAX_EVENT_BYTES]. Overridable for tests.
  * @param maxTraceBytes AMPR-267 per-trace budget; see [TraceBudget.MAX_TRACE_BYTES]. Overridable for tests.
  * @param maxStringFieldChars truncation granularity; see [TraceBudget.MAX_STRING_FIELD_CHARS]. Overridable for tests.
+ * @param producerVersion the Ampere version stamped onto every [Trace] this recorder produces
+ *   (AMPR-363). Defaults to this build's `AMPERE_VERSION`, which is the only correct value in
+ *   production — it is what lets a future build tell "I am too old to read this trace" from
+ *   "this trace is corrupt". Overridable for tests.
  */
 class TraceRecorder(
     private val bus: EventSerialBus,
@@ -47,6 +52,7 @@ class TraceRecorder(
     private val maxEventBytes: Int = TraceBudget.MAX_EVENT_BYTES,
     private val maxTraceBytes: Int = TraceBudget.MAX_TRACE_BYTES,
     private val maxStringFieldChars: Int = TraceBudget.MAX_STRING_FIELD_CHARS,
+    private val producerVersion: String = AMPERE_VERSION,
 ) {
     /**
      * Begin recording. Subscribes to the bus immediately; events published after
@@ -79,6 +85,7 @@ class TraceRecorder(
             maxEventBytes = maxEventBytes,
             maxTraceBytes = maxTraceBytes,
             maxStringFieldChars = maxStringFieldChars,
+            producerVersion = producerVersion,
         )
     }
 }
@@ -99,6 +106,7 @@ class RecordingHandle internal constructor(
     private val maxEventBytes: Int,
     private val maxTraceBytes: Int,
     private val maxStringFieldChars: Int,
+    private val producerVersion: String,
 ) {
     /**
      * Record [event] now, rather than whenever the bus gets round to delivering it.
@@ -183,6 +191,9 @@ class RecordingHandle internal constructor(
             createdAt = createdAt,
             events = events,
             droppedEventCount = droppedEventCount,
+            // Stamped at stop, not at start: the version that wrote the blob is the one that
+            // matters to whoever reads it back.
+            producerVersion = producerVersion,
         )
 
         return traceService.save(trace).map { trace }

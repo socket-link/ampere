@@ -1,5 +1,6 @@
 package link.socket.ampere.eval.relay
 
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
@@ -8,6 +9,8 @@ import link.socket.ampere.api.model.TokenUsage
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.domain.ai.provider.ProviderId
 import link.socket.ampere.eval.trace.Trace
+import link.socket.ampere.eval.trace.TraceEvent
+import link.socket.ampere.eval.trace.UndecodedTraceEvent
 
 /**
  * One recorded model call, paired from a [Trace]'s telemetry events.
@@ -48,9 +51,41 @@ data class RecordedModelCall(
 }
 
 /**
- * Maps this trace's ordered model-call events into an ordered list of
- * `(request, response)` pairs (AMPR-184 task 2.1).
+ * The outcome of reading a [Trace]'s events: the model calls this build could reconstruct,
+ * plus the events it could not decode at all.
  *
+ * Both halves are needed to read the result honestly. Two recorded calls out of a trace that
+ * also held three events this build cannot parse is a different fact from two calls out of a
+ * trace it read completely, and a caller that only ever sees [calls] cannot tell them apart.
+ *
+ * @property calls the paired model calls, in completion order.
+ * @property undecodedEvents every event that failed to decode, in trace order. Empty when the
+ *   replaying build understood the whole trace.
+ */
+data class DecodedModelCalls(
+    val calls: List<RecordedModelCall>,
+    val undecodedEvents: List<UndecodedTraceEvent>,
+)
+
+/**
+ * Decodes this trace's events, skipping (and collecting) any the running build cannot read,
+ * then maps the model-call events into ordered `(request, response)` pairs (AMPR-184 task 2.1,
+ * AMPR-363 task 2).
+ *
+ * ### Decode-or-skip
+ * An event whose `"type"` discriminator this build has no serializer for — a subtype added by
+ * a newer build, or a canon member from a newer minor once an `Event` carries a `CanonEntity` —
+ * used to take the whole trace down with a raw `SerializationException` out of the
+ * `PlaybackRelay` constructor. It is now an [UndecodedTraceEvent] in
+ * [DecodedModelCalls.undecodedEvents] and the rest of the trace replays. Replay only ever needed
+ * [ProviderCallStartedEvent] / [ProviderCallCompletedEvent]; every other event in a trace is
+ * irrelevant to it, so skipping one costs replay nothing and skipping a model-call event shows
+ * up honestly as a shorter [DecodedModelCalls.calls] plus a non-empty undecoded list.
+ *
+ * The tolerance is bought here, at the envelope, and nowhere else: no `defaultDeserializer` is
+ * registered for `Event` or `CanonEntity` (see `docs/concepts/domain-canon.md`).
+ *
+ * ### Pairing
  * The pairing replicates `ArcTraceProjection.buildModelInvocations` (RECON-relay
  * §3.3) **verbatim**: each `ProviderCallCompletedEvent` is matched to the first
  * still-unconsumed `ProviderCallStartedEvent` satisfying the 6-part correlation
@@ -61,11 +96,28 @@ data class RecordedModelCall(
  * Non-model events are ignored. Calls are enumerated in completion order, which
  * is call order for the sequential, deterministic runs evals replay.
  */
-fun Trace.modelCalls(json: Json = DEFAULT_JSON): List<RecordedModelCall> {
-    val decoded = events.map { json.decodeFromJsonElement(Event.serializer(), it.payload) }
+fun Trace.decodeModelCalls(json: Json = DEFAULT_JSON): DecodedModelCalls {
+    val decoded = mutableListOf<Event>()
+    val undecoded = mutableListOf<UndecodedTraceEvent>()
+
+    for (traceEvent in events) {
+        val event = try {
+            json.decodeFromJsonElement(Event.serializer(), traceEvent.payload)
+        } catch (e: SerializationException) {
+            undecoded += traceEvent.toUndecoded(e)
+            continue
+        } catch (e: IllegalArgumentException) {
+            // kotlinx throws this for a payload that is structurally wrong rather than
+            // unknown (a missing discriminator, a member of the wrong JSON kind).
+            undecoded += traceEvent.toUndecoded(e)
+            continue
+        }
+        decoded += event
+    }
+
     val starts = decoded.filterIsInstance<ProviderCallStartedEvent>().toMutableList()
 
-    return decoded.filterIsInstance<ProviderCallCompletedEvent>().map { completed ->
+    val calls = decoded.filterIsInstance<ProviderCallCompletedEvent>().map { completed ->
         val start = starts.firstOrNull { candidate ->
             candidate.timestamp <= completed.timestamp &&
                 candidate.workflowId == completed.workflowId &&
@@ -77,4 +129,23 @@ fun Trace.modelCalls(json: Json = DEFAULT_JSON): List<RecordedModelCall> {
         if (start != null) starts.remove(start)
         RecordedModelCall(started = start, completed = completed)
     }
+
+    return DecodedModelCalls(calls = calls, undecodedEvents = undecoded)
 }
+
+/**
+ * The model calls this build could reconstruct from the trace, in call order.
+ *
+ * Shorthand for [decodeModelCalls]`().calls`. Use [decodeModelCalls] when the undecodable
+ * events matter — this overload cannot distinguish "the trace held two calls" from "the trace
+ * held two calls this build can read".
+ */
+fun Trace.modelCalls(json: Json = DEFAULT_JSON): List<RecordedModelCall> =
+    decodeModelCalls(json).calls
+
+private fun TraceEvent.toUndecoded(cause: Throwable): UndecodedTraceEvent =
+    UndecodedTraceEvent(
+        index = index,
+        type = type,
+        reason = cause.message ?: (cause::class.simpleName ?: "decode failed"),
+    )

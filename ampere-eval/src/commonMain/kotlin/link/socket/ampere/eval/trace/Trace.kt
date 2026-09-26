@@ -29,6 +29,31 @@ data class TraceEvent(
 )
 
 /**
+ * A [TraceEvent] this build could not decode back into an `Event`, kept as a counted fact
+ * rather than an exception (AMPR-363).
+ *
+ * Unknown-type tolerance is an **envelope** property: the envelope preserves the payload
+ * opaquely, counts what it could not read, and keeps going. It is never bought inside
+ * `Event` or `CanonEntity` decode — a `defaultDeserializer` there would not recover the
+ * newer event, it would invent an older one, and the caller could not tell the difference
+ * (see `docs/concepts/domain-canon.md`, version-skew contract).
+ *
+ * The undecoded payload itself is not copied here: it is still in the [Trace] at [index],
+ * unchanged, for a build that *can* read it.
+ *
+ * @property index the position of the offending event in [Trace.events].
+ * @property type the bus event-type discriminator ([TraceEvent.type]) — readable without
+ *   decoding, so an undecodable event is still nameable.
+ * @property reason the decode failure's message, for diagnostics only. Never matched on.
+ */
+@Serializable
+data class UndecodedTraceEvent(
+    val index: Int,
+    val type: String,
+    val reason: String,
+)
+
+/**
  * An ordered, serializable capture of a single run's `EventSerialBus` stream.
  *
  * A `Trace` is the one measurement primitive the eval set is built on: evals,
@@ -44,6 +69,11 @@ data class TraceEvent(
  * @property droppedEventCount trailing events cut when the trace exceeded
  *   [TraceBudget.MAX_TRACE_BYTES] (AMPR-267's drop-with-a-marker policy).
  *   Zero for a trace that stayed within budget.
+ * @property producerVersion the `AMPERE_VERSION` of the build that recorded this trace
+ *   (AMPR-363), stamped by `TraceRecorder` at `RecordingHandle.stop()`. `null` for every
+ *   trace recorded before the stamp existed — which is why the default is `null` rather
+ *   than the current version: a stored trace must decode unchanged, and claiming it was
+ *   produced by *this* build would be a lie that defeats the skew check.
  */
 @Serializable
 data class Trace(
@@ -53,6 +83,7 @@ data class Trace(
     val createdAt: Long,
     val events: List<TraceEvent>,
     val droppedEventCount: Int = 0,
+    val producerVersion: String? = null,
 ) {
     /** The replay window this trace covers: in v1, the Arc run named by [runId]. Not serialized. */
     val window: ReplayWindow get() = ReplayWindow.ArcRun(runId)

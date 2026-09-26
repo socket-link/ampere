@@ -39,6 +39,7 @@ class TraceService(
                 event_count = trace.size.toLong(),
                 events_json = json.encodeToString(eventsSerializer, trace.events),
                 dropped_event_count = trace.droppedEventCount.toLong(),
+                producer_version = trace.producerVersion,
             )
             Unit
         }
@@ -47,7 +48,9 @@ class TraceService(
     /** Load a full [Trace] by id. Fails if no trace with [traceId] exists. */
     suspend fun load(traceId: String): Result<Trace> = withContext(dispatcher) {
         runCatching {
-            queries.selectById(traceId) { id, runId, arcId, createdAt, _, eventsJson, droppedEventCount ->
+            queries.selectById(
+                traceId,
+            ) { id, runId, arcId, createdAt, _, eventsJson, droppedEventCount, producerVersion ->
                 Trace(
                     id = id,
                     runId = runId,
@@ -55,6 +58,9 @@ class TraceService(
                     createdAt = createdAt,
                     events = json.decodeFromString(eventsSerializer, eventsJson),
                     droppedEventCount = droppedEventCount.toInt(),
+                    // Null for a trace recorded before the stamp existed, and carried through
+                    // as null rather than defaulted — the skew check reads it as "cannot tell".
+                    producerVersion = producerVersion,
                 )
             }.executeAsOneOrNull()
                 ?: error("Trace not found: $traceId")

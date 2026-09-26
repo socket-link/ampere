@@ -17,6 +17,11 @@ typealias ArcId = String
  * @property completion What a run that did not close its loop — cancelled, or failed — left in
  *   place of a `Knowledge` entry: its persisted completion manifest (AMPR-359). `null` for a run
  *   that completed, and for one whose manifest was never written.
+ * @property undecodedEventCount How many stored event rows in this window this build could not
+ *   decode and therefore dropped (AMPR-363). The projection stays tolerant — an unknown `Event`
+ *   discriminator must not fail a whole run's trace — but it no longer drops *silently*: a
+ *   non-zero count is how a reader knows the trace it is holding is shorter than the run was.
+ *   Zero for a window this build read completely.
  */
 @Serializable
 data class ArcRunTrace(
@@ -26,6 +31,7 @@ data class ArcRunTrace(
     val endedAt: Instant? = null,
     val phases: List<PropelPhase> = emptyList(),
     val completion: CompletionRecord? = null,
+    val undecodedEventCount: Int = 0,
 ) {
     /** The window this trace covers. Derived from [runId]; not part of the serialized form. */
     val window: ReplayWindow get() = ReplayWindow.ArcRun(runId)

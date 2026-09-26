@@ -66,6 +66,11 @@ class ArcTraceProjection(
             val events = eventRows
                 .mapNotNull { row -> row.decodeOrNull() }
                 .sortedBy { it.sequence }
+            // The rows this build could not decode. Still dropped — a trace shorter by an
+            // event this build has no serializer for is better than no trace at all — but
+            // counted onto the result, so "shorter" is a reported fact rather than a silent one
+            // (AMPR-363).
+            val undecodedEventCount = eventRows.size - events.size
 
             val knowledgeRows = database.knowledgeStoreQueries
                 .findKnowledgeByRunId(runId)
@@ -107,6 +112,7 @@ class ArcTraceProjection(
                 endedAt = endedAt,
                 phases = phases,
                 completion = completion,
+                undecodedEventCount = undecodedEventCount,
             )
         }
     }
