@@ -2,6 +2,7 @@ package link.socket.ampere.api.service
 
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.api.model.AgentSnapshot
+import link.socket.ampere.api.model.AgentState
 import link.socket.ampere.dsl.team.AgentTeam
 import link.socket.ampere.dsl.team.AgentTeamBuilder
 
@@ -85,13 +86,19 @@ interface AgentService {
     suspend fun listAll(): List<AgentSnapshot>
 
     /**
-     * Stop a running agent gracefully.
+     * Stop one running agent gracefully, leaving the rest of the team running.
+     *
+     * The paused agent reports [AgentState.Paused] from [inspect] and [listAll] until it
+     * is resumed through the team ([AgentTeam.resumeMember]).
      *
      * ```
-     * ampere.agents.pause("engineer-agent")
+     * ampere.agents.pause(Engineer.name)
      * ```
      *
-     * @param agentId The ID of the agent to pause
+     * @param agentId The ID of the agent to pause, which must name a member of the
+     *   current team
+     * @return [Result.failure] if no team has been configured, or if [agentId] does not
+     *   name a member of the current team. Nothing is paused in either case.
      */
     suspend fun pause(agentId: AgentId): Result<Unit>
 }
