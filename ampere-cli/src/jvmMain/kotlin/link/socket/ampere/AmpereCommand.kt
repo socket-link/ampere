@@ -8,7 +8,6 @@ import com.github.ajalt.mordant.rendering.TextColors
 import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
-import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.cli.goal.ARC_SETTLE_GRACE
 import link.socket.ampere.cli.goal.ArcShutdownHook
 import link.socket.ampere.cli.goal.GoalHandler
@@ -99,6 +99,10 @@ class AmpereCommand(
           --arc / -a <name>     Select arc workflow pattern
           --list-arcs           List available arc configurations
           --use-arc-phases      Use Arc phases (Charge -> Flow -> Pulse)
+
+        Workspace (where agents may write; nothing else is reachable):
+          --workspace / -w <dir>  Confine agent file writes to <dir>
+                                  (default: `workspace:` in ampere.yaml, else the current directory)
 
         TUI Controls:
           d          Dashboard mode
@@ -278,6 +282,7 @@ class AmpereCommand(
                             arcConfig = selectedArc,
                             agentScope = agentScope,
                             manifestSink = context.completionManifestSink,
+                            workspace = context.workspace,
                             jazzPane = jazzPane,
                         ) { status -> systemStatus = status }
                     } else {
@@ -642,12 +647,14 @@ class AmpereCommand(
         arcConfig: ArcConfig,
         agentScope: CoroutineScope,
         manifestSink: CompletionManifestSink,
+        workspace: ExecutionWorkspace,
         jazzPane: CognitiveProgressPane,
         updateStatus: (StatusBar.SystemStatus) -> Unit,
     ) {
         agentScope.launch {
             try {
-                val projectDirPath = File(System.getProperty("user.dir")).absolutePath
+                // AMPR-300: the run is confined to the CLI's explicitly resolved workspace, not the CWD.
+                val projectDirPath = workspace.baseDirectory
                 val runtime = AmpereRuntime.create(
                     arcConfig = arcConfig,
                     projectDirPath = projectDirPath,
@@ -759,6 +766,7 @@ class AmpereCommand(
                             arcConfig = selectedArc,
                             agentScope = agentScope,
                             manifestSink = context.completionManifestSink,
+                            workspace = context.workspace,
                         )
                         isOneShot = true
                     } else {
@@ -836,8 +844,10 @@ class AmpereCommand(
         arcConfig: ArcConfig,
         agentScope: CoroutineScope,
         manifestSink: CompletionManifestSink,
+        workspace: ExecutionWorkspace,
     ) {
-        val projectDirPath = File(System.getProperty("user.dir")).absolutePath
+        // AMPR-300: the run is confined to the CLI's explicitly resolved workspace, not the CWD.
+        val projectDirPath = workspace.baseDirectory
         val runtime = AmpereRuntime.create(
             arcConfig = arcConfig,
             projectDirPath = projectDirPath,

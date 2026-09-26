@@ -1,9 +1,11 @@
 package link.socket.ampere
 
 import com.github.ajalt.clikt.core.subcommands
+import kotlin.system.exitProcess
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.definition.AgentFactory
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.definition.AgentType
 import link.socket.ampere.agents.definition.SparkBasedAgent
 import link.socket.ampere.agents.definition.code.CodeState
@@ -36,6 +38,10 @@ fun main(args: Array<String>) {
     // Load configuration from file (--config flag or default locations)
     val config = loadConfiguration(args)
 
+    // Resolve the one directory agents may write to (AMPR-300): --workspace, then the
+    // config file's `workspace:` key, then the directory the CLI was started in.
+    val workspace = resolveWorkspace(args, config)
+
     // Configure logging from environment variable (AMPERE_LOG_LEVEL)
     // CLI options (--verbose, --log-level, etc.) can override this per-command if needed
     val loggingConfig = LoggingConfiguration.fromEnvironment()
@@ -61,6 +67,7 @@ fun main(args: Array<String>) {
         println("  AI Provider: ${config.ai.provider} (${config.ai.model})")
         println("  Team: ${config.team.joinToString { it.role }}")
         config.goal?.let { println("  Goal: $it") }
+        println("  Workspace: ${workspace.baseDirectory}")
         println()
     }
 
@@ -74,6 +81,7 @@ fun main(args: Array<String>) {
 
     val context = AmpereContext(
         logger = eventLogger,
+        workspace = workspace,
         userConfig = config,
         aiConfiguration = aiConfiguration,
     )
@@ -86,6 +94,7 @@ fun main(args: Array<String>) {
     val agentFactory = AgentFactory(
         scope = context.scope,
         ticketOrchestrator = environmentService.ticketOrchestrator,
+        workspace = context.workspace,
         knowledgeRepository = context.knowledgeRepository,
         createEventApi = environmentService::createEventApi,
         issueTrackerProvider = issueTrackerProvider,
@@ -129,8 +138,8 @@ fun main(args: Array<String>) {
         // Start all orchestrator services
         context.start()
 
-        // Filter out --config/-c flag (already processed)
-        val filteredArgs = filterConfigArgs(args)
+        // Filter out --config/-c and --workspace/-w flags (already processed)
+        val filteredArgs = filterPreParsedArgs(args)
 
         // Run the CLI
         val api = context.ampereInstance
@@ -229,17 +238,46 @@ private fun findDefaultConfigFile(): File? {
 }
 
 /**
- * Filter out --config/-c flag and its argument from args.
- * These are processed separately before Clikt takes over.
+ * Resolve the directory every agent this process builds is confined to (AMPR-300).
+ *
+ * Precedence:
+ * 1. `--workspace <dir>` / `-w <dir>` on the command line
+ * 2. the `workspace:` key of the loaded configuration file
+ * 3. the directory the CLI was started in
+ *
+ * The directory must already exist: a sandbox that has to be created on the fly is usually a
+ * typo, and silently making one is how writes end up somewhere nobody meant.
  */
-private fun filterConfigArgs(args: Array<String>): Array<String> {
+internal fun resolveWorkspace(args: Array<String>, config: AmpereConfig?): ExecutionWorkspace {
+    val flagIndex = args.indexOfFirst { it == "--workspace" || it == "-w" }
+    val fromFlag = if (flagIndex >= 0 && flagIndex < args.size - 1) args[flagIndex + 1] else null
+    if (flagIndex >= 0 && fromFlag == null) {
+        System.err.println("Error: --workspace requires a directory argument")
+        exitProcess(2)
+    }
+
+    val requested = fromFlag ?: config?.workspace ?: System.getProperty("user.dir")
+    val directory = File(requested).absoluteFile
+    if (!directory.isDirectory) {
+        System.err.println("Error: workspace is not a directory: ${directory.path}")
+        exitProcess(2)
+    }
+    return ExecutionWorkspace(baseDirectory = directory.path)
+}
+
+/**
+ * Filter out the flags that are processed before Clikt takes over — `--config`/`-c` and
+ * `--workspace`/`-w` — together with their arguments.
+ */
+private fun filterPreParsedArgs(args: Array<String>): Array<String> {
+    val preParsed = setOf("--config", "-c", "--workspace", "-w")
     val result = mutableListOf<String>()
     var skipNext = false
 
     for (arg in args) {
         when {
             skipNext -> skipNext = false
-            arg == "--config" || arg == "-c" -> skipNext = true
+            arg in preParsed -> skipNext = true
             else -> result.add(arg)
         }
     }

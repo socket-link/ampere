@@ -1,5 +1,6 @@
 package link.socket.ampere
 
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
@@ -19,7 +20,7 @@ class AmpereContextTest {
     fun `context can be instantiated`(@TempDir tempDir: File) {
         val dbPath = File(tempDir, "test.db").absolutePath
 
-        val context = AmpereContext(databasePath = dbPath)
+        val context = AmpereContext(databasePath = dbPath, workspace = testWorkspace(tempDir))
         try {
             assertNotNull(context.environmentService, "EnvironmentService should be initialized")
             assertNotNull(context.eventRelayService, "EventRelayService should be initialized")
@@ -32,7 +33,7 @@ class AmpereContextTest {
     fun `context creates database file`(@TempDir tempDir: File) {
         val dbPath = File(tempDir, "test.db").absolutePath
 
-        val context = AmpereContext(databasePath = dbPath)
+        val context = AmpereContext(databasePath = dbPath, workspace = testWorkspace(tempDir))
         try {
             assertTrue(File(dbPath).exists(), "Database file should be created")
         } finally {
@@ -44,7 +45,7 @@ class AmpereContextTest {
     fun `context creates parent directories if needed`(@TempDir tempDir: File) {
         val nestedPath = File(tempDir, "nested/dir/test.db").absolutePath
 
-        val context = AmpereContext(databasePath = nestedPath)
+        val context = AmpereContext(databasePath = nestedPath, workspace = testWorkspace(tempDir))
         try {
             assertTrue(File(nestedPath).exists(), "Database file should be created in nested directory")
             assertTrue(
@@ -60,7 +61,7 @@ class AmpereContextTest {
     fun `context can be started`(@TempDir tempDir: File) {
         val dbPath = File(tempDir, "test.db").absolutePath
 
-        val context = AmpereContext(databasePath = dbPath)
+        val context = AmpereContext(databasePath = dbPath, workspace = testWorkspace(tempDir))
         try {
             // Should not throw
             context.start()
@@ -73,7 +74,7 @@ class AmpereContextTest {
     fun `context provides access to environment service repositories`(@TempDir tempDir: File) {
         val dbPath = File(tempDir, "test.db").absolutePath
 
-        val context = AmpereContext(databasePath = dbPath)
+        val context = AmpereContext(databasePath = dbPath, workspace = testWorkspace(tempDir))
         try {
             val env = context.environmentService
 
@@ -90,7 +91,7 @@ class AmpereContextTest {
     fun `context provides access to event bus`(@TempDir tempDir: File) {
         val dbPath = File(tempDir, "test.db").absolutePath
 
-        val context = AmpereContext(databasePath = dbPath)
+        val context = AmpereContext(databasePath = dbPath, workspace = testWorkspace(tempDir))
         try {
             assertNotNull(context.environmentService.eventBus, "EventBus should be available")
         } finally {
@@ -103,8 +104,8 @@ class AmpereContextTest {
         val dbPath1 = File(tempDir, "test1.db").absolutePath
         val dbPath2 = File(tempDir, "test2.db").absolutePath
 
-        val context1 = AmpereContext(databasePath = dbPath1)
-        val context2 = AmpereContext(databasePath = dbPath2)
+        val context1 = AmpereContext(databasePath = dbPath1, workspace = testWorkspace(tempDir))
+        val context2 = AmpereContext(databasePath = dbPath2, workspace = testWorkspace(tempDir))
 
         try {
             assertNotNull(context1.environmentService)
@@ -121,7 +122,7 @@ class AmpereContextTest {
     fun `context can create agent APIs`(@TempDir tempDir: File) {
         val dbPath = File(tempDir, "test.db").absolutePath
 
-        val context = AmpereContext(databasePath = dbPath)
+        val context = AmpereContext(databasePath = dbPath, workspace = testWorkspace(tempDir))
         try {
             val env = context.environmentService
 
@@ -142,7 +143,7 @@ class AmpereContextTest {
     fun `context close is idempotent`(@TempDir tempDir: File) {
         val dbPath = File(tempDir, "test.db").absolutePath
 
-        val context = AmpereContext(databasePath = dbPath)
+        val context = AmpereContext(databasePath = dbPath, workspace = testWorkspace(tempDir))
 
         // Should not throw when called multiple times
         context.close()
@@ -162,7 +163,7 @@ class AmpereContextTest {
         val originalHome = System.getProperty("user.home")
         System.setProperty("user.home", tempDir.absolutePath)
         try {
-            val context = AmpereContext()
+            val context = AmpereContext(workspace = testWorkspace(tempDir))
             try {
                 val expectedPath = File(tempDir, ".ampere/ampere.db")
 
@@ -183,3 +184,8 @@ class AmpereContextTest {
         }
     }
 }
+
+
+/** AMPR-300: every context needs an explicit agent workspace; tests pin it to their temp dir. */
+private fun testWorkspace(tempDir: File): ExecutionWorkspace =
+    ExecutionWorkspace(baseDirectory = tempDir.absolutePath)

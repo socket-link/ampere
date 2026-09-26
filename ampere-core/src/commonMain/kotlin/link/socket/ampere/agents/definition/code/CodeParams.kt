@@ -12,7 +12,9 @@ import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.execution.ParameterStrategy
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
+import link.socket.ampere.agents.execution.tools.READ_CODE_FILE_TOOL_ID
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.agents.execution.tools.WRITE_CODE_FILE_TOOL_ID
 
 /**
  * Parameter strategies for Code Agent tools.
@@ -22,6 +24,31 @@ import link.socket.ampere.agents.execution.tools.Tool
  * - Response parsing and request enrichment
  */
 sealed class CodeParams {
+
+    companion object {
+        /**
+         * The workspace a code tool must operate in (AMPR-300).
+         *
+         * Taken from an already-promoted [ExecutionContext.Code], else from the
+         * pin the dispatching agent stamped on [ExecutionRequest.workspace].
+         * There is no third option: the previous fallback to `"."` made every
+         * agent built without a workspace write into whatever directory the
+         * process happened to be started from.
+         *
+         * @throws IllegalStateException when the request carries no workspace.
+         *   Thrown from `buildPrompt`, so the engine turns it into a typed
+         *   failure before any LLM call is made.
+         */
+        internal fun pinnedWorkspace(request: ExecutionRequest<*>, toolId: String): ExecutionWorkspace =
+            (request.context as? ExecutionContext.Code)?.workspace
+                ?: request.workspace
+                ?: throw IllegalStateException(
+                    "No workspace pinned for '$toolId': the request carries neither an " +
+                        "ExecutionContext.Code workspace nor ExecutionRequest.workspace. " +
+                        "Build the agent with an explicit ExecutionWorkspace (AMPR-300); " +
+                        "there is no default and no fallback to the working directory.",
+                )
+    }
 
     /**
      * Strategy for the write_code_file tool.
@@ -41,12 +68,7 @@ sealed class CodeParams {
             request: ExecutionRequest<*>,
             intent: String,
         ): String {
-            val context = request.context
-            val workspace = if (context is ExecutionContext.Code) {
-                context.workspace.baseDirectory
-            } else {
-                "."
-            }
+            val workspace = pinnedWorkspace(request, tool.id).baseDirectory
 
             return """
                 You are a precise code generation system for the CodeWriterAgent.
@@ -122,11 +144,7 @@ sealed class CodeParams {
             }
 
             val originalContext = originalRequest.context
-            val workspace = if (originalContext is ExecutionContext.Code) {
-                originalContext.workspace
-            } else {
-                ExecutionWorkspace(baseDirectory = ".")
-            }
+            val workspace = pinnedWorkspace(originalRequest, WRITE_CODE_FILE_TOOL_ID)
 
             val enrichedContext = ExecutionContext.Code.WriteCode(
                 executorId = originalContext.executorId,
@@ -163,12 +181,7 @@ sealed class CodeParams {
             request: ExecutionRequest<*>,
             intent: String,
         ): String {
-            val context = request.context
-            val workspace = if (context is ExecutionContext.Code) {
-                context.workspace.baseDirectory
-            } else {
-                "."
-            }
+            val workspace = pinnedWorkspace(request, tool.id).baseDirectory
 
             return """
                 You are a code analysis system for the CodeWriterAgent.
@@ -217,11 +230,7 @@ sealed class CodeParams {
             val filePaths = filePathsArray.map { it.jsonPrimitive.content }
 
             val originalContext = originalRequest.context
-            val workspace = if (originalContext is ExecutionContext.Code) {
-                originalContext.workspace
-            } else {
-                ExecutionWorkspace(baseDirectory = ".")
-            }
+            val workspace = pinnedWorkspace(originalRequest, READ_CODE_FILE_TOOL_ID)
 
             val enrichedContext = ExecutionContext.Code.ReadCode(
                 executorId = originalContext.executorId,

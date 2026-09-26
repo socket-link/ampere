@@ -3,6 +3,7 @@ package link.socket.ampere
 import com.github.ajalt.clikt.testing.test
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.messages.Message
 import link.socket.ampere.agents.events.messages.MessageChannel
 import link.socket.ampere.agents.events.messages.MessageSender
@@ -37,7 +38,7 @@ class ThreadCommandTest {
      */
     private fun createTestContext(tempDir: File): AmpereContext {
         val dbPath = File(tempDir, "test.db").absolutePath
-        return AmpereContext(databasePath = dbPath)
+        return AmpereContext(databasePath = dbPath, workspace = testWorkspace(tempDir))
     }
 
     /**
@@ -118,3 +119,8 @@ class ThreadCommandTest {
         }
     }
 }
+
+
+/** AMPR-300: every context needs an explicit agent workspace; tests pin it to their temp dir. */
+private fun testWorkspace(tempDir: File): ExecutionWorkspace =
+    ExecutionWorkspace(baseDirectory = tempDir.absolutePath)

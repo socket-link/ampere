@@ -288,6 +288,24 @@ The CLI automatically loads configuration from these locations (in order of prec
 4. `.ampere/config.yaml` — Hidden config directory
 5. `.ampere/config.yml` — Hidden config directory
 
+### Agent Workspace
+
+Agents can only write files inside one explicitly chosen directory. It is resolved, in order, from:
+
+1. `--workspace <dir>` / `-w <dir>` — Command-line flag
+2. `workspace: <dir>` — Key in the configuration file
+3. The directory the CLI was started in
+
+There is no shared default: the former `~/.ampere/Workspaces/Ampere` is gone, and so is the
+old `--goal` output directory under `~/.ampere/goal-output`. Paths an agent produces are
+resolved against the workspace and rejected if they escape it (including `../` segments and
+symlinks). The directory must already exist.
+
+```bash
+# Confine agent writes to a worktree
+ampere --workspace ../my-feature-worktree --goal "Implement feature X"
+```
+
 ### Configuration Format
 
 ```yaml
@@ -499,6 +517,9 @@ team:
       thoroughness: 0.4
 
 goal: "Quick prototype of the feature"
+
+# Optional: confine agent file writes to this directory (see "Agent Workspace")
+workspace: ./sandbox
 ```
 
 ### Using Configuration with Commands

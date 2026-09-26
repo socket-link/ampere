@@ -10,6 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.definition.SparkAgentFactory
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import okio.FileSystem
 import okio.Path.Companion.toPath
 
@@ -85,7 +86,12 @@ class ChargePhaseTest {
 
         val spawnScope = CoroutineScope(SupervisorJob())
         val agents = try {
-            ArcAgentSpawner(SparkAgentFactory(scope = spawnScope)).spawn(arcConfig, context)
+            ArcAgentSpawner(
+                SparkAgentFactory(
+                    scope = spawnScope,
+                    workspace = ExecutionWorkspace(baseDirectory = "/tmp/ampr300-test-workspace"),
+                ),
+            ).spawn(arcConfig, context)
         } finally {
             spawnScope.cancel()
         }

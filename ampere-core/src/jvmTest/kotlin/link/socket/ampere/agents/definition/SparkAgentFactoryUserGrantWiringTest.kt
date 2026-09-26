@@ -17,6 +17,7 @@ import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
@@ -83,6 +84,7 @@ class SparkAgentFactoryUserGrantWiringTest {
     private fun createAgent(): SparkBasedAgent<*> =
         SparkAgentFactory(
             scope = CoroutineScope(Dispatchers.Default),
+            workspace = ExecutionWorkspace(baseDirectory = "/tmp/ampr300-test-workspace"),
             executor = NoOpExecutor(),
             database = database,
         ).createAgent(

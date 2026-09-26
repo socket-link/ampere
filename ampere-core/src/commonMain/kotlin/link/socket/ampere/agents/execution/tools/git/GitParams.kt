@@ -26,6 +26,11 @@ sealed class GitParams {
      * Strategy for the `git_commit` tool. Asks the LLM to produce a commit
      * message and an optional file list / issue-number reference from the
      * plan step's intent and current workspace state.
+     *
+     * The repository the commit runs in is, in order: the one already named by
+     * a prior [ExecutionContext.GitOperation] in the step's context, the
+     * dispatching agent's pinned [ExecutionRequest.workspace] (AMPR-300), and
+     * only then [repositoryHint].
      */
     class Commit(
         private val repositoryHint: String = ".",
@@ -99,6 +104,7 @@ sealed class GitParams {
             val originalContext = originalRequest.context
             val priorRepo = (originalContext as? ExecutionContext.GitOperation)
                 ?.gitRequest?.repository
+                ?: originalRequest.workspace?.baseDirectory
                 ?: repositoryHint
 
             val newGitRequest = GitOperationRequest(

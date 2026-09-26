@@ -23,12 +23,15 @@ import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
+import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
+import link.socket.ampere.agents.environment.workspace.containedFile
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.tickets.TicketBuilder
@@ -81,8 +84,9 @@ fun main(escalation: Boolean = false) {
     println("📄 Expected output: ${outputDir.absolutePath}/ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/cognition/sparks/ObservabilitySpark.kt")
     println()
 
-    // Initialize AMPERE context (this creates the database, event bus, etc.)
-    val context = AmpereContext()
+    // Initialize AMPERE context (this creates the database, event bus, etc.), with the
+    // agent confined to the test output directory (AMPR-300).
+    val context = AmpereContext(workspace = ExecutionWorkspace(baseDirectory = outputDir.absolutePath))
     context.start()
 
     val agentScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -95,11 +99,12 @@ fun main(escalation: Boolean = false) {
             println()
 
             // Create the write_code_file tool
-            val writeCodeTool = createWriteCodeFileTool(outputDir)
+            val writeCodeTool = createWriteCodeFileTool(context.workspace)
 
             val agentFactory = AgentFactory(
                 scope = agentScope,
                 ticketOrchestrator = context.environmentService.ticketOrchestrator,
+                workspace = context.workspace,
                 knowledgeRepository = context.knowledgeRepository,
                 createEventApi = context.environmentService::createEventApi,
                 aiConfiguration = AIConfiguration_Default(
@@ -565,10 +570,13 @@ private suspend fun promptForEscalationResponse(): String? {
 }
 
 /**
- * Create the write_code_file tool that writes to the specified directory.
+ * Create the write_code_file tool that writes into [workspace].
+ *
+ * Paths are resolved through [containedFile] before anything is written (AMPR-300), so an
+ * LLM-supplied path that escapes the workspace fails the call with no file touched.
  */
 private fun createWriteCodeFileTool(
-    outputDir: File
+    workspace: ExecutionWorkspace,
 ): Tool<link.socket.ampere.agents.execution.request.ExecutionContext.Code.WriteCode> {
     return FunctionTool(
         id = "write_code_file",
@@ -578,34 +586,55 @@ private fun createWriteCodeFileTool(
         executionFunction = { request ->
             val now = Clock.System.now()
 
-            val changedFiles = withContext(Dispatchers.IO) {
-                request.context.instructionsPerFilePath.map { (path, content) ->
-                    val file = File(outputDir, path)
-                    file.parentFile?.mkdirs()
-                    file.writeText(content)
-
-                    println("      📝 Wrote file: $path (${content.length} chars)")
-
-                    path
-                }
+            // Resolve every path first so a single escaping path rejects the batch before any
+            // sibling has been written; containedFile throws SecurityException for escapes.
+            val resolved = request.context.instructionsPerFilePath.map { (path, content) ->
+                Triple(path, runCatching { workspace.containedFile(path) }, content)
             }
+            val rejected = resolved.firstNotNullOfOrNull { it.second.exceptionOrNull() }
+            if (rejected != null) {
+                ExecutionOutcome.CodeChanged.Failure(
+                    executorId = "agent-test-executor",
+                    ticketId = request.context.ticket.id,
+                    taskId = request.context.task.id,
+                    executionStartTimestamp = now,
+                    executionEndTimestamp = Clock.System.now(),
+                    partiallyChangedFiles = emptyList(),
+                    error = ExecutionError(
+                        type = ExecutionError.Type.WORKSPACE_ERROR,
+                        message = "Access outside workspace ${workspace.baseDirectory} is not allowed: ${rejected.message}",
+                    ),
+                )
+            } else {
+                val changedFiles = withContext(Dispatchers.IO) {
+                    resolved.map { (path, contained, content) ->
+                        val file = contained.getOrThrow()
+                        file.parentFile?.mkdirs()
+                        file.writeText(content)
 
-            val endTime = Clock.System.now()
+                        println("      📝 Wrote file: $path (${content.length} chars)")
 
-            ExecutionOutcome.CodeChanged.Success(
-                executorId = "agent-test-executor",
-                ticketId = request.context.ticket.id,
-                taskId = request.context.task.id,
-                executionStartTimestamp = now,
-                executionEndTimestamp = endTime,
-                changedFiles = changedFiles,
-                validation = ExecutionResult(
-                    codeChanges = null,
-                    compilation = null,
-                    linting = null,
-                    tests = null,
-                ),
-            )
+                        path
+                    }
+                }
+
+                val endTime = Clock.System.now()
+
+                ExecutionOutcome.CodeChanged.Success(
+                    executorId = "agent-test-executor",
+                    ticketId = request.context.ticket.id,
+                    taskId = request.context.task.id,
+                    executionStartTimestamp = now,
+                    executionEndTimestamp = endTime,
+                    changedFiles = changedFiles,
+                    validation = ExecutionResult(
+                        codeChanges = null,
+                        compilation = null,
+                        linting = null,
+                        tests = null,
+                    ),
+                )
+            }
         }
     )
 }

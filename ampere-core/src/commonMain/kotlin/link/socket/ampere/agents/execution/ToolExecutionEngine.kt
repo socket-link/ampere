@@ -129,8 +129,18 @@ class ToolExecutionEngine(
             return executeGenericTool(tool, request, startTime)
         }
 
-        // Generate parameters using strategy
-        val prompt = strategy.buildPrompt(tool, request, intent)
+        // Generate parameters using strategy. A strategy may refuse outright here — e.g. a
+        // code tool whose request carries no pinned workspace (AMPR-300) — and that refusal
+        // has to surface as a typed failure before any LLM call is spent on it.
+        val prompt = try {
+            strategy.buildPrompt(tool, request, intent)
+        } catch (e: Exception) {
+            return createFailure(
+                request = request,
+                startTime = startTime,
+                message = "Cannot execute tool '${tool.id}': ${e.message}",
+            )
+        }
         val enrichedRequest = try {
             val jsonResponse = llmService.callForJson(
                 prompt = prompt,

@@ -15,6 +15,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
 import link.socket.ampere.agents.domain.cognition.sparks.RoleSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
@@ -110,6 +111,9 @@ class ChargePhase(
         val agents = ArcAgentSpawner(
             agentFactory = SparkAgentFactory(
                 scope = agentScope,
+                // AMPR-300: every agent this run spawns is confined to the project directory
+                // the runtime was created with — never a shared default or the process CWD.
+                workspace = ExecutionWorkspace(baseDirectory = projectDir.toString()),
                 cognitiveRelay = cognitiveRelay,
                 executor = executor,
                 upstreamLlmClient = upstreamLlmClient,
