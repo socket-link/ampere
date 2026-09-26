@@ -9,13 +9,27 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.withTimeout
+import kotlinx.datetime.Clock
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.emission.Emission
+import link.socket.ampere.agents.domain.emission.EmissionReplyRegistry
+import link.socket.ampere.agents.domain.emission.Surface
+import link.socket.ampere.agents.domain.emission.SurfacePolicy
+import link.socket.ampere.agents.domain.emission.SurfaceResolution
+import link.socket.ampere.agents.domain.event.EmissionEvent
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.status.EventStatus
@@ -26,12 +40,20 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.EventSerialBusFactory
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
+import link.socket.ampere.util.randomUUID
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AgentMessageApiTest {
 
     private val stubAgentId = "agent-A"
     private val stubAgentId2 = "agent-B"
+    private val humanReply = "Ship it on Friday"
+
+    /** Keeps `ConsoleSurfaceIO` out of the test output; the surface choice is not under test. */
+    private val quietSurfacePolicy = object : SurfacePolicy {
+        override fun resolve(emission: Emission, urgency: Urgency): SurfaceResolution =
+            SurfaceResolution(Surface.Foreground)
+    }
     private val json = DEFAULT_JSON
     private val scope = TestScope(UnconfinedTestDispatcher())
     private val eventSerialBusFactory = EventSerialBusFactory(scope)
@@ -440,6 +462,83 @@ class AgentMessageApiTest {
                 errorMessage?.contains("waiting for human") == true,
                 "Error message should mention waiting for human, was: $errorMessage",
             )
+        }
+    }
+
+    @Test
+    fun `escalation reply is stored as a Human message and not as the escalating agent`() {
+        runBlocking {
+            // Own registry rather than the process-wide default, so only this escalation is pending.
+            val replyRegistry = EmissionReplyRegistry()
+            val api = AgentMessageApi(
+                agentId = stubAgentId,
+                messageRepository = messageRepository,
+                eventApi = AgentEventApiFactory(eventRepository, eventSerialBus).create(stubAgentId),
+                emissionReplyRegistry = replyRegistry,
+                surfacePolicy = quietSurfacePolicy,
+            )
+
+            val thread = api.createThread(
+                participants = emptySet(),
+                channel = MessageChannel.Public.Engineering,
+                initialMessageContent = "Ready to ship?",
+            )
+
+            val escalation = async {
+                api.escalateToHuman(
+                    threadId = thread.id,
+                    reason = "Need approval before release",
+                )
+            }
+
+            // Wait for askHuman to register its waiter, then answer as the human.
+            val emissionId = withTimeout(5.seconds) {
+                var pending = replyRegistry.getPendingEmissionIds()
+                while (pending.isEmpty()) {
+                    delay(20)
+                    pending = replyRegistry.getPendingEmissionIds()
+                }
+                pending.single()
+            }
+
+            val delivered = replyRegistry.deliver(
+                EmissionEvent.BaseResolved(
+                    eventId = randomUUID(),
+                    timestamp = Clock.System.now(),
+                    eventSource = EventSource.Human,
+                    urgency = Urgency.HIGH,
+                    emissionId = emissionId,
+                    affordanceId = "free-text",
+                    replyContext = JsonObject(
+                        mapOf(
+                            "type" to JsonPrimitive("free-text"),
+                            "text" to JsonPrimitive(humanReply),
+                        ),
+                    ),
+                ),
+            )
+            assertTrue(delivered, "Reply should have found the suspended escalation")
+            assertTrue(escalation.await().isSuccess)
+
+            val fetched = api.getThread(thread.id).getOrNull()
+            assertNotNull(fetched)
+            assertEquals(EventStatus.Open, fetched.status)
+
+            // AMPR-344: the re-posted reply carries human attribution ...
+            val replyMessage = fetched.messages.single { it.content == humanReply }
+            assertEquals(MessageSender.Human, replyMessage.sender)
+
+            // ... while the escalating agent's own message is unchanged.
+            val initialMessage = fetched.messages.single { it.content == "Ready to ship?" }
+            assertEquals(MessageSender.Agent(stubAgentId), initialMessage.sender)
+
+            val posted = eventRepository
+                .getEventsByType(MessageEvent.MessagePosted.EVENT_TYPE)
+                .getOrThrow()
+                .map { assertIs<MessageEvent.MessagePosted>(it) }
+            val postedReply = posted.single { it.message.content == humanReply }
+            assertEquals(MessageSender.Human, postedReply.message.sender)
+            assertEquals(EventSource.Human, postedReply.eventSource)
         }
     }
 }
