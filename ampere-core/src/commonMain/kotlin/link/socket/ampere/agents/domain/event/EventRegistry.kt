@@ -144,6 +144,9 @@ object EventRegistry {
         // EventStoreEvent types
         EventStoreEvent.PersistenceFailed.EVENT_TYPE,
 
+        // Persistence decode types
+        StoreRowUndecodableEvent.EVENT_TYPE,
+
         // LinkEvent types
         LinkEvent.LinkGranted.EVENT_TYPE,
         LinkEvent.LinkRevoked.EVENT_TYPE,

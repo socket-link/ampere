@@ -36,6 +36,13 @@ import link.socket.ampere.util.truncateStringLeaves
  * Writes are bounded (AMPR-301). [saveEvent] enforces [EventStoreBudget] at the single
  * chokepoint every persisted event passes through, and reports what it had to do on [signals].
  *
+ * Reads degrade rather than failing (AMPR-364). A row this build cannot decode — a payload
+ * naming an [Event] subtype it does not have, which version skew alone produces — is skipped by
+ * the list-shaped queries and counted on the [DecodedRows] they return, and announced on
+ * [signals] as [EventStoreSignal.RowUndecodable]. Single-row reads return the failure through
+ * their [Result], where [EventStoreFailure.classify] reads it as
+ * [EventStoreFailure.SERIALIZATION]; nothing throws through a `Result.map` any more.
+ *
  * @param maxEventBytes per-event budget; see [EventStoreBudget.MAX_EVENT_BYTES]. Overridable for tests.
  * @param maxStoreBytes whole-store budget; see [EventStoreBudget.MAX_STORE_BYTES]. Overridable for tests.
  * @param maxStringFieldChars truncation granularity; see [EventStoreBudget.MAX_STRING_FIELD_CHARS].
@@ -272,68 +279,74 @@ class EventRepository(
 
     /**
      * Retrieve every event whose `sequence` is at or after [sequence], in fold order.
+     *
+     * Rows this build cannot decode are skipped and counted; see [DecodedRows].
      */
-    suspend fun getEventsSinceSequence(sequence: Long): Result<List<StoredEvent>> =
+    suspend fun getEventsSinceSequence(sequence: Long): Result<DecodedRows<StoredEvent>> =
         withContext(ioDispatcher) {
             runCatching {
                 queries
                     .getEventsSinceSequence(sequence)
                     .executeAsList()
             }.map { rows ->
-                rows.map { row -> row.toStoredEvent() }
+                rows.decodeSkippingUndecodable { row -> row.toStoredEvent() }
             }
         }
 
     /**
      * Retrieve every event whose envelope names [eventId] as its cause, in fold order.
+     *
+     * Rows this build cannot decode are skipped and counted; see [DecodedRows].
      */
-    suspend fun getEventsCausedBy(eventId: EventId): Result<List<StoredEvent>> =
+    suspend fun getEventsCausedBy(eventId: EventId): Result<DecodedRows<StoredEvent>> =
         withContext(ioDispatcher) {
             runCatching {
                 queries
                     .getEventsCausedBy(eventId)
                     .executeAsList()
             }.map { rows ->
-                rows.map { row -> row.toStoredEvent() }
+                rows.decodeSkippingUndecodable { row -> row.toStoredEvent() }
             }
         }
 
     /**
      * Retrieve all events newest first, by `sequence`.
+     *
+     * Rows this build cannot decode are skipped and counted; see [DecodedRows].
      */
-    suspend fun getAllEvents(): Result<List<Event>> =
+    suspend fun getAllEvents(): Result<DecodedRows<Event>> =
         withContext(ioDispatcher) {
             runCatching {
                 queries
                     .getAllEvents()
                     .executeAsList()
             }.map { rows ->
-                rows.map { row ->
-                    decode(row.payload)
-                }
+                rows.decodeSkippingUndecodable()
             }
         }
 
     /**
      * Retrieve all events whose timestamp is at or after [timestamp], in fold (`sequence`) order.
+     *
+     * Rows this build cannot decode are skipped and counted; see [DecodedRows].
      */
-    suspend fun getEventsSince(timestamp: Instant): Result<List<Event>> =
+    suspend fun getEventsSince(timestamp: Instant): Result<DecodedRows<Event>> =
         withContext(ioDispatcher) {
             runCatching {
                 queries
                     .getEventsSince(timestamp.toEpochMilliseconds())
                     .executeAsList()
             }.map { rows ->
-                rows.map { row ->
-                    decode(row.payload)
-                }
+                rows.decodeSkippingUndecodable()
             }
         }
 
     /**
      * Retrieve all events filtered by [eventType] (e.g., "TaskCreatedEvent"), newest first.
+     *
+     * Rows this build cannot decode are skipped and counted; see [DecodedRows].
      */
-    suspend fun getEventsByType(eventType: EventType): Result<List<Event>> =
+    suspend fun getEventsByType(eventType: EventType): Result<DecodedRows<Event>> =
         withContext(ioDispatcher) {
             runCatching {
                 queries
@@ -342,14 +355,18 @@ class EventRepository(
                     )
                     .executeAsList()
             }.map { rows ->
-                rows.map { row ->
-                    decode(row.payload)
-                }
+                rows.decodeSkippingUndecodable()
             }
         }
 
     /**
      * Retrieve an event by its [eventId], or null if not present.
+     *
+     * A row that will not decode is a [Result.failure] carrying [EventSerializationException],
+     * which [EventStoreFailure.classify] reads as [EventStoreFailure.SERIALIZATION] (AMPR-364).
+     * The decode is inside the `runCatching` on purpose: it used to sit in a `Result.map` block,
+     * which does not catch, so the exception escaped the `Result` boundary and reached the
+     * caller as a throw from a function whose whole contract is that it does not throw.
      */
     suspend fun getEventById(eventId: EventId): Result<Event?> =
         withContext(ioDispatcher) {
@@ -357,19 +374,16 @@ class EventRepository(
                 queries
                     .getEventById(eventId)
                     .executeAsOneOrNull()
-            }.map { row ->
-                if (row == null) {
-                    null
-                } else {
-                    decode(row.payload)
-                }
+                    ?.let { row -> decode(row.payload, row.event_id) }
             }
         }
 
     /**
      * Retrieve events between [fromTime] and [toTime] (inclusive), in fold (`sequence`) order.
+     *
+     * Rows this build cannot decode are skipped and counted; see [DecodedRows].
      */
-    suspend fun getEventsBetween(fromTime: Instant, toTime: Instant): Result<List<Event>> =
+    suspend fun getEventsBetween(fromTime: Instant, toTime: Instant): Result<DecodedRows<Event>> =
         withContext(ioDispatcher) {
             runCatching {
                 queries
@@ -379,9 +393,7 @@ class EventRepository(
                     )
                     .executeAsList()
             }.map { rows ->
-                rows.map { row ->
-                    decode(row.payload)
-                }
+                rows.decodeSkippingUndecodable()
             }
         }
 
@@ -395,14 +407,15 @@ class EventRepository(
      * @param toTime End of time range (inclusive)
      * @param eventTypes Optional set of event type strings to filter by (e.g., "TaskCreated", "QuestionRaised")
      * @param sourceIds Optional set of source IDs to filter by (agent IDs or "human")
-     * @return Result containing list of events matching the criteria, in fold (`sequence`) order
+     * @return Result containing the events matching the criteria, in fold (`sequence`) order,
+     * plus a count of the rows this build could not decode; see [DecodedRows]
      */
     suspend fun getEventsWithFilters(
         fromTime: Instant,
         toTime: Instant,
         eventTypes: Set<String>? = null,
         sourceIds: Set<String>? = null,
-    ): Result<List<Event>> =
+    ): Result<DecodedRows<Event>> =
         withContext(ioDispatcher) {
             runCatching {
                 val fromMillis = fromTime.toEpochMilliseconds()
@@ -446,9 +459,7 @@ class EventRepository(
 
                 rows
             }.map { rows ->
-                rows.map { row ->
-                    decode(row.payload)
-                }
+                rows.decodeSkippingUndecodable()
             }
         }
 
@@ -538,9 +549,55 @@ class EventRepository(
         )
     }
 
+    /**
+     * Decode every row that decodes, skip the ones that do not, and say which (AMPR-364).
+     *
+     * One undecodable row used to fail the whole query: the decode sat in a `Result.map` block,
+     * and `Result.map` does not catch, so an `EventSerializationException` escaped the `Result`
+     * boundary and took every good row with it. A payload naming an [Event] subtype this build
+     * does not have is reachable by version skew alone, with no third-party extension involved.
+     *
+     * Each skip is announced on [signals] as [EventStoreSignal.RowUndecodable] and named on the
+     * returned [DecodedRows], so a dropped row is never silent: this store cannot publish an
+     * `Event` about its own reads — the door above it does that, from the count it reads here.
+     */
+    private fun List<EventStore>.decodeSkippingUndecodable(): DecodedRows<Event> =
+        decodeSkippingUndecodable { row -> decode(row.payload, row.event_id) }
+
+    private fun <T : Any> List<EventStore>.decodeSkippingUndecodable(
+        transform: (EventStore) -> T,
+    ): DecodedRows<T> {
+        val skipped = mutableListOf<UndecodableRow>()
+        val decoded = mapNotNull { row ->
+            try {
+                transform(row)
+            } catch (throwable: Throwable) {
+                val reason = throwable.decodeReason()
+                skipped += UndecodableRow(rowId = row.event_id, reason = reason)
+                _signals.tryEmit(
+                    EventStoreSignal.RowUndecodable(
+                        eventId = row.event_id,
+                        eventType = row.event_type,
+                        reason = reason,
+                    ),
+                )
+                null
+            }
+        }
+        return DecodedRows(decoded, skipped)
+    }
+
+    /**
+     * The decoder's own complaint, preferred over the wrapper's. [decode] wraps everything in
+     * [EventSerializationException], whose message names the row; the cause is the one that says
+     * *why* — an unknown class discriminator reads very differently from malformed JSON.
+     */
+    private fun Throwable.decodeReason(): String =
+        (cause ?: this).message ?: this::class.simpleName.orEmpty()
+
     private fun EventStore.toStoredEvent(): StoredEvent =
         StoredEvent(
-            event = decode(payload),
+            event = decode(payload, event_id),
             sequence = sequence,
             recordedAt = Instant.fromEpochMilliseconds(recorded_at),
             causedBy = caused_by,
@@ -548,19 +605,26 @@ class EventRepository(
             truncated = truncated != 0L,
         )
 
-    private fun decode(payload: String): Event = try {
+    /**
+     * Decode one payload, or throw [EventSerializationException] naming the row it came from.
+     *
+     * Every caller either catches this — see [decodeSkippingUndecodable] — or lets `runCatching`
+     * turn it into the `Result.failure` a single-row read returns. Nothing lets it escape a
+     * `Result`.
+     */
+    private fun decode(payload: String, rowId: EventId): Event = try {
         json.decodeFromString(
             deserializer = Event.serializer(),
             string = payload,
         )
     } catch (throwable: SerializationException) {
         throw EventSerializationException(
-            message = "Failed to deserialize event payload",
+            message = "Failed to deserialize event payload for row $rowId",
             cause = throwable,
         )
     } catch (throwable: Throwable) {
         throw EventSerializationException(
-            message = "Failed to deserialize event payload",
+            message = "Failed to deserialize event payload for row $rowId",
             cause = throwable,
         )
     }

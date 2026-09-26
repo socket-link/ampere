@@ -5,7 +5,6 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -16,6 +15,7 @@ import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.EventType
+import link.socket.ampere.agents.domain.event.StoreRowUndecodableEvent
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.bus.subscribe
@@ -148,8 +148,14 @@ class EventBusLoggingAndErrorsTest {
         }
     }
 
+    /**
+     * Before AMPR-364 this test asserted the opposite: `getEventHistory()` *threw* — the decode
+     * failure escaped `Result.map`, which does not catch — and the test's own `runCatching` was
+     * what made it look graceful. One malformed row took every readable row with it. Now the row
+     * is skipped, the readable ones come back, and the skip is announced on the bus.
+     */
     @Test
-    fun `malformed JSON in database is handled gracefully`() {
+    fun `a malformed row is skipped rather than failing the whole history`() {
         runBlocking {
             val logger = TestLogger()
             val repo = EventRepository(json, scope, db)
@@ -169,14 +175,19 @@ class EventBusLoggingAndErrorsTest {
                 truncated = 0L,
             )
 
-            val history = runCatching {
-                AgentEventApiFactory(repo, bus, logger)
-                    .create("agent-X")
-                    .getEventHistory()
-            }.getOrNull()
+            val api = AgentEventApiFactory(repo, bus, logger).create("agent-X")
+            api.publish(taskEvent()).getOrThrow()
 
-            assertNull(history)
-            assertEquals(true, logger.errors.isEmpty())
+            val history = api.getEventHistory()
+
+            assertEquals(listOf("evt-log-1"), history.map { it.eventId })
+            assertEquals(true, logger.errors.isEmpty(), "the read succeeded, so nothing failed")
+
+            val announced = repo
+                .getEventsByType(StoreRowUndecodableEvent.EVENT_TYPE)
+                .getOrThrow()
+            assertEquals(1, announced.size)
+            assertEquals("bad-json-1", (announced.single() as StoreRowUndecodableEvent).rowId)
         }
     }
 }

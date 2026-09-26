@@ -1,5 +1,7 @@
 package link.socket.ampere.agents.events.api
 
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.config.AgentActionAutonomy
@@ -18,10 +20,13 @@ import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.MilestoneCategory
 import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
 import link.socket.ampere.agents.domain.event.PermissionDeniedReason
+import link.socket.ampere.agents.domain.event.PersistedStore
+import link.socket.ampere.agents.domain.event.StoreRowUndecodableEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.domain.task.TaskId
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
+import link.socket.ampere.agents.events.DecodedRows
 import link.socket.ampere.agents.events.EventEnvelope
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.StoredEvent
@@ -82,6 +87,17 @@ class AgentEventApi(
     val clock: Clock = Clock.System,
 ) {
     private val milestoneTracker = MilestoneTracker(this, milestoneTrackerState)
+
+    /**
+     * Rows a read through this door has already reported as undecodable (AMPR-364).
+     *
+     * The row stays undecodable until something rewrites it, and these reads run on every
+     * refresh of a watch pane, so reporting per read would turn one bad row into an unbounded
+     * stream of events about it — each of them a write to the store being read. Said once per
+     * door, then quiet.
+     */
+    private val reportedUndecodableRows = mutableSetOf<String>()
+    private val undecodableReportLock = Mutex()
 
     init {
         milestoneTracker.start()
@@ -319,7 +335,12 @@ class AgentEventApi(
             }
         }
 
-    /** Retrieve all events since the provided timestamp, or all if null. */
+    /**
+     * Retrieve all events since the provided timestamp, or all if null.
+     *
+     * Rows the store could not decode are skipped by it and reported here; see
+     * [reportUndecodableRows].
+     */
     suspend fun getRecentEvents(
         since: Instant?,
         eventType: EventType? = null,
@@ -337,39 +358,81 @@ class AgentEventApi(
             )
         }
 
-        return result.getOrNull()?.let { events ->
-            if (eventType != null) {
-                events.filter { event ->
-                    event.eventType == eventType
-                }
-            } else {
-                events
-            }
-        } ?: emptyList()
+        val events = result.getOrNull() ?: return emptyList()
+        reportUndecodableRows(events)
+
+        return if (eventType != null) {
+            events.filter { event -> event.eventType == eventType }
+        } else {
+            events
+        }
     }
 
-    /** Retrieve historical events with optional type filter and since timestamp. */
+    /**
+     * Retrieve historical events with optional type filter and since timestamp.
+     *
+     * Rows the store could not decode are skipped by it and reported here; see
+     * [reportUndecodableRows].
+     */
     suspend fun getEventHistory(
         since: Instant? = null,
         eventType: EventType? = null,
     ): List<Event> {
-        val result: Result<List<Event>> = when {
-            eventType != null && since != null -> {
-                eventRepository
-                    .getEventsByType(eventType)
-                    .map { list -> list.filter { it.timestamp >= since } }
-            }
+        val result: Result<DecodedRows<Event>> = when {
             eventType != null -> eventRepository.getEventsByType(eventType)
             since != null -> eventRepository.getEventsSince(since)
             else -> eventRepository.getAllEvents()
         }
 
-        return result.onFailure { throwable ->
+        val events = result.onFailure { throwable ->
             logger.logError(
                 message = "Failed to load event history (eventClassType=$eventType since=$since)",
                 throwable = throwable,
             )
-        }.getOrElse { emptyList() }
+        }.getOrElse { return emptyList() }
+
+        reportUndecodableRows(events)
+
+        return if (eventType != null && since != null) {
+            events.filter { it.timestamp >= since }
+        } else {
+            events
+        }
+    }
+
+    /**
+     * Say on the bus that a read skipped a row it could not decode (AMPR-364).
+     *
+     * The store cannot do this itself: it sits *below* this door, and an `Event` published from
+     * inside a read would have to be persisted by the store that is reporting on its own
+     * readability. So the store counts the skips on [DecodedRows] and on
+     * `EventRepository.signals`, and the door — the only thing allowed to publish — turns them
+     * into [StoreRowUndecodableEvent]. Reading a store with no skew publishes nothing.
+     *
+     * Deduplicated by row id, per [reportedUndecodableRows] — and only once the write landed, so
+     * a refused publish leaves the row unreported and the next read says it again.
+     */
+    private suspend fun reportUndecodableRows(rows: DecodedRows<*>) {
+        if (rows.undecodable.isEmpty()) return
+
+        val unreported = undecodableReportLock.withLock {
+            rows.undecodable.filterNot { row -> row.rowId in reportedUndecodableRows }
+        }
+
+        unreported.forEach { row ->
+            publish(
+                StoreRowUndecodableEvent(
+                    eventId = generateUUID("store-row-undecodable", agentId),
+                    timestamp = clock.now(),
+                    eventSource = EventSource.Agent(agentId),
+                    store = PersistedStore.EVENT_STORE,
+                    rowId = row.rowId,
+                    reason = row.reason,
+                ),
+            ).onSuccess {
+                undecodableReportLock.withLock { reportedUndecodableRows += row.rowId }
+            }
+        }
     }
 
     /** Replay past events by publishing them to current subscribers. */

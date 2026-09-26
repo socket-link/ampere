@@ -41,6 +41,7 @@ import link.socket.ampere.agents.domain.event.CognitiveStateSnapshot
 import link.socket.ampere.agents.domain.event.SparkAppliedEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.SparkRemovedEvent
+import link.socket.ampere.agents.domain.event.StoreRowUndecodableEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
@@ -208,6 +209,9 @@ class EventRenderer(
             // The event store refused a write, so something that happened has no row. Red: the
             // pane is the only place it will ever appear.
             is EventStoreEvent.PersistenceFailed -> "🧯" to red
+            // A stored row this build cannot decode, skipped so the query could finish. Red: the
+            // row is still there, and nothing reading the store can see it.
+            is StoreRowUndecodableEvent -> "🧩" to red
         }
     }
 

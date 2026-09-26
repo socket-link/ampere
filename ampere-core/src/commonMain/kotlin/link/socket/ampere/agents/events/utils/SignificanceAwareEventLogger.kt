@@ -29,6 +29,7 @@ import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
+import link.socket.ampere.agents.domain.event.StoreRowUndecodableEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
@@ -222,6 +223,10 @@ class SignificanceAwareEventLogger(
         // The store refused a write, so something that happened has no durable record of
         // happening (AMPR-301). Nothing downstream can recover that on its own.
         is EventStoreEvent.PersistenceFailed -> EventSignificance.CRITICAL
+
+        // A stored row this build cannot read (AMPR-364). The query survived by skipping it,
+        // which means something the Field holds is invisible to everything reading it.
+        is StoreRowUndecodableEvent -> EventSignificance.CRITICAL
     }
 
     private fun formatUrgency(urgency: Urgency): String = when (urgency) {
