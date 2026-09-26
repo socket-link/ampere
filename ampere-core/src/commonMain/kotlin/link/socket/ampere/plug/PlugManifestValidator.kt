@@ -20,10 +20,18 @@ import link.socket.ampere.plug.permission.PlugPermission
  * against anything outside the manifest itself — it only cross-references
  * them against [PlugManifest.requiredLinks] scopes and
  * [PlugManifest.optionalConsumes], and checks them against
- * [PlugManifest.isCanonExternal] for internal consistency. The only
- * production call site today is [PlugContext.create]. It is expected to run
- * at plug install time on every host that accepts manifests — including
- * Socket, which does not currently call it.
+ * [PlugManifest.isCanonExternal] for internal consistency. Whether a canon
+ * *name* exists at all is settled before a [PlugManifest] can be built, by
+ * enum decode and — for bundles — by
+ * [link.socket.ampere.bundle.PlugBundleParser]'s pre-decode pass, which is why
+ * [ManifestValidationReason.UnknownCanonType] is in the reason set but never
+ * produced here.
+ *
+ * Production call sites are [PlugContext.create] and
+ * [link.socket.ampere.bundle.PlugBundleValidator] (AMPR-365), so a marketplace
+ * import is held to the same rules as an in-repo install. It is expected to run
+ * at plug install time on every host that accepts manifests — including Socket,
+ * which does not currently call it.
  */
 object PlugManifestValidator {
 
@@ -296,4 +304,117 @@ sealed interface ManifestValidationReason {
     data class CanonExternalWithTableWriteCapabilities(
         val capabilities: Set<TableWriteCapability>,
     ) : ManifestValidationReason
+
+    /**
+     * A canon-facing manifest field named a wire name this build's [CanonType]
+     * does not contain: an extension type (`com.acme.invoice`), a typo, or a
+     * noun admitted to the canon after this build shipped.
+     *
+     * Produced by [link.socket.ampere.bundle.PlugBundleParser], not by
+     * [PlugManifestValidator] — [PlugManifest.emits] and its siblings are
+     * `Set<CanonType>`, so by the time a [PlugManifest] exists an unknown name
+     * has already failed enum decode. The parser reads the canon fields
+     * leniently off the raw JSON *before* decoding, which is what lets a host
+     * name the offending field and value instead of surfacing a decoder message
+     * as [link.socket.ampere.bundle.BundleParseError.InvalidManifest]
+     * (AMPR-365).
+     *
+     * @property field the manifest field that named it, relative to `plug`:
+     *   `emits`, `consumes`, `optionalConsumes`, or
+     *   `requiredLinks[0].minimumScope`.
+     * @property wireName the unresolvable name, verbatim.
+     */
+    data class UnknownCanonType(
+        val field: String,
+        val wireName: String,
+    ) : ManifestValidationReason
+
+    /**
+     * A bundle pinned a minimum Ampere version newer than the host's
+     * [link.socket.ampere.AMPERE_RUNTIME_VERSION]: the host is too old to be
+     * sure it has every canon type the bundle names.
+     *
+     * This is the honest version of the SCKT-444 failure, where a host pinned
+     * to an older `ampere-core` met a bundle naming a canon type admitted after
+     * it — and reported a malformed manifest. Checked before decode by
+     * [link.socket.ampere.bundle.PlugBundleParser] so the "upgrade required"
+     * diagnostic wins over the unknown-noun one it would otherwise cause, and
+     * again by [link.socket.ampere.bundle.PlugBundleValidator] for a bundle that
+     * was handed over rather than parsed.
+     *
+     * @property required the version the bundle pinned.
+     * @property current the host runtime version it was compared against.
+     */
+    data class AmpereVersionTooOld(
+        val required: String,
+        val current: String,
+    ) : ManifestValidationReason
+
+    /**
+     * A bundle declared a [link.socket.ampere.bundle.BundleManifest.minimumAmpereVersion]
+     * that is not an orderable version (`"latest"`, `"1.x"`, `""`).
+     *
+     * Reported rather than ignored: a pin that cannot be compared is a gate
+     * that cannot be enforced, and silently importing such a bundle is exactly
+     * the skew the pin exists to catch.
+     */
+    data class MalformedAmpereVersion(
+        val declared: String,
+    ) : ManifestValidationReason
+}
+
+/**
+ * One-line rendering of a reason, for hosts that surface validation failures as
+ * text — [link.socket.ampere.bundle.BundleValidation.Failed.reasons] is the
+ * in-tree caller.
+ *
+ * Kept next to the sealed set so a new reason cannot be added without the
+ * exhaustive `when` here failing to compile.
+ */
+fun ManifestValidationReason.describe(): String = when (this) {
+    is ManifestValidationReason.MissingMcpServerPermission ->
+        "mcpServers[$dependencyName] declares $uri but no matching mcp_server permission was granted."
+
+    is ManifestValidationReason.DependencyPermissionNotLifted ->
+        "mcpServers[$dependencyName] requires $permission, which is not in requiredPermissions."
+
+    is ManifestValidationReason.DuplicateLinkRequirementName ->
+        "requiredLinks declares the name \"$name\" more than once; only one could ever be resolved."
+
+    is ManifestValidationReason.EmptyLinkRequirementScope ->
+        "requiredLinks[$name] declares an empty minimumScope, so it would resolve to a wire " +
+            "permitted to carry nothing."
+
+    is ManifestValidationReason.DuplicateDeviceCapability ->
+        "requiredPermissions declares the device capability \"$capability\" more than once."
+
+    is ManifestValidationReason.UndeclaredCanonScope ->
+        "requiredLinks[$requirementName] is scoped to ${canonType.wireName}, which the manifest " +
+            "neither emits, consumes, nor optionally consumes."
+
+    is ManifestValidationReason.RedundantOptionalConsumes ->
+        "${canonType.wireName} is in both consumes and optionalConsumes; it cannot be both " +
+            "required and merely accepted."
+
+    is ManifestValidationReason.CanonExternalWithDeclaredCanon ->
+        "isCanonExternal is set but emits declares " +
+            "${canonTypes.joinToString { it.wireName }}."
+
+    is ManifestValidationReason.UndeclaredTableWriteCapability ->
+        "tableWriteCapabilities declares ${capabilities.joinToString()} but neither emits nor " +
+            "consumes names ${CanonType.TABLE.wireName}."
+
+    is ManifestValidationReason.CanonExternalWithTableWriteCapabilities ->
+        "isCanonExternal is set but tableWriteCapabilities declares " +
+            "${capabilities.joinToString()}."
+
+    is ManifestValidationReason.UnknownCanonType ->
+        "$field names \"$wireName\", which is not a canon type this build understands."
+
+    is ManifestValidationReason.AmpereVersionTooOld ->
+        "minimumAmpereVersion is $required but this build is $current; upgrade Ampere to import " +
+            "this bundle."
+
+    is ManifestValidationReason.MalformedAmpereVersion ->
+        "minimumAmpereVersion \"$declared\" is not a version that can be compared."
 }

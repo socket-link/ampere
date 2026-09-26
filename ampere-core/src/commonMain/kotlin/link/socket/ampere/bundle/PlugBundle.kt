@@ -38,11 +38,28 @@ const val BUNDLE_SIGNATURE_PATH: String = "signature.sig"
  * manifests written before the bundle spec lacked this wrapper; the parser
  * does not attempt to read those — bundle import is opt-in for plugs
  * shipping through the marketplace.
+ *
+ * @property minimumAmpereVersion the oldest Ampere release whose
+ *   [link.socket.ampere.canon.CanonType] vocabulary covers every canon name in
+ *   [plug] — the marketplace rule's pin (`docs/concepts/domain-canon.md`). A
+ *   host older than this cannot read the bundle's canon declarations, and says
+ *   so as [BundleParseError.UnsupportedManifest] carrying
+ *   [link.socket.ampere.plug.ManifestValidationReason.AmpereVersionTooOld]
+ *   instead of letting the enum decode fail as a malformed manifest. `null` —
+ *   the default, and what every bundle written before AMPR-365 decodes to —
+ *   means the bundle makes no claim; its canon names are still checked against
+ *   this build's vocabulary, the host just cannot tell "too old" from "typo"
+ *   apart when one of them is unknown. Lives on the wrapper rather than on
+ *   [PlugManifest] because it is a property of the *distribution*: an in-repo
+ *   plug compiles against the canon it ships with, so it has nothing to pin.
+ *   Additive with a default, so it does not bump
+ *   [CURRENT_BUNDLE_FORMAT_VERSION].
  */
 @Serializable
 data class BundleManifest(
     val bundleFormatVersion: Int,
     val plug: PlugManifest,
+    val minimumAmpereVersion: String? = null,
 )
 
 /**
@@ -57,18 +74,24 @@ data class BundleManifest(
  * @property signature raw bytes of `signature.sig` if present. Verification is
  *   the responsibility of [PlugBundleSignatureVerifier]; the parser does not
  *   inspect the bytes.
+ * @property minimumAmpereVersion the bundle's canon pin, as read from
+ *   `manifest.json` — see [BundleManifest.minimumAmpereVersion]. Carried onto
+ *   the parsed bundle so [PlugBundleValidator] can re-check it against the host
+ *   runtime version for a bundle it was handed rather than parsed.
  */
 data class PlugBundle(
     val bundleFormatVersion: Int,
     val manifest: PlugManifest,
     val assets: Map<String, ByteArray>,
     val signature: ByteArray?,
+    val minimumAmpereVersion: String? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is PlugBundle) return false
         if (bundleFormatVersion != other.bundleFormatVersion) return false
         if (manifest != other.manifest) return false
+        if (minimumAmpereVersion != other.minimumAmpereVersion) return false
         if (assets.keys != other.assets.keys) return false
         for ((path, bytes) in assets) {
             if (!bytes.contentEquals(other.assets[path])) return false
@@ -90,6 +113,7 @@ data class PlugBundle(
             result = 31 * result + bytes.contentHashCode()
         }
         result = 31 * result + (signature?.contentHashCode() ?: 0)
+        result = 31 * result + (minimumAmpereVersion?.hashCode() ?: 0)
         return result
     }
 }
