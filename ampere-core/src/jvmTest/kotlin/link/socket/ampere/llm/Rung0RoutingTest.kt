@@ -22,6 +22,7 @@ import link.socket.ampere.agents.domain.routing.CapabilityRoutingDefaults
 import link.socket.ampere.agents.domain.routing.CognitiveRelayImpl
 import link.socket.ampere.agents.domain.routing.RelayConfig
 import link.socket.ampere.agents.domain.routing.RoutingContext
+import link.socket.ampere.agents.domain.routing.busRoutingEventSink
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
@@ -54,7 +55,7 @@ class Rung0RoutingTest {
         val registry = InMemoryModelDescriptorRegistry()
         val relay = CognitiveRelayImpl(
             initialConfig = RelayConfig(rules = CapabilityRoutingDefaults.defaultCapabilityRules()),
-            eventBus = eventBus,
+            publish = eventBus?.busRoutingEventSink(),
             registry = registry,
         )
         return relay to registry

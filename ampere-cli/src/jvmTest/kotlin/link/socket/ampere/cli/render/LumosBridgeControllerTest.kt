@@ -8,6 +8,7 @@ import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.events.InMemoryEventDoor
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.phosphor.palette.AtmospherePresets
 import link.socket.phosphor.runtime.CognitiveSceneRuntime
@@ -65,17 +66,19 @@ class LumosBridgeControllerTest {
     @Test
     fun `phase event drives the runtime to the strategy's atmosphere`() = runBlocking {
         val scope = TestScope(UnconfinedTestDispatcher())
-        val bus = EventSerialBus(scope)
-        val scene = newScene()
-        val controller = LumosBridgeController(bus = bus, sceneProvider = { scene })
+        // Events reach the bus only through the door (AMPR-340).
+        InMemoryEventDoor.open(agentId = "agent-A", scope = scope).use { door ->
+            val scene = newScene()
+            val controller = LumosBridgeController(bus = door.bus, sceneProvider = { scene })
 
-        controller.tick() // start the bridge
-        assertTrue(controller.isStarted)
+            controller.tick() // start the bridge
+            assertTrue(controller.isStarted)
 
-        bus.publish(phaseEntered(CognitivePhase.EXECUTE))
-        completeInFlightTransition(scene, controller)
+            door.api.publish(phaseEntered(CognitivePhase.EXECUTE)).getOrThrow()
+            completeInFlightTransition(scene, controller)
 
-        assertEquals(AtmospherePresets.READY, scene.currentAtmosphere)
+            assertEquals(AtmospherePresets.READY, scene.currentAtmosphere)
+        }
     }
 
     @Test

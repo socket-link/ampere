@@ -147,7 +147,6 @@ fun Ampere.fromEnvironment(
         scope = agentScope,
         ticketOrchestrator = environmentService.ticketOrchestrator,
         createEventApi = environmentService::createEventApi,
-        eventSerialBus = environmentService.eventBus,
         upstreamLlmClient = upstreamLlmClient,
         modelDescriptorSource = modelDescriptorSource,
         database = database,

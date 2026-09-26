@@ -20,6 +20,7 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventRegistry
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.ProbeEvent
+import link.socket.ampere.agents.events.InMemoryEventDoor
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.eval.db.EvalDatabase
@@ -37,6 +38,7 @@ class TraceRecorderTest {
     private val scope = TestScope(UnconfinedTestDispatcher())
 
     private lateinit var driver: JdbcSqliteDriver
+    private lateinit var door: InMemoryEventDoor.Handle
     private lateinit var bus: EventSerialBus
     private lateinit var service: TraceService
     private lateinit var recorder: TraceRecorder
@@ -45,14 +47,22 @@ class TraceRecorderTest {
     fun setUp() {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         EvalDatabase.Schema.create(driver)
-        bus = EventSerialBus(scope)
+        // The recorder captures the bus stream; events reach that stream only through the
+        // door (AMPR-340), so the test publishes the way production does.
+        door = InMemoryEventDoor.open(agentId = "trace-recorder-test", scope = scope)
+        bus = door.bus
         service = TraceService(EvalDatabase(driver))
         recorder = TraceRecorder(bus, service)
     }
 
     @AfterTest
     fun tearDown() {
+        door.close()
         driver.close()
+    }
+
+    private suspend fun publish(event: Event) {
+        door.api.publish(event).getOrThrow()
     }
 
     private val source = EventSource.Agent("agent-1")
@@ -73,7 +83,7 @@ class TraceRecorderTest {
     fun `records exactly N events in emission order`() = runTest {
         val handle = recorder.start(runId = "run-1", arcId = "arc-1")
         val emitted = events(5)
-        emitted.forEach { bus.publish(it) }
+        emitted.forEach { publish(it) }
 
         val trace = handle.stop().getOrThrow()
 
@@ -86,7 +96,7 @@ class TraceRecorderTest {
     fun `round-trip record persist load replay yields identical ordered sequence`() = runTest {
         val handle = recorder.start(runId = "run-2", arcId = "arc-2")
         val emitted = events(4)
-        emitted.forEach { bus.publish(it) }
+        emitted.forEach { publish(it) }
 
         val recorded = handle.stop().getOrThrow()
 
@@ -107,7 +117,7 @@ class TraceRecorderTest {
         val recorder = TraceRecorder(bus, service, maxEventBytes = 200, maxStringFieldChars = 50)
         val handle = recorder.start(runId = "run-3", arcId = "arc-3")
 
-        bus.publish(
+        publish(
             Event.QuestionRaised(
                 eventId = "e1",
                 urgency = Urgency.LOW,
@@ -138,7 +148,7 @@ class TraceRecorderTest {
         val recorder = TraceRecorder(bus, service, maxTraceBytes = 300)
         val handle = recorder.start(runId = "run-4", arcId = "arc-4")
         val emitted = events(5)
-        emitted.forEach { bus.publish(it) }
+        emitted.forEach { publish(it) }
 
         val trace = handle.stop().getOrThrow()
 
@@ -154,7 +164,7 @@ class TraceRecorderTest {
     fun `asset access event carries a byte count, never the asset bytes, in a recorded trace`() = runTest {
         val handle = recorder.start(runId = "run-5", arcId = "arc-5")
 
-        bus.publish(
+        publish(
             AssetAccessEvent(
                 eventId = "e1",
                 timestamp = Instant.fromEpochMilliseconds(1),
@@ -190,7 +200,7 @@ class TraceRecorderTest {
     fun `a probe verdict survives recording and decoding from a trace`() = runTest {
         val handle = recorder.start(runId = "run-6", arcId = "arc-6")
 
-        bus.publish(
+        publish(
             ProbeEvent.VerdictReached(
                 eventId = "e1",
                 eventSource = source,
@@ -220,7 +230,7 @@ class TraceRecorderTest {
     fun `an undetermined verdict keeps its cause through a trace`() = runTest {
         val handle = recorder.start(runId = "run-7", arcId = "arc-7")
 
-        bus.publish(
+        publish(
             ProbeEvent.VerdictReached(
                 eventId = "e1",
                 eventSource = source,
@@ -250,11 +260,11 @@ class TraceRecorderTest {
         val handle = recorder.start(runId = "run-8", arcId = "arc-8")
         val (first, last) = events(2)
 
-        bus.publish(first)
+        publish(first)
         // The owner's own last word, taken out of the dispatch race — and then published, so the
         // bus delivers a second copy.
         handle.capture(last)
-        bus.publish(last)
+        publish(last)
 
         val trace = handle.stop().getOrThrow()
 

@@ -61,7 +61,7 @@ class CognitiveRelayCostTest {
                 RoutingRule.ByCapability(googleConfig),
             ),
         ),
-        eventBus = eventBus,
+        publish = eventBus?.busRoutingEventSink(),
         registry = InMemoryModelDescriptorRegistry(),
     )
 
@@ -240,7 +240,7 @@ class CognitiveRelayCostTest {
                     RoutingRule.ByCapability(googleConfig),
                 ),
             ),
-            eventBus = eventBus,
+            publish = eventBus.busRoutingEventSink(),
             registry = registry,
         ).resolve(
             context = RoutingContext(requirements = worldKnowledge),

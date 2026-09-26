@@ -23,6 +23,7 @@ import link.socket.ampere.agents.domain.routing.CognitiveRelayImpl
 import link.socket.ampere.agents.domain.routing.RelayConfig
 import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.routing.RoutingRule
+import link.socket.ampere.agents.domain.routing.busRoutingEventSink
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -89,7 +90,7 @@ class EventServiceExtensionsTest {
                     ),
                 ),
             ),
-            eventBus = eventBus,
+            publish = eventBus.busRoutingEventSink(),
         )
 
         val job = launch {

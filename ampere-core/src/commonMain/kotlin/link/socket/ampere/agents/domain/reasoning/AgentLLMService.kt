@@ -496,6 +496,7 @@ class AgentLLMService(
                     modelId = modelId,
                     routingReason = routingReason,
                 ),
+                runId = routingContext?.workflowId,
             )
         }
     }
@@ -535,6 +536,7 @@ class AgentLLMService(
                     success = success,
                     errorType = errorType,
                 ),
+                runId = routingContext?.workflowId,
             )
         }
     }

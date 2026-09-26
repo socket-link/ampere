@@ -106,7 +106,7 @@ class CognitiveRelayFloorTest {
                     RoutingRule.ByCapability(highRungConfig),
                 ),
             ),
-            eventBus = eventBus,
+            publish = eventBus?.busRoutingEventSink(),
             registry = registry,
         )
 

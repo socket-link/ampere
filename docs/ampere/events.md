@@ -1,9 +1,72 @@
 # AMPERE Events
 
 AMPERE exposes cognitive and coordination state changes as typed `Event` values on
-`EventSerialBus`. Publishers should use `AgentEventApi` when they are emitting
-from an agent-owned workflow so events are persisted and source attribution stays
-consistent.
+`EventSerialBus`. Every one of them enters through `AgentEventApi.publish`, which
+persists the event and only then dispatches it, so the durable record and what
+subscribers saw are the same stream. See [The door](#the-door).
+
+## The door
+
+`AgentEventApi.publish(event, causedBy, runId)` is the only way an `Event` enters
+the system (F-register rows F1 and F4, AMPR-340). It does two things, in this order:
+
+1. **Persist.** The event is serialized and inserted into `EventStore` inside its
+   envelope. A failure here is returned to the caller as a `Result.failure` and
+   also announced on the bus as `EventStoreEvent.PersistenceFailed` — the one event
+   that is dispatched without a row, because the store is what just failed.
+2. **Dispatch.** Only once the row is committed does the event go out on
+   `EventSerialBus` to subscribers.
+
+`EventSerialBus.publish` and `publishAsync` are `internal` to `ampere-core`. The
+bus's public surface is subscription. Inside `ampere-core`, `EventDoorBoundaryTest`
+scans every main source set in the repository and fails on any `…bus.publish(`
+outside `AgentEventApi.kt`, so the compiler holds the line across modules and the
+test holds it within the one module that could bypass it. A test in another module
+that needs to drive a bus subscriber publishes through
+`InMemoryEventDoor` from `ampere-core-test-fixtures` (JVM), which is a real door
+over an in-memory store.
+
+### The envelope
+
+Each `EventStore` row carries the event's own fields plus an envelope. Who assigns
+each column:
+
+| Column        | Assigned by                                   | Meaning                                                            |
+|---------------|-----------------------------------------------|--------------------------------------------------------------------|
+| `sequence`    | the store, inside the insert transaction      | Unique, monotonic fold order. Never the event timestamp.           |
+| `recorded_at` | the door's `clock` at publish                 | When the system took the event in. `timestamp` is the event's own. |
+| `caused_by`   | the publisher, via `causedBy`                 | The event this one is a reaction to; `NULL` for a root.            |
+| `run_id`      | the publisher, via `runId`                    | The Arc run this event belongs to; `NULL` when outside a run.      |
+
+There is no fallback for `run_id`. Before AMPR-340 the repository inferred it from
+the fields of ten event kinds; now what the publisher passes is what is stored.
+
+**`causedBy`:** pass the id of the event you are handling. A subscriber that
+publishes in response to `event` passes `causedBy = event.eventId`. Leave it null
+only for an event with no trigger (a user action, a scheduled tick).
+
+**`runId`:** pass the run id you hold. Where it comes from at the usual publish
+sites:
+
+- a tool: `ExecutionRequest.runId`, stamped by `ToolExecutionEngine`;
+- a provider call: `RoutingContext.workflowId`;
+- an `emission { }` block: the scope's `runId`, threaded to every event it produces;
+- an event that carries its own `runId` field (`TaskEvent`, `MemoryEvent`,
+  `ToolEvent` variants): pass that same value.
+
+### Getting an `AgentEventApi`
+
+An agent holds the api it was built with. Anything else asks the environment:
+
+```kotlin
+val eventApi = environmentService.createEventApi(agentId)
+
+eventApi.publish(event, causedBy = trigger.eventId, runId = runId)
+    .onFailure { /* the row was not written; the bus has already said so */ }
+```
+
+`ArcSession` built with a `database` exposes its door as `ArcSession.eventApi`, for
+a host (the iOS bridge, for one) that publishes into a run from outside it.
 
 ## `Event` versus `TeamEvent`
 
@@ -13,7 +76,7 @@ of the durable world-state record, and the fold over them is deterministic.
 second event hierarchy. `TeamEventAdapter.adapt` projects a published `Event` into
 a `TeamEvent`; the projection is never persisted and never enters the fold. To
 subscribe to the record itself, use `EventRelayService.subscribeToLiveEvents` or
-`EventSerialBus`. To observe a team's activity in the DSL, collect
+`EventSerialBus.subscribe`. To observe a team's activity in the DSL, collect
 `AgentTeam.events`, whose replay buffer exists for late UI subscribers and is not
 an event log. `TeamEventBoundaryTest` enforces that no `commonMain` code outside
 `dsl/` references `TeamEvent`.

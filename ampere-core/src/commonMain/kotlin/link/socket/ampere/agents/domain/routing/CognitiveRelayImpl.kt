@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
@@ -13,7 +14,7 @@ import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.routingCostPerWatt
 import link.socket.ampere.agents.domain.routing.capability.satisfies
-import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.util.logWith
@@ -22,7 +23,7 @@ import link.socket.ampere.util.logWith
  * Default implementation of [CognitiveRelay].
  *
  * Evaluates routing rules in order (first-match-wins), emits
- * [RoutingEvent]s through the [EventSerialBus], and supports
+ * [RoutingEvent]s through its [RoutingEventSink], and supports
  * hot-swapping configuration via [updateConfig].
  *
  * When the first match is capability-based, selection is cost-aware (AMPR-210):
@@ -37,14 +38,16 @@ import link.socket.ampere.util.logWith
  * Thread-safe: config updates are guarded by a [Mutex].
  *
  * @param initialConfig The initial relay configuration.
- * @param eventBus Optional EventSerialBus for routing event emission.
+ * @param publish Where routing events go, or null to route silently. Production wires
+ *   [routingEventSink] over the agent's door, so every [RoutingEvent] is persisted before
+ *   it is dispatched (F1, AMPR-340); the relay never touches the bus itself.
  * @param registry Optional provider descriptor registry consulted by
  *   capability-based rules (e.g. [RoutingRule.ByCapability]). When null,
  *   capability rules never match and routing behaves exactly as before.
  */
 class CognitiveRelayImpl(
     initialConfig: RelayConfig = RelayConfig(),
-    private val eventBus: EventSerialBus? = null,
+    private val publish: RoutingEventSink? = null,
     private val registry: ModelDescriptorRegistry? = null,
 ) : CognitiveRelay {
 
@@ -238,12 +241,21 @@ class CognitiveRelayImpl(
         logger.d { "[Relay] Config updated: ${newConfig.rules.size} rules" }
     }
 
+    /**
+     * Hand [event] to the sink under the run of [context]. A sink failure is the door's to
+     * report (it logs and announces `PersistenceFailed`); routing itself is never failed by it.
+     */
+    private suspend fun emit(context: RoutingContext, event: RoutingEvent) {
+        publish?.invoke(event, context.workflowId)
+    }
+
     private suspend fun emitRouteSelected(
         context: RoutingContext,
         decision: RoutingDecision,
     ) {
-        eventBus?.publish(
-            RoutingEvent.RouteSelected(
+        emit(
+            context = context,
+            event = RoutingEvent.RouteSelected(
                 eventId = generateUUID("routing"),
                 timestamp = Clock.System.now(),
                 eventSource = context.agentId?.let { EventSource.Agent(it) }
@@ -266,8 +278,9 @@ class CognitiveRelayImpl(
         fallbackDecision: RoutingDecision,
         failureReason: String,
     ) {
-        eventBus?.publish(
-            RoutingEvent.RouteFallback(
+        emit(
+            context = context,
+            event = RoutingEvent.RouteFallback(
                 eventId = generateUUID("routing"),
                 timestamp = Clock.System.now(),
                 eventSource = context.agentId?.let { EventSource.Agent(it) }
@@ -287,8 +300,9 @@ class CognitiveRelayImpl(
         requestedFloor: CapabilityRung,
         bestAvailableRung: CapabilityRung?,
     ) {
-        eventBus?.publish(
-            RoutingEvent.RouteFloorUnmet(
+        emit(
+            context = context,
+            event = RoutingEvent.RouteFloorUnmet(
                 eventId = generateUUID("routing"),
                 timestamp = Clock.System.now(),
                 eventSource = context.agentId?.let { EventSource.Agent(it) }
@@ -306,8 +320,9 @@ class CognitiveRelayImpl(
         decision: RoutingDecision,
         selection: CostSelection,
     ) {
-        eventBus?.publish(
-            RoutingEvent.RouteResolved(
+        emit(
+            context = context,
+            event = RoutingEvent.RouteResolved(
                 eventId = generateUUID("routing"),
                 timestamp = Clock.System.now(),
                 eventSource = context.agentId?.let { EventSource.Agent(it) }
@@ -344,4 +359,19 @@ class CognitiveRelayImpl(
         val runnerUp: ModelDescriptor?,
         val candidateCount: Int,
     )
+}
+
+/**
+ * Where a [CognitiveRelayImpl] sends its [RoutingEvent]s: the event and the run it belongs to
+ * (the `RoutingContext.workflowId`), which the sink stores as the envelope's `run_id`.
+ */
+typealias RoutingEventSink = suspend (event: RoutingEvent, runId: RunId?) -> Unit
+
+/**
+ * A [RoutingEventSink] over this door: each routing event is persisted with its run id, then
+ * dispatched. The door's result is not surfaced — a persist failure is already logged and
+ * announced on the bus by [AgentEventApi.publish], and routing must not fail because of it.
+ */
+fun AgentEventApi.routingEventSink(): RoutingEventSink = { event, runId ->
+    publish(event, runId = runId)
 }

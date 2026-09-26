@@ -102,7 +102,9 @@ class EventRepositoryTest {
     }
 
     @Test
-    fun `saveEvent stores emission produced provenance run id`() {
+    fun `saveEvent stores the envelope run id and never infers it from emission provenance`() {
+        // AMPR-340 (F4): run_id is the publisher's statement, not something the repository reads
+        // out of the event. The provenance still carries the run for the Emission itself.
         runBlocking {
             val payload = EmissionPayload.Confirmation(
                 action = "deploy production",
@@ -144,8 +146,16 @@ class EventRepositoryTest {
 
             repo.saveEvent(event).getOrThrow()
 
-            val row = database.eventStoreQueries.getEventById("evt-emission-produced").executeAsOne()
-            assertEquals("run-emission-1", row.run_id)
+            val bare = database.eventStoreQueries.getEventById("evt-emission-produced").executeAsOne()
+            assertNull(bare.run_id)
+
+            repo.saveEvent(
+                event.copy(eventId = "evt-emission-produced-in-run"),
+                envelope = EventEnvelope(runId = "run-emission-1"),
+            ).getOrThrow()
+
+            val inRun = database.eventStoreQueries.getEventById("evt-emission-produced-in-run").executeAsOne()
+            assertEquals("run-emission-1", inRun.run_id)
         }
     }
 

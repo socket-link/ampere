@@ -118,6 +118,8 @@ sealed class ArcStartResult {
  * @param scope Caller-owned. Its lifetime bounds every run this session starts.
  * @param runtime The Arc runtime to drive.
  * @param eventSerialBus The bus the run's Emissions are published on.
+ * @param eventApi The door onto [eventSerialBus] for a host that publishes its own events
+ *   into the run (AMPR-340). Null when the session has no store to persist them in.
  * @param traceProjection Optional; supplying it is what makes [ArcRunHandle.trace] return a
  *   folded ledger instead of null.
  * @param emissionReplay Emissions held for late observers. See [DEFAULT_EMISSION_REPLAY].
@@ -130,6 +132,13 @@ class ArcSession(
     private val scope: CoroutineScope,
     private val runtime: AmpereRuntime,
     private val eventSerialBus: EventSerialBus,
+    /**
+     * The one way to publish into this session from outside a run. Every event a host
+     * publishes here is persisted, then dispatched on [bus]; there is no bus-only path.
+     * Null for a session without a store — [Companion.create] without a `database`, or the
+     * bus-only constructor — because there is nowhere to persist to.
+     */
+    val eventApi: AgentEventApi? = null,
     private val traceProjection: ArcTraceProjection? = null,
     private val emissionReplay: Int = DEFAULT_EMISSION_REPLAY,
     private val emissionCapacity: Int = DEFAULT_EMISSION_BUFFER_CAPACITY,
@@ -157,7 +166,8 @@ class ArcSession(
      * The bus this session's Emissions travel on.
      *
      * The only way to reach it for a session built by [Companion.create], which makes its own —
-     * a host that wants to watch anything beyond Emissions needs this handle.
+     * a host that wants to watch anything beyond Emissions needs this handle. It is for
+     * *subscribing*: publishing goes through [eventApi].
      */
     val bus: EventSerialBus
         get() = eventSerialBus
@@ -391,16 +401,15 @@ class ArcSession(
             // The event api subscribes to the bus as it is built. Safe on a caller's thread here —
             // Swift's main one included — because nothing else holds this bus yet, so the lock it
             // takes is never contended.
-            val manifestSink = database?.let {
-                CompletionManifestSink(
-                    eventApi = AgentEventApi(
-                        agentId = CompletionManifestSink.DEFAULT_AGENT_ID,
-                        eventRepository = EventRepository(DEFAULT_JSON, scope, it),
-                        eventSerialBus = bus,
-                        clock = clock,
-                    ),
+            val eventApi = database?.let {
+                AgentEventApi(
+                    agentId = CompletionManifestSink.DEFAULT_AGENT_ID,
+                    eventRepository = EventRepository(DEFAULT_JSON, scope, it),
+                    eventSerialBus = bus,
+                    clock = clock,
                 )
             }
+            val manifestSink = eventApi?.let { CompletionManifestSink(eventApi = it) }
 
             val session = ArcSession(
                 scope = scope,
@@ -413,6 +422,7 @@ class ArcSession(
                     completionManifestSink = manifestSink?.let { it::record },
                 ),
                 eventSerialBus = bus,
+                eventApi = eventApi,
                 traceProjection = database?.let { ArcTraceProjection(it) },
             )
             session.ownedScope = scope

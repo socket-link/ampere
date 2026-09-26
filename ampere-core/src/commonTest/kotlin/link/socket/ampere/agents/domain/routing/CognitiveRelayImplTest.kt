@@ -124,7 +124,7 @@ class CognitiveRelayImplTest {
                     RoutingRule.ByPhase(CognitivePhase.PERCEIVE, geminiConfig),
                 ),
             ),
-            eventBus = eventBus,
+            publish = eventBus.busRoutingEventSink(),
         )
 
         val context = RoutingContext(

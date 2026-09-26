@@ -13,14 +13,23 @@ import link.socket.ampere.data.DatabaseSchemaManager
 import link.socket.ampere.db.Database
 
 /**
- * An in-memory door for jvmTest: a fresh SQLite database brought to the current schema by
- * [DatabaseSchemaManager], an [EventSerialBus] on [CoroutineScope], an [EventRepository], and an
- * [AgentEventApi] reading time from the given [Clock].
+ * A JVM test door onto a fresh in-memory store (AMPR-340).
  *
- * Use [create] when a test only needs the api and repository; use [open] when it also needs the
- * driver or database (to drop a table, read raw rows, or close the connection).
+ * `EventSerialBus.publish` is `internal` to `ampere-core`: the only way an event enters the
+ * system is [AgentEventApi.publish], which persists it and then dispatches it on the bus. A
+ * test outside `ampere-core` that wants to drive a bus subscriber therefore needs a real door,
+ * and this is the smallest one — a SQLite database brought to the current schema by
+ * [DatabaseSchemaManager], an [EventSerialBus] on [scope], an [EventRepository], and an
+ * [AgentEventApi] reading time from [clock].
+ *
+ * ```kotlin
+ * val door = InMemoryEventDoor.open(agentId = "test", scope = scope)
+ * bridge = SomeBusConsumer(bus = door.bus)
+ * door.api.publish(event).getOrThrow()   // persisted, then delivered to the bridge
+ * door.close()
+ * ```
  */
-object InMemoryEventApi {
+object InMemoryEventDoor {
 
     /** Everything [open] built, so a test can reach past the api when it has to. */
     class Handle(
@@ -33,10 +42,17 @@ object InMemoryEventApi {
         override fun close() = driver.close()
     }
 
+    /**
+     * Open a door for [agentId]. The caller owns the returned [Handle] and closes it.
+     *
+     * @param scope the bus dispatches handlers on this scope; the repository uses it too.
+     * @param clock what [AgentEventApi] stamps `recorded_at` with.
+     * @param logger the bus's logger, for a test that counts subscriptions or errors.
+     */
     fun open(
         agentId: AgentId,
-        clock: Clock = Clock.System,
         scope: CoroutineScope,
+        clock: Clock = Clock.System,
         logger: EventLogger = ConsoleEventLogger(),
     ): Handle {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
@@ -52,11 +68,4 @@ object InMemoryEventApi {
         )
         return Handle(api, repository, database, driver, bus)
     }
-
-    fun create(
-        agentId: AgentId,
-        clock: Clock = Clock.System,
-        scope: CoroutineScope,
-    ): Pair<AgentEventApi, EventRepository> =
-        open(agentId = agentId, clock = clock, scope = scope).let { it.api to it.repository }
 }

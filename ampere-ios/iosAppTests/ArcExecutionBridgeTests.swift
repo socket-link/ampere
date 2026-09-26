@@ -45,10 +45,16 @@ final class ArcExecutionBridgeTests: XCTestCase {
         // Every argument is something Swift can build. That is the point of the factory:
         // kotlinx.coroutines is not exported, so `CoroutineScope` has no Swift constructor and
         // the three-argument `ArcSession.init` is unreachable from here.
+        //
+        // With a database, so the session has an `eventApi`: since AMPR-340 the bus only
+        // dispatches, and the one way to publish an event into the run is the door, which
+        // persists it first. A fresh name per test keeps runs from seeing each other's rows.
+        let driver = IOSDatabaseDriverKt.createIosDriver(dbName: "arc-bridge-tests-\(UUID().uuidString).db")
         let session = ArcSession.companion.create(
             arcConfig: ArcRegistry.shared.getDefault(),
             projectDirPath: projectDir.path,
-            maxFlowTicks: maxFlowTicks
+            maxFlowTicks: maxFlowTicks,
+            database: DatabaseCompanion.shared.invoke(driver: driver)
         )
         self.session = session
         return session
@@ -114,8 +120,14 @@ final class ArcExecutionBridgeTests: XCTestCase {
             return texts
         }
 
+        let door = try XCTUnwrap(session.eventApi, "a session created with a database has a door")
         for index in 0..<expected {
-            try await session.bus.publish(event: progressEvent(runId: handle.runId, text: "progress-\(index)"))
+            // Persisted, then dispatched — the same path a running Arc's Emissions take.
+            _ = try await door.publish(
+                event: progressEvent(runId: handle.runId, text: "progress-\(index)"),
+                causedBy: nil,
+                runId: handle.runId
+            )
         }
         await fulfillment(of: [received], timeout: 30)
 

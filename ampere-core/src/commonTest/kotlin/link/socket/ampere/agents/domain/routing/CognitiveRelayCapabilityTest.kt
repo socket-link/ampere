@@ -93,7 +93,7 @@ class CognitiveRelayCapabilityTest {
                 RoutingRule.ByCapability(gridConfig),
             ),
         ),
-        eventBus = eventBus,
+        publish = eventBus?.busRoutingEventSink(),
         registry = registry,
     )
 
