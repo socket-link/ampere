@@ -5,18 +5,15 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.status.ExecutionStatus
-import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.health.ExecutorSystemHealth
+import link.socket.ampere.agents.tools.mcp.McpCallArguments
 import link.socket.ampere.agents.tools.mcp.ServerManager
 import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
 
@@ -225,8 +222,9 @@ class McpExecutor(
         )
 
         try {
-            // Translate request to MCP arguments
-            val arguments = translateRequestToMcpArguments(request)
+            // Translate request to MCP arguments. Shared with McpToolExecutor so the two
+            // MCP dispatch paths cannot disagree about what a call carries (AMPR-341).
+            val arguments = McpCallArguments.forRequest(request)
 
             logger.i { "Invoking MCP tool '${tool.remoteToolName}' on server '${tool.serverId}'" }
 
@@ -309,55 +307,6 @@ class McpExecutor(
                     ),
                 ),
             )
-        }
-    }
-
-    /**
-     * Translates an ExecutionRequest to MCP tool call arguments.
-     *
-     * This is the impedance matching layer - converting from agent abstractions
-     * to MCP protocol format.
-     *
-     * The translation extracts:
-     * - instructions: What the agent wants done
-     * - task description: Context about the task
-     * - Any additional context fields
-     *
-     * These are formatted as a JSON object that MCP servers can understand.
-     *
-     * @param request The execution request
-     * @return JSON element containing the arguments
-     */
-    private fun translateRequestToMcpArguments(
-        request: ExecutionRequest<*>,
-    ): JsonElement {
-        return buildJsonObject {
-            // Extract instructions from context
-            put("instructions", request.context.instructions)
-
-            // Add task information
-            val task = request.context.task
-            put("taskId", task.id)
-            // Task is a sealed interface - only some subtypes have description
-            // Use local variable to enable smart casting
-            if (task is Task.CodeChange) {
-                put("taskDescription", task.description)
-            }
-
-            // Add ticket information
-            put("ticketId", request.context.ticket.id)
-            put("ticketDescription", request.context.ticket.description)
-
-            // Add executor ID
-            put("executorId", request.context.executorId)
-
-            // Add any knowledge from past attempts
-            if (request.context.knowledgeFromPastMemory.isNotEmpty()) {
-                put(
-                    "pastAttempts",
-                    request.context.knowledgeFromPastMemory.size.toString(),
-                )
-            }
         }
     }
 

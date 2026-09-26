@@ -1,10 +1,19 @@
 package link.socket.ampere.agents.tools.mcp
 
+import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
@@ -39,6 +48,7 @@ import org.junit.Test
  * 4. Connection failure (invokeTool returns failure) handling
  * 5. Disconnected server handling
  * 6. Multiple content items in response
+ * 7. The invoked arguments coming from the request rather than the tool's input schema
  */
 class McpToolExecutorTest {
 
@@ -83,6 +93,7 @@ class McpToolExecutorTest {
     private fun createTestMcpTool(
         serverId: String = "test-server",
         remoteToolName: String = "test_tool",
+        inputSchema: JsonElement? = null,
     ): McpTool = McpTool(
         id = "$serverId:$remoteToolName",
         name = remoteToolName,
@@ -90,7 +101,21 @@ class McpToolExecutorTest {
         requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
         serverId = serverId,
         remoteToolName = remoteToolName,
+        inputSchema = inputSchema,
     )
+
+    /**
+     * A realistic `inputSchema` — a JSON Schema document, which is exactly what the
+     * defect in AMPR-341 sent as the call's arguments.
+     */
+    private fun createTestInputSchema(): JsonObject = buildJsonObject {
+        put("type", "object")
+        putJsonObject("properties") {
+            putJsonObject("path") {
+                put("type", "string")
+            }
+        }
+    }
 
     /**
      * Test 1: Successful tool execution.
@@ -294,6 +319,106 @@ class McpToolExecutorTest {
     }
 
     /**
+     * Test 9: The invoked arguments come from the request, not the tool's schema.
+     *
+     * Regression test for AMPR-341: `execute` passed `tool.inputSchema` as the call's
+     * arguments, so every MCP tool taking parameters at all received a JSON Schema
+     * document where its arguments belong.
+     */
+    @Test
+    fun `test invoked arguments come from the request not the tool input schema`() = runTest {
+        val schema = createTestInputSchema()
+        val capturingConnection = ErrorMcpConnection(serverId = "capturing-server")
+
+        val serverManager = TestServerManager(
+            connections = mapOf("capturing-server" to capturingConnection),
+        )
+
+        val executor = McpToolExecutor(serverManager = serverManager)
+        val tool = createTestMcpTool(serverId = "capturing-server", inputSchema = schema)
+        val request = createTestRequest()
+
+        executor.execute(tool, request)
+
+        val arguments = assertNotNull(capturingConnection.lastArguments, "Should invoke the tool")
+        assertNotEquals(schema as JsonElement, arguments, "Must not send the schema as arguments")
+
+        val argumentObject = assertIs<JsonObject>(arguments)
+        assertNull(argumentObject["properties"], "Must not carry the schema's shape")
+        assertEquals(
+            request.context.instructions,
+            argumentObject.getValue("instructions").jsonPrimitive.content,
+        )
+        assertEquals(
+            request.context.task.id,
+            argumentObject.getValue("taskId").jsonPrimitive.content,
+        )
+        assertEquals(
+            request.context.ticket.id,
+            argumentObject.getValue("ticketId").jsonPrimitive.content,
+        )
+        assertEquals(
+            request.context.executorId,
+            argumentObject.getValue("executorId").jsonPrimitive.content,
+        )
+    }
+
+    /**
+     * Test 10: A tool that declares no schema still receives the request's arguments.
+     *
+     * Under the defect this call sent `arguments = null`, since `inputSchema` is nullable —
+     * the tool was told nothing at all about the work it was asked to do.
+     */
+    @Test
+    fun `test invoked arguments are sent for a tool with no input schema`() = runTest {
+        val capturingConnection = ErrorMcpConnection(serverId = "capturing-server")
+
+        val serverManager = TestServerManager(
+            connections = mapOf("capturing-server" to capturingConnection),
+        )
+
+        val executor = McpToolExecutor(serverManager = serverManager)
+        val tool = createTestMcpTool(serverId = "capturing-server", inputSchema = null)
+        val request = createTestRequest()
+
+        executor.execute(tool, request)
+
+        val argumentObject = assertIs<JsonObject>(capturingConnection.lastArguments)
+        assertEquals(
+            request.context.instructions,
+            argumentObject.getValue("instructions").jsonPrimitive.content,
+        )
+        assertEquals(
+            (request.context.task as Task.CodeChange).description,
+            argumentObject.getValue("taskDescription").jsonPrimitive.content,
+        )
+    }
+
+    /**
+     * Test 11: The remote tool name, not the local display name, is what gets invoked.
+     *
+     * Guards the other half of the `invokeTool` call the arguments fix touches.
+     */
+    @Test
+    fun `test invoked tool name is the remote tool name`() = runTest {
+        val capturingConnection = ErrorMcpConnection(serverId = "capturing-server")
+
+        val serverManager = TestServerManager(
+            connections = mapOf("capturing-server" to capturingConnection),
+        )
+
+        val executor = McpToolExecutor(serverManager = serverManager)
+        val tool = createTestMcpTool(
+            serverId = "capturing-server",
+            remoteToolName = "remote_read_file",
+        )
+
+        executor.execute(tool, createTestRequest())
+
+        assertEquals("remote_read_file", capturingConnection.lastToolName)
+    }
+
+    /**
      * Test 8: McpTool.execute() throws when executor is not set.
      */
     @Test(expected = IllegalStateException::class)
@@ -341,10 +466,20 @@ private class ErrorMcpConnection(
 
     override suspend fun listTools(): Result<List<McpToolDescriptor>> = Result.success(emptyList())
 
+    /** The arguments the executor last sent, so tests can assert on the call itself. */
+    var lastArguments: JsonElement? = null
+        private set
+
+    /** The tool name the executor last sent. */
+    var lastToolName: String? = null
+        private set
+
     override suspend fun invokeTool(
         toolName: String,
         arguments: JsonElement?,
     ): Result<ToolCallResult> {
+        lastToolName = toolName
+        lastArguments = arguments
         if (invokeFailure != null) {
             return Result.failure(invokeFailure)
         }
