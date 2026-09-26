@@ -18,6 +18,7 @@ import link.socket.ampere.agents.domain.routing.CognitiveRelayImpl
 import link.socket.ampere.agents.domain.routing.RelayConfig
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
@@ -62,9 +63,19 @@ import link.socket.ampere.plug.permission.UserGrants
  *   real grants (via [SqlDelightUserGrantStore]) instead of the deny-all default every
  *   `requiredPermissions` tool otherwise falls back to. Null preserves that deny-all default, which
  *   stays correct where no persisted store exists (tests, headless use).
+ * @param workspace The directory every agent built here is confined to (AMPR-300); required, no
+ *   default. See the constructor parameter.
  */
 class SparkAgentFactory(
     private val scope: CoroutineScope,
+    /**
+     * The workspace every agent this factory builds is confined to (AMPR-300).
+     * Required and explicit: there is no default workspace, and an agent
+     * dispatched without one cannot write files at all. Arc runs pin this to
+     * the runtime's project directory; a supervisor dispatching a ticket must
+     * pin it to that ticket's worktree.
+     */
+    private val workspace: ExecutionWorkspace,
     private val createEventApi: ((AgentId) -> AgentEventApi)? = null,
     private val knowledgeRepository: KnowledgeRepository? = null,
     private val defaultAiConfiguration: AIConfiguration? = null,
@@ -273,6 +284,7 @@ class SparkAgentFactory(
             _upstreamLlmClient = upstreamLlmClient,
             _runId = runId,
             _userGrantProvider = userGrantProvider,
+            _workspace = workspace,
         )
     }
 

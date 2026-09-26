@@ -29,6 +29,7 @@ import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
@@ -141,6 +142,18 @@ open class SparkBasedAgent<S : AgentState>(
      */
     @Transient
     private val _userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
+    /**
+     * The workspace this agent's file operations are confined to (AMPR-300).
+     * Stamped onto every plan-step [ExecutionRequest] this agent builds, so
+     * a code tool's parameter strategy can promote the request into an
+     * [ExecutionContext.Code] rooted here. Null means the agent was built
+     * without a workspace: code-file tools then refuse to dispatch with a
+     * typed failure instead of writing into the process working directory.
+     * The production factories ([AgentFactory], [SparkAgentFactory]) require
+     * a workspace, so null is reachable only from hand-built agents.
+     */
+    @Transient
+    private val _workspace: ExecutionWorkspace? = null,
 ) : ObservableAgent<S>(_eventApi, _observabilityScope) {
 
     @Transient
@@ -167,6 +180,13 @@ open class SparkBasedAgent<S : AgentState>(
     override val id: AgentId = agentId
 
     override val affinity: CognitiveAffinity = cognitiveAffinity
+
+    /**
+     * The workspace this agent is pinned to (AMPR-300), or null when it was
+     * built without one. See the `_workspace` constructor parameter.
+     */
+    val workspace: ExecutionWorkspace?
+        get() = _workspace
 
     @Transient
     override val memoryService: AgentMemoryService? = _memoryService
@@ -323,6 +343,8 @@ open class SparkBasedAgent<S : AgentState>(
      * generic [ExecutionContext.NoChanges] wrapper to
      * [ExecutionContext.GitOperation] when invoking a git tool); when no
      * strategy is registered the tool must be able to act on the raw request.
+     * The agent's pinned workspace rides along on the request (AMPR-300) so a
+     * strategy promoting into [ExecutionContext.Code] has a root to use.
      */
     private fun buildPlanStepRequest(step: Task.CodeChange, parentTask: Task): ExecutionRequest<*> {
         val ticket = link.socket.ampere.agents.events.tickets.Ticket(
@@ -345,6 +367,8 @@ open class SparkBasedAgent<S : AgentState>(
                 instructions = step.description,
             ),
             constraints = link.socket.ampere.agents.execution.request.ExecutionConstraints(),
+            // AMPR-300: the pin a code tool's strategy roots its Code context in.
+            workspace = _workspace,
         )
     }
 
@@ -440,6 +464,9 @@ open class SparkBasedAgent<S : AgentState>(
          *   travel with the tools themselves.
          * @param sparkRegistry registry that must contain the
          *   `role-code` fixture; construction fails fast otherwise.
+         * @param workspace the directory this agent's code tools are confined
+         *   to (AMPR-300). Null builds an unpinned agent whose code-file tools
+         *   refuse to dispatch; the production factories always supply one.
          */
         fun Code(
             sparkRegistry: SparkRegistry,
@@ -455,6 +482,7 @@ open class SparkBasedAgent<S : AgentState>(
             cognitiveRelay: CognitiveRelay? = null,
             minimumRung: CapabilityRung? = null,
             userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
+            workspace: ExecutionWorkspace? = null,
         ): SparkBasedAgent<CodeState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -476,6 +504,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _cognitiveRelay = cognitiveRelay,
                 _minimumRung = minimumRung,
                 _userGrantProvider = userGrantProvider,
+                _workspace = workspace,
             )
             agent.spark<SparkBasedAgent<CodeState>>(roleSpark)
             return agent
@@ -522,6 +551,7 @@ open class SparkBasedAgent<S : AgentState>(
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
             userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
+            workspace: ExecutionWorkspace? = null,
         ): SparkBasedAgent<ProductState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -541,6 +571,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
                 _userGrantProvider = userGrantProvider,
+                _workspace = workspace,
             )
             agent.spark<SparkBasedAgent<ProductState>>(roleSpark)
             return agent
@@ -574,6 +605,7 @@ open class SparkBasedAgent<S : AgentState>(
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
             userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
+            workspace: ExecutionWorkspace? = null,
         ): SparkBasedAgent<ProjectState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -593,6 +625,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
                 _userGrantProvider = userGrantProvider,
+                _workspace = workspace,
             )
             agent.spark<SparkBasedAgent<ProjectState>>(roleSpark)
             return agent
@@ -626,6 +659,7 @@ open class SparkBasedAgent<S : AgentState>(
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
             userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
+            workspace: ExecutionWorkspace? = null,
         ): SparkBasedAgent<QualityState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -645,6 +679,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
                 _userGrantProvider = userGrantProvider,
+                _workspace = workspace,
             )
             agent.spark<SparkBasedAgent<QualityState>>(roleSpark)
             return agent

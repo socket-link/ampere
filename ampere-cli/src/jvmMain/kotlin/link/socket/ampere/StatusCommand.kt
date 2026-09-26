@@ -43,12 +43,14 @@ class StatusCommand(
         // Fetch data from multiple services concurrently
         val threadsDeferred = async { ampere.threads.list() }
         val ticketsDeferred = async { ampere.tickets.list() }
+        val snapshotDeferred = async { ampere.status.snapshot() }
 
         val threadsResult = threadsDeferred.await()
         val ticketsResult = ticketsDeferred.await()
+        val workspace = snapshotDeferred.await().getOrNull()?.workspace
 
         // Human-readable dashboard
-        outputDashboard(threadsResult, ticketsResult, verbose)
+        outputDashboard(threadsResult, ticketsResult, verbose, workspace)
     }
 
     /**
@@ -58,6 +60,7 @@ class StatusCommand(
         threadsResult: Result<List<ThreadSummary>>,
         ticketsResult: Result<List<TicketSummary>>,
         verbose: Boolean,
+        workspace: String?,
     ) {
         terminal.println(bold(cyan("⚡ AMPERE System Status")))
         terminal.println()
@@ -192,12 +195,14 @@ class StatusCommand(
             terminal.println(green("✓ All systems nominal"))
         }
 
-        // Workspace section
+        // Workspace section: the one directory agents may write to (AMPR-300)
         terminal.println()
         terminal.println(bold("📁 Workspace"))
-        val workspace = link.socket.ampere.agents.environment.workspace.defaultWorkspace()
-        val workspacePath = workspace.baseDirectory
-        terminal.println("  ${cyan(workspacePath)} ${gray("(watching)")}")
+        if (workspace != null) {
+            terminal.println("  ${cyan(workspace)} ${gray("(agent writes confined here)")}")
+        } else {
+            terminal.println(dim("  No workspace pinned"))
+        }
     }
 
     /**

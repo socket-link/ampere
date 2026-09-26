@@ -22,6 +22,7 @@ import kotlinx.serialization.encodeToString
 import link.socket.ampere.agents.definition.SparkAgentFactory
 import link.socket.ampere.agents.domain.routing.RoutingFloorUnmetException
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
@@ -162,7 +163,12 @@ class ArcRungPropagationTest {
             ),
         )
 
-        val agents = ArcAgentSpawner(SparkAgentFactory(scope = agentScope)).spawn(arc, projectContext())
+        val agents = ArcAgentSpawner(
+            SparkAgentFactory(
+                scope = agentScope,
+                workspace = ExecutionWorkspace(baseDirectory = "/tmp/ampr300-test-workspace"),
+            ),
+        ).spawn(arc, projectContext())
 
         assertEquals(
             CapabilityRung.THREE,
@@ -183,7 +189,12 @@ class ArcRungPropagationTest {
             minimumRung = CapabilityRung.THREE,
         )
 
-        val agents = ArcAgentSpawner(SparkAgentFactory(scope = agentScope)).spawn(arc, projectContext())
+        val agents = ArcAgentSpawner(
+            SparkAgentFactory(
+                scope = agentScope,
+                workspace = ExecutionWorkspace(baseDirectory = "/tmp/ampr300-test-workspace"),
+            ),
+        ).spawn(arc, projectContext())
 
         assertEquals(CapabilityRung.THREE, agents[0].agentConfiguration.agentDefinition.minimumRung)
     }
@@ -198,7 +209,12 @@ class ArcRungPropagationTest {
             ),
         )
 
-        val agents = ArcAgentSpawner(SparkAgentFactory(scope = agentScope)).spawn(arc, projectContext())
+        val agents = ArcAgentSpawner(
+            SparkAgentFactory(
+                scope = agentScope,
+                workspace = ExecutionWorkspace(baseDirectory = "/tmp/ampr300-test-workspace"),
+            ),
+        ).spawn(arc, projectContext())
 
         assertNotNull(
             agents[0].agentConfiguration.cognitiveRelay,
@@ -225,6 +241,7 @@ class ArcRungPropagationTest {
         val agent = ArcAgentSpawner(
             agentFactory = SparkAgentFactory(
                 scope = agentScope,
+                workspace = ExecutionWorkspace(baseDirectory = "/tmp/ampr300-test-workspace"),
                 defaultAiConfiguration = agentFallback,
                 upstreamLlmClient = client,
             ),
@@ -253,6 +270,7 @@ class ArcRungPropagationTest {
         val agent = ArcAgentSpawner(
             agentFactory = SparkAgentFactory(
                 scope = agentScope,
+                workspace = ExecutionWorkspace(baseDirectory = "/tmp/ampr300-test-workspace"),
                 defaultAiConfiguration = agentFallback,
                 upstreamLlmClient = client,
             ),
@@ -274,6 +292,7 @@ class ArcRungPropagationTest {
         val agent = ArcAgentSpawner(
             agentFactory = SparkAgentFactory(
                 scope = agentScope,
+                workspace = ExecutionWorkspace(baseDirectory = "/tmp/ampr300-test-workspace"),
                 defaultAiConfiguration = agentFallback,
                 upstreamLlmClient = client,
             ),

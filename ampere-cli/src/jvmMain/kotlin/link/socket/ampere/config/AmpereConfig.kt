@@ -38,6 +38,13 @@ data class AmpereConfig(
     /** Optional initial goal for the team */
     val goal: String? = null,
 
+    /**
+     * Optional directory every agent's file writes are confined to (AMPR-300). Relative paths
+     * resolve against the directory the CLI was started in. `--workspace` on the command line
+     * overrides it; when neither is given the CLI uses its own working directory.
+     */
+    val workspace: String? = null,
+
     /** Optional MCP server configuration for external tool integration */
     val mcp: McpServersConfig? = null,
 )

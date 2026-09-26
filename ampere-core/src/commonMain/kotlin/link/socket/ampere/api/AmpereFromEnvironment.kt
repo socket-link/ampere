@@ -6,6 +6,7 @@ import link.socket.ampere.agents.definition.AgentFactory
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorSource
 import link.socket.ampere.agents.environment.EnvironmentService
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.messages.DefaultThreadViewService
 import link.socket.ampere.agents.events.tickets.DefaultTicketViewService
 import link.socket.ampere.agents.service.AgentActionService
@@ -39,7 +40,11 @@ import link.socket.ampere.memory.MemoryStore
  *
  * @param environmentService The shared environment providing repositories and event bus
  * @param knowledgeRepository The shared knowledge repository
- * @param workspace Optional workspace path for status reporting
+ * @param workspace The directory agents built off this instance's
+ *   [AmpereInstance.agentFactory] are confined to (AMPR-300), also reported by
+ *   [AmpereInstance.status]. Required and explicit: there is no default
+ *   workspace, so a caller that composes an instance must say where its agents
+ *   may write.
  * @param memoryStore Optional [MemoryStore] override. When supplied,
  *   [MemoryStore.knowledge] takes precedence over [knowledgeRepository] and
  *   [MemoryStore.outcomes] takes precedence over
@@ -74,7 +79,7 @@ import link.socket.ampere.memory.MemoryStore
 fun Ampere.fromEnvironment(
     environmentService: EnvironmentService,
     knowledgeRepository: KnowledgeRepository,
-    workspace: String? = null,
+    workspace: String,
     memoryStore: MemoryStore? = null,
     upstreamLlmClient: UpstreamLlmClient? = null,
     agentScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
@@ -146,6 +151,7 @@ fun Ampere.fromEnvironment(
     val boundAgentFactory = AgentFactory(
         scope = agentScope,
         ticketOrchestrator = environmentService.ticketOrchestrator,
+        workspace = ExecutionWorkspace(baseDirectory = workspace),
         createEventApi = environmentService::createEventApi,
         eventSerialBus = environmentService.eventBus,
         upstreamLlmClient = upstreamLlmClient,

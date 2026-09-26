@@ -13,11 +13,14 @@ import link.socket.ampere.agents.definition.AgentType
 import link.socket.ampere.agents.definition.SparkBasedAgent
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
+import link.socket.ampere.agents.environment.workspace.containedFile
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.tickets.create
 import link.socket.ampere.agents.execution.results.ExecutionResult
@@ -48,9 +51,16 @@ class GoalHandler(
     private val agentScope: CoroutineScope,
     private val progressPane: CognitiveProgressPane,
     private val memoryPane: AgentMemoryPane,
-    private val outputDir: File = File(System.getProperty("user.home"), ".ampere/goal-output"),
     private val aiConfiguration: AIConfiguration? = null,
 ) {
+    /**
+     * Where this goal's agent writes (AMPR-300): the context's explicitly pinned workspace.
+     * The former private default (`~/.ampere/goal-output`) was one more directory shared by
+     * every goal ever run; now `--workspace` (or the CLI's working directory) decides.
+     */
+    private val workspace: ExecutionWorkspace
+        get() = context.workspace
+
     private var currentActivation: GoalActivation? = null
     private var currentAgent: SparkBasedAgent<CodeState>? = null
     private var eventApi: AgentEventApi? = null
@@ -85,8 +95,8 @@ class GoalHandler(
      * @return Result containing the GoalActivation on success
      */
     suspend fun activateGoal(goalDescription: String): Result<GoalActivation> {
-        // Ensure output directory exists
-        outputDir.mkdirs()
+        // Ensure the workspace directory exists
+        File(workspace.baseDirectory).mkdirs()
 
         // Create the write_code_file tool
         val writeCodeTool = createWriteCodeFileTool()
@@ -100,6 +110,7 @@ class GoalHandler(
         val agentFactory = AgentFactory(
             scope = agentScope,
             ticketOrchestrator = context.environmentService.ticketOrchestrator,
+            workspace = workspace,
             knowledgeRepository = context.knowledgeRepository,
             createEventApi = context.environmentService::createEventApi,
             aiConfiguration = effectiveAiConfig,
@@ -261,6 +272,10 @@ class GoalHandler(
 
     /**
      * Create the write_code_file tool for the agent.
+     *
+     * Every path the LLM supplies is resolved through [containedFile] before anything is
+     * written (AMPR-300): a `../` segment, an absolute path, or a symlink that leaves the
+     * workspace fails the whole call with no file touched.
      */
     private fun createWriteCodeFileTool(): Tool<link.socket.ampere.agents.execution.request.ExecutionContext.Code.WriteCode> {
         return FunctionTool(
@@ -271,33 +286,54 @@ class GoalHandler(
             executionFunction = { request ->
                 val now = Clock.System.now()
 
-                val changedFiles = withContext(Dispatchers.IO) {
-                    request.context.instructionsPerFilePath.map { (path, content) ->
-                        val file = File(outputDir, path)
-                        file.parentFile?.mkdirs()
-                        file.writeText(content)
-
-                        progressPane.addFileWritten(path, content)
-                        path
-                    }
+                // Resolve every path first so a single escaping path rejects the batch before any
+                // sibling has been written; containedFile throws SecurityException for escapes.
+                val resolved = request.context.instructionsPerFilePath.map { (path, content) ->
+                    Triple(path, runCatching { workspace.containedFile(path) }, content)
                 }
+                val rejected = resolved.firstNotNullOfOrNull { it.second.exceptionOrNull() }
+                if (rejected != null) {
+                    ExecutionOutcome.CodeChanged.Failure(
+                        executorId = "goal-handler-executor",
+                        ticketId = request.context.ticket.id,
+                        taskId = request.context.task.id,
+                        executionStartTimestamp = now,
+                        executionEndTimestamp = Clock.System.now(),
+                        partiallyChangedFiles = emptyList(),
+                        error = ExecutionError(
+                            type = ExecutionError.Type.WORKSPACE_ERROR,
+                            message = "Access outside workspace ${workspace.baseDirectory} is not allowed: ${rejected.message}",
+                        ),
+                    )
+                } else {
+                    val changedFiles = withContext(Dispatchers.IO) {
+                        resolved.map { (path, contained, content) ->
+                            val file = contained.getOrThrow()
+                            file.parentFile?.mkdirs()
+                            file.writeText(content)
 
-                val endTime = Clock.System.now()
+                            progressPane.addFileWritten(path, content)
+                            path
+                        }
+                    }
 
-                ExecutionOutcome.CodeChanged.Success(
-                    executorId = "goal-handler-executor",
-                    ticketId = request.context.ticket.id,
-                    taskId = request.context.task.id,
-                    executionStartTimestamp = now,
-                    executionEndTimestamp = endTime,
-                    changedFiles = changedFiles,
-                    validation = ExecutionResult(
-                        codeChanges = null,
-                        compilation = null,
-                        linting = null,
-                        tests = null,
-                    ),
-                )
+                    val endTime = Clock.System.now()
+
+                    ExecutionOutcome.CodeChanged.Success(
+                        executorId = "goal-handler-executor",
+                        ticketId = request.context.ticket.id,
+                        taskId = request.context.task.id,
+                        executionStartTimestamp = now,
+                        executionEndTimestamp = endTime,
+                        changedFiles = changedFiles,
+                        validation = ExecutionResult(
+                            codeChanges = null,
+                            compilation = null,
+                            linting = null,
+                            tests = null,
+                        ),
+                    )
+                }
             }
         )
     }

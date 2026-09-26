@@ -2,6 +2,7 @@ package link.socket.ampere.agents.execution.request
 
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.RunId
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 
 /** Platform-agnostic request for executing a tool */
 @Serializable
@@ -22,6 +23,19 @@ data class ExecutionRequest<Context : ExecutionContext>(
      * from the reasoning unit's run; null for calls made outside a run.
      */
     val runId: RunId? = null,
+    /**
+     * The workspace the dispatching agent is pinned to (AMPR-300).
+     *
+     * An agent builds its plan-step requests around the generic
+     * [ExecutionContext.NoChanges] and lets the nominated tool's
+     * [ParameterStrategy][link.socket.ampere.agents.execution.ParameterStrategy]
+     * promote them to a tool-specific context. A strategy that promotes into
+     * [ExecutionContext.Code] must take the workspace from here (or from an
+     * already-Code context); it must never invent one. Null means the agent was
+     * built without a workspace, and code-file tools refuse to dispatch in that
+     * state rather than writing into the process working directory.
+     */
+    val workspace: ExecutionWorkspace? = null,
 ) {
 
     /**

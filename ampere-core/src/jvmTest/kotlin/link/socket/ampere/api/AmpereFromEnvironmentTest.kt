@@ -81,6 +81,7 @@ class AmpereFromEnvironmentTest {
         val instance = Ampere.fromEnvironment(
             environmentService = environmentService,
             knowledgeRepository = knowledgeRepository,
+            workspace = "/tmp/ampr300-test-workspace",
         )
 
         // The light construction path exposes every public service surface,
@@ -120,6 +121,7 @@ class AmpereFromEnvironmentTest {
         val instance = Ampere.fromEnvironment(
             environmentService = environmentService,
             knowledgeRepository = knowledgeRepository,
+            workspace = "/tmp/ampr300-test-workspace",
             memoryStore = store,
         )
 
@@ -141,6 +143,7 @@ class AmpereFromEnvironmentTest {
         val instance = Ampere.fromEnvironment(
             environmentService = environmentService,
             knowledgeRepository = knowledgeRepository,
+            workspace = "/tmp/ampr300-test-workspace",
             upstreamLlmClient = recorder,
         )
 
@@ -152,6 +155,7 @@ class AmpereFromEnvironmentTest {
         val instance = Ampere.fromEnvironment(
             environmentService = environmentService,
             knowledgeRepository = knowledgeRepository,
+            workspace = "/tmp/ampr300-test-workspace",
         )
         // AMPR-236: omission no longer means "call the provider directly".
         assertNull(instance.upstreamLlmClient)
@@ -163,6 +167,7 @@ class AmpereFromEnvironmentTest {
         val instance = Ampere.fromEnvironment(
             environmentService = environmentService,
             knowledgeRepository = knowledgeRepository,
+            workspace = "/tmp/ampr300-test-workspace",
             upstreamLlmClient = recorder,
             agentScope = scope,
         )
@@ -189,6 +194,7 @@ class AmpereFromEnvironmentTest {
         val instance = Ampere.fromEnvironment(
             environmentService = environmentService,
             knowledgeRepository = knowledgeRepository,
+            workspace = "/tmp/ampr300-test-workspace",
             upstreamLlmClient = recorder,
         )
 
@@ -213,6 +219,7 @@ class AmpereFromEnvironmentTest {
         val instance = Ampere.fromEnvironment(
             environmentService = environmentService,
             knowledgeRepository = knowledgeRepository,
+            workspace = "/tmp/ampr300-test-workspace",
             agentScope = scope,
         )
 
@@ -241,6 +248,7 @@ class AmpereFromEnvironmentTest {
         val instance = Ampere.fromEnvironment(
             environmentService = environmentService,
             knowledgeRepository = knowledgeRepository,
+            workspace = "/tmp/ampr300-test-workspace",
             memoryStore = store,
         )
 

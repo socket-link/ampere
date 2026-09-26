@@ -2,6 +2,7 @@ package link.socket.ampere
 
 import com.github.ajalt.clikt.testing.test
 import link.socket.ampere.agents.domain.outcome.OutcomeMemory
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.api.model.OutcomeStats
@@ -28,7 +29,7 @@ class OutcomesCommandTest {
      */
     private fun createTestContext(tempDir: File): AmpereContext {
         val dbPath = File(tempDir, "test.db").absolutePath
-        return AmpereContext(databasePath = dbPath)
+        return AmpereContext(databasePath = dbPath, workspace = testWorkspace(tempDir))
     }
 
     /**
@@ -113,3 +114,8 @@ class OutcomesCommandTest {
         }
     }
 }
+
+
+/** AMPR-300: every context needs an explicit agent workspace; tests pin it to their temp dir. */
+private fun testWorkspace(tempDir: File): ExecutionWorkspace =
+    ExecutionWorkspace(baseDirectory = tempDir.absolutePath)

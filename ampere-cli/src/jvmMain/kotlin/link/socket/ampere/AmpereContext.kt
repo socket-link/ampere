@@ -21,7 +21,6 @@ import link.socket.ampere.agents.execution.issue.CodeIssueWorkflow
 import link.socket.ampere.integrations.issues.IssueTrackerProvider
 import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
-import link.socket.ampere.agents.environment.workspace.defaultWorkspace
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.messages.DefaultThreadViewService
 import link.socket.ampere.agents.events.messages.ThreadViewService
@@ -81,8 +80,20 @@ class AmpereContext(
     json: Json = DEFAULT_JSON,
     /** Event logger for system operations, defaults to console logging */
     private val logger: EventLogger = ConsoleEventLogger(),
-    /** The workspace to monitor for file changes, can be set to null to disable workspace monitoring */
-    private val workspace: ExecutionWorkspace? = defaultWorkspace(),
+    /**
+     * The directory every agent this CLI builds is confined to (AMPR-300). Required and
+     * explicit: `Main` resolves it from `--workspace`, then the `workspace:` key in
+     * `ampere.yaml`, then the directory the CLI was started in — and says which. There is
+     * no shared default any more; the old `~/.ampere/Workspaces/Ampere` let every agent in
+     * every run write into one directory.
+     */
+    val workspace: ExecutionWorkspace,
+    /**
+     * Directory the markdown file receptor watches for `.md` changes, or null to disable
+     * watching. Deliberately separate from [workspace]: the receptor registers every
+     * subdirectory recursively, which is fine for a notes folder and not for a repository.
+     */
+    private val monitoredDirectory: String? = defaultMonitoredDirectory(),
     /** User configuration loaded from YAML file, if present */
     val userConfig: AmpereConfig? = null,
     /** AI configuration derived from user config or default */
@@ -183,7 +194,7 @@ class AmpereContext(
         Ampere.fromEnvironment(
             environmentService = environmentService,
             knowledgeRepository = knowledgeRepository,
-            workspace = workspace?.baseDirectory,
+            workspace = workspace.baseDirectory,
             database = database,
         )
     }
@@ -275,7 +286,7 @@ class AmpereContext(
      * Null if workspace monitoring is disabled.
      */
     private val workspaceEventMapper: WorkspaceEventMapper? =
-        workspace?.baseDirectory?.let {
+        monitoredDirectory?.let {
             val eventApi = environmentService.createEventApi("workspace-receptor-system")
             WorkspaceEventMapper(
                 agentEventApi = eventApi,
@@ -289,7 +300,7 @@ class AmpereContext(
      * Null if workspace monitoring is disabled.
      */
     private val fileSystemReceptor: FileSystemReceptor? =
-        workspace?.baseDirectory?.let { path ->
+        monitoredDirectory?.let { path ->
             val eventApi = environmentService.createEventApi("workspace-receptor-system")
             FileSystemReceptor(
                 workspacePath = path,
@@ -326,12 +337,15 @@ class AmpereContext(
     fun start() {
         environmentService.start()
 
-        // Start the workspace monitoring system if enabled
+        // Said out loud on every start (AMPR-300): this is the only directory agents may write to.
+        logger.logInfo("Agent workspace pinned to: ${workspace.baseDirectory}")
+
+        // Start the markdown monitoring system if enabled
         workspaceEventMapper?.startWithEventBus(environmentService.eventBus)
         fileSystemReceptor?.start()
 
         if (fileSystemReceptor != null) {
-            logger.logInfo("Workspace receptor system started, monitoring: ${workspace?.baseDirectory ?: "disabled"}")
+            logger.logInfo("Workspace receptor system started, monitoring: ${monitoredDirectory ?: "disabled"}")
         }
     }
 
@@ -416,6 +430,15 @@ class AmpereContext(
     }
 
     companion object {
+        /**
+         * Default directory the markdown receptor watches. This is a watch-only location for
+         * the notes receptor; agents never write here (AMPR-300 removed it as a write target).
+         */
+        private fun defaultMonitoredDirectory(): String {
+            val homeDir = System.getProperty("user.home") ?: System.getProperty("user.dir") ?: "."
+            return File(homeDir, ".ampere/Workspaces/Ampere").absolutePath
+        }
+
         /**
          * Default database path in the user's home directory.
          * Falls back to current directory if user.home is not available.

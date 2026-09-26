@@ -22,6 +22,7 @@ import link.socket.ampere.agents.domain.routing.capability.DefaultModelDescripto
 import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorSource
 import link.socket.ampere.agents.domain.state.AgentState
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.tickets.TicketOrchestrator
@@ -87,10 +88,21 @@ enum class AgentType {
  * @param toolWriteCodeFileOverride Optional override for write_code_file tool
  * @param modelDescriptorSource Optional catalog source for the default relay's
  *   model registry (AMPR-231); ignored when [cognitiveRelay] is supplied
+ * @param workspace The directory every agent built here is confined to (AMPR-300);
+ *   required, no default. See the constructor parameter.
  */
 class AgentFactory(
     private val scope: CoroutineScope,
     private val ticketOrchestrator: TicketOrchestrator,
+    /**
+     * The workspace every agent this factory builds is confined to (AMPR-300).
+     * Required and explicit: the former process-wide default
+     * (`~/.ampere/Workspaces/Ampere`, shared by every agent) is gone, and so
+     * is the code tools' fallback to the working directory. Pin this to the
+     * directory the dispatched work is allowed to touch — a ticket's worktree
+     * under supervisor dispatch, the project root for a CLI goal.
+     */
+    private val workspace: ExecutionWorkspace,
     private val knowledgeRepository: KnowledgeRepository? = null,
     private val createEventApi: ((AgentId) -> AgentEventApi)? = null,
     private val issueTrackerProvider: IssueTrackerProvider? = null,
@@ -359,6 +371,7 @@ class AgentFactory(
                 cognitiveRelay = effectiveCognitiveRelay,
                 minimumRung = codeAgentMinimumRung,
                 userGrantProvider = userGrantProvider,
+                workspace = workspace,
                 tools = buildSet {
                     add(toolWriteCodeFile)
                     add(ToolReadCodeFile(AgentActionAutonomy.FULLY_AUTONOMOUS))
@@ -385,6 +398,7 @@ class AgentFactory(
                 observabilityScope = scope,
                 upstreamLlmClient = upstreamLlmClient,
                 userGrantProvider = userGrantProvider,
+                workspace = workspace,
             )
         }
         AgentType.PROJECT -> {
@@ -401,6 +415,7 @@ class AgentFactory(
                 observabilityScope = scope,
                 upstreamLlmClient = upstreamLlmClient,
                 userGrantProvider = userGrantProvider,
+                workspace = workspace,
                 tools = setOfNotNull(toolCreateIssues, toolAskHuman),
             )
         }
@@ -418,6 +433,7 @@ class AgentFactory(
                 observabilityScope = scope,
                 upstreamLlmClient = upstreamLlmClient,
                 userGrantProvider = userGrantProvider,
+                workspace = workspace,
             )
         }
     }

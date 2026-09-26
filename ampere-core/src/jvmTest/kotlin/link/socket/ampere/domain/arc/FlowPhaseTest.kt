@@ -24,6 +24,7 @@ import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
@@ -133,7 +134,12 @@ class FlowPhaseTest {
 
         val agentScope = CoroutineScope(SupervisorJob())
         val agents = try {
-            ArcAgentSpawner(SparkAgentFactory(scope = agentScope)).spawn(
+            ArcAgentSpawner(
+                SparkAgentFactory(
+                    scope = agentScope,
+                    workspace = ExecutionWorkspace(baseDirectory = "/tmp/ampr300-test-workspace"),
+                ),
+            ).spawn(
                 arcConfig,
                 ProjectContext(
                     projectId = "demo",
