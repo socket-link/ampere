@@ -190,6 +190,7 @@ class SignificanceAwareEventLogger(
         // Bench (eval) lifecycle events - routine progress, significant on completion
         is BenchEvent.BenchRunStarted -> EventSignificance.ROUTINE
         is BenchEvent.ProbeGraded -> EventSignificance.ROUTINE
+        is BenchEvent.ArcSettled -> EventSignificance.ROUTINE
         is BenchEvent.BenchRunCompleted -> EventSignificance.SIGNIFICANT
 
         // Probe verdicts - a clean pass is routine; anything else is a decision

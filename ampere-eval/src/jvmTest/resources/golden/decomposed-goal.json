@@ -1,0 +1,40 @@
+{
+    "id": "golden-decomposed-goal",
+    "runId": "golden-run-decomposed-goal",
+    "arcId": "startup-saas",
+    "createdAt": 0,
+    "events": [
+        {
+            "index": 0,
+            "timestamp": 0,
+            "type": "ArcSettled",
+            "payload": {
+                "type": "BenchEvent.ArcSettled",
+                "eventId": "decomposed-goal-event-0",
+                "runId": "golden-run-decomposed-goal",
+                "eventSource": {
+                    "type": "link.socket.ampere.agents.domain.event.EventSource.Human"
+                },
+                "timestamp": "1970-01-01T00:00:00Z",
+                "probeId": "decomposed-goal",
+                "arcId": "startup-saas",
+                "arcRunId": "golden-arc-run-decomposed-goal",
+                "terminal": "COMPLETED",
+                "terminationReason": "MAX_TICKS_REACHED",
+                "pulseSuccess": false,
+                "agentCount": 3,
+                "goalNodeCount": 3,
+                "completedGoalCount": 0,
+                "finalTick": 1,
+                "outcomeTotal": 3,
+                "outcomeSucceeded": 0,
+                "outcomeFailed": 0,
+                "failure": null,
+                "urgency": "LOW",
+                "eventType": "ArcSettled"
+            },
+            "truncated": false
+        }
+    ],
+    "droppedEventCount": 0
+}
