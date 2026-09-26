@@ -10,6 +10,7 @@ import link.socket.ampere.api.model.AgentState
 import link.socket.ampere.api.service.AgentService
 import link.socket.ampere.dsl.team.AgentTeam
 import link.socket.ampere.dsl.team.AgentTeamBuilder
+import link.socket.ampere.dsl.team.TeamMemberStatus
 
 internal class DefaultAgentService(
     private val agentActionService: AgentActionService,
@@ -53,7 +54,7 @@ internal class DefaultAgentService(
             AgentSnapshot(
                 id = agentId,
                 role = member.role,
-                state = if (member.isActive) AgentState.Active else AgentState.Idle,
+                state = stateOf(member),
                 currentTask = null,
                 sparkStack = member.capabilities,
                 lastActivity = Clock.System.now(),
@@ -67,7 +68,7 @@ internal class DefaultAgentService(
             AgentSnapshot(
                 id = member.role,
                 role = member.role,
-                state = if (member.isActive) AgentState.Active else AgentState.Idle,
+                state = stateOf(member),
                 currentTask = null,
                 sparkStack = member.capabilities,
                 lastActivity = Clock.System.now(),
@@ -76,11 +77,18 @@ internal class DefaultAgentService(
     }
 
     override suspend fun pause(agentId: AgentId): Result<Unit> {
-        return try {
-            currentTeam?.pause()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
+        val team = currentTeam ?: return Result.failure(
+            IllegalStateException("No team configured. Call team {} first."),
+        )
+        if (!team.pauseMember(agentId)) {
+            return Result.failure(IllegalArgumentException("Agent not found: $agentId"))
         }
+        return Result.success(Unit)
+    }
+
+    private fun stateOf(member: TeamMemberStatus): AgentState = when {
+        member.isPaused -> AgentState.Paused
+        member.isActive -> AgentState.Active
+        else -> AgentState.Idle
     }
 }

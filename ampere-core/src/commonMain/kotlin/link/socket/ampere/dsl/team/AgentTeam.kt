@@ -72,6 +72,12 @@ class AgentTeam private constructor(
     private var currentGoal: String? = null
 
     /**
+     * Roles paused one at a time by [pauseMember], tracked separately from the team-wide
+     * [isRunning] flag so that pausing one agent does not stop the others.
+     */
+    private val pausedMembers = mutableSetOf<String>()
+
+    /**
      * Assign a goal to the team and begin collaborative work.
      *
      * The team will:
@@ -107,13 +113,46 @@ class AgentTeam private constructor(
 
     /**
      * Pause all team activity.
+     *
+     * Agents paused individually by [pauseMember] are unaffected; they stay paused.
      */
     fun pause() {
         isRunning = false
     }
 
     /**
+     * Pause a single team member, leaving the rest of the team running.
+     *
+     * A member paused this way reports `isActive = false` and `isPaused = true` from
+     * [getMembers] while the team as a whole keeps running. Lift it with [resumeMember]:
+     * the team-wide [resume] deliberately leaves per-member pauses alone.
+     *
+     * @param role The name of the member's [TeamMember.role]
+     * @return true if [role] names a member of this team, false if it does not, in which
+     *   case nothing was paused
+     */
+    fun pauseMember(role: String): Boolean {
+        if (config.members.none { it.role.name == role }) return false
+        pausedMembers.add(role)
+        return true
+    }
+
+    /**
+     * Resume a member that [pauseMember] paused.
+     *
+     * @param role The name of the member's [TeamMember.role]
+     * @return true if [role] names a member of this team, false if it does not
+     */
+    fun resumeMember(role: String): Boolean {
+        if (config.members.none { it.role.name == role }) return false
+        pausedMembers.remove(role)
+        return true
+    }
+
+    /**
      * Resume paused team activity.
+     *
+     * Members paused individually by [pauseMember] stay paused; use [resumeMember] on those.
      */
     fun resume() {
         require(currentGoal != null) { "No goal to resume. Call pursue() first." }
@@ -126,6 +165,7 @@ class AgentTeam private constructor(
     fun stop() {
         isRunning = false
         currentGoal = null
+        pausedMembers.clear()
     }
 
     /**
@@ -133,10 +173,12 @@ class AgentTeam private constructor(
      */
     fun getMembers(): List<TeamMemberStatus> {
         return config.members.map { member ->
+            val isPaused = member.role.name in pausedMembers
             TeamMemberStatus(
                 role = member.role.name,
                 capabilities = member.role.capabilities.map { it.name },
-                isActive = isRunning,
+                isActive = isRunning && !isPaused,
+                isPaused = isPaused,
             )
         }
     }
@@ -233,4 +275,6 @@ data class TeamMemberStatus(
     val role: String,
     val capabilities: List<String>,
     val isActive: Boolean,
+    /** True when this member was paused on its own by [AgentTeam.pauseMember]. */
+    val isPaused: Boolean = false,
 )

@@ -10,6 +10,8 @@ import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.api.model.TicketFilter
 import link.socket.ampere.api.service.EventStreamFilter
+import link.socket.ampere.dsl.agent.Engineer
+import link.socket.ampere.dsl.agent.QATester
 
 /**
  * External consumer integration test.
@@ -56,7 +58,13 @@ class ExternalConsumerTest {
         assertTrue(goalId.isNotEmpty())
         ampere.agents.wake("reviewer-agent").getOrThrow()
         ampere.agents.listAll()
-        ampere.agents.pause("engineer-agent").getOrThrow()
+        ampere.agents.team {
+            agent(Engineer)
+            agent(QATester)
+        }
+        ampere.agents.pause(Engineer.name).getOrThrow()
+        // Pausing an agent that is not on the team is a failure, not a silent success
+        assertTrue(ampere.agents.pause("engineer-agent").isFailure)
 
         // === Events (including new get method) ===
         val eventResult = ampere.events.get("nonexistent-event")
