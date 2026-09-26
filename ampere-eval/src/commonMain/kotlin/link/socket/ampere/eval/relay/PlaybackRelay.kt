@@ -11,8 +11,11 @@ import link.socket.ampere.agents.domain.routing.RoutingResolution
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.eval.trace.Trace
+import link.socket.ampere.eval.trace.UndecodedTraceEvent
 import link.socket.ampere.trace.ReplayWindow
 import link.socket.ampere.trace.WattCost
+import link.socket.ampere.version.AMPERE_VERSION
+import link.socket.ampere.version.SemanticVersion
 
 /**
  * What a [PlaybackRelay] does when an Arc makes a model call for which the
@@ -52,6 +55,35 @@ class PlaybackMiss(
 )
 
 /**
+ * Typed failure signalling that the trace was recorded by a **newer build** than the one
+ * replaying it, and that this build could not read part of it (AMPR-363).
+ *
+ * This is the version-skew contract from `docs/concepts/domain-canon.md` applied at the trace
+ * envelope, in the shape `BundleParseError.UnknownVersion` already established: an old consumer
+ * is told "upgrade required", not "parse failed". Both halves are required before the claim is
+ * made — undecodable events *and* a newer [producerVersion] — because either alone means
+ * something else. Undecodable events under an older or equal producer are corruption or a
+ * removed type, not skew; a newer producer whose events all decoded is simply forward
+ * compatibility working, and replay proceeds.
+ *
+ * Reported by [PlaybackRelay.validate] as a `Result.failure` and **never thrown from a
+ * constructor**: a trace's content must not be able to take down the object that reads it.
+ *
+ * @property producerVersion the `AMPERE_VERSION` of the build that recorded the trace.
+ * @property currentVersion the `AMPERE_VERSION` of the build replaying it.
+ * @property undecodedCount how many of the trace's events this build could not decode.
+ */
+class TraceVersionSkew(
+    val producerVersion: String,
+    val currentVersion: String,
+    val undecodedCount: Int,
+) : Exception(
+    "Trace was recorded by Ampere $producerVersion but is being replayed by $currentVersion, " +
+        "which could not decode $undecodedCount event(s). Upgrade to $producerVersion or newer " +
+        "to replay this trace in full.",
+)
+
+/**
  * A relay that replays a [Trace]'s recorded model routing in order, behind the
  * exact [CognitiveRelay] interface (AMPR-184; interface per RECON-relay §1).
  *
@@ -85,6 +117,11 @@ class PlaybackMiss(
  * A replayed call performs **no live provider invocation**, so it consumes no
  * tokens and therefore zero Watts (RECON-relay §2.4). See [replayedWattCost].
  *
+ * ### Version skew
+ * Constructing a relay never fails on trace content (AMPR-363). An event this build cannot
+ * decode is skipped and counted in [undecodedEvents] rather than thrown; whether that
+ * degradation is *acceptable* is the caller's call, asked via [validate].
+ *
  * @param trace the recorded window to replay (in v1, one Arc run).
  * @param missPolicy what to do when the Arc makes more (or different) calls than
  *   were recorded. Defaults to strict [MissPolicy.Error].
@@ -96,6 +133,10 @@ class PlaybackMiss(
  *   Defaults to `trace.size` — an event count that is always ≥ the model-call
  *   count, i.e. "never branch" (the degenerate eval case, mirroring
  *   `TraceCursor.branchAfter(size - 1)`).
+ * @param json the codec used to read the trace's payloads.
+ * @param currentVersion the Ampere version doing the replaying, compared against
+ *   [Trace.producerVersion] by [validate]. Defaults to this build's `AMPERE_VERSION`;
+ *   overridable so a test can pin both sides of the comparison.
  */
 class PlaybackRelay(
     private val trace: Trace,
@@ -103,9 +144,11 @@ class PlaybackRelay(
     private val liveDelegate: CognitiveRelay? = null,
     private val branchIndex: Int = trace.size,
     private val json: Json = DEFAULT_JSON,
+    private val currentVersion: String = AMPERE_VERSION,
 ) : CognitiveRelay {
 
-    private val recordedCalls: List<RecordedModelCall> = trace.modelCalls(json)
+    private val decoded: DecodedModelCalls = trace.decodeModelCalls(json)
+    private val recordedCalls: List<RecordedModelCall> get() = decoded.calls
     private val mutex = Mutex()
     private var nextCallIndex: Int = 0
 
@@ -114,6 +157,15 @@ class PlaybackRelay(
 
     /** The ordered recorded model calls this relay replays. */
     val recordedCallCount: Int get() = recordedCalls.size
+
+    /**
+     * Events in the trace this build could not decode, in trace order (AMPR-363).
+     *
+     * Empty for a trace this build understands completely. A non-empty list does not by itself
+     * stop replay — the skipped events may be irrelevant to it — but it is the counted fact a
+     * bench asserts on, and the reason half of [validate]'s verdict.
+     */
+    val undecodedEvents: List<UndecodedTraceEvent> get() = decoded.undecodedEvents
 
     /**
      * The Watt cost charged for a replayed call: **zero**. Replayed calls make no
@@ -166,6 +218,40 @@ class PlaybackRelay(
             missPolicy == MissPolicy.Delegate -> delegate(context, fallbackConfiguration, index)
             else -> Result.failure(PlaybackMiss(index, recordedCalls.size, window))
         }
+    }
+
+    /**
+     * Whether this build can replay the trace faithfully.
+     *
+     * `Result.failure(`[TraceVersionSkew]`)` when the trace holds events this build could not
+     * decode **and** [Trace.producerVersion] is strictly newer than [currentVersion] — the
+     * version-skew case, where the honest report is "upgrade required" rather than a shorter
+     * replay that looks complete. Success otherwise, including for:
+     * - a trace with no [Trace.producerVersion] at all (everything recorded before AMPR-363),
+     *   which behaves exactly as it did before the stamp existed;
+     * - a trace from an older or equal build, whose undecodable events are corruption or a
+     *   removed type rather than skew;
+     * - a newer trace this build read in full, which is forward compatibility working.
+     *
+     * This is a question, not a gate: nothing calls it on the replay path, and replay works the
+     * same whether or not a caller asks. A bench that wants skew to be a red build checks it.
+     */
+    fun validate(): Result<Unit> {
+        val undecoded = undecodedEvents
+        if (undecoded.isEmpty()) return Result.success(Unit)
+
+        val producerVersion = trace.producerVersion ?: return Result.success(Unit)
+        if (!SemanticVersion.isNewer(candidate = producerVersion, reference = currentVersion)) {
+            return Result.success(Unit)
+        }
+
+        return Result.failure(
+            TraceVersionSkew(
+                producerVersion = producerVersion,
+                currentVersion = currentVersion,
+                undecodedCount = undecoded.size,
+            ),
+        )
     }
 
     /** Recorded model call at [index] in replay order, or `null` if out of range. */

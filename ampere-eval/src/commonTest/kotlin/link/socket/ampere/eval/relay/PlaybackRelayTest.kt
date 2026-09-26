@@ -7,7 +7,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.put
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.event.Event
@@ -195,6 +197,106 @@ class PlaybackRelayTest {
 
     // endregion
 
+    // region — AMPR-363: unknown discriminators and version skew
+
+    @Test
+    fun `an event this build cannot decode is skipped and counted rather than thrown`() = runTest {
+        // Constructing the relay is the regression: this used to be a raw SerializationException
+        // out of the constructor, taking the whole trace down for one unreadable event.
+        val relay = PlaybackRelay(traceWithUnknownEvent())
+
+        val undecoded = relay.undecodedEvents.single()
+        assertEquals(2, undecoded.index)
+        assertEquals(UNKNOWN_EVENT_TYPE, undecoded.type)
+        assertTrue(undecoded.reason.isNotBlank())
+
+        assertEquals(2, relay.recordedCallCount)
+        val reasons = listOf(
+            (relay.resolveWithMetadata(ctx, fallback) as RoutingResolution.Success).reason,
+            (relay.resolveWithMetadata(ctx, fallback) as RoutingResolution.Success).reason,
+        )
+        assertEquals(listOf(PlaybackRelay.PLAYBACK_REASON, PlaybackRelay.PLAYBACK_REASON), reasons)
+    }
+
+    @Test
+    fun `decodeModelCalls returns the readable calls alongside the undecodable events`() {
+        val decoded = traceWithUnknownEvent().decodeModelCalls()
+
+        assertEquals(listOf("m1", "m2"), decoded.calls.map { it.modelId })
+        assertEquals(listOf(2), decoded.undecodedEvents.map { it.index })
+    }
+
+    @Test
+    fun `a trace this build reads in full reports no undecoded events`() {
+        assertTrue(traceOfCalls(2).decodeModelCalls().undecodedEvents.isEmpty())
+    }
+
+    @Test
+    fun `a producerVersion newer than the current build is a typed version skew`() {
+        val relay = PlaybackRelay(
+            traceWithUnknownEvent(producerVersion = NEWER_VERSION),
+            currentVersion = CURRENT_VERSION,
+        )
+
+        val result = relay.validate()
+
+        assertTrue(result.isFailure)
+        val skew = result.exceptionOrNull()
+        assertTrue(skew is TraceVersionSkew)
+        assertEquals(NEWER_VERSION, skew.producerVersion)
+        assertEquals(CURRENT_VERSION, skew.currentVersion)
+        assertEquals(1, skew.undecodedCount)
+        // Reported, never thrown: the calls this build *can* read still replay.
+        assertEquals(2, relay.recordedCallCount)
+    }
+
+    @Test
+    fun `a trace with no producerVersion behaves exactly as it did before the stamp`() {
+        val relay = PlaybackRelay(
+            traceWithUnknownEvent(producerVersion = null),
+            currentVersion = CURRENT_VERSION,
+        )
+
+        assertTrue(relay.validate().isSuccess)
+        assertEquals(2, relay.recordedCallCount)
+        assertEquals(1, relay.undecodedEvents.size)
+    }
+
+    @Test
+    fun `an undecodable event from an older build is not claimed as version skew`() {
+        val relay = PlaybackRelay(
+            traceWithUnknownEvent(producerVersion = OLDER_VERSION),
+            currentVersion = CURRENT_VERSION,
+        )
+
+        // Something else went wrong — corruption, or a type this build removed. Calling it
+        // "upgrade required" would send the reader somewhere that cannot help them.
+        assertTrue(relay.validate().isSuccess)
+    }
+
+    @Test
+    fun `a newer trace this build read in full is forward compatibility not skew`() {
+        val relay = PlaybackRelay(
+            traceOfCalls(2).copy(producerVersion = NEWER_VERSION),
+            currentVersion = CURRENT_VERSION,
+        )
+
+        assertTrue(relay.undecodedEvents.isEmpty())
+        assertTrue(relay.validate().isSuccess)
+    }
+
+    @Test
+    fun `an unparseable producerVersion is never claimed to be newer`() {
+        val relay = PlaybackRelay(
+            traceWithUnknownEvent(producerVersion = "not-a-version"),
+            currentVersion = CURRENT_VERSION,
+        )
+
+        assertTrue(relay.validate().isSuccess)
+    }
+
+    // endregion
+
     // region — fixtures
 
     /** All resolutions in this test are [RoutingResolution.Success] — floor-unmet isn't exercised here. */
@@ -237,6 +339,36 @@ class PlaybackRelayTest {
             )
         }
         return Trace(id = "t", runId = "r", arcId = "a", createdAt = 0L, events = traceEvents)
+    }
+
+    /**
+     * A two-call trace with an event this build has no serializer for wedged between the calls,
+     * standing in for a subtype (or a canon member) added by a newer build. Its payload is a
+     * plain JSON object with an unregistered `"type"` discriminator — which is exactly what a
+     * newer build's event looks like from here.
+     */
+    private fun traceWithUnknownEvent(producerVersion: String? = null): Trace {
+        val recorded = traceOfCalls(2).events
+        val events = recorded.take(2) +
+            TraceEvent(
+                index = 2,
+                timestamp = 3L,
+                type = UNKNOWN_EVENT_TYPE,
+                payload = buildJsonObject {
+                    put("type", "link.socket.ampere.agents.domain.event.$UNKNOWN_EVENT_TYPE")
+                    put("eventId", "future-1")
+                },
+            ) +
+            recorded.drop(2).map { it.copy(index = it.index + 1) }
+
+        return Trace(
+            id = "t",
+            runId = "r",
+            arcId = "a",
+            createdAt = 0L,
+            events = events,
+            producerVersion = producerVersion,
+        )
     }
 
     /** A trace of [n] sequential model calls, models `m1..mn`, reasons `r1..rn`. */
@@ -296,6 +428,16 @@ class PlaybackRelayTest {
         questionText = "why?",
         context = "",
     )
+
+    private companion object {
+        /** A bus event-type name no build registers — the discriminator a newer build would ship. */
+        const val UNKNOWN_EVENT_TYPE = "EventFromTheFuture"
+
+        // Pinned on both sides so the comparison is the test's, not the build's.
+        const val OLDER_VERSION = "0.14.9"
+        const val CURRENT_VERSION = "0.15.0"
+        const val NEWER_VERSION = "0.16.0"
+    }
 
     // endregion
 }

@@ -5,6 +5,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
@@ -62,6 +63,26 @@ class TraceServiceTest {
         val decoded = loaded.events.map { DEFAULT_JSON.decodeFromJsonElement(Event.serializer(), it.payload) }
         assertEquals("e1", decoded[0].eventId)
         assertEquals("e2", decoded[1].eventId)
+    }
+
+    @Test
+    fun `producerVersion round-trips through the store`() = runTest {
+        // AMPR-363: the stamp has to survive persistence, or the skew check can never fire on a
+        // trace that was loaded back — which is the only kind it ever runs against.
+        val trace = sampleTrace("trace-stamped", "arc-1").copy(producerVersion = "0.16.0")
+
+        service.save(trace).getOrThrow()
+
+        assertEquals("0.16.0", service.load("trace-stamped").getOrThrow().producerVersion)
+    }
+
+    @Test
+    fun `a trace recorded before the stamp loads with a null producerVersion`() = runTest {
+        val trace = sampleTrace("trace-unstamped", "arc-1")
+
+        service.save(trace).getOrThrow()
+
+        assertNull(service.load("trace-unstamped").getOrThrow().producerVersion)
     }
 
     @Test

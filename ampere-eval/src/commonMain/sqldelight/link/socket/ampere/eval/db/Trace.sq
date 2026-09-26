@@ -6,6 +6,12 @@
 -- reads the whole stream back, so there is no query that benefits from
 -- per-event rows in v1.
 
+-- `producer_version` is nullable with no default on purpose (AMPR-363): NULL means "recorded
+-- before the stamp existed", which is a different fact from any version string, and only the
+-- recorder may say which build wrote a row. Declared last so the column order matches what an
+-- `ALTER TABLE ... ADD COLUMN` would produce, should this database ever grow a migration chain
+-- (it has none — `EvalDatabase` is created fresh, and AMPR-267 added `dropped_event_count` the
+-- same way).
 CREATE TABLE trace (
   id                  TEXT NOT NULL PRIMARY KEY,
   run_id              TEXT NOT NULL,
@@ -13,7 +19,8 @@ CREATE TABLE trace (
   created_at          INTEGER NOT NULL,
   event_count         INTEGER NOT NULL,
   events_json         TEXT NOT NULL,
-  dropped_event_count INTEGER NOT NULL DEFAULT 0
+  dropped_event_count INTEGER NOT NULL DEFAULT 0,
+  producer_version    TEXT
 );
 
 CREATE INDEX idx_trace_arc_id ON trace(arc_id);
@@ -22,12 +29,12 @@ CREATE INDEX idx_trace_created_at ON trace(created_at);
 
 -- Persist (or overwrite) a full trace.
 upsertTrace:
-INSERT OR REPLACE INTO trace(id, run_id, arc_id, created_at, event_count, events_json, dropped_event_count)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO trace(id, run_id, arc_id, created_at, event_count, events_json, dropped_event_count, producer_version)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- Load a full trace (blob included) by id.
 selectById:
-SELECT id, run_id, arc_id, created_at, event_count, events_json, dropped_event_count
+SELECT id, run_id, arc_id, created_at, event_count, events_json, dropped_event_count, producer_version
 FROM trace
 WHERE id = ?
 LIMIT 1;

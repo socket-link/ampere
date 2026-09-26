@@ -296,6 +296,50 @@ class ArcTraceProjectionTest {
         assertEquals("run-short-2", projection.project("run-short-2").getOrThrow().completion?.runId)
     }
 
+    @Test
+    fun `an event this build cannot decode is dropped but counted on the trace`() = runTest {
+        val runId = "run-unknown-discriminator"
+        seedTrace(runId)
+        // A row written by a newer build: a discriminator this build has no serializer for.
+        // The projection must still return the run's trace, not fail the whole window.
+        insertUnknownEventRow(runId = runId, eventId = "future-1", sequence = 9_001)
+        insertUnknownEventRow(runId = runId, eventId = "future-2", sequence = 9_002)
+
+        val trace = projection.project(runId).getOrThrow()
+
+        assertEquals(2, trace.undecodedEventCount)
+        // Everything this build *could* read is still projected.
+        assertEquals(1, assertNotNull(trace.phases.firstOrNull { it.name == "PLAN" }).modelInvocations.size)
+    }
+
+    @Test
+    fun `a window this build reads in full reports no undecoded events`() = runTest {
+        val runId = "run-fully-decodable"
+        seedTrace(runId)
+
+        assertEquals(0, projection.project(runId).getOrThrow().undecodedEventCount)
+    }
+
+    /**
+     * Writes an `EventStore` row straight through the queries, bypassing `EventRepository`:
+     * the repository can only write events this build can serialize, and the point of the row
+     * is that it is one this build cannot read back.
+     */
+    private fun insertUnknownEventRow(runId: String, eventId: String, sequence: Long) {
+        database.eventStoreQueries.insertEvent(
+            event_id = eventId,
+            event_type = "EventFromTheFuture",
+            source_id = "agent:planner-agent",
+            timestamp = 1_500,
+            payload = """{"type":"link.socket.ampere.agents.domain.event.EventFromTheFuture","eventId":"$eventId"}""",
+            run_id = runId,
+            sequence = sequence,
+            caused_by = null,
+            recorded_at = 1_500,
+            truncated = 0,
+        )
+    }
+
     private fun cancelledRecord(runId: String) = CompletionRecord(
         runId = runId,
         endedBy = TerminationReason.CANCELLED,

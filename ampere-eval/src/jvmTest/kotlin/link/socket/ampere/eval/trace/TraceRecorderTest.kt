@@ -28,6 +28,7 @@ import link.socket.ampere.probe.ProbeId
 import link.socket.ampere.probe.UndeterminedCause
 import link.socket.ampere.probe.Verdict
 import link.socket.ampere.util.TRUNCATION_MARKER
+import link.socket.ampere.version.AMPERE_VERSION
 
 /** AMPR-183 task 1.4 validation + record -> persist -> load -> replay round-trip. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -90,6 +91,28 @@ class TraceRecorderTest {
         assertEquals(5, trace.size)
         assertEquals(emitted.map { it.eventId }, trace.events.map { it.payload.eventId() })
         assertEquals(listOf(0, 1, 2, 3, 4), trace.events.map { it.index })
+    }
+
+    @Test
+    fun `stop stamps the recording build's version onto the trace`() = runTest {
+        // AMPR-363: stamped from the runtime `AMPERE_VERSION` by default. Pinned here so the
+        // assertion is about the stamp happening, not about whatever version this build is.
+        val versionedRecorder = TraceRecorder(bus, service, producerVersion = "9.9.9")
+        val handle = versionedRecorder.start(runId = "run-stamped", arcId = "arc-1")
+        publish(events(1).single())
+
+        val trace = handle.stop().getOrThrow()
+
+        assertEquals("9.9.9", trace.producerVersion)
+        assertEquals("9.9.9", service.load(trace.id).getOrThrow().producerVersion)
+    }
+
+    @Test
+    fun `the default stamp is this build's AMPERE_VERSION`() = runTest {
+        val handle = recorder.start(runId = "run-default-stamp", arcId = "arc-1")
+        publish(events(1).single())
+
+        assertEquals(AMPERE_VERSION, handle.stop().getOrThrow().producerVersion)
     }
 
     @Test
