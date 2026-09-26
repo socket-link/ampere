@@ -150,3 +150,24 @@ class LinkResolutionException(
 class UnknownLinkException(
     val linkId: LinkId,
 ) : Exception("No Link registered for id '${linkId.value}'")
+
+/**
+ * A stored `Links` row exists for [linkId] but this build cannot decode it (AMPR-364).
+ *
+ * Reachable by version skew alone: `Link.scope` is a `Set<CanonType>` persisted by member name,
+ * and an unknown enum member is a hard `SerializationException` — `ignoreUnknownKeys` covers
+ * keys, never enum values, and `coerceInputValues` needs a property default that an element of a
+ * `Set` does not have.
+ *
+ * Distinct from [UnknownLinkException]: the row *is* there. A caller that gets this back knows
+ * the difference between "you named a Link that does not exist" and "this Link exists and I am
+ * too old to read it", which is the difference between a dangling reference and an upgrade.
+ *
+ * `LinkStore.list()` does not fail this way — it skips the row and says so on the bus. This is
+ * what a single-row `get` returns, where there is no rest of the query to save.
+ */
+class UndecodableLinkException(
+    val linkId: LinkId,
+    val reason: String,
+    cause: Throwable? = null,
+) : Exception("Stored Link '${linkId.value}' could not be decoded: $reason", cause)

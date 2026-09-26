@@ -1,9 +1,17 @@
 package link.socket.ampere.link
 
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.PersistedStore
+import link.socket.ampere.agents.domain.event.StoreRowUndecodableEvent
+import link.socket.ampere.agents.events.UndecodableRow
+import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.db.Database
 import link.socket.ampere.plug.PlugId
 import link.socket.ampere.util.ioDispatcher
@@ -19,10 +27,25 @@ interface LinkStore {
 
     suspend fun upsert(link: Link, updatedAt: Instant = Clock.System.now()): Result<Unit>
 
+    /**
+     * The Link with this id, null if there is no such row, or a
+     * [UndecodableLinkException] failure if the row exists and this build cannot decode it
+     * (AMPR-364).
+     */
     suspend fun get(linkId: LinkId): Result<Link?>
 
+    /**
+     * Every stored Link this build can decode.
+     *
+     * A row that will not decode is skipped rather than failing the query (AMPR-364): one Link
+     * naming a canon member this build does not have used to poison the whole list, and
+     * [LinkResolutionService] reads a failed list as "no Links at all" — so one unreadable row
+     * silently unplugged every Plug. Skips are announced, not swallowed; see
+     * [SqlDelightLinkStore].
+     */
     suspend fun list(): Result<List<Link>>
 
+    /** As [list], narrowed by [transport], with the same skip-rather-than-fail behaviour. */
     suspend fun listByTransport(transport: Transport): Result<List<Link>>
 
     suspend fun delete(linkId: LinkId): Result<Unit>
@@ -55,8 +78,17 @@ interface LinkStore {
     ): Result<List<String>>
 }
 
+/**
+ * The persistent [LinkStore].
+ *
+ * @param eventApi Optional door. With one, every row [list] and [listByTransport] had to skip is
+ *   announced as a [StoreRowUndecodableEvent] — the glass-brain rule applies to a dropped row as
+ *   much as to a dropped event. Without it the store still degrades rather than failing; the skip
+ *   just goes unobserved, exactly as [LinkResolutionService] behaves without a door.
+ */
 class SqlDelightLinkStore(
     private val database: Database,
+    private val eventApi: AgentEventApi? = null,
     private val json: Json = Json {
         classDiscriminator = "type"
         encodeDefaults = true
@@ -66,6 +98,16 @@ class SqlDelightLinkStore(
 
     private val queries
         get() = database.linksQueries
+
+    /**
+     * Rows already announced as undecodable, and the lock over it.
+     *
+     * The row stays undecodable until something rewrites it, and [list] runs on every Plug
+     * resolution, so announcing per read would turn one bad row into an unbounded stream of
+     * events about it. Said once per store, then quiet.
+     */
+    private val reportedUndecodableRows = mutableSetOf<String>()
+    private val undecodableReportLock = Mutex()
 
     override suspend fun upsert(link: Link, updatedAt: Instant): Result<Unit> =
         withContext(ioDispatcher) {
@@ -82,21 +124,17 @@ class SqlDelightLinkStore(
     override suspend fun get(linkId: LinkId): Result<Link?> =
         withContext(ioDispatcher) {
             runCatching {
-                queries.selectLink(linkId.value).executeAsOneOrNull()?.let(::decode)
+                queries.selectLink(linkId.value).executeAsOneOrNull()?.let { payload ->
+                    decodeOrFail(linkId, payload)
+                }
             }
         }
 
     override suspend fun list(): Result<List<Link>> =
-        withContext(ioDispatcher) {
-            runCatching { queries.selectAllLinks().executeAsList().map(::decode) }
-        }
+        decodeRows { queries.selectAllLinks(::StoredLinkRow).executeAsList() }
 
     override suspend fun listByTransport(transport: Transport): Result<List<Link>> =
-        withContext(ioDispatcher) {
-            runCatching {
-                queries.selectLinksByTransport(transport.name).executeAsList().map(::decode)
-            }
-        }
+        decodeRows { queries.selectLinksByTransport(transport.name, ::StoredLinkRow).executeAsList() }
 
     override suspend fun delete(linkId: LinkId): Result<Unit> =
         withContext(ioDispatcher) {
@@ -190,7 +228,7 @@ class SqlDelightLinkStore(
                 )
 
                 queries.selectLink(linkId.value).executeAsOneOrNull()?.let { stored ->
-                    val revoked = decode(stored).copy(revokedAt = revokedAt)
+                    val revoked = decodeOrFail(linkId, stored).copy(revokedAt = revokedAt)
                     queries.upsertLink(
                         link_id = revoked.id.value,
                         transport = revoked.transport.name,
@@ -203,9 +241,85 @@ class SqlDelightLinkStore(
             }
         }
 
+    /**
+     * Read and decode rows on [ioDispatcher], skipping every one this build cannot read, then
+     * announce the skips (AMPR-364).
+     *
+     * A decode failure is caught per row rather than by the surrounding `runCatching`, which is
+     * the whole change: one bad row must not become the query's failure. The announcement comes
+     * after, outside the `Result`, so a publish through the door cannot fail the read either.
+     */
+    private suspend fun decodeRows(query: () -> List<StoredLinkRow>): Result<List<Link>> {
+        val skipped = mutableListOf<UndecodableRow>()
+
+        val links = withContext(ioDispatcher) {
+            runCatching {
+                query().mapNotNull { row ->
+                    try {
+                        decode(row.linkJson)
+                    } catch (throwable: Throwable) {
+                        skipped += UndecodableRow(row.linkId, throwable.reasonText())
+                        null
+                    }
+                }
+            }
+        }.getOrElse { throwable -> return Result.failure(throwable) }
+
+        skipped.forEach { row -> announceUndecodable(row) }
+
+        return Result.success(links)
+    }
+
+    /**
+     * Say on the bus that a row was skipped, once per row id. No door, no event — and no throw
+     * either: a store with no observer still degrades rather than failing.
+     *
+     * The row is marked as reported only once the publish succeeded, so a write the store refused
+     * leaves it unreported and the next read says it again. Silence is the one outcome this must
+     * not produce.
+     */
+    private suspend fun announceUndecodable(row: UndecodableRow) {
+        val api = eventApi ?: return
+        val reported = undecodableReportLock.withLock { row.rowId in reportedUndecodableRows }
+        if (reported) return
+
+        api.publish(
+            StoreRowUndecodableEvent(
+                eventId = generateUUID("store-row-undecodable", api.agentId),
+                timestamp = api.clock.now(),
+                eventSource = EventSource.Agent(api.agentId),
+                store = PersistedStore.LINK_STORE,
+                rowId = row.rowId,
+                reason = row.reason,
+            ),
+        ).onSuccess {
+            undecodableReportLock.withLock { reportedUndecodableRows += row.rowId }
+        }
+    }
+
+    /**
+     * Decode one row for a caller that named it, or throw [UndecodableLinkException] for the
+     * enclosing `runCatching` to turn into a typed [Result.failure]. A single-row read has no
+     * rest of the query to save, so the caller gets told rather than handed a silent null.
+     */
+    private fun decodeOrFail(linkId: LinkId, payload: String): Link =
+        try {
+            decode(payload)
+        } catch (throwable: Throwable) {
+            throw UndecodableLinkException(linkId, throwable.reasonText(), throwable)
+        }
+
+    private fun Throwable.reasonText(): String = message ?: this::class.simpleName.orEmpty()
+
     private fun encode(link: Link): String = json.encodeToString(Link.serializer(), link)
 
     private fun decode(payload: String): Link = json.decodeFromString(Link.serializer(), payload)
+
+    /** One `Links` row as the list queries read it: the id, and the payload that names it. */
+    private class StoredLinkRow(
+        val linkId: String,
+        val linkJson: String,
+    )
 }
 
 /**

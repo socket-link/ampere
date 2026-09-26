@@ -14,10 +14,11 @@ import link.socket.ampere.agents.domain.event.EventType
  * the row, [EventsPruned] writes an `EventStorePruning` record); the signal is how a live
  * consumer — a CLI status line, a supervisor, a test — learns about it without polling.
  *
- * Deliberately not an [link.socket.ampere.agents.domain.event.Event]. These are emitted from
+ * Deliberately not an [link.socket.ampere.agents.domain.event.Event]. Most are emitted from
  * inside `saveEvent`, and an `Event` emitted from there would have to be persisted by the same
  * call that is reporting on persistence. `EventStoreEvent.PersistenceFailed` is the bus-facing
- * counterpart of [PersistenceFailed], dispatched by the door rather than the store.
+ * counterpart of [PersistenceFailed], and `StoreRowUndecodableEvent` of [RowUndecodable]; both
+ * are dispatched by the door rather than the store, for the same reason.
  */
 sealed interface EventStoreSignal {
 
@@ -42,6 +43,28 @@ sealed interface EventStoreSignal {
         val eventType: EventType,
         val originalBytes: Int,
         val storedBytes: Int,
+    ) : EventStoreSignal
+
+    /**
+     * A stored row could not be decoded and was skipped, so a list query returned without it
+     * (AMPR-364). Reachable by version skew alone: a payload naming an
+     * [link.socket.ampere.agents.domain.event.Event] subtype this build does not have.
+     *
+     * The row is still there and still unreadable — this is not a drop, it is a blind spot.
+     * `StoreRowUndecodableEvent` is the bus-facing counterpart, published by the door when a
+     * read through it skipped a row; the count also comes back on the query result itself, as
+     * [DecodedRows.undecodableCount].
+     *
+     * @property eventId the row's `event_id`, read from its own column — available even when
+     * nothing in the payload parses.
+     * @property eventType the row's `event_type` column, which says what was lost without
+     * decoding anything.
+     * @property reason the decoder's own message, verbatim.
+     */
+    data class RowUndecodable(
+        val eventId: EventId,
+        val eventType: EventType,
+        val reason: String,
     ) : EventStoreSignal
 
     /**

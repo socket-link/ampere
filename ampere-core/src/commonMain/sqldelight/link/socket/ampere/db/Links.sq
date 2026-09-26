@@ -34,13 +34,15 @@ SELECT link_json
 FROM Links
 WHERE link_id = ?;
 
+-- `link_id` is selected alongside the payload so a row that fails to decode can still be
+-- named (AMPR-364). Reading the id out of `link_json` would need the decode that just failed.
 selectAllLinks:
-SELECT link_json
+SELECT link_id, link_json
 FROM Links
 ORDER BY link_id ASC;
 
 selectLinksByTransport:
-SELECT link_json
+SELECT link_id, link_json
 FROM Links
 WHERE transport = ?
 ORDER BY link_id ASC;

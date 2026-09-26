@@ -25,6 +25,7 @@ import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
+import link.socket.ampere.agents.domain.event.StoreRowUndecodableEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
@@ -73,6 +74,9 @@ object EventCategorizer {
         // The store refused a write (AMPR-301): something happened that the Field has no
         // record of, and nothing downstream can recover it.
         is EventStoreEvent.PersistenceFailed,
+        // A stored row this build cannot read (AMPR-364): the query survived by skipping it, so
+        // the row is there and invisible.
+        is StoreRowUndecodableEvent,
         is TaskEvent.TaskFailed -> EventSignificance.CRITICAL
 
         // Significant events represent state changes worth noting
