@@ -387,8 +387,11 @@ class AmpereContext(
     /**
      * Stop the autonomous work loop.
      *
-     * Gracefully stops the polling loop. Any in-progress issue will complete,
-     * but no new issues will be claimed.
+     * Cancels the loop's job outright, including any in-progress issue — it does not let the
+     * current issue complete first. The issue's terminal status write (e.g. `BLOCKED`) runs on
+     * `Dispatchers.IO` and throws on entry because the Job is already cancelled, so the issue is
+     * left labelled `IN_PROGRESS` indefinitely. Intake skips issues that already carry a workflow
+     * label, so it is never picked up again (AMPR-343).
      */
     fun stopAutonomousWork() {
         _autonomousWorkLoop?.stop()
