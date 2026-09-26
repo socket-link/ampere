@@ -7,7 +7,11 @@ CREATE TABLE EventStore (
   run_id TEXT,
   sequence INTEGER NOT NULL DEFAULT 0,
   caused_by TEXT,
-  recorded_at INTEGER NOT NULL DEFAULT 0
+  recorded_at INTEGER NOT NULL DEFAULT 0,
+  -- AMPR-301: 1 when the payload's oversized string leaves were cut to fit
+  -- EventStoreBudget.MAX_EVENT_BYTES. Declared last to match where 7.sqm's ADD COLUMN puts
+  -- it, because every query below reads this table with SELECT *.
+  truncated INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX idx_event_type ON EventStore(event_type);
@@ -26,8 +30,8 @@ SELECT COALESCE(MAX(sequence), 0) + 1
 FROM EventStore;
 
 insertEvent:
-INSERT INTO EventStore(event_id, event_type, source_id, timestamp, payload, run_id, sequence, caused_by, recorded_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO EventStore(event_id, event_type, source_id, timestamp, payload, run_id, sequence, caused_by, recorded_at, truncated)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 getAllEvents:
 SELECT *
@@ -117,3 +121,26 @@ WHERE timestamp >= :fromTime
   AND event_type IN :eventTypes
   AND source_id IN :sourceIds
 ORDER BY sequence ASC;
+
+-- AMPR-301 size budget.
+--
+-- `payload` is the only column measured: it is the dominant term by an order of magnitude, and
+-- the CAST makes LENGTH count bytes rather than characters, so a payload of multi-byte text is
+-- not under-counted against a budget denominated in bytes.
+
+totalPayloadBytes:
+SELECT COALESCE(SUM(LENGTH(CAST(payload AS BLOB))), 0)
+FROM EventStore;
+
+-- Oldest-first, so a pruning pass walks the rotation order. `beforeSequence` holds the write
+-- that triggered the sweep out of its own sweep: the newest event is always admitted.
+oldestPayloadSizes:
+SELECT sequence, COALESCE(LENGTH(CAST(payload AS BLOB)), 0) AS payload_bytes
+FROM EventStore
+WHERE sequence < :beforeSequence
+ORDER BY sequence ASC
+LIMIT :limit;
+
+deleteEventsUpToSequence:
+DELETE FROM EventStore
+WHERE sequence <= ?;

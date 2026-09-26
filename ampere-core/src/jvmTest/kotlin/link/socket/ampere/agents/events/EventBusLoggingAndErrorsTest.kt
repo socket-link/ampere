@@ -166,6 +166,7 @@ class EventBusLoggingAndErrorsTest {
                 sequence = 1L,
                 caused_by = null,
                 recorded_at = 1L,
+                truncated = 0L,
             )
 
             val history = runCatching {

@@ -11,6 +11,7 @@ import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.EventStoreEvent
 import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
@@ -217,6 +218,10 @@ class SignificanceAwareEventLogger(
             TerminationReason.ERROR -> EventSignificance.CRITICAL
             else -> EventSignificance.SIGNIFICANT
         }
+
+        // The store refused a write, so something that happened has no durable record of
+        // happening (AMPR-301). Nothing downstream can recover that on its own.
+        is EventStoreEvent.PersistenceFailed -> EventSignificance.CRITICAL
     }
 
     private fun formatUrgency(urgency: Urgency): String = when (urgency) {

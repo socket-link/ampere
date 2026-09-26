@@ -21,6 +21,7 @@ import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.EventStoreEvent
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
@@ -204,6 +205,9 @@ class EventRenderer(
                 TerminationReason.ERROR -> red
                 else -> yellow
             }
+            // The event store refused a write, so something that happened has no row. Red: the
+            // pane is the only place it will ever appear.
+            is EventStoreEvent.PersistenceFailed -> "🧯" to red
         }
     }
 

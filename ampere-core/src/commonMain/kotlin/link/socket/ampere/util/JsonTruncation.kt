@@ -1,4 +1,4 @@
-package link.socket.ampere.eval.trace
+package link.socket.ampere.util
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -18,7 +18,7 @@ const val TRUNCATION_MARKER = "…[truncated]"
  * [truncateStringLeaves] must never cut this key's value: it is what
  * `Event.serializer()` reads to pick the polymorphic subclass on decode, and
  * truncating it produces a class name that resolves to nothing, hard-failing
- * decode — the exact "unreplayable trace" failure AMPR-267 forbids.
+ * decode — the exact "unreplayable" failure AMPR-267 forbids.
  */
 private const val CLASS_DISCRIMINATOR_KEY = "type"
 
@@ -34,6 +34,11 @@ private const val CLASS_DISCRIMINATOR_KEY = "type"
  * JSON shape (keys, object/array nesting) — only string leaf *values* shrink,
  * and [CLASS_DISCRIMINATOR_KEY] is never touched — so truncated output still
  * decodes via `Event.serializer()`.
+ *
+ * Lives in `ampere-core` rather than beside the eval `TraceBudget` that first
+ * needed it (AMPR-267) because `EventStoreBudget` enforces the same per-event
+ * bound on the production persistence path (AMPR-301), and both budgets have to
+ * cut payloads the same way for the two records of a run to stay comparable.
  *
  * Returns the possibly-truncated tree paired with whether any leaf was cut.
  */

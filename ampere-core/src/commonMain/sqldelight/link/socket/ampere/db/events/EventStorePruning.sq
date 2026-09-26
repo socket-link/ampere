@@ -1,0 +1,49 @@
+-- AMPR-301: the marker that records a rotation pass over EventStore.
+--
+-- Dropping events silently is the failure this table exists to prevent: a reader who folds the
+-- store and finds it starts at sequence 40,001 can tell from here whether the first 40,000
+-- events never existed or were rotated out, and when. One row per pass, not per dropped event.
+--
+-- Bounded like the table it guards: each pass trims this one to EventStoreBudget.MAX_PRUNING_RECORDS.
+CREATE TABLE EventStorePruning (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pruned_at INTEGER NOT NULL,
+  dropped_count INTEGER NOT NULL,
+  dropped_bytes INTEGER NOT NULL,
+  first_sequence INTEGER NOT NULL,
+  last_sequence INTEGER NOT NULL,
+  store_bytes_before INTEGER NOT NULL,
+  store_bytes_after INTEGER NOT NULL
+);
+
+CREATE INDEX idx_event_store_pruning_pruned_at ON EventStorePruning(pruned_at);
+
+insertPruning:
+INSERT INTO EventStorePruning(
+  pruned_at, dropped_count, dropped_bytes, first_sequence, last_sequence,
+  store_bytes_before, store_bytes_after
+)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+-- Newest pass first, matching how EventStore itself reads back (AMPR-336).
+getPruningRecords:
+SELECT *
+FROM EventStorePruning
+ORDER BY id DESC;
+
+-- Total events the rotation policy has dropped from this database, ever.
+totalDroppedEvents:
+SELECT COALESCE(SUM(dropped_count), 0)
+FROM EventStorePruning;
+
+-- The highest sequence rotated out of this database, or 0 if nothing was ever pruned. A fold
+-- that starts above 1 is complete from here on.
+lastPrunedSequence:
+SELECT COALESCE(MAX(last_sequence), 0)
+FROM EventStorePruning;
+
+trimPruningRecords:
+DELETE FROM EventStorePruning
+WHERE id NOT IN (
+  SELECT id FROM EventStorePruning ORDER BY id DESC LIMIT :keep
+);

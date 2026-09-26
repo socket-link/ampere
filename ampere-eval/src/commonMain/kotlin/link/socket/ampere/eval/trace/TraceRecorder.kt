@@ -12,6 +12,8 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.data.DEFAULT_JSON
+import link.socket.ampere.util.serializedByteSize
+import link.socket.ampere.util.truncateStringLeaves
 
 /**
  * Captures a run's `EventSerialBus` stream into a [Trace].
