@@ -108,10 +108,12 @@ class ArcRunHandle internal constructor(
      *
      * 1. [AmpereRuntime.cancel] cancels the run's job; `FlowPhase`'s tick loop observes it at
      *    its next `ensureActive()` and terminates with `TerminationReason.CANCELLED`.
-     * 2. An in-flight LLM call unwinds through its `CancellationException` handler, which
-     *    settles a cost record under `NonCancellable` before rethrowing.
-     * 3. `execute` joins every agent coroutine before it returns, so those settlement writes are
-     *    durable by the time this function does.
+     * 2. An in-flight LLM call does not observe this cancel: `SparkBasedAgent.runLLMTo*` runs the
+     *    call inside `runBlockingCompat(ioDispatcher) { withTimeout(60000) { ... } }`, a new root
+     *    coroutine with no parent Job. The call finishes normally and is booked as a success
+     *    rather than as `errorType="Cancelled"`, unless it separately overruns the 60s timeout.
+     * 3. `execute` joins every agent coroutine before it returns, so whatever that coroutine did
+     *    write is durable by the time this function does.
      *
      * Returns the run's terminal outcome — [ArcOutcome.Cancelled] in the ordinary case. A run
      * that had already completed or failed before the cancel landed returns *that* outcome
