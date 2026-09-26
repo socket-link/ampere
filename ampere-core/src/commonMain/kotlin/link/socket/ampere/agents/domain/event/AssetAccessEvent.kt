@@ -18,8 +18,13 @@ import link.socket.ampere.link.LinkId
  * Lives in `agents.domain.event` because [Event] is sealed: every subtype has
  * to share its module and package.
  *
- * @property linkId Null for a [link.socket.ampere.canon.CanonAssetRef.Url] —
- *   there is no Link, and therefore no consent check, for a plain URL.
+ * @property linkId The consent key the resolution was checked against, or null
+ *   to mean *no consent key* — there is no Link, and therefore no consent
+ *   check, for the reference that was resolved. Today only a
+ *   [link.socket.ampere.canon.CanonAssetRef.Url] is keyless; a new ref variant
+ *   has to decide whether it carries a key, and
+ *   [link.socket.ampere.plug.spi.ConsentEnforcingAssetResolver]'s exhaustive
+ *   `when` makes that decision a compile error rather than an omission.
  * @property byteCount Size of the resolved bytes. Never the bytes themselves.
  */
 @Serializable

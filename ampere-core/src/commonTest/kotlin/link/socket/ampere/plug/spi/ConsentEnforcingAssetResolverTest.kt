@@ -117,6 +117,66 @@ class ConsentEnforcingAssetResolverTest {
         assertEquals(0, delegate.callCount)
     }
 
+    /**
+     * The consent decision each [CanonAssetRef] variant must reach, named so a
+     * third variant cannot be added without stating which one it takes.
+     */
+    private enum class ConsentDecision {
+        /** No consent key, so the delegate is reached with no grant lookup. */
+        RESOLVES_UNCHECKED,
+
+        /** Carries a consent key; a revoked grant refuses before the delegate. */
+        REFUSED_AS_REVOKED,
+    }
+
+    /**
+     * Same shape as `CanonAssetRefSerializationTest.refSamples()`: one sample per
+     * variant, keyed by its pinned discriminator.
+     */
+    private fun refSamples(): Map<String, CanonAssetRef> = mapOf(
+        "canon_asset_ref.url" to CanonAssetRef.Url(template = "https://img.example/{w}x{h}.jpg"),
+        "canon_asset_ref.native_handle" to handle,
+    )
+
+    // Exhaustive with no `else`, mirroring the resolver: adding a CanonAssetRef
+    // variant breaks this test's compilation at the decision it has to make.
+    private fun expectedDecision(ref: CanonAssetRef): ConsentDecision = when (ref) {
+        is CanonAssetRef.Url -> ConsentDecision.RESOLVES_UNCHECKED
+        is CanonAssetRef.NativeHandle -> ConsentDecision.REFUSED_AS_REVOKED
+    }
+
+    @Test
+    fun `every CanonAssetRef variant reaches its named consent decision under a revoked grant`() = runTest {
+        refSamples().forEach { (discriminator, ref) ->
+            val store = InMemoryLinkStore(listOf(photosLink))
+            store.grant(plugId, photosLink.id, Instant.fromEpochMilliseconds(1))
+            store.revokeGrant(plugId, photosLink.id, Instant.fromEpochMilliseconds(2))
+            val delegate = StubResolver(Result.success(stubBytes))
+            val resolver = ConsentEnforcingAssetResolver(delegate, plugId, store)
+
+            val result = resolver.resolve(ref, AssetSpec())
+
+            when (expectedDecision(ref)) {
+                ConsentDecision.RESOLVES_UNCHECKED -> {
+                    assertTrue(result.isSuccess, "$discriminator should resolve without a consent check")
+                    assertEquals(1, delegate.callCount, "$discriminator should reach the delegate")
+                }
+
+                ConsentDecision.REFUSED_AS_REVOKED -> {
+                    val error = assertIs<AssetResolutionException>(
+                        result.exceptionOrNull(),
+                        "$discriminator should be refused under a revoked grant",
+                    )
+                    assertIs<AssetResolutionFailure.ConsentRevoked>(
+                        error.failure,
+                        "$discriminator should fail as ConsentRevoked",
+                    )
+                    assertEquals(0, delegate.callCount, "$discriminator should not reach the delegate")
+                }
+            }
+        }
+    }
+
     @Test
     fun `resolution works with no door wired`() = runTest {
         val store = InMemoryLinkStore(listOf(photosLink))
