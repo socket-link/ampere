@@ -98,6 +98,11 @@ class BenchTest {
         assertTrue(observed.any { it is BenchEvent.BenchRunStarted })
         assertEquals(2, observed.count { it is BenchEvent.ProbeGraded })
         assertTrue(observed.any { it is BenchEvent.BenchRunCompleted })
+
+        // One ArcSettled per case (AMPR-187), published whether or not the case was recorded.
+        val settled = observed.filterIsInstance<BenchEvent.ArcSettled>()
+        assertEquals(setOf("probe-1", "probe-2"), settled.map { it.probeId }.toSet())
+        assertTrue(settled.all { it.terminal == BenchEvent.ArcTerminal.COMPLETED })
     }
 
     @Test
@@ -121,10 +126,12 @@ class BenchTest {
 
         assertEquals(1, door.repository.getEventsByType(BenchEvent.BenchRunStarted.EVENT_TYPE).getOrThrow().size)
         assertEquals(1, door.repository.getEventsByType(BenchEvent.BenchRunCompleted.EVENT_TYPE).getOrThrow().size)
+        assertEquals(2, door.repository.getEventsByType(BenchEvent.ArcSettled.EVENT_TYPE).getOrThrow().size)
 
         val benchRunId = (graded.first() as BenchEvent.ProbeGraded).runId
         val stored = door.repository.getEventsSinceSequence(0).getOrThrow().filter { it.event is BenchEvent }
-        assertEquals(4, stored.size)
+        // Started + (graded, settled) per probe + completed.
+        assertEquals(6, stored.size)
         assertTrue(stored.all { it.runId == benchRunId })
     }
 
@@ -231,6 +238,7 @@ class BenchTest {
         val handler = EventHandler<Event, Subscription> { event, _ -> onEvent(event as BenchEvent) }
         bus.subscribe("bench-test-observer", BenchEvent.BenchRunStarted.EVENT_TYPE, handler)
         bus.subscribe("bench-test-observer", BenchEvent.ProbeGraded.EVENT_TYPE, handler)
+        bus.subscribe("bench-test-observer", BenchEvent.ArcSettled.EVENT_TYPE, handler)
         bus.subscribe("bench-test-observer", BenchEvent.BenchRunCompleted.EVENT_TYPE, handler)
     }
 

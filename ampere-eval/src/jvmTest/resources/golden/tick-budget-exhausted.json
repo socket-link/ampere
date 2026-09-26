@@ -1,0 +1,40 @@
+{
+    "id": "golden-tick-budget-exhausted",
+    "runId": "golden-run-tick-budget-exhausted",
+    "arcId": "startup-saas",
+    "createdAt": 0,
+    "events": [
+        {
+            "index": 0,
+            "timestamp": 0,
+            "type": "ArcSettled",
+            "payload": {
+                "type": "BenchEvent.ArcSettled",
+                "eventId": "tick-budget-exhausted-event-0",
+                "runId": "golden-run-tick-budget-exhausted",
+                "eventSource": {
+                    "type": "link.socket.ampere.agents.domain.event.EventSource.Human"
+                },
+                "timestamp": "1970-01-01T00:00:00Z",
+                "probeId": "tick-budget-exhausted",
+                "arcId": "startup-saas",
+                "arcRunId": "golden-arc-run-tick-budget-exhausted",
+                "terminal": "COMPLETED",
+                "terminationReason": "MAX_TICKS_REACHED",
+                "pulseSuccess": false,
+                "agentCount": 3,
+                "goalNodeCount": 5,
+                "completedGoalCount": 0,
+                "finalTick": 1,
+                "outcomeTotal": 3,
+                "outcomeSucceeded": 0,
+                "outcomeFailed": 0,
+                "failure": null,
+                "urgency": "LOW",
+                "eventType": "ArcSettled"
+            },
+            "truncated": false
+        }
+    ],
+    "droppedEventCount": 0
+}

@@ -123,6 +123,76 @@ tasks.named<Test>("jvmTest") {
     useJUnitPlatform()
 }
 
+// region — AMPR-187: the Ampere-first eval suite
+//
+// Both tasks below are `Test` tasks over the jvmTest classpath rather than `JavaExec` over a new
+// source set. The suite needs a JDBC driver for the event store and the trace store, and jvmTest is
+// the only configuration that already has one — putting it on jvmMain instead would ship a JDBC
+// dependency in the published `ampere-eval` POM for the sake of two developer commands.
+
+// Read the compilation, not the `jvmTest` task: deriving a classpath from `tasks.named<Test>
+// ("jvmTest").map { it.classpath }` makes that task the provider's producer, so Gradle runs the
+// whole jvmTest suite before either task below — which is exactly the duplicated work a narrow
+// gate exists to avoid.
+val jvmTestCompilation = kotlin.jvm().compilations.getByName("test")
+
+/**
+ * The per-commit regression gate (task 5.4), as a named command.
+ *
+ * Runs only the Replay suite, so CI has a step whose failure means "an Arc's behavior changed"
+ * rather than "something in ampere-eval broke". `upToDateWhen { false }` because a gate that can
+ * report UP-TO-DATE or FROM-CACHE is not a gate — Gradle would happily skip it on a rerun of an
+ * unchanged tree, which is exactly the run a flaky regression hides in.
+ */
+val evalReplay by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Runs the Ampere eval suite in Replay mode against its committed golden traces."
+
+    testClassesDirs = jvmTestCompilation.output.classesDirs
+    classpath = jvmTestCompilation.output.allOutputs + jvmTestCompilation.runtimeDependencyFiles
+    useJUnitPlatform()
+
+    filter {
+        includeTestsMatching("link.socket.ampere.eval.suite.AmpereEvalSuiteTest")
+    }
+
+    outputs.upToDateWhen { false }
+}
+
+/**
+ * Re-records every probe's golden trace (task 5.5).
+ *
+ * Writes into the *source* resources directory, not the build one, so the result is something to
+ * review and commit. `GoldenTraceRecorderTest` does nothing unless this property is set, which is
+ * what keeps a plain `jvmTest` run from overwriting the traces it is checking against.
+ */
+val recordGoldenTraces by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Re-records the Ampere eval suite's golden traces from a Live Bench run."
+
+    testClassesDirs = jvmTestCompilation.output.classesDirs
+    classpath = jvmTestCompilation.output.allOutputs + jvmTestCompilation.runtimeDependencyFiles
+    useJUnitPlatform()
+
+    filter {
+        includeTestsMatching("link.socket.ampere.eval.suite.GoldenTraceRecorderTest")
+    }
+
+    systemProperty(
+        "ampere.eval.goldenDir",
+        layout.projectDirectory.dir("src/jvmTest/resources/golden").asFile.absolutePath,
+    )
+
+    // Recording is the point of the task; there is no such thing as an up-to-date re-record.
+    outputs.upToDateWhen { false }
+
+    testLogging {
+        showStandardStreams = true
+    }
+}
+
+// endregion
+
 ktlint {
     verbose.set(true)
     outputToConsole.set(true)

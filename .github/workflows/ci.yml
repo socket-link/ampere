@@ -184,18 +184,89 @@ jobs:
         timeout-minutes: 20
         run: ./gradlew ${{ matrix.tasks }}
 
+  # AMPR-187: AMPERE's own eval suite, replayed against its committed golden traces. Its own job
+  # rather than a line in the matrix above, so a red build here reads as "an Arc's behavior changed"
+  # rather than "something in ampere-eval broke" — the two want very different responses.
+  #
+  # Replay mode only, and structurally so: the suite opens its Bench without a live relay and
+  # without liveModeEnabled, so Live mode is refused rather than merely unused. No API key, no
+  # network, no writable directory beyond a temp one.
+  #
+  # Cheap ubuntu job. The scarce CI resource in this repo is macOS concurrency, not ubuntu minutes,
+  # so the few seconds of overlap with :ampere-eval:jvmTest is worth the separate signal.
+  eval-replay-gate:
+    name: Eval Replay Gate (ubuntu, JDK 21)
+    needs: jvm-lint-build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+
+      # See "Cache Gradle distribution" in jvm-lint-build for why this is not covered by
+      # setup-gradle's own cache.
+      - name: Cache Gradle distribution
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/wrapper/dists
+          key: gradle-dist-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}
+
+      - name: Create local.properties
+        run: |
+          cat > local.properties << 'EOF'
+          anthropic_api_key=placeholder
+          google_api_key=placeholder
+          openai_api_key=placeholder
+          EOF
+
+      - name: Replay the eval suite against its golden traces
+        timeout-minutes: 15
+        run: ./gradlew :ampere-eval:evalReplay
+
+      - name: Explain a red gate
+        if: failure()
+        run: |
+          cat <<'EOF'
+          The eval suite no longer matches its golden traces.
+
+          An Arc's observable behavior changed. Read the failure above: it names the probe, the
+          meter, and for a conformance failure the first trace position that stopped matching.
+
+          If the change was intended, re-record and commit the diff:
+            ./gradlew :ampere-eval:recordGoldenTraces
+            git diff ampere-eval/src/jvmTest/resources/golden
+
+          See ampere-eval/README.md for what each probe measures and why.
+          EOF
+
   jvm-tests-status:
     name: JVM + Android Tests (ubuntu, JDK 21)
-    needs: [ jvm-lint-build, jvm-test ]
+    needs: [ jvm-lint-build, jvm-test, eval-replay-gate ]
     runs-on: ubuntu-latest
     if: always()
 
     steps:
+      # eval-replay-gate is aggregated here as well as standing on its own: this job is the
+      # configured required check, so wiring the gate into it is what actually blocks a merge.
       - name: Check required jobs succeeded
         run: |
-          if [ "${{ needs.jvm-lint-build.result }}" != "success" ] || [ "${{ needs.jvm-test.result }}" != "success" ]; then
+          if [ "${{ needs.jvm-lint-build.result }}" != "success" ] \
+            || [ "${{ needs.jvm-test.result }}" != "success" ] \
+            || [ "${{ needs.eval-replay-gate.result }}" != "success" ]; then
             echo "jvm-lint-build: ${{ needs.jvm-lint-build.result }}"
             echo "jvm-test: ${{ needs.jvm-test.result }}"
+            echo "eval-replay-gate: ${{ needs.eval-replay-gate.result }}"
             exit 1
           fi
 
