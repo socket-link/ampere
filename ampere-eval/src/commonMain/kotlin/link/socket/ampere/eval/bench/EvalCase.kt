@@ -38,11 +38,19 @@ typealias Probe = EvalCase
 /** Whether a [Bench] run replays a golden [Trace] (CI-safe) or drives the real relay (nightly/on-demand). */
 @Serializable
 sealed interface RunMode {
-    @Serializable
-    data object Replay : RunMode
+
+    /** How this mode names itself in a reading's failure detail — "Replay run failed: …". */
+    val label: String
 
     @Serializable
-    data object Live : RunMode
+    data object Replay : RunMode {
+        override val label: String get() = "Replay"
+    }
+
+    @Serializable
+    data object Live : RunMode {
+        override val label: String get() = "Live"
+    }
 }
 
 data class EvalCaseResult(

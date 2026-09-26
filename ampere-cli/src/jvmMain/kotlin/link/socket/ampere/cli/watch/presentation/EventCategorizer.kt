@@ -139,7 +139,8 @@ object EventCategorizer {
         is BenchEvent.BenchRunStarted,
         is LinkEvent.LinkResolved,
         is AssetAccessEvent,
-        is BenchEvent.ProbeGraded -> EventSignificance.ROUTINE
+        is BenchEvent.ProbeGraded,
+        is BenchEvent.ArcSettled -> EventSignificance.ROUTINE
 
         is RoutingEvent.RouteFallback,
         is BenchEvent.BenchRunCompleted -> EventSignificance.SIGNIFICANT

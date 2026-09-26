@@ -126,6 +126,7 @@ object EventRegistry {
         // BenchEvent types
         BenchEvent.BenchRunStarted.EVENT_TYPE,
         BenchEvent.ProbeGraded.EVENT_TYPE,
+        BenchEvent.ArcSettled.EVENT_TYPE,
         BenchEvent.BenchRunCompleted.EVENT_TYPE,
 
         // ProbeEvent types
