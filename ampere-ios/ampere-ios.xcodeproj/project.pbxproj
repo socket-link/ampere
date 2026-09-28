@@ -14,6 +14,7 @@
 		AC243AAAAAAAAAAAAAAA0003 /* ArcExecutionBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC243AAAAAAAAAAAAAAA0002 /* ArcExecutionBridgeTests.swift */; };
 		AC243AAAAAAAAAAAAAAA0005 /* ArcRunHandle+AsyncStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC243AAAAAAAAAAAAAAA0004 /* ArcRunHandle+AsyncStream.swift */; };
 		AC243AAAAAAAAAAAAAAA0010 /* ArcRunHandle+AsyncStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC243AAAAAAAAAAAAAAA0004 /* ArcRunHandle+AsyncStream.swift */; };
+		AC327AAAAAAAAAAAAAAA0002 /* FoundationModelsLocalInferenceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC327AAAAAAAAAAAAAAA0001 /* FoundationModelsLocalInferenceEngine.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,6 +28,7 @@
 		AC243AAAAAAAAAAAAAAA0001 /* ampere-iosTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ampere-iosTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AC243AAAAAAAAAAAAAAA0002 /* ArcExecutionBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcExecutionBridgeTests.swift; sourceTree = "<group>"; };
 		AC243AAAAAAAAAAAAAAA0004 /* ArcRunHandle+AsyncStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcRunHandle+AsyncStream.swift"; sourceTree = "<group>"; };
+		AC327AAAAAAAAAAAAAAA0001 /* FoundationModelsLocalInferenceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsLocalInferenceEngine.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXContainerItemProxy section */
@@ -100,6 +102,7 @@
 				7555FF8C242A565B00829871 /* Info.plist */,
 				2152FB032600AC8F00CF470E /* iOSApp.swift */,
 				AC243AAAAAAAAAAAAAAA0004 /* ArcRunHandle+AsyncStream.swift */,
+				AC327AAAAAAAAAAAAAAA0001 /* FoundationModelsLocalInferenceEngine.swift */,
 				058557D7273AAEEB004C7B11 /* Preview Content */,
 			);
 			path = iosApp;
@@ -253,6 +256,7 @@
 				2152FB042600AC8F00CF470E /* iOSApp.swift in Sources */,
 				7555FF83242A565900829871 /* ContentView.swift in Sources */,
 				AC243AAAAAAAAAAAAAAA0005 /* ArcRunHandle+AsyncStream.swift in Sources */,
+				AC327AAAAAAAAAAAAAAA0002 /* FoundationModelsLocalInferenceEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

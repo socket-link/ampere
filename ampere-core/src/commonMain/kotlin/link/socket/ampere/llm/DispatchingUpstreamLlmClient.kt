@@ -5,10 +5,14 @@ import com.aallam.openai.api.chat.ChatCompletionRequest
 import link.socket.ampere.agents.domain.routing.capability.CostPolicy
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorRegistry
+import link.socket.ampere.agents.domain.routing.capability.executesLocally
+import link.socket.ampere.agents.domain.routing.local.InferenceLocality
+import link.socket.ampere.agents.domain.routing.local.InferenceLocalityClassifier
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
 import link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine
 import link.socket.ampere.api.AmpereStableApi
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
+import link.socket.ampere.domain.ai.provider.ProviderId
 
 /**
  * [UpstreamLlmClient] that dispatches each call to either a [LocalUpstreamLlmClient]
@@ -39,13 +43,22 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
  * is byte-equivalent to before. Platform modules
  * (`:ampere-relay-local-android` / `-apple`) supply a real
  * [LocalInferenceEngine]; tests supply a fake.
+ *
+ * ## Saying where a call ran
+ *
+ * This client is also the [InferenceLocalityClassifier] a surface should use
+ * (AMPR-327). The catalog can say a model is *meant* to run locally; only the
+ * client that executes it knows whether an engine is bound to run it on. With
+ * none bound, a local-designated configuration goes to [bundled] like any
+ * other, and [localityOf] reports it as [InferenceLocality.CLOUD] — so an
+ * "on-device" label can never be shown for a call that left the device.
  */
 @AmpereStableApi
 class DispatchingUpstreamLlmClient(
     private val registry: ModelDescriptorRegistry,
     private val localEngine: LocalInferenceEngine?,
     private val bundled: UpstreamLlmClient = BundledUpstreamLlmClient,
-) : UpstreamLlmClient {
+) : UpstreamLlmClient, InferenceLocalityClassifier {
 
     private val local: LocalUpstreamLlmClient? = localEngine?.let(::LocalUpstreamLlmClient)
 
@@ -65,9 +78,8 @@ class DispatchingUpstreamLlmClient(
         configuration: AIConfiguration,
     ): ChatCompletion {
         val localClient = local
-        val descriptor = registry.descriptorFor(configuration.model.name)
 
-        return if (localClient != null && descriptor != null && descriptor.prefersLocalExecution()) {
+        return if (localClient != null && isLocalModel(configuration.model.name)) {
             localClient.call(request, configuration)
         } else {
             bundled.call(request, configuration)
@@ -75,9 +87,24 @@ class DispatchingUpstreamLlmClient(
     }
 
     /**
-     * Whether this descriptor designates a model that should execute locally:
-     * a free (0-Watt) cost policy or a device-gated availability flag.
+     * Where [call] sends a request for [modelId]: [InferenceLocality.ON_DEVICE]
+     * only when an engine is bound *and* the model's descriptor
+     * [executesLocally][ModelDescriptor.executesLocally] — the same two
+     * conditions [call] dispatches on, so the answer cannot disagree with what
+     * ran. [providerId] is not consulted: dispatch keys on the model.
      */
-    private fun ModelDescriptor.prefersLocalExecution(): Boolean =
-        cost is CostPolicy.Free || availabilityGated
+    override suspend fun localityOf(providerId: ProviderId, modelId: String): InferenceLocality =
+        if (local != null && isLocalModel(modelId)) {
+            InferenceLocality.ON_DEVICE
+        } else {
+            InferenceLocality.CLOUD
+        }
+
+    /**
+     * Whether the catalog designates [modelName] for local execution: a free
+     * (0-Watt) [CostPolicy] or a device-gated availability flag. A model with
+     * no descriptor is not local.
+     */
+    private suspend fun isLocalModel(modelName: String): Boolean =
+        registry.descriptorFor(modelName)?.executesLocally == true
 }

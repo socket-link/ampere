@@ -23,6 +23,7 @@ import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.api.model.TokenUsage
 import link.socket.ampere.domain.ai.pricing.ProviderPricingCalculator
+import link.socket.ampere.domain.ai.provider.ProviderId
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.domain.util.toClientModelId
 import link.socket.ampere.llm.BundledUpstreamLlmClient
@@ -31,6 +32,24 @@ import link.socket.ampere.llm.MissingUpstreamLlmClientException
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.util.ioDispatcher
 import link.socket.ampere.util.logWith
+
+/**
+ * What one [AgentLLMService.callDetailed] produced, and who produced it.
+ *
+ * @property text The model's response — what [AgentLLMService.call] returns.
+ * @property providerId The `AIProvider.id` of the provider that served the call.
+ * @property modelId The `AIModel.name` of the model that served the call.
+ * @property routingReason Why that model: the matched relay rule, or
+ *   `"agent_configuration"` when no relay resolved the call.
+ * @property latencyMs Wall-clock time the provider call took.
+ */
+data class LlmCallResult(
+    val text: String,
+    val providerId: ProviderId,
+    val modelId: String,
+    val routingReason: String,
+    val latencyMs: Long,
+)
 
 /**
  * Centralized service for LLM interactions used by autonomous agents.
@@ -139,7 +158,34 @@ class AgentLLMService(
         temperature: Double = DEFAULT_TEMPERATURE,
         maxTokens: Int = DEFAULT_MAX_TOKENS,
         routingContext: RoutingContext? = null,
-    ): String {
+    ): String = callDetailed(
+        prompt = prompt,
+        systemMessage = systemMessage,
+        temperature = temperature,
+        maxTokens = maxTokens,
+        routingContext = routingContext,
+    ).text
+
+    /**
+     * [call], returning which provider and model produced the text along with it.
+     *
+     * [call] answers "what did the model say"; this also answers "which model,
+     * and why that one" — the same `providerId`, `modelId` and `routingReason`
+     * the call's [ProviderCallStartedEvent] carries. A caller that shows its
+     * user where an answer came from (on the device, or from the cloud —
+     * AMPR-327) reads them here instead of correlating against the event stream,
+     * which is dispatched asynchronously and may not have arrived yet.
+     *
+     * Same routing, same telemetry, same failures as [call]: this is the one
+     * implementation, and [call] is this with everything but the text dropped.
+     */
+    suspend fun callDetailed(
+        prompt: String,
+        systemMessage: String = DEFAULT_SYSTEM_MESSAGE,
+        temperature: Double = DEFAULT_TEMPERATURE,
+        maxTokens: Int = DEFAULT_MAX_TOKENS,
+        routingContext: RoutingContext? = null,
+    ): LlmCallResult {
         val effectiveSystemMessage = applyActivePromptProvider(systemMessage)
 
         // Route through custom provider if configured (takes precedence over relay)
@@ -152,7 +198,7 @@ class AgentLLMService(
                 routingContext = routingContext,
                 providerId = providerId,
                 modelId = modelId,
-                routingReason = "custom_provider",
+                routingReason = CUSTOM_PROVIDER_ROUTING_REASON,
             )
 
             val startedAt = Clock.System.now()
@@ -160,6 +206,7 @@ class AgentLLMService(
                 val response = withContext(ioDispatcher) {
                     provider(combinedPrompt)
                 }
+                val latencyMs = elapsedMillisSince(startedAt)
                 emitCompletedTelemetry(
                     routingContext = routingContext,
                     providerId = providerId,
@@ -168,7 +215,13 @@ class AgentLLMService(
                     success = true,
                     startedAt = startedAt,
                 )
-                response
+                LlmCallResult(
+                    text = response,
+                    providerId = providerId,
+                    modelId = modelId,
+                    routingReason = CUSTOM_PROVIDER_ROUTING_REASON,
+                    latencyMs = latencyMs,
+                )
             } catch (cancellation: CancellationException) {
                 // A custom provider is a prompt-in/text-out test seam that reports no
                 // usage even on success, so there is no input floor to book here — only
@@ -321,6 +374,7 @@ class AgentLLMService(
             )
             throw t
         }
+        val latencyMs = elapsedMillisSince(startedAt)
 
         // Log token usage for monitoring
         completion.usage?.let { usage ->
@@ -346,8 +400,16 @@ class AgentLLMService(
             startedAt = startedAt,
         )
 
-        return completion.choices.firstOrNull()?.message?.content
+        val text = completion.choices.firstOrNull()?.message?.content
             ?: throw IllegalStateException("No response from LLM")
+
+        return LlmCallResult(
+            text = text,
+            providerId = effectiveConfig.provider.id,
+            modelId = model.name,
+            routingReason = routingResolution.reason,
+            latencyMs = latencyMs,
+        )
     }
 
     /**
@@ -437,6 +499,13 @@ class AgentLLMService(
          * input floor rather than provider-reported actuals (AMPR-242).
          */
         const val CANCELLED_ERROR_TYPE = "Cancelled"
+
+        /**
+         * `routingReason` of a call served by a configured
+         * [LlmProvider][link.socket.ampere.domain.llm.LlmProvider], which
+         * short-circuits the relay.
+         */
+        const val CUSTOM_PROVIDER_ROUTING_REASON = "custom_provider"
 
         const val DEFAULT_SYSTEM_MESSAGE =
             "You are an autonomous agent component. Respond clearly and concisely."
@@ -572,6 +641,9 @@ class AgentLLMService(
             usage = usage,
         )
     }
+
+    private fun elapsedMillisSince(startedAt: kotlinx.datetime.Instant): Long =
+        (Clock.System.now() - startedAt).inWholeMilliseconds
 
     private fun applyActivePromptProvider(systemMessage: String): String {
         val provider = activePromptProvider ?: return systemMessage

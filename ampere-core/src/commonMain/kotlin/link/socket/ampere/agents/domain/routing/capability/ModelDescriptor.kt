@@ -74,6 +74,21 @@ val ModelDescriptor.routingCostPerWatt: Double
     get() = if (cost is CostPolicy.Free) 0.0 else costPerWatt
 
 /**
+ * Whether this descriptor designates a model that executes locally, on the
+ * device, rather than on a provider's servers: a free (0-Watt) cost policy or a
+ * device-gated availability flag (AMPR-203/225).
+ *
+ * This is the single predicate behind both *dispatch* and *display*.
+ * [link.socket.ampere.llm.DispatchingUpstreamLlmClient] uses it to decide which
+ * execution path a relay-selected configuration takes, and
+ * [link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceProjection]
+ * uses it to decide which calls a UI may label "on-device" (AMPR-327). Keeping
+ * one definition is what stops the label drifting from what actually ran.
+ */
+val ModelDescriptor.executesLocally: Boolean
+    get() = cost is CostPolicy.Free || availabilityGated
+
+/**
  * Whether this descriptor can serve the given [req]. A null/empty constraint
  * imposes nothing; every present constraint must hold.
  *
