@@ -79,6 +79,7 @@ class DatabaseSchemaManagerTest {
             }
             assertTrue(tableExists(driver, "Links"))
             assertTrue(tableExists(driver, "LinkGrants"))
+            assertTrue(tableExists(driver, "PauseStore"))
             assertEquals(
                 listOf("evt-1"),
                 query(driver, "SELECT event_id FROM EventStore WHERE run_id IS NULL") { it.getString(0)!! },
@@ -92,8 +93,14 @@ class DatabaseSchemaManagerTest {
 
     @Test
     fun `migrated legacy tables match a freshly created schema column for column`() {
-        val migratedTables = listOf("EventStore", "KnowledgeStore", "OutcomeMemoryStore", "Links", "LinkGrants") +
-            UNMIGRATED_SQ_TABLES
+        val migratedTables = listOf(
+            "EventStore",
+            "KnowledgeStore",
+            "OutcomeMemoryStore",
+            "Links",
+            "LinkGrants",
+            "PauseStore",
+        ) + UNMIGRATED_SQ_TABLES
         val fresh = inMemoryDriver().use { driver ->
             DatabaseSchemaManager.ensure(driver).getOrThrow()
             migratedTables.associateWith { tableShape(driver, it) }

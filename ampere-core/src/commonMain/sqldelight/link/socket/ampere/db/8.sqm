@@ -1,0 +1,18 @@
+-- AMPR-370: `AgentPause` had a contract and no store, so a pending human decision lived only in
+-- the process that raised it. This adds the table that makes one durable and resumable. New
+-- table rather than a column on any existing one: a pause outlives the run that raised it, and
+-- resume is a fresh perceive over this committed state rather than a resurrection of that run
+-- (AMPR-274 Contract 4, D4).
+--
+-- Definition copied from PauseStore.sq; IF NOT EXISTS keeps this a no-op on a database that
+-- already has it. No backfill: there is nothing to migrate, because nothing was ever stored.
+CREATE TABLE IF NOT EXISTS PauseStore (
+  correlation_id TEXT NOT NULL PRIMARY KEY,
+  pause_json TEXT NOT NULL,
+  raised_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  response_json TEXT,
+  settled_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_pause_store_settled_at_expires_at ON PauseStore(settled_at, expires_at);

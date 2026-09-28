@@ -22,6 +22,13 @@ typealias PauseCorrelationId = String
  *
  * The contract intentionally lives in commonMain and carries no platform
  * references so it can be expressed across every Ampere target.
+ *
+ * A raised pause belongs in [PauseStore], which makes it durable and resumable
+ * (AMPR-370): persisted at raise, addressed by [correlationId] from anywhere,
+ * and settled exactly once — including to [AgentPauseResponse.TimedOut] when
+ * [timeoutMillis] elapses with nobody watching. Read that type's KDoc for what
+ * resume means here; the short version is that the store holds the decision and
+ * never the coroutine.
  */
 @Serializable
 data class AgentPause(
