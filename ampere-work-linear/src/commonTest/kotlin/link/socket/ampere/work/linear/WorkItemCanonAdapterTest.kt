@@ -19,8 +19,8 @@ import link.socket.ampere.canon.adapter.CanonConversionFailure
 import link.socket.ampere.link.LinkId
 
 /**
- * The canon projection, and the four supervisory states it deliberately cannot
- * express.
+ * The canon projection: what one native issue object can say about a work item,
+ * and the one supervisory status it deliberately cannot.
  */
 class WorkItemCanonAdapterTest {
 
@@ -52,10 +52,10 @@ class WorkItemCanonAdapterTest {
     }
 
     @Test
-    fun `the supervisory state rides in providerStatus and not in status`() {
-        // Claimed, verifying, verdict-requested and escalated are not
-        // CanonWorkStatus members (AMPR-314). The canon status stays coarse and
-        // true; the work source's own state name carries the detail.
+    fun `providerStatus stays verbatim now that the lifecycle is typed`() {
+        // Before AMPR-314 this field was where the supervisory lifecycle rode.
+        // It is still carried, and it is still the only place a status a
+        // workspace invented survives — but `status` is now the typed answer.
         val item = project(Recorded.body(Recorded.GET_ISSUE)).getOrThrow()
 
         assertEquals("In Progress", item.providerStatus)
@@ -63,7 +63,27 @@ class WorkItemCanonAdapterTest {
     }
 
     @Test
-    fun `a gated ticket carries its gate label into canon verbatim`() {
+    fun `the in-review state projects as verifying`() {
+        // "In Progress" and "In Review" share one statusType, so the state name is
+        // the only thing that can separate them — which is why the projection
+        // reads it rather than deriving status from the category alone.
+        val body = Recorded.body(
+            """
+            {
+              "id": "AMPR-1",
+              "title": "Gates running",
+              "status": "In Review",
+              "statusType": "started",
+              "labels": ["wave:w0"]
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(CanonWorkStatus.VERIFYING, project(body, identifier = "AMPR-1").getOrThrow().status)
+    }
+
+    @Test
+    fun `a gated ticket projects as verdict-requested and keeps its label`() {
         val body = Recorded.body(
             """
             {
@@ -79,15 +99,70 @@ class WorkItemCanonAdapterTest {
         val item = project(body, identifier = "AMPR-1").getOrThrow()
 
         assertEquals(listOf("wave:w0", "gate:awaiting-verdict"), item.labels)
-        assertEquals(
-            CanonWorkStatus.IN_PROGRESS,
-            item.status,
-            "a verdict-requested ticket is `started` to the provider, and canon has no better word",
+        assertEquals(CanonWorkStatus.VERDICT_REQUESTED, item.status)
+    }
+
+    @Test
+    fun `an escalated ticket projects as escalated from whatever state it stopped in`() {
+        val body = Recorded.body(
+            """
+            {
+              "id": "AMPR-1",
+              "title": "Stuck",
+              "status": "In Progress",
+              "statusType": "started",
+              "labels": ["wave:w0", "gate:escalated"]
+            }
+            """.trimIndent(),
         )
+
+        assertEquals(CanonWorkStatus.ESCALATED, project(body, identifier = "AMPR-1").getOrThrow().status)
+    }
+
+    @Test
+    fun `a closed ticket still carrying a gate label projects as done`() {
+        // The label is an untidied record; the closure is the provider's own
+        // statement of finality. Reading it the other way round would strand
+        // finished work in a queue waiting on a human with nothing left to do.
+        val body = Recorded.body(
+            """
+            {
+              "id": "AMPR-1",
+              "title": "Finished",
+              "status": "Done",
+              "statusType": "completed",
+              "labels": ["wave:w0", "gate:escalated"]
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(CanonWorkStatus.DONE, project(body, identifier = "AMPR-1").getOrThrow().status)
+    }
+
+    @Test
+    fun `a claimed ticket projects as in progress because a claim is a comment`() {
+        // The honest answer for a read that did not look. A claim lives in a
+        // comment, and this projection sees one issue object —
+        // LinearWorkSource.readCanonWorkItem is the read that resolves it.
+        val body = Recorded.body(
+            """
+            {
+              "id": "AMPR-1",
+              "title": "Claimed elsewhere",
+              "status": "In Progress",
+              "statusType": "started",
+              "labels": ["wave:w0"]
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(CanonWorkStatus.IN_PROGRESS, project(body, identifier = "AMPR-1").getOrThrow().status)
     }
 
     @Test
     fun `every status type maps to a canon member`() {
+        // A state name this workspace does not use, so each case falls through to
+        // the category — the coarse half of SupervisoryStatusMapping.
         val expected = mapOf(
             "triage" to CanonWorkStatus.BACKLOG,
             "backlog" to CanonWorkStatus.BACKLOG,

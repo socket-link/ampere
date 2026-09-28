@@ -3,6 +3,9 @@ package link.socket.ampere.work.linear
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.canon.CanonType
+import link.socket.ampere.canon.CanonWorkItem
+import link.socket.ampere.canon.CanonWorkStatus
+import link.socket.ampere.canon.NativePayload
 import link.socket.ampere.canon.adapter.CanonConversionFailure
 import link.socket.ampere.link.LinkDirection
 import link.socket.ampere.link.LinkId
@@ -72,8 +75,11 @@ data class ReadyQueue(
  *
  * Work items project onto the Ring 3 [CanonType.WORK_ITEM] entity through
  * [WorkItemCanonAdapter], which is where the mapping table and its lossiness
- * live. The four supervisory lifecycle states canon has no member for ride in
- * `providerStatus` and `labels` until AMPR-314 lands — see [SupervisoryState].
+ * live. All four supervisory lifecycle states are canon members as of AMPR-314,
+ * and [SupervisoryStatusMapping] owns the composition that expresses each one on
+ * this provider: [readCanonWorkItem] is the typed read, [markStatus] the typed
+ * write. `providerStatus` is still carried verbatim, but it is no longer where
+ * the lifecycle lives.
  *
  * ## Three provider facts shape everything here
  *
@@ -171,6 +177,53 @@ class LinearWorkSource(
 
     /** One issue, relations and state history included. */
     suspend fun readIssue(issue: String): Result<WorkSourceIssue> = readIssue(tools, issue)
+
+    /**
+     * One issue as a [CanonWorkItem], with the claim evidence resolved — the
+     * typed read half of the AMPR-314 mapping.
+     *
+     * [WorkItemCanonAdapter] projects everything one native object can say, which
+     * covers [CanonWorkStatus.VERIFYING], [CanonWorkStatus.VERDICT_REQUESTED] and
+     * [CanonWorkStatus.ESCALATED]. It cannot cover [CanonWorkStatus.CLAIMED],
+     * because a claim is a *comment* and
+     * [link.socket.ampere.canon.adapter.ReadableCanonAdapter.project] is a
+     * function of one object. So this method does the second read and refines the
+     * projected status with what it found. The refinement is a `copy` rather than
+     * a projection parameter deliberately: widening the adapter's signature would
+     * put a provider-specific second read into the framework's read contract.
+     *
+     * The comment scan is paid for only when it can change the answer — see
+     * [SupervisoryStatusMapping.claimEvidenceMatters]. A queued, gated or closed
+     * ticket costs exactly one read.
+     *
+     * Any claim comment for this issue counts, including another instance's: the
+     * question this answers is *is this item claimed*, not *do I hold it*.
+     * [claim] is the only thing that decides the second, and it decides it from
+     * the total order rather than from presence.
+     */
+    suspend fun readCanonWorkItem(issue: String): Result<CanonWorkItem> {
+        val read = readIssue(issue).getOrElse { return Result.failure(it) }
+        val expression = read.supervisoryExpression()
+
+        val claimed = if (SupervisoryStatusMapping.claimEvidenceMatters(expression)) {
+            readComments(read.identifier)
+                .getOrElse { return Result.failure(it) }
+                .claimsFor(read.identifier)
+                .isNotEmpty()
+        } else {
+            false
+        }
+
+        return canonAdapter.project(
+            payload = NativePayload(schema = WorkItemCanonAdapter.SCHEMA, fields = read.native),
+            handle = WorkItemCanonAdapter.handleFor(linkId, read.identifier),
+            observedAt = clock.now(),
+        ).map { item ->
+            item.copy(
+                status = SupervisoryStatusMapping.canonStatusFor(expression.copy(claimed = claimed)),
+            )
+        }
+    }
 
     /**
      * Every comment on an issue, oldest first, across every page.
@@ -277,6 +330,9 @@ class LinearWorkSource(
      * orphaned comment is still its claim, so a retry re-reads the same total
      * order and reaches the same verdict, rather than racing itself.
      *
+     * A won claim is what makes [CanonWorkStatus.CLAIMED] readable: the comment
+     * this posts is the evidence [readCanonWorkItem] goes looking for.
+     *
      * @param claimedState The state a claimed ticket moves to. Defaults to the
      *   ratified [SupervisoryState.CLAIMED] mapping.
      */
@@ -341,7 +397,9 @@ class LinearWorkSource(
      * [SupervisoryState.ESCALATED] mapping changes no state, because where the
      * work stopped is the most useful thing about an escalated ticket. The label
      * is what takes it out of [readyQueue]; the comment is what tells the human
-     * why.
+     * why. A ticket written this way reads back as [CanonWorkStatus.ESCALATED]
+     * whatever state it stopped in, because the label outranks the state name —
+     * see [SupervisoryStatusMapping].
      *
      * The body is screened against [WorkSourceIssueSink.forbiddenTerms] before it
      * leaves, and the comment lands on a public mirror.
@@ -359,12 +417,78 @@ class LinearWorkSource(
      * Mark a ticket as waiting on a human verdict:
      * [SupervisoryState.VERDICT_REQUESTED]'s state plus its gate label.
      */
-    suspend fun requestVerdict(issue: String): Result<ExecuteReceipt> {
-        val state = SupervisoryState.VERDICT_REQUESTED
-        state.workSourceState?.let { target ->
-            transition(issue, target).getOrElse { return Result.failure(it) }
+    suspend fun requestVerdict(issue: String): Result<ExecuteReceipt> =
+        markStatus(issue, CanonWorkStatus.VERDICT_REQUESTED)
+
+    /**
+     * Put a ticket into [status]'s provider expression — the typed write half of
+     * the AMPR-314 mapping, and the replacement for a raw [transition] against a
+     * hand-written state name.
+     *
+     * ## What it writes
+     *
+     * The state from [SupervisoryStatusMapping.expressionFor], then the label
+     * edit from [SupervisoryStatusMapping.gateEdit]. **The transition goes
+     * first, always.** It is the half that can make a ticket dispatchable, and
+     * the ordering decides what a concurrent reader sees mid-write: moved but
+     * still gated reads as stopped, which is safe, while ungated but not yet
+     * moved reads as ready, which is not.
+     *
+     * Clearing a stale gate is part of the write, not an afterthought — a ticket
+     * that reached [CanonWorkStatus.DONE] still carrying
+     * [WorkSourceLabels.GATE_AWAITING_VERDICT] would sit outside
+     * [readyQueue] forever and read back as stopped on a provider that considers
+     * it finished. Only gate labels are ever removed; a ticket's `wave:` tag and
+     * its topic labels are not this adapter's vocabulary.
+     *
+     * ## What it refuses
+     *
+     * [CanonWorkStatus.CLAIMED] and [CanonWorkStatus.ESCALATED], with
+     * [WorkSourceFailure.StatusNeedsProtocol]. Both are composed with a comment
+     * that does real work — the claim arbitrates a race, the escalation carries
+     * the reason — so there is no honest "just write the status" for either. Use
+     * [claim] and [escalate].
+     *
+     * @return the receipt of the **last** write, so a caller reading
+     *   `postWriteState` sees the ticket after the whole edit rather than after
+     *   the transition.
+     */
+    suspend fun markStatus(issue: String, status: CanonWorkStatus): Result<ExecuteReceipt> {
+        val protocol = SupervisoryStatusMapping.PROTOCOL_STATUSES[status]
+        val target = SupervisoryStatusMapping.expressionFor(status).stateName
+
+        // The second disjunct is unreachable today — ESCALATED is the only member
+        // with no state of its own and it is a protocol status — and it is here so
+        // that a member admitted later without one refuses loudly instead of
+        // silently writing labels and no transition.
+        if (protocol != null || target == null) {
+            return workSourceFailure(
+                WorkSourceFailure.StatusNeedsProtocol(
+                    status = status,
+                    use = protocol ?: "a protocol entry point: $status has no state of its own",
+                ),
+            )
         }
-        return addLabels(issue, listOfNotNull(state.label))
+
+        // Only a target that can clear a gate needs to know which gates are
+        // there, so the extra read is paid for only where it changes the write.
+        val carried = if (SupervisoryStatusMapping.clearsGates(status)) {
+            readIssue(issue).getOrElse { return Result.failure(it) }.labels
+        } else {
+            emptyList()
+        }
+        val edit = SupervisoryStatusMapping.gateEdit(target = status, present = carried)
+
+        var receipt = transition(issue, target).getOrElse { return Result.failure(it) }
+
+        if (edit.remove.isNotEmpty()) {
+            receipt = removeLabels(issue, edit.remove.sorted()).getOrElse { return Result.failure(it) }
+        }
+        if (edit.add.isNotEmpty()) {
+            receipt = addLabels(issue, edit.add.sorted()).getOrElse { return Result.failure(it) }
+        }
+
+        return Result.success(receipt)
     }
 
     private fun List<WorkSourceComment>.claimsFor(identifier: String): List<ClaimRecord> =

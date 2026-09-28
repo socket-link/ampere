@@ -1,5 +1,7 @@
 package link.socket.ampere.work.linear
 
+import link.socket.ampere.canon.CanonWorkStatus
+
 /**
  * Why a work-source call could not complete, for the failures this adapter
  * itself defines.
@@ -80,6 +82,28 @@ sealed interface WorkSourceFailure {
     data class ForbiddenTerm(
         val term: String,
     ) : WorkSourceFailure
+
+    /**
+     * A caller asked [LinearWorkSource.markStatus] for a canonical status whose
+     * provider expression is a protocol rather than a write, and nothing was
+     * written.
+     *
+     * Refusing is the point. [CanonWorkStatus.CLAIMED] and
+     * [CanonWorkStatus.ESCALATED] are each composed with a comment that is
+     * load-bearing — the one arbitrates a race, the other carries the reason a
+     * human is being called — so writing the status half alone produces a ticket
+     * that either reads back as [CanonWorkStatus.IN_PROGRESS] (a claim nobody
+     * can see) or stops a human with no context. Same shape as
+     * [link.socket.ampere.plug.spi.ExecuteFailure.PreconditionUnsupported]: the
+     * loud refusal is the correct answer, not a gap to paper over.
+     *
+     * @property use The entry point that performs the protocol, per
+     *   [SupervisoryStatusMapping.PROTOCOL_STATUSES].
+     */
+    data class StatusNeedsProtocol(
+        val status: CanonWorkStatus,
+        val use: String,
+    ) : WorkSourceFailure
 }
 
 /**
@@ -119,4 +143,8 @@ fun WorkSourceFailure.describe(): String = when (this) {
     is WorkSourceFailure.ForbiddenTerm ->
         "The write carried the forbidden term \"$term\"; every write to this work source " +
             "syncs to a public issue, so nothing was written."
+
+    is WorkSourceFailure.StatusNeedsProtocol ->
+        "$status is expressed with a comment as well as a status, so it cannot be written " +
+            "as a plain transition; use $use. Nothing was written."
 }
