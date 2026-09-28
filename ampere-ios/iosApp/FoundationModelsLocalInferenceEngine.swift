@@ -22,47 +22,42 @@ import shared
 /// (`value(_:forProperty:)`) and used to construct the matching Kotlin
 /// `EmissionPayload` case directly — the shape was already constrained at
 /// generation time, so this is a typed read, not a parse of free text.
+///
+/// ## One session per call
+///
+/// `LocalInferenceEngine.generate` is stateless: a prompt in, text out, no
+/// memory of the call before. A `LanguageModelSession` is the opposite — it
+/// accumulates a transcript, which counts against the context window, and it
+/// traps if asked to respond while it is already responding. So each call gets
+/// its own session. That keeps calls independent of each other, keeps the
+/// window free for the prompt it was measured against, and makes the engine
+/// safe to call from two Arcs at once.
 @available(iOS 26.0, *)
 final class FoundationModelsLocalInferenceEngine: SwiftLocalInferenceEngine {
 
-    private let session: LanguageModelSession
-
-    override init() {
-        self.session = LanguageModelSession()
-        super.init()
-    }
-
     override func probe() async throws -> LocalCapacity {
-        switch SystemLanguageModel.default.availability {
+        let model = SystemLanguageModel.default
+        switch model.availability {
         case .available:
             return LocalCapacity(
                 available: true,
                 modelId: Self.modelId,
-                maxContextTokens: KotlinInt(int: Self.maxContextTokens),
+                // The system's own figure: 4,096 before iOS 27, the running model's
+                // real window from iOS 27 on (AMPR-327). The relay reads this to keep
+                // a prompt that will not fit from being routed here.
+                maxContextTokens: KotlinInt(int: Int32(clamping: model.contextSize)),
                 providerId: AIProvider_OnDevice.shared.id,
                 reason: nil
             )
         case .unavailable(let reason):
-            return LocalCapacity(
-                available: false,
-                modelId: nil,
-                maxContextTokens: nil,
-                providerId: AIProvider_OnDevice.shared.id,
-                reason: Self.describe(reason)
-            )
+            return Self.unavailable(reason: Self.describe(reason))
         @unknown default:
-            return LocalCapacity(
-                available: false,
-                modelId: nil,
-                maxContextTokens: nil,
-                providerId: AIProvider_OnDevice.shared.id,
-                reason: "apple_foundation_models_unavailable"
-            )
+            return Self.unavailable(reason: LocalUnavailableReason.shared.UNAVAILABLE)
         }
     }
 
     override func generate(prompt: String) async throws -> String {
-        let response = try await session.respond(to: prompt)
+        let response = try await LanguageModelSession().respond(to: prompt)
         return response.content
     }
 
@@ -74,8 +69,18 @@ final class FoundationModelsLocalInferenceEngine: SwiftLocalInferenceEngine {
         }
 
         let schema = try Self.schema(for: kind)
-        let response = try await session.respond(to: prompt, schema: schema)
+        let response = try await LanguageModelSession().respond(to: prompt, schema: schema)
         return try Self.payload(for: kind, content: response.content)
+    }
+
+    private static func unavailable(reason: String) -> LocalCapacity {
+        LocalCapacity(
+            available: false,
+            modelId: nil,
+            maxContextTokens: nil,
+            providerId: AIProvider_OnDevice.shared.id,
+            reason: reason
+        )
     }
 
     // MARK: - Schema construction (AMPR-225: DynamicGenerationSchema, no @Generable macro needed)
@@ -162,18 +167,20 @@ final class FoundationModelsLocalInferenceEngine: SwiftLocalInferenceEngine {
         }
     }
 
+    /// Reason codes are declared once, in Kotlin's `LocalUnavailableReason`, so the
+    /// engine that reports one and the surface that words it cannot drift apart.
     private static func describe(_ reason: SystemLanguageModel.Availability.UnavailableReason) -> String {
         switch reason {
-        case .deviceNotEligible: return "apple_intelligence_device_not_eligible"
-        case .appleIntelligenceNotEnabled: return "apple_intelligence_not_enabled"
-        case .modelNotReady: return "apple_intelligence_model_not_ready"
-        @unknown default: return "apple_intelligence_unavailable"
+        case .deviceNotEligible: return LocalUnavailableReason.shared.DEVICE_NOT_ELIGIBLE
+        case .appleIntelligenceNotEnabled: return LocalUnavailableReason.shared.NOT_ENABLED
+        case .modelNotReady: return LocalUnavailableReason.shared.MODEL_NOT_READY
+        @unknown default: return LocalUnavailableReason.shared.UNAVAILABLE
         }
     }
 
-    /// Provisional pending on-device verification (AMPR-225 recon, §1.1).
-    private static let maxContextTokens: Int32 = 4_096
-    private static let modelId = "apple-foundation-models-on-device"
+    /// Must match `AIModel_OnDevice.AppleFoundationModels.name`: the relay selects the
+    /// on-device route by that name, and telemetry reports it under the same one.
+    private static let modelId = AIModel_OnDevice.AppleFoundationModels.shared.name
 }
 
 enum AmpereFoundationModelsError: Swift.Error {

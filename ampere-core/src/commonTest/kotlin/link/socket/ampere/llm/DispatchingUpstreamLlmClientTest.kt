@@ -13,6 +13,7 @@ import link.socket.ampere.agents.domain.routing.capability.CostPolicy
 import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.local.FakeLocalInferenceEngine
+import link.socket.ampere.agents.domain.routing.local.InferenceLocality
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
@@ -108,6 +109,58 @@ class DispatchingUpstreamLlmClientTest {
 
         assertEquals(0, engine.generateCount)
         assertEquals(1, bundled.callCount)
+    }
+
+    @Test
+    fun `reports a local model as on-device only while an engine is bound`() = runTest {
+        val bound = DispatchingUpstreamLlmClient(registry(), FakeLocalInferenceEngine(), RecordingClient("cloud"))
+        val unbound = DispatchingUpstreamLlmClient(registry(), localEngine = null, bundled = RecordingClient("cloud"))
+
+        assertEquals(
+            InferenceLocality.ON_DEVICE,
+            bound.localityOf(AIProvider_Anthropic.id, AIModel_Claude.Sonnet_5.name),
+        )
+        // The catalog still calls the model local. With nothing to run it on the call
+        // goes to the bundled client, so that is what the label has to say.
+        assertEquals(
+            InferenceLocality.CLOUD,
+            unbound.localityOf(AIProvider_Anthropic.id, AIModel_Claude.Sonnet_5.name),
+        )
+    }
+
+    @Test
+    fun `reports a metered model and an undescribed model as cloud`() = runTest {
+        val client = DispatchingUpstreamLlmClient(registry(), FakeLocalInferenceEngine(), RecordingClient("cloud"))
+
+        assertEquals(
+            InferenceLocality.CLOUD,
+            client.localityOf(AIProvider_Google.id, AIModel_Gemini.Flash_2_5.name),
+        )
+        assertEquals(
+            InferenceLocality.CLOUD,
+            client.localityOf(AIProvider_Google.id, "a-model-with-no-descriptor"),
+        )
+    }
+
+    @Test
+    fun `the reported locality matches where the call was dispatched`() = runTest {
+        val engine = FakeLocalInferenceEngine(respond = { Result.success("local-answer") })
+        val bundled = RecordingClient("cloud-answer")
+        val client = DispatchingUpstreamLlmClient(registry(), engine, bundled)
+
+        for (configuration in listOf(localConfig, gatedConfig, cloudConfig)) {
+            val engineCallsBefore = engine.generateCount
+            client.call(request(), configuration)
+            val ranOnEngine = engine.generateCount > engineCallsBefore
+
+            val reported = client.localityOf(configuration.provider.id, configuration.model.name)
+
+            assertEquals(
+                if (ranOnEngine) InferenceLocality.ON_DEVICE else InferenceLocality.CLOUD,
+                reported,
+                "locality reported for ${configuration.model.name} disagrees with where it ran",
+            )
+        }
     }
 
     private fun descriptor(
