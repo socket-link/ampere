@@ -24,7 +24,9 @@ import link.socket.ampere.agents.domain.event.PersistedStore
 import link.socket.ampere.agents.domain.event.StoreRowUndecodableEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
+import link.socket.ampere.agents.domain.task.ExecutionAssignment
 import link.socket.ampere.agents.domain.task.TaskId
+import link.socket.ampere.agents.domain.task.WorkPhase
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.DecodedRows
 import link.socket.ampere.agents.events.EventEnvelope
@@ -175,6 +177,8 @@ class AgentEventApi(
         assignedTo: AgentId? = null,
         causedBy: EventId? = null,
         runId: RunId? = null,
+        phase: WorkPhase? = null,
+        execution: ExecutionAssignment? = null,
     ) {
         val event = Event.TaskCreated(
             eventId = generateUUID(taskId, agentId),
@@ -184,6 +188,8 @@ class AgentEventApi(
             taskId = taskId,
             description = description,
             assignedTo = assignedTo,
+            phase = phase,
+            execution = execution,
         )
 
         publish(event, causedBy = causedBy, runId = runId)
@@ -455,6 +461,7 @@ class AgentEventApi(
         urgency: Urgency = Urgency.LOW,
         causedBy: EventId? = null,
         runId: RunId? = null,
+        execution: ExecutionAssignment? = null,
     ) {
         val event = TaskEvent.TaskStarted(
             eventId = generateUUID(taskId, agentId),
@@ -464,6 +471,7 @@ class AgentEventApi(
             assignedTo = agentId,
             workspace = workspace,
             urgency = urgency,
+            execution = execution,
         )
 
         publish(event, causedBy = causedBy, runId = runId)
@@ -597,6 +605,8 @@ class AgentEventApi(
         urgency: Urgency = Urgency.LOW,
         causedBy: EventId? = null,
         runId: RunId? = null,
+        phase: WorkPhase? = null,
+        execution: ExecutionAssignment? = null,
     ) {
         val event = TaskEvent.SubtaskCreated(
             eventId = generateUUID(subtaskId, agentId),
@@ -608,6 +618,8 @@ class AgentEventApi(
             assignedTo = assignedTo,
             workspace = workspace,
             urgency = urgency,
+            phase = phase,
+            execution = execution,
         )
 
         publish(event, causedBy = causedBy, runId = runId)

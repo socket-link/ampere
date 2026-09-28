@@ -5,7 +5,9 @@ import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.AssignedTo
+import link.socket.ampere.agents.domain.task.ExecutionAssignment
 import link.socket.ampere.agents.domain.task.TaskId
+import link.socket.ampere.agents.domain.task.WorkPhase
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 
 typealias WorkItemId = TaskId
@@ -15,6 +17,13 @@ typealias WorkItemId = TaskId
  *
  * Reuses [TaskStatus] for lifecycle states and [ExecutionWorkspace] for sandbox
  * directory assignment (e.g., a clone of the source repo where an agent operates).
+ *
+ * @property phase Whether the work is read-only investigation or implementation
+ *   that writes code, or null when it was never classified. This is a
+ *   [WorkPhase], not a `CognitivePhase` — see [WorkPhase] for the distinction
+ *   and for why null must be read as "may not write".
+ * @property execution The model and effort to run the work with, alongside
+ *   [assignedTo]'s "which agent". Null when the work specifies neither.
  */
 @Serializable
 data class WorkItem(
@@ -29,6 +38,8 @@ data class WorkItem(
     val createdAt: Instant,
     val updatedAt: Instant,
     val events: List<EventId> = emptyList(),
+    val phase: WorkPhase? = null,
+    val execution: ExecutionAssignment? = null,
 )
 
 /**

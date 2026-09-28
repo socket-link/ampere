@@ -4,6 +4,8 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.task.ExecutionAssignment
+import link.socket.ampere.agents.domain.task.WorkPhase
 
 typealias EventId = String
 typealias EventType = String
@@ -49,7 +51,14 @@ sealed interface Event {
      */
     val parentEventTypes: Set<EventType> get() = emptySet()
 
-    /** Event emitted when a new task is created in the system. */
+    /**
+     * Event emitted when a new task is created in the system.
+     *
+     * @property phase Whether the task is read-only investigation or
+     *   implementation (AMPR-369). Fixed here, at creation: no later task
+     *   event can change it.
+     * @property execution The model and effort the task should be run with.
+     */
     @Serializable
     data class TaskCreated(
         override val eventId: EventId,
@@ -59,6 +68,8 @@ sealed interface Event {
         val taskId: String,
         val description: String,
         val assignedTo: AgentId?,
+        val phase: WorkPhase? = null,
+        val execution: ExecutionAssignment? = null,
     ) : Event {
 
         override val eventType: EventType = EVENT_TYPE

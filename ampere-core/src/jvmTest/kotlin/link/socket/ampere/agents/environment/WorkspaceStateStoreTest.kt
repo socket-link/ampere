@@ -20,6 +20,9 @@ import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.state.WorkspaceState
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.AssignedTo
+import link.socket.ampere.agents.domain.task.EffortLevel
+import link.socket.ampere.agents.domain.task.ExecutionAssignment
+import link.socket.ampere.agents.domain.task.WorkPhase
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.bus.EventSerialBus
 
@@ -509,6 +512,179 @@ class WorkspaceStateStoreTest {
         )
 
         assertEquals(state, result)
+    }
+
+    // ==================== Phase, model and effort (AMPR-369) ====================
+
+    @Test
+    fun `fold TaskCreated carries phase and execution onto the item`() {
+        val execution = ExecutionAssignment(model = "claude-sonnet-5", effort = EffortLevel.MEDIUM)
+
+        val state = WorkspaceStateStore.fold(
+            WorkspaceState.empty(),
+            Event.TaskCreated(
+                eventId = "evt-1",
+                urgency = Urgency.MEDIUM,
+                timestamp = now,
+                eventSource = EventSource.Agent("agent-A"),
+                taskId = "task-1",
+                description = "Map the dispatch seam",
+                assignedTo = "agent-B",
+                phase = WorkPhase.RECON,
+                execution = execution,
+            ),
+        )
+
+        val item = state.items["task-1"]
+        assertNotNull(item)
+        assertEquals(WorkPhase.RECON, item.phase)
+        assertEquals(execution, item.execution)
+        assertEquals(AssignedTo.Agent("agent-B"), item.assignedTo)
+    }
+
+    @Test
+    fun `fold TaskCreated without phase or execution leaves the item unclassified`() {
+        val state = WorkspaceStateStore.fold(
+            WorkspaceState.empty(),
+            Event.TaskCreated(
+                eventId = "evt-1",
+                urgency = Urgency.MEDIUM,
+                timestamp = now,
+                eventSource = EventSource.Agent("agent-A"),
+                taskId = "task-1",
+                description = "Legacy task",
+                assignedTo = null,
+            ),
+        )
+
+        val item = state.items["task-1"]
+        assertNotNull(item)
+        assertNull(item.phase)
+        assertNull(item.execution)
+    }
+
+    @Test
+    fun `fold TaskStarted assigns execution and keeps the phase set at creation`() {
+        val execution = ExecutionAssignment(model = "claude-opus-5-5", effort = EffortLevel.HIGH)
+        var state = WorkspaceStateStore.fold(
+            WorkspaceState.empty(),
+            Event.TaskCreated(
+                eventId = "evt-1",
+                urgency = Urgency.MEDIUM,
+                timestamp = now,
+                eventSource = EventSource.Agent("agent-A"),
+                taskId = "task-1",
+                description = "Map the dispatch seam",
+                assignedTo = "agent-B",
+                phase = WorkPhase.RECON,
+            ),
+        )
+
+        state = WorkspaceStateStore.fold(
+            state,
+            TaskEvent.TaskStarted(
+                eventId = "evt-2",
+                taskId = "task-1",
+                eventSource = EventSource.Agent("agent-B"),
+                timestamp = now,
+                assignedTo = "agent-B",
+                execution = execution,
+            ),
+        )
+
+        val item = state.items["task-1"]
+        assertNotNull(item)
+        assertEquals(TaskStatus.InProgress, item.status)
+        assertEquals(execution, item.execution)
+        assertEquals(WorkPhase.RECON, item.phase)
+    }
+
+    @Test
+    fun `fold TaskStarted without execution keeps the one set at creation`() {
+        val execution = ExecutionAssignment(model = "claude-sonnet-5", effort = EffortLevel.LOW)
+        var state = WorkspaceStateStore.fold(
+            WorkspaceState.empty(),
+            Event.TaskCreated(
+                eventId = "evt-1",
+                urgency = Urgency.MEDIUM,
+                timestamp = now,
+                eventSource = EventSource.Agent("agent-A"),
+                taskId = "task-1",
+                description = "Write the adapter",
+                assignedTo = "agent-B",
+                phase = WorkPhase.IMPLEMENTATION,
+                execution = execution,
+            ),
+        )
+
+        state = WorkspaceStateStore.fold(
+            state,
+            TaskEvent.TaskStarted(
+                eventId = "evt-2",
+                taskId = "task-1",
+                eventSource = EventSource.Agent("agent-B"),
+                timestamp = now,
+                assignedTo = "agent-B",
+            ),
+        )
+
+        val item = state.items["task-1"]
+        assertNotNull(item)
+        assertEquals(execution, item.execution)
+        assertEquals(WorkPhase.IMPLEMENTATION, item.phase)
+    }
+
+    @Test
+    fun `fold SubtaskCreated carries its own phase and inherits nothing from the parent`() {
+        val execution = ExecutionAssignment(effort = EffortLevel.HIGH)
+        var state = WorkspaceStateStore.fold(
+            WorkspaceState.empty(),
+            Event.TaskCreated(
+                eventId = "evt-1",
+                urgency = Urgency.MEDIUM,
+                timestamp = now,
+                eventSource = EventSource.Agent("agent-A"),
+                taskId = "task-1",
+                description = "Ship the dispatch arc",
+                assignedTo = null,
+                phase = WorkPhase.IMPLEMENTATION,
+            ),
+        )
+
+        state = WorkspaceStateStore.fold(
+            state,
+            TaskEvent.SubtaskCreated(
+                eventId = "evt-2",
+                taskId = "task-1",
+                eventSource = EventSource.Agent("agent-A"),
+                timestamp = now,
+                subtaskId = "task-1-a",
+                description = "Read the claim protocol",
+                phase = WorkPhase.RECON,
+                execution = execution,
+            ),
+        )
+        state = WorkspaceStateStore.fold(
+            state,
+            TaskEvent.SubtaskCreated(
+                eventId = "evt-3",
+                taskId = "task-1",
+                eventSource = EventSource.Agent("agent-A"),
+                timestamp = now,
+                subtaskId = "task-1-b",
+                description = "Unclassified follow-up",
+            ),
+        )
+
+        val classified = state.items["task-1-a"]
+        assertNotNull(classified)
+        assertEquals(WorkPhase.RECON, classified.phase)
+        assertEquals(execution, classified.execution)
+
+        val unclassified = state.items["task-1-b"]
+        assertNotNull(unclassified)
+        assertNull(unclassified.phase)
+        assertNull(unclassified.execution)
     }
 
     // ==================== Integration test with EventSerialBus ====================

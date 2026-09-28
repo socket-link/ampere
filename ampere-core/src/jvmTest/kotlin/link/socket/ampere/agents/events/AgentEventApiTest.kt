@@ -18,6 +18,10 @@ import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MilestoneCategory
+import link.socket.ampere.agents.domain.event.TaskEvent
+import link.socket.ampere.agents.domain.task.EffortLevel
+import link.socket.ampere.agents.domain.task.ExecutionAssignment
+import link.socket.ampere.agents.domain.task.WorkPhase
 import link.socket.ampere.agents.events.api.AgentEventApiFactory
 import link.socket.ampere.agents.events.api.EventFilter
 import link.socket.ampere.agents.events.api.filterForEventsCreatedByMe
@@ -79,6 +83,32 @@ class AgentEventApiTest {
             assertEquals(true, event.eventId.isNotBlank())
 
             // ** TODO: Test [subscription] can be unsubscribed from. */
+        }
+    }
+
+    @Test
+    fun `published task events carry phase and execution`() {
+        runBlocking {
+            val api = agentEventApiFactory.create(stubAgentId)
+            val execution = ExecutionAssignment(model = "claude-sonnet-5", effort = EffortLevel.MEDIUM)
+
+            val created = CompletableDeferred<Event.TaskCreated>()
+            val started = CompletableDeferred<TaskEvent.TaskStarted>()
+            api.onTaskCreated { event, _ -> created.complete(event) }
+            api.onTaskStarted { event, _ -> started.complete(event) }
+
+            api.publishTaskCreated(
+                taskId = "task-123",
+                urgency = Urgency.HIGH,
+                description = "Map the dispatch seam",
+                phase = WorkPhase.RECON,
+                execution = execution,
+            )
+            api.publishTaskStarted(taskId = "task-123", execution = execution)
+
+            assertEquals(WorkPhase.RECON, created.await().phase)
+            assertEquals(execution, created.await().execution)
+            assertEquals(execution, started.await().execution)
         }
     }
 

@@ -4,7 +4,9 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.task.ExecutionAssignment
 import link.socket.ampere.agents.domain.task.TaskId
+import link.socket.ampere.agents.domain.task.WorkPhase
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 
 /**
@@ -21,7 +23,14 @@ sealed interface TaskEvent : Event {
     /** The task this event pertains to. */
     val taskId: TaskId
 
-    /** Emitted when an agent begins executing a task. */
+    /**
+     * Emitted when an agent begins executing a task.
+     *
+     * @property execution The model and effort the task is being run with
+     *   (AMPR-369), when that is decided at dispatch rather than at creation.
+     *   Null leaves whatever the task already carried. There is deliberately
+     *   no `phase` here: a task's [WorkPhase] is fixed when it is created.
+     */
     @Serializable
     data class TaskStarted(
         override val eventId: EventId,
@@ -31,6 +40,7 @@ sealed interface TaskEvent : Event {
         val assignedTo: AgentId,
         val workspace: ExecutionWorkspace? = null,
         override val urgency: Urgency = Urgency.LOW,
+        val execution: ExecutionAssignment? = null,
     ) : TaskEvent {
 
         override val eventType: EventType = EVENT_TYPE
@@ -150,7 +160,14 @@ sealed interface TaskEvent : Event {
         }
     }
 
-    /** Emitted when a task is decomposed into a subtask. */
+    /**
+     * Emitted when a task is decomposed into a subtask.
+     *
+     * @property phase Whether the subtask is read-only investigation or
+     *   implementation (AMPR-369). Stated per subtask, never inherited from
+     *   the parent: a subtask created without one is unclassified.
+     * @property execution The model and effort the subtask should be run with.
+     */
     @Serializable
     data class SubtaskCreated(
         override val eventId: EventId,
@@ -162,6 +179,8 @@ sealed interface TaskEvent : Event {
         val assignedTo: AgentId? = null,
         val workspace: ExecutionWorkspace? = null,
         override val urgency: Urgency = Urgency.LOW,
+        val phase: WorkPhase? = null,
+        val execution: ExecutionAssignment? = null,
     ) : TaskEvent {
 
         override val eventType: EventType = EVENT_TYPE
