@@ -1,0 +1,70 @@
+-- AMPR-370: the durable side of `AgentPause`. Before this table the pause contract existed with
+-- no store, so a decision a run was blocked on lived only in the process that raised it: a
+-- restart lost it, and a person on another device could never answer it.
+--
+-- `pause_json` is the source of truth for the pause itself. The three scalar columns beside it
+-- are not denormalizations for speed — each one has to be readable *without* decoding
+-- `pause_json`, because the two operations that must never be blocked by an unreadable payload
+-- are exactly the two that keep the table honest:
+--
+--   * `correlation_id` — an `AgentPauseResponse` only needs the id, so a row this build cannot
+--     decode can still be settled and can still be named in a diagnostic (the AMPR-364 rule).
+--   * `expires_at` — the expiry sweep settles on elapsed time alone. Deriving the deadline from
+--     `pause_json.timeoutMillis` would mean one undecodable row stays open forever, which is the
+--     indefinitely-open row AMPR-370 exists to forbid. It is also written once at raise, so a
+--     later build changing a timeout default cannot retroactively move a live deadline.
+--   * `settled_at` — "is this decision still open" is the table's primary question and answering
+--     it must not require decoding every row.
+--
+-- `response_json` holds the whole `AgentPauseResponse`, including its `TimedOut` variant: expiry
+-- is an outcome written to this column, never the absence of one. A NULL `response_json` means
+-- open and not yet expired; it never means "expired, nobody noticed".
+CREATE TABLE PauseStore (
+  correlation_id TEXT NOT NULL PRIMARY KEY,
+  pause_json TEXT NOT NULL,
+  raised_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  response_json TEXT,
+  settled_at INTEGER
+);
+
+-- The sweep's access path. `settled_at` leads so both open-row queries can seek straight to the
+-- NULL group and then walk it in deadline order; a settled row is only ever read by id, never by
+-- deadline, so it never needs to be reached through here.
+CREATE INDEX idx_pause_store_settled_at_expires_at ON PauseStore(settled_at, expires_at);
+
+insertPause:
+INSERT INTO PauseStore(correlation_id, pause_json, raised_at, expires_at, response_json, settled_at)
+VALUES (?, ?, ?, ?, NULL, NULL);
+
+selectPause:
+SELECT correlation_id, pause_json, raised_at, expires_at, response_json, settled_at
+FROM PauseStore
+WHERE correlation_id = ?;
+
+-- Open decisions, soonest deadline first: the order a reconciliation pass wants to walk them in.
+selectOpenPauses:
+SELECT correlation_id, pause_json, raised_at, expires_at, response_json, settled_at
+FROM PauseStore
+WHERE settled_at IS NULL
+ORDER BY expires_at ASC, correlation_id ASC;
+
+-- Only the ids, and deliberately so: the sweep settles these without decoding a payload.
+selectExpiredOpenIds:
+SELECT correlation_id
+FROM PauseStore
+WHERE settled_at IS NULL AND expires_at <= ?
+ORDER BY expires_at ASC, correlation_id ASC;
+
+-- `settled_at IS NULL` makes settling first-writer-wins. Two settlers (a human reply landing as
+-- the sweep runs) cannot both apply, and JDBC SQLite gives no transaction isolation to lean on
+-- instead (AMPR-336), so the guard lives in the statement. The loser re-reads the row to learn
+-- which response won rather than assuming its own did.
+settlePause:
+UPDATE PauseStore
+SET response_json = ?, settled_at = ?
+WHERE correlation_id = ? AND settled_at IS NULL;
+
+deletePause:
+DELETE FROM PauseStore
+WHERE correlation_id = ?;

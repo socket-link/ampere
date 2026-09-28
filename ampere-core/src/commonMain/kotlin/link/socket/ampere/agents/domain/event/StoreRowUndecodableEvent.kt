@@ -9,10 +9,11 @@ import link.socket.ampere.agents.domain.Urgency
  * A table whose rows carry serialized domain objects, and can therefore hold a row this build
  * cannot read (AMPR-364).
  *
- * Both members are reachable by version skew alone: a `Links` row whose `link_json` names a
+ * Every member is reachable by version skew alone: a `Links` row whose `link_json` names a
  * canon member this build does not have, an `EventStore` row whose `payload` names an [Event]
- * subtype it does not have. Neither needs a third-party extension to happen — an older binary
- * reading a newer profile's database is enough.
+ * subtype it does not have, a `PauseStore` row whose `pause_json` names an
+ * `EscalationChannel` variant it does not have. None of them needs a third-party extension to
+ * happen — an older binary reading a newer profile's database is enough.
  */
 @Serializable
 enum class PersistedStore(val tableName: String) {
@@ -22,6 +23,13 @@ enum class PersistedStore(val tableName: String) {
 
     /** `EventStore.payload` holds an [Event], named by its class discriminator. */
     EVENT_STORE("EventStore"),
+
+    /**
+     * `PauseStore.pause_json` holds an `AgentPause`, whose `suggestedChannels` are
+     * `EscalationChannel` variants — and adding a variant is a documented breaking change for
+     * readers (AMPR-370).
+     */
+    PAUSE_STORE("PauseStore"),
 }
 
 /**
