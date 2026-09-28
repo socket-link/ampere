@@ -140,17 +140,51 @@ class CanonWorkEntitiesTest {
 
     @Test
     fun `work status wire names are stable`() {
-        // These land in traces; a rename breaks PlaybackRelay replay.
-        assertEquals("\"backlog\"", json.encodeToString(CanonWorkStatus.serializer(), CanonWorkStatus.BACKLOG))
-        assertEquals("\"todo\"", json.encodeToString(CanonWorkStatus.serializer(), CanonWorkStatus.TODO))
-        assertEquals(
-            "\"in_progress\"",
-            json.encodeToString(CanonWorkStatus.serializer(), CanonWorkStatus.IN_PROGRESS),
+        // These land in traces; a rename breaks PlaybackRelay replay. Keyed by
+        // member rather than asserted one call at a time so that a status
+        // admitted later has to be named here — the set equality below is the
+        // tripwire.
+        val wireNames = mapOf(
+            CanonWorkStatus.BACKLOG to "backlog",
+            CanonWorkStatus.TODO to "todo",
+            CanonWorkStatus.IN_PROGRESS to "in_progress",
+            // The four supervisory members admitted by AMPR-314.
+            CanonWorkStatus.CLAIMED to "claimed",
+            CanonWorkStatus.VERIFYING to "verifying",
+            CanonWorkStatus.VERDICT_REQUESTED to "verdict_requested",
+            CanonWorkStatus.ESCALATED to "escalated",
+            CanonWorkStatus.DONE to "done",
+            CanonWorkStatus.CANCELLED to "cancelled",
         )
-        assertEquals("\"done\"", json.encodeToString(CanonWorkStatus.serializer(), CanonWorkStatus.DONE))
-        assertEquals(
-            "\"cancelled\"",
-            json.encodeToString(CanonWorkStatus.serializer(), CanonWorkStatus.CANCELLED),
+
+        assertEquals(CanonWorkStatus.entries.toSet(), wireNames.keys)
+
+        wireNames.forEach { (status, wireName) ->
+            assertEquals(
+                "\"$wireName\"",
+                json.encodeToString(CanonWorkStatus.serializer(), status),
+                status.name,
+            )
+        }
+    }
+
+    @Test
+    fun `a supervisory status survives a work item round trip`() {
+        // The four AMPR-314 members are ordinary enum members on the wire: the
+        // admission added vocabulary, not a new encoding.
+        val entity = CanonWorkItem(
+            canonId = CanonId("wi-314"),
+            provenance = mcpProvenance,
+            title = "Stopped at a verdict gate",
+            status = CanonWorkStatus.VERDICT_REQUESTED,
+            providerStatus = "In Review",
+            labels = listOf("wave:w0", "gate:awaiting-verdict"),
+        )
+
+        assertEquals(entity, roundTrip(entity))
+        assertTrue(
+            "\"verdict_requested\"" in json.encodeToString(CanonEntity.serializer(), entity),
+            "the status has to be legible on the wire for an eval assertion to match on it",
         )
     }
 

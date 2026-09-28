@@ -351,10 +351,17 @@ class FakeWorkSource(
 
     private fun JsonArray?.orEmpty(): List<JsonElement> = this ?: emptyList()
 
-    private companion object {
-        const val DEFAULT_LIMIT = 50
+    companion object {
+        private const val DEFAULT_LIMIT = 50
 
-        /** The workspace's state names, mapped to the types the server reports. */
+        /**
+         * The workspace's state names, mapped to the types the server reports.
+         *
+         * Deliberately *not* read from [WorkSourceStates.TYPES]: this is the fake's
+         * model of the server, and a fake that derived it from the production table
+         * could never catch the production table being wrong about the workspace.
+         * `SupervisoryStatusMappingTest` pins the two together instead.
+         */
         val STATE_TYPES: Map<String, WorkItemStatusType> = mapOf(
             "Backlog" to WorkItemStatusType.BACKLOG,
             "Todo" to WorkItemStatusType.UNSTARTED,

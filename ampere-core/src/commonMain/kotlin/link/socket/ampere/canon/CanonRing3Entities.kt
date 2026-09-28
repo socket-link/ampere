@@ -410,7 +410,34 @@ data class CanonTablePreview(
  * Progress" and "In Review" are distinct statuses sharing one `statusType`; this
  * enum is the same operation, one notch coarser.
  *
- * Mapping, recorded so adapters do not re-derive it:
+ * ## Two kinds of member
+ *
+ * The first three and the last two are **provider lifecycle** members: every
+ * work-item provider ships statuses that land on them, and an adapter derives
+ * one from the provider's own status name and category.
+ *
+ * [CLAIMED], [VERIFYING], [VERDICT_REQUESTED] and [ESCALATED] are
+ * **supervisory** members, admitted by AMPR-314 against a *translation* bar
+ * rather than the intersection bar the nouns clear: no provider ships a status
+ * for any of them, so an adapter **composes** each one out of a provider status
+ * plus a label or a comment. The producer is the supervisory workflow, not the
+ * provider, and the admission record — the composition per provider, the live
+ * consumer, the translation evidence — is
+ * `docs/ampr-314-supervisory-status-admission.md`.
+ *
+ * Two consequences a reader must hold onto:
+ *
+ * - **A supervisory member is only ever produced by an adapter that speaks the
+ *   supervisory conventions**, in the same way an adapter over a provider with no
+ *   backlog signal never produces [BACKLOG]. Nothing is wrong with a work item
+ *   that never reports one.
+ * - **Absence of a supervisory member proves nothing.** [IN_PROGRESS] does not
+ *   mean *not claimed*; it means the adapter had no claim evidence in hand — and
+ *   on a provider where a claim is a comment, that evidence is a second read the
+ *   projection may not have paid for. Same ambiguity-by-design as a nullable
+ *   cross-reference.
+ *
+ * ## Provider lifecycle mapping, recorded so adapters do not re-derive it
  *
  * | Member | Linear `statusType` | Jira | GitHub issue |
  * | -- | -- | -- | -- |
@@ -420,7 +447,16 @@ data class CanonTablePreview(
  * | [DONE] | `completed` | `done`, resolution not won't-do | `closed` + `completed` |
  * | [CANCELLED] | `canceled`, `duplicate` | `done` + won't-do resolution | `closed` + `not_planned`/`duplicate` |
  *
- * Two rules that are easy to get wrong:
+ * ## Supervisory composition (AMPR-314)
+ *
+ * | Member | Provider status | Composed with | What a read matches on |
+ * | -- | -- | -- | -- |
+ * | [CLAIMED] | the in-progress status | a claim comment naming the claimant | the comment |
+ * | [VERIFYING] | the in-review status | — | the status name |
+ * | [VERDICT_REQUESTED] | the in-review status | a verdict-gate label | the label |
+ * | [ESCALATED] | *unchanged* | an escalation label and a context comment | the label |
+ *
+ * Three rules that are easy to get wrong:
  *
  * - Only Linear elevates *backlog* to a status category, but every provider can
  *   produce one as a named status. Match on the provider's status **name** first
@@ -430,6 +466,11 @@ data class CanonTablePreview(
  * - Jira's category lies about abandoned work: a "Won't Do" issue is category
  *   `done`. Read `resolution`, not `statusCategory`, or cancelled work is counted
  *   as completed.
+ * - **A terminal provider status outranks a supervisory label.** A closed item
+ *   still carrying an escalation label is [DONE], not [ESCALATED]: the label is
+ *   an untidied record, the closure is the provider's own statement of finality.
+ *   Reading it the other way round strands finished work in a queue waiting on a
+ *   human who has nothing left to do.
  */
 @Serializable
 enum class CanonWorkStatus {
@@ -441,6 +482,54 @@ enum class CanonWorkStatus {
 
     @SerialName("in_progress")
     IN_PROGRESS,
+
+    /**
+     * An automated worker holds this item and is working it.
+     *
+     * A *refinement* of [IN_PROGRESS] rather than an alternative to it — the
+     * provider cannot tell the two apart, and what distinguishes them is the
+     * claim: a durable, attributable record that this particular worker took the
+     * item, which is the thing that stops a second worker taking it too. An item
+     * a human dragged into the provider's in-progress status with no claim behind
+     * it is [IN_PROGRESS], and saying otherwise would invent a claimant.
+     */
+    @SerialName("claimed")
+    CLAIMED,
+
+    /**
+     * Work is complete and the definition-of-done gates are executing.
+     *
+     * Machine-blocked, not human-blocked: nobody is being waited on, and the item
+     * needs no attention unless a gate fails. That is the whole distinction from
+     * [VERDICT_REQUESTED], with which it shares a provider status on every
+     * provider measured so far.
+     */
+    @SerialName("verifying")
+    VERIFYING,
+
+    /**
+     * Stopped at a human-judgment gate, awaiting a verdict.
+     *
+     * **A planned stop.** The workflow put the gate here deliberately, because
+     * the decision is one a machine must not make. So this is neither a failure
+     * nor dispatchable: not [ESCALATED], because nothing went wrong, and not
+     * [VERIFYING], because what is being waited on is a person.
+     */
+    @SerialName("verdict_requested")
+    VERDICT_REQUESTED,
+
+    /**
+     * Automated handling hit its bounds; a human must intervene, with the context
+     * attached.
+     *
+     * **An unplanned stop** — the inverse of [VERDICT_REQUESTED] on exactly that
+     * axis. The workflow did not intend to stop here and cannot say what comes
+     * next, which is why the provider expression deliberately leaves the item's
+     * status where it was: where the work stopped is the most useful fact an
+     * escalated item carries.
+     */
+    @SerialName("escalated")
+    ESCALATED,
 
     @SerialName("done")
     DONE,

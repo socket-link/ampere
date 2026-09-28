@@ -25,12 +25,15 @@ import link.socket.ampere.plug.spi.PerceiveQuery
  * ## Read-only, and why
  *
  * [ReadableCanonAdapter] and not [link.socket.ampere.canon.adapter.WritableCanonAdapter]:
- * canon write-back is a preserve-and-merge of *canon* fields, and every write
- * this adapter makes is a supervisory act on fields canon cannot express — a
- * state transition into a state with no canon member, a claim comment, a gate
- * label. Those go through [WorkSourceIssueSink] as native commands. Declaring
- * `ownedFields` here would claim a canon write footprint the adapter does not
- * have.
+ * canon write-back is a preserve-and-merge of *canon* fields, and no write this
+ * adapter makes is one. AMPR-314 did not change that. A supervisory status is
+ * expressed as a state transition plus a label plus a comment — three native
+ * writes against two objects — so `canonFields` could not name a field to merge
+ * even now that the canon has a word for the result. Those writes go through
+ * [WorkSourceIssueSink] as native commands, and
+ * [LinearWorkSource.markStatus] is the typed entry point that composes them.
+ * Declaring `ownedFields` here would claim a canon write footprint the adapter
+ * does not have.
  *
  * ## The mapping
  *
@@ -38,8 +41,8 @@ import link.socket.ampere.plug.spi.PerceiveQuery
  * | --- | --- | --- |
  * | `canonId` | `id` (the identifier, e.g. `AMPR-305`) | see below |
  * | `title` | `title` | |
- * | `status` | `statusType` | five work-source types → five canon members |
- * | `providerStatus` | `status` (the state *name*, e.g. `In Progress`) | where the supervisory lifecycle rides |
+ * | `status` | `statusType` + `status` + `labels` | composed — see [SupervisoryStatusMapping] |
+ * | `providerStatus` | `status` (the state *name*, e.g. `In Progress`) | verbatim, for the statuses canon coarsens away |
  * | `labels` | `labels` | carries `wave:` and `gate:` conventions verbatim |
  * | `projectId` | `projectId` | |
  * | `dueAt` | `dueDate` | normalised to `00:00Z`, per `CanonWorkItem.dueAt` |
@@ -63,14 +66,24 @@ import link.socket.ampere.plug.spi.PerceiveQuery
  * no handle and no provenance of its own would put a canon entity on the wire
  * that says less than the native field it came from.
  *
- * ## Four supervisory states have no canon member
+ * ## Three supervisory states project; the fourth needs a second read
  *
- * *Claimed*, *verifying*, *verdict-requested* and *escalated* are not
- * [CanonWorkStatus] members (gap G2, ticketed as AMPR-314). This adapter does
- * not approximate them: `status` is derived from `statusType` alone, so a
- * claimed ticket reads as [CanonWorkStatus.IN_PROGRESS] — true, just coarse —
- * and the supervisory truth is in `providerStatus` and `labels`. See
- * [SupervisoryState].
+ * *Verifying*, *verdict-requested* and *escalated* are [CanonWorkStatus]
+ * members as of AMPR-314, and this adapter composes each one the way
+ * [SupervisoryStatusMapping] specifies: the state *name* separates
+ * [CanonWorkStatus.VERIFYING] from [CanonWorkStatus.IN_PROGRESS] (both are
+ * `started` to the provider), and a gate label carries the other two. All three
+ * are in the issue object, so a plain projection reports them.
+ *
+ * [CanonWorkStatus.CLAIMED] is not, and cannot be. A claim is a **comment** —
+ * that is the whole basis of the claim protocol, comments being the only thing
+ * this provider totally orders — and a comment is a different object from the
+ * issue, reached by a different tool. `projectFields` sees one native object, so
+ * it passes no claim evidence and a claimed ticket projects as
+ * [CanonWorkStatus.IN_PROGRESS]: true, just coarse, and the honest answer for a
+ * read that did not look. [LinearWorkSource.readCanonWorkItem] is the projection
+ * that does look, and [SupervisoryStatusMapping.claimEvidenceMatters] is how it
+ * avoids paying for the comment scan when the answer cannot change.
  *
  * ## An unknown status type fails loudly
  *
@@ -103,17 +116,28 @@ class WorkItemCanonAdapter(
                     "has drifted from this build's",
             )
 
+        val stateName = issue.optionalString("status")
+        val labels = fields.stringList("labels")
+
         CanonWorkItem(
             canonId = CanonId(provenance.sourceHandle.nativeId),
             provenance = provenance,
             title = issue.requireString("title"),
-            status = statusType.toCanonStatus(),
-            providerStatus = issue.optionalString("status"),
+            // `claimed` is left at its default: a claim is a comment, and this
+            // projection has only the issue. See the class KDoc.
+            status = SupervisoryStatusMapping.canonStatusFor(
+                SupervisoryExpression(
+                    stateName = stateName,
+                    statusType = statusType,
+                    labels = labels.toSet(),
+                ),
+            ),
+            providerStatus = stateName,
             projectId = issue.optionalString("projectId")?.let(::CanonId),
             dueAt = issue.optionalString("dueDate")?.let { raw ->
                 parseDueDate(raw) ?: issue.malformed("dueDate", "not a date or instant: '$raw'")
             },
-            labels = fields.stringList("labels"),
+            labels = labels,
             description = issue.optionalString("description")?.let { CanonProse.bounded(it) },
             dependsOn = fields.blockerIds(),
         )
@@ -142,23 +166,6 @@ class WorkItemCanonAdapter(
                 fields = result.jsonBody(WorkSourceToolPins.GET_ISSUE).getOrThrow(),
             )
         }
-
-    /**
-     * Five work-source status types onto five canon members.
-     *
-     * `triage` maps to [CanonWorkStatus.BACKLOG] rather than
-     * [CanonWorkStatus.TODO]: an untriaged issue has not been committed to, and
-     * `TODO` is canon's "committed, not started". The distinction survives
-     * verbatim in `providerStatus` either way.
-     */
-    private fun WorkItemStatusType.toCanonStatus(): CanonWorkStatus = when (this) {
-        WorkItemStatusType.TRIAGE -> CanonWorkStatus.BACKLOG
-        WorkItemStatusType.BACKLOG -> CanonWorkStatus.BACKLOG
-        WorkItemStatusType.UNSTARTED -> CanonWorkStatus.TODO
-        WorkItemStatusType.STARTED -> CanonWorkStatus.IN_PROGRESS
-        WorkItemStatusType.COMPLETED -> CanonWorkStatus.DONE
-        WorkItemStatusType.CANCELED -> CanonWorkStatus.CANCELLED
-    }
 
     /**
      * A due date is a calendar date with no time and no zone, so it normalises
