@@ -195,6 +195,7 @@ Every phase transition is emitted as an event, ensuring every action inside an a
 | [Concept Cells](docs/concepts/_index.md)   | Per-primitive invariants and rationale |
 | [Agent Lifecycle](docs/AGENT_LIFECYCLE.md) | The PROPEL loop in detail           |
 | [Architecture](docs/ARCS.md)               | System architecture overview        |
+| [Eval Suite](ampere-eval/README.md)        | Measuring AMPERE with AMPERE: traces, meters, and the regression gate |
 | [Contributing](CONTRIBUTING.md)            | How to contribute to the project    |
 
 ---
