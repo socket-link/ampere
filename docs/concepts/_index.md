@@ -32,6 +32,7 @@ How agents reach consensus and avoid stepping on each other.
 |---------|--------|------------------|
 | [EventSerialBus](event-serial-bus.md) | stable | The nervous system. Agents coordinate by publishing typed `Event`s, not by direct method calls. Bus only dispatches; persistence lives one layer up. |
 | [CoordinatorDigestStep](coordinator-digest.md) | experimental | Anti-lazy-delegation primitive: a coordinator must produce a digest before re-delegating. Target shape only — no implementation yet. |
+| [LifecycleTypes](lifecycle-types.md) | experimental | Three plain-data types for a human-judgment stop: `ReconFinding` (claim + evidence + verified/inferred/untested), `DecisionRegister` (options, explicit default, lock), `LifecycleGate` (open / awaiting a person / closed with an outcome). Not canon entities; `Open` means unresolved, not passable. |
 | [CancellationAddress](cancellation-address.md) | experimental | D4 applied to local subprocesses: every spawn that can outlive its spawner gets its own process group, and the caller holds a serializable address to stop it. Stop = SIGTERM group → bounded wait → SIGKILL, and works from the address alone after a restart. |
 
 ## Surface
