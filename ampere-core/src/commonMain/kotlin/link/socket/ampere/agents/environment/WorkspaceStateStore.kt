@@ -118,6 +118,8 @@ class WorkspaceStateStore(
                     createdAt = event.timestamp,
                     updatedAt = event.timestamp,
                     events = listOf(event.eventId),
+                    phase = event.phase,
+                    execution = event.execution,
                 ),
             )
 
@@ -126,6 +128,7 @@ class WorkspaceStateStore(
                     status = TaskStatus.InProgress,
                     assignedTo = AssignedTo.Agent(event.assignedTo),
                     workspace = event.workspace ?: workspace,
+                    execution = event.execution ?: execution,
                     updatedAt = event.timestamp,
                     events = events + event.eventId,
                 )
@@ -180,6 +183,8 @@ class WorkspaceStateStore(
                     createdAt = event.timestamp,
                     updatedAt = event.timestamp,
                     events = listOf(event.eventId),
+                    phase = event.phase,
+                    execution = event.execution,
                 ),
             )
 

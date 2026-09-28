@@ -60,6 +60,7 @@ properties for free:
 - `agents/events/subscription/EventSubscription.kt`, `Subscription.kt` — the handle returned to subscribers.
 - `agents/domain/event/Event.kt` and the `event/` package — the sealed `Event` hierarchy.
 - `agents/domain/event/CognitivePhaseEvent.kt` — phase transition events emitted by `PhaseSparkManager` when a bus is wired.
+- `agents/domain/event/TaskEvent.kt` — task lifecycle (started, progressed, completed, failed, blocked, subtask created), folded with `Event.TaskCreated` into the `WorkItem` checklist by `WorkspaceStateStore`. The creating events carry the work's `WorkPhase` and `ExecutionAssignment` (model, effort); `TaskStarted` can assign an `ExecutionAssignment` but carries no phase, so starting a task cannot promote it from read-only to writing (AMPR-369).
 - `agents/domain/event/LinkEvent.kt` — Link lifecycle (granted, revoked, resolved, resolution failed); see [LinkLayer](link-layer.md).
 - `agents/domain/event/ProbeEvent.kt` — `VerdictReached`, one Probe's judgement of one identified subject; see [Probe](probe.md).
 - `agents/domain/event/ArcRunEvent.kt` — run-level signals from the Arc runtime itself. `CompletionManifestRecorded` carries a cancelled or failed run's manifest into the store, published through an `AgentEventApi` under `CompletionManifestSink.DEFAULT_AGENT_ID`; see [CognitionTrace](cognition-trace.md).
