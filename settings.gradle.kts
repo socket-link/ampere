@@ -10,6 +10,7 @@ include(":ampere-desktop")
 include(":ampere-cli")
 include(":ampere-phosphor")
 include(":ampere-eval")
+include(":ampere-work-linear")
 
 pluginManagement {
     repositories {

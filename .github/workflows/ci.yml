@@ -129,7 +129,7 @@ jobs:
 
       - name: Lint and build JVM/Android modules
         timeout-minutes: 20
-        run: ./gradlew ktlintCheck verifyPublishWorkflowCoverage :ampere-core:assemble :ampere-cli:assemble :ampere-compose:assemble :ampere-eval:assemble
+        run: ./gradlew ktlintCheck verifyPublishWorkflowCoverage :ampere-core:assemble :ampere-cli:assemble :ampere-compose:assemble :ampere-eval:assemble :ampere-work-linear:assemble
 
   jvm-test:
     name: JVM + Android Tests (${{ matrix.module }}, JDK 21)
@@ -148,6 +148,8 @@ jobs:
             tasks: ":ampere-compose:jvmTest :ampere-compose:testDebugUnitTest"
           - module: ampere-eval
             tasks: ":ampere-eval:jvmTest"
+          - module: ampere-work-linear
+            tasks: ":ampere-work-linear:jvmTest"
 
     steps:
       - name: Checkout code

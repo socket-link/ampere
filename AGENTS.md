@@ -109,6 +109,7 @@ For details: [Core Concepts](docs/CORE_CONCEPTS.md) | [Agent Lifecycle](docs/AGE
 | `ampere-core/src/androidMain/` | Android platform implementations |
 | `ampere-core/src/iosMain/` | iOS platform implementations |
 | `ampere-cli/` | Command-line TUI and tools |
+| `ampere-work-linear/` | Work-source adapter: Chassis SPI Plug over MCP (ready queue, claim protocol, status lifecycle) |
 | `ampere-android/` | Android application |
 | `ampere-desktop/` | Desktop application (Compose) |
 | `ampere-ios/` | iOS application (Xcode project) |
