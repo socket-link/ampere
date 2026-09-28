@@ -6,6 +6,10 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -71,13 +75,14 @@ class MessageRouterTest {
             val channel = MessageChannel.Public.Engineering
             router.subscribeToChannel(targetAgent, channel)
 
-            // Capture notifications to agents
-            val notifications = mutableListOf<NotificationEvent.ToAgent<*>>()
+            // Capture notifications to agents. The handler runs on whatever thread the door
+            // dispatches from, so every access goes through the list's own lock.
+            val captured = mutableListOf<NotificationEvent.ToAgent<*>>()
             eventSerialBus.subscribe<NotificationEvent.ToAgent<*>, Subscription>(
                 agentId = "observer",
                 eventType = NotificationEvent.ToAgent.EVENT_TYPE,
             ) { event, _ ->
-                notifications += event
+                synchronized(captured) { captured += event }
             }
 
             router.startRouting()
@@ -93,8 +98,20 @@ class MessageRouterTest {
             // Post a message in the same thread to trigger channel message posted routing
             producer.postMessage(thread.id, "Follow-up")
 
-            // Allow async dispatch
-            delay(250)
+            // Dispatch is asynchronous, and the door persists before it publishes. A fixed
+            // sleep loses that race on a loaded runner, so wait for routing to go quiet.
+            awaitSettled {
+                val seen = synchronized(captured) { captured.toList() }
+                val stored = eventRepository
+                    .getEventsByType(NotificationEvent.ToAgent.EVENT_TYPE)
+                    .getOrThrow()
+                    .size
+                val routedBoth = seen.any { it.event.eventType == MessageEvent.ThreadCreated.EVENT_TYPE } &&
+                    seen.any { it.event.eventType == MessageEvent.MessagePosted.EVENT_TYPE }
+
+                if (routedBoth && stored == seen.size) seen.size else null
+            }
+            val notifications = synchronized(captured) { captured.toList() }
 
             // At least two notifications: thread created and message posted
             assertTrue(notifications.size >= 2)
@@ -121,6 +138,32 @@ class MessageRouterTest {
                 causedByThreadCreated.any { it.event.eventType == NotificationEvent.ToAgent.EVENT_TYPE },
                 "caused: ${causedByThreadCreated.map { it.event.eventType }}",
             )
+        }
+    }
+
+    /**
+     * Polls [settledCount] until it has returned the same non-null value for [quiet], or
+     * [timeout] passes. Returning on timeout rather than throwing leaves the failure to the
+     * assertions that follow, which say what is actually missing.
+     */
+    private suspend fun awaitSettled(
+        timeout: Duration = 10.seconds,
+        quiet: Duration = 250.milliseconds,
+        settledCount: suspend () -> Int?,
+    ) {
+        val deadline = TimeSource.Monotonic.markNow() + timeout
+        var last: Int? = null
+        var quietSince = TimeSource.Monotonic.markNow()
+
+        while (deadline.hasNotPassedNow()) {
+            val count = settledCount()
+            if (count == null || count != last) {
+                last = count
+                quietSince = TimeSource.Monotonic.markNow()
+            } else if (quietSince.elapsedNow() >= quiet) {
+                return
+            }
+            delay(25)
         }
     }
 }
