@@ -154,6 +154,8 @@ val evalReplay by tasks.registering(Test::class) {
 
     filter {
         includeTestsMatching("link.socket.ampere.eval.suite.AmpereEvalSuiteTest")
+        // AMPR-225: the Rung 0 routing bench, graded against its own golden traces.
+        includeTestsMatching("link.socket.ampere.eval.suite.Rung0RoutingSuiteTest")
     }
 
     outputs.upToDateWhen { false }

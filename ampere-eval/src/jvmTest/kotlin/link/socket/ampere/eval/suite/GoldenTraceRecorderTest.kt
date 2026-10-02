@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import link.socket.ampere.agents.domain.event.BenchEvent
+import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.eval.bench.EvalCase
 import link.socket.ampere.eval.bench.EvalSeed
 import link.socket.ampere.eval.bench.RunMode
@@ -80,6 +81,54 @@ class GoldenTraceRecorderTest {
     }
 
     /**
+     * The same, for the Rung 0 routing bench (AMPR-225): every scenario in [Rung0RoutingSuite]
+     * run once through [Rung0RoutingBench], canonicalized, and written over its committed golden.
+     * There is no Live/Replay distinction here — the relay is the deterministic thing — so the
+     * recording run is the gate's run with the meters swapped for a trivial one.
+     */
+    @Test
+    fun `records a canonical golden trace for every Rung 0 routing scenario`() = runBlocking {
+        val outputDirectory = GoldenTraces.outputDirectory()
+        if (outputDirectory == null) {
+            println(
+                "[golden-trace-recorder] skipped: -D${GoldenTraces.GOLDEN_DIR_PROPERTY} is not set. " +
+                    "Run ./gradlew :ampere-eval:recordGoldenTraces to re-record.",
+            )
+            return@runBlocking
+        }
+
+        Rung0RoutingBench.open().use { bench ->
+            val results = bench.run(Rung0RoutingSuite.scenarios.map(::recordingCase))
+
+            assertEquals(Rung0RoutingSuite.scenarios.size, results.size)
+
+            results.forEach { result ->
+                val trace = result.trace
+                assertTrue(
+                    trace.events.isNotEmpty(),
+                    "Scenario '${result.caseId}' recorded no routing event; committing an empty " +
+                        "trace would make every meter fail on an empty reference",
+                )
+                assertEquals(
+                    RoutingEvent.RouteResolved.EVENT_TYPE,
+                    trace.events.last().type,
+                    "Scenario '${result.caseId}' recorded no terminal RouteResolved",
+                )
+
+                GoldenTraces.write(outputDirectory, result.caseId, GoldenTraces.canonicalize(result.caseId, trace))
+
+                println(
+                    "[golden-trace-recorder] ${result.caseId}: ${trace.size} event(s) -> " +
+                        trace.events.joinToString(", ") { it.type } + "\n" +
+                        "    " + trace.events.last().payload,
+                )
+            }
+
+            println("[golden-trace-recorder] wrote ${results.size} routing trace(s) to $outputDirectory")
+        }
+    }
+
+    /**
      * A probe as a [RunMode.Live] case.
      *
      * The meters are deliberately trivial: a recording run is not a graded run, and grading it
@@ -93,5 +142,13 @@ class GoldenTraceRecorderTest {
         meters = listOf(Meter { Result.success(Reading(score = 1.0, passed = true, meterId = "recording")) }),
         tolerance = Tolerance(minScore = 0.0),
         goldenTrace = null,
+    )
+
+    /** A routing scenario with a trivial meter, for the same reason [recordingCase] has one. */
+    private fun recordingCase(scenario: Rung0RoutingSuite.ScenarioSpec): RoutingCase = RoutingCase(
+        id = scenario.id,
+        context = scenario.context,
+        meters = listOf(Meter { Result.success(Reading(score = 1.0, passed = true, meterId = "recording")) }),
+        tolerance = Tolerance(minScore = 0.0),
     )
 }

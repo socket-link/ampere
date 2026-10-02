@@ -1,0 +1,66 @@
+{
+    "id": "golden-rung-0-below-requested-floor",
+    "runId": "golden-run-rung-0-below-requested-floor",
+    "arcId": "rung-0-routing",
+    "createdAt": 0,
+    "events": [
+        {
+            "index": 0,
+            "timestamp": 0,
+            "type": "RouteSelected",
+            "payload": {
+                "type": "RoutingEvent.RouteSelected",
+                "eventId": "rung-0-below-requested-floor-event-0",
+                "timestamp": "1970-01-01T00:00:00Z",
+                "eventSource": {
+                    "type": "link.socket.ampere.agents.domain.event.EventSource.Agent",
+                    "agentId": "rung-0-bench"
+                },
+                "urgency": "LOW",
+                "agentId": "rung-0-bench",
+                "phase": null,
+                "decision": {
+                    "providerName": "Google",
+                    "modelName": "gemini-2.5-pro",
+                    "matchedRule": "capability:google",
+                    "isFallback": false
+                },
+                "eventType": "RouteSelected"
+            },
+            "truncated": false
+        },
+        {
+            "index": 1,
+            "timestamp": 0,
+            "type": "RouteResolved",
+            "payload": {
+                "type": "RoutingEvent.RouteResolved",
+                "eventId": "rung-0-below-requested-floor-event-1",
+                "timestamp": "1970-01-01T00:00:00Z",
+                "eventSource": {
+                    "type": "link.socket.ampere.agents.domain.event.EventSource.Agent",
+                    "agentId": "rung-0-bench"
+                },
+                "urgency": "LOW",
+                "agentId": "rung-0-bench",
+                "phase": null,
+                "decision": {
+                    "providerName": "Google",
+                    "modelName": "gemini-2.5-pro",
+                    "matchedRule": "capability:google",
+                    "isFallback": false
+                },
+                "tier": "HIGH",
+                "estimatedWattCost": 0.007,
+                "candidateCount": 19,
+                "runnerUpProvider": "Google",
+                "runnerUpWattCost": 0.007,
+                "savingsVsRunnerUp": 0.0,
+                "eventType": "RouteResolved"
+            },
+            "truncated": false
+        }
+    ],
+    "droppedEventCount": 0,
+    "producerVersion": "0.17.0"
+}
