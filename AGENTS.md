@@ -59,6 +59,18 @@ are generated at release time from commit/PR history instead.
 ./gradlew dokkaHtml                    # Generate API documentation
 ```
 
+### Release
+```bash
+scripts/release-preflight.sh 0.15.0    # Gate a release, on the commit you intend to tag
+scripts/bump-version.sh 0.16.0         # Move both version declarations together
+```
+
+Publishing is one action — pushing a `v*` tag — and Maven Central is permanent.
+Work through [docs/RELEASING.md](docs/RELEASING.md) in order; never skip the
+pre-flight, which covers what PR CI does not. `main` always carries the *next*,
+unreleased version, so the number to release is the one already in
+`gradle.properties` and the tag goes on a commit from before the next bump.
+
 ### CLI
 ```bash
 ./gradlew :ampere-cli:installDist      # Build the CLI

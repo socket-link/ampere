@@ -8,7 +8,7 @@ tracked_sources:
   - docs/AGENT_LIFECYCLE.md
   - docs/ARCS.md
 related: [PropelLoop, EventSerialBus, CognitiveRelay, MemoryProvenance, SparkSystem, AgentSurface, PlugPermissions, CognitionTrace]
-last_verified: 2026-04-29
+last_verified: 2026-10-02
 ---
 
 # Ampere — The Meta-Concept
