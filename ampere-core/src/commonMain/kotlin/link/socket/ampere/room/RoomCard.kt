@@ -4,8 +4,11 @@ import kotlin.time.Duration
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import link.socket.ampere.canon.CanonId
 import link.socket.ampere.probe.ProbeId
 import link.socket.ampere.probe.Verdict as ProbeVerdict
+import link.socket.ampere.probe.safety.HazardCategory
+import link.socket.ampere.probe.safety.MitigationHint
 
 /**
  * The structured part of a Room post (AMPR-379): what a renderer draws as a card
@@ -36,6 +39,26 @@ sealed interface RoomCard {
         val probeId: ProbeId,
         val subjectId: String,
         val verdict: ProbeVerdict,
+    ) : RoomCard
+
+    /**
+     * One hazard the verifier found, and the mitigation Task inserted for it
+     * (AMPR-380).
+     *
+     * Carries the closed vocabulary rather than prose so a renderer can draw the
+     * category it recognizes — the disclaimer copy is the consumer's (SCKT-747).
+     *
+     * @property mitigationTaskId null when there was no step to sequence a
+     *   mitigation before: a hazard found on a manifest line that no Task uses.
+     */
+    @Serializable
+    @SerialName("RoomCard.Hazard")
+    data class Hazard(
+        val category: HazardCategory,
+        val subjectId: String,
+        val mitigationHint: MitigationHint,
+        val evidence: String,
+        val mitigationTaskId: CanonId? = null,
     ) : RoomCard
 
     /** The Coordinator's standup status: what moved, what is projected, what is blocked. */

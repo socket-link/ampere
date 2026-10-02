@@ -413,4 +413,5 @@ internal fun ThreadSubject.defaultTitle(): String = when (this) {
     ThreadSubject.General -> "Room opened"
     is ThreadSubject.Milestone -> "Milestone ${milestoneId.value}"
     is ThreadSubject.Verdict -> "${kind.name.lowercase()} verdict on $subjectId"
+    is ThreadSubject.Hazard -> "${category.name} hazard on $subjectId"
 }

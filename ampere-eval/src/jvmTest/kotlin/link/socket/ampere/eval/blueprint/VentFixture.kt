@@ -29,6 +29,14 @@ import link.socket.ampere.probe.ProbeId
 import link.socket.ampere.probe.SequenceProbe
 import link.socket.ampere.probe.UndeterminedCause
 import link.socket.ampere.probe.Verdict as ProbeVerdict
+import link.socket.ampere.probe.safety.HazardCategory
+import link.socket.ampere.probe.safety.HazardFinding
+import link.socket.ampere.probe.safety.HazardSubject
+import link.socket.ampere.probe.safety.MitigationHint
+import link.socket.ampere.probe.safety.MitigationPlan
+import link.socket.ampere.probe.safety.PlanLine
+import link.socket.ampere.probe.safety.SafetyProbe
+import link.socket.ampere.probe.safety.WorkPlan
 import link.socket.ampere.room.RoomId
 import link.socket.ampere.room.ThreadSubject
 import link.socket.ampere.room.VerdictKind
@@ -86,17 +94,24 @@ object VentFixture {
 
     private fun item(
         id: String,
+        title: String,
         status: CanonWorkStatus = CanonWorkStatus.TODO,
         vararg dependsOn: String,
     ) = CanonWorkItem(
         CanonId(id),
         provenance,
-        title = id,
+        title = title,
         status = status,
         projectId = project.canonId,
         dependsOn = dependsOn.map(::CanonId),
     )
 
+    /**
+     * The week's work, titled the way a Blueprint would phrase it for a person —
+     * which is also what makes the hazards readable (AMPR-380). Cutting the duct,
+     * the mains connection and the resin sealant are all really in this build; the
+     * titles do not dodge them, and `SafetyProbe` finds exactly three.
+     */
     val graph: CanonWorkGraph = CanonWorkGraph(
         project = project,
         milestones = listOf(
@@ -106,19 +121,110 @@ object VentFixture {
             milestone("ms-verify", "Install and verify"),
         ),
         items = listOf(
-            item("measure-opening", CanonWorkStatus.DONE),
-            item("pick-grille"),
-            item("pick-fan"),
-            item("pick-duct"),
-            item("order-parts", CanonWorkStatus.TODO, "pick-grille", "pick-fan", "pick-duct"),
-            item("cut-duct", CanonWorkStatus.TODO, "order-parts"),
-            item("mount-fan", CanonWorkStatus.TODO, "cut-duct"),
-            item("fit-grille", CanonWorkStatus.TODO, "mount-fan"),
-            item("verify-airflow", CanonWorkStatus.TODO, "fit-grille"),
+            item("measure-opening", "Measure the opening and the duct run", CanonWorkStatus.DONE),
+            item("pick-grille", "Choose a grille"),
+            item("pick-fan", "Choose an exhaust fan"),
+            item("pick-duct", "Choose the duct"),
+            item(
+                "order-parts",
+                "Order the parts",
+                CanonWorkStatus.TODO,
+                "pick-grille",
+                "pick-fan",
+                "pick-duct",
+            ),
+            item("cut-duct", "Cut the duct to length", CanonWorkStatus.TODO, "order-parts"),
+            item(
+                "mount-fan",
+                "Mount the fan and wire it to the switched mains circuit",
+                CanonWorkStatus.TODO,
+                "cut-duct",
+            ),
+            item("fit-grille", "Fit the grille", CanonWorkStatus.TODO, "mount-fan"),
+            item("verify-airflow", "Verify airflow at the grille", CanonWorkStatus.TODO, "fit-grille"),
         ),
     )
 
+    /**
+     * The manifest, as the hazard check sees it: four lines, two of which say what
+     * they are in their interface kind. Socket's own `ManifestLine` implements
+     * `LineRef`; [PlanLine] is what a fixture with no manifest type uses.
+     */
+    val lines: List<PlanLine> = listOf(
+        PlanLine(
+            lineId = "line-duct",
+            kind = "RIGID_DUCT",
+            label = "6in rigid duct",
+            appliesTo = setOf(CanonId("cut-duct"), CanonId("mount-fan")),
+        ),
+        PlanLine(
+            lineId = "line-fan",
+            kind = "MAINS_VOLTAGE",
+            label = "Inline exhaust fan hardwired to the lighting circuit",
+            appliesTo = setOf(CanonId("mount-fan")),
+        ),
+        PlanLine(
+            lineId = "line-sealant",
+            kind = "RESIN",
+            label = "Two-part resin duct sealant",
+            appliesTo = setOf(CanonId("mount-fan")),
+        ),
+        PlanLine(
+            lineId = "line-grille",
+            kind = "GRILLE",
+            label = "Ceiling grille",
+            appliesTo = setOf(CanonId("fit-grille")),
+        ),
+    )
+
+    val plan: WorkPlan = WorkPlan(graph, lines)
+
+    /** The hazards this build carries. Pinned: a replay that finds fewer is a failing replay. */
+    val expectedFindings: List<HazardFinding> = listOf(
+        HazardFinding(
+            category = HazardCategory.CUTTING_OR_POWER_TOOLS,
+            subject = HazardSubject.Task(CanonId("cut-duct")),
+            evidence = "task text matched \"cut\"",
+            mitigationHint = MitigationHint.USE_PPE,
+        ),
+        HazardFinding(
+            category = HazardCategory.ELECTRICAL,
+            subject = HazardSubject.Task(CanonId("mount-fan")),
+            evidence = "manifest line line-fan has kind MAINS_VOLTAGE",
+            mitigationHint = MitigationHint.CHECK_LOCAL_CODE,
+        ),
+        HazardFinding(
+            category = HazardCategory.FUMES_OR_CHEMICALS,
+            subject = HazardSubject.Task(CanonId("mount-fan")),
+            evidence = "manifest line line-sealant has kind RESIN",
+            mitigationHint = MitigationHint.CONFIRM_VENTILATION,
+        ),
+    )
+
+    /** The `Warn` reason the Probe must reach over [plan]. */
+    val expectedSafetyReason: String =
+        "3 hazard(s): CUTTING_OR_POWER_TOOLS on cut-duct, ELECTRICAL on mount-fan, " +
+            "FUMES_OR_CHEMICALS on mount-fan"
+
+    /** The mitigation Tasks the Inspector rule inserts, in insertion order. */
+    val expectedMitigations: List<CanonId> = expectedFindings.map { finding ->
+        MitigationPlan.mitigationId(
+            CanonId(finding.subject.value),
+            finding.mitigationHint,
+        )
+    }
+
+    val safety: ProbeId = ProbeId(SafetyProbe.ID)
+
+    /**
+     * The Estimator's own numbers, including one for each mitigation Task the
+     * safety rule inserts (AMPR-380) — a mitigation is real work, so a standup that
+     * could not estimate it would re-plan around a hole.
+     */
     val baseline: List<WorkEstimate> = listOf(
+        WorkEstimate(expectedMitigations[0], EstimateCategory.ADMIN, 10.minutes),
+        WorkEstimate(expectedMitigations[1], EstimateCategory.RESEARCH, 30.minutes),
+        WorkEstimate(expectedMitigations[2], EstimateCategory.PHYSICAL_WORK, 20.minutes),
         WorkEstimate(CanonId("pick-grille"), EstimateCategory.RESEARCH, 45.minutes),
         WorkEstimate(CanonId("pick-fan"), EstimateCategory.RESEARCH, 45.minutes),
         WorkEstimate(CanonId("pick-duct"), EstimateCategory.RESEARCH, 30.minutes),
@@ -129,9 +235,16 @@ object VentFixture {
         WorkEstimate(CanonId("verify-airflow"), EstimateCategory.PHYSICAL_WORK, 30.minutes),
     )
 
+    /**
+     * Three Saturday afternoons. The third one is here because the safety rule
+     * inserts mitigation Tasks (AMPR-380) and they are real work: two windows held
+     * the build before the hazards were checked and no longer do, which is the
+     * honest consequence of planning the safe version of the same build.
+     */
     val availability: List<AvailabilityWindow> = listOf(
         AvailabilityWindow(start = Instant.parse("2026-10-03T13:00:00Z"), end = Instant.parse("2026-10-03T17:00:00Z")),
         AvailabilityWindow(start = Instant.parse("2026-10-10T13:00:00Z"), end = Instant.parse("2026-10-10T17:00:00Z")),
+        AvailabilityWindow(start = Instant.parse("2026-10-17T13:00:00Z"), end = Instant.parse("2026-10-17T17:00:00Z")),
     )
 
     /** Subject ids the Room's verdict binding treats as its own. */

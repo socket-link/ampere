@@ -19,6 +19,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.emission.EmissionKind
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.event.MessageEvent
 import link.socket.ampere.agents.domain.event.ProbeEvent
@@ -26,14 +27,22 @@ import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.events.InMemoryEventDoor
 import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
+import link.socket.ampere.canon.CanonWorkGraph
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.eval.relay.PlaybackRelay
+import link.socket.ampere.probe.ProbeSuite
+import link.socket.ampere.probe.SequenceProbe
+import link.socket.ampere.probe.Verdict as ProbeVerdict
+import link.socket.ampere.probe.safety.KeywordHazardClassifier
+import link.socket.ampere.probe.safety.MitigationPlan
+import link.socket.ampere.probe.safety.SafetyProbe
 import link.socket.ampere.room.Author
 import link.socket.ampere.room.CoordinatorEscalation
 import link.socket.ampere.room.DefaultRoomService
 import link.socket.ampere.room.ReviewGate
 import link.socket.ampere.room.RoomId
 import link.socket.ampere.room.RoomTranscript
+import link.socket.ampere.room.SafetyReview
 import link.socket.ampere.room.ThreadSubject
 import link.socket.ampere.room.VerdictKind
 import link.socket.ampere.room.VerdictThreadBinding
@@ -104,7 +113,13 @@ class BlueprintVentReplayTest {
         }
     }
 
-    private data class ReplayResult(val transcript: String, val standup: StandupOutcome, val recordedCalls: Int)
+    private data class ReplayResult(
+        val transcript: String,
+        val standup: StandupOutcome,
+        val recordedCalls: Int,
+        val safetyVerdict: ProbeVerdict,
+        val mitigated: CanonWorkGraph,
+    )
 
     private suspend fun Replay.replay(): ReplayResult {
         val trace = VentFixture.trace()
@@ -112,6 +127,27 @@ class BlueprintVentReplayTest {
         relay.validate().getOrThrow()
 
         room.open(VentFixture.graph).getOrThrow()
+
+        // The Inspector runs the hazard Probe as the week opens (AMPR-380): the verdict
+        // goes on the bus through the suite like every other verdict, and the rule turns
+        // the findings into work — a thread per hazard and a mitigation Task before each
+        // hazardous Task. The standup below then re-plans over the mitigated graph,
+        // because a mitigation is real work and not an annotation.
+        val safetyProbe = SafetyProbe(KeywordHazardClassifier)
+        val safetyReports = ProbeSuite(
+            probes = listOf(safetyProbe),
+            eventApi = door.api,
+            eventSource = EventSource.Agent(BlueprintRoster.inspector.id.value),
+            now = { clock.now() },
+            idGenerator = ids,
+        ).evaluate(VentFixture.project.canonId.value, VentFixture.plan)
+        val safety = SafetyReview(room, VentFixture.roomId, BlueprintRoster, safetyProbe, clock)
+            .review(VentFixture.plan)
+            .getOrThrow()
+        check(safetyReports.single().verdict == safety.verdict) {
+            "the published verdict and the reviewed verdict are the same verdict"
+        }
+
         binding.start()
 
         var verdicts = 0L
@@ -164,7 +200,7 @@ class BlueprintVentReplayTest {
             clock = clock,
             idGenerator = ids,
         ).run(
-            graph = VentFixture.graph,
+            graph = safety.graph,
             since = VentFixture.since,
             calibration = object : EstimateCalibrationSource {
                 override suspend fun multiplier(category: EstimateCategory) =
@@ -178,7 +214,13 @@ class BlueprintVentReplayTest {
             room.threads(VentFixture.roomId).getOrThrow(),
             room.history(VentFixture.roomId).getOrThrow(),
         )
-        return ReplayResult(transcript, standup, relay.recordedCallCount)
+        return ReplayResult(
+            transcript = transcript,
+            standup = standup,
+            recordedCalls = relay.recordedCallCount,
+            safetyVerdict = safety.verdict,
+            mitigated = safety.graph,
+        )
     }
 
     @Test
@@ -194,13 +236,36 @@ class BlueprintVentReplayTest {
             VentReplayGate.check(transcript).getOrThrow()
             assertEquals(0, result.recordedCalls, "a 0W standup records no model calls for the relay to replay")
 
+            // The hazard rule ran before the week: three findings, three mitigation Tasks,
+            // and the graph the standup re-planned over is the mitigated one.
+            assertEquals(ProbeVerdict.Warn(VentFixture.expectedSafetyReason), result.safetyVerdict)
+            assertEquals(
+                VentFixture.expectedMitigations.map { it.value },
+                result.mitigated.items.filter { MitigationPlan.isMitigation(it) }.map { it.canonId.value },
+            )
+            assertEquals(
+                ProbeVerdict.Holds(),
+                SequenceProbe().evaluate(result.mitigated),
+                "no cycles after insertion",
+            )
+
             // The standup read the persisted stream: three completions, the grille still open, nothing blocked.
             val standup = result.standup
             assertEquals(1, standup.escalations.size)
             assertEquals("grille", standup.escalations.single().subjectId)
             assertEquals(
-                listOf("pick-grille", "cut-duct", "mount-fan", "fit-grille", "verify-airflow"),
+                listOf(
+                    "pick-grille",
+                    "cut-duct/mitigation:use_ppe",
+                    "cut-duct",
+                    "mount-fan/mitigation:check_local_code",
+                    "mount-fan/mitigation:confirm_ventilation",
+                    "mount-fan",
+                    "fit-grille",
+                    "verify-airflow",
+                ),
                 standup.revisionProposal.remaining.map { it.value },
+                "each mitigation is planned immediately before the step it guards",
             )
             assertTrue(standup.revisionReleased)
             assertTrue(standup.narrative.contains("3 task(s) finished"), standup.narrative)
@@ -245,7 +310,12 @@ class BlueprintVentReplayTest {
 /**
  * The socket#1406 Phase 3 criterion, as a check over the transcript: three
  * `Violated` threads resolved, one `Undetermined` waiting for the human after the
- * Coordinator asked, and nothing undetermined reading as resolved.
+ * Coordinator asked, nothing undetermined reading as resolved, and — AMPR-380 — a
+ * hazard thread open for every hazard the build carries.
+ *
+ * The hazard threads are *open*, not resolved: the mitigation Task is in the plan
+ * and nobody has done it yet. A transcript where they read as resolved would be
+ * claiming the work was done.
  */
 object VentReplayGate {
 
@@ -258,6 +328,8 @@ object VentReplayGate {
             .findAll(transcript)
             .count()
         val asked = transcript.lineSequence().count { it.trim().startsWith("coordinator: Asking the human:") }
+        val openHazards = Regex("""## \[hazard] \S+ \(\w+\) — open""").findAll(transcript).count()
+        val resolvedHazards = Regex("""## \[hazard] \S+ \(\w+\) — resolved""").findAll(transcript).count()
 
         val problems = buildList {
             if (resolvedViolations != 3) add("expected 3 resolved violated threads, found $resolvedViolations")
@@ -268,6 +340,8 @@ object VentReplayGate {
             }
             if (resolvedUndetermined != 0) add("an undetermined verdict reads as resolved: convict-but-not-acquit")
             if (asked != 1) add("expected the coordinator to ask the human once, found $asked")
+            if (openHazards != 3) add("expected 3 open hazard threads, found $openHazards")
+            if (resolvedHazards != 0) add("a hazard thread reads as resolved before its mitigation was done")
         }
         return if (problems.isEmpty()) {
             Result.success(Unit)

@@ -22,7 +22,7 @@ already had (AMPR-379). `BlueprintRoster` is the first roster: six roles (Planne
 Estimator, Scout, Scheduler, Inspector, Coordinator) for a physical project. The
 Room is one `MessageChannel.Room` per project with a `MessageThread` per subject
 (`ThreadSubject.General`, one `Milestone` per milestone, one `Verdict` per
-`Violated`/`Undetermined` Probe verdict). The Coordinator's DM to the human is
+`Violated`/`Undetermined` Probe verdict, one `Hazard` per `SafetyProbe` finding). The Coordinator's DM to the human is
 `AgentMessageApi.escalateToHuman`, which is a Decision-kind Emission with a
 thread attached. The Estimator reads duration calibration through
 `EstimateCalibrationSource`, an SPI the consumer implements.
@@ -58,6 +58,7 @@ Three pressures shaped the cut:
 - `room/RoomService.kt`, `room/DefaultRoomService.kt` — open, thread, post, resolve, threads, history, transcript. `room/RoomMetadata.kt` — the metadata keys (wire contract).
 - `room/ThreadSubject.kt`, `room/Author.kt`, `room/RoomCard.kt`, `room/RoomMessage.kt`, `room/RoomFailure.kt` — the value types.
 - `room/VerdictPolicy.kt` — the pure rules; `room/VerdictThreadBinding.kt` — the bus subscriber that applies them; `room/CoordinatorEscalation.kt` — the DM.
+- `room/SafetyReview.kt` — the Inspector's hazard rule (AMPR-380): a `ThreadSubject.Hazard` thread per `SafetyProbe` finding, a `RoomCard.Hazard` posted by the verifier, and the mitigation Tasks inserted into the graph it returns.
 - `room/ReviewGate.kt` — the open-for-review path for cards; `room/RoomTranscript.kt` — the text rendering the fixture replay reads.
 - `standup/Standup.kt` — the Meeting; `standup/StandupDeliberation.kt` — digest, ordering, scheduling; `standup/StandupNarrator.kt` — `TemplatedNarrator`, `LlmNarrator`.
 - `agents/domain/event/RoomEvent.kt` — `RoomOpened`, `ThreadOpened`, `Posted`, `ThreadResolved`, `ReviewRequested`, `ReviewCompleted`.
@@ -69,9 +70,12 @@ Three pressures shaped the cut:
 - **One Room per project, one thread per subject, by construction.** Both ids are derived; opening twice names the same things and publishes nothing new. `RoomEvent.RoomOpened` fires once.
 - **A Room is made of the thread primitive.** Every Room thread is a `MessageThread` on a `MessageChannel.Room`; every post is a `Message`; `ThreadCreated`, `MessagePosted` and `ThreadStatusChanged` fire for Room writes exactly as for any other thread. `RoomEvent`s add facts, never replace those.
 - **Roles may not talk over the human.** A role's post into a `WaitingForHuman` or `Resolved` thread is refused with a typed failure. The human may post into either; that reopens the thread, and the reopening is published, not silent.
-- **A verdict thread is assigned by the Probe, not the subject.** `Roster.resolverFor(probeId)`: the sequence Probe's verdicts go to the Planner, every other Probe's to the Scout.
+- **A verdict thread is assigned by the Probe, not the subject.** `Roster.resolverFor(probeId)`: the sequence and safety Probes' verdicts go to the Planner — both are settled by changing the graph — and every other Probe's to the Scout.
 - **The human is asked once per thread, and only when a role cannot settle it.** `Undetermined` escalates at once (no evidence exists). `Violated` escalates only on a reconviction after at least one pass by the assigned role. A thread already waiting is never escalated twice.
-- **Holds closes only what the same Probe convicted.** A different Probe holding on the same subject leaves the thread open. `Warn` opens nothing.
+- **Holds closes only what the same Probe convicted.** A different Probe holding on the same subject leaves the thread open.
+- **`Warn` opens no *verdict* thread, and a hazard is the one `Warn` the Room does speak about.** `VerdictPolicy` still returns no action for `Warn`: a Room that threaded every decided-and-not-disqualifying verdict would shout. The hazard rule is not an exception to that — it opens a `ThreadSubject.Hazard`, which is a different subject and a different conversation, because the remedy is a Task rather than an argument about evidence. It is also not on the bus path: `SafetyReview` reads the findings from the Probe, since a verdict event carries no findings (see [Probe](probe.md)).
+- **A hazard thread stays open until somebody does the work.** The mitigation Task is in the plan and nothing in Ampere knows it was performed, so nothing resolves the thread. The vent replay gate refuses a transcript where a hazard thread reads as resolved, for the same reason it refuses a resolved `Undetermined`.
+- **A hazard review is quiet on a plan it has already seen.** Thread ids are derived from the finding and `MitigationPlan` is idempotent, so re-reviewing an unchanged plan opens no thread, posts no card and returns the graph unchanged. A plan edit that introduces a hazard produces exactly one new thread.
 - **The DM is the AskHuman path.** `CoordinatorEscalation` calls `escalateToHuman(awaitReply = true)`, launched off the handler, so the thread's `WaitingForHuman` is durable before the Decision Emission is produced and the reply lands in the thread as the human. No fourth CHI path.
 - **A reviewed role's card never reaches the Room unreviewed.** `ReviewGate` holds it until the reviewer's `ProbeReport`; `Holds`/`Warn` release, `Violated`/`Undetermined` withhold, and the reviewer's `Verdict` card is posted either way.
 - **The review graph is acyclic.** `reviewsAreAcyclic()` over `Roster.all()`; pinned for `BlueprintRoster`.
@@ -90,6 +94,7 @@ Three pressures shaped the cut:
 - **Bind verdicts** — `VerdictThreadBinding(room, roomId, roster, CoordinatorEscalation(AgentMessageApi(roster.host.value, …), scope), bus, scope, subjects).start()`.
 - **Review a card** — `reviewGate.submit(roomId, threadId, Author.Role(planner), body, card)` → `Pending(reviewId, reviewer)`; then `reviewGate.review(reviewId, Author.Role(inspector), ProbeReport(...))`.
 - **Run the standup** — `Standup(room, reviewGate, eventApi, narrator = LlmNarrator(provider)).run(graph, since, calibration, baseline, availability)`.
+- **Check a plan for hazards** — `SafetyReview(room, roomId, roster, SafetyProbe(KeywordHazardClassifier), clock).review(WorkPlan(graph, lines))`; the outcome's `graph` is the plan with the mitigation Tasks in it, and the caller decides whether to adopt it (D21).
 - **Read the Room** — `room.history(roomId)` for everything so far, `room.transcript(roomId)` for what happens next, `RoomTranscript.render(threads, messages)` for text.
 - **Replay the vent fixture** — `:ampere-eval:jvmTest --tests "*BlueprintVentReplayTest*"`; the transcript is written to `ampere-eval/build/reports/blueprint/vent-transcript.md`.
 
@@ -99,9 +104,11 @@ Three pressures shaped the cut:
 - *Posting a Room message through `AgentMessageApi.postMessage`* — it attributes every post to the one agent it was built for; a Room has six authors and the human.
 - *A fourth "ask the human" primitive for the DM* — `escalateToHuman` already is the Decision Emission with a thread; wrap it, do not rival it (see [ChiProtocol](chi.md)).
 - *Escalating a `Violated` verdict on first sight* — the assigned role gets one pass; asking the human before it has looked is the single-persona behaviour this layer exists to replace.
-- *Reading `Warn` as a thread* — it is decided and not disqualifying; a thread for it would make the Room shout.
+- *Reading `Warn` as a verdict thread* — it is decided and not disqualifying; a verdict thread for it would make the Room shout. A hazard gets a `ThreadSubject.Hazard` instead, keyed by the Task or line and the category, so `VerdictKind` stays the two values that convict.
+- *Publishing a second `ProbeEvent.VerdictReached` from `SafetyReview`* — the Probe belongs in the host's `ProbeSuite`, which publishes every verdict in one place. Running the deterministic Probe twice is free; two verdict events for one plan edit is a trace that lies about how many times the plan was judged.
 - *Resolving a thread on any `Holds`* — a sequence Probe holding says nothing about a part's lead time; match the Probe.
 - *Keying calibration per person instead of per category* — one multiplier averages optimism about physical work into waiting that nobody can shorten.
 - *Running the standup narrative for each re-plan* — re-plans between standups are graph work; the narrative is weekly and metered.
 - *Putting `MeetingType.Standup` through `MeetingOrchestrator.scheduleMeeting`* — it rejects a time that is not in the future against `Clock.System`, so a "run now" standup cannot start that way.
+- *Resolving a hazard thread because the Probe stopped warning* — it will not stop: the hazardous step is still in the plan, and a mitigated plan still warns.
 - *Naming a part or finish in a `roster`/`room`/`standup` type* — the domain boundary lives in `RosterPrompts`; a type that knows what a duct is cannot serve the next kind of project.
