@@ -27,6 +27,7 @@ import link.socket.ampere.agents.domain.event.ProbeEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
+import link.socket.ampere.agents.domain.event.RoomEvent
 import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.StoreRowUndecodableEvent
@@ -203,6 +204,16 @@ class SignificanceAwareEventLogger(
             is Verdict.Undetermined,
             -> EventSignificance.SIGNIFICANT
         }
+
+        // Room lifecycle (AMPR-379) - a post is already reported as the MessagePosted it
+        // follows; what a thread is about, and a card held back by review, are the
+        // facts worth noting.
+        is RoomEvent.RoomOpened -> EventSignificance.SIGNIFICANT
+        is RoomEvent.ThreadOpened -> EventSignificance.SIGNIFICANT
+        is RoomEvent.Posted -> EventSignificance.ROUTINE
+        is RoomEvent.ThreadResolved -> EventSignificance.SIGNIFICANT
+        is RoomEvent.ReviewRequested -> EventSignificance.ROUTINE
+        is RoomEvent.ReviewCompleted -> if (event.released) EventSignificance.ROUTINE else EventSignificance.SIGNIFICANT
 
         // Link lifecycle - resolution is routine, but anything that changes or
         // denies a Plug's access to a wire is a consent-visible fact.

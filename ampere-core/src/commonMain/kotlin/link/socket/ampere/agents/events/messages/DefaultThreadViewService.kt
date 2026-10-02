@@ -45,6 +45,7 @@ class DefaultThreadViewService(
         val channelName = when (val channel = thread.channel) {
             is MessageChannel.Public -> channel.id
             is MessageChannel.Direct -> "DM with ${channel.sender.agentId}"
+            is MessageChannel.Room -> channel.roomId
         }
 
         val preview = if (thread.messages.isNotEmpty()) {
