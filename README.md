@@ -87,7 +87,7 @@ Add to your project:
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("link.socket:ampere-core:0.1.1")
+    implementation("link.socket:ampere-core:0.15.0")
 }
 ```
 
