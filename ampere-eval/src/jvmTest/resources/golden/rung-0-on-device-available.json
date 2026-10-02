@@ -1,0 +1,66 @@
+{
+    "id": "golden-rung-0-on-device-available",
+    "runId": "golden-run-rung-0-on-device-available",
+    "arcId": "rung-0-routing",
+    "createdAt": 0,
+    "events": [
+        {
+            "index": 0,
+            "timestamp": 0,
+            "type": "RouteSelected",
+            "payload": {
+                "type": "RoutingEvent.RouteSelected",
+                "eventId": "rung-0-on-device-available-event-0",
+                "timestamp": "1970-01-01T00:00:00Z",
+                "eventSource": {
+                    "type": "link.socket.ampere.agents.domain.event.EventSource.Agent",
+                    "agentId": "rung-0-bench"
+                },
+                "urgency": "LOW",
+                "agentId": "rung-0-bench",
+                "phase": null,
+                "decision": {
+                    "providerName": "Apple Foundation Models (on-device)",
+                    "modelName": "apple-foundation-models-on-device",
+                    "matchedRule": "capability:apple-on-device",
+                    "isFallback": false
+                },
+                "eventType": "RouteSelected"
+            },
+            "truncated": false
+        },
+        {
+            "index": 1,
+            "timestamp": 0,
+            "type": "RouteResolved",
+            "payload": {
+                "type": "RoutingEvent.RouteResolved",
+                "eventId": "rung-0-on-device-available-event-1",
+                "timestamp": "1970-01-01T00:00:00Z",
+                "eventSource": {
+                    "type": "link.socket.ampere.agents.domain.event.EventSource.Agent",
+                    "agentId": "rung-0-bench"
+                },
+                "urgency": "LOW",
+                "agentId": "rung-0-bench",
+                "phase": null,
+                "decision": {
+                    "providerName": "Apple Foundation Models (on-device)",
+                    "modelName": "apple-foundation-models-on-device",
+                    "matchedRule": "capability:apple-on-device",
+                    "isFallback": false
+                },
+                "tier": "LOW",
+                "estimatedWattCost": 0.0,
+                "candidateCount": 31,
+                "runnerUpProvider": "Google",
+                "runnerUpWattCost": 0.007,
+                "savingsVsRunnerUp": 0.007,
+                "eventType": "RouteResolved"
+            },
+            "truncated": false
+        }
+    ],
+    "droppedEventCount": 0,
+    "producerVersion": "0.17.0"
+}

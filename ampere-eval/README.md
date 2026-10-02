@@ -243,6 +243,53 @@ it lands, `ArcSettled` keeps its meaning as the run's terminal summary, the
 golden traces simply get richer around it, and this suite is what will tell you
 exactly how much richer.
 
+## The Rung 0 routing bench
+
+The Arc probes above can never exercise a routing decision, because the Arc
+path makes no model call. Rung 0 (AMPR-225) *is* a routing decision — whether
+the relay sends a call to the free on-device model or routes around it — so it
+gets its own bench, in the same style and behind the same gate.
+
+- Scenarios and their rationales: `src/jvmTest/kotlin/.../suite/Rung0RoutingSuite.kt`
+- The rig: `src/jvmTest/kotlin/.../suite/Rung0RoutingBench.kt`
+- The gate: `src/jvmTest/kotlin/.../suite/Rung0RoutingSuiteTest.kt`
+- Golden traces: `src/jvmTest/resources/golden/rung-0-*.json`
+
+A scenario's seed is a `RoutingContext` rather than a user goal: a capability
+requirement plus the `LocalCapacity` an on-device engine would report at
+runtime. The run is one `CognitiveRelayImpl.resolveWithMetadata` over the
+bundled catalog and the default capability rules, with the relay's routing
+events recorded through a door. Routing is a local decision and calls no
+provider, so the gate runs the **real** relay in CI with no `PlaybackRelay`, no
+API key and no network — the same context over the same catalog publishes the
+same events every time.
+
+| Scenario                                  | Device reports                         | Request                 | Relay must                                                            |
+| ----------------------------------------- | -------------------------------------- | ----------------------- | --------------------------------------------------------------------- |
+| `rung-0-on-device-available`              | engine up, on-device provider          | text, no floor          | select on-device; `RouteResolved` at **0 W**; no `RouteFallback`      |
+| `rung-0-ineligible-hardware-falls-back`   | unavailable, reason `device_not_eligible` | text, no floor       | `RouteFallback` naming on-device and that reason; metered selection   |
+| `rung-0-capacity-from-another-provider`   | available, under a foreign provider id | text, no floor          | gate stays closed: `RouteFallback` with the default reason; metered   |
+| `rung-0-below-requested-floor`            | engine up, on-device provider          | text, floor rung THREE  | no fallback (not capable, not unavailable); cheapest metered at ≥ THREE |
+| `rung-0-context-exceeds-window`           | engine up, on-device provider          | text, 8192-token window | no fallback; cheapest metered model with a large enough window         |
+
+Each scenario grades the same way as an Arc probe. Meters over the recorded
+events assert what a reader can derive from `CognitiveRelayImpl` and
+`RoutingRule.ByCapability` without running them — who won, whether a fallback
+was announced, that the on-device route costs exactly zero. A
+`TraceConformanceMeter` against the golden trace pins the rest: which cloud
+model is the cheapest capable runner-up, what it costs per Watt, how many
+candidates were compared. A catalog change that moves any of those is a red
+build and a legible diff on re-record, which is the point.
+
+The guardrail recorded on AMPR-225 is the bench's second scenario stated as
+behavior: on-device selection is a runtime hardware check the selector owns,
+and cloud fallback is the path for ineligible hardware, never for an OS
+version. The third scenario pins the AMPR-327 finding that an engine reporting
+availability under some other provider id has not opened the gate.
+
+`recordGoldenTraces` re-records these alongside the Arc probes; an empty diff
+on an unchanged catalog is the same proof it is for them.
+
 ## Re-recording a golden trace
 
 When an Arc's behavior legitimately changes, the gate goes red and the golden

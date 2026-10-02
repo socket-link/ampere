@@ -73,7 +73,10 @@ internal object GoldenTraces {
     }
 
     /** Every probe's golden trace, keyed by probe id. */
-    fun loadAll(): Map<String, Trace> = AmpereEvalSuite.probes.associate { it.id to load(it.id) }
+    fun loadAll(): Map<String, Trace> = loadAll(AmpereEvalSuite.probes.map { it.id })
+
+    /** The golden trace of each id in [ids], keyed by id. */
+    fun loadAll(ids: Collection<String>): Map<String, Trace> = ids.associateWith(::load)
 
     /** [trace] in canonical form, attributed to [probeId]. */
     fun canonicalize(probeId: String, trace: Trace): Trace = trace.copy(
