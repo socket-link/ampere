@@ -20,6 +20,7 @@ import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
 import link.socket.ampere.agents.domain.event.ProbeEvent
+import link.socket.ampere.agents.domain.event.RoomEvent
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
@@ -152,6 +153,15 @@ object EventCategorizer {
         // A rung floor with no satisfying model is a terminal routing failure:
         // the call cannot proceed, so it warrants immediate human awareness.
         is RoutingEvent.RouteFloorUnmet -> EventSignificance.CRITICAL
+
+        // Room lifecycle (AMPR-379): a post is the MessagePosted it follows; a thread
+        // opening or closing, and a card withheld by review, are worth surfacing.
+        is RoomEvent.RoomOpened,
+        is RoomEvent.ThreadOpened,
+        is RoomEvent.ThreadResolved -> EventSignificance.SIGNIFICANT
+        is RoomEvent.Posted,
+        is RoomEvent.ReviewRequested -> EventSignificance.ROUTINE
+        is RoomEvent.ReviewCompleted -> if (event.released) EventSignificance.ROUTINE else EventSignificance.SIGNIFICANT
 
         // A Probe verdict: a clean pass is routine, every other outcome is a
         // decision worth surfacing. An Undetermined is never a quiet pass.

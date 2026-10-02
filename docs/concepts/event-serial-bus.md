@@ -11,7 +11,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/**
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/events/**
 related: [PropelLoop, AgentSurface, CognitionTrace, MemoryProvenance, LinkLayer]
-last_verified: 2026-09-27
+last_verified: 2026-10-02
 ---
 
 # EventSerialBus
@@ -63,6 +63,7 @@ properties for free:
 - `agents/domain/event/TaskEvent.kt` — task lifecycle (started, progressed, completed, failed, blocked, subtask created), folded with `Event.TaskCreated` into the `WorkItem` checklist by `WorkspaceStateStore`. The creating events carry the work's `WorkPhase` and `ExecutionAssignment` (model, effort); `TaskStarted` can assign an `ExecutionAssignment` but carries no phase, so starting a task cannot promote it from read-only to writing (AMPR-369).
 - `agents/domain/event/LinkEvent.kt` — Link lifecycle (granted, revoked, resolved, resolution failed); see [LinkLayer](link-layer.md).
 - `agents/domain/event/ProbeEvent.kt` — `VerdictReached`, one Probe's judgement of one identified subject; see [Probe](probe.md).
+- `agents/domain/event/RoomEvent.kt` — `RoomOpened`, `ThreadOpened`, `Posted`, `ThreadResolved`, `ReviewRequested`, `ReviewCompleted`: what a Room write *meant*, each `causedBy` the `MessageEvent` the thread primitive fired for the same write; see [TeamLayer](team-layer.md).
 - `agents/domain/event/ArcRunEvent.kt` — run-level signals from the Arc runtime itself. `CompletionManifestRecorded` carries a cancelled or failed run's manifest into the store, published through an `AgentEventApi` under `CompletionManifestSink.DEFAULT_AGENT_ID`; see [CognitionTrace](cognition-trace.md).
 - `agents/domain/event/EventRegistry.kt` — the hand-maintained list of every event type, and the only thing `subscribeToAll`, the relay, and `TraceRecorder` enumerate.
 - `ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/events/EventStore.sq` — persistence schema (with `run_id` indexes for trace queries).

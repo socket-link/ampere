@@ -33,6 +33,7 @@ import link.socket.ampere.agents.domain.event.NotificationEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
 import link.socket.ampere.agents.domain.event.ProbeEvent
+import link.socket.ampere.agents.domain.event.RoomEvent
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.event.ProductEvent
@@ -192,6 +193,10 @@ class EventRenderer(
             is LinkEvent.LinkResolutionFailed -> "🔌" to red
             // Asset resolution: out-of-band, mirroring Link's icon family
             is AssetAccessEvent -> "🖼" to green
+            // Room lifecycle (AMPR-379): the roster deliberating. A review that withheld
+            // a card is the one Room line that is not routine.
+            is RoomEvent.ReviewCompleted -> "🏠" to if (event.released) green else yellow
+            is RoomEvent -> "🏠" to blue
             // Probe verdicts: the colour is the verdict. Undetermined is never
             // green — it is not decided, and must not read as a pass.
             is ProbeEvent.VerdictReached -> "⚖" to when (event.verdict) {

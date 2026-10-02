@@ -132,6 +132,14 @@ object EventRegistry {
         // ProbeEvent types
         ProbeEvent.VerdictReached.EVENT_TYPE,
 
+        // RoomEvent types
+        RoomEvent.RoomOpened.EVENT_TYPE,
+        RoomEvent.ThreadOpened.EVENT_TYPE,
+        RoomEvent.Posted.EVENT_TYPE,
+        RoomEvent.ThreadResolved.EVENT_TYPE,
+        RoomEvent.ReviewRequested.EVENT_TYPE,
+        RoomEvent.ReviewCompleted.EVENT_TYPE,
+
         // ArcRunEvent types
         ArcRunEvent.CompletionManifestRecorded.EVENT_TYPE,
 
