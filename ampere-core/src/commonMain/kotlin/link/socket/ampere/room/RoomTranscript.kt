@@ -41,6 +41,8 @@ object RoomTranscript {
                 ThreadSubject.General -> "[general]"
                 is ThreadSubject.Milestone -> "[milestone] ${subject.milestoneId.value}"
                 is ThreadSubject.Verdict -> "[verdict] ${subject.subjectId} (${subject.kind.name.lowercase()})"
+                is ThreadSubject.Hazard ->
+                    "[hazard] ${subject.subjectId} (${subject.category.name.lowercase()})"
             },
         )
         append(" — ")
@@ -72,6 +74,10 @@ object RoomTranscript {
             append(", finish ${card.projectedFinish?.toString() ?: "unscheduled"}")
         }
         is RoomCard.Verdict -> "verdict ${card.probeId.value} on ${card.subjectId}: ${card.verdict.label()}"
+        is RoomCard.Hazard -> buildString {
+            append("hazard ${card.category.name} on ${card.subjectId}: ${card.mitigationHint.name}")
+            card.mitigationTaskId?.let { append(" -> ${it.value}") }
+        }
         is RoomCard.Status -> buildString {
             append("status: ${card.completed} done, ${card.remaining} remaining, ${card.blocked} blocked")
             append(", finish ${card.projectedFinish?.toString() ?: "unscheduled"}")

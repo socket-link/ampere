@@ -14,6 +14,8 @@ import link.socket.ampere.canon.CanonId
 import link.socket.ampere.probe.ProbeId
 import link.socket.ampere.probe.UndeterminedCause
 import link.socket.ampere.probe.Verdict as ProbeVerdict
+import link.socket.ampere.probe.safety.HazardCategory
+import link.socket.ampere.probe.safety.MitigationHint
 import link.socket.ampere.roster.RoleId
 
 /** AMPR-379 task 2: the Room's value types — identity rules and pinned wire names. */
@@ -72,11 +74,27 @@ class RoomTypesTest {
     }
 
     @Test
+    fun `a hazard thread is keyed by the subject and the category`() {
+        val roomId = RoomId.forProject(CanonId("vent-42"))
+
+        assertEquals(
+            "room:vent-42/hazard:electrical:mount-fan",
+            roomThreadId(roomId, ThreadSubject.Hazard("mount-fan", HazardCategory.ELECTRICAL)),
+        )
+        assertTrue(
+            roomThreadId(roomId, ThreadSubject.Hazard("mount-fan", HazardCategory.FUMES_OR_CHEMICALS)) !=
+                roomThreadId(roomId, ThreadSubject.Hazard("mount-fan", HazardCategory.ELECTRICAL)),
+            "two hazards on one task are two conversations",
+        )
+    }
+
+    @Test
     fun `subjects round-trip with pinned wire names`() {
         val subjects: List<ThreadSubject> = listOf(
             ThreadSubject.General,
             ThreadSubject.Milestone(CanonId("ms-1")),
             ThreadSubject.Verdict("grille", VerdictKind.UNDETERMINED),
+            ThreadSubject.Hazard("mount-fan", HazardCategory.ELECTRICAL),
         )
 
         subjects.forEach { subject ->
@@ -88,6 +106,9 @@ class RoomTypesTest {
         )
         assertTrue(
             json.encodeToString(ThreadSubject.serializer(), subjects[2]).contains("ThreadSubject.Verdict"),
+        )
+        assertTrue(
+            json.encodeToString(ThreadSubject.serializer(), subjects[3]).contains("ThreadSubject.Hazard"),
         )
     }
 
@@ -119,6 +140,13 @@ class RoomTypesTest {
                 verdict = ProbeVerdict.Undetermined("grille publishes no CFM", UndeterminedCause.EVIDENCE_ABSENT),
             ),
             RoomCard.Status(headline = "Standup", completed = 2, remaining = 5, blocked = 0, projectedFinish = null),
+            RoomCard.Hazard(
+                category = HazardCategory.FUMES_OR_CHEMICALS,
+                subjectId = "mount-fan",
+                mitigationHint = MitigationHint.CONFIRM_VENTILATION,
+                evidence = "manifest line line-sealant has kind RESIN",
+                mitigationTaskId = CanonId("mount-fan/mitigation:confirm_ventilation"),
+            ),
         )
 
         cards.forEach { card ->

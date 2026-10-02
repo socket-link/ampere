@@ -11,6 +11,7 @@ import kotlinx.datetime.Instant
 import link.socket.ampere.canon.CanonProvenance
 import link.socket.ampere.canon.SourceHandle
 import link.socket.ampere.link.LinkId
+import link.socket.ampere.probe.safety.SafetyProbe
 
 /**
  * AMPR-323 task 2 validation: the three outcomes against a pinned clock, and
@@ -88,10 +89,13 @@ class FreshnessProbeTest {
     }
 
     @Test
-    fun `ampere wiring lists the freshness probe beside the sequence probe`() {
+    fun `ampere wiring lists every probe ampere ships`() {
         val registry = ProbeRegistry().registerAmpereProbes(freshnessMaxAge = maxAge, now = { now })
 
-        assertEquals(listOf(ProbeId(SequenceProbe.ID), ProbeId(FreshnessProbe.ID)), registry.all().map { it.id })
+        assertEquals(
+            listOf(ProbeId(SequenceProbe.ID), ProbeId(FreshnessProbe.ID), ProbeId(SafetyProbe.ID)),
+            registry.all().map { it.id },
+        )
         assertIs<FreshnessProbe>(registry.get(ProbeId("ampere.freshness")))
     }
 }

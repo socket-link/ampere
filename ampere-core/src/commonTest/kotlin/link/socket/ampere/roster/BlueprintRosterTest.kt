@@ -8,6 +8,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import link.socket.ampere.probe.ProbeId
 import link.socket.ampere.probe.SequenceProbe
+import link.socket.ampere.probe.safety.SafetyProbe
 
 /** AMPR-379 task 1 validation: six roles, acyclic reviews, and the resolver rule. */
 class BlueprintRosterTest {
@@ -60,9 +61,10 @@ class BlueprintRosterTest {
     }
 
     @Test
-    fun `a sequence verdict resolves to the planner and any other to the scout`() {
+    fun `a sequence or safety verdict resolves to the planner and any other to the scout`() {
         assertEquals(BlueprintRoster.planner.id, BlueprintRoster.resolverFor(SequenceProbe().id))
         assertEquals(BlueprintRoster.planner.id, BlueprintRoster.resolverFor(ProbeId(SequenceProbe.ID)))
+        assertEquals(BlueprintRoster.planner.id, BlueprintRoster.resolverFor(ProbeId(SafetyProbe.ID)))
         assertEquals(BlueprintRoster.scout.id, BlueprintRoster.resolverFor(ProbeId("ampere.freshness")))
         assertEquals(BlueprintRoster.scout.id, BlueprintRoster.resolverFor(ProbeId("blueprint.part-fit")))
     }

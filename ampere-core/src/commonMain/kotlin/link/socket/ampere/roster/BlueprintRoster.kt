@@ -5,6 +5,7 @@ import link.socket.ampere.agents.execution.tools.CREATE_ISSUES_TOOL_ID
 import link.socket.ampere.agents.execution.tools.planning.PLAN_STEPS_TOOL_ID
 import link.socket.ampere.probe.ProbeId
 import link.socket.ampere.probe.SequenceProbe
+import link.socket.ampere.probe.safety.SafetyProbe
 import link.socket.ampere.tools.KNOWLEDGE_QUERY_TOOL_ID
 
 /**
@@ -81,9 +82,11 @@ object BlueprintRoster : Roster {
     override val verifier: RoleId get() = inspector.id
 
     /**
-     * A sequence verdict is the Planner's to resolve (the graph is wrong); every
-     * other Probe judges a fact about a part or a source, which is the Scout's.
+     * A sequence or safety verdict is the Planner's to resolve — both are settled
+     * by changing the graph, by fixing an edge or by taking the mitigation Task
+     * (AMPR-380) — while every other Probe judges a fact about a part or a source,
+     * which is the Scout's.
      */
     override fun resolverFor(probeId: ProbeId): RoleId =
-        if (probeId.value == SequenceProbe.ID) planner.id else scout.id
+        if (probeId.value == SequenceProbe.ID || probeId.value == SafetyProbe.ID) planner.id else scout.id
 }
