@@ -281,10 +281,26 @@ class AgentLLMService(
             } ?: RoutingContext(requirements = CapabilityRequirement(minRung = rung)).withProbedLocalCapacity()
         } ?: routingContext?.withProbedLocalCapacity()
 
+        // Context-window fit (AMPR-374). With an engine bound, a small-window model is a
+        // candidate, and the relay can only keep a prompt that will not fit away from it
+        // if the requirement says how much room the prompt needs. This service is the one
+        // place that knows the final system message, the prompt and the output budget, so
+        // it widens an *existing* requirement here. It never creates one: a step with no
+        // requirement is not eligible for the device, and sizing it would make it so.
+        val fittedRoutingContext = if (probedLocalCapacity != null) {
+            effectiveRoutingContext?.withContextWindowFit(
+                tokensNeeded = PromptTokenEstimator.estimateInputTokens(
+                    listOf(effectiveSystemMessage, prompt),
+                ) + maxTokens,
+            )
+        } else {
+            effectiveRoutingContext
+        }
+
         // Resolve configuration through CognitiveRelay if available
-        val routingResolution = if (effectiveRoutingContext != null) {
+        val routingResolution = if (fittedRoutingContext != null) {
             agentConfiguration.cognitiveRelay?.resolveWithMetadata(
-                context = effectiveRoutingContext,
+                context = fittedRoutingContext,
                 fallbackConfiguration = agentConfiguration.aiConfiguration,
             ) ?: RoutingResolution.Success(
                 configuration = agentConfiguration.aiConfiguration,
@@ -483,6 +499,21 @@ class AgentLLMService(
         routingContext: RoutingContext? = null,
     ): JsonArray {
         return callForJson(prompt, systemMessage, temperature, maxTokens, routingContext).asArray()
+    }
+
+    /**
+     * This context with its requirement widened to ask for at least [tokensNeeded] of
+     * context window. A context with no requirement is returned unchanged, and a caller
+     * that already asked for more room keeps its figure — the fit only ever raises.
+     */
+    private fun RoutingContext.withContextWindowFit(tokensNeeded: Int): RoutingContext {
+        val existing = requirements ?: return this
+        val asked = existing.minContextTokens
+        return if (asked != null && asked >= tokensNeeded) {
+            this
+        } else {
+            copy(requirements = existing.copy(minContextTokens = tokensNeeded))
+        }
     }
 
     companion object {

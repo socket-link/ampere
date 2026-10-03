@@ -278,6 +278,72 @@ final class ArcExecutionBridgeTests: XCTestCase {
         XCTAssertThrowsError(try session.tryStart(userGoal: "   "))
     }
 
+    /// A session bound to the real engine type (AMPR-374): the on-device `create` overload is
+    /// reachable from Swift with a `FoundationModelsLocalInferenceEngine`, the session exposes
+    /// the on-device state, a probe lands in it, and a run started on it settles.
+    ///
+    /// The simulator has Apple Intelligence off, so the engine reports a reason code and the
+    /// run's eligible step fails cleanly without the prompt leaving the device — the same
+    /// path `ArcSessionTest` pins on the JVM with a fake engine. What is proved here is that
+    /// every piece of it survives the Objective-C export.
+    func testSessionBoundToTheOnDeviceEngineExposesItsState() async throws {
+        guard #available(iOS 26.0, *) else {
+            throw XCTSkip("FoundationModels ships with iOS 26")
+        }
+
+        let driver = IOSDatabaseDriverKt.createIosDriver(dbName: "arc-bridge-on-device-\(UUID().uuidString).db")
+        defer { driver.close() }
+
+        let session = ArcSession.companion.create(
+            arcConfig: onDeviceArcConfig(),
+            projectDirPath: projectDir.path,
+            maxFlowTicks: 1,
+            database: DatabaseCompanion.shared.invoke(driver: driver),
+            engine: FoundationModelsLocalInferenceEngine().toLocalInferenceEngine(),
+            cloud: nil
+        )
+        self.session = session
+
+        let state = try XCTUnwrap(session.onDeviceState, "an engine-bound session exposes its on-device state")
+        let before = try XCTUnwrap(state.value as? OnDeviceInferenceState)
+        XCTAssertTrue(before.availability is OnDeviceAvailabilityUnknown, "Nothing has probed the engine yet")
+
+        // The probe answers from the device itself, attributed to the on-device provider.
+        let capacity = try XCTUnwrap(try await session.refreshOnDeviceAvailability())
+        XCTAssertEqual(capacity.providerId, AIProvider_OnDevice.shared.id)
+        let probed = try XCTUnwrap(state.value as? OnDeviceInferenceState)
+        XCTAssertFalse(probed.availability is OnDeviceAvailabilityUnknown, "The probe is folded into the state")
+
+        var observed: [OnDeviceInferenceState] = []
+        let token = try XCTUnwrap(session.observeOnDeviceState { observed.append($0) })
+
+        let handle = session.start(userGoal: "Add a health check endpoint")
+        let outcome = try await handle.outcome()
+        XCTAssertEqual(outcome.runId, handle.runId)
+        XCTAssertFalse(handle.isActive)
+
+        token.cancel()
+        XCTAssertFalse(observed.isEmpty, "The callback observation delivers the current state first")
+
+        // Whatever the device decided, the run's trace was persisted under its id.
+        let trace = try XCTUnwrap(try await handle.trace())
+        XCTAssertEqual(trace.runId, handle.runId)
+    }
+
+    /// An Arc whose one step is eligible for the device: a `ZERO` floor is the one the
+    /// on-device model clears. The Objective-C export drops Kotlin defaults, so every
+    /// parameter is spelled out.
+    private func onDeviceArcConfig() -> ArcConfig {
+        ArcConfig(
+            name: "bridge-on-device-arc",
+            description: nil,
+            agents: [ArcAgentConfig(role: "code", sparks: [], minimumRung: .zero)],
+            orchestration: OrchestrationConfig(type: .sequential, order: ["code"]),
+            minimumRung: nil,
+            concurrency: .reject
+        )
+    }
+
     /// Cancelling the consuming `Task` releases the bus subscription rather than leaking it.
     func testCancellingTheConsumerReleasesTheObservation() async throws {
         let session = makeSession(maxFlowTicks: Int32.max)

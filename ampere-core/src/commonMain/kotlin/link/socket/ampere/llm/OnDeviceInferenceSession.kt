@@ -1,7 +1,5 @@
 package link.socket.ampere.llm
 
-import com.aallam.openai.api.chat.ChatCompletion
-import com.aallam.openai.api.chat.ChatCompletionRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -15,20 +13,14 @@ import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.reasoning.AgentLLMService
 import link.socket.ampere.agents.domain.reasoning.PromptTokenEstimator
-import link.socket.ampere.agents.domain.routing.CapabilityRoutingDefaults
-import link.socket.ampere.agents.domain.routing.CognitiveRelay
-import link.socket.ampere.agents.domain.routing.CognitiveRelayImpl
-import link.socket.ampere.agents.domain.routing.RelayConfig
 import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.routing.RoutingFloorUnmetException
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorRegistry
-import link.socket.ampere.agents.domain.routing.capability.executesLocally
 import link.socket.ampere.agents.domain.routing.local.InferenceLocality
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
 import link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine
-import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceMonitor
 import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceState
 import link.socket.ampere.agents.domain.routing.routingEventSink
 import link.socket.ampere.agents.events.EventRepository
@@ -38,8 +30,6 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 import link.socket.ampere.domain.agent.bundled.OnDeviceAssistantAgent
-import link.socket.ampere.domain.ai.configuration.AIConfiguration
-import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs
 import link.socket.ampere.domain.ai.provider.ProviderId
 
@@ -169,54 +159,45 @@ class OnDeviceInferenceSession(
     private val eventApi: AgentEventApi,
     private val scope: CoroutineScope,
     private val cloud: UpstreamLlmClient? = null,
-    private val registry: ModelDescriptorRegistry = InMemoryModelDescriptorRegistry(),
+    registry: ModelDescriptorRegistry = InMemoryModelDescriptorRegistry(),
     private val maxOutputTokens: Int = DEFAULT_MAX_OUTPUT_TOKENS,
     clock: Clock = eventApi.clock,
 ) {
-    private val client = DispatchingUpstreamLlmClient(
+    /**
+     * The engine, relay, registry, client and monitor, wired once (AMPR-374).
+     * The same binding an [ArcSession][link.socket.ampere.domain.arc.bridge.ArcSession]
+     * hands its runtime, so a single prompt and an Arc step reach the device
+     * by one road.
+     */
+    private val binding = OnDeviceInferenceBinding(
+        engine = engine,
+        cloud = cloud,
+        routingEvents = eventApi.routingEventSink(),
         registry = registry,
-        localEngine = engine,
-        bundled = cloud ?: NoCloudTransport,
+        clock = clock,
     )
-
-    private val relay: CognitiveRelay = CognitiveRelayImpl(
-        initialConfig = RelayConfig(
-            rules = if (cloud == null) {
-                CapabilityRoutingDefaults.onDeviceCapabilityRules()
-            } else {
-                CapabilityRoutingDefaults.defaultCapabilityRules()
-            },
-        ),
-        publish = eventApi.routingEventSink(),
-        registry = registry,
-    )
-
-    private val onDeviceConfiguration: AIConfiguration =
-        OnDeviceAssistantAgent.suggestedAIConfigurationBuilder(AIConfigurationFactory)
 
     private val service = AgentLLMService(
         agentConfiguration = AgentConfiguration(
             agentDefinition = OnDeviceAssistantAgent,
-            aiConfiguration = onDeviceConfiguration,
-            cognitiveRelay = relay,
-            upstreamLlmClient = client,
+            aiConfiguration = binding.onDeviceConfiguration,
+            cognitiveRelay = binding.relay,
+            upstreamLlmClient = binding.client,
         ),
         eventApi = eventApi,
     )
-
-    private val monitor = OnDeviceInferenceMonitor(classifier = client, clock = clock)
 
     /** Set only by [Companion.create]; the scope this session must clean up after itself. */
     private var ownedScope: CoroutineScope? = null
 
     /** When the on-device model is being used, and everything a surface needs to say so. */
-    val state: StateFlow<OnDeviceInferenceState> = monitor.state
+    val state: StateFlow<OnDeviceInferenceState> = binding.state
 
     init {
         // UNDISPATCHED so the bus subscriptions are registered before the constructor
         // returns: a call made on the very next line is already being watched.
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            monitor.follow(eventApi.eventSerialBus)
+            binding.follow(eventApi.eventSerialBus)
         }
     }
 
@@ -225,40 +206,7 @@ class OnDeviceInferenceSession(
      * [state]. Call on launch, and again whenever the surface comes forward —
      * a model that was still downloading a minute ago may be ready now.
      */
-    suspend fun refreshAvailability(): LocalCapacity =
-        monitor.probe(engine).attributed().also { adoptReportedContextWindow(it) }
-
-    /**
-     * Route against the context window the engine actually has, not the one
-     * the catalog was seeded with.
-     *
-     * The bundled on-device descriptor carries a provisional 4,096 tokens. An
-     * engine that knows better says so in [LocalCapacity.maxContextTokens] —
-     * Apple's reports the running model's real window from iOS 27 — and the
-     * relay decides whether a prompt fits from the descriptor, so the figure
-     * has to land there to count. Only a local model's own descriptor is
-     * touched, and only when the engine names both the model and the window.
-     */
-    private suspend fun adoptReportedContextWindow(capacity: LocalCapacity) {
-        if (!capacity.available) return
-        val modelId = capacity.modelId ?: return
-        val window = capacity.maxContextTokens ?: return
-        val descriptor = registry.descriptorFor(modelId) ?: return
-
-        if (descriptor.executesLocally && descriptor.maxContextTokens != window) {
-            registry.register(descriptor.copy(maxContextTokens = window))
-        }
-    }
-
-    /**
-     * An engine bound to this session *is* the on-device provider's engine, so
-     * a snapshot that does not name its provider is attributed to it. The
-     * relay's availability gate only opens for a snapshot whose provider matches
-     * the model's, and an engine written against the text-only contract (no
-     * provider id) would otherwise never be routed to.
-     */
-    private fun LocalCapacity.attributed(): LocalCapacity =
-        if (providerId == null) copy(providerId = onDeviceConfiguration.provider.id) else this
+    suspend fun refreshAvailability(): LocalCapacity = binding.probe()
 
     /**
      * Answer [prompt], on the device when the device can.
@@ -316,7 +264,7 @@ class OnDeviceInferenceSession(
             LocalFirstOutcome.Answered(
                 LocalFirstAnswer(
                     text = result.text,
-                    locality = client.localityOf(result.providerId, result.modelId),
+                    locality = binding.client.localityOf(result.providerId, result.modelId),
                     providerId = result.providerId,
                     modelId = result.modelId,
                     routingReason = result.routingReason,
@@ -378,17 +326,6 @@ class OnDeviceInferenceSession(
     fun close() {
         ownedScope?.cancel()
         ownedScope = null
-    }
-
-    /**
-     * The cloud side of an on-device-only session: there is none. A call that
-     * reaches it fails instead of leaving the device.
-     */
-    private object NoCloudTransport : UpstreamLlmClient {
-        override suspend fun call(
-            request: ChatCompletionRequest,
-            configuration: AIConfiguration,
-        ): ChatCompletion = throw MissingUpstreamLlmClientException(OnDeviceAssistantAgent.name)
     }
 
     companion object {

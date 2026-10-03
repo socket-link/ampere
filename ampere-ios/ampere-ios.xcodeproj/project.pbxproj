@@ -15,6 +15,7 @@
 		AC243AAAAAAAAAAAAAAA0005 /* ArcRunHandle+AsyncStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC243AAAAAAAAAAAAAAA0004 /* ArcRunHandle+AsyncStream.swift */; };
 		AC243AAAAAAAAAAAAAAA0010 /* ArcRunHandle+AsyncStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC243AAAAAAAAAAAAAAA0004 /* ArcRunHandle+AsyncStream.swift */; };
 		AC327AAAAAAAAAAAAAAA0002 /* FoundationModelsLocalInferenceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC327AAAAAAAAAAAAAAA0001 /* FoundationModelsLocalInferenceEngine.swift */; };
+		AC374AAAAAAAAAAAAAAA0001 /* FoundationModelsLocalInferenceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC327AAAAAAAAAAAAAAA0001 /* FoundationModelsLocalInferenceEngine.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -265,6 +266,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AC243AAAAAAAAAAAAAAA0010 /* ArcRunHandle+AsyncStream.swift in Sources */,
+				AC374AAAAAAAAAAAAAAA0001 /* FoundationModelsLocalInferenceEngine.swift in Sources */,
 				AC243AAAAAAAAAAAAAAA0003 /* ArcExecutionBridgeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

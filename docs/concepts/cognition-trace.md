@@ -13,7 +13,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/RoutingEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/ArcRunEvent.kt
 related: [PropelLoop, EventSerialBus, MemoryProvenance, CognitiveRelay, SparkSystem]
-last_verified: 2026-09-21
+last_verified: 2026-10-02
 ---
 
 # Cognition Trace
@@ -80,7 +80,7 @@ the projection that makes the run *legible*:
 
 - **`run_id` is non-optional on persisted events and memory rows.** `ArcTraceProjection` joins by `run_id`. A row without it is invisible.
 - **The projection never writes.** It is a read model. A change that has the projection update an event row or a memory row is a layering violation; corrections happen by writing new rows.
-- **Provider call events come in pairs.** `ProviderCallStartedEvent` ↔ `ProviderCallCompletedEvent` keyed by `(workflowId, agentId, providerId, modelId, cognitivePhase)`. A start without a completion appears as a half-trace; a completion without a start is reconstructed from `latencyMs` (lossy — keep both). Since AMPR-240, `AmpereRuntime.execute(userGoal, runId)` threads the ambient Arc `runId` down through `ChargePhase` → `SparkAgentFactory` → `SparkBasedAgent` → `AgentReasoning`, so `workflowId` on this join key *is* the Arc `runId` for the lifetime of one run — this path is now production-proven (see `RunIdToTraceProjectionTest`), not just a theoretical join key with no real producer.
+- **Provider call events come in pairs.** `ProviderCallStartedEvent` ↔ `ProviderCallCompletedEvent` keyed by `(workflowId, agentId, providerId, modelId, cognitivePhase)`. A start without a completion appears as a half-trace; a completion without a start is reconstructed from `latencyMs` (lossy — keep both). Since AMPR-240, `AmpereRuntime.execute(userGoal, runId)` threads the ambient Arc `runId` down through `ChargePhase` → `SparkAgentFactory` → `SparkBasedAgent` → `AgentReasoning`, so `workflowId` on this join key *is* the Arc `runId` for the lifetime of one run — this path is now production-proven (see `RunIdToTraceProjectionTest`), not just a theoretical join key with no real producer. A run started from Swift takes the same path: `ArcSession.create` with a `database` builds a per-agent `AgentEventApiFactory` over the session's store and bus, so its agents' `ProviderCall*` pairs — and the relay's `RoutingEvent`s, which go through the session's own door — are persisted under the run id and `ArcRunHandle.trace()` shows which steps ran on the device (AMPR-374).
 - **Tool events come in pairs by `invocationId`.** `ToolExecutionStarted` ↔ `ToolExecutionCompleted`. The projection retains starts that lack a completion as `pendingCalls` so in-flight work is visible.
 - **Phase names are derived from the event, not assigned by the projector.** `phaseNameFor(event)` reads explicit phase fields (`CognitivePhaseEvent`, telemetry `cognitivePhase`, routing `phase`) or, for spark events, the `Phase:` prefix. The projector does not invent phase membership — events declare it. New event types that should be phase-aware must carry their own phase signal.
 - **`WattCost` is monotone-additive.** `WattCost.plus` only adds; entries are never subtracted. A change that subtracts cost (e.g., to "correct" a previous estimate) breaks the running aggregate.
