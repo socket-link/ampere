@@ -1,6 +1,8 @@
 package link.socket.ampere.llm
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import com.aallam.openai.api.chat.ChatCompletion
+import com.aallam.openai.api.chat.ChatCompletionRequest
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -25,6 +27,7 @@ import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.reasoning.AgentLLMService
 import link.socket.ampere.agents.domain.routing.RoutingContext
+import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -33,9 +36,13 @@ import link.socket.ampere.api.internal.DefaultEventService
 import link.socket.ampere.api.service.EventStreamFilter
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
+import link.socket.ampere.domain.agent.bundled.OnDeviceAssistantAgent
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
+import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
+import link.socket.ampere.domain.ai.model.AIModel_OnDevice
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
+import link.socket.ampere.domain.ai.provider.AIProvider_OnDevice
 import link.socket.ampere.domain.ai.provider.AIProvider_OpenAI
 import link.socket.ampere.domain.llm.LlmProvider
 
@@ -177,6 +184,74 @@ class AgentLlmTelemetryTest {
         assertEquals("wf-fail", completed.workflowId)
         assertEquals(CognitivePhase.EXECUTE, completed.cognitivePhase)
         assertEquals("IllegalStateException", completed.errorType)
+    }
+
+    @Test
+    fun `refused on-device call is recorded as a failed completion and never reaches the transport`() = runTest {
+        // AMPR-371: an agent whose static configuration is the on-device one, on a host
+        // with no engine bound (every JVM host). The dispatching client must refuse
+        // before the transport, and the service must book the refusal like any other
+        // transport error.
+        val telemetryEvents = mutableListOf<Event>()
+        val transport = CountingClient()
+        val llmService = AgentLLMService(
+            agentConfiguration = AgentConfiguration(
+                agentDefinition = OnDeviceAssistantAgent,
+                aiConfiguration = AIConfiguration_Default(
+                    provider = AIProvider_OnDevice,
+                    model = AIModel_OnDevice.AppleFoundationModels,
+                ),
+                cognitiveConfig = CognitiveConfig(),
+                upstreamLlmClient = DispatchingUpstreamLlmClient(
+                    registry = InMemoryModelDescriptorRegistry(),
+                    localEngine = null,
+                    bundled = transport,
+                ),
+            ),
+            eventApi = eventApi,
+        )
+
+        val job = launch {
+            eventService.observe(EventStreamFilter.TELEMETRY)
+                .take(2)
+                .toList(telemetryEvents)
+        }
+
+        delay(100)
+
+        assertFailsWith<LocalEngineNotBoundException> {
+            llmService.call(
+                prompt = "This must stay on the device.",
+                routingContext = RoutingContext(
+                    phase = CognitivePhase.EXECUTE,
+                    agentId = eventApi.agentId,
+                    workflowId = "wf-on-device",
+                ),
+            )
+        }
+
+        job.join()
+
+        assertEquals(0, transport.callCount, "the bundled transport must not be called")
+        val completed = telemetryEvents.filterIsInstance<ProviderCallCompletedEvent>().single()
+        assertFalse(completed.success)
+        assertEquals("wf-on-device", completed.workflowId)
+        assertEquals(AIProvider_OnDevice.id, completed.providerId)
+        assertEquals(AIModel_OnDevice.AppleFoundationModels.name, completed.modelId)
+        assertEquals("LocalEngineNotBoundException", completed.errorType)
+    }
+
+    private class CountingClient : UpstreamLlmClient {
+        var callCount: Int = 0
+            private set
+
+        override suspend fun call(
+            request: ChatCompletionRequest,
+            configuration: AIConfiguration,
+        ): ChatCompletion {
+            callCount++
+            error("the transport must never be reached in this test")
+        }
     }
 
     private fun telemetryConfig(provider: LlmProvider): AgentConfiguration =
