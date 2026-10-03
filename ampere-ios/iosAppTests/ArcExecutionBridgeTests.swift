@@ -283,9 +283,13 @@ final class ArcExecutionBridgeTests: XCTestCase {
     /// the on-device state, a probe lands in it, and a run started on it settles.
     ///
     /// The simulator has Apple Intelligence off, so the engine reports a reason code and the
-    /// run's eligible step fails cleanly without the prompt leaving the device — the same
-    /// path `ArcSessionTest` pins on the JVM with a fake engine. What is proved here is that
-    /// every piece of it survives the Objective-C export.
+    /// run's steps fail cleanly without the prompt leaving the device — the same path
+    /// `ArcSessionTest` pins on the JVM with a fake engine. What is proved here is that every
+    /// piece of it survives the Objective-C export.
+    ///
+    /// The default Arc, not one with a rung `ZERO` step: `CapabilityRung` is a Kotlin inline
+    /// class, which the export erases to `Any?`, so a floor cannot be declared from Swift.
+    /// Which steps are eligible for the device is the JVM tests' subject, and AMPR-372's.
     func testSessionBoundToTheOnDeviceEngineExposesItsState() async throws {
         guard #available(iOS 26.0, *) else {
             throw XCTSkip("FoundationModels ships with iOS 26")
@@ -295,7 +299,7 @@ final class ArcExecutionBridgeTests: XCTestCase {
         defer { driver.close() }
 
         let session = ArcSession.companion.create(
-            arcConfig: onDeviceArcConfig(),
+            arcConfig: ArcRegistry.shared.getDefault(),
             projectDirPath: projectDir.path,
             maxFlowTicks: 1,
             database: DatabaseCompanion.shared.invoke(driver: driver),
@@ -309,7 +313,8 @@ final class ArcExecutionBridgeTests: XCTestCase {
         XCTAssertTrue(before.availability is OnDeviceAvailabilityUnknown, "Nothing has probed the engine yet")
 
         // The probe answers from the device itself, attributed to the on-device provider.
-        let capacity = try XCTUnwrap(try await session.refreshOnDeviceAvailability())
+        let probedCapacity = try await session.refreshOnDeviceAvailability()
+        let capacity = try XCTUnwrap(probedCapacity)
         XCTAssertEqual(capacity.providerId, AIProvider_OnDevice.shared.id)
         let probed = try XCTUnwrap(state.value as? OnDeviceInferenceState)
         XCTAssertFalse(probed.availability is OnDeviceAvailabilityUnknown, "The probe is folded into the state")
@@ -326,22 +331,9 @@ final class ArcExecutionBridgeTests: XCTestCase {
         XCTAssertFalse(observed.isEmpty, "The callback observation delivers the current state first")
 
         // Whatever the device decided, the run's trace was persisted under its id.
-        let trace = try XCTUnwrap(try await handle.trace())
+        let folded = try await handle.trace()
+        let trace = try XCTUnwrap(folded)
         XCTAssertEqual(trace.runId, handle.runId)
-    }
-
-    /// An Arc whose one step is eligible for the device: a `ZERO` floor is the one the
-    /// on-device model clears. The Objective-C export drops Kotlin defaults, so every
-    /// parameter is spelled out.
-    private func onDeviceArcConfig() -> ArcConfig {
-        ArcConfig(
-            name: "bridge-on-device-arc",
-            description: nil,
-            agents: [ArcAgentConfig(role: "code", sparks: [], minimumRung: .zero)],
-            orchestration: OrchestrationConfig(type: .sequential, order: ["code"]),
-            minimumRung: nil,
-            concurrency: .reject
-        )
     }
 
     /// Cancelling the consuming `Task` releases the bus subscription rather than leaking it.
