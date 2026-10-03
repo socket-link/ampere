@@ -141,6 +141,45 @@ class EventSerialBusSubscriptionTest {
         assertEquals(emptyList(), received)
     }
 
+    /**
+     * AMPR-374: `release` walks every event type and mutates the map as it goes. It must walk a
+     * copy of the *pairs*, because on Kotlin/Native a `HashMap` entry read after its map has
+     * changed throws `ConcurrentModificationException` — and the JVM's entries do not, so only
+     * this common test, run on the simulator, can see the difference. The shape is the on-device
+     * monitor's: several types subscribed, the first one released while the others remain.
+     */
+    @Test
+    fun `releasing the first of several event types does not trip on the mutated map`() = runTest {
+        val bus = EventSerialBus(scope = backgroundScope)
+        val keeper = mutableListOf<String>()
+
+        // Registered first, so its entry is the first the release loop reaches and removes.
+        val leaver = bus.subscribeSuspending(
+            agentId = "leaver",
+            eventType = Event.QuestionRaised.EVENT_TYPE,
+            handler = EventHandler { _, _ -> },
+        )
+        val secondLeaver = bus.subscribeSuspending(
+            agentId = "leaver",
+            eventType = Event.TaskCreated.EVENT_TYPE,
+            handler = EventHandler { _, _ -> },
+        )
+        bus.subscribeSuspending(
+            agentId = "keeper",
+            eventType = Event.TaskCreated.EVENT_TYPE,
+            handler = EventHandler { event, _ -> keeper += event.eventId },
+        )
+
+        // Each release mutates the map while later entries are still to be visited.
+        bus.unsubscribeSuspending(leaver)
+        bus.unsubscribeSuspending(secondLeaver)
+
+        bus.publish(taskEvent("evt-1"))
+        runCurrent()
+
+        assertEquals(listOf("evt-1"), keeper, "The subscriber that stayed must still be listening")
+    }
+
     @Test
     fun `each handler is given its own subscription rather than the first registered one`() = runTest {
         val bus = EventSerialBus(scope = backgroundScope)

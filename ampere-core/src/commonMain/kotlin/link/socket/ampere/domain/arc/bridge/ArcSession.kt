@@ -9,11 +9,18 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.emission.Emission
+import link.socket.ampere.agents.domain.routing.local.LocalCapacity
+import link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine
+import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceState
+import link.socket.ampere.agents.domain.routing.routingEventSink
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.api.AgentEventApiFactory
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.relay.DEFAULT_EMISSION_BUFFER_CAPACITY
 import link.socket.ampere.agents.events.relay.emissions
@@ -28,6 +35,8 @@ import link.socket.ampere.domain.arc.ArcRunRejectedException
 import link.socket.ampere.domain.arc.CompletionManifest
 import link.socket.ampere.domain.arc.CompletionManifestSink
 import link.socket.ampere.domain.arc.TerminationReason
+import link.socket.ampere.llm.OnDeviceInferenceBinding
+import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.trace.ArcRunId
 import link.socket.ampere.trace.ArcRunTrace
 import link.socket.ampere.trace.ArcTraceProjection
@@ -127,6 +136,10 @@ sealed class ArcStartResult {
  * @param onEmissionsDropped Called with the running number of Emissions lost to a slow
  *   observer. Loss is reported, never silent — a progress surface that has skipped updates
  *   should be able to say so.
+ * @param onDeviceInference The on-device binding [runtime] was built on, if any (AMPR-374).
+ *   The session follows [eventSerialBus] into it so [onDeviceState] reflects the runs started
+ *   here. Pass the same instance whose relay and client the runtime holds; a different one
+ *   would describe calls that never happened.
  */
 class ArcSession(
     private val scope: CoroutineScope,
@@ -143,6 +156,7 @@ class ArcSession(
     private val emissionReplay: Int = DEFAULT_EMISSION_REPLAY,
     private val emissionCapacity: Int = DEFAULT_EMISSION_BUFFER_CAPACITY,
     private val onEmissionsDropped: (droppedTotal: Long) -> Unit = {},
+    private val onDeviceInference: OnDeviceInferenceBinding? = null,
 ) {
     /**
      * Secondary constructor for the Objective-C export, which does not carry Kotlin default
@@ -171,6 +185,57 @@ class ArcSession(
      */
     val bus: EventSerialBus
         get() = eventSerialBus
+
+    /**
+     * When the on-device model is being used by this session's runs, and everything a surface
+     * needs to say so (AMPR-374): availability and its reason, the model, calls in flight, and
+     * the split between device and cloud so far.
+     *
+     * Null when no engine is bound — a session built without one has nothing to report, and
+     * says so rather than showing an indicator that can never light up.
+     *
+     * Model calls reach it through the session's door, so with no `database` only the probes
+     * land here: there is nowhere to persist the call events, and since AMPR-340 nothing is
+     * dispatched that was not persisted first.
+     */
+    val onDeviceState: StateFlow<OnDeviceInferenceState>?
+        get() = onDeviceInference?.state
+
+    init {
+        // UNDISPATCHED so the bus subscriptions are registered before the constructor returns:
+        // a run started on the very next line is already being watched. Runs until the scope
+        // ends, which for a session built by [Companion.create] is [close].
+        onDeviceInference?.let { binding ->
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                binding.follow(eventSerialBus)
+            }
+        }
+    }
+
+    /**
+     * Deliver every change of [onDeviceState] to [onState] until the returned [ArcCancellable]
+     * is cancelled — the form Swift can consume, as `kotlinx.coroutines` flows do not cross the
+     * boundary in a collectable shape. The current state is delivered first.
+     *
+     * Null when no engine is bound, for the same reason [onDeviceState] is.
+     */
+    fun observeOnDeviceState(onState: (OnDeviceInferenceState) -> Unit): ArcCancellable? {
+        val state = onDeviceState ?: return null
+        val job = scope.launch {
+            state.collect { onState(it) }
+        }
+        return ArcCancellable { job.cancel() }
+    }
+
+    /**
+     * Ask the bound engine whether it can serve right now, fold the answer into
+     * [onDeviceState], and return it. Nothing on the bus says the device *can* serve until a
+     * call has been routed, so a surface that wants to show "ready" or "unavailable, and why"
+     * before the first run probes here.
+     *
+     * Null when no engine is bound.
+     */
+    suspend fun refreshOnDeviceAvailability(): LocalCapacity? = onDeviceInference?.probe()
 
     /** Start an Arc for [userGoal] under a freshly generated run identity. */
     fun start(userGoal: String): ArcRunHandle = start(userGoal, generateUUID("arc-run"))
@@ -388,12 +453,85 @@ class ArcSession(
             database: Database,
         ): ArcSession = build(arcConfig, projectDirPath, maxFlowTicks, clock, database)
 
+        /**
+         * [create], with the runs bound to an on-device [engine] (AMPR-374).
+         *
+         * Every step of every run this session starts is routed by a relay that knows the
+         * engine, executed by a client that runs the on-device model on it, and folded into
+         * [onDeviceState]. Which steps are *eligible* is the routing floor's call — an agent or
+         * Arc step whose effective floor the on-device model clears — and this session does not
+         * change it.
+         *
+         * With a null [cloud] the session is on-device only: a step the device cannot serve
+         * fails cleanly, having sent its prompt nowhere. Supplying a transport is what opts the
+         * session's runs into the cloud.
+         *
+         * Without a database there is nowhere to persist the runs' model-call events, so only
+         * probes reach [onDeviceState]; see the overload that takes one.
+         *
+         * From Swift, the engine is a `SwiftLocalInferenceEngine` subclass adapted with
+         * `toLocalInferenceEngine()`:
+         * ```swift
+         * let session = ArcSession.companion.create(
+         *     arcConfig: ArcRegistry.shared.getDefault(),
+         *     projectDirPath: projectPath,
+         *     maxFlowTicks: 100,
+         *     engine: FoundationModelsLocalInferenceEngine().toLocalInferenceEngine(),
+         *     cloud: nil
+         * )
+         * ```
+         *
+         * @param engine The on-device engine to prefer.
+         * @param cloud Transport for steps the device cannot serve, or null to keep the runs on
+         *   the device.
+         */
+        fun create(
+            arcConfig: ArcConfig,
+            projectDirPath: String,
+            maxFlowTicks: Int,
+            engine: LocalInferenceEngine,
+            cloud: UpstreamLlmClient?,
+        ): ArcSession = build(
+            arcConfig = arcConfig,
+            projectDirPath = projectDirPath,
+            maxFlowTicks = maxFlowTicks,
+            clock = Clock.System,
+            database = null,
+            engine = engine,
+            cloud = cloud,
+        )
+
+        /**
+         * [create] with an on-device [engine] and a [database] (AMPR-374): the runs' model
+         * calls — the relay's routing decisions and every `ProviderCall*` pair — are persisted
+         * under the run id, so [ArcRunHandle.trace] shows which steps ran on the device and
+         * [onDeviceState] is live for the whole run.
+         */
+        fun create(
+            arcConfig: ArcConfig,
+            projectDirPath: String,
+            maxFlowTicks: Int,
+            database: Database,
+            engine: LocalInferenceEngine,
+            cloud: UpstreamLlmClient?,
+        ): ArcSession = build(
+            arcConfig = arcConfig,
+            projectDirPath = projectDirPath,
+            maxFlowTicks = maxFlowTicks,
+            clock = Clock.System,
+            database = database,
+            engine = engine,
+            cloud = cloud,
+        )
+
         private fun build(
             arcConfig: ArcConfig,
             projectDirPath: String,
             maxFlowTicks: Int,
             clock: Clock,
             database: Database?,
+            engine: LocalInferenceEngine? = null,
+            cloud: UpstreamLlmClient? = null,
         ): ArcSession {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val bus = EventSerialBus(scope = scope)
@@ -401,15 +539,36 @@ class ArcSession(
             // The event api subscribes to the bus as it is built. Safe on a caller's thread here —
             // Swift's main one included — because nothing else holds this bus yet, so the lock it
             // takes is never contended.
-            val eventApi = database?.let {
+            val eventRepository = database?.let { EventRepository(DEFAULT_JSON, scope, it) }
+            val eventApi = eventRepository?.let {
                 AgentEventApi(
                     agentId = CompletionManifestSink.DEFAULT_AGENT_ID,
-                    eventRepository = EventRepository(DEFAULT_JSON, scope, it),
+                    eventRepository = it,
                     eventSerialBus = bus,
                     clock = clock,
                 )
             }
             val manifestSink = eventApi?.let { CompletionManifestSink(eventApi = it) }
+
+            // One door per spawned agent, over the same store and bus as the session's own, so
+            // the run's model calls are persisted under its id and its trace can see them
+            // (AMPR-240). Without a database there is nothing to persist to, and no door.
+            val eventApiFactory: ((AgentId) -> AgentEventApi)? = eventRepository?.let { repository ->
+                val factory = AgentEventApiFactory(eventRepository = repository, eventSerialBus = bus)
+                val create: (AgentId) -> AgentEventApi = { agentId -> factory.create(agentId, clock) }
+                create
+            }
+
+            // The relay's routing events go through the session's door, under the run they
+            // belong to; silent without one.
+            val onDevice = engine?.let {
+                OnDeviceInferenceBinding(
+                    engine = it,
+                    cloud = cloud,
+                    routingEvents = eventApi?.routingEventSink(),
+                    clock = clock,
+                )
+            }
 
             val session = ArcSession(
                 scope = scope,
@@ -418,12 +577,16 @@ class ArcSession(
                     projectDir = projectDirPath.toPath(),
                     agentScope = scope,
                     maxFlowTicks = maxFlowTicks,
+                    cognitiveRelay = onDevice?.relay,
+                    upstreamLlmClient = onDevice?.client,
+                    eventApiFactory = eventApiFactory,
                     clock = clock,
                     completionManifestSink = manifestSink?.let { it::record },
                 ),
                 eventSerialBus = bus,
                 eventApi = eventApi,
                 traceProjection = database?.let { ArcTraceProjection(it) },
+                onDeviceInference = onDevice,
             )
             session.ownedScope = scope
 

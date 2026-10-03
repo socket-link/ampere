@@ -231,7 +231,11 @@ class EventSerialBus(
     private fun release(subscription: Subscription): List<EventType> {
         val releasedTypes = mutableListOf<EventType>()
 
-        for ((eventType, registrations) in handlerMap.entries.toList()) {
+        // A *copy of the pairs*, not of the entry objects: the loop below mutates `handlerMap`,
+        // and on Kotlin/Native a `HashMap` entry read after its map has changed throws
+        // `ConcurrentModificationException` — `entries.toList()` only copies the references.
+        // The JVM's entries hold their key and value, so that form only fails on the device.
+        for ((eventType, registrations) in handlerMap.toMap()) {
             val remaining = registrations.filterNot { it.subscription === subscription }
             if (remaining.size == registrations.size) continue
 
