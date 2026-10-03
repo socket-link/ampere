@@ -15,9 +15,9 @@ import link.socket.ampere.domain.limits.TokenLimits
 /**
  * On-device models backing Rung 0 (AMPR-225): 0-Watt, local generation, no
  * network round-trip. Parallel to [AIModel_Claude]/[AIModel_Gemini]/
- * [AIModel_OpenAI] but never dials out — [AIProvider_OnDevice.client] exists
- * only to satisfy [link.socket.ampere.domain.ai.provider.AIProvider]'s shape
- * and is never invoked; execution is dispatched to a
+ * [AIModel_OpenAI] but never dials out —
+ * [AIProvider_OnDevice.client][link.socket.ampere.domain.ai.provider.AIProvider_OnDevice.client]
+ * throws on read rather than reach a host; execution is dispatched to a
  * [link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine]
  * instead (see [link.socket.ampere.llm.DispatchingUpstreamLlmClient]).
  */

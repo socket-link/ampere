@@ -8,6 +8,7 @@ import com.aallam.openai.api.chat.ChatRole
 import com.aallam.openai.api.model.ModelId
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.domain.routing.capability.CostPolicy
 import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
@@ -20,10 +21,13 @@ import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
+import link.socket.ampere.domain.ai.model.AIModel_OnDevice
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.domain.ai.provider.AIProvider_Google
+import link.socket.ampere.domain.ai.provider.AIProvider_OnDevice
 import link.socket.ampere.domain.ai.provider.AIProvider_OpenAI
+import link.socket.ampere.domain.ai.provider.OnDeviceProviderHasNoClientException
 
 class DispatchingUpstreamLlmClientTest {
 
@@ -84,14 +88,73 @@ class DispatchingUpstreamLlmClientTest {
     }
 
     @Test
-    fun `routes to bundled when no engine is bound even for a free provider`() = runTest {
+    fun `refuses a local-designated model when no engine is bound`() = runTest {
+        // AMPR-371: this used to hand the call to the bundled transport, which for the
+        // real on-device provider meant api.openai.com with an empty bearer token.
         val bundled = RecordingClient("cloud-answer")
         val client = DispatchingUpstreamLlmClient(registry(), localEngine = null, bundled = bundled)
 
-        val response = client.call(request(), localConfig)
+        val refusal = assertFailsWith<LocalEngineNotBoundException> {
+            client.call(request(), localConfig)
+        }
+
+        assertEquals(AIProvider_Anthropic.id, refusal.providerId)
+        assertEquals(AIModel_Claude.Sonnet_5.name, refusal.modelId)
+        assertEquals(0, bundled.callCount, "a local-designated configuration must never reach the cloud transport")
+    }
+
+    @Test
+    fun `refuses a gated metered model when no engine is bound`() = runTest {
+        val bundled = RecordingClient("cloud-answer")
+        val client = DispatchingUpstreamLlmClient(registry(), localEngine = null, bundled = bundled)
+
+        assertFailsWith<LocalEngineNotBoundException> { client.call(request(), gatedConfig) }
+
+        assertEquals(0, bundled.callCount)
+    }
+
+    @Test
+    fun `still routes a cloud model to bundled when no engine is bound`() = runTest {
+        val bundled = RecordingClient("cloud-answer")
+        val client = DispatchingUpstreamLlmClient(registry(), localEngine = null, bundled = bundled)
+
+        val response = client.call(request(), cloudConfig)
 
         assertEquals("cloud-answer", response.choices.single().message.content)
         assertEquals(1, bundled.callCount)
+    }
+
+    @Test
+    fun `refuses the real on-device configuration when no engine is bound`() = runTest {
+        // The default catalog designates the Apple on-device model local; with no
+        // engine on this host the prompt must not go anywhere.
+        val bundled = RecordingClient("cloud-answer")
+        val client = DispatchingUpstreamLlmClient(
+            InMemoryModelDescriptorRegistry(),
+            localEngine = null,
+            bundled = bundled,
+        )
+        val onDevice = AIConfiguration_Default(AIProvider_OnDevice, AIModel_OnDevice.AppleFoundationModels)
+
+        val refusal = assertFailsWith<LocalEngineNotBoundException> { client.call(request(), onDevice) }
+
+        assertEquals(AIProvider_OnDevice.id, refusal.providerId)
+        assertEquals(0, bundled.callCount)
+    }
+
+    @Test
+    fun `the on-device configuration cannot egress through the bundled transport either`() = runTest {
+        // Second line of defence: even a dispatcher whose catalog knows nothing about
+        // the on-device model (so it hands the call to BundledUpstreamLlmClient) fails
+        // before a request is built, because the provider has no client to send with.
+        val client = DispatchingUpstreamLlmClient(
+            InMemoryModelDescriptorRegistry(seed = emptyList()),
+            localEngine = null,
+            bundled = BundledUpstreamLlmClient,
+        )
+        val onDevice = AIConfiguration_Default(AIProvider_OnDevice, AIModel_OnDevice.AppleFoundationModels)
+
+        assertFailsWith<OnDeviceProviderHasNoClientException> { client.call(request(), onDevice) }
     }
 
     @Test
@@ -121,7 +184,8 @@ class DispatchingUpstreamLlmClientTest {
             bound.localityOf(AIProvider_Anthropic.id, AIModel_Claude.Sonnet_5.name),
         )
         // The catalog still calls the model local. With nothing to run it on the call
-        // goes to the bundled client, so that is what the label has to say.
+        // is refused (AMPR-371); nothing about it is provably on the device, so the
+        // label stays CLOUD rather than claim an execution that cannot happen.
         assertEquals(
             InferenceLocality.CLOUD,
             unbound.localityOf(AIProvider_Anthropic.id, AIModel_Claude.Sonnet_5.name),

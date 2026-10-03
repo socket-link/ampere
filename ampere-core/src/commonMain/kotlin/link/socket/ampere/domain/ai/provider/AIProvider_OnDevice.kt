@@ -11,13 +11,20 @@ private const val NAME = "Apple Foundation Models (on-device)"
 
 /**
  * Stand-in [AIProvider] for Rung 0 (AMPR-225): identifies the on-device
- * execution path in routing/cost/provenance, but [client] is never actually
- * called. Execution for this provider's models is dispatched to a bound
+ * execution path in routing/cost/provenance. Execution for this provider's
+ * models is dispatched to a bound
  * [link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine] by
  * [link.socket.ampere.llm.DispatchingUpstreamLlmClient] before the OpenAI-shaped
  * seam is ever reached, exactly like the [AIProvider_Anthropic]/local stand-in
- * used in `LocalInferenceRelayIntegrationTest`. [client] and [apiToken] exist
- * only to satisfy the [AIProvider] shape.
+ * used in `LocalInferenceRelayIntegrationTest`. [apiToken] exists only to
+ * satisfy the [AIProvider] shape.
+ *
+ * [client] has no host to point at. Reading it throws
+ * [OnDeviceProviderHasNoClientException] (AMPR-371): an earlier version built a
+ * default client, which meant any path that reached it POSTed the prompt to
+ * `api.openai.com` with an empty bearer token and got a 401 back — after the
+ * prompt had left the device. Failing on use is the only way to guarantee no
+ * caller, present or future, can egress through this provider.
  */
 data object AIProvider_OnDevice : AIProvider<AITool, AIModel_OnDevice> {
 
@@ -26,7 +33,6 @@ data object AIProvider_OnDevice : AIProvider<AITool, AIModel_OnDevice> {
     override val apiToken: String = ""
     override val availableModels: List<AIModel_OnDevice> = AIModel_OnDevice.ALL_MODELS
 
-    override val client: Client by lazy {
-        AIProvider.createClient(token = apiToken)
-    }
+    override val client: Client
+        get() = throw OnDeviceProviderHasNoClientException()
 }
