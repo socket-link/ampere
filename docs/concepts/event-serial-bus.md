@@ -11,7 +11,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/**
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/events/**
 related: [PropelLoop, AgentSurface, CognitionTrace, MemoryProvenance, LinkLayer]
-last_verified: 2026-10-02
+last_verified: 2026-10-03
 ---
 
 # EventSerialBus
@@ -101,4 +101,5 @@ properties for free:
 - **Persisting state in the bus.** The bus is a router. Anything that needs persistence belongs in a store one layer up.
 - **Unsubscribing by event type from a shared consumer.** It reads like "stop listening" and behaves like "nobody listens." Use the `Subscription` handle unless you are certain you are the only subscriber on that type, and say so in a comment if you are.
 - **Taking a clean `:ampere-core:*` compile as proof a new event type is wired.** "A CLI display handler" above is two exhaustive `when`s, both in `ampere-cli` jvmMain — `EventCategorizer.categorizeInternal` and `EventRenderer.getIconAndColor` — alongside `SignificanceAwareEventLogger.categorizeEvent` in core and the `EventRegistry` entry. Core compiles and its tests pass without the CLI pair, so the omission surfaces as a broken `:ampere-cli:compileKotlinJvm` in CI rather than locally (AMPR-301, again in AMPR-187). A `when` that already matches the whole family — `is BenchEvent ->` — needs no edit, which is why grepping for an `else ->` branch is not a reliable check either: both CLI files nest `when`s that have their own.
+- **Holding a `HashMap` entry across a mutation of its map.** `handlerMap.entries.toList()` copies entry *references*; on Kotlin/Native an entry read after the map changed throws `ConcurrentModificationException`, and because `release` runs in a `finally` under `NonCancellable` the throw escapes the coroutine and terminates the process. The JVM's entries carry their key and value, so the JVM suite never sees it — it surfaced as an iOS test crash the first time a session with three subscriptions was closed (AMPR-374). Snapshot the pairs (`toMap()`) before mutating.
 - **Exposing `subscribe` across the FFI boundary.** It calls `runBlockingCompat`, so a Swift call from the main thread blocks the UI and can deadlock on Kotlin/Native. Swift gets a Flow or a callback facade, never the bus.
