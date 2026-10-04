@@ -56,7 +56,7 @@ import link.socket.ampere.domain.arc.ArcConfig
 import link.socket.ampere.domain.arc.ArcOutcome
 import link.socket.ampere.domain.arc.ArcRegistry
 import link.socket.ampere.domain.arc.CompletionManifestSink
-import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.terminal.TerminalFactory
 
 /**
  * Root command for the Ampere CLI.

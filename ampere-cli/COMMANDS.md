@@ -244,81 +244,138 @@ ampere outcomes stats
 
 ---
 
+### trace
+
+**Purpose:** Show an event and the events surrounding it in time
+
+**Syntax:** `trace <event-id> [--window SECONDS]`
+
+**Arguments:**
+- `event-id` - ID of the event to trace (required, a UUID)
+
+**Flags:**
+- `-w, --window SECONDS` - Time window of surrounding events to show (default: 30)
+
+**Behavior:**
+- Looks the target event up via `EventService.get`, then queries the window around it
+- Reports "Event not found" with an ID-format hint when the ID does not resolve
+
+**Example:**
+```bash
+ampere trace a1b2c3d4-e5f6-7890-abcd-ef1234567890
+ampere trace a1b2c3d4-e5f6-7890-abcd-ef1234567890 --window 120
+```
+
+**Implementation:** `ampere-cli/src/jvmMain/kotlin/link/socket/ampere/TraceCommand.kt`
+
+---
+
+### knowledge
+
+**Purpose:** Query agent knowledge and learnings
+
+**Syntax:** `knowledge <subcommand> [args]`
+
+**Subcommands:**
+- `search <query>` - Search knowledge entries by text
+- `show <knowledge-id>` - Show one knowledge entry in full
+- `stats` - Show knowledge counts by type and source
+
+---
+
+#### knowledge search
+
+**Syntax:** `knowledge search <query> [--type TYPE] [--task-type TYPE] [--tags A,B] [--limit N]`
+
+**Arguments:**
+- `query` - Search terms matched against knowledge entries (required)
+
+**Flags:**
+- `-t, --type TYPE` - Filter by `KnowledgeType`
+- `--task-type TYPE` - Filter by task type (e.g. `database_migration`)
+- `--tags A,B` - Filter by tags (comma-separated)
+- `-n, --limit N` - Maximum results (default: 10)
+
+**Example:**
+```bash
+ampere knowledge search "retry backoff"
+ampere knowledge search "migration" --task-type database_migration --limit 25
+```
+
+---
+
+#### knowledge show
+
+**Syntax:** `knowledge show <knowledge-id>`
+
+**Arguments:**
+- `knowledge-id` - ID of the entry to display (required)
+
+---
+
+#### knowledge stats
+
+**Syntax:** `knowledge stats`
+
+**Flags:** None
+
+**Implementation:** `ampere-cli/src/jvmMain/kotlin/link/socket/ampere/KnowledgeCommand.kt`
+
+---
+
 ## ACTION COMMANDS
 
-These commands create work and coordinate agents. (Note: These are designed for the REPL mode and may not be fully implemented as standalone CLI commands yet)
+These commands create work and drive agents.
 
-### ticket
+### task create
 
-**Purpose:** Manage tickets in the system
+**Purpose:** Create a ticket from the CLI
 
-**Available Operations:**
-- `create "TITLE" [--priority PRI] [--description "DESC"]` - Create new ticket
-- `assign <ticket-id> <agent-id>` - Assign ticket to an agent
-- `status <ticket-id> <STATUS>` - Update ticket status
+**Syntax:** `task create <description> [--urgency low|medium|high] [--assign AGENT_ID]`
 
-**Valid Ticket Priorities:**
-- `LOW` - Low priority
-- `MEDIUM` - Medium priority (default)
-- `HIGH` - High priority
-- `CRITICAL` - Critical priority
+**Arguments:**
+- `description` - Task description; quote it if it contains spaces (required)
 
-**Valid Ticket Statuses:**
-- `Backlog` - In backlog, not yet prioritized
-- `Ready` - Ready to be picked up
-- `In Progress` / `InProgress` - Actively being worked on
-- `Blocked` - Blocked by dependencies/issues
-- `In Review` / `InReview` - Awaiting review
-- `Done` - Complete
+**Flags:**
+- `--urgency low|medium|high` - Priority level (default: `medium`)
+- `--assign AGENT_ID` - Agent to assign the ticket to
 
-**Valid Status Transitions:**
-- Backlog → Ready, Done
-- Ready → In Progress
-- In Progress → Blocked, In Review, Done
-- Blocked → In Progress
-- In Review → In Progress, Done
-- Done → (terminal state)
+**Behavior:**
+- Maps `--urgency` onto `TicketPriority`; an unrecognized value is reported rather than silently accepted
+- Creates the ticket through `TicketService`
 
-**Examples:**
+**Example:**
 ```bash
-ticket create "Implement user authentication" --priority HIGH
-ticket create "Fix navbar styling" -p MEDIUM -d "Navbar overlaps content on mobile"
-ticket assign TKT-123 agent-dev
-ticket status TKT-123 InProgress
-ticket status TKT-123 InReview
+ampere task create "Implement user authentication" --urgency high
+ampere task create "Fix navbar styling" --assign agent-dev
 ```
+
+**Implementation:** `ampere-cli/src/jvmMain/kotlin/link/socket/ampere/TaskCommand.kt`
 
 ---
 
-### message
+### work
 
-**Purpose:** Manage messages and conversation threads
+**Purpose:** Autonomously work on GitHub issues
 
-**Available Operations:**
-- `post <thread-id> "TEXT" [--sender ID]` - Post message to thread
-- `create-thread --title "TITLE" --participants A,B` - Create new thread
+**Syntax:** `work [--repo OWNER/REPO] [--issue N] [--labels A,B] [--continuous] [--dry-run] [--max-issues N]`
 
-**Examples:**
+**Flags:**
+- `-r, --repo OWNER/REPO` - GitHub repository to pull issues from
+- `-i, --issue N` - Work on one specific issue number
+- `-l, --labels A,B` - Filter issues by label (repeatable)
+- `-c, --continuous` - Keep working until no issues remain
+- `--dry-run` - Report what would be done without executing
+- `--max-issues N` - Cap on issues processed in continuous mode (default: 10)
+
+**Example:**
 ```bash
-message post thread-123 "Hello team"
-message post thread-123 "Status update" --sender agent-pm
-message create-thread --title "Planning Discussion" --participants agent-pm,agent-dev
+ampere work --repo socket-link/ampere --issue 42
+ampere work --labels bug --continuous --max-issues 5
+ampere work --dry-run
 ```
 
----
-
-### agent
-
-**Purpose:** Interact with agents
-
-**Available Operations:**
-- `wake <agent-id>` - Send wake signal to dormant agent
-
-**Examples:**
-```bash
-agent wake agent-pm
-agent wake agent-dev
-```
+**Implementation:** `ampere-cli/src/jvmMain/kotlin/link/socket/ampere/WorkCommand.kt`
 
 ---
 
@@ -389,7 +446,7 @@ When running `ampere <command>`:
 ## ERROR HANDLING
 
 **Common Errors:**
-- **Unknown command**: "Unknown command: xyz. Type 'help' for available commands"
+- **Unknown command** (TUI `:` mode): "Unknown command: xyz / Type :help for available commands"
 - **Invalid event type**: Warning displayed, filter ignored
 - **Thread not found**: "Thread not found: thread-id"
 - **Invalid ticket status**: "Invalid ticket status: xyz"
@@ -406,7 +463,7 @@ When running `ampere <command>`:
 **Core Libraries:**
 - **Clikt** - Command-line parsing framework
 - **Mordant** - Terminal rendering (colors, tables, styles)
-- **JLine** - REPL terminal handling (readline)
+- **JLine** - Raw-mode key input for the TUI (`cli/layout/DemoInputHandler`)
 - **Kotlin Coroutines** - Async command execution
 
 **Services Used:**

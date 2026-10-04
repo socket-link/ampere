@@ -1,4 +1,4 @@
-package link.socket.ampere.repl
+package link.socket.ampere.terminal
 
 import com.github.ajalt.mordant.rendering.AnsiLevel
 import org.junit.jupiter.api.AfterEach

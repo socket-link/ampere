@@ -8,7 +8,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
-    kotlin("plugin.compose")
     id("com.vanniktech.maven.publish")
 }
 
@@ -93,10 +92,10 @@ kotlin {
                 // Terminal rendering with colors and styles (kept for command output)
                 implementation("com.github.ajalt.mordant:mordant:2.7.2")
 
-                // Mosaic - Compose-based terminal UI
-                implementation("com.jakewharton.mosaic:mosaic-runtime:0.18.0")
-
-                // REPL terminal handling
+                // Raw-mode key input for the TUI (cli/layout/DemoInputHandler). The
+                // jna artifacts are not imported by any source file — they are jline's
+                // native terminal provider, and without one TerminalBuilder.terminal()
+                // degrades silently to a dumb terminal, so they are runtime-load-bearing.
                 implementation("org.jline:jline:3.25.0")
                 implementation("org.jline:jline-terminal-jna:3.25.0")
                 implementation("net.java.dev.jna:jna:5.14.0")

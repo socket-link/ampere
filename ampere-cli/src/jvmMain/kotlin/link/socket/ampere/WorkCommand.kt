@@ -15,7 +15,7 @@ import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.terminal.TerminalFactory
 
 /**
  * Command to trigger autonomous work by CodeAgent on GitHub issues.

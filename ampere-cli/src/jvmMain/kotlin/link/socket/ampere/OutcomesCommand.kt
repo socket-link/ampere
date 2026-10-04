@@ -17,7 +17,7 @@ import com.github.ajalt.mordant.table.table
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Instant
 import link.socket.ampere.api.service.OutcomeService
-import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.terminal.TerminalFactory
 
 /**
  * Root command for viewing outcome memory.

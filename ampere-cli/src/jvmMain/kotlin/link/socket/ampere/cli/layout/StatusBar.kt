@@ -5,7 +5,7 @@ import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
 import link.socket.ampere.cli.help.CommandRegistry
-import link.socket.ampere.repl.TerminalSymbols
+import link.socket.ampere.terminal.TerminalSymbols
 
 /**
  * Status bar component for the bottom of the demo layout.

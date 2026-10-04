@@ -3,7 +3,7 @@ package link.socket.ampere.cli.animation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import link.socket.ampere.repl.TerminalSymbols
+import link.socket.ampere.terminal.TerminalSymbols
 import kotlin.math.abs
 
 /**

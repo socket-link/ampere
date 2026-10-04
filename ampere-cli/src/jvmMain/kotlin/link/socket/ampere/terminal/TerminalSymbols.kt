@@ -1,4 +1,4 @@
-package link.socket.ampere.repl
+package link.socket.ampere.terminal
 
 /**
  * Centralized terminal symbols with automatic Unicode/ASCII fallback.

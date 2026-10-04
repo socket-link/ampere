@@ -1,4 +1,4 @@
-package link.socket.ampere.repl
+package link.socket.ampere.terminal
 
 /**
  * Terminal color utilities for consistent visual feedback.

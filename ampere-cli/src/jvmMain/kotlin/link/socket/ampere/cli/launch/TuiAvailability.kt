@@ -1,6 +1,6 @@
 package link.socket.ampere.cli.launch
 
-import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.terminal.TerminalFactory
 
 /**
  * Decides whether the Lumos TUI dashboard is usable in the current environment,

@@ -21,7 +21,7 @@ import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.api.service.EventService
-import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.terminal.TerminalFactory
 import kotlin.time.Duration.Companion.seconds
 
 /**

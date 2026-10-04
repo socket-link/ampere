@@ -23,7 +23,7 @@ import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
 import link.socket.ampere.api.service.KnowledgeService
-import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.terminal.TerminalFactory
 
 /**
  * Root command for querying agent knowledge.

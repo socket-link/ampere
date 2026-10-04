@@ -11,7 +11,7 @@ import link.socket.ampere.cli.watch.presentation.SignificantEventSummary
 import link.socket.ampere.cli.watch.presentation.SystemState
 import link.socket.ampere.cli.watch.presentation.SystemVitals
 import link.socket.ampere.cli.watch.presentation.WatchViewState
-import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.terminal.TerminalFactory
 import kotlinx.datetime.Clock
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test

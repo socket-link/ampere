@@ -17,7 +17,7 @@ import link.socket.ampere.agents.execution.tools.issue.BatchIssueCreateRequest
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.integrations.issues.BatchIssueCreator
 import link.socket.ampere.integrations.issues.github.GitHubCliProvider
-import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.terminal.TerminalFactory
 
 /**
  * Root command for managing GitHub issues.
