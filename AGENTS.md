@@ -31,6 +31,23 @@ This repo's load-bearing primitives are documented as concept cells in
   `Concept-Verified: <ConceptName>` in the commit message. This satisfies
   the validator without requiring a separate `last_verified` bump.
 
+## Ticket Authoring
+
+Tickets here are dispatched by machine, so a ticket is only as dispatchable as
+its metadata. Before filing one, read
+[`docs/concepts/ticket-conventions.md`](docs/concepts/ticket-conventions.md) —
+the seven conventions, each with a filled example — and copy
+[`docs/templates/ticket-description.md`](docs/templates/ticket-description.md)
+for the description body.
+
+The two most often missed:
+
+- **An `ampere-scope` block** in the description, declaring every repository
+  and repo-relative path glob the ticket may write. A ticket with no block has
+  *unknown* scope, not empty scope, so it can only be dispatched alone.
+- **Exactly one `wave:<id>` label.** It is the only supervisory fact the work
+  source can filter server-side; a ticket without it is in no ready queue.
+
 ## Changelog
 
 There is no `CHANGELOG.md`. Do not create one, and do not add a changelog entry
