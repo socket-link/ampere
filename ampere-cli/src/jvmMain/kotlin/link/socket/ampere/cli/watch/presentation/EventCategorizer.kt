@@ -27,6 +27,7 @@ import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.StoreRowUndecodableEvent
+import link.socket.ampere.agents.domain.event.SupervisorEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
@@ -78,6 +79,9 @@ object EventCategorizer {
         // A stored row this build cannot read (AMPR-364): the query survived by skipping it, so
         // the row is there and invisible.
         is StoreRowUndecodableEvent,
+        // A journal line nothing can parse (AMPR-307): if it was a claim record, then a
+        // held claim or a running agent process group can no longer be enumerated.
+        is SupervisorEvent.JournalLineQuarantined,
         is TaskEvent.TaskFailed -> EventSignificance.CRITICAL
 
         // Significant events represent state changes worth noting
@@ -145,9 +149,13 @@ object EventCategorizer {
         is LinkEvent.LinkResolved,
         is AssetAccessEvent,
         is BenchEvent.ProbeGraded,
-        is BenchEvent.ArcSettled -> EventSignificance.ROUTINE
+        is BenchEvent.ArcSettled,
+        is SupervisorEvent.DispatchRecorded -> EventSignificance.ROUTINE
 
         is RoutingEvent.RouteFallback,
+        // A supervisor that marked a clean exit owes no recovery — the only positive
+        // signal recovery has, and worth seeing for that reason.
+        is SupervisorEvent.CleanShutdownMarked,
         is BenchEvent.BenchRunCompleted -> EventSignificance.SIGNIFICANT
 
         // A rung floor with no satisfying model is a terminal routing failure:

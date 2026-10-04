@@ -43,6 +43,7 @@ import link.socket.ampere.agents.domain.event.SparkAppliedEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.SparkRemovedEvent
 import link.socket.ampere.agents.domain.event.StoreRowUndecodableEvent
+import link.socket.ampere.agents.domain.event.SupervisorEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
@@ -211,6 +212,11 @@ class EventRenderer(
                 TerminationReason.ERROR -> red
                 else -> yellow
             }
+            // Supervisor journal (AMPR-307): the record that makes a dispatch recoverable.
+            // Amber for the clean-exit marker (nothing is owed), red for a line nothing can read.
+            is SupervisorEvent.DispatchRecorded -> "📓" to blue
+            is SupervisorEvent.CleanShutdownMarked -> "📓" to green
+            is SupervisorEvent.JournalLineQuarantined -> "📓" to red
             // The event store refused a write, so something that happened has no row. Red: the
             // pane is the only place it will ever appear.
             is EventStoreEvent.PersistenceFailed -> "🧯" to red

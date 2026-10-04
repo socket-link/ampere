@@ -5,7 +5,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/process/CancellationAddress.kt
   - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/process/ProcessGroups.kt
 related: [EventSerialBus, ChassisSpi]
-last_verified: 2026-09-21
+last_verified: 2026-10-04
 ---
 
 # CancellationAddress
@@ -32,10 +32,13 @@ and its address goes to the caller at spawn.**
 `Process.destroy()` is not enough even while the parent is alive: it signals one PID,
 so wrappers like `./gradlew`, `npx` or `sh -c` die and leave the real work running.
 
-The address is `@Serializable` in `commonMain` so its owner can make it durable. The first
-planned consumer is the CLI supervisor's claim-record journal (AMPR-291 mechanism M-A/M-B,
-built in the AMPR-286 wave), which records one address per dispatch and reaps them in its
-startup reconciliation pass.
+The address is `@Serializable` in `commonMain` so its owner can make it durable. Its first
+consumer is [DispatchJournal](dispatch-journal.md) (AMPR-291 mechanism M-A, built in
+AMPR-307), which records one address per dispatch in `DispatchRecord.agentAddress` — the
+whole address rather than the bare PGID the recon named, so that `terminate` can still
+refuse a PID reused while the supervisor was dead. The startup reconciliation pass that
+reaps them (mechanism M-C) consumes both and is a separate ticket. The journal lives in
+`ampere-core` alongside `ProcessGroups`, not in `ampere-cli`.
 
 ## Where it lives
 
@@ -71,7 +74,8 @@ JVM); otherwise `setsid` on the PATH; otherwise (Windows) no group — the addre
   leader whose group is still alive is still ours: POSIX does not reuse a PID that is the ID
   of a live group.
 - **Recording is the owner's job.** `ProcessGroups` surfaces the address; persisting it
-  somewhere that survives the spawner is up to whoever owns recovery for that work.
+  somewhere that survives the spawner is up to whoever owns recovery for that work. For
+  supervisor dispatches that owner is [DispatchJournal](dispatch-journal.md).
 - **Normal completion leaves the group alone.** `run` only terminates on cancellation or a
   thrown block; anything deliberately left running (e.g. a Gradle daemon) survives.
 
