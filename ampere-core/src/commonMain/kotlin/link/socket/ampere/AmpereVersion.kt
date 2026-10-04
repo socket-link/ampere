@@ -20,7 +20,7 @@ package link.socket.ampere
  * version (bundle import today, trace/store envelope tolerance next) reuse this
  * one.
  */
-const val AMPERE_RUNTIME_VERSION: String = "0.17.0"
+const val AMPERE_RUNTIME_VERSION: String = "0.18.0"
 
 /**
  * Orders two Ampere versions, or returns `null` when either is not a version
