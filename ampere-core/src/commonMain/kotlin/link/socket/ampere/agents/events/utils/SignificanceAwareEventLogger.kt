@@ -31,6 +31,7 @@ import link.socket.ampere.agents.domain.event.RoomEvent
 import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.StoreRowUndecodableEvent
+import link.socket.ampere.agents.domain.event.SupervisorEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
@@ -204,6 +205,13 @@ class SignificanceAwareEventLogger(
             is Verdict.Undetermined,
             -> EventSignificance.SIGNIFICANT
         }
+
+        // Supervisor journal (AMPR-307) - a dispatch advancing is routine progress; a
+        // graceful exit is the one signal that says no recovery is owed. A line nothing
+        // can parse may be a claim or an agent process group now impossible to enumerate.
+        is SupervisorEvent.DispatchRecorded -> EventSignificance.ROUTINE
+        is SupervisorEvent.CleanShutdownMarked -> EventSignificance.SIGNIFICANT
+        is SupervisorEvent.JournalLineQuarantined -> EventSignificance.CRITICAL
 
         // Room lifecycle (AMPR-379) - a post is already reported as the MessagePosted it
         // follows; what a thread is about, and a card held back by review, are the

@@ -143,6 +143,11 @@ object EventRegistry {
         // ArcRunEvent types
         ArcRunEvent.CompletionManifestRecorded.EVENT_TYPE,
 
+        // SupervisorEvent types
+        SupervisorEvent.DispatchRecorded.EVENT_TYPE,
+        SupervisorEvent.CleanShutdownMarked.EVENT_TYPE,
+        SupervisorEvent.JournalLineQuarantined.EVENT_TYPE,
+
         // TelemetryEvent types
         ProviderCallStartedEvent.EVENT_TYPE,
         ProviderCallCompletedEvent.EVENT_TYPE,
