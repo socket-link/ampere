@@ -1,0 +1,288 @@
+# Ampere's definition of done, declared once.
+#
+# Schema: docs/verify-manifest.md (v1). Concept: docs/concepts/verification-manifest.md.
+# This file is data. The runner that executes it (the Breaker) is a separate wave.
+#
+# One task per gate: a bundled gate answers one question with one exit code and
+# silently withholds the coverage it never obtained. Gates run in listed order,
+# cheapest signal first, and ordering is a courtesy — every gate runs regardless
+# of every other gate's outcome.
+#
+# Do not add resource flags (--max-workers, --parallel, heap settings) or cache
+# flags to a `run`. Those are the runner's; keeping them out is what lets a gate's
+# command be checked against .github/workflows/ci.yml by eye.
+version: 1
+
+env:
+  # Hard: absent -> the whole run is refused, every gate reports not_executed
+  # naming the blocker. Nothing executes.
+  requires:
+    - id: jdk-21
+      toolchain: "21"
+      reason: Gradle toolchains resolve 21; CI pins temurin-21.
+    - id: local-properties
+      file: local.properties
+      reason: >-
+        anthropic_api_key / google_api_key / openai_api_key, and sdk.dir for the
+        Android variants. CI writes placeholders, so placeholders suffice.
+
+  # Soft: absent -> only the gates that name it in `needs` report not_executed.
+  # Never a silent skip.
+  optional:
+    - id: simulator
+      simulator: "iPhone *"
+      reason: Kotlin/Native and xcodebuild both run against a booted iPhone simulator.
+    - id: xcode
+      command: xcodebuild -version
+      reason: The Swift bridge gate is xcodebuild; a Linux host has neither.
+
+gates:
+  # --- Source-level checks. No test executes, so no gate here is `fresh`: these
+  # --- assert a property of the sources and Gradle's cache key covers the sources.
+
+  - id: ktlint
+    run: ./gradlew ktlintCheck
+    fresh: false
+    timeout_minutes: 20
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  - id: verify-publish-workflow-coverage
+    run: ./gradlew verifyPublishWorkflowCoverage
+    fresh: false
+    timeout_minutes: 10
+    retry_safe: true
+    side_effects: none
+    parallel_safe: true
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  # AMPR-257: asserts ampere-core carries zero platform-SDK references. Registered
+  # in ampere-core/build.gradle.kts and wired into `check` — which no workflow job
+  # runs (the required status check named `check` is the concept-staleness job), so
+  # this manifest is currently the only thing that runs the guard outside a local
+  # `./gradlew build`. Hence baseline: none.
+  - id: core-neutrality
+    run: ./gradlew :ampere-core:verifyCoreNeutrality
+    fresh: false
+    timeout_minutes: 10
+    retry_safe: true
+    side_effects: none
+    parallel_safe: true
+    requires: [jdk-21, local-properties]
+    baseline: none
+
+  # The task no PR CI job runs. A JVM-only stdlib call in commonMain compiles on
+  # every platform target and fails only here — which is why it fails at publish
+  # time instead (docs/RELEASING.md). scripts/release-preflight.sh runs it.
+  - id: metadata-compile-ampere-core
+    run: ./gradlew :ampere-core:compileCommonMainKotlinMetadata
+    fresh: false
+    timeout_minutes: 10
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: release
+
+  # --- Assemble, one gate per module. The recon's single bundled lint+assemble
+  # --- gate failed on ampere-core's JS production leg while the other three
+  # --- modules' assembles passed inside the same invocation; one exit code could
+  # --- not say that.
+
+  - id: assemble-ampere-core
+    run: ./gradlew :ampere-core:assemble
+    fresh: false
+    timeout_minutes: 20
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  - id: assemble-ampere-cli
+    run: ./gradlew :ampere-cli:assemble
+    fresh: false
+    timeout_minutes: 20
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  - id: assemble-ampere-compose
+    run: ./gradlew :ampere-compose:assemble
+    fresh: false
+    timeout_minutes: 20
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  - id: assemble-ampere-eval
+    run: ./gradlew :ampere-eval:assemble
+    fresh: false
+    timeout_minutes: 20
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  - id: assemble-ampere-work-linear
+    run: ./gradlew :ampere-work-linear:assemble
+    fresh: false
+    timeout_minutes: 20
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  # --- Tests. Every gate below is `fresh: true`: a jvmTest gate was observed
+  # --- returning FROM-CACHE in 3 seconds having executed zero tests, and
+  # --- reporting green. A cached test report attests to an execution that did
+  # --- not happen on this host.
+
+  - id: jvm-test-ampere-core
+    run: ./gradlew :ampere-core:jvmTest
+    fresh: true
+    timeout_minutes: 20
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  - id: android-unit-test-ampere-core
+    run: ./gradlew :ampere-core:testDebugUnitTest
+    fresh: true
+    timeout_minutes: 20
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  - id: jvm-test-ampere-cli
+    run: ./gradlew :ampere-cli:jvmTest
+    fresh: true
+    timeout_minutes: 20
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  - id: jvm-test-ampere-compose
+    run: ./gradlew :ampere-compose:jvmTest
+    fresh: true
+    timeout_minutes: 20
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  - id: android-unit-test-ampere-compose
+    run: ./gradlew :ampere-compose:testDebugUnitTest
+    fresh: true
+    timeout_minutes: 20
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  - id: jvm-test-ampere-eval
+    run: ./gradlew :ampere-eval:jvmTest
+    fresh: true
+    timeout_minutes: 20
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  - id: jvm-test-ampere-work-linear
+    run: ./gradlew :ampere-work-linear:jvmTest
+    fresh: true
+    timeout_minutes: 20
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  # AMPR-187: the eval suite replayed against its committed golden traces. A red
+  # result here means an Arc's observable behaviour changed, which is a different
+  # question from "something in ampere-eval broke" — hence its own gate, as it has
+  # its own CI job.
+  - id: eval-replay
+    run: ./gradlew :ampere-eval:evalReplay
+    fresh: true
+    timeout_minutes: 15
+    retry_safe: true
+    side_effects: build-dir
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    baseline: ci
+
+  # --- iOS. Both gates need a simulator, and neither parallelises: Konan holds an
+  # --- inter-process lock whose contention is a documented real hang.
+
+  - id: ios-kotlin-test-ampere-core
+    run: ./gradlew :ampere-core:iosSimulatorArm64Test
+    fresh: true
+    timeout_minutes: 25
+    retry_safe: true
+    side_effects: device
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    needs: [simulator]
+    baseline: ci
+
+  # The one ordered gate. Legitimate because no later step has a standalone
+  # verdict: test-without-building cannot run without the build before it, so
+  # stopping at a failed step withholds nothing that was obtainable. The gate's
+  # outcome names the failing step id.
+  #
+  # Step 1 is kept even though CI dropped its equivalent: measured across five CI
+  # runs the standalone link was never reusable there, because Xcode's script phase
+  # supplies build settings that reach the link task's arguments. Locally it is —
+  # the AMPR-290 transcript shows xcodebuild's nested Gradle finding
+  # linkDebugFrameworkIosSimulatorArm64 UP-TO-DATE after this step ran it. A link
+  # failure also reads as a Kotlin failure here rather than as a failed Run Script
+  # phase buried in xcodebuild output.
+  - id: ios-swift-bridge
+    steps:
+      - id: link-framework
+        run: ./gradlew :ampere-core:linkDebugFrameworkIosSimulatorArm64
+      - id: build-for-testing
+        run: >-
+          xcodebuild build-for-testing
+          -project ampere-ios/ampere-ios.xcodeproj
+          -scheme ampere-ios
+          -destination "id=${env.SIMULATOR_UDID}"
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM=
+      - id: test-without-building
+        run: >-
+          xcodebuild test-without-building
+          -project ampere-ios/ampere-ios.xcodeproj
+          -scheme ampere-ios
+          -destination "id=${env.SIMULATOR_UDID}"
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM=
+    fresh: true
+    timeout_minutes: 45
+    retry_safe: true
+    side_effects: device
+    parallel_safe: false
+    requires: [jdk-21, local-properties]
+    needs: [simulator, xcode]
+    baseline: ci

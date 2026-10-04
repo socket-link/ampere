@@ -4,7 +4,13 @@
 !ampere-core/src/commonMain/sqldelight/databases/*.db
 .gradle
 .kotlin/
-.ampere
+# A developer's local .ampere/config.yaml can hold credentials, so the directory
+# stays ignored by default. verify.yml is the one tracked file in it: the
+# repository's declared definition of done (docs/verify-manifest.md). Git cannot
+# re-include a path under an excluded directory, so this is `/*` plus a negation
+# rather than a bare `.ampere`.
+.ampere/*
+!.ampere/verify.yml
 /local.properties
 /.idea
 .DS_Store
