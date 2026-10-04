@@ -6,7 +6,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.coordination.AgentInteraction
 import link.socket.ampere.coordination.InteractionType
-import link.socket.ampere.repl.TerminalSymbols
+import link.socket.ampere.terminal.TerminalSymbols
 
 /**
  * Renders the interaction feed showing recent inter-agent coordination events.

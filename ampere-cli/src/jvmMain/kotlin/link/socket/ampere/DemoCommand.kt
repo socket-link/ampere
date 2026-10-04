@@ -19,7 +19,7 @@ import link.socket.phosphor.timeline.TimelineController
 import link.socket.phosphor.timeline.TimelineEvent
 import link.socket.phosphor.timeline.WaveformDemoTimeline
 import link.socket.ampere.cli.render.WaveformPaneRenderer
-import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.terminal.TerminalFactory
 
 /**
  * Container command for demo subcommands.

@@ -13,7 +13,7 @@ import link.socket.ampere.cli.layout.fitToHeight
 import link.socket.ampere.cli.layout.fitToWidth
 import link.socket.ampere.cli.render.WaveformPaneRenderer
 import link.socket.ampere.cli.watch.presentation.WatchViewState
-import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.terminal.TerminalFactory
 import kotlin.math.roundToInt
 
 /**

@@ -1,7 +1,7 @@
 package link.socket.ampere.cli.launch
 
 import com.github.ajalt.mordant.rendering.AnsiLevel
-import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.terminal.TerminalFactory
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

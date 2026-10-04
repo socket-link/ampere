@@ -19,7 +19,7 @@ import kotlinx.datetime.Instant
 import link.socket.ampere.agents.events.messages.ThreadSummary
 import link.socket.ampere.agents.events.tickets.TicketSummary
 import link.socket.ampere.api.AmpereInstance
-import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.terminal.TerminalFactory
 import kotlin.time.Duration.Companion.hours
 
 /**

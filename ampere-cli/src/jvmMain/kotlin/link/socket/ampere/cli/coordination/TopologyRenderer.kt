@@ -2,7 +2,7 @@ package link.socket.ampere.cli.coordination
 
 import com.github.ajalt.mordant.rendering.TextColors
 import link.socket.ampere.cli.layout.CharBuffer
-import link.socket.ampere.repl.TerminalSymbols
+import link.socket.ampere.terminal.TerminalSymbols
 
 /**
  * Renders topology layouts as ASCII art network graphs.

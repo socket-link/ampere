@@ -5,7 +5,7 @@ import com.github.ajalt.mordant.rendering.TextStyles
 import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import link.socket.ampere.repl.TerminalFactory
+import link.socket.ampere.terminal.TerminalFactory
 
 /**
  * Runnable demo that showcases AMPERE lightning animation primitives.
