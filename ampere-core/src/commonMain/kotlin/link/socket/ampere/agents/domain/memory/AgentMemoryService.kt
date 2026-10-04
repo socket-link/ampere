@@ -333,3 +333,21 @@ data class KnowledgeWithScore(
     val knowledge: Knowledge,
     val relevanceScore: Double, // 0.0 to 1.0, higher = more relevant
 )
+
+/**
+ * Floor on [KnowledgeWithScore.relevanceScore] used by the insight extractors
+ * when the caller does not choose one.
+ *
+ * How relevant is relevant enough is caller policy, not a fact about a recalled
+ * entry: an agent summarising a hundred entries wants a high floor, one working
+ * from three wants none. The constant exists only so a caller that has no
+ * opinion still gets a defined answer, and it is named so that raising it is a
+ * one-line change rather than a hunt for repeated literals.
+ *
+ * `0.5` is the midpoint of the `0.0..1.0` range [AgentMemoryService] scores
+ * into, and is a representative default rather than a calibrated one — nothing
+ * has measured which floor produces better plans.
+ *
+ * Compared strictly: an entry scoring exactly the floor is excluded.
+ */
+const val DEFAULT_RELEVANCE_FLOOR: Double = 0.5

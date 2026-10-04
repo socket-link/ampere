@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.definition.product
 
+import link.socket.ampere.agents.domain.memory.DEFAULT_RELEVANCE_FLOOR
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.reasoning.Idea
@@ -161,14 +162,22 @@ data class PlanningInsights(
     companion object {
         /**
          * Analyzes past knowledge to extract actionable insights.
+         *
+         * [relevanceFloor] is the `relevanceScore` an entry must exceed to
+         * shape the result. It is a parameter because how relevant is relevant
+         * enough is the caller's policy, not this function's; see
+         * [DEFAULT_RELEVANCE_FLOOR] for what the default means and does not
+         * mean. A floor of `0.0` admits every scored entry.
          */
-        fun fromKnowledge(knowledge: List<KnowledgeWithScore>): PlanningInsights {
+        fun fromKnowledge(
+            knowledge: List<KnowledgeWithScore>,
+            relevanceFloor: Double = DEFAULT_RELEVANCE_FLOOR,
+        ): PlanningInsights {
             if (knowledge.isEmpty()) {
                 return PlanningInsights()
             }
 
-            // Filter to high-relevance knowledge (score > 0.5)
-            val relevantKnowledge = knowledge.filter { it.relevanceScore > 0.5 }
+            val relevantKnowledge = knowledge.filter { it.relevanceScore > relevanceFloor }
 
             // Analyze learnings for test-first patterns
             val testFirstKnowledge = relevantKnowledge.filter { scored ->

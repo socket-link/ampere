@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.definition.qa
 
 import link.socket.ampere.agents.domain.knowledge.Knowledge
+import link.socket.ampere.agents.domain.memory.DEFAULT_RELEVANCE_FLOOR
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.reasoning.Idea
@@ -149,13 +150,22 @@ data class ValidationInsights(
 
         /**
          * Analyzes past knowledge to extract validation insights.
+         *
+         * [relevanceFloor] is the `relevanceScore` an entry must exceed to
+         * shape the result. It is a parameter because how relevant is relevant
+         * enough is the caller's policy, not this function's; see
+         * [DEFAULT_RELEVANCE_FLOOR] for what the default means and does not
+         * mean. A floor of `0.0` admits every scored entry.
          */
-        fun fromKnowledge(knowledge: List<KnowledgeWithScore>): ValidationInsights {
+        fun fromKnowledge(
+            knowledge: List<KnowledgeWithScore>,
+            relevanceFloor: Double = DEFAULT_RELEVANCE_FLOOR,
+        ): ValidationInsights {
             if (knowledge.isEmpty()) {
                 return ValidationInsights()
             }
 
-            val relevantKnowledge = knowledge.filter { it.relevanceScore > 0.5 }
+            val relevantKnowledge = knowledge.filter { it.relevanceScore > relevanceFloor }
 
             // Extract effective validation check types
             val effectiveChecks = CHECK_TYPES.mapNotNull { checkType ->
