@@ -35,6 +35,7 @@ How agents reach consensus and avoid stepping on each other.
 | [LifecycleTypes](lifecycle-types.md) | experimental | Three plain-data types for a human-judgment stop: `ReconFinding` (claim + evidence + verified/inferred/untested), `DecisionRegister` (options, explicit default, lock), `LifecycleGate` (open / awaiting a person / closed with an outcome). Not canon entities; `Open` means unresolved, not passable. |
 | [CancellationAddress](cancellation-address.md) | experimental | D4 applied to local subprocesses: every spawn that can outlive its spawner gets its own process group, and the caller holds a serializable address to stop it. Stop = SIGTERM group → bounded wait → SIGKILL, and works from the address alone after a restart. |
 | [TeamLayer](team-layer.md) | experimental | A roster of roles (`BlueprintRoster`: Planner, Estimator, Scout, Scheduler, Inspector, Coordinator), a Room bound onto `MessageThread` with one thread per subject, verdict threads opened from `ProbeEvent.VerdictReached`, the Coordinator's DM over `escalateToHuman`, and a weekly Standup Meeting that is 0W apart from its narrative. `EstimateCalibrationSource` is the consumer-implemented SPI. |
+| [TicketConventions](ticket-conventions.md) | experimental | The seven pieces of metadata a ticket carries so a machine can dispatch it: an `ampere-scope` block declaring the repos and path globs it writes, one `wave:` label, the two `gate:` labels, `claim:`/`esc:` comments, and a model/effort line. `.ampere/verify.yml` is deliberately not a ticket field. |
 
 ## Surface
 
