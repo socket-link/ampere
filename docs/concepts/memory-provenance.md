@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/MemoryEvent.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/memory/**
 related: [PropelLoop, CognitionTrace, EventSerialBus, DreamCycle]
-last_verified: 2026-09-23
+last_verified: 2026-10-04
 ---
 
 # Memory Provenance
@@ -80,6 +80,7 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 - **Extract knowledge** — Loop phase: `KnowledgeExtractor` reads outcomes from the current run, distils into `Knowledge.FromOutcome` (or `FromPlan`, etc.), and `KnowledgeRepository.storeKnowledge` writes it. `KnowledgeStored` event emitted.
 - **Emit a milestone** — milestone detection is separate from knowledge storage. `MilestoneTracker` listens for per-agent task lifecycle transitions and publishes `MilestoneReached` for first successful task types and recovery after failure; external systems use `AgentEventApi.reachMilestone(...)`.
 - **Recall** — `AgentMemoryService.recallRelevantKnowledge(MemoryContext(...))` for in-loop reasoning. Returns scored entries.
+- **Choose how relevant is relevant enough** — pass a `relevanceFloor` to the insight extractors (`ValidationInsights.fromKnowledge`, `PlanningInsights.fromKnowledge`). It defaults to `DEFAULT_RELEVANCE_FLOOR` (declared beside `KnowledgeWithScore`), compared strictly, so an entry scoring exactly the floor is excluded. The floor is caller policy, not a fact about a recalled entry: an agent summarising a hundred entries wants a high one, an agent working from three wants none. The default is representative, not calibrated — nothing has measured which floor produces better plans.
 - **Time-travel a run** — `ArcTraceProjection.project(runId)` reads `EventStore`, `KnowledgeStore`, and `OutcomeMemoryStore` by `run_id` and rebuilds the per-phase trace.
 - **Add a new outcome variant** — extend `ExecutionOutcome`, add a `Success`/`Failure` pair, update `OutcomeEvaluator`, add a CLI display handler.
 
@@ -91,5 +92,6 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 - **Using `KnowledgeStored` as a milestone flag.** Routine memory writes are high volume. Publish `MilestoneReached` as a sibling event when the semantic payload represents a meaningful checkpoint.
 - **Recall by ticket id alone.** `MemoryContext` is built from task type, tags, and description for a reason. Ticket-id recall returns *only* this ticket's prior runs, missing the cross-ticket pattern recognition that's the point.
 - **Filtering failures out of recall.** Failures teach what not to do. A "successful approaches only" filter erases that signal.
+- **Hardcoding a relevance threshold at the call site.** `knowledge.filter { it.relevanceScore > 0.5 }` reads as arithmetic on a score, so it does not look like a policy decision — but it is one, and it was duplicated in `QualityParams` and `ProductParams` for months before AMPR-382 found it. A score is a fact the service computes; the floor above which a score counts belongs to whoever is reading. Take it as a parameter with `DEFAULT_RELEVANCE_FLOOR` as the default.
 - **Reading a source id as a knowledge id.** `getKnowledgeById(entry.outcomeId)` can never match: a knowledge id is `generateUUID("knowledge-<type>", sourceId)`, which is a random prefix, and a source id names an `Idea`/`Outcome`/`Perception`/`Plan`/`Task`. The pre-AMPR-350 `provenance()` walked a "chain" this way and broke on its first iteration every time, returning a one-entry trail that looked plausible. To relate several entries, query by `run_id`.
 - **Stripping `run_id` when persisting.** A common refactoring trap: a helper drops the `run_id` parameter "because it's not used downstream". `ArcTraceProjection` is downstream. Keep it.
