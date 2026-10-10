@@ -6,6 +6,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.config.CognitiveConfig
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.definition.product.ProductState
 import link.socket.ampere.agents.definition.project.ProjectState
@@ -69,6 +70,7 @@ import link.socket.ampere.util.runBlockingCompat
  * @param _eventApi Optional event API for observability
  * @param _memoryService Optional memory service for knowledge persistence
  * @param _aiConfiguration Optional AI configuration (uses default if not provided)
+ * @param _cognitiveConfig Cognitive-loop configuration, notably the phase-spark switches
  */
 @Serializable
 open class SparkBasedAgent<S : AgentState>(
@@ -163,6 +165,16 @@ open class SparkBasedAgent<S : AgentState>(
      */
     @Transient
     private val _workspace: ExecutionWorkspace? = null,
+    /**
+     * Cognitive-loop configuration (AMPR-387). Reaches [agentConfiguration], which
+     * is what [createPhaseSparkManager] reads, so a caller that sets
+     * `phaseSparks.enabled = true` actually gets phase handling — before AMPR-387
+     * this agent built its configuration without one and the manager always saw the
+     * default (phases off). Defaults to [CognitiveConfig], i.e. phases off, so every
+     * caller that does not opt in is unaffected.
+     */
+    @Transient
+    private val _cognitiveConfig: CognitiveConfig = CognitiveConfig(),
 ) : ObservableAgent<S>(_eventApi, _observabilityScope) {
 
     @Transient
@@ -222,6 +234,7 @@ open class SparkBasedAgent<S : AgentState>(
                 minimumRung = _minimumRung,
             ),
             aiConfiguration = effectiveAiConfiguration,
+            cognitiveConfig = _cognitiveConfig,
             llmProvider = _llmProvider,
             cognitiveRelay = _cognitiveRelay,
             upstreamLlmClient = _upstreamLlmClient,
@@ -486,6 +499,9 @@ open class SparkBasedAgent<S : AgentState>(
          * @param workspace the directory this agent's code tools are confined
          *   to (AMPR-300). Null builds an unpinned agent whose code-file tools
          *   refuse to dispatch; the production factories always supply one.
+         * @param cognitiveConfig cognitive-loop configuration (AMPR-387); its
+         *   `phaseSparks` block is what the agent's `PhaseSparkManager` is built
+         *   from. Default leaves phase handling off, as before.
          */
         fun Code(
             sparkRegistry: SparkRegistry,
@@ -503,6 +519,7 @@ open class SparkBasedAgent<S : AgentState>(
             minimumRung: CapabilityRung? = null,
             userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
             workspace: ExecutionWorkspace? = null,
+            cognitiveConfig: CognitiveConfig = CognitiveConfig(),
         ): SparkBasedAgent<CodeState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -526,6 +543,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _minimumRung = minimumRung,
                 _userGrantProvider = userGrantProvider,
                 _workspace = workspace,
+                _cognitiveConfig = cognitiveConfig,
             )
             agent.spark<SparkBasedAgent<CodeState>>(roleSpark)
             return agent
@@ -574,6 +592,7 @@ open class SparkBasedAgent<S : AgentState>(
             reasoningOverride: AgentReasoning? = null,
             userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
             workspace: ExecutionWorkspace? = null,
+            cognitiveConfig: CognitiveConfig = CognitiveConfig(),
         ): SparkBasedAgent<ProductState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -595,6 +614,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _reasoningOverride = reasoningOverride,
                 _userGrantProvider = userGrantProvider,
                 _workspace = workspace,
+                _cognitiveConfig = cognitiveConfig,
             )
             agent.spark<SparkBasedAgent<ProductState>>(roleSpark)
             return agent
@@ -630,6 +650,7 @@ open class SparkBasedAgent<S : AgentState>(
             reasoningOverride: AgentReasoning? = null,
             userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
             workspace: ExecutionWorkspace? = null,
+            cognitiveConfig: CognitiveConfig = CognitiveConfig(),
         ): SparkBasedAgent<ProjectState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -651,6 +672,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _reasoningOverride = reasoningOverride,
                 _userGrantProvider = userGrantProvider,
                 _workspace = workspace,
+                _cognitiveConfig = cognitiveConfig,
             )
             agent.spark<SparkBasedAgent<ProjectState>>(roleSpark)
             return agent
@@ -686,6 +708,7 @@ open class SparkBasedAgent<S : AgentState>(
             reasoningOverride: AgentReasoning? = null,
             userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
             workspace: ExecutionWorkspace? = null,
+            cognitiveConfig: CognitiveConfig = CognitiveConfig(),
         ): SparkBasedAgent<QualityState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -707,6 +730,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _reasoningOverride = reasoningOverride,
                 _userGrantProvider = userGrantProvider,
                 _workspace = workspace,
+                _cognitiveConfig = cognitiveConfig,
             )
             agent.spark<SparkBasedAgent<QualityState>>(roleSpark)
             return agent

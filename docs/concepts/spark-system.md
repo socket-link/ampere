@@ -23,6 +23,15 @@ last_verified: 2026-10-09
 > with env-var interpolation for `repositoryRoot`. The old `RoleSpark` Kotlin
 > singleton hierarchy has been removed.
 
+> **2026-10-09 (AMPR-387):** `PhaseSparkConfig` on `AgentConfiguration.cognitiveConfig`
+> now actually reaches `PhaseSparkManager`: `SparkBasedAgent` builds its
+> `AgentConfiguration` with the `cognitiveConfig` its factory was given, and
+> `AgentFactory` / `SparkAgentFactory` / the `SparkBasedAgent.<Role>(...)` factories
+> all pass one through. The single `enabled` flag also split: `publishBrackets`
+> governs the `PhaseEntered` / `PhaseExited` pair and `injectPhaseSparks` governs
+> everything that reaches the prompt, so a run can be bracketed silently. Both
+> default to `true`, so `enabled = true` alone is unchanged.
+
 # Spark System
 
 ## What it is
@@ -173,6 +182,9 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - **The system prompt is rebuilt from the live stack on every LLM call.** No caching of the rendered prompt is allowed unless invalidated on every push/pop. Stale prompts cause the active Spark stack to drift from observed prompt content.
 - **Apply/remove are paired and observed.** Every `SparkAppliedEvent` has a matching `SparkRemovedEvent` (or end-of-run cleanup). `ArcTraceProjection` uses these events to reconstruct phase context.
 - **Phase boundaries are explicit when a bus is wired.** `PhaseSparkManager` publishes `PhaseEntered` after `currentCognitivePhase` is assigned and before phase sparks are applied, and publishes `PhaseExited` after phase sparks are removed and the previous phase is restored.
+- **Bracketing and prompt injection are separate switches.** `PhaseSparkConfig.publishBrackets` and `injectPhaseSparks` sit under `enabled` and are independent. `injectPhaseSparks = false` must leave the system prompt byte-for-byte what it would be with phases off — which is why `agent.currentCognitivePhase` is written only when that switch is on: it is read by exactly one thing, `buildSystemPrompt`, so leaving it set would still pull every role/language spark's `## When <Phase>` section into a supposedly silent run's prompt.
+- **A phase is active when `currentPhase != null`, not when sparks are on the stack.** The two were equivalent before AMPR-387 and are not now: a bracketed-but-not-injected phase pushes nothing. Any guard written as `appliedSparks.isNotEmpty()` silently disables `injectPhaseSparks = false`.
+- **`AMPERE_PHASE_SPARKS` is an override, not a default.** Set, it forces `enabled`, `publishBrackets`, and `injectPhaseSparks` on regardless of config; unset, it contributes nothing and the config decides alone. It is a developer switch — never the mechanism a consumer relies on.
 - **Narrowing is read, not just computed.** Every site that offers or dispatches tools reads `effectiveTools`, never `requiredTools`. There are two — the planner's available-tools list and `executePlanStep`'s lookup — and they share one set, so a tool the stack withdrew fails identically to one that never existed. A narrowing that nothing reads is decoration; that was the AMPR-400 bug. (One tool-advertising path is still unnarrowed: `AutonomousAgent.buildToolAwarenessIdea` lists every `ToolRegistry` tool to Perceive. Those tools are outside `requiredTools`, so they are already undispatchable by `executePlanStep` — the leak is that the model is told about them at all.)
 - **The narrowed set is read live, never captured.** The stack is mutable for the agent's lifetime, so `ReasoningSettings.availableTools` is a `() -> Set<Tool<*>>` provider rather than a set. A snapshot taken when the reasoning unit was constructed would keep offering tools a later spark has since withdrawn.
 - **A capability-bearing spark's `allowedTools` is a real permission, so it must name real tool ids.** Because composition is intersection, an id that no tool in the repo carries contributes nothing, and a *missing* id silently withdraws a tool the agent was deliberately built with. A role spark must list every tool its factory hands the agent, `plan_steps` included.
@@ -192,7 +204,8 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - **Apply a Spark transiently** — `SparkStack.push(spark)` and ensure a matching `pop` in `finally`. `PhaseSparkManager` handles this for phase boundaries.
 - **Compose a per-agent stack** — declarative role spark + `ProjectSpark` at agent construction, then `PhaseSpark` pushed/popped per phase (potentially multiple when declarative library is active), then `TaskSpark` pushed/popped per task.
 - **Inspect the active stack** — subscribe to `SparkAppliedEvent` / `SparkRemovedEvent` on the bus, or read `SparkStack.current`.
-- **Enable phase sparks** — set `AgentConfiguration.cognitiveConfig.phaseSparks.enabled = true` (optionally per-phase) or `AMPERE_PHASE_SPARKS=true` globally.
+- **Enable phase sparks** — set `AgentConfiguration.cognitiveConfig.phaseSparks.enabled = true` (optionally per-phase via `phases`), and hand that `CognitiveConfig` to whichever factory builds the agent (`AgentFactory`, `SparkAgentFactory`, or a `SparkBasedAgent.<Role>(...)` factory — all take `cognitiveConfig`). `AMPERE_PHASE_SPARKS=true` forces it on process-wide as a developer switch.
+- **Bracket a run's phases without changing its prompt** — `PhaseSparkConfig(enabled = true, injectPhaseSparks = false)`. The agent publishes `PhaseEntered` / `PhaseExited` for every `withPhase` and its system prompt is unchanged. The mirror, `publishBrackets = false`, injects the guidance and publishes nothing.
 - **Enable declarative phase sparks** — set `AmpereSpikeFlags.declarativeSparksEnabled = true` and inject a `PhaseSparkLibrary` into the agent (via `SparkBasedAgent.setPhaseSparkLibrary` or `PhaseSparkManager.createWithLibrary`). Default is off; flip in `try { ... } finally { ... = false }` blocks in tests.
 
 ## Anti-patterns
@@ -205,3 +218,5 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - **Reading `requiredTools` at a planning or dispatch site.** It is the set the agent was *built* with, not the set it may *use*. `effectiveTools` is the only correct answer to "which tools does this agent have"; `requiredTools` is the input to it.
 - **Assuming `fileAccessScope` gates anything.** It does not. `effectiveFileAccess` is computed and no file-touching tool consults it, and as composed today it would deny nearly everything if one did: `FileAccessScope.intersect` is literal set intersection over glob *strings*, so `{"**/*"} ∩ {"**/*.kt"}` is empty rather than `{"**/*.kt"}`. Enforcing it needs a glob matcher and subsumption-aware composition first.
 - **Using `PhaseSpark` to narrow tools.** Phase sparks are advisory prompt content, not gates. Capability narrowing belongs in role, language, project, or task sparks.
+- **Building an `AgentConfiguration` without the `cognitiveConfig` you were handed.** This was the AMPR-387 bug exactly: `SparkBasedAgent.agentConfiguration` constructed `AgentConfiguration(...)` without one, so the default (`phaseSparks.enabled = false`) won and the documented config path did nothing for two releases while `AgentFactory(cognitiveConfig = …)` fed a private getter nothing read. A config parameter that is accepted and dropped reads as supported.
+- **Treating `currentCognitivePhase` as observability.** It is prompt state — `buildSystemPrompt` is its only reader. Subscribe to `CognitivePhaseEvent` to know what phase an agent is in; `getCurrentPhase()` on the manager is the in-process equivalent.

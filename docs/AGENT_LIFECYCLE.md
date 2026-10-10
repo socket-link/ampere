@@ -78,14 +78,36 @@ PhaseSparks add lightweight, phase-specific guidance to the system prompt during
 PERCEIVE, RECALL, OBSERVE, PLAN, EXECUTE, and LEARN. They are transient: applied
 at phase entry and removed at phase exit.
 
-Enable PhaseSparks in one of two ways:
-- Set `AgentConfiguration.cognitiveConfig.phaseSparks.enabled = true`
-  - Optionally restrict to a subset with `phaseSparks.phases`
-- Or set `AMPERE_PHASE_SPARKS=true` to enable globally (all phases)
+Enable PhaseSparks by setting `AgentConfiguration.cognitiveConfig.phaseSparks.enabled
+= true`, optionally restricting to a subset of phases with `phaseSparks.phases`. The
+config reaches the agent through whichever factory built it — `AgentFactory`,
+`SparkAgentFactory`, and the `SparkBasedAgent.<Role>(...)` factories all take a
+`cognitiveConfig`.
+
+`enabled` is the master switch. Under it sit two independent ones, because phase
+*handling* and phase *guidance* are different things to want:
+
+| Switch | Default | What it does |
+|--------|---------|--------------|
+| `publishBrackets` | `true` | Publishes `CognitivePhaseEvent.PhaseEntered` / `PhaseExited` at each phase boundary. Needs a door on the agent; with none there is nothing to publish through. |
+| `injectPhaseSparks` | `true` | Adds the phase's `PhaseSpark` guidance to the system prompt (and lets each role/language spark contribute its `## When <Phase>` section). |
+
+So `enabled = true` alone behaves as it always has: brackets *and* guidance.
+`enabled = true, injectPhaseSparks = false` brackets a run silently — you get the
+phase boundaries in the trace while the agent's system prompt stays byte-for-byte
+what it would be with phases off. That is the configuration to reach for when you
+want phase observability without paying for phase prompt tokens or perturbing a
+prompt you are measuring.
+
+`AMPERE_PHASE_SPARKS=true` is a **developer switch**, not a deployment one: it
+forces `enabled`, `publishBrackets`, and `injectPhaseSparks` on for every agent in
+the process, whatever the config says. Use it to inspect phase behaviour in a local
+run; configure `cognitiveConfig` for anything a consumer depends on.
 
 Trade-offs:
 - Pros: clearer phase focus, more consistent reasoning at each step
-- Cons: larger prompts (more tokens/latency) and more context to review in logs
+- Cons: larger prompts (more tokens/latency) and more context to review in logs —
+  both of which `injectPhaseSparks = false` opts out of while keeping the brackets
 
 ---
 
