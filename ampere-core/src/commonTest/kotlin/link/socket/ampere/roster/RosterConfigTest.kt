@@ -7,12 +7,18 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
+import link.socket.ampere.agents.domain.task.EffortLevel
+import link.socket.ampere.agents.domain.task.ExecutionAssignment
 import link.socket.ampere.probe.ProbeId
 import link.socket.ampere.probe.SequenceProbe
 import link.socket.ampere.probe.safety.SafetyProbe
 
 /**
  * AMPR-409 (B15): a roster a consumer authors, with no reviewing seat to invent.
+ *
+ * AMPR-413 adds what such a roster can carry: the reviewing seat as a value rather
+ * than an override, a per-seat `ExecutionAssignment`, and the plain-id factories a
+ * caller that cannot write a [RoleId] needs.
  */
 class RosterConfigTest {
 
@@ -131,5 +137,96 @@ class RosterConfigTest {
             json.decodeFromString(RosterConfig.serializer(), encoded)
         }
         assertTrue(failure.message.orEmpty().contains("ghost"), failure.message)
+    }
+
+    @Test
+    fun `a roster can name the seat that reviews without implementing the interface`() {
+        val maker = RoleConfig(RoleId("maker"), "Maker", PromptRef("consumer.maker", 1))
+        val checker = RoleConfig(
+            id = RoleId("checker"),
+            title = "Checker",
+            instructions = PromptRef("consumer.checker", 1),
+            reviews = setOf(maker.id),
+        )
+
+        val roster = RosterConfig(host = maker.id, roles = listOf(maker, checker), verifier = checker.id)
+
+        assertEquals(checker.id, roster.verifier)
+        assertEquals(checker.id, roster.reviewerOf(maker.id))
+        assertNull(
+            roster.resolverFor(ProbeId(SequenceProbe.ID)),
+            "naming a verifier names no resolver; which seat settles a Probe is still an override",
+        )
+    }
+
+    @Test
+    fun `a verifier who holds no seat is refused`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            RosterConfig(host = solo.id, roles = listOf(solo), verifier = RoleId("ghost"))
+        }
+        assertTrue(failure.message.orEmpty().contains("ghost"), failure.message)
+    }
+
+    @Test
+    fun `a roster decoded with a verifier who holds no seat is refused`() {
+        val encoded = """{"host":"solo","verifier":"ghost","roles":""" +
+            """[{"id":"solo","title":"Solo","instructions":{"id":"s","version":1}}]}"""
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            json.decodeFromString(RosterConfig.serializer(), encoded)
+        }
+        assertTrue(failure.message.orEmpty().contains("ghost"), failure.message)
+    }
+
+    @Test
+    fun `a roster round-trips with a verifier and a seat's execution assignment`() {
+        val maker = RoleConfig(
+            id = RoleId("maker"),
+            title = "Maker",
+            instructions = PromptRef("consumer.maker", 2),
+            tools = setOf("web_fetch"),
+            execution = ExecutionAssignment(model = "the-big-one", effort = EffortLevel.HIGH),
+        )
+        val checker = RoleConfig(
+            id = RoleId("checker"),
+            title = "Checker",
+            instructions = PromptRef("consumer.checker", 1),
+            reviews = setOf(maker.id),
+        )
+        val roster = RosterConfig(host = maker.id, roles = listOf(maker, checker), verifier = checker.id)
+
+        val encoded = json.encodeToString(RosterConfig.serializer(), roster)
+        val decoded = json.decodeFromString(RosterConfig.serializer(), encoded)
+
+        assertEquals(roster, decoded)
+        assertTrue(encoded.contains("\"verifier\":\"checker\""), encoded)
+        assertEquals(EffortLevel.HIGH, decoded.byId(maker.id)?.execution?.effort)
+        assertEquals("the-big-one", decoded.byId(maker.id)?.execution?.model)
+        assertNull(decoded.byId(checker.id)?.execution, "a seat that declares no assignment decodes to none")
+    }
+
+    @Test
+    fun `a roster built from plain ids is the roster built from role ids`() {
+        val fromRoleIds = RosterConfig(
+            host = solo.id,
+            roles = listOf(solo.copy(reviews = setOf(solo.id))),
+            verifier = solo.id,
+        )
+
+        val fromStrings = RosterConfig.of(
+            host = "solo",
+            roles = listOf(
+                RoleConfig.of(
+                    id = "solo",
+                    title = "Solo",
+                    instructions = PromptRef("consumer.solo", 1),
+                    tools = setOf("web_search"),
+                    reviews = setOf("solo"),
+                ),
+            ),
+            verifier = "solo",
+        )
+
+        assertEquals(fromRoleIds, fromStrings)
     }
 }

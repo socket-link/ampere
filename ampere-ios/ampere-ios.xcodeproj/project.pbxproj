@@ -16,6 +16,7 @@
 		AC243AAAAAAAAAAAAAAA0010 /* ArcRunHandle+AsyncStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC243AAAAAAAAAAAAAAA0004 /* ArcRunHandle+AsyncStream.swift */; };
 		AC327AAAAAAAAAAAAAAA0002 /* FoundationModelsLocalInferenceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC327AAAAAAAAAAAAAAA0001 /* FoundationModelsLocalInferenceEngine.swift */; };
 		AC374AAAAAAAAAAAAAAA0001 /* FoundationModelsLocalInferenceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC327AAAAAAAAAAAAAAA0001 /* FoundationModelsLocalInferenceEngine.swift */; };
+		AC413AAAAAAAAAAAAAAA0002 /* RosterAuthoringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC413AAAAAAAAAAAAAAA0001 /* RosterAuthoringTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 		AC243AAAAAAAAAAAAAAA0002 /* ArcExecutionBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcExecutionBridgeTests.swift; sourceTree = "<group>"; };
 		AC243AAAAAAAAAAAAAAA0004 /* ArcRunHandle+AsyncStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcRunHandle+AsyncStream.swift"; sourceTree = "<group>"; };
 		AC327AAAAAAAAAAAAAAA0001 /* FoundationModelsLocalInferenceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsLocalInferenceEngine.swift; sourceTree = "<group>"; };
+		AC413AAAAAAAAAAAAAAA0001 /* RosterAuthoringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RosterAuthoringTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXContainerItemProxy section */
@@ -121,6 +123,7 @@
 			isa = PBXGroup;
 			children = (
 				AC243AAAAAAAAAAAAAAA0002 /* ArcExecutionBridgeTests.swift */,
+				AC413AAAAAAAAAAAAAAA0001 /* RosterAuthoringTests.swift */,
 			);
 			path = iosAppTests;
 			sourceTree = "<group>";
@@ -268,6 +271,7 @@
 				AC243AAAAAAAAAAAAAAA0010 /* ArcRunHandle+AsyncStream.swift in Sources */,
 				AC374AAAAAAAAAAAAAAA0001 /* FoundationModelsLocalInferenceEngine.swift in Sources */,
 				AC243AAAAAAAAAAAAAAA0003 /* ArcExecutionBridgeTests.swift in Sources */,
+				AC413AAAAAAAAAAAAAAA0002 /* RosterAuthoringTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
