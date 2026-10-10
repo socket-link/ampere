@@ -89,10 +89,20 @@ class SparkBasedAgentPlanStepDispatchTest {
                 "own PLAN call should be billed (the AMPR-396 bug billed one more per " +
                 "step, so four)",
         )
-        assertEquals(1, prompts.size, "exactly one prompt should have reached the provider")
+        assertEquals(
+            3,
+            callsUnder(CognitivePhase.EXECUTE).size,
+            "each of the three tool-less steps is carried out by one EXECUTE call " +
+                "(AMPR-407), and none of them is a PLAN call",
+        )
+        assertEquals(
+            4,
+            prompts.size,
+            "one planning prompt plus one per reasoning step",
+        )
         assertTrue(
             outcome is Outcome.Success,
-            "every step is a tool-less reasoning step, so the plan should succeed; " +
+            "every step reached a conclusion, so the plan should succeed; " +
                 "got ${outcome::class.simpleName}",
         )
     }
@@ -159,13 +169,19 @@ class SparkBasedAgentPlanStepDispatchTest {
         )
 
     private suspend fun planCalls(): List<ProviderCallStartedEvent> =
+        callsUnder(CognitivePhase.PLAN)
+
+    private suspend fun callsUnder(phase: CognitivePhase): List<ProviderCallStartedEvent> =
         eventRepository.getAllEvents()
             .getOrThrow()
             .filterIsInstance<ProviderCallStartedEvent>()
-            .filter { it.cognitivePhase == CognitivePhase.PLAN }
+            .filter { it.cognitivePhase == phase }
 
     private companion object {
-        /** Three steps nominating no tool, so dispatching one costs nothing but the dispatch. */
+        /**
+         * Three steps nominating no tool, so each is carried out by one EXECUTE model call
+         * and none of them dispatches a tool (AMPR-407).
+         */
         const val THREE_STEP_PLAN_JSON: String = """
             {
               "steps": [

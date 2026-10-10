@@ -393,7 +393,9 @@ class SparkBasedAgentToolNarrowingTest {
         val alpha = RecordingTool(ALPHA)
         val reasoning = AgentReasoning.createForTesting(executorId = "narrowing-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
-            onToolExecution { _, _ -> error("a null toolId invokes nothing") }
+            onToolExecution { _, _ -> error("a null toolId invokes no tool") }
+            // AMPR-407: a tool-less step is one model call by the executing seat.
+            onLLMCall { "The approach is to narrow nothing." }
         }
         val agent = agentWith(
             tools = setOf(alpha.tool),

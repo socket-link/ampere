@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.definition
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeout
@@ -7,12 +8,14 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.config.CognitiveConfig
+import link.socket.ampere.agents.config.ReasoningStepConfig
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.definition.product.ProductState
 import link.socket.ampere.agents.definition.project.ProjectState
 import link.socket.ampere.agents.definition.qa.QualityState
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
+import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
 import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
@@ -26,6 +29,7 @@ import link.socket.ampere.agents.domain.reasoning.AgentReasoning
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
+import link.socket.ampere.agents.domain.reasoning.StepContext
 import link.socket.ampere.agents.domain.reasoning.StepResult
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
@@ -196,6 +200,25 @@ open class SparkBasedAgent<S : AgentState>(
     private var _phaseSparkLibrary: PhaseSparkLibrary? = null
 
     /**
+     * What the current plan's tool-less steps concluded, oldest first
+     * (AMPR-407).
+     *
+     * The carrier that gets a reasoning step's text to the steps after it: the
+     * live path hands Execute one step at a time, each wrapped in its own
+     * one-step plan (AMPR-396), so `PlanExecutor`'s per-plan [StepContext] ends
+     * with the step that wrote to it and cannot be that carrier.
+     *
+     * Plan-scoped, not run-scoped: cleared whenever this agent generates a plan
+     * ([runLLMToPlan], [runSubPlanForTask]), and bounded at the read by
+     * [ReasoningStepConfig.priorResultLimit]. Unsynchronised because
+     * `PlanExecutor` walks a plan's steps sequentially in one coroutine — this
+     * is a within-plan buffer, not cross-run state, which belongs in the
+     * memory repositories.
+     */
+    @Transient
+    private val reasoningStepResults: MutableList<ReasoningStepResult> = mutableListOf()
+
+    /**
      * Sets the [PhaseSparkLibrary] consulted by the agent's [PhaseSparkManager]
      * when [link.socket.ampere.agents.domain.cognition.sparks.AmpereSpikeFlags.declarativeSparksEnabled]
      * is on. Must be called before the agent enters its first cognitive phase
@@ -316,6 +339,9 @@ open class SparkBasedAgent<S : AgentState>(
         { task, ideas, relevantKnowledge ->
             runBlockingCompat(ioDispatcher) {
                 withTimeout(60000) {
+                    // AMPR-407: a new plan is a new reasoning scope — the steps of the plan
+                    // about to be generated must not read the previous plan's conclusions.
+                    reasoningStepResults.clear()
                     // AMPR-388: knowledge Recall found reaches `PlanGenerator`'s prompt. This
                     // used to call `generatePlan(task, ideas)` and take the empty default.
                     reasoning.generatePlan(task, ideas, relevantKnowledge)
@@ -365,6 +391,9 @@ open class SparkBasedAgent<S : AgentState>(
         runBlockingCompat(ioDispatcher) {
             withTimeout(60000) {
                 val relevantKnowledge = recallRelevantKnowledgeForTask(task)
+                // AMPR-407: as in `runLLMToPlan` — the sub-plan's steps reason from each
+                // other, not from whatever plan ran before them.
+                reasoningStepResults.clear()
                 val plan = reasoning.generatePlan(task, emptyList(), relevantKnowledge)
                 reasoning.executePlan(plan) { step, _ ->
                     executePlanStep(step, parentTask = task)
@@ -402,9 +431,11 @@ open class SparkBasedAgent<S : AgentState>(
      * the agent was never built with — one set, one error, no second path
      * (AMPR-400).
      *
-     * Steps with `toolId == null` are treated as pure reasoning placeholders
-     * and succeed without invoking anything (the LLM was asked to mark
-     * tool-less steps with `toolToUse = null` in the plan_steps schema).
+     * A step with `toolId == null` nominates no tool because the work is
+     * thinking, not acting — the plan_steps schema asks the planner to mark
+     * those with `toolToUse = null`. It is carried out by
+     * [executeReasoningStep]: one model call, not a success returned on its
+     * behalf (AMPR-407).
      */
     private suspend fun executePlanStep(step: Task, parentTask: Task): StepResult {
         if (step is Task.Blank) {
@@ -425,10 +456,7 @@ open class SparkBasedAgent<S : AgentState>(
 
         val toolId = step.toolId
         if (toolId == null) {
-            return StepResult.success(
-                description = step.description,
-                details = "reasoning step (no toolToUse)",
-            )
+            return executeReasoningStep(step, parentTask)
         }
 
         val dispatchable = effectiveTools
@@ -462,6 +490,125 @@ open class SparkBasedAgent<S : AgentState>(
     }
 
     /**
+     * Carries out a step that nominated no tool (AMPR-407).
+     *
+     * The step is one model call by this seat — the agent the Plan phase's step
+     * was handed to — tagged [CognitivePhase.EXECUTE] like every other model
+     * call Execute makes, and prompted with the step's description, the task it
+     * belongs to, and what this plan's earlier reasoning steps concluded. The
+     * text that comes back *is* the step's result: it goes on the [StepResult]
+     * (so `PlanStepCompleted` carries it) and into [reasoningStepResults], from
+     * where the steps after it read it.
+     *
+     * Until AMPR-407 this returned `StepResult.success(details = "reasoning
+     * step (no toolToUse)")` with no call at all, so a plan whose first step
+     * was "decide the approach" had that step done by nobody and reported done.
+     * Every way this can fail to produce text is therefore a step failure, not
+     * a success — including having no LLM transport to call, which is the state
+     * a bench or a test agent is in. A host that wants tool-less steps to stay
+     * free says so with `cognitiveConfig.reasoningSteps.execute = false`, and
+     * then gets the old behaviour by declaration rather than by accident.
+     */
+    private suspend fun executeReasoningStep(step: Task.CodeChange, parentTask: Task): StepResult {
+        val stepConfig = agentConfiguration.cognitiveConfig.reasoningSteps
+        if (!stepConfig.execute) {
+            return StepResult.success(
+                description = step.description,
+                details = "reasoning step not executed: cognitiveConfig.reasoningSteps.execute is off",
+            )
+        }
+
+        val text = try {
+            reasoning.callLLM(
+                prompt = buildReasoningStepPrompt(step, parentTask),
+                phase = CognitivePhase.EXECUTE,
+            ).trim()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return StepResult.failure(
+                description = step.description,
+                error = "Reasoning step ${step.id} nominated no tool, so carrying it out is " +
+                    "one model call — and that call failed: " +
+                    "${e::class.simpleName}: ${e.message}. Set " +
+                    "cognitiveConfig.reasoningSteps.execute = false to declare tool-less " +
+                    "steps free instead of leaving them undone.",
+                isCritical = true,
+            )
+        }
+
+        if (text.isBlank()) {
+            return StepResult.failure(
+                description = step.description,
+                error = "Reasoning step ${step.id} produced no text, so it reached no " +
+                    "conclusion for the steps after it to read.",
+                isCritical = true,
+            )
+        }
+
+        reasoningStepResults += ReasoningStepResult(stepDescription = step.description, text = text)
+        return StepResult.success(
+            description = step.description,
+            details = text,
+        )
+    }
+
+    /**
+     * The prompt one reasoning step is carried out with.
+     *
+     * Names what the step was asked to do and — when there is a wider task to
+     * name — what the plan it belongs to is for. The live path hands Execute
+     * one step at a time wrapped in its own one-step plan (AMPR-396), so the
+     * step *is* its own parent there and a "Task:" line would repeat the step;
+     * [runSubPlanForTask] is where the two differ. The earlier steps'
+     * conclusions come last, and the instruction to answer the step itself
+     * after them, so the model ends on the ask.
+     */
+    private fun buildReasoningStepPrompt(step: Task.CodeChange, parentTask: Task): String =
+        buildString {
+            appendLine("You are carrying out one step of a plan that is already underway.")
+            appendLine(
+                "This step nominates no tool, so it is yours to reason through: what you " +
+                    "write is the step's result, and the steps after it are given it as context.",
+            )
+            appendLine()
+            val taskDescription = parentTask.promptDescription()
+            if (taskDescription.isNotBlank() && taskDescription != step.description) {
+                appendLine("Task: $taskDescription")
+            }
+            appendLine("Step to carry out: ${step.description}")
+            appendLine()
+            priorReasoningSection()?.let { section ->
+                appendLine(section)
+            }
+            appendLine(
+                "Answer the step itself — the conclusion the later steps need, and nothing else.",
+            )
+        }
+
+    /**
+     * What this plan's earlier reasoning steps concluded, rendered for a prompt
+     * or for a tool step's instructions, or null when there is nothing to carry
+     * (AMPR-407, B14).
+     *
+     * Bounded by [ReasoningStepConfig.priorResultLimit], keeping the *last* N
+     * in plan order: a long plan's later steps read the reasoning nearest them
+     * rather than everything since the plan began.
+     */
+    private fun priorReasoningSection(): String? {
+        val limit = agentConfiguration.cognitiveConfig.reasoningSteps.priorResultLimit
+        if (limit <= 0 || reasoningStepResults.isEmpty()) {
+            return null
+        }
+        return buildString {
+            appendLine("Conclusions reached by earlier steps of this plan:")
+            reasoningStepResults.takeLast(limit).forEach { result ->
+                appendLine("- ${result.stepDescription}: ${result.text}")
+            }
+        }
+    }
+
+    /**
      * Builds the initial request handed to the tool's parameter strategy. The
      * strategy enriches this with a tool-specific context (e.g. promotes the
      * generic [ExecutionContext.NoChanges] wrapper to
@@ -469,6 +616,12 @@ open class SparkBasedAgent<S : AgentState>(
      * strategy is registered the tool must be able to act on the raw request.
      * The agent's pinned workspace rides along on the request (AMPR-300) so a
      * strategy promoting into [ExecutionContext.Code] has a root to use.
+     *
+     * The instructions are the step's description plus what this plan's
+     * reasoning steps concluded (AMPR-407): a plan of "1. decide the approach,
+     * 2. write the file" is only coherent if step 2 is told what step 1
+     * decided, and `instructions` is what `ToolExecutionEngine` takes as the
+     * call's intent.
      */
     private fun buildPlanStepRequest(step: Task.CodeChange, parentTask: Task): ExecutionRequest<*> {
         val ticket = link.socket.ampere.agents.events.tickets.Ticket(
@@ -483,12 +636,17 @@ open class SparkBasedAgent<S : AgentState>(
             createdAt = kotlinx.datetime.Clock.System.now(),
             updatedAt = kotlinx.datetime.Clock.System.now(),
         )
+        val priorReasoning = priorReasoningSection()
         return ExecutionRequest(
             context = ExecutionContext.NoChanges(
                 executorId = id,
                 ticket = ticket,
                 task = step,
-                instructions = step.description,
+                instructions = if (priorReasoning == null) {
+                    step.description
+                } else {
+                    "${step.description}\n\n$priorReasoning"
+                },
             ),
             constraints = link.socket.ampere.agents.execution.request.ExecutionConstraints(),
             // AMPR-300: the pin a code tool's strategy roots its Code context in.
@@ -833,4 +991,27 @@ open class SparkBasedAgent<S : AgentState>(
             return agent
         }
     }
+}
+
+/**
+ * One tool-less plan step's product (AMPR-407): what the plan asked for, and
+ * what the executing seat concluded.
+ *
+ * Kept as a pair rather than as bare text because a later step reading
+ * "use a sealed interface" without "decide how to model the states" has the
+ * answer and not the question.
+ */
+private data class ReasoningStepResult(
+    val stepDescription: String,
+    val text: String,
+)
+
+/**
+ * How a task names itself inside a prompt. Only [Task.CodeChange] carries a
+ * description; anything else is named by its id, the same fallback
+ * `PlanExecutor` uses when it has to describe a step it was handed.
+ */
+private fun Task.promptDescription(): String = when (this) {
+    is Task.CodeChange -> description
+    else -> id.ifBlank { "unnamed task" }
 }
