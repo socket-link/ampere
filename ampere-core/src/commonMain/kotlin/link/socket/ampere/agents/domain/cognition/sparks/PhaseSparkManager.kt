@@ -24,6 +24,16 @@ import link.socket.ampere.util.getEnvironmentVariable
  * Phase Sparks are disabled by default to maintain backward compatibility.
  * Enable via [PhaseSparkConfig], the `enabled` property, or environment variable `AMPERE_PHASE_SPARKS`.
  *
+ * **AMPR-387**: [enabled] is the master gate, and the two things it used to fuse are now
+ * separate switches. [publishBrackets] governs the `PhaseEntered` / `PhaseExited` pair;
+ * [injectPhaseSparks] governs everything that reaches the agent's prompt: the `PhaseSpark` pushed
+ * onto its spark stack, the declarative sparks selected from its library, and
+ * `currentCognitivePhase` (which `buildSystemPrompt` reads to pick each spark's per-phase
+ * section). Both default on, so `enabled` alone behaves as it always has;
+ * `injectPhaseSparks = false` brackets the phases of a run while leaving its prompt byte-for-byte
+ * what it would be with phases off. `AMPERE_PHASE_SPARKS` is a developer override that forces all
+ * three on.
+ *
  * Phase brackets are published through [eventApi] (F1, AMPR-339): every `PhaseEntered` /
  * `PhaseExited` is persisted before it is dispatched, which is what lets a run's phase history
  * be replayed from the store (F18). The api is the owning agent's own door, so the events are
@@ -34,6 +44,8 @@ import link.socket.ampere.util.getEnvironmentVariable
 class PhaseSparkManager<S : AgentState> private constructor(
     private val agent: AutonomousAgent<S>,
     val enabled: Boolean,
+    private val publishBrackets: Boolean,
+    private val injectPhaseSparks: Boolean,
     private val activePhases: Set<CognitivePhase>,
     private val library: PhaseSparkLibrary?,
     private val eventApi: AgentEventApi?,
@@ -41,16 +53,25 @@ class PhaseSparkManager<S : AgentState> private constructor(
     constructor(
         agent: AutonomousAgent<S>,
         enabled: Boolean = isPhaseSparkEnabled(),
+        publishBrackets: Boolean = true,
+        injectPhaseSparks: Boolean = true,
         activePhases: Set<CognitivePhase> = DEFAULT_PHASES,
         eventApi: AgentEventApi? = null,
     ) : this(
         agent = agent,
         enabled = enabled,
+        publishBrackets = publishBrackets,
+        injectPhaseSparks = injectPhaseSparks,
         activePhases = activePhases,
         library = null,
         eventApi = eventApi,
     )
 
+    /**
+     * The sparks pushed for the active phase. Empty while a phase is active and
+     * [injectPhaseSparks] is off, which is why [currentPhase] — not this list — is
+     * what marks a phase as entered.
+     */
     private var appliedSparks: MutableList<PhaseSpark> = mutableListOf()
     private var currentPhase: CognitivePhase? = null
     private var currentPhaseNestingDepth: Int = 0
@@ -73,23 +94,20 @@ class PhaseSparkManager<S : AgentState> private constructor(
         if (!enabled) return
 
         val oldPhase = oldPhaseOverride ?: currentPhase
-        if (appliedSparks.isNotEmpty() && currentPhase != phase) {
+        if (currentPhase != null && currentPhase != phase) {
             removeAppliedSparks()
         }
 
         if (!isPhaseEnabled(phase)) return
 
-        if (currentPhase == phase && appliedSparks.isNotEmpty()) return
+        if (currentPhase == phase) return
 
-        val sparksToApply = mutableListOf<PhaseSpark>(PhaseSpark.forPhase(phase))
-        val lib = library
-        if (AmpereSpikeFlags.declarativeSparksEnabled && lib != null) {
-            val context = selectionContext ?: SparkSelectionContext(phase = phase, text = "")
-            val declarative = runCatching { lib.selectFor(context) }.getOrElse { emptyList() }
-            sparksToApply += declarative
-        }
+        val sparksToApply = if (injectPhaseSparks) selectSparksFor(phase, selectionContext) else emptyList()
 
-        agent.currentCognitivePhase = phase
+        // `currentCognitivePhase` is read by exactly one thing — `buildSystemPrompt` — so it is
+        // prompt injection as much as the sparks are: left set, every role/language spark's
+        // `## When <Phase>` section would still reach a silently bracketed run's prompt.
+        if (injectPhaseSparks) agent.currentCognitivePhase = phase
         publishPhaseEntered(oldPhase = oldPhase, newPhase = phase, nestingDepth = nestingDepth)
         for (spark in sparksToApply) {
             agent.spark<AutonomousAgent<S>>(spark)
@@ -140,7 +158,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
                     nestingDepth = nestingDepth,
                 )
 
-                if (previousPhase != null && previousSparks.isNotEmpty()) {
+                if (previousPhase != null) {
                     appliedSparks = previousSparks.toMutableList()
                     currentPhase = previousPhase
                     currentPhaseNestingDepth = previousPhaseNestingDepth
@@ -159,18 +177,34 @@ class PhaseSparkManager<S : AgentState> private constructor(
         removeAppliedSparks()
     }
 
-    fun getCurrentPhase(): CognitivePhase? =
-        if (enabled && appliedSparks.isNotEmpty()) currentPhase else null
+    fun getCurrentPhase(): CognitivePhase? = if (enabled) currentPhase else null
 
-    fun isPhaseActive(): Boolean = enabled && appliedSparks.isNotEmpty()
+    fun isPhaseActive(): Boolean = enabled && currentPhase != null
 
     private fun isPhaseEnabled(phase: CognitivePhase): Boolean = activePhases.contains(phase)
+
+    /**
+     * The built-in [PhaseSpark] for [phase] plus any declarative sparks the agent's
+     * library selects. Only called when [injectPhaseSparks] is on: selection is part
+     * of prompt injection, so a silently bracketed run never consults the library.
+     */
+    private fun selectSparksFor(
+        phase: CognitivePhase,
+        selectionContext: SparkSelectionContext?,
+    ): List<PhaseSpark> {
+        val sparks = mutableListOf<PhaseSpark>(PhaseSpark.forPhase(phase))
+        val lib = library
+        if (AmpereSpikeFlags.declarativeSparksEnabled && lib != null) {
+            val context = selectionContext ?: SparkSelectionContext(phase = phase, text = "")
+            sparks += runCatching { lib.selectFor(context) }.getOrElse { emptyList() }
+        }
+        return sparks
+    }
 
     private suspend fun removeAppliedSparks(
         restoredToPhase: CognitivePhase? = null,
         nestingDepth: Int = currentPhaseNestingDepth,
     ) {
-        if (appliedSparks.isEmpty()) return
         val exitedPhase = currentPhase ?: return
         repeat(appliedSparks.size) {
             agent.unspark()
@@ -178,7 +212,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
         appliedSparks.clear()
         currentPhase = null
         currentPhaseNestingDepth = 0
-        agent.currentCognitivePhase = restoredToPhase
+        if (injectPhaseSparks) agent.currentCognitivePhase = restoredToPhase
         publishPhaseExited(
             exitedPhase = exitedPhase,
             restoredToPhase = restoredToPhase,
@@ -191,6 +225,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
         newPhase: CognitivePhase,
         nestingDepth: Int,
     ) {
+        if (!publishBrackets) return
         eventApi?.let { api ->
             api.publish(
                 CognitivePhaseEvent.PhaseEntered(
@@ -211,6 +246,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
         restoredToPhase: CognitivePhase?,
         nestingDepth: Int,
     ) {
+        if (!publishBrackets) return
         eventApi?.let { api ->
             api.publish(
                 CognitivePhaseEvent.PhaseExited(
@@ -230,11 +266,12 @@ class PhaseSparkManager<S : AgentState> private constructor(
         private val DEFAULT_PHASES: Set<CognitivePhase> = enumValues<CognitivePhase>().toSet()
 
         /**
-         * Checks if phase Sparks should be enabled.
+         * Whether the `AMPERE_PHASE_SPARKS` developer switch is set to `"true"`.
          *
-         * Resolution order:
-         * 1. `AMPERE_PHASE_SPARKS` environment variable ("true" to enable)
-         * 2. Default: disabled (false)
+         * This is an override, not a default: when set it enables phases, bracket
+         * publication, and prompt injection together, whatever a caller's
+         * [PhaseSparkConfig] says. Unset (the normal case) it contributes nothing and
+         * the config decides on its own.
          */
         fun isPhaseSparkEnabled(): Boolean {
             return try {
@@ -262,12 +299,16 @@ class PhaseSparkManager<S : AgentState> private constructor(
         internal fun <S : AgentState> internalCreate(
             agent: AutonomousAgent<S>,
             enabled: Boolean,
+            publishBrackets: Boolean = true,
+            injectPhaseSparks: Boolean = true,
             activePhases: Set<CognitivePhase> = DEFAULT_PHASES,
             library: PhaseSparkLibrary? = null,
             eventApi: AgentEventApi? = null,
         ): PhaseSparkManager<S> = PhaseSparkManager(
             agent = agent,
             enabled = enabled,
+            publishBrackets = publishBrackets,
+            injectPhaseSparks = injectPhaseSparks,
             activePhases = activePhases,
             library = library,
             eventApi = eventApi,
@@ -279,12 +320,16 @@ class PhaseSparkManager<S : AgentState> private constructor(
             library: PhaseSparkLibrary?,
             eventApi: AgentEventApi?,
         ): PhaseSparkManager<S> {
-            val enabledFromConfig = phaseConfig?.enabled ?: false
-            val enabled = enabledFromConfig || isPhaseSparkEnabled()
+            // The env var is a developer override (AMPR-387): it enables phases and both
+            // switches, whatever the config says. Absent it, the config alone decides.
+            val envOverride = isPhaseSparkEnabled()
+            val enabled = (phaseConfig?.enabled ?: false) || envOverride
             val phases = phaseConfig?.phases ?: DEFAULT_PHASES
             return PhaseSparkManager(
                 agent = agent,
                 enabled = enabled,
+                publishBrackets = envOverride || (phaseConfig?.publishBrackets ?: true),
+                injectPhaseSparks = envOverride || (phaseConfig?.injectPhaseSparks ?: true),
                 activePhases = phases,
                 library = library,
                 eventApi = eventApi,

@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.definition
 
 import kotlinx.coroutines.CoroutineScope
+import link.socket.ampere.agents.config.CognitiveConfig
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
@@ -66,6 +67,10 @@ import link.socket.ampere.plug.permission.UserGrants
  *   stays correct where no persisted store exists (tests, headless use).
  * @param workspace The directory every agent built here is confined to (AMPR-300); required, no
  *   default. See the constructor parameter.
+ * @param cognitiveConfig Cognitive-loop configuration handed to every agent this factory builds
+ *   (AMPR-387). Set `phaseSparks.enabled = true` to get `PhaseEntered` / `PhaseExited` brackets
+ *   without touching the environment, and `phaseSparks.injectPhaseSparks = false` to bracket a
+ *   run without adding phase guidance to its prompt. Default leaves phase handling off.
  */
 class SparkAgentFactory(
     private val scope: CoroutineScope,
@@ -88,6 +93,7 @@ class SparkAgentFactory(
     private val upstreamDecisionClient: UpstreamDecisionClient? = null,
     private val runId: RunId? = null,
     private val database: Database? = null,
+    private val cognitiveConfig: CognitiveConfig = CognitiveConfig(),
 ) {
     private val effectiveSparkRegistry: SparkRegistry
         get() = sparkRegistry ?: DefaultSparkCatalog.registry
@@ -289,6 +295,7 @@ class SparkAgentFactory(
             _runId = runId,
             _userGrantProvider = userGrantProvider,
             _workspace = workspace,
+            _cognitiveConfig = cognitiveConfig,
         )
     }
 

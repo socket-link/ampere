@@ -2,7 +2,6 @@ package link.socket.ampere.agents.definition
 
 import kotlinx.coroutines.CoroutineScope
 import link.socket.ampere.agents.config.AgentActionAutonomy
-import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.config.CognitiveConfig
 import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.agents.domain.cognition.sparks.AmpereProjectSpark
@@ -41,7 +40,6 @@ import link.socket.ampere.agents.execution.tools.git.ToolGitStatus
 import link.socket.ampere.agents.execution.tools.git.ToolPush
 import link.socket.ampere.agents.execution.tools.git.ToolStageFiles
 import link.socket.ampere.db.Database
-import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.llm.LlmProvider
@@ -111,6 +109,12 @@ class AgentFactory(
     private val aiConfiguration: AIConfiguration? = null,
     private val projectSpark: ProjectSpark? = null,
     private val toolWriteCodeFileOverride: Tool<ExecutionContext.Code.WriteCode>? = null,
+    /**
+     * Cognitive-loop configuration handed to every agent this factory builds
+     * (AMPR-387). It used to feed a private `AgentConfiguration` getter nothing
+     * read, so a caller setting `phaseSparks.enabled = true` here got nothing;
+     * it now reaches the agents themselves. Default leaves phase handling off.
+     */
     private val cognitiveConfig: CognitiveConfig = CognitiveConfig(),
     private val llmProvider: LlmProvider? = null,
     /**
@@ -259,16 +263,6 @@ class AgentFactory(
     private val effectiveModelDescriptorSource: ModelDescriptorSource
         get() = modelDescriptorSource ?: DefaultModelDescriptorSource
 
-    private val agentConfiguration: AgentConfiguration
-        get() = AgentConfiguration(
-            agentDefinition = WriteCodeAgent,
-            aiConfiguration = effectiveAiConfiguration,
-            cognitiveConfig = cognitiveConfig,
-            llmProvider = llmProvider,
-            upstreamLlmClient = upstreamLlmClient,
-            upstreamDecisionClient = upstreamDecisionClient,
-        )
-
     /**
      * The effective ProjectSpark to use for agent initialization.
      * Defaults to AmpereProjectSpark if not explicitly provided.
@@ -378,6 +372,7 @@ class AgentFactory(
                 minimumRung = codeAgentMinimumRung,
                 userGrantProvider = userGrantProvider,
                 workspace = workspace,
+                cognitiveConfig = cognitiveConfig,
                 tools = buildSet {
                     add(toolWriteCodeFile)
                     add(ToolReadCodeFile(AgentActionAutonomy.FULLY_AUTONOMOUS))
@@ -406,6 +401,7 @@ class AgentFactory(
                 upstreamDecisionClient = upstreamDecisionClient,
                 userGrantProvider = userGrantProvider,
                 workspace = workspace,
+                cognitiveConfig = cognitiveConfig,
             )
         }
         AgentType.PROJECT -> {
@@ -424,6 +420,7 @@ class AgentFactory(
                 upstreamDecisionClient = upstreamDecisionClient,
                 userGrantProvider = userGrantProvider,
                 workspace = workspace,
+                cognitiveConfig = cognitiveConfig,
                 tools = setOfNotNull(toolCreateIssues, toolAskHuman),
             )
         }
@@ -443,6 +440,7 @@ class AgentFactory(
                 upstreamDecisionClient = upstreamDecisionClient,
                 userGrantProvider = userGrantProvider,
                 workspace = workspace,
+                cognitiveConfig = cognitiveConfig,
             )
         }
     }
