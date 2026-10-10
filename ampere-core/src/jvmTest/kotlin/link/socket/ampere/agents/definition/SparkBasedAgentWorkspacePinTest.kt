@@ -50,8 +50,7 @@ class SparkBasedAgentWorkspacePinTest {
             workspace = pinned,
         )
 
-        agent.runLLMToExecuteTask(planStep("write_code_file"))
-
+        agent.runLLMToExecuteTask(planStep("write_code_file"), emptyList())
         assertEquals(pinned, seen.single().workspace)
         assertEquals(pinned, agent.workspace)
     }
@@ -66,8 +65,7 @@ class SparkBasedAgentWorkspacePinTest {
             reasoningOverride = recordingReasoning(seen),
         )
 
-        agent.runLLMToExecuteTask(planStep("write_code_file"))
-
+        agent.runLLMToExecuteTask(planStep("write_code_file"), emptyList())
         assertNull(seen.single().workspace)
         assertNull(agent.workspace)
     }

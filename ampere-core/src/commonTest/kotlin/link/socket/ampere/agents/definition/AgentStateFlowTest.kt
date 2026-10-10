@@ -12,6 +12,7 @@ import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.IdeaId
 import link.socket.ampere.agents.domain.reasoning.Perception
@@ -121,7 +122,8 @@ class AgentStateFlowTest {
             ideas: List<Idea>,
             relevantKnowledge: List<KnowledgeWithScore>,
         ) -> Plan = { _, _, _ -> Plan.blank }
-        override val runLLMToExecuteTask: (task: Task) -> Outcome = { _ -> Outcome.blank }
+        override val runLLMToExecuteTask: (task: Task, priorResults: List<StepOutcome>) -> Outcome =
+            { _, _ -> Outcome.blank }
         override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome =
             { _, _ -> throw NotImplementedError("Not needed for tests") }
         override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { _ -> Idea.blank }

@@ -255,8 +255,7 @@ class SparkBasedAgentToolNarrowingTest {
             reasoningOverride = reasoning,
         )
 
-        val outcome = agent.runLLMToExecuteTask(step(BETA))
-
+        val outcome = agent.runLLMToExecuteTask(step(BETA), emptyList())
         assertTrue(
             outcome is Outcome.Failure,
             "a step naming a withdrawn tool should fail the run; got ${outcome::class.simpleName}",
@@ -323,8 +322,7 @@ class SparkBasedAgentToolNarrowingTest {
             reasoningOverride = reasoning,
         )
 
-        val outcome = agent.runLLMToExecuteTask(step(BETA))
-
+        val outcome = agent.runLLMToExecuteTask(step(BETA), emptyList())
         assertEquals(
             1,
             beta.invocations.size,
@@ -379,8 +377,7 @@ class SparkBasedAgentToolNarrowingTest {
             reasoningOverride = reasoning,
         )
 
-        val outcome = agent.runLLMToExecuteTask(step("tool_that_never_existed"))
-
+        val outcome = agent.runLLMToExecuteTask(step("tool_that_never_existed"), emptyList())
         assertTrue(
             outcome is Outcome.Failure,
             "an unknown tool id fails on the same lookup as a withdrawn one; " +
@@ -401,8 +398,7 @@ class SparkBasedAgentToolNarrowingTest {
             reasoningOverride = reasoning,
         )
 
-        val outcome = agent.runLLMToExecuteTask(step(null))
-
+        val outcome = agent.runLLMToExecuteTask(step(null), emptyList())
         assertTrue(
             outcome is Outcome.Success,
             "pure-reasoning steps are not gated by the tool set; got ${outcome::class.simpleName}",

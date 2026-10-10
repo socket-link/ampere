@@ -22,6 +22,7 @@ import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.reasoning.AgentReasoning
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
@@ -35,6 +36,8 @@ import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.agents.execution.describeResult
+import link.socket.ampere.agents.execution.detailText
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
@@ -334,11 +337,16 @@ open class SparkBasedAgent<S : AgentState>(
      * any of its own steps nominated. Re-planning a step into a sub-plan is a
      * cycle a host asks for by name ([runSubPlanForTask]), not what executing a
      * step means.
+     *
+     * [priorResults] is what the earlier steps of the same plan produced, handed
+     * down by [AutonomousAgent.executePlan] (AMPR-408). It rides on the request
+     * this step dispatches, which is how the nominated tool's parameter prompt
+     * gets to see it.
      */
-    override val runLLMToExecuteTask: (Task) -> Outcome = { task ->
+    override val runLLMToExecuteTask: (Task, List<StepOutcome>) -> Outcome = { task, priorResults ->
         runBlockingCompat(ioDispatcher) {
             withTimeout(60000) {
-                dispatchStepAsPlan(task)
+                dispatchStepAsPlan(task, priorResults)
             }
         }
     }
@@ -366,8 +374,10 @@ open class SparkBasedAgent<S : AgentState>(
             withTimeout(60000) {
                 val relevantKnowledge = recallRelevantKnowledgeForTask(task)
                 val plan = reasoning.generatePlan(task, emptyList(), relevantKnowledge)
-                reasoning.executePlan(plan) { step, _ ->
-                    executePlanStep(step, parentTask = task)
+                // Nothing ran before this sub-plan: the entry point takes a Task and
+                // nothing else, so the chain starts here and grows step by step.
+                reasoning.executePlan(plan, priorResults = emptyList()) { step, context ->
+                    executePlanStep(step, parentTask = task, priorResults = context.priorResults)
                 }.outcome
             }
         }
@@ -380,17 +390,50 @@ open class SparkBasedAgent<S : AgentState>(
      * rather than a bespoke `StepResult` → `Outcome` conversion, so a single
      * step and a whole plan settle to the same outcome shape from the same code.
      * [AgentReasoning.executePlan] makes no model call.
+     *
+     * [priorResults] is what ran before this step in the plan it came from, seeded
+     * into the wrapper plan's step context (AMPR-408).
      */
-    private suspend fun dispatchStepAsPlan(step: Task): Outcome =
-        reasoning.executePlan(
-            Plan.ForTask(
+    private suspend fun dispatchStepAsPlan(step: Task, priorResults: List<StepOutcome>): Outcome {
+        val result = reasoning.executePlan(
+            plan = Plan.ForTask(
                 task = step,
                 tasks = listOf(step),
                 estimatedComplexity = 1,
             ),
-        ) { planStep, _ ->
-            executePlanStep(planStep, parentTask = step)
-        }.outcome
+            // The one-step plan is a wrapper, not the whole plan, so the chain the
+            // real plan has accumulated is seeded in rather than starting empty
+            // (AMPR-408). `context.priorResults` is then the one place a step
+            // executor reads it, whichever path got here.
+            priorResults = priorResults,
+        ) { planStep, context ->
+            executePlanStep(planStep, parentTask = step, priorResults = context.priorResults)
+        }
+        return result.outcome.reportingStep(result.stepOutcomes.singleOrNull())
+    }
+
+    /**
+     * This outcome, carrying the step's own report as its message (AMPR-408).
+     *
+     * [AgentReasoning.executePlan] summarises a plan for its caller, and the summary of a
+     * plan with one step in it is a tally of one — `"✓ Success: 1"`. That message is the
+     * only thing [AutonomousAgent.executePlan] can hand the *next* step, so on the live
+     * path, where every step is dispatched as its own one-step plan (AMPR-396), a tally is
+     * all a later step would ever learn about an earlier one. The verdict still comes from
+     * the plan's own outcome — which is what the loop, the Arc and `rememberNewOutcome`
+     * read — only the message is the step's.
+     *
+     * A multi-step plan ([runSubPlanForTask]) keeps the summary: its steps read each other
+     * through `StepContext.priorResults` and never through this message.
+     */
+    private fun Outcome.reportingStep(stepOutcome: StepOutcome?): Outcome {
+        val report = stepOutcome?.detailText()?.takeIf { it.isNotBlank() } ?: return this
+        return when (this) {
+            is ExecutionOutcome.NoChanges.Success -> copy(message = report)
+            is ExecutionOutcome.NoChanges.Failure -> copy(message = report)
+            else -> this
+        }
+    }
 
     /**
      * Routes a plan step to its nominated tool. Strict tool-id dispatch with no
@@ -406,7 +449,11 @@ open class SparkBasedAgent<S : AgentState>(
      * and succeed without invoking anything (the LLM was asked to mark
      * tool-less steps with `toolToUse = null` in the plan_steps schema).
      */
-    private suspend fun executePlanStep(step: Task, parentTask: Task): StepResult {
+    private suspend fun executePlanStep(
+        step: Task,
+        parentTask: Task,
+        priorResults: List<StepOutcome>,
+    ): StepResult {
         if (step is Task.Blank) {
             return StepResult.success(
                 description = "blank step",
@@ -443,22 +490,38 @@ open class SparkBasedAgent<S : AgentState>(
                 isCritical = true,
             )
 
-        val request = buildPlanStepRequest(step, parentTask)
+        val request = buildPlanStepRequest(step, parentTask, priorResults)
         return when (val outcome = reasoning.executeTool(tool, request)) {
             is ExecutionOutcome.Success -> StepResult.success(
                 description = step.description,
-                details = "tool=$toolId outcome=${outcome::class.simpleName}",
+                details = outcome.stepDetails(toolId),
             )
             is ExecutionOutcome.Failure -> StepResult.failure(
                 description = step.description,
-                error = "tool=$toolId failed: ${outcome::class.simpleName}",
+                error = "tool=$toolId failed: ${outcome::class.simpleName}; " +
+                    outcome.describeResult(),
                 isCritical = true,
             )
             else -> StepResult.success(
                 description = step.description,
-                details = "tool=$toolId outcome=${outcome::class.simpleName}",
+                details = outcome.stepDetails(toolId),
             )
         }
+    }
+
+    /**
+     * What the step reports having done: the tool it ran, the outcome variant, and
+     * what that outcome actually said.
+     *
+     * The last part is the AMPR-408 half. This read `"tool=$toolId
+     * outcome=Success"` and nothing more, so even once the results were threaded
+     * forward the next step would have been handed a type name — true, and of no
+     * use to a model asked to summarise what the previous step found.
+     */
+    private fun ExecutionOutcome.stepDetails(toolId: String): String {
+        val result = describeResult()
+        val head = "tool=$toolId outcome=${this::class.simpleName}"
+        return if (result.isBlank()) head else "$head; $result"
     }
 
     /**
@@ -468,9 +531,15 @@ open class SparkBasedAgent<S : AgentState>(
      * [ExecutionContext.GitOperation] when invoking a git tool); when no
      * strategy is registered the tool must be able to act on the raw request.
      * The agent's pinned workspace rides along on the request (AMPR-300) so a
-     * strategy promoting into [ExecutionContext.Code] has a root to use.
+     * strategy promoting into [ExecutionContext.Code] has a root to use, and so do
+     * the earlier steps' results (AMPR-408) so a strategy can parameterise this step
+     * from them.
      */
-    private fun buildPlanStepRequest(step: Task.CodeChange, parentTask: Task): ExecutionRequest<*> {
+    private fun buildPlanStepRequest(
+        step: Task.CodeChange,
+        parentTask: Task,
+        priorResults: List<StepOutcome>,
+    ): ExecutionRequest<*> {
         val ticket = link.socket.ampere.agents.events.tickets.Ticket(
             id = "spark-task-${parentTask.id}",
             title = parentTask.id,
@@ -498,6 +567,11 @@ open class SparkBasedAgent<S : AgentState>(
             // mutable for the agent's lifetime, so a scope captured at
             // construction would outlive the narrowing that produced it.
             fileAccessScope = effectiveFileAccess,
+            // AMPR-408: what the earlier steps of this plan produced. The strategy
+            // that generates this step's parameters renders them into its prompt,
+            // which is the only way a step can be parameterised from an earlier
+            // step's result.
+            priorResults = priorResults,
         )
     }
 

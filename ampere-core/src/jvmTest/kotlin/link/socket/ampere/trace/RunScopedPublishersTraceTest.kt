@@ -37,6 +37,7 @@ import link.socket.ampere.agents.domain.memory.MemoryContext
 import link.socket.ampere.agents.domain.memory.MemoryTaskTypes
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
@@ -295,7 +296,7 @@ class RunScopedPublishersTraceTest {
         override val runLLMToEvaluatePerception: (Perception<AgentState>) -> Idea = { Idea.blank }
         override val runLLMToPlan: (Task, List<Idea>, List<KnowledgeWithScore>) -> Plan =
             { _, _, _ -> LOOP_PLAN }
-        override val runLLMToExecuteTask: (Task) -> Outcome = { LOOP_OUTCOME }
+        override val runLLMToExecuteTask: (Task, List<StepOutcome>) -> Outcome = { _, _ -> LOOP_OUTCOME }
         override val runLLMToExecuteTool: (Tool<*>, ExecutionRequest<*>) -> ExecutionOutcome = { _, _ -> LOOP_OUTCOME }
         override val runLLMToEvaluateOutcomes: (List<Outcome>) -> Idea = { Idea.blank }
 

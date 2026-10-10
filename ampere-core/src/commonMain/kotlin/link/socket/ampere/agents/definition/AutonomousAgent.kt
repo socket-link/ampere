@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
@@ -29,6 +30,7 @@ import link.socket.ampere.agents.domain.memory.MemoryContext
 import link.socket.ampere.agents.domain.memory.MemoryTaskTypes
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
@@ -37,6 +39,7 @@ import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.domain.task.TaskId
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.agents.execution.describeResult
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.tools.registry.ToolRegistry
@@ -608,8 +611,17 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
      * that is applied before execution and removed after completion. This
      * provides task-specific context during execution.
      *
+     * This is also where a plan's results travel forward (AMPR-408). The walk is
+     * sequential and each step is dispatched on its own, so the running list of
+     * [StepOutcome]s built here is the only thing that can tell step N what steps
+     * 1..N-1 produced; it reaches the tool's parameter prompt through
+     * [ExecutionRequest.priorResults]. Without it a plan of the form "search for X,
+     * then summarise what you found" generates the summary step's parameters with
+     * no idea what the search returned.
+     *
      * @param plan The plan containing tasks to execute
-     * @return The combined outcome of all tasks in the plan
+     * @return The combined outcome of all tasks in the plan — the first step that
+     *   did not succeed, else the last step's outcome, as before.
      */
     override suspend fun executePlan(
         plan: Plan,
@@ -618,15 +630,70 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
             return Outcome.blank
         }
 
-        return plan.tasks.map { task ->
+        val priorResults = mutableListOf<StepOutcome>()
+        var runningOutcome: Outcome? = null
+
+        for (task in plan.tasks) {
             rememberNewTask(task)
-            executeTaskWithSpark(task)
-        }.reduce { runningOutcome, outcome ->
-            if (runningOutcome !is Outcome.Success) {
-                runningOutcome
-            } else {
-                outcome
+            val startedAt = Clock.System.now()
+            val outcome = executeTaskWithSpark(task, priorResults.toList())
+            priorResults += outcome.asPriorResult(task, startedAt)
+            runningOutcome = when {
+                runningOutcome == null -> outcome
+                runningOutcome is Outcome.Success -> outcome
+                else -> runningOutcome
             }
+        }
+
+        return runningOutcome ?: Outcome.blank
+    }
+
+    /**
+     * This step's [Outcome], as the [StepOutcome] the next step is told about
+     * (AMPR-408).
+     *
+     * The text comes off the outcome's own payload via
+     * [describeResult][link.socket.ampere.agents.execution.describeResult] — the files
+     * read, the message, the issues created — because a type name is not a result. A
+     * [StepOutcome] already handed up by a step executor is kept as it is: it is the
+     * closer record of what the step did.
+     *
+     * A failure is recorded as non-critical because this walk does not stop at one —
+     * it runs every step and reports the first that did not succeed. Marking it
+     * critical would claim the plan was cut short when it was not.
+     */
+    private fun Outcome.asPriorResult(task: Task, startedAt: Instant): StepOutcome {
+        val endedAt = (this as? ExecutionOutcome)?.executionEndTimestamp ?: Clock.System.now()
+        val description = taskTextFor(task).ifBlank { "Execute step ${task.id}" }
+        val detail = (this as? ExecutionOutcome)?.describeResult() ?: ""
+
+        return when (this) {
+            is StepOutcome -> this
+            // Both blanks: `Outcome.Blank` is what a blank step returns, and
+            // `ExecutionOutcome.Blank` is the initialisation value a tool can hand
+            // back. Neither is a success, and calling either one would say the step
+            // produced something.
+            is Outcome.Blank, is ExecutionOutcome.Blank -> StepOutcome.Skipped(
+                id = task.id,
+                stepDescription = description,
+                timestamp = startedAt,
+                reason = "nothing to execute",
+            )
+            is Outcome.Failure -> StepOutcome.Failure(
+                id = task.id,
+                stepDescription = description,
+                startTimestamp = startedAt,
+                endTimestamp = endedAt,
+                error = detail,
+                isCritical = false,
+            )
+            else -> StepOutcome.Success(
+                id = task.id,
+                stepDescription = description,
+                startTimestamp = startedAt,
+                endTimestamp = endedAt,
+                details = detail,
+            )
         }
     }
 
@@ -637,9 +704,11 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
      * and ensures it's removed afterward.
      *
      * @param task The task to execute
+     * @param priorResults What the steps before this one produced (AMPR-408), passed
+     *   on to [runLLMToExecuteTask] so the step's tool can be parameterised from them.
      * @return The outcome of the task execution
      */
-    private suspend fun executeTaskWithSpark(task: Task): Outcome {
+    private suspend fun executeTaskWithSpark(task: Task, priorResults: List<StepOutcome>): Outcome {
         // Skip TaskSpark for blank tasks
         if (task is Task.Blank) {
             return Outcome.blank
@@ -654,7 +723,7 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         }
 
         return try {
-            val outcome = runLLMToExecuteTask(task)
+            val outcome = runLLMToExecuteTask(task, priorResults)
             rememberNewOutcome(outcome)
             outcome
         } finally {
@@ -690,7 +759,8 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         }
 
         rememberNewTask(task)
-        return executeTaskWithSpark(task)
+        // A task run on its own has no plan around it, so there is nothing before it.
+        return executeTaskWithSpark(task, emptyList())
     }
 
     /** Executes a tool with the given parameters */

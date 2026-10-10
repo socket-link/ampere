@@ -3,8 +3,10 @@ package link.socket.ampere.agents.definition.project
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.reasoning.LLMResponseParser
 import link.socket.ampere.agents.execution.ParameterStrategy
+import link.socket.ampere.agents.execution.priorResultsSection
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
@@ -67,6 +69,7 @@ sealed class ProjectParams {
             repository = repository,
             availableAgents = availableAgents,
             existingIssues = existingIssues,
+            priorResults = request.priorResults,
         )
 
         override fun parseAndEnrichRequest(
@@ -122,6 +125,7 @@ sealed class ProjectParams {
             intent = intent,
             taskId = request.context.task.id,
             ticketTitle = request.context.ticket.title,
+            priorResults = request.priorResults,
         )
 
         override fun parseAndEnrichRequest(
@@ -192,6 +196,7 @@ sealed class ProjectParams {
         ): String = ProjectPrompts.taskAssignment(
             task = intent,
             availableAgents = availableAgents,
+            priorResults = request.priorResults,
         )
 
         override fun parseAndEnrichRequest(
@@ -235,6 +240,23 @@ sealed class ProjectParams {
  */
 object ProjectPrompts {
 
+    /**
+     * Appends the earlier steps' results under their own heading, or nothing at all
+     * when there are none (AMPR-408).
+     *
+     * Private to the prompt object so every Project prompt places the block the same
+     * way: inside the context the model is given, never after the output-format
+     * section — text after "respond with ONLY valid JSON" reads as part of the
+     * instruction about the response.
+     */
+    private fun StringBuilder.appendPriorResults(priorResults: List<StepOutcome>) {
+        val section = priorResultsSection(priorResults)
+        if (section.isBlank()) return
+        appendLine()
+        appendLine("## Results of Earlier Steps")
+        appendLine(section)
+    }
+
     const val SYSTEM_PROMPT = """You are a Project Manager Agent responsible for:
 - Decomposing goals into structured work breakdowns
 - Creating issues in external systems
@@ -244,12 +266,19 @@ object ProjectPrompts {
 
     /**
      * Generates a prompt for decomposing a high-level goal into a structured work breakdown.
+     *
+     * @param priorResults what the earlier steps of the plan produced (AMPR-408),
+     *   rendered under its own heading so a goal, an assignment or an escalation can
+     *   be written from what has already happened. Defaults to empty for callers that
+     *   render a prompt outside a plan; every strategy in this file passes the
+     *   request's own list.
      */
     fun goalDecomposition(
         goal: String,
         repository: String,
         availableAgents: List<AgentCapability>,
         existingIssues: List<String> = emptyList(),
+        priorResults: List<StepOutcome> = emptyList(),
     ): String = buildString {
         appendLine("# Goal Decomposition Task")
         appendLine()
@@ -268,6 +297,8 @@ object ProjectPrompts {
                 "  - ${agent.agentId}: ${agent.capabilities.joinToString(", ")} (${agent.currentTaskCount} tasks)",
             )
         }
+
+        appendPriorResults(priorResults)
 
         if (existingIssues.isNotEmpty()) {
             appendLine()
@@ -369,10 +400,17 @@ object ProjectPrompts {
 
     /**
      * Generates a prompt for assigning a task to the most appropriate agent.
+     *
+     * @param priorResults what the earlier steps of the plan produced (AMPR-408),
+     *   rendered under its own heading so a goal, an assignment or an escalation can
+     *   be written from what has already happened. Defaults to empty for callers that
+     *   render a prompt outside a plan; every strategy in this file passes the
+     *   request's own list.
      */
     fun taskAssignment(
         task: String,
         availableAgents: List<AgentCapability>,
+        priorResults: List<StepOutcome> = emptyList(),
     ): String = buildString {
         appendLine("# Task Assignment Decision")
         appendLine()
@@ -382,6 +420,7 @@ object ProjectPrompts {
         appendLine("```")
         appendLine(task)
         appendLine("```")
+        appendPriorResults(priorResults)
         appendLine()
         appendLine("## Available Agents")
         if (availableAgents.isEmpty()) {
@@ -431,12 +470,19 @@ object ProjectPrompts {
 
     /**
      * Generates a prompt for human escalation.
+     *
+     * @param priorResults what the earlier steps of the plan produced (AMPR-408),
+     *   rendered under its own heading so a goal, an assignment or an escalation can
+     *   be written from what has already happened. Defaults to empty for callers that
+     *   render a prompt outside a plan; every strategy in this file passes the
+     *   request's own list.
      */
     fun humanEscalation(
         agentRole: String,
         intent: String,
         taskId: String,
         ticketTitle: String,
+        priorResults: List<StepOutcome> = emptyList(),
     ): String = buildString {
         appendLine("# Human Escalation Request")
         appendLine()
@@ -448,6 +494,7 @@ object ProjectPrompts {
         appendLine("## Context")
         appendLine("Task: $taskId")
         appendLine("Ticket: $ticketTitle")
+        appendPriorResults(priorResults)
         appendLine()
         appendLine("## Instructions")
         appendLine("Format this escalation as a clear question for a human to answer.")
