@@ -3,6 +3,7 @@ package link.socket.ampere.agents.domain.event
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.outcome.StepOutcome
 
@@ -12,7 +13,14 @@ import link.socket.ampere.agents.domain.outcome.StepOutcome
 @Serializable
 sealed interface PlanEvent : Event {
 
-    /** Emitted when a plan step begins execution. */
+    /**
+     * Emitted when a plan step begins execution.
+     *
+     * Published by [PlanExecutor][link.socket.ampere.agents.domain.reasoning.PlanExecutor]
+     * when it has a door (AMPR-389). [runId] is the Arc run the step belongs to, and is
+     * also what the envelope's `run_id` is set to, so the step is visible in that run's
+     * trace; null means the plan ran outside a run.
+     */
     @Serializable
     data class PlanStepStarted(
         override val eventId: EventId,
@@ -24,6 +32,7 @@ sealed interface PlanEvent : Event {
         override val eventSource: EventSource,
         override val timestamp: Instant,
         override val urgency: Urgency = Urgency.LOW,
+        val runId: RunId? = null,
     ) : PlanEvent {
 
         override val eventType: EventType = EVENT_TYPE
@@ -38,7 +47,14 @@ sealed interface PlanEvent : Event {
         }
     }
 
-    /** Emitted when a plan step completes execution. */
+    /**
+     * Emitted when a plan step completes execution.
+     *
+     * The pair to [PlanStepStarted], matched on [stepId] within [planId]; see that event
+     * for [runId]. A step that was never started — one the executor skipped after an
+     * earlier critical failure — emits neither event, and is reported only in
+     * [PlanExecutionResult.stepOutcomes][link.socket.ampere.agents.domain.reasoning.PlanExecutionResult.stepOutcomes].
+     */
     @Serializable
     data class PlanStepCompleted(
         override val eventId: EventId,
@@ -51,6 +67,7 @@ sealed interface PlanEvent : Event {
         override val eventSource: EventSource,
         override val timestamp: Instant,
         override val urgency: Urgency = Urgency.LOW,
+        val runId: RunId? = null,
     ) : PlanEvent {
 
         override val eventType: EventType = EVENT_TYPE
