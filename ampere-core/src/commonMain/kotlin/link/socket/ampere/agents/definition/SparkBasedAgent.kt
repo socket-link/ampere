@@ -289,7 +289,37 @@ open class SparkBasedAgent<S : AgentState>(
         }
     }
 
+    /**
+     * Dispatches [task] as the one plan step it is: no LLM call of its own.
+     *
+     * [AutonomousAgent.executePlan] has already walked the Plan phase's output
+     * and handed this one step over, and the step names the tool to run in its
+     * [Task.CodeChange.toolId]. Until AMPR-396 this re-entered planning —
+     * `generatePlan(task, emptyList())` — and dispatched *that* sub-plan's steps
+     * instead, so an N-step plan spent N extra PLAN calls and never ran the tool
+     * any of its own steps nominated. Re-planning a step into a sub-plan is a
+     * cycle a host asks for by name ([runSubPlanForTask]), not what executing a
+     * step means.
+     */
     override val runLLMToExecuteTask: (Task) -> Outcome = { task ->
+        runBlockingCompat(ioDispatcher) {
+            withTimeout(60000) {
+                dispatchStepAsPlan(task)
+            }
+        }
+    }
+
+    /**
+     * Re-plans [task] into a sub-plan and dispatches that plan's steps — the
+     * opt-in sub-cycle, costing one PLAN call plus one dispatch per generated
+     * step.
+     *
+     * Nothing in the PROPEL loop calls this: [AutonomousAgent.executePlan]
+     * dispatches the steps the Plan phase already produced, one call each. A
+     * host reaches for it when a step it holds is too coarse to dispatch
+     * directly and it wants the agent to break that step down first.
+     */
+    fun runSubPlanForTask(task: Task): Outcome =
         runBlockingCompat(ioDispatcher) {
             withTimeout(60000) {
                 val plan = reasoning.generatePlan(task, emptyList())
@@ -298,7 +328,26 @@ open class SparkBasedAgent<S : AgentState>(
                 }.outcome
             }
         }
-    }
+
+    /**
+     * Runs [step] through [executePlanStep] and folds its [StepResult] into an
+     * [Outcome].
+     *
+     * The fold goes through [AgentReasoning.executePlan] with a one-step plan
+     * rather than a bespoke `StepResult` → `Outcome` conversion, so a single
+     * step and a whole plan settle to the same outcome shape from the same code.
+     * [AgentReasoning.executePlan] makes no model call.
+     */
+    private suspend fun dispatchStepAsPlan(step: Task): Outcome =
+        reasoning.executePlan(
+            Plan.ForTask(
+                task = step,
+                tasks = listOf(step),
+                estimatedComplexity = 1,
+            ),
+        ) { planStep, _ ->
+            executePlanStep(planStep, parentTask = step)
+        }.outcome
 
     /**
      * Routes a plan step to its nominated tool. Strict tool-id dispatch with no
