@@ -28,6 +28,12 @@ import link.socket.ampere.agents.events.utils.generateUUID
  * allows agents to opt-in to observability by extending ObservableAgent
  * instead of AutonomousAgent.
  *
+ * Every event published here is stamped with the agent's
+ * [currentRunId][Agent.currentRunId] on its envelope (F4, AMPR-386), so a run's spark
+ * applications and cognitive snapshots are returned by `ArcTraceProjection.project(runId)`
+ * rather than depending on the projection's payload `LIKE` fallback. An agent built outside
+ * a run stamps null, exactly as before.
+ *
  * @param eventApi The event API for publishing cognitive events
  * @param observabilityScope CoroutineScope for async event publishing
  */
@@ -59,7 +65,7 @@ abstract class ObservableAgent<S : AgentState>(
                 sparkType = spark::class.simpleName ?: "Unknown",
             )
             observabilityScope.launch {
-                api.publish(event)
+                api.publish(event, runId = currentRunId)
             }
         }
     }
@@ -79,7 +85,7 @@ abstract class ObservableAgent<S : AgentState>(
                 previousSparkName = previousSpark?.name ?: "Unknown",
             )
             observabilityScope.launch {
-                api.publish(event)
+                api.publish(event, runId = currentRunId)
             }
         }
     }
@@ -114,7 +120,7 @@ abstract class ObservableAgent<S : AgentState>(
                 availableToolCount = availableTools?.size,
             )
             observabilityScope.launch {
-                api.publish(event)
+                api.publish(event, runId = currentRunId)
             }
         }
     }

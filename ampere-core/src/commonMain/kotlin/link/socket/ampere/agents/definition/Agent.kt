@@ -47,6 +47,20 @@ sealed interface Agent<S : AgentState> {
     val memoryService: AgentMemoryService?
         get() = null
 
+    /**
+     * The Arc run this agent is animating, or null when it was built outside one.
+     *
+     * Every event the agent publishes is stamped with this on its envelope (F4, AMPR-386), so
+     * `ArcTraceProjection.project(runId)` sees the agent's phase brackets, spark applications
+     * and recalls without needing the payload `LIKE` fallback. An agent animates one run, so
+     * this is fixed at construction — [SparkBasedAgent] reads it off the run id the Arc threaded
+     * in (AMPR-240). It is the agent's identity for the run, not state the agent accumulates
+     * across runs.
+     */
+    @Transient
+    val currentRunId: RunId?
+        get() = null
+
     private val logger: Logger
         get() = logWith("Agent/$id")
 
@@ -109,11 +123,14 @@ sealed interface Agent<S : AgentState> {
      *
      * @param context Current situation to find relevant memories for
      * @param limit Maximum knowledge entries to retrieve (default 10)
+     * @param runId Arc run to attribute the recall to; defaults to [currentRunId] so the
+     *   `KnowledgeRecalled` the service emits lands on this run's trace (F4, AMPR-386)
      * @return Result containing knowledge entries ranked by relevance, or an error
      */
     suspend fun recallRelevantKnowledge(
         context: MemoryContext,
         limit: Int = 10,
+        runId: RunId? = currentRunId,
     ): Result<List<KnowledgeWithScore>> {
         // Check if memory service is available
         val service = memoryService
@@ -132,6 +149,7 @@ sealed interface Agent<S : AgentState> {
             val recallResult = service.recallRelevantKnowledge(
                 context = context,
                 limit = limit,
+                runId = runId,
             )
 
             recallResult.fold(
@@ -182,14 +200,14 @@ sealed interface Agent<S : AgentState> {
      * @param knowledge The knowledge to persist
      * @param tags Optional tags for categorization
      * @param taskType Optional task type for context-based retrieval
-     * @param runId Optional Arc run correlation ID for trace projection
+     * @param runId Arc run correlation ID for trace projection; defaults to [currentRunId]
      * @return Result containing the stored knowledge entry or an error
      */
     suspend fun storeKnowledge(
         knowledge: Knowledge,
         tags: List<String> = emptyList(),
         taskType: String? = null,
-        runId: RunId? = null,
+        runId: RunId? = currentRunId,
     ): Result<Unit> {
         val service = memoryService
         if (service == null) {

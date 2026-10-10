@@ -514,12 +514,14 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
                 else -> tags.add("partial")
             }
 
-            // Store in long-term memory
+            // Store in long-term memory, under the run this agent is animating. `task.id` used
+            // to be stamped here, which put a task id in the trace's `run_id` column and left
+            // the entry orphaned from its run (AMPR-386).
             storeKnowledge(
                 knowledge = knowledge,
                 tags = tags,
                 taskType = taskType,
-                runId = task.id.takeUnless { it.isBlank() },
+                runId = currentRunId,
             )
         } catch (e: Exception) {
             // Logging is handled in storeKnowledge, just catch to prevent loop crash
