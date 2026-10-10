@@ -20,8 +20,9 @@ import kotlinx.datetime.Instant
  * - [GoalSet] — emitted by `AgentTeam.pursue` when a goal is assigned to the team.
  * - [AgentInitialized] — emitted by `AgentTeam.initializeAgents` once per member.
  * - [Planned] — emitted by `AgentTeam.delegateGoalToTeam` as a placeholder
- *   "analyzing goal" marker until the DSL is wired to real agents. The adapter also
- *   produces [Planned] from bus events; only the `AgentTeam` marker is UI-only.
+ *   "analyzing goal" marker; the DSL is never wired to real agents, which is why
+ *   `AgentTeam` is deprecated (AMPR-399). The adapter also produces [Planned] from
+ *   bus events; only the `AgentTeam` marker is UI-only.
  *
  * The boundary is test-enforced by `TeamEventBoundaryTest` (jvmTest): a
  * `TeamEvent` is never an `Event`, and no `commonMain` file outside `dsl/` refers

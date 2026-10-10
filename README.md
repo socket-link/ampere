@@ -95,6 +95,12 @@ dependencies {
 <details>
 <summary><strong>Library Usage</strong></summary>
 
+> **`AgentTeam` is deprecated and runs nothing (AMPR-399).** The DSL below declares a team
+> and emits UI markers about it; no agent is constructed, no model is called, nothing is
+> scheduled. It is kept compiling for consumers already on it. The hosted run that does
+> charge PERCEIVE → … → LEARN for a goal arrives as `RunHost` (AMPR-393); until then, run
+> agents through the CLI (`ampere --goal "…"`, `ampere --issues`).
+
 ```kotlin
 val team = AgentTeam.create {
     // Configure your AI provider
@@ -111,19 +117,15 @@ val team = AgentTeam.create {
     agent(QATester)
 }
 
-// Assign a goal and observe the event stream
-team.goal("Build a user authentication system")
+// Declare a goal. No work starts: this emits GoalSet, one AgentInitialized per member,
+// and one Planned placeholder — all view-layer markers, none of them on the event bus.
+team.pursue("Build a user authentication system")
 
-team.events.collect { event ->
-    when (event) {
-        is Perceived -> println("${event.agent} noticed: ${event.signal}")
-        is Recalled -> println("${event.agent} remembered: ${event.memory}")
-        is Planned -> println("${event.agent} decided: ${event.plan}")
-        is Executed -> println("${event.agent} did: ${event.action}")
-        is Escalated -> println("${event.agent} needs help: ${event.reason}")
-    }
-}
+team.events.collect { event -> println(event) }
 ```
+
+What *is* wired today is the event bus: build an instance with `Ampere.fromEnvironment(...)`
+and observe `ampere.events.observe()` while the CLI or `AmpereRuntime` runs the agents.
 
 `apiKey` is optional. When you provide it, Ampere uses that runtime credential directly. When you omit it, provider clients fall back to the generated `KotlinConfig` values sourced from `local.properties` at build time.
 </details>

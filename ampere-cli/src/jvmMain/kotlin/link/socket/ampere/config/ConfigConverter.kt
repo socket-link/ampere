@@ -1,3 +1,7 @@
+// Names the deprecated AgentTeam (AMPR-399) in its import and in toAgentTeam's return
+// type; suppressed for the file so the import stops warning.
+@file:Suppress("DEPRECATION")
+
 package link.socket.ampere.config
 
 import link.socket.ampere.agents.config.AgentActionAutonomy
@@ -38,15 +42,24 @@ import link.socket.ampere.dsl.team.TeamMember
  * Example:
  * ```kotlin
  * val config = ConfigParser.parse(File("ampere.yaml"))
- * val team = ConfigConverter.toAgentTeam(config)
- * team.pursue(config.goal ?: "Default goal")
+ * val members = ConfigConverter.toTeamMembers(config)
  * ```
  */
 object ConfigConverter {
 
     /**
-     * Convert a full config to an AgentTeam using the DSL.
+     * Convert a full config to an [AgentTeam] using the DSL.
+     *
+     * The team that comes back runs nothing: see the deprecation on [AgentTeam] (AMPR-399).
+     * The CLI's own `--goal` path does not go through here — it builds agents from the
+     * configured roles and activates the goal through `GoalHandler` — so this has no
+     * caller today.
      */
+    @Deprecated(
+        message = "The AgentTeam this returns declares a team that does not run (AMPR-399). " +
+            "Use toTeamMembers to read the configured roles, or the CLI's own work loop to " +
+            "run a goal.",
+    )
     fun toAgentTeam(config: AmpereConfig): AgentTeam {
         return AgentTeam.create {
             // Set the AI provider configuration

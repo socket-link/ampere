@@ -23,11 +23,14 @@ import link.socket.ampere.llm.decide.UpstreamDecisionClient
  *     workspace("/path/to/project")
  * }
  *
- * ampere.agents.pursue("Build authentication system")
  * ampere.events.observe().collect { event -> ... }
+ * ampere.status.snapshot()
  *
  * ampere.close()
  * ```
+ *
+ * `agents.pursue` and `agents.team` are deprecated and start no work (AMPR-399); the hosted
+ * run that does is `RunHost` (AMPR-393).
  */
 @AmpereStableApi
 interface AmpereInstance : AutoCloseable {

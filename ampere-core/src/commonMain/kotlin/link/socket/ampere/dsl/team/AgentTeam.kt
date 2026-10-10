@@ -1,3 +1,7 @@
+// This file declares the deprecated AgentTeam (AMPR-399) and constructs it in its own
+// companion factories, so the warning is suppressed for the whole file.
+@file:Suppress("DEPRECATION")
+
 package link.socket.ampere.dsl.team
 
 import kotlinx.coroutines.CoroutineScope
@@ -17,14 +21,25 @@ import link.socket.ampere.dsl.events.TeamEvent
 import link.socket.ampere.dsl.events.TeamEventAdapter
 
 /**
- * A coordinated team of AI agents working toward shared goals.
+ * A declared team of AI agents. **Nothing in this class runs an agent (AMPR-399).**
  *
- * AgentTeam provides:
- * - Coordinated goal pursuit across multiple specialized agents
- * - Real-time event stream of agent activities
- * - Automatic task delegation based on agent capabilities
+ * What it does provide:
+ * - the roles you declared, as [TeamMemberStatus] values from [getMembers]
+ * - two flags over those roles: team-wide [pause]/[resume] and per-member
+ *   [pauseMember]/[resumeMember]
+ * - a [Flow] of [TeamEvent] markers this class emits about itself
  *
- * Example:
+ * What it does not provide, despite the names: no agent is instantiated from a member, no
+ * spark stack is built, no model is called, no task is scheduled, and nothing is published
+ * to the event bus. [pursue] emits a marker per declared member plus two of its own and
+ * returns; its delegation step is a `TODO`. The flags it keeps are therefore a description of what [getMembers] reports, not
+ * of any running work.
+ *
+ * The entry point that does charge PERCEIVE → … → LEARN over a roster is `RunHost`
+ * (AMPR-393); this class is re-pointed at it when that ships. Until then the paths that run
+ * agents are the CLI (`ampere --goal`, `ampere --issues`) and `AmpereRuntime`.
+ *
+ * Example of what is observable today:
  * ```kotlin
  * val team = AgentTeam.create {
  *     agent(ProductManager) { personality { directness = 0.8 } }
@@ -34,17 +49,15 @@ import link.socket.ampere.dsl.events.TeamEventAdapter
  *
  * team.pursue("Build a user authentication system")
  *
- * team.events.collect { event ->
- *     when (event) {
- *         is Perceived -> println("${event.agent} noticed: ${event.signal}")
- *         is Recalled -> println("${event.agent} remembered: ${event.memory}")
- *         is Planned -> println("${event.agent} decided: ${event.plan}")
- *         is Executed -> println("${event.agent} did: ${event.action}")
- *         is Escalated -> println("${event.agent} needs help: ${event.reason}")
- *     }
- * }
+ * // GoalSet, then one AgentInitialized per member, then one Planned marker. No more.
+ * team.events.collect { event -> println(event) }
  * ```
  */
+@Deprecated(
+    message = "AgentTeam declares a team that does not run: no agent is constructed from a " +
+        "member and pursue only emits UI markers (AMPR-399). Run agents through the CLI or " +
+        "AmpereRuntime; this class is re-pointed at RunHost when AMPR-393 ships.",
+)
 class AgentTeam private constructor(
     private val config: AgentTeamConfig,
     private val scope: CoroutineScope,
@@ -78,13 +91,17 @@ class AgentTeam private constructor(
     private val pausedMembers = mutableSetOf<String>()
 
     /**
-     * Assign a goal to the team and begin collaborative work.
+     * Record a goal against the team. **No work begins.**
      *
-     * The team will:
-     * 1. Break down the goal into tasks
-     * 2. Assign tasks to appropriate agents based on capabilities
-     * 3. Execute tasks and emit progress events
-     * 4. Coordinate between agents as needed
+     * What happens, in the scope this team was created with: a [GoalSet] marker, one
+     * [AgentInitialized] marker per declared member, and one [Planned] marker attributed to
+     * whichever member holds [Capability.DELEGATION] (or the first member) whose text names
+     * the goal. All of them are [TeamEvent] projections for a UI; none is an `Event`, so none
+     * reaches the bus, the event store or a trace. No task is created, no plan is generated,
+     * no agent is constructed or invoked.
+     *
+     * The flag it sets is what makes [getMembers] report its members as active, which is in
+     * turn what `AgentService.inspect` and `AgentService.listAll` read.
      *
      * @param goal High-level description of what to accomplish
      */
@@ -204,7 +221,7 @@ class AgentTeam private constructor(
         } ?: config.members.firstOrNull()
 
         if (coordinator != null) {
-            // UI-only placeholder until the DSL is wired to real agents (see TODO below).
+            // UI-only placeholder; the DSL is never wired to real agents (see TODO below).
             // No bus Event is published here, so there is nothing to route through
             // TeamEventAdapter.adapt (listed in TeamEvent KDoc).
             _events.emit(
@@ -215,11 +232,12 @@ class AgentTeam private constructor(
                 ),
             )
 
-            // TODO: Wire up to actual agent infrastructure
-            // This is where we would:
-            // 1. Create agent instances from config.members using KoreAgentFactory
-            // 2. Subscribe to EventRelayService to bridge internal events
-            // 3. Invoke the coordinator agent to break down and delegate the goal
+            // TODO(AMPR-393): delegate to a hosted run instead of marking one.
+            // This placeholder is why `AgentTeam` and `AgentService.team`/`pursue` are
+            // deprecated (AMPR-399): a real delegation would construct agents from
+            // config.members, bridge their events through the door, and hand the goal to the
+            // coordinator. `RunHost.open(roster, seats, goal, tools, policy)` is the shape
+            // that does it, over the `roster/` types rather than this DSL.
         }
     }
 

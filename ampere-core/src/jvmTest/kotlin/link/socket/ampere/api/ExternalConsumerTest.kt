@@ -19,7 +19,11 @@ import link.socket.ampere.dsl.agent.QATester
  * Simulates a consumer using the public API exactly as documented:
  * create a stub instance, exercise all 7 services including new methods, close.
  * No internal types or implementation details are referenced.
+ *
+ * `agents.team`, `agents.pursue` and `agents.wake` are deprecated (AMPR-399); the sweep keeps
+ * calling them so a consumer still on them keeps a passing contract.
  */
+@Suppress("DEPRECATION")
 class ExternalConsumerTest {
 
     @Test

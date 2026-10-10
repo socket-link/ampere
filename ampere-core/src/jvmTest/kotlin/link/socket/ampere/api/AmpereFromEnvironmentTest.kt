@@ -49,8 +49,12 @@ import link.socket.ampere.memory.memoryStoreOf
  * This test currently lives in `jvmTest` because the in-memory SQLite
  * driver factory is JVM-specific. The cross-platform smoke test in Task 8
  * exercises the same path on iOS and Android.
+ *
+ * The smoke test drives the deprecated `agents.pursue` (AMPR-399) on purpose: one publish
+ * through the door is what it asserts, and that is all `pursue` claims to do.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("DEPRECATION")
 class AmpereFromEnvironmentTest {
 
     private val scope = TestScope(UnconfinedTestDispatcher())

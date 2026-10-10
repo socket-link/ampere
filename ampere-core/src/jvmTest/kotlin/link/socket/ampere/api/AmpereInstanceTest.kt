@@ -38,7 +38,11 @@ import link.socket.ampere.db.Database
  *
  * These tests verify that each Default*Service correctly delegates
  * to the underlying infrastructure.
+ *
+ * `pursue` and `wake` are deprecated (AMPR-399) and still covered here: what they delegate
+ * to — one publish each — is exactly what the deprecation promises they still do.
  */
+@Suppress("DEPRECATION")
 class AmpereInstanceTest {
 
     private lateinit var driver: JdbcSqliteDriver
