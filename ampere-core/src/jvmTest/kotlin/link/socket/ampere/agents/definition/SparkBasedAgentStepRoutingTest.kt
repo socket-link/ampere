@@ -101,6 +101,7 @@ class SparkBasedAgentStepRoutingTest {
 
         val outcome = agent.runLLMToExecuteTask(
             planStep("step-1-parent-task", "commit changes", toolId = "git_commit"),
+            emptyList(),
         )
 
         assertEquals(1, recorder.invocations.size, "the nominated tool should be invoked exactly once")
@@ -126,6 +127,7 @@ class SparkBasedAgentStepRoutingTest {
 
         val outcome = agent.runLLMToExecuteTask(
             planStep("step-1-parent-task", "stage files", toolId = "git_stage"),
+            emptyList(),
         )
 
         assertEquals(0, recorder.invocations.size, "no tool should be invoked on routing failure")
@@ -135,12 +137,23 @@ class SparkBasedAgentStepRoutingTest {
         )
     }
 
+    /**
+     * AMPR-407: a tool-less step invokes no *tool*, which is not the same as
+     * invoking nothing. It is carried out by one model call, and a seat that
+     * cannot make that call reports a failure rather than a success it did not
+     * earn.
+     */
     @Test
-    fun `a step with null toolId is treated as a no-op reasoning step`() {
+    fun `a step with null toolId is carried out by a model call instead of a tool`() {
         val recorder = RecordingTool(id = "git_commit")
+        val reasoningPrompts = mutableListOf<String>()
         val reasoning = AgentReasoning.createForTesting(executorId = "routing-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, _ -> error("must not be reached when toolId is null") }
+            onLLMCall { prompt ->
+                reasoningPrompts += prompt
+                "Start from the failing test."
+            }
         }
         val agent = SparkBasedAgent.Code(
             sparkRegistry = phaseSparkLibrary,
@@ -151,12 +164,44 @@ class SparkBasedAgentStepRoutingTest {
 
         val outcome = agent.runLLMToExecuteTask(
             planStep("step-1-parent-task", "think about it", toolId = null),
+            emptyList(),
         )
 
-        assertEquals(0, recorder.invocations.size, "no-op steps must not invoke any tool")
+        assertEquals(0, recorder.invocations.size, "a reasoning step must not invoke any tool")
+        assertEquals(1, reasoningPrompts.size, "exactly one model call carries the step out")
+        assertTrue(
+            reasoningPrompts.single().contains("think about it"),
+            "the step's own description is what the call asks about; got " +
+                reasoningPrompts.single(),
+        )
         assertTrue(
             outcome is Outcome.Success,
-            "a pure-reasoning step should still succeed",
+            "the reasoning step reached a conclusion, so it succeeded; " +
+                "got ${outcome::class.simpleName}",
+        )
+    }
+
+    @Test
+    fun `a reasoning step with no model to call fails rather than reporting success`() {
+        val reasoning = AgentReasoning.createForTesting(executorId = "routing-test") {
+            onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
+            onToolExecution { _, _ -> error("must not be reached when toolId is null") }
+        }
+        val agent = SparkBasedAgent.Code(
+            sparkRegistry = phaseSparkLibrary,
+            agentId = "routing-agent",
+            reasoningOverride = reasoning,
+        )
+
+        val outcome = agent.runLLMToExecuteTask(
+            planStep("step-1-parent-task", "decide the approach", toolId = null),
+            emptyList(),
+        )
+
+        assertTrue(
+            outcome is Outcome.Failure,
+            "a step nobody performed is not a step that succeeded (AMPR-407); " +
+                "got ${outcome::class.simpleName}",
         )
     }
 

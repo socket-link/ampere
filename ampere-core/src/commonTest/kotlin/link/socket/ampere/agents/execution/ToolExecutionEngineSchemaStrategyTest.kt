@@ -8,6 +8,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -18,6 +19,7 @@ import kotlinx.serialization.json.putJsonObject
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.reasoning.AgentLLMService
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
@@ -71,6 +73,27 @@ class ToolExecutionEngineSchemaStrategyTest {
         val prompt = harness.prompts.single()
         assertTrue("- `query` (string, required) — What to search for" in prompt)
         assertTrue("Allowed values: \"inbox\", \"all\"." in prompt)
+    }
+
+    @Test
+    fun `the parameter prompt renders the earlier steps' results`() = runTest {
+        val harness = harness(answer = """{"query": "quarterly report"}""")
+        val earlier = StepOutcome.Success(
+            id = "step-1",
+            stepDescription = "list the mailboxes",
+            startTimestamp = Instant.fromEpochSeconds(0),
+            endTimestamp = Instant.fromEpochSeconds(1),
+            details = "found: inbox, archive",
+        )
+
+        harness.engine.execute(harness.tool, request(priorResults = listOf(earlier)))
+
+        // AMPR-412 (H17): the engine's own schema strategy is told what came before, the way
+        // a hand-written strategy is — and still through one parameter call.
+        val prompt = harness.prompts.single()
+        assertTrue("## Results of earlier steps" in prompt)
+        assertTrue("list the mailboxes" in prompt)
+        assertTrue("found: inbox, archive" in prompt)
     }
 
     @Test
@@ -274,6 +297,7 @@ class ToolExecutionEngineSchemaStrategyTest {
 
     private fun request(
         arguments: JsonObject? = null,
+        priorResults: List<StepOutcome> = emptyList(),
     ): ExecutionRequest<ExecutionContext.NoChanges> {
         val now = Clock.System.now()
         return ExecutionRequest(
@@ -301,6 +325,7 @@ class ToolExecutionEngineSchemaStrategyTest {
             ),
             constraints = ExecutionConstraints(requireTests = false, requireLinting = false),
             arguments = arguments,
+            priorResults = priorResults,
         )
     }
 

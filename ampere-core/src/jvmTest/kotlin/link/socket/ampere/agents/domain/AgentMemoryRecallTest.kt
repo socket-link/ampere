@@ -25,6 +25,7 @@ import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.memory.MemoryContext
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
@@ -473,7 +474,8 @@ private class TestAgentWithMemory(
         ideas: List<Idea>,
         relevantKnowledge: List<KnowledgeWithScore>,
     ) -> Plan = { _, _, _ -> Plan.blank }
-    override val runLLMToExecuteTask: (task: Task) -> Outcome = { Outcome.blank }
+    override val runLLMToExecuteTask: (task: Task, priorResults: List<StepOutcome>) -> Outcome =
+        { _, _ -> Outcome.blank }
     override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome =
         { _, _ -> ExecutionOutcome.blank }
     override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { Idea.blank }
@@ -521,7 +523,8 @@ private class TestAgentWithoutMemory(
         ideas: List<Idea>,
         relevantKnowledge: List<KnowledgeWithScore>,
     ) -> Plan = { _, _, _ -> Plan.blank }
-    override val runLLMToExecuteTask: (task: Task) -> Outcome = { Outcome.blank }
+    override val runLLMToExecuteTask: (task: Task, priorResults: List<StepOutcome>) -> Outcome =
+        { _, _ -> Outcome.blank }
     override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome =
         { _, _ -> ExecutionOutcome.blank }
     override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { Idea.blank }

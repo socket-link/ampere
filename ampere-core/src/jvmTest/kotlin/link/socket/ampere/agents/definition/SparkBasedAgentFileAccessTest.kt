@@ -69,8 +69,7 @@ class SparkBasedAgentFileAccessTest {
         val dispatched = CopyOnWriteArrayList<ExecutionRequest<*>>()
         val agent = agentWith(dispatched, ScopingSpark(KOTLIN_ONLY))
 
-        agent.runLLMToExecuteTask(step())
-
+        agent.runLLMToExecuteTask(step(), emptyList())
         val scope = dispatched.single().fileAccessScope
         assertEquals(KOTLIN_ONLY, scope)
         assertEquals(agent.effectiveFileAccess, scope)
@@ -91,8 +90,7 @@ class SparkBasedAgentFileAccessTest {
             ScopingSpark(KOTLIN_ONLY),
         )
 
-        agent.runLLMToExecuteTask(step())
-
+        agent.runLLMToExecuteTask(step(), emptyList())
         val scope = requireNotNull(dispatched.single().fileAccessScope)
         assertTrue(scope.allowsWrite("src/Thing.kt"))
         assertFalse(scope.allowsWrite("README.md"), "the narrower spark's write list wins")
@@ -105,8 +103,7 @@ class SparkBasedAgentFileAccessTest {
         val dispatched = CopyOnWriteArrayList<ExecutionRequest<*>>()
         val agent = agentWith(dispatched)
 
-        agent.runLLMToExecuteTask(step())
-
+        agent.runLLMToExecuteTask(step(), emptyList())
         assertEquals(
             FileAccessScope.Permissive,
             dispatched.single().fileAccessScope,
@@ -120,10 +117,9 @@ class SparkBasedAgentFileAccessTest {
         val dispatched = CopyOnWriteArrayList<ExecutionRequest<*>>()
         val agent = agentWith(dispatched)
 
-        agent.runLLMToExecuteTask(step())
+        agent.runLLMToExecuteTask(step(), emptyList())
         agent.spark<SparkBasedAgent<CodeState>>(ScopingSpark(KOTLIN_ONLY))
-        agent.runLLMToExecuteTask(step())
-
+        agent.runLLMToExecuteTask(step(), emptyList())
         assertEquals(FileAccessScope.Permissive, dispatched.first().fileAccessScope)
         assertEquals(
             KOTLIN_ONLY,

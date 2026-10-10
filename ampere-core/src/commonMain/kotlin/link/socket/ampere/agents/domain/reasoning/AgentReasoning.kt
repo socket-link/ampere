@@ -15,6 +15,7 @@ import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.state.AgentState
@@ -195,12 +196,18 @@ class AgentReasoning private constructor(
 
     /**
      * Executes a plan step by step.
+     *
+     * @param priorResults what the caller has already run, oldest first (AMPR-408). It
+     *   seeds [StepContext.priorResults] so a step executor can pass earlier results
+     *   into the request it dispatches; a caller at the start of a plan passes
+     *   `emptyList()`.
      */
     suspend fun executePlan(
         plan: Plan,
+        priorResults: List<StepOutcome>,
         stepExecutor: suspend (Task, StepContext) -> StepResult,
     ): PlanExecutionResult {
-        return planExecutor.execute(plan, stepExecutor)
+        return planExecutor.execute(plan, priorResults, stepExecutor)
     }
 
     /**

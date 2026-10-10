@@ -27,12 +27,14 @@ import link.socket.ampere.agents.execution.executor.ExecutorId
  * - Sequential step execution with dependency tracking
  * - Critical failure detection and early termination
  * - Step outcome collection for analysis
- * - Context passing between steps (e.g., created issue IDs)
+ * - Context passing between steps: the running chain of
+ *   [StepContext.priorResults] (AMPR-408), plus whatever a step names in
+ *   `StepResult.contextUpdates` (e.g., created issue IDs)
  *
  * Usage:
  * ```kotlin
  * val executor = PlanExecutor(executorId)
- * val result = executor.execute(plan) { step, context ->
+ * val result = executor.execute(plan, priorResults = emptyList()) { step, context ->
  *     when (step) {
  *         is PMTask.CreateIssues -> executeCreateIssues(step, context)
  *         is PMTask.AssignTask -> executeAssignTask(step, context)
@@ -60,16 +62,26 @@ class PlanExecutor(
      * Executes a plan step by step.
      *
      * @param plan The plan to execute
+     * @param priorResults What already happened before this plan's first step — the
+     *   results of the steps the caller has run, oldest first (AMPR-408). It seeds
+     *   [StepContext.priorResults], so a step executor reads the whole chain from one
+     *   place no matter how the plan reached it. The live Execute path matters here:
+     *   since AMPR-396 it wraps each step of the Plan phase's output in its own
+     *   one-step plan, so without a seed every step would see an empty chain. Required
+     *   rather than defaulted for the same reason `generatePlan`'s `relevantKnowledge`
+     *   is (AMPR-388): a caller with nothing to pass says `emptyList()` and says it on
+     *   purpose.
      * @param stepExecutor Function to execute individual steps
      * @return PlanExecutionResult with overall outcome and step details
      */
     suspend fun execute(
         plan: Plan,
+        priorResults: List<StepOutcome>,
         stepExecutor: suspend (Task, StepContext) -> StepResult,
     ): PlanExecutionResult {
         val startTime = Clock.System.now()
         val stepOutcomes = mutableListOf<StepOutcome>()
-        val context = MutableStepContext()
+        val context = MutableStepContext(priorResults)
 
         // Handle empty or non-task plans
         if (plan !is Plan.ForTask || plan.tasks.isEmpty()) {
@@ -111,6 +123,10 @@ class PlanExecutor(
             )
             stepOutcomes.add(stepOutcome)
             publishStepCompleted(plan, step, index, stepOutcome)
+
+            // AMPR-408: the next step's executor — and so the parameter prompt of
+            // whatever tool it nominates — sees what this one produced.
+            context.addResult(stepOutcome)
 
             // Update context with any values from this step
             stepResult.contextUpdates.forEach { (key, value) ->
@@ -390,16 +406,36 @@ interface StepContext {
     fun <T> get(key: String): T?
     fun <T> getOrDefault(key: String, default: T): T
     fun contains(key: String): Boolean
+
+    /**
+     * What the steps before this one produced, oldest first (AMPR-408) — seeded with
+     * whatever the caller had already run, then one entry appended per step this plan
+     * executes.
+     *
+     * This is the typed channel for passing results forward, as against
+     * [get]/[set][MutableStepContext.set], which carry only what a step chose to name
+     * in `StepResult.contextUpdates`. A step executor that ignores it cannot dispatch
+     * a step that depends on an earlier one: the parameter prompt of the tool it
+     * nominates is built from the request it hands over, and nothing else carries the
+     * chain.
+     */
+    val priorResults: List<StepOutcome>
 }
 
 /**
  * Mutable context that accumulates data during plan execution.
  */
-class MutableStepContext : StepContext {
+class MutableStepContext(priorResults: List<StepOutcome> = emptyList()) : StepContext {
     private val data = mutableMapOf<String, Any>()
+    private val results = priorResults.toMutableList()
 
     fun set(key: String, value: Any) {
         data[key] = value
+    }
+
+    /** Appends the outcome of a step that has just run to the running chain. */
+    fun addResult(result: StepOutcome) {
+        results += result
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -409,15 +445,21 @@ class MutableStepContext : StepContext {
 
     override fun contains(key: String): Boolean = data.containsKey(key)
 
+    override val priorResults: List<StepOutcome>
+        get() = results.toList()
+
     fun getAll(): Map<String, Any> = data.toMap()
 
-    fun toImmutable(): StepContext = ImmutableStepContext(data.toMap())
+    fun toImmutable(): StepContext = ImmutableStepContext(data.toMap(), results.toList())
 }
 
 /**
  * Immutable snapshot of step context.
  */
-private class ImmutableStepContext(private val data: Map<String, Any>) : StepContext {
+private class ImmutableStepContext(
+    private val data: Map<String, Any>,
+    override val priorResults: List<StepOutcome>,
+) : StepContext {
     @Suppress("UNCHECKED_CAST")
     override fun <T> get(key: String): T? = data[key] as? T
 

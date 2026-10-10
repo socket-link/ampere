@@ -78,7 +78,7 @@ class ExecutePublishesItsStepsTest {
         val plan = planOf(step("step-1", "Write the greeting"))
 
         val result = runBlocking {
-            reasoning.executePlan(plan) { step, _ ->
+            reasoning.executePlan(plan, priorResults = emptyList()) { step, _ ->
                 when (val outcome = reasoning.executeTool(greetingTool, requestFor(step))) {
                     is ExecutionOutcome.Success -> StepResult.success(
                         description = "ran ${greetingTool.id}",
@@ -154,7 +154,8 @@ class ExecutePublishesItsStepsTest {
         val reasoning = reasoningWith(runId)
 
         runBlocking {
-            reasoning.executePlan(planOf(step("step-1", "Fail on purpose"))) { stepTask, _ ->
+            val plan = planOf(step("step-1", "Fail on purpose"))
+            reasoning.executePlan(plan, priorResults = emptyList()) { stepTask, _ ->
                 reasoning.executeTool(failingTool, requestFor(stepTask))
                 StepResult.failure(
                     description = "ran ${failingTool.id}",
@@ -180,7 +181,7 @@ class ExecutePublishesItsStepsTest {
         val plan = planOf(step("step-1", "Fail on purpose"), step("step-2", "Never reached"))
 
         val result = runBlocking {
-            reasoning.executePlan(plan) { stepTask, _ ->
+            reasoning.executePlan(plan, priorResults = emptyList()) { stepTask, _ ->
                 reasoning.executeTool(failingTool, requestFor(stepTask))
                 StepResult.failure(
                     description = "ran ${failingTool.id}",
@@ -223,7 +224,8 @@ class ExecutePublishesItsStepsTest {
         }
 
         runBlocking {
-            reasoning.executePlan(planOf(step("step-1", "Write the greeting"))) { stepTask, _ ->
+            val plan = planOf(step("step-1", "Write the greeting"))
+            reasoning.executePlan(plan, priorResults = emptyList()) { stepTask, _ ->
                 reasoning.executeTool(greetingTool, requestFor(stepTask))
                 StepResult.success(description = "ran")
             }

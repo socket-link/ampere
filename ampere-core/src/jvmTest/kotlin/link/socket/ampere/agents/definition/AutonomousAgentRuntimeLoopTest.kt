@@ -15,6 +15,7 @@ import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
@@ -94,7 +95,7 @@ class AutonomousAgentRuntimeLoopTest {
             planFor(task)
         }
 
-        override val runLLMToExecuteTask: (task: Task) -> Outcome = { task ->
+        override val runLLMToExecuteTask: (task: Task, priorResults: List<StepOutcome>) -> Outcome = { task, _ ->
             modelCalls += "execute:${task.id}"
             executedTasks += task
             ExecutionOutcome.NoChanges.Success(

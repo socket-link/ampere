@@ -5,8 +5,8 @@ import link.socket.ampere.agents.domain.reasoning.LLMResponseParser
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
 
-/** How many prior-context entries [SchemaParameterStrategy] renders into its prompt. */
-private const val MAX_PRIOR_RESULTS = 10
+/** How many recalled-knowledge entries [SchemaParameterStrategy] renders into its prompt. */
+private const val MAX_RECALLED_ENTRIES = 10
 
 private const val DEFAULT_SYSTEM_MESSAGE =
     "You are a parameter generation system. You are given a tool's argument schema and the " +
@@ -51,8 +51,8 @@ class SchemaParameterStrategy(
 ) : ParameterStrategy {
 
     /**
-     * The parameter prompt: what the tool is, what this step is for, what is already known,
-     * and the arguments to fill.
+     * The parameter prompt: what the tool is, what this step is for, what the earlier steps
+     * produced, what Recall found, and the arguments to fill.
      *
      * The schema section is [ToolArgumentSchema.describe]'s rendering, so the names, types,
      * required flags, defaults and permitted values the model is shown are read from the same
@@ -76,10 +76,19 @@ class SchemaParameterStrategy(
         appendLine(intent.ifBlank { "No step intent was supplied." })
         appendLine()
 
-        val priorContext = priorResults(request)
-        if (priorContext.isNotEmpty()) {
-            appendLine("## Prior results and recalled context")
-            priorContext.forEach { appendLine("- $it") }
+        // AMPR-412 (H17): what the earlier steps of this plan produced, rendered by the same
+        // function every hand-written strategy uses, so a schema-described tool is told the
+        // same things in the same words as a typed one.
+        val earlierSteps = priorResultsSection(request.priorResults)
+        if (earlierSteps.isNotBlank()) {
+            appendLine("## Results of earlier steps")
+            appendLine(earlierSteps)
+        }
+
+        val recalled = recalledContext(request)
+        if (recalled.isNotEmpty()) {
+            appendLine("## Recalled context")
+            recalled.forEach { appendLine("- $it") }
             appendLine()
         }
 
@@ -120,17 +129,19 @@ class SchemaParameterStrategy(
     }
 
     /**
-     * What this step can already see, as one line per entry.
+     * What Recall put within reach of this step, as one line per entry.
      *
-     * Read off `knowledgeFromPastMemory`, the request's carrier for everything an earlier
-     * phase or an earlier step put within reach of this one: Recall writes what it retrieved
-     * there, and the prior step outcomes of H17 (AMPR-412) arrive on the same field. Capped,
-     * because the parameter call's budget is for the answer and a plan with many completed
-     * steps would otherwise crowd the schema out of its own prompt.
+     * Read off `knowledgeFromPastMemory`, the context's carrier for what an earlier *phase*
+     * retrieved. What the earlier *steps* produced is a different thing and rides a different
+     * field — [ExecutionRequest.priorResults], rendered above through
+     * [priorResultsSection] (AMPR-408, AMPR-412) — because a strategy rebuilds the context
+     * and the dispatch funnel re-applies the request-level fields it must not lose. Capped,
+     * because the parameter call's budget is for the answer and a long recall would
+     * otherwise crowd the schema out of its own prompt.
      */
-    private fun priorResults(request: ExecutionRequest<*>): List<String> =
+    private fun recalledContext(request: ExecutionRequest<*>): List<String> =
         request.context.knowledgeFromPastMemory
-            .take(MAX_PRIOR_RESULTS)
+            .take(MAX_RECALLED_ENTRIES)
             .map { knowledge ->
                 listOf(knowledge.approach, knowledge.learnings)
                     .filter { it.isNotBlank() }

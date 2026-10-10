@@ -3,6 +3,7 @@ package link.socket.ampere.agents.definition
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
@@ -24,7 +25,18 @@ interface NeuralAgent<S : AgentState> : Agent<S> {
      * a default drop what Recall found.
      */
     val runLLMToPlan: (task: Task, ideas: List<Idea>, relevantKnowledge: List<KnowledgeWithScore>) -> Plan
-    val runLLMToExecuteTask: (task: Task) -> Outcome
+
+    /**
+     * Executes one step of a plan, informed by what the steps before it produced.
+     *
+     * `priorResults` is not optional (AMPR-408): a step dispatched without it is
+     * parameterised from its own description alone, so a plan whose second step
+     * consumes the first step's output cannot run — the sibling of the Recall drop
+     * `runLLMToPlan` closed. They reach the dispatched tool's parameter prompt on
+     * [ExecutionRequest.priorResults]; a caller executing a step in isolation passes
+     * `emptyList()` and says so.
+     */
+    val runLLMToExecuteTask: (task: Task, priorResults: List<StepOutcome>) -> Outcome
     val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome
     val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea
 

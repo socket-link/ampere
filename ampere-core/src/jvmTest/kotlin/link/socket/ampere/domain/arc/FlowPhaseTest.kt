@@ -20,6 +20,7 @@ import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
@@ -367,7 +368,8 @@ class FlowPhaseTest {
             onPlan(task)
             Plan.blank
         }
-        override val runLLMToExecuteTask: (task: Task) -> Outcome = { _ -> Outcome.blank }
+        override val runLLMToExecuteTask: (task: Task, priorResults: List<StepOutcome>) -> Outcome =
+            { _, _ -> Outcome.blank }
         override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome =
             { _, _ -> error("No tools in this test") }
         override val runLLMToEvaluateOutcomes: (outcomes: List<Outcome>) -> Idea = { _ -> Idea.blank }

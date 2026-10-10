@@ -26,10 +26,12 @@ sealed interface Task {
         val assignedTo: AssignedTo? = null,
         /**
          * Tool id this step nominates for execution. Populated by the planning
-         * pipeline from the LLM's `toolToUse` field; `null` denotes a pure
-         * reasoning step that performs no tool invocation.
+         * pipeline from the LLM's `toolToUse` field; `null` denotes a
+         * reasoning step — one whose work is thinking rather than acting.
          *
-         * The executor routes strictly on this id with no keyword fallback.
+         * The executor routes strictly on this id with no keyword fallback. A
+         * null id is not a no-op: the executing agent carries the step out as
+         * one model call and its text becomes the step's result (AMPR-407).
          */
         val toolId: String? = null,
     ) : Task

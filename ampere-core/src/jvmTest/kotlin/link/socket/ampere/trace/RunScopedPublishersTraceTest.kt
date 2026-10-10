@@ -37,6 +37,7 @@ import link.socket.ampere.agents.domain.memory.MemoryContext
 import link.socket.ampere.agents.domain.memory.MemoryTaskTypes
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
@@ -209,6 +210,13 @@ class RunScopedPublishersTraceTest {
                     delay(POLL_MS)
                 }
             }
+            // The knowledge row lands before its event does: `AgentMemoryService.storeKnowledge`
+            // writes the row through the repository and only then publishes `KnowledgeStored`
+            // through the door. So the poll above can win the race against the publish, and the
+            // envelope assertion below has to wait for the envelope — while the loop is still
+            // running, because `shutdownAgent` cancels a publish still in flight and the next
+            // iteration is what would land it.
+            awaitEnvelopeRows(MemoryEvent.KnowledgeStored.EVENT_TYPE)
         } finally {
             agent.shutdownAgent()
         }
@@ -295,7 +303,7 @@ class RunScopedPublishersTraceTest {
         override val runLLMToEvaluatePerception: (Perception<AgentState>) -> Idea = { Idea.blank }
         override val runLLMToPlan: (Task, List<Idea>, List<KnowledgeWithScore>) -> Plan =
             { _, _, _ -> LOOP_PLAN }
-        override val runLLMToExecuteTask: (Task) -> Outcome = { LOOP_OUTCOME }
+        override val runLLMToExecuteTask: (Task, List<StepOutcome>) -> Outcome = { _, _ -> LOOP_OUTCOME }
         override val runLLMToExecuteTool: (Tool<*>, ExecutionRequest<*>) -> ExecutionOutcome = { _, _ -> LOOP_OUTCOME }
         override val runLLMToEvaluateOutcomes: (List<Outcome>) -> Idea = { Idea.blank }
 

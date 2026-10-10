@@ -9,6 +9,38 @@ import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 @Serializable
 data class CognitiveConfig(
     val phaseSparks: PhaseSparkConfig = PhaseSparkConfig(),
+    val reasoningSteps: ReasoningStepConfig = ReasoningStepConfig(),
+)
+
+/**
+ * Configuration for the plan steps that nominate no tool (AMPR-407).
+ *
+ * The planning prompt invites them — `"toolToUse": "tool ID or null if no
+ * specific tool"` — so a plan like *"1. decide the approach, 2. write the
+ * file"* is a plan the planner is entitled to produce. Step 1 is work the
+ * executing seat does by thinking, and [execute] is what makes it happen: one
+ * model call under `EXECUTE`, whose text becomes the step's result and is
+ * carried into the steps after it.
+ *
+ * [execute] defaults to `true` because the alternative default — returning
+ * success without doing anything — is a silent lie about work that was never
+ * done, which is the bug this configuration closed. A host that wants
+ * reasoning steps to be free has to say so.
+ *
+ * What a reasoning step is told about the steps before it is not configured
+ * here: it reads the same prior-results chain every tool step's parameter
+ * strategy renders (AMPR-408, AMPR-412), so there is one carrier and one
+ * rendering for both kinds of step.
+ *
+ * @property execute Carries out a tool-less step as one model call by the
+ *   executing agent. With it off, such a step succeeds without a call and
+ *   without a result, which is what every release before AMPR-407 did: that is
+ *   only honest when the host's planner never emits reasoning steps, or when
+ *   the host wants them treated as notes rather than work.
+ */
+@Serializable
+data class ReasoningStepConfig(
+    val execute: Boolean = true,
 )
 
 /**

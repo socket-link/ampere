@@ -329,16 +329,17 @@ class ToolExecutionEngine(
      * Executes the tool through the executor framework.
      *
      * The single funnel every dispatch path reaches, and so where the run id is stamped
-     * (AMPR-351) and the dispatching agent's file access scope re-applied (AMPR-414):
-     * a [ParameterStrategy] builds a fresh [ExecutionRequest] to carry its
-     * generated parameters, dropping whatever [originalRequest] stated, so re-stamping
-     * here — rather than before enrichment — is what actually reaches the tool.
+     * (AMPR-351), the dispatching agent's file access scope re-applied (AMPR-414) and
+     * the earlier steps' results restored (AMPR-408): a [ParameterStrategy] builds a
+     * fresh [ExecutionRequest] to carry its generated parameters, dropping whatever
+     * [originalRequest] stated, so re-stamping here — rather than before enrichment —
+     * is what actually reaches the tool.
      *
-     * [ExecutionRequest.arguments] is deliberately *not* re-stamped the same way. The run and
-     * the scope belong to the dispatcher, so the original's copy is authoritative; the
-     * arguments are what enrichment produced, so [enrichedRequest]'s copy is. Re-applying the
-     * original's would overwrite a [SchemaParameterStrategy]'s generated arguments with the
-     * null the agent dispatched with (AMPR-411).
+     * [ExecutionRequest.arguments] is deliberately *not* re-stamped the same way. The run,
+     * the scope and the prior results belong to the dispatcher, so the original's copy is
+     * authoritative; the arguments are what enrichment produced, so [enrichedRequest]'s copy
+     * is. Re-applying the original's would overwrite a [SchemaParameterStrategy]'s generated
+     * arguments with the null the agent dispatched with (AMPR-411).
      */
     private suspend fun executeViaExecutor(
         tool: Tool<*>,
@@ -354,6 +355,10 @@ class ToolExecutionEngine(
             // strategy has no business widening it and no way to state one of
             // its own.
             .withFileAccessScope(originalRequest.fileAccessScope)
+            // AMPR-408: the strategy reads the earlier steps' results to build its
+            // prompt and then drops them when it rebuilds the request, so a tool
+            // that wants to see what came before it gets them back here.
+            .withPriorResults(originalRequest.priorResults)
         val dispatchRunId = runScopedRequest.runId
         val invocationId = generateUUID("tool-invocation", tool.id, executorId)
         val dispatchedAt = Clock.System.now()
@@ -701,6 +706,13 @@ interface ParameterStrategy {
 
     /**
      * Builds the LLM prompt for generating parameters.
+     *
+     * A strategy whose tool can consume what an earlier step produced renders
+     * [ExecutionRequest.priorResults] into its prompt — through
+     * [priorResultsSection], so every strategy renders them the same way and an
+     * empty list adds nothing (AMPR-408). Without that, a step can only ever be
+     * parameterised from its own description, and a plan cannot pass results
+     * forward.
      *
      * @param tool The tool being executed
      * @param request The original execution request
