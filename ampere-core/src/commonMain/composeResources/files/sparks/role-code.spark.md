@@ -12,11 +12,22 @@
     "search_codebase"
   ],
   "allowedTools": [
+    "plan_steps",
     "read_code_file",
+    "read_codebase",
     "write_code_file",
+    "run_tests",
     "run_command",
     "ask_human",
-    "search_codebase"
+    "search_codebase",
+    "knowledge_query",
+    "git_create_branch",
+    "git_checkout",
+    "git_stage",
+    "git_commit",
+    "git_push",
+    "git_create_pr",
+    "git_status"
   ],
   "fileAccessScope": {
     "read": ["**/*"],

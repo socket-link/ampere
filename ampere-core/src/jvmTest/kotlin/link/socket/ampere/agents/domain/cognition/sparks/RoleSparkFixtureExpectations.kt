@@ -13,6 +13,21 @@ internal data class ExpectedRoleSpark(
     val promptContribution: String,
 )
 
+/**
+ * The bundled `role-*.spark.md` fixtures, as data, so every test that reads
+ * them asserts against one source.
+ *
+ * `allowedTools` is deliberately a *superset* of `requestedToolIds` and is the
+ * load-bearing half of the pair (AMPR-400): since the spark stack enforces
+ * narrowing by intersection, any tool id missing from `allowedTools` is
+ * withdrawn from the agent at dispatch. It therefore has to list every tool
+ * `AgentFactory` actually hands the role — the git tool set and `plan_steps`
+ * included — plus the ids the fixtures were originally authored against
+ * (`run_command`, `search_codebase`, `web_search`, `create_issue`,
+ * `query_issues`, `update_issue`), which no tool in the repo carries yet and
+ * which an intersection simply ignores. Trimming this set to "what the role
+ * needs" is how you silently take git away from the Code agent.
+ */
 internal object RoleSparkFixtureExpectations {
     val code = ExpectedRoleSpark(
         id = "code",
@@ -26,11 +41,22 @@ internal object RoleSparkFixtureExpectations {
             "search_codebase",
         ),
         allowedTools = setOf(
+            "plan_steps",
             "read_code_file",
+            "read_codebase",
             "write_code_file",
+            "run_tests",
             "run_command",
             "ask_human",
             "search_codebase",
+            "knowledge_query",
+            "git_create_branch",
+            "git_checkout",
+            "git_stage",
+            "git_commit",
+            "git_push",
+            "git_create_pr",
+            "git_status",
         ),
         fileAccessScope = FileAccessScope(
             readPatterns = setOf("**/*"),
@@ -84,10 +110,13 @@ You are operating in a **code-focused** capacity. Your primary responsibilities 
             "search_codebase",
         ),
         allowedTools = setOf(
+            "plan_steps",
             "web_search",
             "read_code_file",
+            "read_codebase",
             "ask_human",
             "search_codebase",
+            "knowledge_query",
         ),
         fileAccessScope = FileAccessScope(
             readPatterns = setOf("**/*"),
@@ -129,10 +158,14 @@ You are operating in a **research-focused** capacity. Your primary responsibilit
             "search_codebase",
         ),
         allowedTools = setOf(
+            "plan_steps",
             "run_command",
+            "run_tests",
             "read_code_file",
+            "read_codebase",
             "ask_human",
             "search_codebase",
+            "git_status",
         ),
         fileAccessScope = FileAccessScope(
             readPatterns = setOf("**/*"),
@@ -188,12 +221,16 @@ You are operating in an **operations-focused** capacity. Your primary responsibi
             "search_codebase",
         ),
         allowedTools = setOf(
+            "plan_steps",
+            "create_issues",
             "create_issue",
             "query_issues",
             "update_issue",
             "ask_human",
             "read_code_file",
+            "read_codebase",
             "search_codebase",
+            "knowledge_query",
         ),
         fileAccessScope = FileAccessScope(
             readPatterns = setOf("**/*"),

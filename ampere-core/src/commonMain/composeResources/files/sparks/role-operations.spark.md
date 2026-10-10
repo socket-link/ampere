@@ -11,10 +11,14 @@
     "search_codebase"
   ],
   "allowedTools": [
+    "plan_steps",
     "run_command",
+    "run_tests",
     "read_code_file",
+    "read_codebase",
     "ask_human",
-    "search_codebase"
+    "search_codebase",
+    "git_status"
   ],
   "fileAccessScope": {
     "read": ["**/*"],

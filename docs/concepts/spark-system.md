@@ -6,8 +6,10 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/SparkAppliedEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/SparkRemovedEvent.kt
   - ampere-core/src/commonMain/composeResources/files/sparks/**
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/AutonomousAgent.kt
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/SparkBasedAgent.kt
 related: [PropelLoop, CognitiveRelay, PlugPermissions, CognitionTrace]
-last_verified: 2026-05-31
+last_verified: 2026-10-09
 ---
 
 > **2026-05-17 (AMPR-165):** Declarative `.spark.md` documents now use JSON
@@ -39,8 +41,13 @@ remain shareable as `.spark.md` artifacts:
 - **Tool requests (additive)** — `requestedToolIds: Set<ToolId>`, unioned
   across the stack; declares which tools this Spark needs.
 - **Tool narrowing (subtractive)** — optional `allowedTools: Set<ToolId>`
-  the Spark permits, intersected across the stack.
+  the Spark permits, intersected across the stack. Enforced since AMPR-400:
+  `AutonomousAgent.effectiveTools` is `requiredTools` narrowed by the stack,
+  and it is both what the planner is offered and what plan-step dispatch
+  looks up.
 - **File access narrowing** — optional `FileAccessScope` the Spark permits.
+  Computed (`AutonomousAgent.effectiveFileAccess`) but **not yet enforced** —
+  nothing reads it at a file-touching tool. See *Anti-patterns*.
 
 Concrete subtypes include `ProjectSpark`, `TaskSpark`, `LanguageSpark`,
 `CoordinationSpark`, `PhaseSpark`, `DeclarativePhaseSpark`, and
@@ -155,6 +162,8 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - `agents/domain/cognition/sparks/PhaseSparkLibrary.kt`, `DefaultPhaseSparkLibrary.kt` — read-only catalog with deterministic `selectFor` ordering; extends `SparkRegistry`.
 - `agents/domain/cognition/sparks/AmpereSpikeFlags.kt` — `declarativeSparksEnabled: Boolean = false`; gates declarative spark application.
 - `composeResources/files/sparks/*.spark.md` — bundled declarative spark fixtures.
+- `agents/definition/AutonomousAgent.kt` — `availableTools` (the permitted *ids*, null when unconstrained) and `effectiveTools` (`requiredTools` ∩ permitted ids: the tools the agent may actually act with).
+- `agents/definition/SparkBasedAgent.kt` — the two enforcement sites: the reasoning unit is built with `availableTools = { effectiveTools }`, and `executePlanStep` resolves a step's `toolId` against `effectiveTools`.
 - `agents/domain/event/SparkAppliedEvent.kt`, `SparkRemovedEvent.kt` — observability.
 - `agents/domain/event/CognitivePhaseEvent.kt` — first-class phase boundary events.
 
@@ -164,6 +173,9 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - **The system prompt is rebuilt from the live stack on every LLM call.** No caching of the rendered prompt is allowed unless invalidated on every push/pop. Stale prompts cause the active Spark stack to drift from observed prompt content.
 - **Apply/remove are paired and observed.** Every `SparkAppliedEvent` has a matching `SparkRemovedEvent` (or end-of-run cleanup). `ArcTraceProjection` uses these events to reconstruct phase context.
 - **Phase boundaries are explicit when a bus is wired.** `PhaseSparkManager` publishes `PhaseEntered` after `currentCognitivePhase` is assigned and before phase sparks are applied, and publishes `PhaseExited` after phase sparks are removed and the previous phase is restored.
+- **Narrowing is read, not just computed.** Every site that offers or dispatches tools reads `effectiveTools`, never `requiredTools`. There are two — the planner's available-tools list and `executePlanStep`'s lookup — and they share one set, so a tool the stack withdrew fails identically to one that never existed. A narrowing that nothing reads is decoration; that was the AMPR-400 bug. (One tool-advertising path is still unnarrowed: `AutonomousAgent.buildToolAwarenessIdea` lists every `ToolRegistry` tool to Perceive. Those tools are outside `requiredTools`, so they are already undispatchable by `executePlanStep` — the leak is that the model is told about them at all.)
+- **The narrowed set is read live, never captured.** The stack is mutable for the agent's lifetime, so `ReasoningSettings.availableTools` is a `() -> Set<Tool<*>>` provider rather than a set. A snapshot taken when the reasoning unit was constructed would keep offering tools a later spark has since withdrawn.
+- **A capability-bearing spark's `allowedTools` is a real permission, so it must name real tool ids.** Because composition is intersection, an id that no tool in the repo carries contributes nothing, and a *missing* id silently withdraws a tool the agent was deliberately built with. A role spark must list every tool its factory hands the agent, `plan_steps` included.
 - **Tool-set composition is intersection.** When two Sparks both specify `allowedTools`, the effective set is `A ∩ B`, not `A ∪ B`. A change that switches to union is a permission expansion and violates the narrowing invariant.
 - **PhaseSparks add context only.** They do not narrow tools (`allowedTools = null`) or file access (`fileAccessScope = null`). Their job is prompt augmentation, not capability gating.
 - **Spark `name` follows `Type:Subtype`.** `Role:Code`, `Phase:Perceive`, `Project:ampere`, `PhaseSpark:cooking-domain`. The trace projection extracts subtype from this prefix; ad-hoc names break trace bucketing. Declarative sparks use `PhaseSpark:<id>` so trace bucketing that keys on `Phase:` still treats built-in phases distinctly.
@@ -174,7 +186,7 @@ exceed parent permissions, so adding a Spark is monotone safe.
 
 - **Add a new Spark type** — implement `Spark` (or extend an existing sealed family like `PhaseSpark`), define `name`, `promptContribution`, optionally `allowedTools` / `fileAccessScope` / `phaseContributions` / `agentRole` / `requestedToolIds`, mark it `@Serializable` with a stable `@SerialName`.
 - **Author a declarative phase spark** — write a `.spark.md` file under `composeResources/files/sparks/` with a `---json` / `---` frontmatter block of type `"phase"` (id, name, whenToUse required) and a markdown body, optionally with `## When <Phase>` sections for phase-specific guidance. Add the path to `DefaultPhaseSparkLibrary.DEFAULT_SPARKS`.
-- **Author a declarative role spark** — same path, `---json` / `---` frontmatter block of type `"role"` (id, name, agentRole required; `allowedTools` / `fileAccessScope` optional for narrowing). Body is the role's `promptContribution` verbatim — do not use `## When <Phase>` headers, they will not be extracted. Add the path to `DefaultPhaseSparkLibrary.DEFAULT_SPARKS`. Factory call sites resolve it via `SparkRegistry.roleSparkById(id)`.
+- **Author a declarative role spark** — same path, `---json` / `---` frontmatter block of type `"role"` (id, name, agentRole required; `allowedTools` / `fileAccessScope` optional for narrowing). If you supply `allowedTools`, check it against the ids the agent's factory actually passes (`grep -r '_TOOL_ID' ampere-core/src` plus the private ids in `execution/tools/git/GitTools.kt`) and include `plan_steps`, which every `SparkBasedAgent` ships with — omitting an id withdraws that tool at dispatch. Body is the role's `promptContribution` verbatim — do not use `## When <Phase>` headers, they will not be extracted. Add the path to `DefaultPhaseSparkLibrary.DEFAULT_SPARKS`. Factory call sites resolve it via `SparkRegistry.roleSparkById(id)`.
 - **Author a declarative language spark** — use type `"language"` with optional `fileAccessScope`; body text outside `## When <Phase>` headers is always-on guidance, and matching phase sections become `phaseContributions`. Resolve through `SparkRegistry.languageSparkById(id)`.
 - **Author a declarative project spark** — use type `"project"`, put `## Project Description` and `## Project Conventions` in the body, and use `${env:VAR:-fallback}` for dynamic fields such as `repositoryRoot`. Resolve through `SparkRegistry.projectSparkById(id)`.
 - **Apply a Spark transiently** — `SparkStack.push(spark)` and ensure a matching `pop` in `finally`. `PhaseSparkManager` handles this for phase boundaries.
@@ -190,4 +202,6 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - **Mutable tool sets that expand mid-run.** A `TaskSpark` that "unlocks" extra tools after some condition violates the narrowing invariant. If you need conditional tools, push a different Spark.
 - **Skipping `SparkRemovedEvent` because "the run is ending anyway".** The trace doesn't know that. Always pair apply/remove; let the projector decide what's noise.
 - **`Spark.name` without `Type:Subtype`.** Trace projection strips the prefix to bucket events; an ad-hoc name like `"my-experiment"` will not be grouped with the rest of its kind.
+- **Reading `requiredTools` at a planning or dispatch site.** It is the set the agent was *built* with, not the set it may *use*. `effectiveTools` is the only correct answer to "which tools does this agent have"; `requiredTools` is the input to it.
+- **Assuming `fileAccessScope` gates anything.** It does not. `effectiveFileAccess` is computed and no file-touching tool consults it, and as composed today it would deny nearly everything if one did: `FileAccessScope.intersect` is literal set intersection over glob *strings*, so `{"**/*"} ∩ {"**/*.kt"}` is empty rather than `{"**/*.kt"}`. Enforcing it needs a glob matcher and subsumption-aware composition first.
 - **Using `PhaseSpark` to narrow tools.** Phase sparks are advisory prompt content, not gates. Capability narrowing belongs in role, language, project, or task sparks.

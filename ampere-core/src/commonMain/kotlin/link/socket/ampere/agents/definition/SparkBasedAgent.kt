@@ -246,7 +246,9 @@ open class SparkBasedAgent<S : AgentState>(
             runId = _runId,
         ) {
             agentRole = "Spark-Based Agent (${affinity.name})"
-            availableTools = requiredTools
+            // AMPR-400: the narrowed set, read live on every call — not
+            // `requiredTools`, which ignores what the spark stack permits.
+            availableTools = { effectiveTools }
             executor = _executor
             _userGrantProvider?.let { provider ->
                 execution { userGrants(provider) }
@@ -288,7 +290,12 @@ open class SparkBasedAgent<S : AgentState>(
     /**
      * Routes a plan step to its nominated tool. Strict tool-id dispatch with no
      * keyword fallback — if [Task.CodeChange.toolId] is missing or doesn't
-     * match a tool in [requiredTools], the step fails fast with a clear error.
+     * match a tool in [effectiveTools], the step fails fast with a clear error.
+     *
+     * Dispatch is against [effectiveTools], the same narrowed set the planner
+     * was offered, so a tool the spark stack withdrew is as unreachable as one
+     * the agent was never built with — one set, one error, no second path
+     * (AMPR-400).
      *
      * Steps with `toolId == null` are treated as pure reasoning placeholders
      * and succeed without invoking anything (the LLM was asked to mark
@@ -319,12 +326,14 @@ open class SparkBasedAgent<S : AgentState>(
             )
         }
 
-        val tool = requiredTools.firstOrNull { it.id == toolId }
+        val dispatchable = effectiveTools
+        val tool = dispatchable.firstOrNull { it.id == toolId }
             ?: return StepResult.failure(
                 description = step.description,
                 error = "Plan step ${step.id} nominated toolToUse=\"$toolId\", " +
-                    "which is not in the agent's required tools " +
-                    "(${requiredTools.joinToString { it.id }}). The executor " +
+                    "which is not in the agent's effective tool set " +
+                    "(${dispatchable.joinToString { it.id }}) — the tools it was " +
+                    "built with, narrowed by its spark stack. The executor " +
                     "routes strictly by tool id — no keyword fallback.",
                 isCritical = true,
             )

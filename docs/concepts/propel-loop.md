@@ -54,7 +54,8 @@ single point at which we emit telemetry.
 
 - `ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/reasoning/AgentReasoning.kt` — the facade composing all phase services.
 - `agents/domain/reasoning/PerceptionEvaluator.kt` — Perceive: distills `AgentState` into `Idea`s.
-- `agents/domain/reasoning/PlanGenerator.kt` — Observe + Plan: combines ideas, recalled `Knowledge`, and the ticket into a `Plan`.
+- `agents/domain/reasoning/PlanGenerator.kt` — Observe + Plan: combines ideas, recalled `Knowledge`, the ticket, and the agent's available tools into a `Plan`.
+- `agents/domain/reasoning/AgentReasoning.ReasoningSettings.availableTools` — a `() -> Set<Tool<*>>` provider, not a set: a spark-based agent's tool set is narrowed by its live spark stack, so Perceive and Plan re-read it per call (AMPR-400). See [SparkSystem](spark-system.md).
 - `agents/domain/reasoning/PlanExecutor.kt` — Execute: dispatches each `Task` through `ToolExecutionEngine`.
 - `agents/domain/reasoning/OutcomeEvaluator.kt` — first half of Learn: turns raw tool returns into typed `ExecutionOutcome`s.
 - `agents/domain/reasoning/KnowledgeExtractor.kt` — second half of Learn: distils outcomes into `Knowledge`.
@@ -70,6 +71,7 @@ single point at which we emit telemetry.
 - **Each phase emits its own boundary events.** `CognitivePhaseEvent.PhaseEntered` / `PhaseExited` mark phase transitions when the phase manager has a bus; `ProviderCallStartedEvent` / `ProviderCallCompletedEvent` carry a `cognitivePhase`; memory writes carry the phase that produced them; tool calls are tagged via the active phase. `ArcTraceProjection` relies on this to bucket activity per phase. A phase that runs without emitting boundary events is invisible to the trace, which is equivalent to it not having run.
 - **The loop closes through `Knowledge`.** Every successful Arc run ends with `KnowledgeExtractor` writing at least one `Knowledge` entry tagged with the `run_id`. An Arc run that produced outcomes but no Knowledge entry has not closed the loop and will not contribute to future Recall. A run that is cancelled, or where a phase throws, does not close it and is not credited with a `Knowledge` entry: it leaves a `CompletionManifest` instead (AMPR-282), persisted as `ArcRunEvent.CompletionManifestRecorded` and read back as `ArcRunTrace.completion` (AMPR-359).
 - **Phase order is fixed.** Perceive → Recall → Observe → Plan → Execute → Learn. The declaration order in `CognitivePhase` matches the PROPEL acronym; `enumValues<CognitivePhase>()` yields the cycle. New phases are added by extending the enum and updating every service that switches on it; phases are never reordered or skipped per call site.
+- **Plan is offered only the tools the agent may actually use.** `PlanGenerator`'s available-tools list comes from the caller's `availableTools` provider, which for a spark-based agent is its *narrowed* set. Planning against a wider set invites steps the executor will refuse, and the refusal costs a whole Arc run rather than a retry.
 - **Observe is not a side-effect of Plan.** When recalled `Knowledge` contradicts an `Idea` or current state has drifted since the last run, that contradiction must be resolved in Observe and recorded in the Plan's rationale, not silently dropped during Plan generation.
 
 ## Common operations

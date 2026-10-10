@@ -53,7 +53,7 @@ import link.socket.ampere.plug.permission.UserGrants
  * ```kotlin
  * val reasoning = AgentReasoning.create(config, executorId, eventApi, activePromptProvider) {
  *     agentRole = "Spark-Based Agent (ANALYTICAL)"
- *     availableTools = requiredTools
+ *     availableTools = { effectiveTools }
  *
  *     execution {
  *         registerStrategy("create_issues", ProjectParams.IssueCreation(...))
@@ -122,7 +122,7 @@ class AgentReasoning private constructor(
             perception = perception,
             contextBuilder = { state -> "State: $state" },
             agentRole = settings.agentRole,
-            availableTools = settings.availableTools,
+            availableTools = settings.availableTools(),
             runId = runId,
         ) ?: throw IllegalStateException("No perception evaluator configured")
     }
@@ -148,7 +148,7 @@ class AgentReasoning private constructor(
             task = task,
             ideas = ideas,
             agentRole = settings.agentRole,
-            availableTools = settings.availableTools,
+            availableTools = settings.availableTools(),
             relevantKnowledge = relevantKnowledge,
             taskFactory = settings.taskFactory,
             customPromptBuilder = null,
@@ -456,7 +456,7 @@ class AgentReasoning private constructor(
             val settings = ReasoningSettings(
                 executorId = executorId,
                 agentRole = "Test Agent",
-                availableTools = emptySet(),
+                availableTools = { emptySet() },
                 executor = null,
                 taskFactory = DefaultTaskFactory,
                 parameterStrategies = emptyMap(),
@@ -549,7 +549,17 @@ class MockReasoningBuilder {
 data class ReasoningSettings(
     val executorId: ExecutorId,
     val agentRole: String,
-    val availableTools: Set<Tool<*>>,
+    /**
+     * The tools to offer the planner and the perception evaluator, evaluated at
+     * every call rather than once at construction.
+     *
+     * It is a provider because the set is not static: a spark-based agent
+     * narrows its tools through its live spark stack
+     * ([AutonomousAgent.effectiveTools][link.socket.ampere.agents.definition.AutonomousAgent.effectiveTools]),
+     * and a set captured when the reasoning unit was built would keep offering
+     * tools a later spark has since withdrawn (AMPR-400).
+     */
+    val availableTools: () -> Set<Tool<*>>,
     val executor: Executor?,
     val taskFactory: TaskFactory,
     val parameterStrategies: Map<String, ParameterStrategy>,
@@ -566,7 +576,13 @@ data class ReasoningSettings(
  */
 class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
     var agentRole: String = "Agent"
-    var availableTools: Set<Tool<*>> = emptySet()
+
+    /**
+     * Provider for the tools offered to the planner and perception evaluator.
+     * See [ReasoningSettings.availableTools] for why this is a provider and not
+     * a set — pass `{ effectiveTools }`, never a snapshot of it.
+     */
+    var availableTools: () -> Set<Tool<*>> = { emptySet() }
     var executor: Executor? = null
     var taskFactory: TaskFactory = DefaultTaskFactory
 

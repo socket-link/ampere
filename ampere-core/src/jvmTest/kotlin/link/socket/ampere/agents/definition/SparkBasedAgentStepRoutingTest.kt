@@ -24,8 +24,11 @@ import link.socket.ampere.agents.execution.tools.Tool
 /**
  * Exercises the AMPR-163 Task 5 routing contract on
  * [SparkBasedAgent.runLLMToExecuteTask]: plan steps dispatch strictly by
- * `Task.CodeChange.toolId` into the agent's `requiredTools`, with no
+ * `Task.CodeChange.toolId` into the agent's `effectiveTools`, with no
  * keyword-routing fallback when the tool id is missing or unknown.
+ * (AMPR-400 moved the lookup set from `requiredTools` to the spark-narrowed
+ * `effectiveTools`; the git tools these cases nominate are permitted by the
+ * `role-code` fixture, so the routing contract they pin is unchanged.)
  *
  * The test wires a mock reasoning instance so it can produce arbitrary
  * plans and observe tool invocations without standing up a real LLM or
