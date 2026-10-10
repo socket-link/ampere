@@ -37,6 +37,7 @@ object EventRegistry {
         // CognitiveEvent types
         CognitiveEvent.EscalationFired.EVENT_TYPE,
         CognitiveEvent.EscalationConsidered.EVENT_TYPE,
+        CognitiveEvent.JudgmentRecorded.EVENT_TYPE,
 
         // MeetingEvent types
         MeetingEvent.MeetingScheduled.EVENT_TYPE,

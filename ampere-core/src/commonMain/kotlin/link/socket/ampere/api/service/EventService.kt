@@ -192,6 +192,19 @@ fun EventService.escalationConsideredEvents(
 ): Flow<CognitiveEvent.EscalationConsidered> =
     observe(filters).filterIsInstance<CognitiveEvent.EscalationConsidered>()
 
+/**
+ * Stream every judgment a decision call records (AMPR-384, J4).
+ *
+ * One event per judgment, carrying the distribution when the adapter measured one and a
+ * digest of the state, never the state. High-volume; subscribe for calibration and model
+ * comparison.
+ */
+@link.socket.ampere.api.AmpereStableApi
+fun EventService.judgmentRecordedEvents(
+    filters: EventRelayFilters = EventRelayFilters(),
+): Flow<CognitiveEvent.JudgmentRecorded> =
+    observe(filters).filterIsInstance<CognitiveEvent.JudgmentRecorded>()
+
 @link.socket.ampere.api.AmpereStableApi
 enum class EventStreamFilter {
     ALL,

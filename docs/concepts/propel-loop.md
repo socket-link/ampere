@@ -7,8 +7,8 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/cognition/sparks/PhaseSparkManager.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/trace/ArcRunTrace.kt
   - docs/AGENT_LIFECYCLE.md
-related: [CognitiveRelay, MemoryProvenance, SparkSystem, CognitionTrace, EventSerialBus]
-last_verified: 2026-10-02
+related: [CognitiveRelay, MemoryProvenance, SparkSystem, CognitionTrace, EventSerialBus, DecideSeam]
+last_verified: 2026-10-09
 ---
 
 # PROPEL Loop
@@ -58,6 +58,8 @@ single point at which we emit telemetry.
 - `agents/domain/reasoning/PlanExecutor.kt` — Execute: dispatches each `Task` through `ToolExecutionEngine`.
 - `agents/domain/reasoning/OutcomeEvaluator.kt` — first half of Learn: turns raw tool returns into typed `ExecutionOutcome`s.
 - `agents/domain/reasoning/KnowledgeExtractor.kt` — second half of Learn: distils outcomes into `Knowledge`.
+- `agents/domain/reasoning/AgentReasoning.decide` — the Decide call kind (AMPR-384): typed questions about a state, answered with a measured confidence and recorded as `JudgmentRecorded` under the asking phase. Shadow only in W1; no phase calls it yet. See [DecideSeam](decide-seam.md).
+- `agents/domain/reasoning/Confidence.kt` + `ConfidenceSource.kt` — every `Confidence` a phase parses from generated JSON is `SELF_REPORTED`; a `MEASURED` confidence is a `Judgment`, not a level.
 - `agents/domain/cognition/sparks/PhaseSpark.kt` + `PhaseSparkManager.kt` — phase-aware prompt augmentation (`PERCEIVE | RECALL | OBSERVE | PLAN | EXECUTE | LEARN`).
 - `trace/ArcRunTrace.kt` — `PropelPhase` is the telemetry record per phase.
 - `docs/AGENT_LIFECYCLE.md` — the human-readable narrative.
@@ -81,6 +83,7 @@ single point at which we emit telemetry.
 
 - **Short-circuiting Recall when the context "feels obvious"** — the whole point of Recall is to override the agent's confidence with prior outcomes. Plans that look obvious are exactly the ones where past failures live.
 - **Treating Learn as bookkeeping** — the closing phase is where the system *learns*. If your change records outcomes but doesn't extract `Knowledge`, you've made the loop open-loop.
+- **Asking a decision question without a phase** — `decide(…, phase = null)` files the record under whatever phase happens to be active, the same way an untagged `callLLM` does. Pass the phase that is asking.
 - **Inlining a "quick LLM call" outside a phase** — every model invocation should be wrapped in a `ProviderCallStartedEvent` / `ProviderCallCompletedEvent` pair tagged with `cognitivePhase`. Calls outside this contract don't appear in `ArcRunTrace` and break the glass-brain guarantee.
 - **Folding Observe into Plan** — recalled `Knowledge` becomes a passive context dump rather than an explicit selection between alternatives. The Plan emerges with no record of *why this approach over the others*.
 - **Holding state across runs in the agent object** — agents are animated, not stateful in memory. Cross-run state belongs in `OutcomeMemoryRepository` / `KnowledgeRepository`, keyed by ids retrievable in Recall. Anything else is invisible to the trace and fragile across restarts.

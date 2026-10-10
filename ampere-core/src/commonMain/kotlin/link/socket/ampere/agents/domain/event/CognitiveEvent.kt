@@ -6,6 +6,10 @@ import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
+import link.socket.ampere.agents.domain.reasoning.ConfidenceSource
+import link.socket.ampere.agents.domain.routing.local.InferenceLocality
+import link.socket.ampere.api.model.TokenUsage
+import link.socket.ampere.llm.decide.ModelSnapshot
 
 /**
  * Events emitted by cognitive evaluators outside normal phase transitions.
@@ -102,6 +106,85 @@ sealed interface CognitiveEvent : Event {
 
         companion object {
             const val EVENT_TYPE: EventType = "EscalationConsidered"
+        }
+    }
+
+    /**
+     * The record of one judgment a decision call produced (AMPR-384, J4).
+     *
+     * `AgentReasoning.decide` publishes one of these per judgment in a call's response, through
+     * the agent's event door, so that a band can later be fitted and a model compared with its
+     * replacement. It records what the call was and what came back — never the state: a state
+     * may hold a person's data, and [stateDigest] is enough to join on.
+     *
+     * [distribution] is present only when the adapter measured one (a System One provider or
+     * the deterministic adapter); [source] says which. [band] is the band applied to read the
+     * judgment, and is null throughout W1, which fits none. [causedBy] is the Action or write
+     * the judgment bears on; an [EscalationConsidered] later derived from this judgment (J8)
+     * is linked back to it by the same `caused_by` and is otherwise untouched.
+     *
+     * Volume warning: this fires on every judgment. [Urgency.LOW] for the same reason as
+     * [EscalationConsidered].
+     */
+    @Serializable
+    @SerialName("CognitiveEvent.JudgmentRecorded")
+    data class JudgmentRecorded(
+        override val eventId: EventId,
+        override val timestamp: Instant,
+        override val eventSource: EventSource,
+        override val urgency: Urgency = Urgency.LOW,
+        override val agentId: AgentId,
+        /** Groups the records of one call; a call with one question leaves one record. */
+        val callId: String,
+        /** The question's id in the request. */
+        val questionId: String,
+        /** The digest of the question as asked; a reworded question is a new version. */
+        val questionVersion: String,
+        /** `noul`, `choice` or `score`. */
+        val questionType: String,
+        /** SHA-256 of the state. The state itself is never recorded. */
+        val stateDigest: String,
+        /** One of the question's declared answer keys. */
+        val answer: String,
+        /** Probability per declared answer, when the adapter measured one. */
+        val distribution: Map<String, Double>? = null,
+        /** `p(answer)` — measured, or the F10 mapping of a self-report; see [source]. */
+        val confidence: Double? = null,
+        val source: ConfidenceSource,
+        /** The band the judgment was read against. Always null in W1. */
+        val band: String? = null,
+        val modelSnapshot: ModelSnapshot,
+        val locality: InferenceLocality,
+        /** Client-observed, for the whole call. */
+        val latencyMs: Long,
+        /** As the transport reported it, for the whole call. */
+        val usage: TokenUsage = TokenUsage(),
+        /** The Action or write this judgment bears on, if any. */
+        val causedBy: String? = null,
+        val cognitivePhase: CognitivePhase? = null,
+    ) : CognitiveEvent {
+
+        override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Judgment recorded for $agentId: $questionId ($questionType) = $answer")
+            confidence?.let { append(" p=${it.formatRatio()}") }
+            append(" [${source.name.lowercase()}")
+            if (distribution == null) append(", no distribution")
+            append("]")
+            cognitivePhase?.let { append(" [${it.name}]") }
+            append(" via ${modelSnapshot.providerId}/${modelSnapshot.modelId}")
+            append(" ${locality.name.lowercase()}")
+            append(" ${latencyMs}ms")
+            append(" ${formatUrgency(urgency)}")
+            append(" from ${formatSource(eventSource)}")
+        }
+
+        companion object {
+            const val EVENT_TYPE: EventType = "JudgmentRecorded"
         }
     }
 }

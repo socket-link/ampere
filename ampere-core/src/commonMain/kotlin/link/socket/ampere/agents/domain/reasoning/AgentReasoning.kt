@@ -1,9 +1,14 @@
 package link.socket.ampere.agents.domain.reasoning
 
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
+import link.socket.ampere.agents.domain.event.CognitiveEvent
+import link.socket.ampere.agents.domain.event.EventId
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
@@ -14,12 +19,20 @@ import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.ParameterStrategy
 import link.socket.ampere.agents.execution.ToolExecutionEngine
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.llm.decide.DecisionRequest
+import link.socket.ampere.llm.decide.DecisionResponse
+import link.socket.ampere.llm.decide.MissingUpstreamDecisionClientException
+import link.socket.ampere.llm.decide.Question
+import link.socket.ampere.llm.decide.stateDigest
+import link.socket.ampere.llm.decide.typeName
+import link.socket.ampere.llm.decide.version
 import link.socket.ampere.plug.PlugManifest
 import link.socket.ampere.plug.permission.UserGrants
 
@@ -284,6 +297,103 @@ class AgentReasoning private constructor(
             routingContext = routingContext(requirements, phase),
         )
             ?: throw IllegalStateException("No LLM service configured")
+    }
+
+    // ========================================================================
+    // Decide (AMPR-384)
+    // ========================================================================
+
+    /**
+     * Asks typed [questions] about [state] through the injected
+     * [UpstreamDecisionClient][link.socket.ampere.llm.decide.UpstreamDecisionClient]
+     * and records every judgment that comes back (AMPR-384).
+     *
+     * The second call kind beside [callLLM] and [callLLMForJson]. A decision call
+     * generates no text: every answer is declared on its [Question] and the
+     * response is one [Judgment][link.socket.ampere.llm.decide.Judgment] per
+     * question id, with a measured confidence when the transport is a decision
+     * model. Shadow only in W1 — nothing in the loop calls this yet.
+     *
+     * One [CognitiveEvent.JudgmentRecorded] per judgment is published through the
+     * agent's event door, under the run id, carrying a digest of the state and
+     * never the state. Without a door (no [eventApi]) nothing is recorded, as
+     * with the `ProviderCall*` pair. A call that throws leaves no record.
+     *
+     * @param phase The cognitive phase asking, so the trace files the record under
+     *   it (AMPR-273). Null files it under whatever phase is active.
+     * @param causedBy The Action or write the judgment bears on, if any (F2). Goes
+     *   on the record and on the stored row's `caused_by`.
+     * @throws MissingUpstreamDecisionClientException when the configuration
+     *   carries no decision transport. There is no fallback.
+     */
+    suspend fun decide(
+        state: String,
+        questions: Map<String, Question>,
+        phase: CognitivePhase? = null,
+        causedBy: EventId? = null,
+    ): DecisionResponse {
+        val configuration = config
+            ?: throw IllegalStateException("No agent configuration; decide needs one")
+        val client = configuration.upstreamDecisionClient
+            ?: throw MissingUpstreamDecisionClientException(configuration.agentDefinition.name)
+
+        val request = DecisionRequest(state = state, questions = questions)
+        val startedAt = Clock.System.now()
+        val response = client.decide(request, configuration.aiConfiguration)
+        val latencyMs = (Clock.System.now() - startedAt).inWholeMilliseconds
+
+        recordJudgments(request, response, latencyMs, phase, causedBy)
+        return response
+    }
+
+    /**
+     * Publishes one [CognitiveEvent.JudgmentRecorded] per judgment (J4). Under
+     * [NonCancellable] for the same reason as the provider-call telemetry: the
+     * judgment has been made and paid for by the time this runs, and a
+     * cancellation landing here would lose a record of a call that happened.
+     */
+    private suspend fun recordJudgments(
+        request: DecisionRequest,
+        response: DecisionResponse,
+        latencyMs: Long,
+        phase: CognitivePhase?,
+        causedBy: EventId?,
+    ) {
+        val door = eventApi ?: return
+        val publishingAgentId = door.agentId
+        val callId = generateUUID("decide", publishingAgentId)
+        val digest = stateDigest(request.state)
+        withContext(NonCancellable) {
+            response.judgments.forEach { (questionId, judgment) ->
+                val question = request.questions[questionId] ?: return@forEach
+                door.publish(
+                    CognitiveEvent.JudgmentRecorded(
+                        eventId = generateUUID("judgment", publishingAgentId),
+                        timestamp = Clock.System.now(),
+                        eventSource = EventSource.Agent(publishingAgentId),
+                        agentId = publishingAgentId,
+                        callId = callId,
+                        questionId = questionId,
+                        questionVersion = question.version,
+                        questionType = question.typeName,
+                        stateDigest = digest,
+                        answer = judgment.answer,
+                        distribution = judgment.distribution,
+                        confidence = judgment.confidence,
+                        source = judgment.source,
+                        band = null,
+                        modelSnapshot = judgment.modelSnapshot,
+                        locality = judgment.locality,
+                        latencyMs = latencyMs,
+                        usage = response.usage,
+                        causedBy = causedBy,
+                        cognitivePhase = phase,
+                    ),
+                    causedBy = causedBy,
+                    runId = runId,
+                )
+            }
+        }
     }
 
     private fun routingContext(

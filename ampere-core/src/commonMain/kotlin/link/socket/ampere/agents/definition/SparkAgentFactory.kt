@@ -25,6 +25,7 @@ import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.db.Database
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.plug.PlugManifest
 import link.socket.ampere.plug.permission.SqlDelightUserGrantStore
 import link.socket.ampere.plug.permission.UserGrants
@@ -83,6 +84,8 @@ class SparkAgentFactory(
     private val cognitiveRelay: CognitiveRelay? = null,
     private val executor: Executor? = null,
     private val upstreamLlmClient: UpstreamLlmClient? = null,
+    /** Outbound decision transport handed to created agents (AMPR-384). Null leaves them without one. */
+    private val upstreamDecisionClient: UpstreamDecisionClient? = null,
     private val runId: RunId? = null,
     private val database: Database? = null,
 ) {
@@ -282,6 +285,7 @@ class SparkAgentFactory(
             _minimumRung = minimumRung,
             _executor = executor,
             _upstreamLlmClient = upstreamLlmClient,
+            _upstreamDecisionClient = upstreamDecisionClient,
             _runId = runId,
             _userGrantProvider = userGrantProvider,
             _workspace = workspace,

@@ -7,8 +7,8 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/RoutingEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/ProviderCallStartedEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/ProviderCallCompletedEvent.kt
-related: [PropelLoop, EventSerialBus, CognitionTrace]
-last_verified: 2026-10-02
+related: [PropelLoop, EventSerialBus, CognitionTrace, DecideSeam]
+last_verified: 2026-10-09
 ---
 
 # CognitiveRelay
@@ -65,6 +65,7 @@ change.
 - `llm/OnDeviceInferenceSession.kt` — the smallest complete local-first path: `ask` through `AgentLLMService`, `state` from the binding. Built on `OnDeviceAssistantAgent`, the one bundled definition whose floor is rung `ZERO`.
 - `domain/arc/bridge/ArcSession.kt` — the Arc path. `create(…, engine, cloud)` hands the binding's relay and client to `AmpereRuntime` and exposes the binding's state as `onDeviceState` (AMPR-374).
 - `agents/domain/event/RoutingEvent.kt`, `ProviderCallStartedEvent.kt`, `ProviderCallCompletedEvent.kt` — observability events.
+- `llm/decide/` — the *other* outbound seam (AMPR-384). `UpstreamDecisionClient` is the sibling of `UpstreamLlmClient` for the Decide call kind: a state plus typed questions in, judgments out, no text. It does not route through the relay — a hosted decision endpoint's model is fixed by the endpoint, and the one adapter that is a generative model (`ModelBackedDecisionClient`) reaches the relay through `AgentLLMService` like any other call. See [DecideSeam](decide-seam.md).
 
 ## Invariants
 
@@ -79,6 +80,7 @@ change.
 - **An on-device failure is returned, never re-sent.** Availability is decided *before* the call, by the probe the relay's gate reads. Once a prompt has been routed to the device, a failed generation surfaces as a failure; it is not retried on a cloud model. A person shown "on-device" must not find out afterwards that their prompt left.
 - **The on-device read model is commutative.** `EventSerialBus` launches each handler on its own coroutine, so a `ProviderCallCompletedEvent` can be folded before its `ProviderCallStartedEvent`. `OnDeviceInferenceProjection` counts rather than tracks open calls, and keeps the later-timestamped fact rather than the last-folded one, so any order ends in the same state.
 - **The context-window fit widens a requirement; it never creates one.** With an engine bound, `AgentLLMService` adds `minContextTokens` (system message + prompt + output budget) to a call's *existing* `CapabilityRequirement`, so the relay keeps a prompt that will not fit away from the small-window on-device model. A call with no requirement is left alone: a `ByCapability` rule cannot match without one, and sizing it would make a step eligible for the device that nothing declared eligible. Which steps are eligible is a floor's call (AMPR-372), not the service's. Without an engine bound nothing is added, so cloud-only routing is unchanged.
+- **A transport is opted into on each seam separately.** `AgentConfiguration.upstreamLlmClient` and `AgentConfiguration.upstreamDecisionClient` are independent; injecting one does not supply the other, and each has its own missing-client exception. The relay's "every call must produce some `AIConfiguration`" rule is about *selection*; it never conjures a transport.
 - **The fallback is not optional.** A relay that can return null on no-match would make every `AgentLLMService` caller responsible for a fallback decision, defeating the point. Every call must produce some `AIConfiguration`.
 
 ## Common operations
@@ -110,4 +112,5 @@ change.
 - **Inventing an event to drive the indicator.** Everything the on-device read model needs is already emitted by the relay and `AgentLLMService`. A second signal for the same fact is a second thing to keep truthful.
 - **Giving the relay and the client different registries.** The relay selects by a descriptor and the client dispatches by one; two catalogs let them disagree about whether a model is local, and a call the relay priced at 0W goes out on the cloud transport. `OnDeviceInferenceBinding` exists so there is one instance to share.
 - **Building an engine-bound `AmpereRuntime` with no `eventApiFactory`.** The relay and the client then route and run on the device, and nothing persists the `ProviderCall*` pair under the run id — the trace shows no model calls and the on-device state never leaves `Unknown`. `ArcSession.create` supplies the factory whenever it has a database.
+- **Reaching a decision model through `UpstreamLlmClient`.** A decision request has no messages and returns no text; squeezing it into a chat completion keeps one seam and drops the distribution, which is what the call exists to return. The Decide seam is `UpstreamDecisionClient`.
 - **Rebuilding the relay to change a model's rung.** The registry is the mutable surface — `refresh()` (whole catalog) or `register()` (one descriptor). Tearing down a live relay drops the rule set and every in-flight reasoning session along with it.

@@ -342,6 +342,25 @@ class AgentEventApi(
         }
 
     /**
+     * Subscribe to every judgment a decision call records (AMPR-384, J4).
+     *
+     * High-volume telemetry — one per judgment. Subscribe for calibration, band fitting over
+     * measured judgments, or model comparison; not for action signals.
+     */
+    fun onJudgmentRecorded(
+        filter: EventFilter<CognitiveEvent.JudgmentRecorded> = EventFilter.noFilter(),
+        handler: suspend (CognitiveEvent.JudgmentRecorded, Subscription?) -> Unit,
+    ): Subscription =
+        eventSerialBus.subscribe<CognitiveEvent.JudgmentRecorded, EventSubscription.ByEventClassType>(
+            agentId = agentId,
+            eventType = CognitiveEvent.JudgmentRecorded.EVENT_TYPE,
+        ) { event, subscription ->
+            if (filter.execute(event)) {
+                handler(event, subscription)
+            }
+        }
+
+    /**
      * Retrieve all events since the provided timestamp, or all if null.
      *
      * Rows the store could not decode are skipped by it and reported here; see

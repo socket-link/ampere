@@ -47,6 +47,7 @@ import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.integrations.issues.IssueTrackerProvider
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.plug.PlugManifest
 import link.socket.ampere.plug.permission.SqlDelightUserGrantStore
 import link.socket.ampere.plug.permission.UserGrants
@@ -146,6 +147,15 @@ class AgentFactory(
      * to opt into that call.
      */
     private val upstreamLlmClient: UpstreamLlmClient? = null,
+    /**
+     * Outbound decision transport handed to every agent this factory builds
+     * (AMPR-384). `Ampere.fromEnvironment(upstreamDecisionClient = ...)`
+     * supplies it. Null leaves the agents without one, so their first
+     * `decide` throws
+     * [MissingUpstreamDecisionClientException][link.socket.ampere.llm.decide.MissingUpstreamDecisionClientException];
+     * nothing falls back to the model-backed adapter.
+     */
+    private val upstreamDecisionClient: UpstreamDecisionClient? = null,
     /**
      * Backing store for a persisted [link.socket.ampere.plug.permission.UserGrantStore]
      * (AMPR-348). When set, every agent this factory creates gates plug-tool
@@ -256,6 +266,7 @@ class AgentFactory(
             cognitiveConfig = cognitiveConfig,
             llmProvider = llmProvider,
             upstreamLlmClient = upstreamLlmClient,
+            upstreamDecisionClient = upstreamDecisionClient,
         )
 
     /**
@@ -359,6 +370,7 @@ class AgentFactory(
                 llmProvider = llmProvider,
                 observabilityScope = scope,
                 upstreamLlmClient = upstreamLlmClient,
+                upstreamDecisionClient = upstreamDecisionClient,
                 // AMPR-219: the CODE path is the one activated production agent.
                 // Only this branch wires the relay + rung floor; PRODUCT,
                 // PROJECT, and QUALITY keep the dormant (null relay) behavior.
@@ -391,6 +403,7 @@ class AgentFactory(
                 llmProvider = llmProvider,
                 observabilityScope = scope,
                 upstreamLlmClient = upstreamLlmClient,
+                upstreamDecisionClient = upstreamDecisionClient,
                 userGrantProvider = userGrantProvider,
                 workspace = workspace,
             )
@@ -408,6 +421,7 @@ class AgentFactory(
                 llmProvider = llmProvider,
                 observabilityScope = scope,
                 upstreamLlmClient = upstreamLlmClient,
+                upstreamDecisionClient = upstreamDecisionClient,
                 userGrantProvider = userGrantProvider,
                 workspace = workspace,
                 tools = setOfNotNull(toolCreateIssues, toolAskHuman),
@@ -426,6 +440,7 @@ class AgentFactory(
                 llmProvider = llmProvider,
                 observabilityScope = scope,
                 upstreamLlmClient = upstreamLlmClient,
+                upstreamDecisionClient = upstreamDecisionClient,
                 userGrantProvider = userGrantProvider,
                 workspace = workspace,
             )

@@ -22,6 +22,7 @@ import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.trace.ArcRunId
 import link.socket.ampere.util.systemFileSystem
 import okio.FileSystem
@@ -77,6 +78,11 @@ class AmpereRuntime(
     private val cognitiveRelay: CognitiveRelay? = null,
     private val executor: Executor? = null,
     private val upstreamLlmClient: UpstreamLlmClient? = null,
+    /**
+     * Outbound decision transport for the agents a run spawns (AMPR-384). Null leaves them
+     * without one; nothing in the loop calls `decide` yet.
+     */
+    private val upstreamDecisionClient: UpstreamDecisionClient? = null,
     /**
      * Optional factory for a per-agent [AgentEventApi] (AMPR-240). When
      * supplied, spawned agents publish `ProviderCallStartedEvent`/
@@ -359,6 +365,7 @@ class AmpereRuntime(
         cognitiveRelay = cognitiveRelay,
         executor = executor,
         upstreamLlmClient = upstreamLlmClient,
+        upstreamDecisionClient = upstreamDecisionClient,
         runId = runId,
         eventApiFactory = eventApiFactory,
         clock = clock,

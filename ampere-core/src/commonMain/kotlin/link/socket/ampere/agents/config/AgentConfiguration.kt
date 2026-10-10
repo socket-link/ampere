@@ -8,6 +8,7 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.llm.BundledUpstreamLlmClient
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.llm.decide.UpstreamDecisionClient
 
 @Serializable
 data class AgentConfiguration(
@@ -34,4 +35,16 @@ data class AgentConfiguration(
      */
     @Transient
     val upstreamLlmClient: UpstreamLlmClient? = null,
+    /**
+     * Outbound decision-call seam (AMPR-384, J1): the sibling of
+     * [upstreamLlmClient] for the Decide call kind. `null` means no decision
+     * transport has been chosen, and
+     * [AgentReasoning.decide][link.socket.ampere.agents.domain.reasoning.AgentReasoning.decide]
+     * throws
+     * [MissingUpstreamDecisionClientException][link.socket.ampere.llm.decide.MissingUpstreamDecisionClientException]
+     * rather than falling back to the model-backed adapter. Independent of the
+     * chat seam: an agent may carry either, both, or neither.
+     */
+    @Transient
+    val upstreamDecisionClient: UpstreamDecisionClient? = null,
 )

@@ -13,6 +13,13 @@ import kotlinx.serialization.Serializable
  * Prompt strings remain lower-case (`"high" | "medium" | "low"`) for LLM
  * compatibility; [parseOrNull] / [parseOrDefault] handle the conversion to
  * this enum on the Kotlin side.
+ *
+ * Every level is something a generating model said about itself, so its
+ * [source] is always [ConfidenceSource.SELF_REPORTED] (AMPR-384, J5). A
+ * measured confidence is a probability on a
+ * [link.socket.ampere.llm.decide.Judgment], not a level here; the two are kept
+ * apart on purpose, and [asProbability] is the one sanctioned bridge from a
+ * level to a number.
  */
 @Serializable
 enum class Confidence {
@@ -20,6 +27,28 @@ enum class Confidence {
     MEDIUM,
     HIGH,
     ;
+
+    /**
+     * Where this value came from. A level is parsed from generated JSON, so it
+     * is always [ConfidenceSource.SELF_REPORTED]; nothing measured is ever a
+     * [Confidence].
+     */
+    val source: ConfidenceSource
+        get() = ConfidenceSource.SELF_REPORTED
+
+    /**
+     * The F10 mapping of a self-reported level to a number:
+     * `LOW → 0.25`, `MEDIUM → 0.5`, `HIGH → 0.75`.
+     *
+     * This applies to self-reported values only, which is every value of this
+     * enum. The result is a self-reported number still — no band is ever fitted
+     * on it (see [link.socket.ampere.llm.decide.BandFitGuard]).
+     */
+    fun asProbability(): Double = when (this) {
+        LOW -> 0.25
+        MEDIUM -> 0.5
+        HIGH -> 0.75
+    }
 
     companion object {
 

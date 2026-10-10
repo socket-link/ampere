@@ -130,6 +130,7 @@ object EventCategorizer {
         is GitEvent.Pushed,
         is GitEvent.FilesStaged,
         is CognitiveEvent.EscalationConsidered,
+        is CognitiveEvent.JudgmentRecorded,
         is MemoryEvent.KnowledgeRecalled,
         is MemoryEvent.KnowledgeStored,
         is NotificationEvent<*>,
