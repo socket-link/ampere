@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.execution.request
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.FileAccessScope
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
@@ -57,6 +58,29 @@ data class ExecutionRequest<Context : ExecutionContext>(
      * tool invocation), where there is no stack to honour.
      */
     val fileAccessScope: FileAccessScope? = null,
+    /**
+     * The arguments for this one tool call (AMPR-411).
+     *
+     * The generic counterpart to the typed [ExecutionContext] subtypes: a tool whose
+     * parameters are a domain object (`create_issues`, `write_code_file`) gets them from a
+     * context its [ParameterStrategy][link.socket.ampere.agents.execution.ParameterStrategy]
+     * promoted the request into, while a tool that declares a
+     * [FunctionTool.argumentSchema][link.socket.ampere.agents.execution.tools.FunctionTool.argumentSchema]
+     * gets them from here, validated against that schema and holding only the names it
+     * declares.
+     *
+     * Two things fill it, and they are the same field on purpose: a plan step that already
+     * states its arguments (H11) and
+     * [SchemaParameterStrategy][link.socket.ampere.agents.execution.SchemaParameterStrategy]
+     * when the step does not. That is what lets
+     * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine] skip the
+     * parameter call for a step whose arguments are already present and valid: the tool reads
+     * one field either way and cannot tell which path filled it.
+     *
+     * Null means no arguments are known for this call. An empty object means the call takes
+     * none — a real answer, and the one a schema that declares no properties produces.
+     */
+    val arguments: JsonObject? = null,
 ) {
 
     /**
@@ -87,4 +111,16 @@ data class ExecutionRequest<Context : ExecutionContext>(
         } else {
             copy(fileAccessScope = fileAccessScope)
         }
+
+    /**
+     * This request carrying [arguments].
+     *
+     * Deliberately *not* shaped like [withRunId] and [withFileAccessScope]: those two guard
+     * against a rebuild dropping what the dispatcher stamped, and are re-applied at the
+     * dispatch funnel for that reason. Arguments are the opposite case — they are the *output*
+     * of parameter generation, so the funnel must leave them alone, and a null here is a real
+     * answer ("this call has no arguments") rather than "nothing to say".
+     */
+    fun withArguments(arguments: JsonObject?): ExecutionRequest<Context> =
+        if (arguments == this.arguments) this else copy(arguments = arguments)
 }
