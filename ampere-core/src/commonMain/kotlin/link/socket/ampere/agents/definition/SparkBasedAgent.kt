@@ -320,6 +320,35 @@ open class SparkBasedAgent<S : AgentState>(
     val canExecuteTools: Boolean
         get() = reasoning.canExecuteTools
 
+    /**
+     * This agent's reasoning unit — the phase services, reached as the suspending
+     * functions they are (AMPR-393).
+     *
+     * The `runLLMTo*` lambdas above are the same services wrapped in
+     * [runBlockingCompat] and a 60 s timeout, which is what `AutonomousAgent`'s
+     * loop needs and what a hosted run must not have: blocking a thread throws
+     * outright on JS and wasm, and a run's caller owns its own time limits. A
+     * suspend-only driver therefore needs the unit itself.
+     *
+     * `internal` because it is a seam, not a surface: a consumer drives phases
+     * through [RunHost][link.socket.ampere.propel.RunHost], which is the entry
+     * point that brackets them, stamps the run and closes the loop. Handing the
+     * unit out publicly would make the un-bracketed, un-recorded call the easy one.
+     */
+    internal val reasoningUnit: AgentReasoning
+        get() = reasoning
+
+    /**
+     * What Recall finds for [task], under this agent's own memory (AMPR-393).
+     *
+     * Delegates to [recallRelevantKnowledgeForTask] so a hosted run's RECALL asks
+     * the same question the loop's does — one definition of what a task's
+     * `MemoryContext` is, which is the reason that method is `protected` rather
+     * than private (AMPR-388). Empty with no memory service wired.
+     */
+    internal suspend fun recallForRun(task: Task): List<KnowledgeWithScore> =
+        recallRelevantKnowledgeForTask(task)
+
     // ========================================================================
     // Neural Agent Implementation
     // ========================================================================
@@ -479,8 +508,17 @@ open class SparkBasedAgent<S : AgentState>(
      * those with `toolToUse = null`. It is carried out by
      * [executeReasoningStep]: one model call, not a success returned on its
      * behalf (AMPR-407).
+     *
+     * `internal` rather than private because a roster-hosted run dispatches each
+     * of its plan's steps through the seat it was assigned to, and this is what
+     * running a step on a seat means (AMPR-393). One definition, two drivers: the
+     * Arc path's `executePlan` and
+     * [RunHost][link.socket.ampere.propel.RunHost]'s EXECUTE. Re-implementing it
+     * in the hosted run would have given the consumer-facing path its own
+     * tool-narrowing, its own reasoning-step handling and its own notion of what a
+     * step's request carries — three places to keep in step instead of one.
      */
-    private suspend fun executePlanStep(
+    internal suspend fun executePlanStep(
         step: Task,
         parentTask: Task,
         priorResults: List<StepOutcome>,

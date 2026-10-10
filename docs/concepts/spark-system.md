@@ -10,7 +10,7 @@ tracked_sources:
   - ampere-core/src/commonMain/composeResources/files/sparks/**
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/AutonomousAgent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/SparkBasedAgent.kt
-related: [PropelLoop, CognitiveRelay, PlugPermissions, CognitionTrace]
+related: [PropelLoop, CognitiveRelay, PlugPermissions, CognitionTrace, HostedRun]
 last_verified: 2026-10-10
 ---
 
@@ -24,6 +24,18 @@ last_verified: 2026-10-10
 > `project-ampere.spark.md` supplies the canonical Ampere project context
 > with env-var interpolation for `repositoryRoot`. The old `RoleSpark` Kotlin
 > singleton hierarchy has been removed.
+
+> **2026-10-10 (AMPR-393):** A roster-hosted run differentiates one seat per role
+> from this one class: `SparkBasedAgent` with the seat's `HostedAgent.sparks` stacked
+> (its `charter` among them, through `Spark.fromMarkdown`, so what a seat was told is
+> on the record as a `SparkAppliedEvent`), its own event door, and the run id on every
+> event. Three seams were opened for it, all `internal`: `reasoningUnit` — the phase
+> services as the suspending functions they are, because the `runLLMTo*` lambdas wrap
+> them in `runBlockingCompat` and a hosted run must not block; `recallForRun`, so the
+> run's RECALL asks the same question the loop's does; and `executePlanStep`, now
+> `internal` rather than private, so step dispatch has one definition across both
+> drivers. A seat's tools are its role's, namespaced `<seat>/<tool>`, and the spark
+> stack narrows them on top (AMPR-400). See [HostedRun](hosted-run.md).
 
 > **2026-10-09 (AMPR-387):** `PhaseSparkConfig` on `AgentConfiguration.cognitiveConfig`
 > now actually reaches `PhaseSparkManager`: `SparkBasedAgent` builds its

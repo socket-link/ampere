@@ -382,6 +382,7 @@ class ConsumerSimulationTest {
     @Test
     fun `agent lifecycle - pursue, inspect, listAll, pause`() = kotlinx.coroutines.runBlocking<Unit> {
         // Pursue a goal
+        // The stub's `pursue` counts ids; it opens no run (it has nothing to open one on).
         val goalId = stubAgentService.pursue("Build authentication system").getOrThrow()
         assertTrue(goalId.startsWith("goal-"))
 

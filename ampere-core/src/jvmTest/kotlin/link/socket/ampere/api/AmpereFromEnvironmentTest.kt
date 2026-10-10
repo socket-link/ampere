@@ -20,11 +20,11 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.definition.AgentType
 import link.socket.ampere.agents.definition.SparkBasedAgent
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.cognition.sparks.DefaultPhaseSparkLibrary
+import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
@@ -36,6 +36,7 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
+import link.socket.ampere.dsl.agent.Engineer
 import link.socket.ampere.llm.MissingUpstreamLlmClientException
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.llm.decide.DeterministicDecisionClient
@@ -50,8 +51,9 @@ import link.socket.ampere.memory.memoryStoreOf
  * driver factory is JVM-specific. The cross-platform smoke test in Task 8
  * exercises the same path on iOS and Android.
  *
- * The smoke test drives the deprecated `agents.pursue` (AMPR-399) on purpose: one publish
- * through the door is what it asserts, and that is all `pursue` claims to do.
+ * The smoke test drives `agents.pursue`, which since AMPR-393 opens a hosted run over the
+ * roster `agents.team {}` declared — so what it asserts is a run's own events, under the run
+ * id, rather than the single orphan `TaskCreated` it used to publish (AMPR-399).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Suppress("DEPRECATION")
@@ -278,11 +280,15 @@ class AmpereFromEnvironmentTest {
         }
     }
 
+    /**
+     * End-to-end smoke: construct via `fromEnvironment`, declare a team, and drive one
+     * hosted run through `agents.pursue` (AMPR-393).
+     *
+     * `runBlocking`, not `runTest`: the run's doors and memory writes hop to the IO
+     * dispatcher, and a virtual clock walks straight past them.
+     */
     @Test
-    fun `smoke - pursue emits TaskCreated through the event bus`() = runTest {
-        // End-to-end smoke: construct via fromEnvironment with an in-memory
-        // MemoryStore, then drive one event-bus cycle via agents.pursue and
-        // verify the TaskCreated event surfaces through events.query.
+    fun `smoke - pursue opens a hosted run whose events reach events query`() = runBlocking<Unit> {
         environmentService.start()
 
         val store = memoryStoreOf(
@@ -295,14 +301,16 @@ class AmpereFromEnvironmentTest {
             knowledgeRepository = knowledgeRepository,
             workspace = "/tmp/ampr300-test-workspace",
             memoryStore = store,
+            upstreamLlmClient = RecordingUpstream(),
         )
+        assertNotNull(instance.runs, "fromEnvironment can host (row H9)")
 
-        val pursueResult = instance.agents.pursue("smoke-test-goal")
-        assertTrue(pursueResult.isSuccess, "pursue must succeed in clean environment")
+        instance.agents.team { agent(Engineer) }
+        val runId = instance.agents.pursue("smoke-test-goal").getOrThrow()
+        assertTrue(runId.isNotEmpty(), "pursue returns the run it opened")
 
-        // Query the event repository directly (history snapshot, no live
-        // subscription needed — keeps the smoke deterministic across
-        // dispatchers).
+        // Query the event repository directly (history snapshot, no live subscription
+        // needed — keeps the smoke deterministic across dispatchers).
         val now = kotlinx.datetime.Clock.System.now()
         val events = instance.events.query(
             fromTime = now - kotlin.time.Duration.parse("PT1M"),
@@ -310,7 +318,11 @@ class AmpereFromEnvironmentTest {
         ).getOrThrow()
         assertTrue(
             events.any { it is Event.TaskCreated && it.description == "smoke-test-goal" },
-            "TaskCreated event for 'smoke-test-goal' must be on the bus after pursue",
+            "the run's own TaskCreated is on the record; got ${events.map { it.eventType }}",
+        )
+        assertTrue(
+            events.any { it is CognitivePhaseEvent.PhaseEntered },
+            "and so are its phase brackets, which is what a hosted run adds over a publish",
         )
 
         instance.close()

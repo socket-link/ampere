@@ -29,6 +29,9 @@ import link.socket.ampere.db.Database
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.dsl.events.Escalated
 import link.socket.ampere.dsl.events.TeamEventAdapter
+import link.socket.ampere.memory.memoryStoreOf
+import link.socket.ampere.propel.RunHost
+import link.socket.ampere.propel.rosterRunHost
 
 /**
  * JVM implementation of [AmpereInstance].
@@ -42,7 +45,7 @@ internal class DefaultAmpereInstance(
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-    @Suppress("unused") // Available for downstream use when agents need AI calls
+    /** What a seat of a run opened off this instance talks to by default (AMPR-393). */
     private val aiConfiguration: AIConfiguration = config.provider.toAIConfiguration()
 
     private val databasePath: String = config.databasePath ?: defaultDatabasePath()
@@ -66,9 +69,25 @@ internal class DefaultAmpereInstance(
 
     private val sdkEventApi = environmentService.createEventApi("sdk")
 
+    /**
+     * The hosted run (AMPR-393). This path supplies no `UpstreamLlmClient` — the heavy
+     * constructor takes a provider configuration, not a transport — so a run opened
+     * here must be given its seats' transports on each [HostedAgent]; [agents]'s
+     * `pursue`, which builds its seats from this instance, reports that it cannot.
+     */
+    override val runs: RunHost = rosterRunHost(
+        createEventApi = environmentService::createEventApi,
+        agentScope = scope,
+    )
+
     override val agents: AgentService = DefaultAgentService(
         agentActionService = AgentActionService(eventApi = sdkEventApi),
-        eventApi = sdkEventApi,
+        runHost = runs,
+        aiConfiguration = aiConfiguration,
+        memoryStore = memoryStoreOf(
+            knowledge = KnowledgeRepositoryImpl(database, driver),
+            outcomes = environmentService.outcomeMemoryRepository,
+        ),
     )
 
     override val tickets: TicketService = DefaultTicketService(

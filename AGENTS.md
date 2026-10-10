@@ -123,6 +123,7 @@ Paths are relative to `ampere-core/src/commonMain/kotlin/link/socket/ampere/`.
 | AI Providers | `domain/ai/` | Multi-provider support (Anthropic, OpenAI, Google) with fallback chains |
 | Agent Definitions | `domain/agent/` | Agent identities, prompts, and bundled agent catalog |
 | Cognitive Core | `agents/definition/`, `agents/domain/reasoning/` | PROPEL loop (`AutonomousAgent`, `SparkBasedAgent`), autonomous agent contracts, the per-phase reasoning services |
+| Hosted Runs | `propel/` | `RunHost` / `HostedRun`: one consumer-opened PROPEL run over a roster of seats, behind a `PlanGate` (AMPR-393) |
 | Arc Runtime | `domain/arc/` | Charge → Flow → Pulse, `AmpereRuntime`, `ArcSession` |
 | Event System | `agents/events/` | EventBus, routing, persistence, messaging, escalation |
 | Coordination | `agents/events/meetings/` | Standup, sprint planning, code review, ad-hoc meetings |
