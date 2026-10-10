@@ -47,7 +47,10 @@ import link.socket.ampere.plug.permission.UserGrants
  * extractors were deleted by AMPR-163 Task 11; spark-based agents now express
  * that guidance through their stacked `.spark.md` per-phase contributions and
  * fall through to the generic `KnowledgeExtractor.extractDefault` for
- * knowledge extraction.
+ * knowledge extraction. The Perceive phase's context builder came back in
+ * AMPR-403 — a spark narrows the *system* prompt, so it has no way to put the
+ * host's own observations of the world into the *user* prompt, which is what
+ * the Perceive phase is asking about.
  *
  * Usage:
  * ```kotlin
@@ -110,6 +113,13 @@ class AgentReasoning private constructor(
 
     /**
      * Evaluates a perception and generates insights.
+     *
+     * The rendered prompt carries three things (AMPR-403): the state, through
+     * [ReasoningSettings.perceptionContextBuilder] or
+     * [defaultPerceptionContext] when the host supplied none; the
+     * [Perception.ideas] handed in, verbatim; and the agent's tools. Before
+     * AMPR-403 the state was rendered as `"State: $state"` and the ideas were
+     * dropped, so every iteration asked the same question about nothing.
      */
     suspend fun <S : AgentState> evaluatePerception(perception: Perception<S>): Idea {
         // Use mock response if available
@@ -118,9 +128,10 @@ class AgentReasoning private constructor(
             return evaluator(perception as Perception<AgentState>)
         }
 
+        val contextBuilder = settings.perceptionContextBuilder ?: ::defaultPerceptionContext
         return perceptionEvaluator?.evaluate(
             perception = perception,
-            contextBuilder = { state -> "State: $state" },
+            contextBuilder = { state -> contextBuilder(state) },
             agentRole = settings.agentRole,
             availableTools = settings.availableTools(),
             runId = runId,
@@ -545,6 +556,11 @@ class MockReasoningBuilder {
  * knowledgeExtractor): role-specific guidance now lives in stacked
  * `.spark.md` per-phase contributions instead of in agent-side Kotlin
  * builders.
+ *
+ * [perceptionContextBuilder] is the one of those four that came back
+ * (AMPR-403). A spark narrows the *system* prompt, so it cannot carry the
+ * host's observations of the world into the *user* prompt — which is the
+ * whole of what the Perceive phase asks about.
  */
 data class ReasoningSettings(
     val executorId: ExecutorId,
@@ -564,15 +580,30 @@ data class ReasoningSettings(
     val taskFactory: TaskFactory,
     val parameterStrategies: Map<String, ParameterStrategy>,
     val userGrantProvider: suspend (PlugManifest) -> UserGrants,
+    /**
+     * How the Perceive phase renders the state into the prompt (AMPR-403).
+     *
+     * Null falls through to [defaultPerceptionContext], which renders the
+     * current task rather than `toString()` of the state. A host that knows
+     * more about its world than the memory cells do — open tickets, inbound
+     * messages, whatever it is perceiving on the agent's behalf — supplies its
+     * own here.
+     *
+     * Typed over [AgentState] rather than the agent's own state type because
+     * [ReasoningSettings] is not generic; a builder that needs the narrower
+     * type casts inside its own lambda.
+     */
+    val perceptionContextBuilder: ((AgentState) -> String)? = null,
 )
 
 /**
  * Builder for [ReasoningSettings].
  *
- * The DSL is intentionally narrow after AMPR-163 Task 11. Only
- * [execution] survives — it registers parameter strategies and the
- * user-grant provider. Per-phase prompt/context customisation has moved
- * to the `.spark.md` artifacts the agent stacks at construction time.
+ * The DSL is intentionally narrow after AMPR-163 Task 11. [execution]
+ * registers parameter strategies and the user-grant provider, and
+ * [perceptionContextBuilder] is the one per-phase context hook that came back
+ * (AMPR-403). The rest of the per-phase prompt customisation stays in the
+ * `.spark.md` artifacts the agent stacks at construction time.
  */
 class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
     var agentRole: String = "Agent"
@@ -585,6 +616,14 @@ class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
     var availableTools: () -> Set<Tool<*>> = { emptySet() }
     var executor: Executor? = null
     var taskFactory: TaskFactory = DefaultTaskFactory
+
+    /**
+     * How the Perceive phase renders the state into its prompt (AMPR-403).
+     * Leaving it null uses [defaultPerceptionContext].
+     *
+     * See [ReasoningSettings.perceptionContextBuilder].
+     */
+    var perceptionContextBuilder: ((AgentState) -> String)? = null
 
     private val parameterStrategies = mutableMapOf<String, ParameterStrategy>()
     private var userGrantProvider: suspend (PlugManifest) -> UserGrants = { UserGrants() }
@@ -608,6 +647,7 @@ class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
         taskFactory = taskFactory,
         parameterStrategies = parameterStrategies.toMap(),
         userGrantProvider = userGrantProvider,
+        perceptionContextBuilder = perceptionContextBuilder,
     )
 }
 

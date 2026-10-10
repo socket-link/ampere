@@ -175,6 +175,18 @@ val perception = Perception(
 - Generates initial Ideas about potential approaches
 - Creates a Perception object capturing current understanding
 
+**What the Perceive prompt carries (AMPR-403):** the description of the task in
+the state's current memory cell, every `Perception.ideas` entry handed in, and
+the agent's available tools. Blank ideas are dropped. The task gets there
+through `Agent.rememberNewTask`, not through the role state's own `task` field —
+role states (`CodeState`, `QualityState`, …) are only ever constructed as
+`.blank`.
+
+A host that perceives more of the world than the memory cells hold supplies its
+own rendering through `AgentReasoning.create { perceptionContextBuilder = { … } }`.
+That replaces `defaultPerceptionContext` rather than extending it. Passing the
+goal as an `Idea` is the other supported channel, and composes with either.
+
 ---
 
 ### 4. Agent Recalls Knowledge

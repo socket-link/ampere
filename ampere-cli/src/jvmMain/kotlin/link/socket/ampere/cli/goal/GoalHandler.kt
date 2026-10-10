@@ -16,6 +16,7 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.api.AgentEventApi
@@ -221,7 +222,17 @@ class GoalHandler(
 
             // PHASE 1: PERCEIVE
             progressPane.setPhase(CognitiveProgressPane.Phase.PERCEIVE, "Analyzing task...")
-            val perception = agent.perceiveState(agent.getCurrentState())
+            // AMPR-403: the memory cell is how the task reaches the perception
+            // prompt, and the ticket is what this host wants perceived. Without
+            // both, Perceive is asked about a blank state and an empty idea list.
+            agent.rememberNewTask(task)
+            val perception = agent.perceiveState(
+                agent.getCurrentState(),
+                Idea(
+                    name = "Assigned ticket: ${ticket.title}",
+                    description = ticket.description,
+                ),
+            )
             progressPane.setPerceiveResult(perception.ideas)
 
             if (perception.ideas.isEmpty()) {
