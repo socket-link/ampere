@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
@@ -224,7 +225,8 @@ class ClaimReleaseTest {
         val released = assertIs<ReleaseOutcome.Released>(outcome)
         assertTrue(released.commentPosted)
         assertNull(released.revertedTo)
-        assertTrue(released.reason!!.contains(other.value), released.reason!!)
+        val reason = assertNotNull(released.reason)
+        assertTrue(reason.contains(other.value), reason)
         assertEquals("In Progress", fake.issue("AMPR-310").status)
     }
 
