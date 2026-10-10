@@ -17,7 +17,8 @@ internal sealed interface DeclarativeSparkSource {
 
     /**
      * A `"phase"` spark: prompt-only, optionally split into per-phase sections
-     * via `## When Perceiving/Planning/Executing/Learning` headers.
+     * via the six `## When <Phase>` headings whose rules live on
+     * [link.socket.ampere.agents.domain.cognition.Spark.fromMarkdown].
      */
     data class Phase(
         val frontmatter: PhaseSparkFrontmatter,

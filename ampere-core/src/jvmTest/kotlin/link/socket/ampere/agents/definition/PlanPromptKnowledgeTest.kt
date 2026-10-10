@@ -327,6 +327,8 @@ class PlanPromptKnowledgeTest {
             For complex tasks, break down into logical phases (3-5 steps typically).
             Avoid excessive granularity - focus on meaningful phases of work.
 
+            Set requiresHumanInput to true only when the plan cannot be carried out without a decision, an approval, or information that only a person can supply. A plan you can execute with the tools and context above sets it to false.
+
             Format your response as a JSON object:
             {
               "steps": [

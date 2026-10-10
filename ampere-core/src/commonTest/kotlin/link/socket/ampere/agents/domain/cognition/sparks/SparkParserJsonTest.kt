@@ -93,6 +93,48 @@ class SparkParserJsonTest {
     }
 
     @Test
+    fun `phase variant extracts Recalling and Observing through the public splitter`() {
+        // AMPR-392: the declarative parser delegates its section rules to
+        // `Spark.fromMarkdown`, so all six headings reach a bundled-style fixture —
+        // not just the four the parser used to know about. A failure here means the
+        // delegation was undone and consumer rules have drifted from Ampere's.
+        val raw = """
+            |---json
+            |{
+            |  "type": "phase",
+            |  "id": "six-phase",
+            |  "name": "Six Phase",
+            |  "whenToUse": "every phase",
+            |  "phases": ["RECALL", "OBSERVE"]
+            |}
+            |---
+            |
+            |Base guidance.
+            |
+            |## When Recalling
+            |
+            |Search memory.
+            |
+            |## When Observing
+            |
+            |Diff the state.
+            |
+            |## When nothing matches
+            |
+            |Prose that stays in the body.
+        """.trimMargin()
+
+        val result = parseSpark(raw)
+        assertIs<SparkParseResult.Ok>(result)
+        val source = assertIs<DeclarativeSparkSource.Phase>(result.source)
+        assertEquals("Search memory.", source.phaseContributions[CognitivePhase.RECALL])
+        assertEquals("Diff the state.", source.phaseContributions[CognitivePhase.OBSERVE])
+        assertTrue(source.body.startsWith("Base guidance."))
+        assertTrue(source.body.contains("## When nothing matches"))
+        assertTrue(source.body.contains("Prose that stays in the body."))
+    }
+
+    @Test
     fun `role variant happy path parses all fields`() {
         val raw = """
             |---json
