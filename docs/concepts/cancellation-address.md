@@ -4,8 +4,8 @@ status: experimental
 tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/process/CancellationAddress.kt
   - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/process/ProcessGroups.kt
-related: [EventSerialBus, ChassisSpi]
-last_verified: 2026-10-04
+related: [EventSerialBus, ChassisSpi, StartupReconciliation]
+last_verified: 2026-10-09
 ---
 
 # CancellationAddress
@@ -37,8 +37,9 @@ consumer is [DispatchJournal](dispatch-journal.md) (AMPR-291 mechanism M-A, buil
 AMPR-307), which records one address per dispatch in `DispatchRecord.agentAddress` — the
 whole address rather than the bare PGID the recon named, so that `terminate` can still
 refuse a PID reused while the supervisor was dead. The startup reconciliation pass that
-reaps them (mechanism M-C) consumes both and is a separate ticket. The journal lives in
-`ampere-core` alongside `ProcessGroups`, not in `ampere-cli`.
+reaps them (mechanism M-C) consumes both — see
+[StartupReconciliation](startup-reconciliation.md), built in AMPR-310. The journal lives
+in `ampere-core` alongside `ProcessGroups`, not in `ampere-cli`.
 
 ## Where it lives
 
@@ -49,7 +50,9 @@ reaps them (mechanism M-C) consumes both and is a separate ticket. The journal l
   throws), `terminate(address)`, `isAlive(address)`; `GroupedProcess` pairs the `Process` with
   its address.
 - Callers: `GitCliProvider.execute`, `GitHubCliProvider.executeGh`,
-  `ToolRunTests.jvm.kt` (via `run`); `StdioProcessHandler.jvm.kt` (via `start`, long-lived).
+  `ProcessGroupGitRunner` and `GhMergeRequestLookup` (the reconciliation pass's git and
+  `gh`), `ToolRunTests.jvm.kt` (via `run`); `StdioProcessHandler.jvm.kt` (via `start`,
+  long-lived).
 - `ampere-core/src/jvmTest/.../agents/execution/process/ProcessGroupsTest.kt` — behaviour
   pinned against real processes.
 

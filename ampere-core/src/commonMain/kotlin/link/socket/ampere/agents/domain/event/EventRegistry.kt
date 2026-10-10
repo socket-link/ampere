@@ -147,6 +147,9 @@ object EventRegistry {
         SupervisorEvent.DispatchRecorded.EVENT_TYPE,
         SupervisorEvent.CleanShutdownMarked.EVENT_TYPE,
         SupervisorEvent.JournalLineQuarantined.EVENT_TYPE,
+        SupervisorEvent.JournalReconciled.EVENT_TYPE,
+        SupervisorEvent.DispatchReconciled.EVENT_TYPE,
+        SupervisorEvent.ReconciliationCompleted.EVENT_TYPE,
 
         // TelemetryEvent types
         ProviderCallStartedEvent.EVENT_TYPE,

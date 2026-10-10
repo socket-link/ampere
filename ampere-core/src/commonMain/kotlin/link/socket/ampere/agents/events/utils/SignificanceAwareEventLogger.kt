@@ -213,6 +213,19 @@ class SignificanceAwareEventLogger(
         is SupervisorEvent.CleanShutdownMarked -> EventSignificance.SIGNIFICANT
         is SupervisorEvent.JournalLineQuarantined -> EventSignificance.CRITICAL
 
+        // Startup reconciliation (AMPR-310) - settling a dead supervisor's journal is the
+        // positive signal that its residue is gone; a dispatch the pass could not settle
+        // is residue a person now owns, so it is reported at the level that reaches one.
+        is SupervisorEvent.JournalReconciled -> EventSignificance.SIGNIFICANT
+        is SupervisorEvent.DispatchReconciled ->
+            if (event.settled) EventSignificance.ROUTINE else EventSignificance.CRITICAL
+        is SupervisorEvent.ReconciliationCompleted ->
+            if (event.held > 0 || event.quarantinedLines > 0) {
+                EventSignificance.CRITICAL
+            } else {
+                EventSignificance.SIGNIFICANT
+            }
+
         // Room lifecycle (AMPR-379) - a post is already reported as the MessagePosted it
         // follows; what a thread is about, and a card held back by review, are the
         // facts worth noting.

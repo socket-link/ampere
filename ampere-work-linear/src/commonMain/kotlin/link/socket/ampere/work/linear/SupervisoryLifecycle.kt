@@ -448,5 +448,22 @@ enum class SupervisoryState(
          * value that is a compile-time constant here.
          */
         val CLAIMED_STATE: String = requireNotNull(CLAIMED.workSourceState)
+
+        /** The state a release puts a ticket back into, non-null for the same reason. */
+        val QUEUED_STATE: String = requireNotNull(QUEUED.workSourceState)
+
+        /**
+         * The states a dispatch legitimately sits in *while it holds the claim*.
+         *
+         * The reconciliation pass's test for "did anything else move this ticket"
+         * (AMPR-310 step 4): a crashed dispatch's ticket should be in one of these,
+         * and a ticket anywhere else — queued, done, cancelled, or a state this
+         * workspace invented — was moved by something that is not a supervisor
+         * dispatch, so rule B4 says defer to it.
+         *
+         * Derived from the enum rather than written out, so a state admitted to the
+         * dispatch lifecycle later cannot quietly read as interference.
+         */
+        val IN_FLIGHT: Set<String> = setOfNotNull(CLAIMED.workSourceState, VERIFYING.workSourceState)
     }
 }

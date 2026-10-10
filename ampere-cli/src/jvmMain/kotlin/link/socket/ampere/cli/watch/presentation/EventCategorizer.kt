@@ -84,6 +84,18 @@ object EventCategorizer {
         is SupervisorEvent.JournalLineQuarantined,
         is TaskEvent.TaskFailed -> EventSignificance.CRITICAL
 
+        // Startup reconciliation (AMPR-310): a dispatch the pass could not settle, or a
+        // pass that finished with residue still on disk, is work a person now owns.
+        is SupervisorEvent.DispatchReconciled ->
+            if (event.settled) EventSignificance.ROUTINE else EventSignificance.CRITICAL
+
+        is SupervisorEvent.ReconciliationCompleted ->
+            if (event.held > 0 || event.quarantinedLines > 0) {
+                EventSignificance.CRITICAL
+            } else {
+                EventSignificance.SIGNIFICANT
+            }
+
         // Significant events represent state changes worth noting
         is TaskEvent.TaskCompleted,
         is TaskEvent.TaskBlocked,
@@ -156,6 +168,9 @@ object EventCategorizer {
         // A supervisor that marked a clean exit owes no recovery — the only positive
         // signal recovery has, and worth seeing for that reason.
         is SupervisorEvent.CleanShutdownMarked,
+        // A dead supervisor's journal settled by a reconciliation pass: the same
+        // "nothing is owed" fact, established after the fact rather than on exit.
+        is SupervisorEvent.JournalReconciled,
         is BenchEvent.BenchRunCompleted -> EventSignificance.SIGNIFICANT
 
         // A rung floor with no satisfying model is a terminal routing failure:

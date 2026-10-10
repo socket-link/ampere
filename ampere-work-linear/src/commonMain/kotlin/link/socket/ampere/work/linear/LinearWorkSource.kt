@@ -208,7 +208,7 @@ class LinearWorkSource(
         val claimed = if (SupervisoryStatusMapping.claimEvidenceMatters(expression)) {
             readComments(read.identifier)
                 .getOrElse { return Result.failure(it) }
-                .claimsFor(read.identifier)
+                .liveClaimsFor(read.identifier)
                 .isNotEmpty()
         } else {
             false
@@ -315,9 +315,10 @@ class LinearWorkSource(
      * 1. read      the issue, keeping its state and state history
      * 2. write     claim:<issue>:<instance>          ← the server timestamps it
      * 3. write     transition to the claimed state
-     * 4. read      every comment; earliest claim wins
+     * 4. read      every comment; the earliest claim no release retracts wins
      *    won   → done
-     *    lost  → re-read; revert only if nothing else moved, else defer (B4)
+     *    lost  → retract this claim; re-read; revert only if nothing else
+     *            moved, else defer (B4)
      * ```
      *
      * Order matters in step 2 and 3: the comment goes **first**, so the claim's
@@ -332,6 +333,11 @@ class LinearWorkSource(
      *
      * A won claim is what makes [CanonWorkStatus.CLAIMED] readable: the comment
      * this posts is the evidence [readCanonWorkItem] goes looking for.
+     *
+     * Step 4 arbitrates over *live* claims only — see [liveClaimsFor]. A supervisor
+     * that died holding a ticket left a claim comment nothing can delete, and
+     * counting it would make the earliest dead claimant the permanent winner of
+     * every later race for that ticket. [release] is what retracts one.
      *
      * @param claimedState The state a claimed ticket moves to. Defaults to the
      *   ratified [SupervisoryState.CLAIMED] mapping.
@@ -352,7 +358,7 @@ class LinearWorkSource(
 
         // 4. Read the total order back and see who was first.
         val comments = readComments(issue).getOrElse { return Result.failure(it) }
-        val claims = comments.claimsFor(before.identifier)
+        val claims = comments.liveClaimsFor(before.identifier)
         val winner = claims.minWithOrNull(CLAIM_ORDER)
 
         if (winner != null && winner.instanceId == instanceId) {
@@ -362,8 +368,18 @@ class LinearWorkSource(
         }
 
         // Lost — or, with no claim comment readable at all, unable to prove
-        // otherwise. Either way this instance must not hold the ticket, and the
-        // revert is the part that has to be careful.
+        // otherwise. Either way this instance must not hold the ticket.
+        //
+        // Retract first, unconditionally. A losing claim comment left on the ticket
+        // stays *live* forever, and once the winner's claim can be released
+        // (AMPR-310) a stale loser would be promoted to holder — the winner's
+        // reconciliation would retract the only claim anyone meant, and the ticket
+        // would sit in progress with nothing working on it. The retraction is also
+        // the safe half: this instance demonstrably does not hold the ticket, so
+        // saying so cannot be wrong. Only the *revert* needs rule B4's care.
+        postComment(issue, SupervisoryComment.Release(before.identifier, instanceId).render())
+            .getOrElse { return Result.failure(it) }
+
         val after = readIssue(issue).getOrElse { return Result.failure(it) }
         val interference = detectInterference(before, after, claimedState)
 
@@ -385,6 +401,126 @@ class LinearWorkSource(
                 issue = before.identifier,
                 winner = winner,
                 revertedTo = before.statusName,
+            ),
+        )
+    }
+
+    /**
+     * Give a ticket back: retract [heldBy]'s claim and put the ticket in the queued
+     * state. The inverse of [claim], and the write half of the startup
+     * reconciliation pass's step 4 (AMPR-310).
+     *
+     * ```
+     * 1. read      the issue and every comment
+     *    no claim by heldBy  → NotHeld, nothing written
+     * 2. write     release:<issue>:<heldBy>    ← unless a previous run posted it
+     * 3. decide    another live claim? already queued? interference?  → no transition
+     * 4. write     transition to the queued state
+     * ```
+     *
+     * ## Called on behalf of a supervisor that is gone
+     *
+     * [heldBy] is somebody else's instance id — the one the caller read out of a
+     * crashed supervisor's journal — which is why this is not `claim`'s symmetric
+     * twin. It cannot read the state the claim moved the ticket *from*, because the
+     * process that knew that is dead. It has the claim comment's server timestamp
+     * and the state history, and [detectReleaseInterference] is what it can conclude
+     * from them.
+     *
+     * ## Idempotent, step by step
+     *
+     * A pass can be killed anywhere in here. The comment write is guarded by the
+     * read in step 1, so a second run finds its own release comment and skips to the
+     * revert instead of commenting twice; the transition is a no-op write of a state
+     * the ticket may already be in. Nothing is resumed from a progress record.
+     *
+     * ## What it will not do
+     *
+     * Overwrite a state something else set. The retraction comment is posted
+     * regardless — a dead supervisor's claim is unambiguously not held, and the
+     * comment is additive — but the *transition* is refused whenever the evidence
+     * does not show this claim's own write to be the one being undone. That
+     * asymmetry is ratified rule B4 of the AMPR-291 verdict: an un-reverted ticket
+     * is visible mess a later pass can clean up, and a revert that stomps a human's
+     * move destroys the record of an intervention.
+     *
+     * @param queuedState The state a released ticket returns to. Defaults to the
+     *   ratified [SupervisoryState.QUEUED] mapping.
+     * @param inFlight The states a dispatch may legitimately be sitting in; a ticket
+     *   anywhere else was moved by something that is not a supervisor dispatch.
+     */
+    suspend fun release(
+        issue: String,
+        heldBy: SupervisorInstanceId,
+        queuedState: String = SupervisoryState.QUEUED_STATE,
+        inFlight: Set<String> = SupervisoryState.IN_FLIGHT,
+    ): Result<ReleaseOutcome> {
+        val observed = readIssue(issue).getOrElse { return Result.failure(it) }
+        val identifier = observed.identifier
+        val comments = readComments(issue).getOrElse { return Result.failure(it) }
+
+        // Release-blind, deliberately: a claim this pass already retracted is still a
+        // claim this instance posted, and the revert it owes may be unfinished.
+        val ours = comments.claimsFor(identifier).filter { it.instanceId == heldBy }
+        val live = comments.liveClaimsFor(identifier)
+
+        if (ours.isEmpty()) {
+            return Result.success(
+                ReleaseOutcome.NotHeld(
+                    issue = identifier,
+                    liveHolder = live.minWithOrNull(CLAIM_ORDER)?.instanceId,
+                ),
+            )
+        }
+
+        val commentPosted = if (live.any { it.instanceId == heldBy }) {
+            postComment(issue, SupervisoryComment.Release(identifier, heldBy).render())
+                .getOrElse { return Result.failure(it) }
+            true
+        } else {
+            false
+        }
+
+        // Somebody else's live claim owns the ticket's state, so the retraction is as
+        // far as this release goes.
+        live.filterNot { it.instanceId == heldBy }.minWithOrNull(CLAIM_ORDER)?.let { holder ->
+            return Result.success(
+                ReleaseOutcome.Released(
+                    issue = identifier,
+                    commentPosted = commentPosted,
+                    reason = "${holder.instanceId}'s claim on $identifier is still live",
+                ),
+            )
+        }
+
+        if (observed.statusName == queuedState) {
+            return Result.success(
+                ReleaseOutcome.Released(
+                    issue = identifier,
+                    commentPosted = commentPosted,
+                    reason = "the ticket is already in '$queuedState'",
+                ),
+            )
+        }
+
+        detectReleaseInterference(observed, ours.minWith(CLAIM_ORDER), inFlight)?.let { interference ->
+            return Result.success(
+                ReleaseOutcome.Deferred(
+                    issue = identifier,
+                    commentPosted = commentPosted,
+                    observedState = observed.statusName,
+                    interference = interference,
+                ),
+            )
+        }
+
+        transition(issue, queuedState).getOrElse { return Result.failure(it) }
+
+        return Result.success(
+            ReleaseOutcome.Released(
+                issue = identifier,
+                commentPosted = commentPosted,
+                revertedTo = queuedState,
             ),
         )
     }
@@ -490,13 +626,6 @@ class LinearWorkSource(
 
         return Result.success(receipt)
     }
-
-    private fun List<WorkSourceComment>.claimsFor(identifier: String): List<ClaimRecord> =
-        mapNotNull { comment ->
-            (SupervisoryComment.parse(comment.body) as? SupervisoryComment.Claim)
-                ?.takeIf { it.issue == identifier }
-                ?.let { ClaimRecord(it, comment.id, comment.createdAt) }
-        }
 
     companion object {
 

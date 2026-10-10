@@ -28,6 +28,64 @@ internal val CLAIM_ORDER: Comparator<ClaimRecord> =
     compareBy<ClaimRecord>({ it.createdAt }, { it.commentId })
 
 /**
+ * Every claim comment for [identifier], release-blind.
+ *
+ * What is physically on the ticket, in the order the server assigned. Used where
+ * the question is *did this instance ever claim this* — the release path's first
+ * read — rather than *who holds it now*, which is [liveClaimsFor].
+ *
+ * Requires [this] in total order, as [LinearWorkSource.readComments] returns it.
+ */
+internal fun List<WorkSourceComment>.claimsFor(identifier: String): List<ClaimRecord> =
+    mapNotNull { comment ->
+        (SupervisoryComment.parse(comment.body) as? SupervisoryComment.Claim)
+            ?.takeIf { it.issue == identifier }
+            ?.let { ClaimRecord(it, comment.id, comment.createdAt) }
+    }
+
+/**
+ * The claims on [identifier] that are still held: every claim no later
+ * [SupervisoryComment.Release] by the same instance has retracted.
+ *
+ * ## Why the arbiter cannot just count claim comments
+ *
+ * Comments are append-only, so a claim cannot be deleted — and the arbiter crowns
+ * the *earliest* one. A supervisor that died holding a ticket would therefore keep
+ * winning every future race for it, and a reconciliation pass that put the ticket
+ * back in the queue would have handed back a ticket nothing can ever claim again.
+ * [SupervisoryComment.Release] is the retraction, and this is where it takes
+ * effect: one pass over the total order, dropping an instance's claims when its
+ * release goes by.
+ *
+ * Scoped per instance rather than per ticket, because a release says "*my* claim
+ * is off" and must not retract a concurrent claimant's — the loser of a race
+ * tidying up would otherwise free the winner's ticket out from under it.
+ *
+ * Requires [this] in total order, as [LinearWorkSource.readComments] returns it: a
+ * release only retracts claims it *follows*, so an out-of-order list would retract
+ * a re-claim the release predates.
+ */
+internal fun List<WorkSourceComment>.liveClaimsFor(identifier: String): List<ClaimRecord> {
+    val live = mutableListOf<ClaimRecord>()
+    forEach { comment ->
+        when (val parsed = SupervisoryComment.parse(comment.body)) {
+            is SupervisoryComment.Claim ->
+                if (parsed.issue == identifier) {
+                    live += ClaimRecord(parsed, comment.id, comment.createdAt)
+                }
+
+            is SupervisoryComment.Release ->
+                if (parsed.issue == identifier) {
+                    live.removeAll { it.instanceId == parsed.instanceId }
+                }
+
+            is SupervisoryComment.Escalation, null -> Unit
+        }
+    }
+    return live
+}
+
+/**
  * Why a losing claimant refused to revert its own transition.
  *
  * Ratified rule B4 of the AMPR-291 verdict: the adapter reads state history
@@ -151,6 +209,166 @@ internal fun detectInterference(
 
     return if (spansAfter.size > spansBefore.size + 1) {
         ClaimInterference.ExtraTransitions(spansBefore.size, spansAfter.size)
+    } else {
+        null
+    }
+}
+
+/**
+ * How a claim release ended — the mirror of [ClaimOutcome], for the retraction a
+ * reconciliation pass performs on behalf of a supervisor that died (AMPR-310).
+ *
+ * Four outcomes because a release has four honest endings, and a caller that
+ * collapsed them would act wrongly on three: the claim was retracted and the ticket
+ * requeued; it was retracted but the ticket left alone because someone else's claim
+ * owns it; this instance never held it; or the work source showed interference and
+ * the pass refused to write at all.
+ */
+sealed interface ReleaseOutcome {
+
+    /** The issue the release was for, by identifier. */
+    val issue: String
+
+    /**
+     * The claim is retracted. A later claimant will not see it in the total order.
+     *
+     * @property commentPosted False when a previous run of the pass had already
+     *   posted the retraction and this run only finished the revert — the read-back
+     *   that makes releasing a claim idempotent.
+     * @property revertedTo The state the ticket was transitioned to, or null when
+     *   no transition was written. Null is not a failure: see [reason].
+     * @property reason Why no transition was written, when none was — the ticket was
+     *   already queued, or another instance's claim still owns it.
+     */
+    data class Released(
+        override val issue: String,
+        val commentPosted: Boolean,
+        val revertedTo: String? = null,
+        val reason: String? = null,
+    ) : ReleaseOutcome
+
+    /**
+     * No claim comment by that instance was ever posted for this issue.
+     *
+     * @property liveHolder The earliest instance whose claim *is* live, or null when
+     *   nothing claims the ticket. Non-null means the ticket belongs to a
+     *   supervisor that may still be working, and nothing about it may be moved.
+     */
+    data class NotHeld(
+        override val issue: String,
+        val liveHolder: SupervisorInstanceId? = null,
+    ) : ReleaseOutcome
+
+    /**
+     * The claim was retracted where it could be, but the ticket's state was left
+     * exactly as found because the work source showed interference — ratified rule
+     * B4 of the AMPR-291 verdict.
+     *
+     * @property observedState Where the ticket actually is, and where it stays.
+     */
+    data class Deferred(
+        override val issue: String,
+        val commentPosted: Boolean,
+        val observedState: String,
+        val interference: ReleaseInterference,
+    ) : ReleaseOutcome
+}
+
+/**
+ * Why a reconciliation pass would not revert a ticket it holds the claim for.
+ *
+ * Deliberately a different type from [ClaimInterference], which answers a different
+ * question. A losing claimant knows the state it set *and the state it set it from*,
+ * because it read both; a reconciliation pass arrives after a crash with neither,
+ * and has only the claim comment's timestamp and the state history to work with. One
+ * type covering both would have to carry fields that are meaningless in half its
+ * uses.
+ */
+sealed interface ReleaseInterference {
+
+    /**
+     * The ticket is in no state a supervisor's own dispatch transitions produce, so
+     * something else moved it.
+     *
+     * This is the case B4 was written for. It also covers a ticket somebody
+     * *finished*: a crashed dispatch whose ticket now reads Done had its work
+     * accepted by someone, and requeueing it would reopen settled work.
+     *
+     * @property inFlight The states a dispatch legitimately sits in while claimed —
+     *   [SupervisoryState.IN_FLIGHT].
+     */
+    data class MovedOutOfFlight(
+        val observed: String,
+        val inFlight: Set<String>,
+    ) : ReleaseInterference
+
+    /**
+     * The ticket is in an in-flight state, but the span it is in began *before* this
+     * claim was posted — so this claim is not what put it there.
+     *
+     * Either the ticket was already in progress when the claim landed, or something
+     * moved it away and back. Either way the claim's transition is not the write
+     * being undone, and reverting would overwrite a state something else set.
+     *
+     * @property since When the current span began, per the work source's own audit
+     *   trail.
+     * @property claimedAt The server's timestamp on the claim comment.
+     */
+    data class StateNotSetByClaim(
+        val state: String,
+        val since: Instant?,
+        val claimedAt: Instant,
+    ) : ReleaseInterference
+
+    /**
+     * The state history needed to judge the revert was not there to read.
+     *
+     * Deferring on absent evidence rather than reverting is the same choice B4 makes
+     * about a detected move: with nothing to check, a revert is a blind write.
+     */
+    data class HistoryUnavailable(val reason: String) : ReleaseInterference
+}
+
+/**
+ * Whether it is safe to revert the ticket [observed] to its queued state, given
+ * that [claim] is the claim being retracted.
+ *
+ * Returns null when the evidence says this claim's own transition is the only thing
+ * that put the ticket where it is — the one case where reverting writes over nothing
+ * but the dead supervisor's own work.
+ *
+ * Two conditions, both from evidence the work source gives away for free: the ticket
+ * is in a state a dispatch legitimately occupies, and the span it is in opened *after*
+ * the claim comment was timestamped. The claim protocol posts the comment before the
+ * transition, so a span this claim created is always strictly later than it; a span
+ * that is earlier belongs to somebody else's write.
+ */
+internal fun detectReleaseInterference(
+    observed: WorkSourceIssue,
+    claim: ClaimRecord,
+    inFlight: Set<String> = SupervisoryState.IN_FLIGHT,
+): ReleaseInterference? {
+    if (observed.statusName !in inFlight) {
+        return ReleaseInterference.MovedOutOfFlight(observed = observed.statusName, inFlight = inFlight)
+    }
+
+    val spans = observed.stateHistory
+        ?: return ReleaseInterference.HistoryUnavailable("the work source returned no state history")
+
+    val current = spans.lastOrNull { it.endedAt == null }
+        ?: return ReleaseInterference.HistoryUnavailable("the state history has no open span")
+
+    if (current.stateName != observed.statusName) {
+        return ReleaseInterference.HistoryUnavailable(
+            "the open span is '${current.stateName}' but the issue reads '${observed.statusName}'",
+        )
+    }
+
+    val since = current.startedAt
+        ?: return ReleaseInterference.HistoryUnavailable("the open span carries no start time")
+
+    return if (since < claim.createdAt) {
+        ReleaseInterference.StateNotSetByClaim(current.stateName, since, claim.createdAt)
     } else {
         null
     }

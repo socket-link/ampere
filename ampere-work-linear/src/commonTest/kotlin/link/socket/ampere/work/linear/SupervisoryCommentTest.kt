@@ -6,10 +6,10 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 /**
- * The claim and escalation formats are a wire protocol between two supervisor
- * processes, so these tests are about *exactness*: every constructible value
- * renders to text that parses back to the same value, and nothing else parses to
- * anything at all.
+ * The claim, release and escalation formats are a wire protocol between two
+ * supervisor processes, so these tests are about *exactness*: every constructible
+ * value renders to text that parses back to the same value, and nothing else parses
+ * to anything at all.
  */
 class SupervisoryCommentTest {
 
@@ -18,6 +18,13 @@ class SupervisoryCommentTest {
         val claim = SupervisoryComment.Claim("AMPR-305", SupervisorInstanceId("supervisor-7f3a"))
 
         assertEquals("claim:AMPR-305:supervisor-7f3a", claim.render())
+    }
+
+    @Test
+    fun `a release renders to the ratified format`() {
+        val release = SupervisoryComment.Release("AMPR-310", SupervisorInstanceId("supervisor-7f3a"))
+
+        assertEquals("release:AMPR-310:supervisor-7f3a", release.render())
     }
 
     @Test
@@ -47,6 +54,8 @@ class SupervisoryCommentTest {
         val comments = listOf(
             SupervisoryComment.Claim("AMPR-305", SupervisorInstanceId("supervisor-7f3a")),
             SupervisoryComment.Claim("AMPR-1", SupervisorInstanceId("a")),
+            SupervisoryComment.Release("AMPR-310", SupervisorInstanceId("supervisor-7f3a")),
+            SupervisoryComment.Release("AMPR-1", SupervisorInstanceId("a")),
             SupervisoryComment.Escalation("AMPR-305", SupervisorInstanceId("b")),
             SupervisoryComment.Escalation("AMPR-305", SupervisorInstanceId("b"), "one line"),
             // A body is arbitrary markdown, and markdown round-trips
@@ -83,12 +92,17 @@ class SupervisoryCommentTest {
             "claim:AMPR-305",
             "claim:AMPR-305:instance:extra",
             "esc:AMPR-305",
+            "release:AMPR-305",
             // Right shape, blank fields.
             "claim::instance",
             "claim:AMPR-305:",
-            // An unknown prefix must not be treated as a claim.
+            "release::instance",
+            // An unknown prefix must not be treated as a supervisory comment. The
+            // set is open-ended on purpose: a near-miss of a real prefix is how a
+            // mirrored human comment would be misread as a protocol write.
             "claimed:AMPR-305:instance",
-            "release:AMPR-305:instance",
+            "released:AMPR-305:instance",
+            "rel:AMPR-305:instance",
             // A header with a newline in it is prose, not a header.
             "claim:AMPR-305:instance\nand more",
         )
@@ -104,6 +118,13 @@ class SupervisoryCommentTest {
         // something else that merely starts like a claim — arbitrating on it
         // would put a guessed value into a race.
         assertNull(SupervisoryComment.parse("claim:AMPR-305:instance\n\nwhy I took it"))
+    }
+
+    @Test
+    fun `a release with a body attached is not a release`() {
+        // Same reason, and it matters more on this side: a misread release retracts
+        // a claim nobody retracted, and the ticket gets handed to a second agent.
+        assertNull(SupervisoryComment.parse("release:AMPR-305:instance\n\nhanding it back"))
     }
 
     @Test

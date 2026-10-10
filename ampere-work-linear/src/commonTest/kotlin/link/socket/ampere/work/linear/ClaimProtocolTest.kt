@@ -104,20 +104,28 @@ class ClaimProtocolTest {
     }
 
     @Test
-    fun `a loser leaves the winner's claim comment alone`() = runTest {
+    fun `a loser retracts its own claim and leaves the winner's alone`() = runTest {
         val fake = seeded()
         fake.addComment("AMPR-101", SupervisoryComment.Claim("AMPR-101", alpha).render())
 
         supervisor(fake, beta).claim("AMPR-101").getOrThrow()
 
-        // Comments are append-only; abandoning a claim is not retracting it, and
-        // nothing in this protocol deletes anything.
+        // Comments are append-only, so nothing is deleted — the retraction is a
+        // further comment. Beta's own claim has to go: a losing claim left live is
+        // promoted to holder the moment the winner's claim is released (AMPR-310),
+        // and the ticket would sit in progress with nothing working on it.
         assertEquals(
             listOf(
                 "claim:AMPR-101:supervisor-alpha",
                 "claim:AMPR-101:supervisor-beta",
+                "release:AMPR-101:supervisor-beta",
             ),
             fake.comments("AMPR-101").map { it.body },
+        )
+        assertEquals(
+            listOf(alpha),
+            fake.comments("AMPR-101").liveClaimsFor("AMPR-101").map { it.instanceId },
+            "only the winner still holds a live claim",
         )
     }
 

@@ -217,6 +217,12 @@ class EventRenderer(
             is SupervisorEvent.DispatchRecorded -> "📓" to blue
             is SupervisorEvent.CleanShutdownMarked -> "📓" to green
             is SupervisorEvent.JournalLineQuarantined -> "📓" to red
+            // Startup reconciliation (AMPR-310): green once a dead supervisor's journal is
+            // settled, red while a dispatch or a whole pass is still held for a person.
+            is SupervisorEvent.JournalReconciled -> "🧹" to green
+            is SupervisorEvent.DispatchReconciled -> "🧹" to if (event.settled) blue else red
+            is SupervisorEvent.ReconciliationCompleted ->
+                "🧹" to if (event.held > 0 || event.quarantinedLines > 0) red else green
             // The event store refused a write, so something that happened has no row. Red: the
             // pane is the only place it will ever appear.
             is EventStoreEvent.PersistenceFailed -> "🧯" to red

@@ -2,7 +2,8 @@ package link.socket.ampere.work.linear
 
 /**
  * A comment the supervisor writes for the supervisor to read: the claim that
- * arbitrates a race, and the escalation that hands a ticket to a human.
+ * arbitrates a race, the release that retracts one, and the escalation that hands
+ * a ticket to a human.
  *
  * ## Why a comment carries this at all
  *
@@ -19,13 +20,14 @@ package link.socket.ampere.work.linear
  *
  * ```
  * claim:AMPR-305:supervisor-7f3a
+ * release:AMPR-305:supervisor-7f3a
  * esc:AMPR-305:supervisor-7f3a
  *
  * The verification gate needs a decision a machine must not make.
  * ```
  *
- * [Escalation] may carry a body after one blank line; [Claim] never does. Both
- * round-trip exactly: `parse(render(comment)) == comment` for every
+ * [Escalation] may carry a body after one blank line; [Claim] and [Release] never
+ * do. All three round-trip exactly: `parse(render(comment)) == comment` for every
  * constructible value, including a body with leading, trailing or repeated
  * newlines, because [render] separates the header from the body with the first
  * `"\n\n"` in the text and [parse] splits on that same first occurrence.
@@ -75,6 +77,43 @@ sealed interface SupervisoryComment {
     }
 
     /**
+     * "That claim is no longer held." The retraction a reconciliation pass posts
+     * for a supervisor that died holding a ticket (AMPR-310, step 4).
+     *
+     * ## Why the retraction has to be machine-readable
+     *
+     * Because the claim it retracts is. The arbiter in [LinearWorkSource.claim]
+     * crowns the *earliest* claim comment in the server's total order, and a
+     * comment is append-only — so a dead supervisor's claim would go on winning
+     * every subsequent race forever, and the ticket a reconciliation pass just
+     * put back in the queue could never be claimed by anything again. A release
+     * comment is what lets the arbiter skip it: a claim is live unless a release
+     * naming the same issue and instance follows it in the total order.
+     *
+     * Posted *before* the status revert, for the mirror image of the reason a
+     * claim is posted before its transition: the retraction is the durable half,
+     * and a pass killed in between finds its own release comment on the next run,
+     * skips the write and finishes the revert — which is what makes releasing a
+     * claim idempotent.
+     *
+     * Carries no body. A release is a fact about a claim, not a report about a
+     * crash; the report is the reconciliation outcome in the supervisor's journal.
+     */
+    data class Release(
+        override val issue: String,
+        override val instanceId: SupervisorInstanceId,
+    ) : SupervisoryComment {
+
+        init {
+            validateIssue(issue)
+        }
+
+        override val prefix: String get() = RELEASE_PREFIX
+
+        override fun render(): String = "$RELEASE_PREFIX$issue$FIELD_SEPARATOR$instanceId"
+    }
+
+    /**
      * "This ticket needs a human." Paired with
      * [WorkSourceLabels.GATE_ESCALATED] so the ready-queue stops offering it —
      * the label is what a query can filter on, the comment is what carries the
@@ -107,6 +146,8 @@ sealed interface SupervisoryComment {
         const val FIELD_SEPARATOR: String = ":"
 
         const val CLAIM_PREFIX: String = "claim$FIELD_SEPARATOR"
+
+        const val RELEASE_PREFIX: String = "release$FIELD_SEPARATOR"
 
         const val ESCALATION_PREFIX: String = "esc$FIELD_SEPARATOR"
 
@@ -142,6 +183,7 @@ sealed interface SupervisoryComment {
 
             return when ("$kind$FIELD_SEPARATOR") {
                 CLAIM_PREFIX -> if (rest.isEmpty()) Claim(issue, SupervisorInstanceId(instance)) else null
+                RELEASE_PREFIX -> if (rest.isEmpty()) Release(issue, SupervisorInstanceId(instance)) else null
                 ESCALATION_PREFIX -> Escalation(issue, SupervisorInstanceId(instance), rest)
                 else -> null
             }
