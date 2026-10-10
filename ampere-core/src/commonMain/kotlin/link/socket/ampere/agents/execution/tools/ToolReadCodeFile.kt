@@ -1,7 +1,11 @@
 package link.socket.ampere.agents.execution.tools
 
+import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.definition.code.CodeParams
+import link.socket.ampere.agents.domain.cognition.FileAccessScope
+import link.socket.ampere.agents.domain.error.ExecutionError
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.execution.ParameterStrategy
 import link.socket.ampere.agents.execution.request.ExecutionContext
 
@@ -16,6 +20,12 @@ const val READ_CODE_FILE_TOOL_ID: String = "read_code_file"
  * ships with the [CodeParams.CodeReading]
  * parameter strategy attached so an agent that wants the tool does not
  * need to register a strategy separately.
+ *
+ * Every requested path is checked against the dispatching agent's
+ * [FileAccessScope] before the platform read runs (AMPR-414), and the whole
+ * call is refused if any path is out of scope — a partial read would hand the
+ * model a file list it cannot tell from a complete one. The refusal is an
+ * [ExecutionOutcome.CodeReading.Failure] rather than a thrown exception.
  *
  * @param requiredAgentAutonomy The minimum autonomy level required to
  *   use this tool.
@@ -32,9 +42,65 @@ fun ToolReadCodeFile(
         description = DESCRIPTION,
         requiredAgentAutonomy = requiredAgentAutonomy,
         executionFunction = { executionRequest ->
-            executeReadCodebase(executionRequest.context)
+            val context = executionRequest.context
+            val scope = executionRequest.fileAccessScope
+            val refusals = scope?.refusedReads(context.filePathsToRead).orEmpty()
+
+            if (scope == null || refusals.isEmpty()) {
+                executeReadCodebase(context)
+            } else {
+                outOfScopeFailure(context, refusals, scope)
+            }
         },
         parameterStrategy = parameterStrategy,
+    )
+}
+
+/**
+ * The paths in [paths] this scope will not permit a read of, each paired with
+ * the reason — the forbidden pattern that blocked it, or the absence of a
+ * matching read pattern.
+ */
+internal fun FileAccessScope.refusedReads(paths: List<String>): List<Pair<String, String>> =
+    paths.mapNotNull { path ->
+        when {
+            allowsRead(path) -> null
+            else -> path to (
+                forbiddingPattern(path)
+                    ?.let { "blocked by forbidden pattern \"$it\"" }
+                    ?: "no read pattern permits it"
+                )
+        }
+    }
+
+/**
+ * Refusal outcome for a read the spark stack does not permit.
+ *
+ * Reported before the platform read runs, so `partiallyReadFiles` is empty by
+ * construction: nothing was opened.
+ */
+private fun outOfScopeFailure(
+    context: ExecutionContext.Code.ReadCode,
+    refusals: List<Pair<String, String>>,
+    scope: FileAccessScope,
+): ExecutionOutcome.CodeReading.Failure {
+    val timestamp = Clock.System.now()
+    return ExecutionOutcome.CodeReading.Failure(
+        executorId = context.executorId,
+        ticketId = context.ticket.id,
+        taskId = context.task.id,
+        executionStartTimestamp = timestamp,
+        executionEndTimestamp = timestamp,
+        partiallyReadFiles = emptyList(),
+        error = ExecutionError(
+            type = ExecutionError.Type.WORKSPACE_ERROR,
+            message = "Refused $READ_CODE_FILE_TOOL_ID: " +
+                refusals.joinToString { (path, reason) -> "\"$path\" ($reason)" } +
+                " outside the file access scope the agent's spark stack permits.",
+            details = "read patterns: ${scope.readPatterns.sorted()}; " +
+                "forbidden patterns: ${scope.forbiddenPatterns.sorted()}",
+            isRetryable = false,
+        ),
     )
 }
 

@@ -465,6 +465,11 @@ open class SparkBasedAgent<S : AgentState>(
             constraints = link.socket.ampere.agents.execution.request.ExecutionConstraints(),
             // AMPR-300: the pin a code tool's strategy roots its Code context in.
             workspace = _workspace,
+            // AMPR-414: what the spark stack permits this agent to touch, read
+            // live here for the same reason `effectiveTools` is — the stack is
+            // mutable for the agent's lifetime, so a scope captured at
+            // construction would outlive the narrowing that produced it.
+            fileAccessScope = effectiveFileAccess,
         )
     }
 

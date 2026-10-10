@@ -232,7 +232,8 @@ class ToolExecutionEngine(
      * Executes the tool through the executor framework.
      *
      * The single funnel every dispatch path reaches, and so where the run id is stamped
-     * (AMPR-351): a [ParameterStrategy] builds a fresh [ExecutionRequest] to carry its
+     * (AMPR-351) and the dispatching agent's file access scope re-applied (AMPR-414):
+     * a [ParameterStrategy] builds a fresh [ExecutionRequest] to carry its
      * generated parameters, dropping whatever [originalRequest] stated, so re-stamping
      * here — rather than before enrichment — is what actually reaches the tool.
      */
@@ -244,7 +245,12 @@ class ToolExecutionEngine(
     ): ExecutionOutcome {
         // The caller's own run wins over this engine's: a request that already names a run
         // was dispatched by something closer to it than the reasoning unit that built us.
-        val runScopedRequest = enrichedRequest.withRunId(originalRequest.runId ?: runId)
+        val runScopedRequest = enrichedRequest
+            .withRunId(originalRequest.runId ?: runId)
+            // AMPR-414: the scope the agent stamped is the only one in play; a
+            // strategy has no business widening it and no way to state one of
+            // its own.
+            .withFileAccessScope(originalRequest.fileAccessScope)
         val dispatchRunId = runScopedRequest.runId
         val invocationId = generateUUID("tool-invocation", tool.id, executorId)
         val dispatchedAt = Clock.System.now()

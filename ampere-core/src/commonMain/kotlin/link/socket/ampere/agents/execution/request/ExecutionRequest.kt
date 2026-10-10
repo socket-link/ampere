@@ -2,6 +2,7 @@ package link.socket.ampere.agents.execution.request
 
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.RunId
+import link.socket.ampere.agents.domain.cognition.FileAccessScope
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 
 /** Platform-agnostic request for executing a tool */
@@ -36,6 +37,26 @@ data class ExecutionRequest<Context : ExecutionContext>(
      * state rather than writing into the process working directory.
      */
     val workspace: ExecutionWorkspace? = null,
+    /**
+     * The file access the dispatching agent's spark stack permits (AMPR-414).
+     *
+     * Stamped from
+     * [AutonomousAgent.effectiveFileAccess][link.socket.ampere.agents.definition.AutonomousAgent.effectiveFileAccess]
+     * where the agent builds the request, and read by the file-touching tools
+     * (`read_code_file`, `write_code_file`) before they touch anything. Riding
+     * on the request rather than being looked up at the tool is what keeps
+     * `execution/tools` free of a dependency on `AutonomousAgent`: a tool is
+     * handed its permissions, it does not go asking who dispatched it.
+     *
+     * Null means *unconstrained*, matching what a null
+     * [AutonomousAgent.availableTools][link.socket.ampere.agents.definition.AutonomousAgent.availableTools]
+     * means for tools: nothing narrowed this call. Every request a sparked
+     * agent builds carries a scope — an unsparked stack composes to
+     * [FileAccessScope.Permissive] rather than to null — so null is reached
+     * only by callers that dispatch tools outside an agent (tests, direct
+     * tool invocation), where there is no stack to honour.
+     */
+    val fileAccessScope: FileAccessScope? = null,
 ) {
 
     /**
@@ -49,4 +70,21 @@ data class ExecutionRequest<Context : ExecutionContext>(
      */
     fun withRunId(runId: RunId?): ExecutionRequest<Context> =
         if (runId == null || runId == this.runId) this else copy(runId = runId)
+
+    /**
+     * This request carrying [fileAccessScope], or this request unchanged when
+     * [fileAccessScope] is null or already the one it carries.
+     *
+     * Same rebuild problem as [withRunId], and the same reason null never
+     * clears what is already stated: a [ParameterStrategy] builds a fresh
+     * request to carry its generated parameters, so the scope the agent
+     * stamped has to be re-applied at the dispatch funnel or the gate at the
+     * tool would see nothing to enforce.
+     */
+    fun withFileAccessScope(fileAccessScope: FileAccessScope?): ExecutionRequest<Context> =
+        if (fileAccessScope == null || fileAccessScope == this.fileAccessScope) {
+            this
+        } else {
+            copy(fileAccessScope = fileAccessScope)
+        }
 }
