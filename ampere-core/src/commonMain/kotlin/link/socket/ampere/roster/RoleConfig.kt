@@ -29,11 +29,16 @@ data class RoleConfig(
 )
 
 /**
- * The set of roles that plans and tends one project, and the two seats every
- * binding over a Room needs to be able to name.
+ * The set of roles that plans and tends one project, and the seats a binding over a
+ * Room names.
  *
  * A roster is a value, not a service: it says who the seats are and how they relate.
  * Which agent fills a seat, and what it does when it gets there, is the consumer's.
+ *
+ * Only [all] and [host] are a roster's to answer. A reviewing seat is optional
+ * (AMPR-409): a roster with one seat, or whose consumer runs no Probes, has nobody to
+ * review and nothing to review, and should not have to invent an Inspector to satisfy
+ * this interface. [RosterConfig] is the authorable implementation.
  */
 interface Roster {
 
@@ -43,14 +48,20 @@ interface Roster {
     /** The role that hosts the Room: opens its threads, posts status, and DMs the human. */
     val host: RoleId
 
-    /** The role that runs Probes and posts `Verdict` cards; it reviews the roles it names. */
-    val verifier: RoleId
+    /**
+     * The role that runs Probes and posts `Verdict` cards; it reviews the roles it
+     * names. Null — the default — when the roster has no reviewing seat, and a Room
+     * reads that as "no verdict threads": there is no seat to post the card or close
+     * the thread, so there is no verdict conversation to hold.
+     */
+    val verifier: RoleId? get() = null
 
     /**
      * The role that can resolve a verdict reached by [probeId] — the seat a verdict
-     * thread is assigned to when it opens.
+     * thread is assigned to when it opens. Null — the default — when no seat can
+     * settle that Probe's verdicts, and a thread nobody owns does not open either.
      */
-    fun resolverFor(probeId: ProbeId): RoleId
+    fun resolverFor(probeId: ProbeId): RoleId? = null
 
     fun byId(id: RoleId): RoleConfig? = all().firstOrNull { it.id == id }
 

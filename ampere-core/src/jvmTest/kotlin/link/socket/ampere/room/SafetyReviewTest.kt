@@ -20,6 +20,11 @@ import link.socket.ampere.probe.safety.PlanLine
 import link.socket.ampere.probe.safety.SafetyProbe
 import link.socket.ampere.probe.safety.WorkPlan
 import link.socket.ampere.roster.BlueprintRoster
+import link.socket.ampere.roster.PromptRef
+import link.socket.ampere.roster.RoleConfig
+import link.socket.ampere.roster.RoleId
+import link.socket.ampere.roster.Roster
+import link.socket.ampere.roster.RosterConfig
 
 /**
  * AMPR-380 task 2: the Inspector's hazard rule over a real Room — a thread per
@@ -47,11 +52,14 @@ class SafetyReviewTest {
 
     private val plan = WorkPlan(graph, lines)
 
-    private fun <T> withReview(block: suspend (RoomTestRig, SafetyReview) -> T): T =
+    private fun <T> withReview(
+        roster: Roster = BlueprintRoster,
+        block: suspend (RoomTestRig, SafetyReview) -> T,
+    ): T =
         RoomTestRig("safety-review").use { rig ->
             runBlocking {
                 val roomId = rig.room.open(graph).getOrThrow()
-                block(rig, SafetyReview(rig.room, roomId, BlueprintRoster, probe, rig.clock))
+                block(rig, SafetyReview(rig.room, roomId, roster, probe, rig.clock))
             }
         }
 
@@ -202,5 +210,37 @@ class SafetyReviewTest {
             opened.map { it.category }.toSet(),
         )
         assertEquals(3, opened.size)
+    }
+
+    /**
+     * AMPR-409: the mitigation Tasks are graph work and go in regardless; what a
+     * roster with no reviewing seat lacks is somebody to hold the conversation.
+     */
+    @Test
+    fun `a roster with no verifier mitigates the plan and opens no hazard thread`() {
+        val solo = RoleConfig(RoleId("solo"), "Solo", PromptRef("consumer.solo", 1))
+        withReview(RosterConfig(host = solo.id, roles = listOf(solo))) { rig, review ->
+            val outcome = review.review(plan).getOrThrow()
+
+            assertIs<Verdict.Warn>(outcome.verdict)
+            assertEquals(3, outcome.inserted.size)
+            assertEquals(
+                listOf(
+                    "order-parts",
+                    "cut-duct/mitigation:use_ppe",
+                    "cut-duct",
+                    "mount-fan/mitigation:check_local_code",
+                    "mount-fan/mitigation:confirm_ventilation",
+                    "mount-fan",
+                ),
+                outcome.graph.items.map { it.canonId.value },
+            )
+            assertEquals(emptyList(), outcome.threads)
+            assertEquals(emptyList(), outcome.openedThreads)
+
+            val roomId = RoomId.forProject(graph.project.canonId)
+            assertTrue(rig.room.threads(roomId).getOrThrow().none { it.subject is ThreadSubject.Hazard })
+            assertTrue(rig.room.history(roomId).getOrThrow().none { it.card is RoomCard.Hazard })
+        }
     }
 }
