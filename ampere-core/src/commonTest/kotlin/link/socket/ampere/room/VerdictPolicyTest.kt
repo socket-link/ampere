@@ -12,10 +12,16 @@ import link.socket.ampere.probe.SequenceProbe
 import link.socket.ampere.probe.UndeterminedCause
 import link.socket.ampere.probe.Verdict as ProbeVerdict
 import link.socket.ampere.roster.BlueprintRoster
+import link.socket.ampere.roster.PromptRef
+import link.socket.ampere.roster.RoleConfig
+import link.socket.ampere.roster.RoleId
+import link.socket.ampere.roster.Roster
+import link.socket.ampere.roster.RosterConfig
 
 /**
  * AMPR-379 tasks 2 and 3, the pure half: which verdict opens a thread, who it is
- * assigned to, and when the human is asked.
+ * assigned to, and when the human is asked. AMPR-409 adds the rosters that name no
+ * seat for either job.
  */
 class VerdictPolicyTest {
 
@@ -34,6 +40,16 @@ class VerdictPolicyTest {
         )
 
     private val violated = ThreadSubject.Verdict("duct", VerdictKind.VIOLATED)
+
+    private val maker = RoleConfig(RoleId("maker"), "Maker", PromptRef("consumer.maker", 1))
+    private val checker = RoleConfig(RoleId("checker"), "Checker", PromptRef("consumer.checker", 1))
+
+    /** A roster that names a verifier and leaves `resolverFor` at its null default. */
+    private val verifierOnly = object : Roster {
+        override fun all(): List<RoleConfig> = listOf(maker, checker)
+        override val host: RoleId = maker.id
+        override val verifier: RoleId = checker.id
+    }
 
     @Test
     fun `a violated part verdict opens a thread for the scout and does not ask the human`() {
@@ -141,6 +157,48 @@ class VerdictPolicyTest {
         assertTrue(policy.decide(verdict("duct", ProbeVerdict.Holds()), open = emptyList()).isEmpty())
         assertTrue(
             policy.decide(verdict("fan", ProbeVerdict.Warn("210 CFM filter on a 226 CFM fan")), emptyList()).isEmpty(),
+        )
+    }
+
+    @Test
+    fun `a roster with no verifier opens no verdict thread whatever the verdict`() {
+        val solo = RoleConfig(RoleId("solo"), "Solo", PromptRef("consumer.solo", 1))
+        val seatless = VerdictPolicy(RosterConfig(host = solo.id, roles = listOf(solo)))
+
+        assertTrue(seatless.decide(verdict("duct", ProbeVerdict.Violated("duct undersized")), emptyList()).isEmpty())
+        assertTrue(
+            seatless.decide(
+                verdict("grille", ProbeVerdict.Undetermined("no CFM", UndeterminedCause.EVIDENCE_ABSENT)),
+                emptyList(),
+            ).isEmpty(),
+        )
+        assertTrue(seatless.decide(verdict("duct", ProbeVerdict.Holds("fits")), emptyList()).isEmpty())
+        assertTrue(seatless.decide(verdict("fan", ProbeVerdict.Warn("close")), emptyList()).isEmpty())
+    }
+
+    @Test
+    fun `a verifier with no resolver for the probe opens no thread either`() {
+        val unassignable = VerdictPolicy(verifierOnly)
+
+        assertTrue(unassignable.decide(verdict("duct", ProbeVerdict.Violated("undersized")), emptyList()).isEmpty())
+        assertTrue(
+            unassignable.decide(
+                verdict("grille", ProbeVerdict.Undetermined("no CFM", UndeterminedCause.EVIDENCE_ABSENT)),
+                emptyList(),
+            ).isEmpty(),
+        )
+    }
+
+    @Test
+    fun `an open thread keeps its assignee even when the roster would no longer name one`() {
+        val unassignable = VerdictPolicy(verifierOnly)
+        val open = VerdictPolicy.OpenVerdictThread(violated, partFit, maker.id, resolverPasses = 1)
+
+        val actions = unassignable.decide(verdict("duct", ProbeVerdict.Violated("still undersized")), listOf(open))
+
+        assertEquals(
+            listOf(VerdictPolicy.Action.PostCard::class, VerdictPolicy.Action.Escalate::class),
+            actions.map { it::class },
         )
     }
 }

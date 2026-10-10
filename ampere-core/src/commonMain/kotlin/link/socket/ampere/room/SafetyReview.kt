@@ -32,6 +32,11 @@ import link.socket.ampere.roster.Roster
  * (`Roster.resolverFor`) — the Planner, because the remedy is a change to the
  * graph.
  *
+ * **A roster that names neither still gets its plan mitigated** (AMPR-409). The
+ * mitigation Tasks are graph work and go in regardless; what a seatless roster lacks
+ * is somebody to post the card and somebody to own the thread, so no hazard thread
+ * opens and the outcome carries no threads.
+ *
  * **Publishing is the caller's.** This does not publish a
  * `ProbeEvent.VerdictReached`; the Probe belongs in the host's `ProbeSuite`, which
  * publishes every verdict in one place. Running the Probe twice — once for the
@@ -62,13 +67,25 @@ class SafetyReview(
         val insertion = MitigationPlan.insert(subject.graph, inspection.findings, clock.now())
         val mitigationFor = insertion.inserted.associateBy { it.finding }
 
+        val verifierId = roster.verifier
+        val assignee = roster.resolverFor(probe.id)
+        if (verifierId == null || assignee == null) {
+            return Result.success(
+                SafetyReviewOutcome(
+                    verdict = inspection.verdict,
+                    inspection = inspection,
+                    graph = insertion.graph,
+                    inserted = insertion.inserted,
+                ),
+            )
+        }
+
         val existing = room.threads(roomId)
             .getOrElse { return Result.failure(it) }
             .mapNotNull { it.subject as? ThreadSubject.Hazard }
             .mapTo(mutableSetOf()) { it.key }
 
-        val verifier = Author.Role(roster.verifier)
-        val assignee = roster.resolverFor(probe.id)
+        val verifier = Author.Role(verifierId)
         val threads = mutableListOf<MessageThreadId>()
         val opened = mutableListOf<HazardFinding>()
 
@@ -143,7 +160,8 @@ class SafetyReview(
  *   graph when nothing was inserted.
  * @property inserted The mitigation Tasks, each with the finding that asked for it.
  * @property threads The Room thread for every finding, whether this review opened
- *   it or found it already open.
+ *   it or found it already open. Empty when the roster has no seat to hold the
+ *   conversation.
  * @property openedThreads The findings this review opened a thread for — empty on
  *   a re-review of an unchanged plan.
  */

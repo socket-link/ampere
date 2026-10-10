@@ -24,6 +24,12 @@ import link.socket.ampere.roster.Roster
  *
  * Escalation is a one-shot per thread; a thread already waiting for the human is
  * not escalated again when the Probe reconvicts.
+ *
+ * A roster with no verifier ([Roster.verifier] is null) opens no verdict thread at
+ * all, whatever the verdict: the verifier is the seat that posts the card and closes
+ * the thread, so without it there is no verdict conversation to hold. Nor does a
+ * verdict whose Probe the roster gives no resolver for — a thread nobody owns is one
+ * the "one pass, then the human" rule can never advance.
  */
 class VerdictPolicy(private val roster: Roster) {
 
@@ -64,8 +70,10 @@ class VerdictPolicy(private val roster: Roster) {
         ) : Action
     }
 
-    fun decide(verdict: ProbeEvent.VerdictReached, open: Collection<OpenVerdictThread>): List<Action> =
-        when (val value = verdict.verdict) {
+    fun decide(verdict: ProbeEvent.VerdictReached, open: Collection<OpenVerdictThread>): List<Action> {
+        if (roster.verifier == null) return emptyList()
+
+        return when (val value = verdict.verdict) {
             is ProbeVerdict.Holds ->
                 open
                     .filter { it.subject.subjectId == verdict.subjectId && it.probeId == verdict.probeId }
@@ -98,6 +106,7 @@ class VerdictPolicy(private val roster: Roster) {
                 escalateWhen = { thread -> !thread.escalated },
             )
         }
+    }
 
     private fun convict(
         verdict: ProbeEvent.VerdictReached,
@@ -107,7 +116,7 @@ class VerdictPolicy(private val roster: Roster) {
         escalateWhen: (OpenVerdictThread) -> Boolean,
     ): List<Action> {
         val existing = open.firstOrNull { it.subject == subject }
-        val resolver = existing?.assignedTo ?: roster.resolverFor(verdict.probeId)
+        val resolver = existing?.assignedTo ?: roster.resolverFor(verdict.probeId) ?: return emptyList()
         val card = Action.PostCard(
             subject = subject,
             body = "Probe ${verdict.probeId.value} on ${verdict.subjectId}: " +

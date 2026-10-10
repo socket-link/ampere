@@ -20,6 +20,11 @@ import link.socket.ampere.probe.SequenceProbe
 import link.socket.ampere.probe.UndeterminedCause
 import link.socket.ampere.probe.Verdict as ProbeVerdict
 import link.socket.ampere.roster.BlueprintRoster
+import link.socket.ampere.roster.PromptRef
+import link.socket.ampere.roster.RoleConfig
+import link.socket.ampere.roster.RoleId
+import link.socket.ampere.roster.Roster
+import link.socket.ampere.roster.RosterConfig
 
 /**
  * AMPR-379 tasks 2 and 3 validation, the bus half: the fixture's three `Violated`
@@ -63,18 +68,18 @@ class VerdictThreadBindingTest {
         }
     }
 
-    private suspend fun bind(): Bound {
+    private suspend fun bind(roster: Roster = BlueprintRoster): Bound {
         val rig = RoomTestRig()
         val roomId = rig.room.open(VentGraph.graph()).getOrThrow()
         val coordinatorApi = AgentMessageApi(
-            agentId = BlueprintRoster.host.value,
+            agentId = roster.host.value,
             messageRepository = rig.repository,
             eventApi = rig.door.api,
         )
         val binding = VerdictThreadBinding(
             room = rig.room,
             roomId = roomId,
-            roster = BlueprintRoster,
+            roster = roster,
             escalation = CoordinatorEscalation(coordinatorApi, rig.scope),
             bus = rig.door.bus,
             scope = rig.scope,
@@ -231,6 +236,28 @@ class VerdictThreadBindingTest {
 
             assertEquals(5, bound.rig.room.threads(bound.roomId).getOrThrow().size)
             assertTrue(bound.binding.openThreads().isEmpty())
+        }
+    }
+
+    /** AMPR-409: the binding over a roster with no reviewing seat observes and writes nothing. */
+    @Test
+    fun `a roster with no verifier opens no thread and still counts what it saw`() = runBlocking<Unit> {
+        val solo = RoleConfig(RoleId("solo"), "Solo", PromptRef("consumer.solo", 1))
+        bind(RosterConfig(host = solo.id, roles = listOf(solo))).use { bound ->
+            bound.verdict("duct", ProbeVerdict.Violated("duct undersized"), partFit)
+            bound.verdict(
+                "grille",
+                ProbeVerdict.Undetermined("grille publishes no CFM", UndeterminedCause.EVIDENCE_ABSENT),
+                partFit,
+            )
+
+            assertEquals(2L, bound.binding.verdictsSeen.value)
+            assertTrue(bound.binding.openThreads().isEmpty())
+            assertTrue(bound.escalations().isEmpty())
+            assertTrue(
+                bound.rig.room.threads(bound.roomId).getOrThrow().none { it.subject is ThreadSubject.Verdict },
+            )
+            assertTrue(bound.rig.events(RoomEvent.Posted.EVENT_TYPE).isEmpty())
         }
     }
 }

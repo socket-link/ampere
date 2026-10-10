@@ -34,6 +34,10 @@ import link.socket.ampere.roster.Roster
  * [awaitVerdictsSeen] and [awaitIdle] let a replay wait for the Room to settle
  * before it publishes the next recorded event.
  *
+ * A roster with no verifier (AMPR-409) binds inertly: the policy yields no action, so
+ * the binding still counts what it sees — a replay waiting on [awaitVerdictsSeen]
+ * still finishes — and writes nothing into the Room.
+ *
  * @param subjects which subject ids belong to this Room; a Probe suite judging
  *   another project's plan on the same bus is not this Room's business.
  */
@@ -139,7 +143,9 @@ class VerdictThreadBinding(
     }
 
     private suspend fun apply(actions: List<VerdictPolicy.Action>, cause: ProbeEvent.VerdictReached) {
-        val verifier = Author.Role(roster.verifier)
+        // No verifier, no verdict threads: nobody posts the card and nobody closes the
+        // thread. The policy says the same thing by returning no actions.
+        val verifier = Author.Role(roster.verifier ?: return)
         val host = Author.Role(roster.host)
 
         actions.forEach { action ->

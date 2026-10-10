@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/RoomEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/events/messages/MessageChannel.kt
 related: [EventSerialBus, ChiProtocol, Emission, Probe, DomainCanon]
-last_verified: 2026-10-02
+last_verified: 2026-10-10
 ---
 
 # Team Layer
@@ -52,7 +52,8 @@ Three pressures shaped the cut:
 
 ## Where it lives
 
-- `roster/RoleConfig.kt` — `RoleConfig`, the `Roster` interface (`host`, `verifier`, `resolverFor`, `reviewerOf`), `reviewsAreAcyclic`.
+- `roster/RoleConfig.kt` — `RoleConfig`, the `Roster` interface (`all` and `host` abstract; `verifier`, `resolverFor`, `byId`, `reviewerOf` defaulted), `reviewsAreAcyclic`.
+- `roster/RosterConfig.kt` — `RosterConfig(host, roles)`, the serializable roster a consumer authors (AMPR-409).
 - `roster/BlueprintRoster.kt` — the six roles; `roster/RosterPrompts.kt` — their versioned prompt texts (`PromptRef`); `roster/RosterTools.kt` — tool ids the consumer binds.
 - `roster/calibration/` — `EstimateCategory`, `Calibration`, `EstimateCalibrationSource` + `NoCalibration`, `WorkEstimate`/`CalibratedEstimate`, `Estimator`.
 - `room/RoomService.kt`, `room/DefaultRoomService.kt` — open, thread, post, resolve, threads, history, transcript. `room/RoomMetadata.kt` — the metadata keys (wire contract).
@@ -63,7 +64,7 @@ Three pressures shaped the cut:
 - `standup/Standup.kt` — the Meeting; `standup/StandupDeliberation.kt` — digest, ordering, scheduling; `standup/StandupNarrator.kt` — `TemplatedNarrator`, `LlmNarrator`.
 - `agents/domain/event/RoomEvent.kt` — `RoomOpened`, `ThreadOpened`, `Posted`, `ThreadResolved`, `ReviewRequested`, `ReviewCompleted`.
 - `agents/events/messages/MessageChannel.kt` — `MessageChannel.Room` and `ROOM_PREFIX`.
-- Tests: `commonTest/.../roster`, `room`, `standup`, `agents/domain/event/RoomEventTest`; `jvmTest/.../room` (`DefaultRoomServiceTest`, `ReviewGateTest`, `VerdictThreadBindingTest`), `jvmTest/.../standup/StandupTest`; `ampere-eval/src/jvmTest/.../blueprint/` (the vent fixture and its replay gate).
+- Tests: `commonTest/.../roster` (`BlueprintRosterTest`, `RosterConfigTest`), `room`, `standup`, `agents/domain/event/RoomEventTest`; `jvmTest/.../room` (`DefaultRoomServiceTest`, `ReviewGateTest`, `VerdictThreadBindingTest`), `jvmTest/.../standup/StandupTest`; `ampere-eval/src/jvmTest/.../blueprint/` (the vent fixture and its replay gate).
 
 ## Invariants
 
@@ -71,6 +72,9 @@ Three pressures shaped the cut:
 - **A Room is made of the thread primitive.** Every Room thread is a `MessageThread` on a `MessageChannel.Room`; every post is a `Message`; `ThreadCreated`, `MessagePosted` and `ThreadStatusChanged` fire for Room writes exactly as for any other thread. `RoomEvent`s add facts, never replace those.
 - **Roles may not talk over the human.** A role's post into a `WaitingForHuman` or `Resolved` thread is refused with a typed failure. The human may post into either; that reopens the thread, and the reopening is published, not silent.
 - **A verdict thread is assigned by the Probe, not the subject.** `Roster.resolverFor(probeId)`: the sequence and safety Probes' verdicts go to the Planner — both are settled by changing the graph — and every other Probe's to the Scout.
+- **A roster's only required seats are `all()` and `host`.** `verifier` and `resolverFor` default to null (AMPR-409), because a one-seat roster has nobody to review and a consumer that runs no Probes has nothing to review; a roster that had to name an Inspector to compile would be a roster the type system invented. `BlueprintRoster` narrows both back to non-null, so a caller holding it statically still sees two seats.
+- **No reviewing seat means no verdict and no hazard threads — not a thread nobody holds.** With a null `verifier`, `VerdictPolicy.decide` returns no action for every verdict kind and `VerdictThreadBinding` writes nothing (it still counts what it saw, so a replay's `awaitVerdictsSeen` finishes). With a null `resolverFor` for the Probe, the same: a thread nobody owns is one the "one pass, then the human" rule can never advance. An already-open thread keeps the assignee it opened with. `SafetyReview` still mitigates the plan — the mitigation Tasks are graph work — and opens no thread.
+- **A roster a consumer authors is a value with two checks.** `RosterConfig` requires distinct role ids and a host that holds one of the seats, on construction and therefore on decode. Review acyclicity is *not* checked there: `reviewsAreAcyclic()` is asked by whoever is about to rely on the answer, and a roster is a legitimate value while its edges are still being filled in.
 - **The human is asked once per thread, and only when a role cannot settle it.** `Undetermined` escalates at once (no evidence exists). `Violated` escalates only on a reconviction after at least one pass by the assigned role. A thread already waiting is never escalated twice.
 - **Holds closes only what the same Probe convicted.** A different Probe holding on the same subject leaves the thread open.
 - **`Warn` opens no *verdict* thread, and a hazard is the one `Warn` the Room does speak about.** `VerdictPolicy` still returns no action for `Warn`: a Room that threaded every decided-and-not-disqualifying verdict would shout. The hazard rule is not an exception to that — it opens a `ThreadSubject.Hazard`, which is a different subject and a different conversation, because the remedy is a Task rather than an argument about evidence. It is also not on the bus path: `SafetyReview` reads the findings from the Probe, since a verdict event carries no findings (see [Probe](probe.md)).
@@ -89,6 +93,7 @@ Three pressures shaped the cut:
 
 ## Common operations
 
+- **Author a roster** — `RosterConfig(host = planner.id, roles = listOf(planner, scout))`; `@Serializable`, so it reads back out of the file the rest of a consumer's workflow is declared in. To add a reviewing seat, implement `Roster` and override `verifier` and `resolverFor`; nothing else on the interface is abstract.
 - **Open a Room** — `room.open(graph)`; the graph is the project plus its milestones. `RoomId.forProject(graph.project.canonId)` names it.
 - **Post as a role or as the human** — `room.post(threadId, Author.Role(roster.scout.id), body, card)`; `Author.Human` for the person.
 - **Bind verdicts** — `VerdictThreadBinding(room, roomId, roster, CoordinatorEscalation(AgentMessageApi(roster.host.value, …), scope), bus, scope, subjects).start()`.
@@ -104,6 +109,8 @@ Three pressures shaped the cut:
 - *Posting a Room message through `AgentMessageApi.postMessage`* — it attributes every post to the one agent it was built for; a Room has six authors and the human.
 - *A fourth "ask the human" primitive for the DM* — `escalateToHuman` already is the Decision Emission with a thread; wrap it, do not rival it (see [ChiProtocol](chi.md)).
 - *Escalating a `Violated` verdict on first sight* — the assigned role gets one pass; asking the human before it has looked is the single-persona behaviour this layer exists to replace.
+- *Making a consumer invent a verifier* — a mandatory `verifier` turned "which agent fills a seat is the consumer's" into "every consumer ships an Inspector"; that was bug B15.
+- *Falling the resolver back to the verifier or the host when the roster names none* — both already post in the verdict thread (the verifier the card, the host the "Asking the human" notice), and `VerdictThreadBinding.countPass` counts a post by the assigned role as a resolver pass. Either fallback would have the Room count its own bookkeeping as the seat having taken a look.
 - *Reading `Warn` as a verdict thread* — it is decided and not disqualifying; a verdict thread for it would make the Room shout. A hazard gets a `ThreadSubject.Hazard` instead, keyed by the Task or line and the category, so `VerdictKind` stays the two values that convict.
 - *Publishing a second `ProbeEvent.VerdictReached` from `SafetyReview`* — the Probe belongs in the host's `ProbeSuite`, which publishes every verdict in one place. Running the deterministic Probe twice is free; two verdict events for one plan edit is a trace that lies about how many times the plan was judged.
 - *Resolving a thread on any `Holds`* — a sequence Probe holding says nothing about a part's lead time; match the Probe.
