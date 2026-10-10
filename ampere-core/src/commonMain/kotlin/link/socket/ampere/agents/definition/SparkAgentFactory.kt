@@ -13,6 +13,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.RoleSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.routing.CapabilityRoutingDefaults
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.domain.routing.CognitiveRelayImpl
@@ -51,6 +52,9 @@ import link.socket.ampere.plug.permission.UserGrants
  *   `environmentService::createEventApi`. Null builds agents with no door (tests, headless use).
  * @param knowledgeRepository Backing store for per-agent [AgentMemoryService]s, each built on the
  *   agent's own door. Null (or no [createEventApi]) leaves agents without long-term memory.
+ * @param outcomeRepository Episodic store for the outcomes created agents' tool calls produce
+ *   (AMPR-406). Pair it with [executor]: without an executor no tool-execution engine is built,
+ *   so there is nothing to record. Null leaves tool outcomes unrecorded.
  * @param defaultAiConfiguration Default AI configuration for agents
  * @param sparkRegistry Optional declarative spark registry; defaults to bundled fixtures
  * @param cognitiveRelay Optional relay injected into created agents (e.g. a `PlaybackRelay` for eval Bench runs)
@@ -84,6 +88,7 @@ class SparkAgentFactory(
     private val workspace: ExecutionWorkspace,
     private val createEventApi: ((AgentId) -> AgentEventApi)? = null,
     private val knowledgeRepository: KnowledgeRepository? = null,
+    private val outcomeRepository: OutcomeMemoryRepository? = null,
     private val defaultAiConfiguration: AIConfiguration? = null,
     private val sparkRegistry: SparkRegistry? = null,
     private val cognitiveRelay: CognitiveRelay? = null,
@@ -296,6 +301,7 @@ class SparkAgentFactory(
             _userGrantProvider = userGrantProvider,
             _workspace = workspace,
             _cognitiveConfig = cognitiveConfig,
+            _outcomeRepository = outcomeRepository,
         )
     }
 

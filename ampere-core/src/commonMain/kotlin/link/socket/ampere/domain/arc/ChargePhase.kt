@@ -15,6 +15,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
 import link.socket.ampere.agents.domain.cognition.sparks.RoleSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.api.AgentEventApi
@@ -103,6 +104,12 @@ class ChargePhase(
      * agents without long-term memory.
      */
     private val knowledgeRepository: KnowledgeRepository? = null,
+    /**
+     * Episodic store for the outcomes spawned agents' tool calls produce (AMPR-406), threaded
+     * into them. Only has anything to record when [executor] is also set — without an executor
+     * no tool-execution engine is built.
+     */
+    private val outcomeRepository: OutcomeMemoryRepository? = null,
     @Suppress("unused")
     private val clock: Clock = Clock.System,
 ) {
@@ -132,6 +139,7 @@ class ChargePhase(
                 runId = runId,
                 createEventApi = eventApiFactory,
                 knowledgeRepository = knowledgeRepository,
+                outcomeRepository = outcomeRepository,
             ),
         ).spawn(arcConfig, projectContext)
 

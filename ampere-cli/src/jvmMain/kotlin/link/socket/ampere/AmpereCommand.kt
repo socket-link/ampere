@@ -58,6 +58,7 @@ import link.socket.ampere.domain.arc.AmpereRuntime
 import link.socket.ampere.domain.arc.ArcConfig
 import link.socket.ampere.domain.arc.ArcOutcome
 import link.socket.ampere.domain.arc.ArcRegistry
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.domain.arc.CompletionManifestSink
 import link.socket.ampere.terminal.TerminalFactory
 
@@ -288,6 +289,7 @@ class AmpereCommand(
                             workspace = context.workspace,
                             eventApiFactory = context.environmentService::createEventApi,
                             knowledgeRepository = context.knowledgeRepository,
+                            outcomeRepository = context.outcomeMemoryRepository,
                             jazzPane = jazzPane,
                         ) { status -> systemStatus = status }
                     } else {
@@ -655,6 +657,7 @@ class AmpereCommand(
         workspace: ExecutionWorkspace,
         eventApiFactory: (AgentId) -> AgentEventApi,
         knowledgeRepository: KnowledgeRepository,
+        outcomeRepository: OutcomeMemoryRepository,
         jazzPane: CognitiveProgressPane,
         updateStatus: (StatusBar.SystemStatus) -> Unit,
     ) {
@@ -672,6 +675,8 @@ class AmpereCommand(
                     // run learned. Without both, Pulse builds learnings and stores none.
                     eventApiFactory = eventApiFactory,
                     knowledgeRepository = knowledgeRepository,
+                    // AMPR-406: so `ampere outcomes ticket <runId>` can answer for this run.
+                    outcomeRepository = outcomeRepository,
                 )
                 val shutdownHook = ArcShutdownHook(cancelRun = runtime::cancel).install()
 
@@ -781,6 +786,7 @@ class AmpereCommand(
                             workspace = context.workspace,
                             eventApiFactory = context.environmentService::createEventApi,
                             knowledgeRepository = context.knowledgeRepository,
+                            outcomeRepository = context.outcomeMemoryRepository,
                         )
                         isOneShot = true
                     } else {
@@ -861,6 +867,7 @@ class AmpereCommand(
         workspace: ExecutionWorkspace,
         eventApiFactory: (AgentId) -> AgentEventApi,
         knowledgeRepository: KnowledgeRepository,
+        outcomeRepository: OutcomeMemoryRepository,
     ) {
         // AMPR-300: the run is confined to the CLI's explicitly resolved workspace, not the CWD.
         val projectDirPath = workspace.baseDirectory
@@ -872,6 +879,8 @@ class AmpereCommand(
             // AMPR-402: see the TUI path above — both are needed for Pulse to store anything.
             eventApiFactory = eventApiFactory,
             knowledgeRepository = knowledgeRepository,
+            // AMPR-406: see the TUI path above.
+            outcomeRepository = outcomeRepository,
         )
         val shutdownHook = ArcShutdownHook(cancelRun = runtime::cancel).install()
 
