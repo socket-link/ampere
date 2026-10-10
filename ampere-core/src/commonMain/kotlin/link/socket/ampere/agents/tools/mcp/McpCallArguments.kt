@@ -20,13 +20,20 @@ import link.socket.ampere.agents.execution.request.ExecutionRequest
  * nothing constructs.
  *
  * The arguments are derived from the request's context, which is all a dispatch-time caller
- * has: an [ExecutionRequest] carries no per-call MCP argument object. That makes this an
- * envelope describing the work, not a payload shaped to any particular tool's `inputSchema`
- * — filling a specific tool's parameters needs a
- * [ParameterStrategy][link.socket.ampere.agents.execution.ParameterStrategy] and a context
- * that can carry what it generates, neither of which exists yet. No caller passes real
- * arguments straight to a connection any more: the one that did, `propel/ExecuteStep`, was
- * the dead half of a two-path plug dispatch and is gone.
+ * has. That makes this an envelope describing the work, not a payload shaped to any
+ * particular tool's `inputSchema`. Filling a specific tool's parameters needs a
+ * [ParameterStrategy][link.socket.ampere.agents.execution.ParameterStrategy], and
+ * [ExecutionRequest.arguments] is now the generic carrier for what one produces (AMPR-411).
+ * This still does not read it, because nothing on the MCP path fills it: the schema-derived
+ * strategy is keyed on
+ * [FunctionTool.argumentSchema][link.socket.ampere.agents.execution.tools.FunctionTool.argumentSchema],
+ * so an [McpTool][link.socket.ampere.agents.execution.tools.McpTool] never reaches it, and
+ * `inputSchema` — the schema an MCP tool does declare — is not wired to that path. Reading
+ * the field here would read one nothing sets. Giving an MCP tool the same treatment is the
+ * follow-up that would make it worth reading.
+ *
+ * No caller passes real arguments straight to a connection any more: the one that did,
+ * `propel/ExecuteStep`, was the dead half of a two-path plug dispatch and is gone.
  */
 internal object McpCallArguments {
 

@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
@@ -51,13 +52,33 @@ import link.socket.ampere.plug.permission.UserGrants
  * 6. Record the outcome in episodic memory, when a store is wired
  * 7. Return the execution outcome
  *
+ * Steps 2–4 are skipped when the call's parameters are already settled — see
+ * [settledArguments] — so "with LLM-generated parameters" describes the fallback, not every
+ * dispatch.
+ *
+ * Where a tool's parameters come from, in order (AMPR-411):
+ * 1. its own [Tool.parameterStrategy], then a strategy registered here for its id. Needed by
+ *    any tool whose parameters are a typed domain object, because only a strategy can promote
+ *    the request into the [ExecutionContext] subtype carrying it.
+ * 2. the arguments the request already carries, when they pass the tool's
+ *    [FunctionTool.argumentSchema] — no model call.
+ * 3. a [SchemaParameterStrategy] over that schema — one model call, answer validated.
+ * 4. nothing: the tool is dispatched with the request as it came.
+ *
+ * An [McpTool] always lands on 4 unless a strategy was registered for its id, because 2 and 3
+ * are keyed on [FunctionTool.argumentSchema] and an MCP tool declares `inputSchema` instead.
+ * Its `tools/call` arguments are the envelope `McpCallArguments` derives from the request's
+ * context (AMPR-341, AMPR-401), not [ExecutionRequest.arguments].
+ *
  * Usage:
  * ```kotlin
  * val engine = ToolExecutionEngine(llmService, executor, executorId)
  *
- * // Register parameter strategies for different tools
+ * // Register parameter strategies for tools whose parameters are a typed domain object
  * engine.registerStrategy("create_issues", ProjectParams.IssueCreation(...))
  * engine.registerStrategy("ask_human", ProjectParams.HumanEscalation(...))
+ *
+ * // A tool that declares an argumentSchema needs no registration
  *
  * // Execute a tool
  * val outcome = engine.execute(tool, request)
@@ -179,11 +200,69 @@ class ToolExecutionEngine(
         // Get strategy for this tool — prefer the tool's own strategy, fall back to
         // the externally-registered map for legacy registrations.
         val strategy = tool.parameterStrategy ?: strategies[tool.id]
-        if (strategy == null) {
-            // No strategy registered - try generic execution
+        if (strategy != null) {
+            return executeWithStrategy(tool, request, intent, strategy, startTime)
+        }
+
+        // AMPR-411: a tool that declares its arguments needs no hand-written strategy. The
+        // schema path is tried only after the two explicit ones, because a tool that has both
+        // a schema and a strategy wants the strategy: only the strategy can promote the
+        // request into the context that tool reads its parameters from.
+        val schema = (tool as? FunctionTool<*>)?.argumentSchema
+        if (schema == null) {
+            // No strategy and no schema - try generic execution
             return executeGenericTool(tool, request, startTime)
         }
 
+        val settled = settledArguments(schema, request)
+        return if (settled != null) {
+            executeViaExecutor(tool, request.withArguments(settled), startTime, request)
+        } else {
+            executeWithStrategy(tool, request, intent, SchemaParameterStrategy(schema), startTime)
+        }
+    }
+
+    /**
+     * The arguments this call can be dispatched with as it stands, or null when the model has
+     * to be asked for them.
+     *
+     * Two cases settle a call without a parameter call, and both are the same check against
+     * the same schema (AMPR-411):
+     * - the plan step already stated its arguments (H11) and they pass [schema]. The planner
+     *   has the schema in front of it when it emits a step, so for a tool it can fill in, the
+     *   second model call was only ever asking a question already answered.
+     * - [schema] declares no arguments. There is nothing to generate, and asking anyway could
+     *   only produce fields the schema does not name — which are dropped.
+     *
+     * Inline arguments that *fail* the schema fall through to the parameter call rather than
+     * failing the step: the planner's arguments are an optimisation, and the model call is
+     * the path that was always there.
+     */
+    private fun settledArguments(
+        schema: JsonObject,
+        request: ExecutionRequest<*>,
+    ): JsonObject? {
+        val supplied = request.arguments
+        val candidate = when {
+            supplied != null -> supplied
+            ToolArgumentSchema.declaresNoArguments(schema) -> JsonObject(emptyMap())
+            else -> return null
+        }
+        return (ToolArgumentSchema.validate(schema, candidate) as? SchemaValidation.Valid)?.arguments
+    }
+
+    /**
+     * Runs [strategy] to fill this call's parameters, then dispatches what it produced.
+     *
+     * The parameter call is a model call Execute makes, and the only one this engine makes.
+     */
+    private suspend fun executeWithStrategy(
+        tool: Tool<*>,
+        request: ExecutionRequest<*>,
+        intent: String,
+        strategy: ParameterStrategy,
+        startTime: Instant,
+    ): ExecutionOutcome {
         // Generate parameters using strategy. A strategy may refuse outright here — e.g. a
         // code tool whose request carries no pinned workspace (AMPR-300) — and that refusal
         // has to surface as a typed failure before any LLM call is spent on it.
@@ -210,6 +289,9 @@ class ToolExecutionEngine(
                     workflowId = request.effectiveRunId(),
                 ),
             )
+            // AMPR-411: a SchemaParameterStrategy refuses here when the model's answer misses
+            // a required argument or uses a value outside a declared enum, and the refusal
+            // names the arguments at fault.
             strategy.parseAndEnrichRequest(jsonResponse.rawJson, request)
         } catch (e: Exception) {
             return createFailure(
@@ -251,6 +333,12 @@ class ToolExecutionEngine(
      * a [ParameterStrategy] builds a fresh [ExecutionRequest] to carry its
      * generated parameters, dropping whatever [originalRequest] stated, so re-stamping
      * here — rather than before enrichment — is what actually reaches the tool.
+     *
+     * [ExecutionRequest.arguments] is deliberately *not* re-stamped the same way. The run and
+     * the scope belong to the dispatcher, so the original's copy is authoritative; the
+     * arguments are what enrichment produced, so [enrichedRequest]'s copy is. Re-applying the
+     * original's would overwrite a [SchemaParameterStrategy]'s generated arguments with the
+     * null the agent dispatched with (AMPR-411).
      */
     private suspend fun executeViaExecutor(
         tool: Tool<*>,
@@ -595,6 +683,11 @@ private fun ExecutionOutcome.failureMessageOrNull(): String? = when (this) {
  * - ProjectParams.IssueCreation for ToolCreateIssues
  * - CodeParams.CodeWriting for ToolWriteCodeFile
  * - ProjectParams.HumanEscalation for ToolAskHuman
+ *
+ * With one exception: [SchemaParameterStrategy] is tool-*agnostic*, built from whatever
+ * [FunctionTool.argumentSchema] a tool declares. Write an implementation by hand when a
+ * tool's parameters are a typed domain object it reads off its own [ExecutionContext]
+ * subtype; declare a schema instead when they are a flat set of named arguments (AMPR-411).
  */
 interface ParameterStrategy {
 

@@ -3,6 +3,7 @@ package link.socket.ampere.agents.execution.tools
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.execution.ParameterStrategy
@@ -94,6 +95,9 @@ sealed interface Tool<Context : ExecutionContext> {
  * high-level intent into the tool's call parameters via an LLM sub-call. The
  * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine]
  * prefers a tool-owned strategy over any externally-registered one.
+ * @property argumentSchema Optional declaration of this tool's arguments, which
+ * stands in for a hand-written [parameterStrategy]. See the property's own KDoc
+ * for the schema subset AMPERE reads.
  */
 @Serializable
 data class FunctionTool<Context : ExecutionContext>(
@@ -118,6 +122,53 @@ data class FunctionTool<Context : ExecutionContext>(
      */
     @Transient
     override val parameterStrategy: ParameterStrategy? = null,
+
+    /**
+     * This tool's arguments, declared as a JSON Schema subset (AMPR-411).
+     *
+     * The alternative to writing a [ParameterStrategy] by hand. When a tool carries a schema
+     * and no strategy, the
+     * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine] builds a
+     * [SchemaParameterStrategy][link.socket.ampere.agents.execution.SchemaParameterStrategy]
+     * from it: the schema is rendered into the parameter prompt, the model's answer is
+     * validated against it, and the arguments ride to the tool on
+     * [ExecutionRequest.arguments][link.socket.ampere.agents.execution.request.ExecutionRequest.arguments].
+     * A tool whose parameters are a typed domain object wants a strategy instead, so it can
+     * promote the request into its own [ExecutionContext] subtype; a tool whose parameters are
+     * a flat set of named values wants this.
+     *
+     * ### The subset
+     *
+     * Top level: `properties`, an object of one declaration per argument, and `required`, an
+     * array of argument names. Per declaration: `type`, `description`, `default` and `enum`.
+     * `type` is one of `string`, `integer`, `number`, `boolean`, `array`, `object`.
+     *
+     * ```json
+     * {
+     *   "properties": {
+     *     "query":  { "type": "string",  "description": "What to search for" },
+     *     "scope":  { "type": "string",  "description": "Where to look", "enum": ["inbox", "all"] },
+     *     "limit":  { "type": "integer", "description": "Maximum results", "default": 20 }
+     *   },
+     *   "required": ["query"]
+     * }
+     * ```
+     *
+     * Any other key is ignored rather than rejected, so a fuller JSON Schema a consumer
+     * already holds for a tool can be passed straight in; AMPERE reads the part above and
+     * leaves the rest alone. What that costs is enforcement: a constraint outside the subset
+     * (`minimum`, `pattern`, nested `properties` under an `object`) is shown to the model only
+     * if it happens to sit in a `description`, and is never checked. A tool whose correctness
+     * depends on such a constraint has to check it itself.
+     *
+     * An argument the schema does not name never reaches the tool — not from the model, and
+     * not from a plan step's inline arguments. A schema whose `properties` is absent or empty
+     * declares a tool that takes no arguments, and skips the parameter call entirely.
+     *
+     * Null leaves this tool on the hand-written path: its [parameterStrategy], the engine's
+     * registered strategy for its id, or generic execution with no parameter call.
+     */
+    val argumentSchema: JsonObject? = null,
 ) : Tool<Context> {
 
     override suspend fun execute(executionRequest: ExecutionRequest<Context>): Outcome {
