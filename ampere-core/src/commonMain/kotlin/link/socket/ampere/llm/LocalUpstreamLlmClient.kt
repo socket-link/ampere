@@ -31,6 +31,27 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
  *   no token-billing meaning, and its 0-Watt accounting is anchored by the
  *   provider's `CostPolicy.Free` descriptor (T5), not by token counts.
  *
+ * ## What served it
+ *
+ * [callDetailed] reports a [ServedBy] (AMPR-391): the engine on this device
+ * served the call, so the record says so rather than leaving Ampere to assume
+ * it from the resolved configuration — an on-device call is labelled by what
+ * ran it. It names the on-device provider and model the dispatch keyed on and
+ * reports `usage = null`, which is a positive statement that a local generation
+ * has no token accounting rather than an absence of information.
+ *
+ * It deliberately does **not** substitute an engine-private model identity for
+ * the catalog's. Two readers key on the pair of ids: the on-device ledger in
+ * [OnDeviceInferenceProjection][link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceProjection]
+ * balances a start against a completion on `(workflowId, agentId, providerId,
+ * modelId, cognitivePhase)`, and
+ * [DispatchingUpstreamLlmClient.localityOf] resolves a descriptor by model id.
+ * A name the catalog does not hold would leave the "generating now" indicator
+ * stuck on and label a call that never left the device as `CLOUD`. The engine's
+ * own reported model reaches a surface through
+ * [LocalCapacity.modelId][link.socket.ampere.agents.domain.routing.local.LocalCapacity.modelId]
+ * instead, where it already does.
+ *
  * ## Errors
  *
  * On [Result.failure] from the engine, this client throws a
@@ -48,7 +69,12 @@ class LocalUpstreamLlmClient(
     override suspend fun call(
         request: ChatCompletionRequest,
         configuration: AIConfiguration,
-    ): ChatCompletion {
+    ): ChatCompletion = callDetailed(request, configuration).completion
+
+    override suspend fun callDetailed(
+        request: ChatCompletionRequest,
+        configuration: AIConfiguration,
+    ): UpstreamCompletion {
         val text = engine.generate(request.flattenToPrompt()).getOrElse { cause ->
             throw LocalInferenceException(
                 "Local inference engine failed to generate a completion for " +
@@ -57,18 +83,36 @@ class LocalUpstreamLlmClient(
             )
         }
 
-        return ChatCompletion(
-            id = LOCAL_COMPLETION_ID,
-            created = 0L,
-            model = request.model,
-            choices = listOf(
-                ChatChoice(
-                    index = 0,
-                    message = ChatMessage(
-                        role = ChatRole.Assistant,
-                        content = text,
+        return UpstreamCompletion(
+            completion = ChatCompletion(
+                id = LOCAL_COMPLETION_ID,
+                created = 0L,
+                model = request.model,
+                choices = listOf(
+                    ChatChoice(
+                        index = 0,
+                        message = ChatMessage(
+                            role = ChatRole.Assistant,
+                            content = text,
+                        ),
                     ),
                 ),
+            ),
+            served = ServedBy(
+                providerId = configuration.provider.id,
+                modelId = configuration.model.name,
+                // Nothing else to add. A local generation has no token accounting;
+                // its 0-Watt cost is the Free descriptor's, not a second figure here;
+                // the relay's reason already says why the device was chosen, and
+                // "the engine ran it" in its place would drop which rule selected it;
+                // and latency is Ampere's own measurement to take, since the engine
+                // runs in this process. Reporting a narrower local figure beside
+                // wall-clock cloud ones would bias the comparison a surface draws
+                // between them.
+                usage = null,
+                estimatedCostUsd = null,
+                routingReason = null,
+                latencyMs = null,
             ),
         )
     }

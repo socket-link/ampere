@@ -8,6 +8,7 @@ import link.socket.ampere.agents.domain.event.ArcRunEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
@@ -125,6 +126,7 @@ class ArcTraceProjection(
                 event = json.decodeFromString(Event.serializer(), payload),
                 payload = payload,
                 sequence = sequence,
+                causedBy = caused_by,
             )
         } catch (_: SerializationException) {
             null
@@ -153,29 +155,49 @@ class ArcTraceProjection(
         }
     }
 
+    /**
+     * Joins each [ProviderCallCompletedEvent] to the [ProviderCallStartedEvent] it answers.
+     *
+     * The join is the envelope's `caused_by`: `AgentLLMService` stamps the start row's id
+     * on its completion, so the two are paired by identity (AMPR-336). Pairing on
+     * provider+model equality cannot be the primary join any more, because a transport
+     * that reports what served a call may name a different provider and model on the
+     * completion than the relay resolved on the start (AMPR-391) — those rows would never
+     * match, and every such call would project as a start-less half-trace priced from
+     * `latencyMs`.
+     *
+     * The field-equality match is kept as the fallback for rows written before the stamp:
+     * a persisted run from an older build has no `caused_by` on its completions, and
+     * dropping the old join would make those traces worse, not better.
+     */
     private fun buildModelInvocations(
         events: List<DecodedEvent>,
         costByModel: Map<String, CostPolicy>,
     ): List<ModelInvocationTrace> {
-        val starts = events
+        val startsByEventId = events
+            .map { it.event }
+            .filterIsInstance<ProviderCallStartedEvent>()
+            .associateBy { it.eventId }
+        val unpairedStarts = events
             .map { it.event }
             .filterIsInstance<ProviderCallStartedEvent>()
             .toMutableList()
 
         return events
-            .map { it.event }
-            .filterIsInstance<ProviderCallCompletedEvent>()
-            .map { completed ->
-                val start = starts.firstOrNull { candidate ->
-                    candidate.timestamp <= completed.timestamp &&
-                        candidate.workflowId == completed.workflowId &&
-                        candidate.agentId == completed.agentId &&
-                        candidate.providerId == completed.providerId &&
-                        candidate.modelId == completed.modelId &&
-                        candidate.cognitivePhase == completed.cognitivePhase
-                }
+            .mapNotNull { decoded ->
+                val completed = decoded.event as? ProviderCallCompletedEvent
+                    ?: return@mapNotNull null
+                val start = decoded.causedBy?.let(startsByEventId::get)
+                    ?: unpairedStarts.firstOrNull { candidate ->
+                        candidate.timestamp <= completed.timestamp &&
+                            candidate.workflowId == completed.workflowId &&
+                            candidate.agentId == completed.agentId &&
+                            candidate.providerId == completed.providerId &&
+                            candidate.modelId == completed.modelId &&
+                            candidate.cognitivePhase == completed.cognitivePhase
+                    }
                 if (start != null) {
-                    starts.remove(start)
+                    unpairedStarts.remove(start)
                 }
 
                 val invocation = ModelInvocationTrace(
@@ -189,7 +211,11 @@ class ArcTraceProjection(
                             completed.timestamp.toEpochMilliseconds() - completed.latencyMs,
                         ),
                     endedAt = completed.timestamp,
-                    routingReason = start?.routingReason,
+                    // The transport's own reason when it reported one, else the relay's:
+                    // why it was served that way outranks why it was routed that way, and
+                    // a served model with another model's reason beside it reads as a lie
+                    // to whoever is debugging the run (AMPR-391).
+                    routingReason = completed.servedRoutingReason ?: start?.routingReason,
                     inputTokens = completed.usage.inputTokens,
                     outputTokens = completed.usage.outputTokens,
                     estimatedUsd = completed.usage.estimatedCost,
@@ -444,6 +470,11 @@ class ArcTraceProjection(
         val event: Event,
         val payload: String,
         val sequence: Long,
+        /**
+         * The envelope's `caused_by`, which is how the model-call pair is joined
+         * (AMPR-391). Null for a row written before its publisher passed one.
+         */
+        val causedBy: EventId? = null,
     )
 
     private companion object {
