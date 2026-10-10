@@ -27,6 +27,7 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.relay.DEFAULT_EMISSION_BUFFER_CAPACITY
 import link.socket.ampere.agents.events.relay.emissions
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 import link.socket.ampere.domain.arc.AmpereRuntime
@@ -649,6 +650,12 @@ class ArcSession(
                     agentScope = scope,
                     maxFlowTicks = maxFlowTicks,
                     cognitiveRelay = onDevice?.relay,
+                    // AMPR-405: the agents of every run this session hosts dispatch their
+                    // tool calls through an in-process executor. Without one they build no
+                    // `ToolExecutionEngine` at all, so every tool step of every run came
+                    // back "Tool execution engine not configured" — the Swift bridge could
+                    // start Arcs that were structurally unable to change anything.
+                    executor = FunctionExecutor.create(),
                     upstreamLlmClient = onDevice?.client,
                     upstreamDecisionClient = decision,
                     eventApiFactory = eventApiFactory,

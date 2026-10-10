@@ -16,6 +16,9 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.reasoning.AgentReasoning
+import link.socket.ampere.agents.execution.describeResult
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
@@ -188,8 +191,12 @@ class GoalHandler(
 
     /**
      * Handle ticket assignment by running the PROPEL cognitive cycle.
+     *
+     * `internal` so a test can drive the cycle for an agent it built itself, which is the
+     * only way to exercise what this reports for an agent that cannot act (AMPR-405) —
+     * [activateGoal] builds its own agent through [AgentFactory], which supplies an executor.
      */
-    private suspend fun handleTicketAssignment(
+    internal suspend fun handleTicketAssignment(
         agent: SparkBasedAgent<CodeState>,
         ticketId: String,
     ) {
@@ -219,6 +226,19 @@ class GoalHandler(
                 taskType = GOAL_TASK_TYPE,
                 workspace = workspace
             )
+
+            // An agent with no executor cannot run a single tool, so the whole cycle below
+            // is spent without a possible result: Perceive and Plan both cost a model call,
+            // then every planned tool step refuses in turn. Say so once, here, before any of
+            // it (AMPR-405). The shipped path cannot reach this — the factory above supplies
+            // a `FunctionExecutor` — and that is the point: a goal that *is* misconfigured
+            // used to run the cycle anyway and report COMPLETED, because the refusals came
+            // back as `NoChanges` and nothing below looked at them.
+            if (!agent.canExecuteTools) {
+                progressPane.setFailed(AgentReasoning.NO_EXECUTOR_MESSAGE)
+                lifecycle?.failed(AgentReasoning.NO_EXECUTOR_MESSAGE)
+                return
+            }
 
             // PHASE 1: PERCEIVE
             progressPane.setPhase(CognitiveProgressPane.Phase.PERCEIVE, "Analyzing task...")
@@ -274,9 +294,20 @@ class GoalHandler(
             val outcome = agent.executePlan(plan)
 
             when (outcome) {
-                is ExecutionOutcome.CodeChanged.Failure -> {
-                    progressPane.setFailed(outcome.error.message)
-                    lifecycle?.failed(outcome.error.message)
+                // AMPR-405: *every* failure is reported, not only the code-change one. A plan
+                // settles through `PlanExecutor`, which folds its steps into
+                // `ExecutionOutcome.NoChanges.*` whatever the steps actually did — so a plan
+                // whose every step failed arrived here as a `NoChanges.Failure`, fell into the
+                // `else` branch below, and the goal went on to report COMPLETED.
+                is Outcome.Failure -> {
+                    // `describeResult` is the one renderer for what an outcome actually said
+                    // (AMPR-412); the cast is because it is typed over `ExecutionOutcome` and
+                    // a plan settles to the wider `Outcome`.
+                    val reason = (outcome as? ExecutionOutcome)?.describeResult()
+                        ?.takeIf { it.isNotBlank() }
+                        ?: "the plan failed without recording a reason"
+                    progressPane.setFailed(reason)
+                    lifecycle?.failed(reason)
                     return
                 }
                 is ExecutionOutcome.CodeChanged.Success -> {

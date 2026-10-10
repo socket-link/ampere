@@ -124,6 +124,25 @@ class AgentReasoning private constructor(
         null
     }
 
+    /**
+     * Whether this unit can actually run a tool (AMPR-405).
+     *
+     * False means no [ToolExecutionEngine] was built — because no
+     * [ReasoningSettings.executor] was supplied, or because there is no
+     * configuration to build an LLM service from — and so every [executeTool] call
+     * returns the "no executor configured" refusal below rather than dispatching
+     * anything.
+     *
+     * Ask this *before* planning a cycle that is supposed to act. The alternative
+     * is finding out one plan step at a time: a misconfigured agent plans normally,
+     * nominates tools normally, and then refuses each of its own steps in turn,
+     * which reads in a trace like several tool failures rather than one wiring
+     * mistake. [link.socket.ampere.agents.definition.SparkBasedAgent.canExecuteTools]
+     * surfaces this to the hosts that drive the loop.
+     */
+    val canExecuteTools: Boolean
+        get() = toolExecutionEngine != null || mockResponses?.toolExecutor != null
+
     // ========================================================================
     // Perception
     // ========================================================================
@@ -229,7 +248,7 @@ class AgentReasoning private constructor(
                 taskId = request.context.task.id,
                 executionStartTimestamp = Clock.System.now(),
                 executionEndTimestamp = Clock.System.now(),
-                message = "Tool execution engine not configured",
+                message = NO_EXECUTOR_MESSAGE,
             )
     }
 
@@ -449,6 +468,20 @@ class AgentReasoning private constructor(
         )
 
     companion object {
+        /**
+         * What [executeTool] reports when [canExecuteTools] is false (AMPR-405).
+         *
+         * Names the missing dependency and how to supply it, because the two ways to
+         * reach this message are both wiring mistakes rather than runtime conditions,
+         * and the message is the only evidence of either. Exposed so the hosts that
+         * refuse a cycle up front can say the same thing the step-level refusal would
+         * have said.
+         */
+        const val NO_EXECUTOR_MESSAGE: String =
+            "No executor configured, so no tool can run: this agent's reasoning unit was " +
+                "built without one (ReasoningSettings.executor). The agent factories supply " +
+                "a FunctionExecutor by default; a hand-built agent must pass one."
+
         /**
          * Creates an AgentReasoning instance with the given configuration.
          */

@@ -153,6 +153,36 @@ class AmpereRuntimeTest {
         assertEquals("Build API endpoint", chargeResult.goalTree.root.description)
     }
 
+    /**
+     * AMPR-405 (B11): the shipped entry point spawns agents that can actually dispatch a tool.
+     *
+     * [AmpereRuntime.create] left `executor` null, so every agent a run spawned built no
+     * `ToolExecutionEngine` and every tool step of every Arc run failed as "Tool execution
+     * engine not configured". The primary constructor still defaults to null — that is the
+     * seam the eval Bench's `NoOpExecutor` uses — so the default is asserted on `create`.
+     */
+    @Test
+    fun `create spawns agents that can execute tools`() = runTest {
+        val runtime = AmpereRuntime.create(
+            arcConfig = ArcConfig(
+                name = "executor-wiring-arc",
+                agents = listOf(ArcAgentConfig(role = "code")),
+            ),
+            projectDirPath = arcProjectDir("runtime-executor-wiring").toString(),
+            agentScope = backgroundScope,
+        )
+
+        val agents = runtime.executeChargeOnly("Build API endpoint").agents
+
+        assertTrue(agents.isNotEmpty(), "the arc declares one agent, so Charge should spawn one")
+        agents.forEach { agent ->
+            assertTrue(
+                assertIs<SparkBasedAgent<*>>(agent).canExecuteTools,
+                "a run's agents must be able to dispatch a tool; ${agent.id} cannot",
+            )
+        }
+    }
+
     @Test
     fun `runtime from team config creates equivalent arc`() {
         val teamRoles = listOf("product-manager", "engineer", "qa-tester")
