@@ -14,26 +14,13 @@ import kotlin.test.assertTrue
  * `TraceRecorder` all enumerate it, so an unregistered event reaches no
  * subscriber that did not name its type and appears in no recorded trace. This
  * test walks the sealed [Event] hierarchy instead of trusting the list, so the
- * next omission fails here rather than as a hole in a trace.
+ * next omission fails here rather than as a hole in a trace. The walk is total
+ * now that [SparkEvent] is sealed (AMPR-386): every branch is enumerable.
  *
  * JVM-only because it needs `sealedSubclasses`; the hierarchy it checks is
  * declared in `commonMain`, so covering it once on one target is enough.
  */
 class EventRegistryCompletenessTest {
-
-    /**
-     * Concrete events that no walk of the hierarchy can reach. [SparkEvent] is a
-     * plain interface, not a sealed one — its implementations are top-level
-     * classes in the same file — and reflection cannot enumerate the implementors
-     * of an open interface. `SparkEvent is the only Event branch a walk cannot
-     * enumerate` below fails if a second such branch appears, which is what keeps
-     * this hand-written list from going quietly stale.
-     */
-    private val openBranchEvents: List<KClass<*>> = listOf(
-        SparkAppliedEvent::class,
-        SparkRemovedEvent::class,
-        CognitiveStateSnapshot::class,
-    )
 
     @Test
     fun `every sealed Event subtype is registered`() {
@@ -87,19 +74,24 @@ class EventRegistryCompletenessTest {
     }
 
     /**
-     * A non-sealed interface under [Event] is a hole in the hierarchy: its
-     * implementors can live anywhere, so nothing — not this test, not the
-     * compiler — can enumerate them. One exists ([SparkEvent]) and its three
-     * implementations are listed in [openBranchEvents]. A second one has to be
-     * listed there too, or its events go unchecked.
+     * A non-sealed interface under [Event] is a hole in the hierarchy twice over: its
+     * implementors can live anywhere, so nothing — not this test, not the compiler — can
+     * enumerate them, *and* the serialization plugin stops registering polymorphic subclasses
+     * at that branch, so every event under it fails to encode and is never persisted.
+     * [SparkEvent] was the one such branch until AMPR-386 sealed it; there must be none.
      */
     @Test
-    fun `SparkEvent is the only Event branch a walk cannot enumerate`() {
+    fun `no Event branch is an open interface a walk cannot enumerate`() {
         val openBranches = Event::class.sealedSubclasses
             .filter { it.java.isInterface && !it.isSealed }
             .map { it.java.name }
 
-        assertEquals(listOf(SparkEvent::class.java.name), openBranches)
+        assertEquals(
+            emptyList<String>(),
+            openBranches,
+            "an open interface under Event hides its implementors from this tripwire and from " +
+                "the serialization plugin; seal it, as SparkEvent now is",
+        )
     }
 
     @Test
@@ -116,9 +108,9 @@ class EventRegistryCompletenessTest {
             klass.eventTypeConstant()?.let { klass to it }
         }.toMap()
 
-    /** Every instantiable event in the hierarchy, plus the branch a walk cannot reach. */
+    /** Every instantiable event in the hierarchy. */
     private fun concreteEventClasses(): List<Class<*>> =
-        (sealedLeaves(Event::class) + openBranchEvents)
+        sealedLeaves(Event::class)
             .map { it.java }
             .distinct()
             .filterNot { it.isInterface || Modifier.isAbstract(it.modifiers) }

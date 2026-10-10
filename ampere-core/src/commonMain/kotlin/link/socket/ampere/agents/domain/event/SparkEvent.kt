@@ -18,10 +18,16 @@ import link.socket.ampere.agents.domain.Urgency
  * - stackDepth: How many Sparks are now on the stack
  * - stackDescription: Human-readable stack state
  *
- * Note: This is not a sealed interface as the implementations are concrete data classes
- * in this same file.
+ * Sealed, and `@Serializable`, because [Event] is: the serialization plugin registers a
+ * polymorphic subclass by walking the sealed subtypes of the base, and it stops at a branch
+ * that is neither. While this interface was open, all three events below were outside
+ * `Event`'s polymorphic scope — `EventRepository.saveEvent` failed to encode every one of
+ * them, so a spark application reached bus subscribers but was never persisted and so could
+ * never appear in an `ArcRunTrace` (found by AMPR-386). The three implementations are
+ * top-level classes in this same file, which is what sealing requires.
  */
-interface SparkEvent : Event {
+@Serializable
+sealed interface SparkEvent : Event {
     /** The ID of the agent whose cognitive state changed. */
     val agentId: AgentId
 

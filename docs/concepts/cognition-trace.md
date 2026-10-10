@@ -33,6 +33,25 @@ and `OutcomeMemoryStore` by `run_id` and assembles an `ArcRunTrace`:
 - `CognitiveEvent.JudgmentRecorded` rows — one per judgment a decision call returned (AMPR-384), filed as `TraceEvent`s under the phase that asked. The row carries a digest of the state, the distribution when the adapter measured one, the model snapshot, locality, latency and usage; the state itself is never in the trace.
 - `completion` — for a run that ended without closing its loop (cancelled, or a phase threw), the `CompletionRecord` its `ArcRunEvent.CompletionManifestRecorded` carried: which phases ran and did not, the tick Flow reached, what each agent produced, and which intended goals did not happen (AMPR-359). `null` for a run that completed.
 
+The run-scoped event kinds — the ones whose publisher stamps the run on the
+envelope, so `project(runId)` finds them on `run_id` alone — are the model-call
+pair, the tool-call pair, the plan-step pair, routing, memory writes, judgments,
+the run's own `ArcRunEvent`s, and (since AMPR-386) the three that a run publishes
+from inside itself: `CognitivePhaseEvent.PhaseEntered` / `PhaseExited` from
+`PhaseSparkManager`, `SparkAppliedEvent` / `SparkRemovedEvent` /
+`CognitiveStateSnapshot` from `ObservableAgent`, and
+`MemoryEvent.KnowledgeRecalled` from `AgentMemoryService.recallRelevantKnowledge`.
+Each takes the run id from the agent's `Agent.currentRunId` — the run the Arc
+built it for — so no call site has to remember to pass one. Before that, all
+three published with a null envelope `run_id`, and a phase bracket's payload
+names no run at all, so a run's own phase history was reachable only through the
+`getEventsByRunIdOrPayload` fallback, which cannot see it. The spark events had a
+second problem underneath that one: `SparkEvent` was an open interface under the
+sealed `Event`, so the three were outside `Event`'s polymorphic scope and every
+`publish` of one failed to encode. They reached bus subscribers and were never
+persisted, which made the `Phase:`-prefix bucketing below dead code for any
+stored trace. AMPR-386 sealed `SparkEvent`.
+
 What the projection folds is a `ReplayWindow`, not a bare run id. Replay
 walks recorded model calls by call index, and a call-index sequence needs an
 end, so the window has to be bounded. In v1 the only window is
@@ -78,11 +97,12 @@ the projection that makes the run *legible*:
 - `agents/domain/event/MemoryEvent.kt` — `KnowledgeStored`, `KnowledgeRecalled`, `MilestoneReached`, `OutcomeRecorded`.
 - `agents/domain/event/ArcRunEvent.kt` — `CompletionManifestRecorded`, a cut-short run's manifest as a row of its own trace.
 - `agents/domain/event/CognitiveEvent.kt` — `JudgmentRecorded`, the record of one judgment; `phaseNameFor` reads its `cognitivePhase`.
+- `agents/domain/cognition/sparks/PhaseSparkManager.kt`, `agents/definition/ObservableAgent.kt`, `agents/domain/memory/AgentMemoryService.kt` — the three in-run publishers; each stamps `Agent.currentRunId` on the envelope (AMPR-386).
 - `domain/arc/CompletionRecord.kt` — the bounded, persisted form of a `CompletionManifest`; `domain/arc/CompletionManifestSink.kt` — the production sink that writes it through `AgentEventApi`.
 
 ## Invariants
 
-- **`run_id` is non-optional on persisted events and memory rows.** `ArcTraceProjection` joins by `run_id`. A row without it is invisible.
+- **`run_id` is non-optional on persisted events and memory rows.** `ArcTraceProjection` joins by `run_id`. A row without it is invisible. `getEventsByRunIdOrPayload`'s `payload LIKE` arm exists for legacy rows written before the column was populated — it is not a substitute for stamping the envelope, and it cannot rescue an event whose payload never mentions the run (a `PhaseEntered` has no run field). `RunScopedPublishersTraceTest` folds a run's trace over a database holding only the envelope-matched rows, so the fallback has nothing to contribute.
 - **The projection never writes.** It is a read model. A change that has the projection update an event row or a memory row is a layering violation; corrections happen by writing new rows.
 - **Provider call events come in pairs.** `ProviderCallStartedEvent` ↔ `ProviderCallCompletedEvent` keyed by `(workflowId, agentId, providerId, modelId, cognitivePhase)`. A start without a completion appears as a half-trace; a completion without a start is reconstructed from `latencyMs` (lossy — keep both). Since AMPR-240, `AmpereRuntime.execute(userGoal, runId)` threads the ambient Arc `runId` down through `ChargePhase` → `SparkAgentFactory` → `SparkBasedAgent` → `AgentReasoning`, so `workflowId` on this join key *is* the Arc `runId` for the lifetime of one run — this path is now production-proven (see `RunIdToTraceProjectionTest`), not just a theoretical join key with no real producer. A run started from Swift takes the same path: `ArcSession.create` with a `database` builds a per-agent `AgentEventApiFactory` over the session's store and bus, so its agents' `ProviderCall*` pairs — and the relay's `RoutingEvent`s, which go through the session's own door — are persisted under the run id and `ArcRunHandle.trace()` shows which steps ran on the device (AMPR-374).
 - **Tool events come in pairs by `invocationId`.** `ToolExecutionStarted` ↔ `ToolExecutionCompleted`. The projection retains starts that lack a completion as `pendingCalls` so in-flight work is visible. The producer on the live path is `ToolExecutionEngine`, which brackets its `Executor` call (AMPR-389) — so `ArcRunTrace.toolCalls` is populated for a run that executed a tool, where before it was always empty and the only producer was a `ToolInvoker` nothing constructed. The bracket covers the dispatch only: a call `PlugPermissionGate` refused emits `PermissionDeniedEvent` and no pair, so a pair means a tool ran. The standalone `ToolInvoker` still emits the same pair around a tool it wraps directly and has no production caller; there is one producer per dispatch, never two.
@@ -108,6 +128,7 @@ the projection that makes the run *legible*:
 - **Adding fields to `PropelPhase` for non-phase-scoped data.** Phase-scoped means: belongs to exactly one phase of one run. Run-level data goes on `ArcRunTrace`; system-level data goes elsewhere entirely.
 - **Bypassing `WattCostAggregator` to compute cost.** Multiple paths compute cost differently and the per-phase totals diverge. Use the aggregator; if it lacks a metric, extend it.
 - **Persisting rows without `run_id`.** Even "metadata" rows: if it relates to a run, it carries the id. Otherwise the trace can't see it.
+- **Letting the payload fallback stand in for an envelope stamp.** A row found by `payload LIKE '%<runId>%'` is found by accident — because some field happened to serialize the id — and the match is a substring one, so a run id that is a prefix of another drags in the other run's rows. If a publisher runs inside a run, pass that run to `AgentEventApi.publish`; `Agent.currentRunId` is where to read it from inside an agent (AMPR-386).
 - **Treating the projection as a write-through cache.** It rebuilds from stores on each call. Caching is fine; lying about the source of truth is not.
 - **Persisting the whole `CompletionManifest`.** Its `producedOutcomes` hold full `Outcome` graphs — tasks, plans, tool results — and grow with every tick, on the teardown path. `CompletionRecord` is the bounded form; widen it deliberately in `CompletionRecord.of`, never by serializing the manifest.
 - **Reading a judgment's confidence off the trace without its `source`.** A `SELF_REPORTED` `confidence` on a `JudgmentRecorded` row is the F10 mapping of a word the model wrote; only a `MEASURED` one with a `distribution` is fittable (see [DecideSeam](decide-seam.md)).

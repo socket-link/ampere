@@ -115,11 +115,15 @@ class AgentMemoryService(
      *
      * @param context Current situation to find relevant memories for
      * @param limit Maximum number of knowledge entries to retrieve
+     * @param runId Arc run this recall belongs to; stamped on the event *and* on its envelope
+     *   (F4, AMPR-386), so a run's Recall phase is on its own trace rather than reachable only
+     *   through the projection's payload fallback. Null when the caller holds no run.
      * @return Result containing scored knowledge entries, ranked by relevance
      */
     suspend fun recallRelevantKnowledge(
         context: MemoryContext,
         limit: Int = 10,
+        runId: RunId? = null,
     ): Result<List<KnowledgeWithScore>> = withContext(ioDispatcher) {
         runCatching {
             val candidates = mutableListOf<KnowledgeEntry>()
@@ -213,9 +217,10 @@ class AgentMemoryService(
                 },
                 topKnowledgeIds = scoredKnowledge.map { it.entry.id },
                 retrievedKnowledge = retrievedSummaries,
+                runId = runId,
             )
 
-            eventApi.publish(event).getOrThrow()
+            eventApi.publish(event, runId = runId).getOrThrow()
 
             scoredKnowledge
         }

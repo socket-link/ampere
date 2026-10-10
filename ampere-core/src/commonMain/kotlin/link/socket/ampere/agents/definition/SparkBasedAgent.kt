@@ -218,6 +218,15 @@ open class SparkBasedAgent<S : AgentState>(
     override val affinity: CognitiveAffinity = cognitiveAffinity
 
     /**
+     * The Arc run this agent was built for (AMPR-240), surfaced so every event it publishes
+     * carries the run on its envelope (F4, AMPR-386) — phase brackets through
+     * [PhaseSparkManager], spark events and snapshots through [ObservableAgent], and memory
+     * recall through [AgentMemoryService].
+     */
+    @Transient
+    override val currentRunId: RunId? = _runId
+
+    /**
      * The workspace this agent is pinned to (AMPR-300), or null when it was
      * built without one. See the `_workspace` constructor parameter.
      */

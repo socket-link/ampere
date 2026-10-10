@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.PhaseSparkConfig
 import link.socket.ampere.agents.definition.AutonomousAgent
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.state.AgentState
@@ -40,6 +41,13 @@ import link.socket.ampere.util.getEnvironmentVariable
  * attributed to that agent. Left null — agents built without a door — phases still apply and
  * nothing is published. Because the door is a suspending seam, phase entry and cleanup are
  * suspending too.
+ *
+ * Each bracket is stamped with an Arc run id on its envelope (F4, AMPR-386), so a run's phase
+ * history is returned by `ArcTraceProjection.project(runId)` without the payload `LIKE`
+ * fallback — a `PhaseEntered` payload names no run. [enterPhase] and [withPhase] take it,
+ * defaulting to the owning agent's [currentRunId][link.socket.ampere.agents.definition.Agent.currentRunId];
+ * the entered run is held until the matching exit, so a bracket closed by [cleanup] (or by
+ * [withPhase]'s `finally`) carries the run it opened under rather than whatever is current.
  */
 class PhaseSparkManager<S : AgentState> private constructor(
     private val agent: AutonomousAgent<S>,
@@ -77,17 +85,25 @@ class PhaseSparkManager<S : AgentState> private constructor(
     private var currentPhaseNestingDepth: Int = 0
     private var withPhaseNestingDepth: Int = 0
 
-    suspend fun enterPhase(phase: CognitivePhase) {
-        enterPhaseInternal(phase, selectionContext = null)
+    /** The run the active bracket was entered under, so its `PhaseExited` is stamped the same. */
+    private var currentPhaseRunId: RunId? = null
+
+    suspend fun enterPhase(phase: CognitivePhase, runId: RunId? = agent.currentRunId) {
+        enterPhaseInternal(phase, selectionContext = null, runId = runId)
     }
 
-    internal suspend fun enterPhase(phase: CognitivePhase, selectionContext: SparkSelectionContext?) {
-        enterPhaseInternal(phase, selectionContext)
+    internal suspend fun enterPhase(
+        phase: CognitivePhase,
+        selectionContext: SparkSelectionContext?,
+        runId: RunId? = agent.currentRunId,
+    ) {
+        enterPhaseInternal(phase, selectionContext, runId = runId)
     }
 
     private suspend fun enterPhaseInternal(
         phase: CognitivePhase,
         selectionContext: SparkSelectionContext?,
+        runId: RunId?,
         nestingDepth: Int = 0,
         oldPhaseOverride: CognitivePhase? = null,
     ) {
@@ -108,27 +124,38 @@ class PhaseSparkManager<S : AgentState> private constructor(
         // prompt injection as much as the sparks are: left set, every role/language spark's
         // `## When <Phase>` section would still reach a silently bracketed run's prompt.
         if (injectPhaseSparks) agent.currentCognitivePhase = phase
-        publishPhaseEntered(oldPhase = oldPhase, newPhase = phase, nestingDepth = nestingDepth)
+        publishPhaseEntered(
+            oldPhase = oldPhase,
+            newPhase = phase,
+            nestingDepth = nestingDepth,
+            runId = runId,
+        )
         for (spark in sparksToApply) {
             agent.spark<AutonomousAgent<S>>(spark)
             appliedSparks += spark
         }
         currentPhase = phase
         currentPhaseNestingDepth = nestingDepth
+        currentPhaseRunId = runId
     }
 
-    suspend fun <R> withPhase(phase: CognitivePhase, block: suspend () -> R): R =
-        withPhaseInternal(phase, selectionContext = null, block)
+    suspend fun <R> withPhase(
+        phase: CognitivePhase,
+        runId: RunId? = agent.currentRunId,
+        block: suspend () -> R,
+    ): R = withPhaseInternal(phase, selectionContext = null, runId = runId, block = block)
 
     internal suspend fun <R> withPhase(
         phase: CognitivePhase,
         selectionContext: SparkSelectionContext?,
+        runId: RunId? = agent.currentRunId,
         block: suspend () -> R,
-    ): R = withPhaseInternal(phase, selectionContext, block)
+    ): R = withPhaseInternal(phase, selectionContext, runId = runId, block = block)
 
     private suspend fun <R> withPhaseInternal(
         phase: CognitivePhase,
         selectionContext: SparkSelectionContext?,
+        runId: RunId?,
         block: suspend () -> R,
     ): R {
         if (!enabled) return block()
@@ -138,11 +165,13 @@ class PhaseSparkManager<S : AgentState> private constructor(
         val previousPhase = currentPhase
         val previousSparks = appliedSparks.toList()
         val previousPhaseNestingDepth = currentPhaseNestingDepth
+        val previousPhaseRunId = currentPhaseRunId
         appliedSparks = mutableListOf()
         currentPhase = null
         enterPhaseInternal(
             phase = phase,
             selectionContext = selectionContext,
+            runId = runId,
             nestingDepth = nestingDepth,
             oldPhaseOverride = previousPhase,
         )
@@ -162,10 +191,12 @@ class PhaseSparkManager<S : AgentState> private constructor(
                     appliedSparks = previousSparks.toMutableList()
                     currentPhase = previousPhase
                     currentPhaseNestingDepth = previousPhaseNestingDepth
+                    currentPhaseRunId = previousPhaseRunId
                     publishPhaseEntered(
                         oldPhase = phase,
                         newPhase = previousPhase,
                         nestingDepth = previousPhaseNestingDepth,
+                        runId = previousPhaseRunId,
                     )
                 }
             }
@@ -206,17 +237,20 @@ class PhaseSparkManager<S : AgentState> private constructor(
         nestingDepth: Int = currentPhaseNestingDepth,
     ) {
         val exitedPhase = currentPhase ?: return
+        val exitedRunId = currentPhaseRunId
         repeat(appliedSparks.size) {
             agent.unspark()
         }
         appliedSparks.clear()
         currentPhase = null
         currentPhaseNestingDepth = 0
+        currentPhaseRunId = null
         if (injectPhaseSparks) agent.currentCognitivePhase = restoredToPhase
         publishPhaseExited(
             exitedPhase = exitedPhase,
             restoredToPhase = restoredToPhase,
             nestingDepth = nestingDepth,
+            runId = exitedRunId,
         )
     }
 
@@ -224,11 +258,12 @@ class PhaseSparkManager<S : AgentState> private constructor(
         oldPhase: CognitivePhase?,
         newPhase: CognitivePhase,
         nestingDepth: Int,
+        runId: RunId?,
     ) {
         if (!publishBrackets) return
         eventApi?.let { api ->
             api.publish(
-                CognitivePhaseEvent.PhaseEntered(
+                event = CognitivePhaseEvent.PhaseEntered(
                     eventId = generateUUID(agent.id, newPhase.name, nestingDepth.toString()),
                     timestamp = Clock.System.now(),
                     eventSource = EventSource.Agent(agent.id),
@@ -237,6 +272,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
                     newPhase = newPhase,
                     nestingDepth = nestingDepth,
                 ),
+                runId = runId,
             )
         }
     }
@@ -245,11 +281,12 @@ class PhaseSparkManager<S : AgentState> private constructor(
         exitedPhase: CognitivePhase,
         restoredToPhase: CognitivePhase?,
         nestingDepth: Int,
+        runId: RunId?,
     ) {
         if (!publishBrackets) return
         eventApi?.let { api ->
             api.publish(
-                CognitivePhaseEvent.PhaseExited(
+                event = CognitivePhaseEvent.PhaseExited(
                     eventId = generateUUID(agent.id, exitedPhase.name, nestingDepth.toString()),
                     timestamp = Clock.System.now(),
                     eventSource = EventSource.Agent(agent.id),
@@ -258,6 +295,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
                     restoredToPhase = restoredToPhase,
                     nestingDepth = nestingDepth,
                 ),
+                runId = runId,
             )
         }
     }
