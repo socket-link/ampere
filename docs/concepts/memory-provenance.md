@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/MemoryEvent.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/memory/**
 related: [PropelLoop, CognitionTrace, EventSerialBus, DreamCycle]
-last_verified: 2026-10-04
+last_verified: 2026-10-09
 ---
 
 # Memory Provenance
@@ -61,6 +61,7 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 - `agents/domain/knowledge/Knowledge.kt` — sealed knowledge sources.
 - `agents/domain/knowledge/KnowledgeRepository.kt` + `KnowledgeRepositoryImpl.kt` — semantic store.
 - `agents/domain/memory/AgentMemoryService.kt` — the recall facade; scores by similarity, tag overlap, task type, recency, complexity.
+- `agents/domain/memory/MemoryTaskTypes.kt` — the `task_type` vocabulary shared by the write side and Recall (AMPR-402).
 - `agents/domain/event/MemoryEvent.kt` — `KnowledgeStored`, `KnowledgeRecalled`, `MilestoneReached`, `OutcomeRecorded` events.
 - `commonMain/sqldelight/link/socket/ampere/db/memory/OutcomeMemoryStore.sq`, `KnowledgeStore.sq` — schemas (each carries `run_id`).
 
@@ -68,7 +69,8 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 
 - **Append-only.** Outcomes and knowledge entries are never updated in place. Corrections happen by inserting a new entry; the original stays for audit. A query that mutates a stored row is a violation.
 - **Every entry carries `run_id`.** Outcomes and knowledge entries are written with the `run_id` of the Arc that produced them. An entry without a `run_id` is invisible to `ArcTraceProjection` and thus orphaned from the trace.
-- **Knowledge is distilled by `KnowledgeExtractor`, not by tools.** Tool implementations write `ExecutionOutcome`s; the Loop phase's `KnowledgeExtractor` produces `Knowledge`. Tools that write directly into `KnowledgeRepository` skip the cognitive distillation step and pollute the semantic store with raw observations.
+- **Knowledge is distilled by a closing phase, not by tools.** Tool implementations write `ExecutionOutcome`s; `KnowledgeExtractor` (an agent's Learn phase) and `PulsePhase` (the Arc's close) produce `Knowledge`. Tools that write directly into `KnowledgeRepository` skip the cognitive distillation step and pollute the semantic store with raw observations.
+- **The write side and Recall share one `task_type` vocabulary.** `recallRelevantKnowledge` finds candidates by matching `MemoryContext.taskType` against the stored `task_type` exactly, so a writer that invents its own string files an entry no reader asks for. The vocabulary is `MemoryTaskTypes`; both sides take their value from there.
 - **A knowledge entry records one source, not a lineage.** Each row carries exactly one of `idea_id`, `outcome_id`, `perception_id`, `plan_id`, `task_id` — the id of the element it was distilled from — and no reference to a parent entry. Those elements have no tables of their own, and `OutcomeMemoryStore.id` is `generateUUID(ticketId, executorId)`, a different id space from `ExecutionOutcome.id`, so a source id resolves to no row at all. Entries relate to each other through `run_id`, never through source ids; `KnowledgeService.provenance` returns that single hop (AMPR-350).
 - **Recall queries Knowledge first.** `AgentMemoryService.recallRelevantKnowledge` is the canonical Recall entry point. Domain code that goes straight to `OutcomeMemoryRepository` for in-loop reasoning is bypassing the semantic layer for performance reasons that don't exist.
 - **Outcome variants are tool-agnostic.** `ExecutionOutcome.CodeChanged` does not depend on which executor produced it; the same outcome shape is comparable across implementations. A new tool that needs a bespoke outcome variant must justify why an existing variant doesn't fit.
@@ -94,4 +96,5 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 - **Filtering failures out of recall.** Failures teach what not to do. A "successful approaches only" filter erases that signal.
 - **Hardcoding a relevance threshold at the call site.** `knowledge.filter { it.relevanceScore > 0.5 }` reads as arithmetic on a score, so it does not look like a policy decision — but it is one, and it was duplicated in `QualityParams` and `ProductParams` for months before AMPR-382 found it. A score is a fact the service computes; the floor above which a score counts belongs to whoever is reading. Take it as a parameter with `DEFAULT_RELEVANCE_FLOOR` as the default.
 - **Reading a source id as a knowledge id.** `getKnowledgeById(entry.outcomeId)` can never match: a knowledge id is `generateUUID("knowledge-<type>", sourceId)`, which is a random prefix, and a source id names an `Idea`/`Outcome`/`Perception`/`Plan`/`Task`. The pre-AMPR-350 `provenance()` walked a "chain" this way and broke on its first iteration every time, returning a one-entry trail that looked plausible. To relate several entries, query by `run_id`.
+- **Filing a learning under a task type nothing recalls with.** `storeKnowledge(knowledge, taskType = "arc-pulse")` persists a row, returns success, and is invisible forever: `FlowPhase` and `AutonomousAgent` recall with `code_change` or `generic`, and the match is exact. A store that succeeds is not the same as a store that can be read, which is why `MemoryTaskTypes` exists rather than three literals.
 - **Stripping `run_id` when persisting.** A common refactoring trap: a helper drops the `run_id` parameter "because it's not used downstream". `ArcTraceProjection` is downstream. Keep it.

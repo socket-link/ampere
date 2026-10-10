@@ -26,6 +26,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.SparkSelectionContext
 import link.socket.ampere.agents.domain.cognition.sparks.TaskSpark
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.memory.MemoryContext
+import link.socket.ampere.agents.domain.memory.MemoryTaskTypes
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.reasoning.Idea
@@ -440,12 +441,12 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         // Build context from the task description
         val context = when (task) {
             is Task.CodeChange -> MemoryContext(
-                taskType = "code_change",
+                taskType = MemoryTaskTypes.CODE_CHANGE,
                 tags = emptySet(),
                 description = task.description,
             )
             else -> MemoryContext(
-                taskType = "generic",
+                taskType = MemoryTaskTypes.GENERIC,
                 tags = emptySet(),
                 description = "Generic task: ${task.id}",
             )
@@ -471,9 +472,9 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
             val taskType = when (task) {
                 is Task.CodeChange -> {
                     tags.add("code")
-                    "code_change"
+                    MemoryTaskTypes.CODE_CHANGE
                 }
-                else -> "generic"
+                else -> MemoryTaskTypes.GENERIC
             }
 
             when (outcome) {

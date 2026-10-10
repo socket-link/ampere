@@ -14,6 +14,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.LanguageSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
 import link.socket.ampere.agents.domain.cognition.sparks.RoleSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
+import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.api.AgentEventApi
@@ -95,6 +96,13 @@ class ChargePhase(
     private val runId: ArcRunId? = null,
     /** Optional per-agent [AgentEventApi] factory (AMPR-240), threaded into spawned agents. */
     private val eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
+    /**
+     * Long-term semantic memory for spawned agents (AMPR-402). Each agent gets its own
+     * `AgentMemoryService` over this store and its own door, which is what Flow's Recall reads
+     * and what Pulse writes the run's learnings into. Null (or no [eventApiFactory]) spawns
+     * agents without long-term memory.
+     */
+    private val knowledgeRepository: KnowledgeRepository? = null,
     @Suppress("unused")
     private val clock: Clock = Clock.System,
 ) {
@@ -123,6 +131,7 @@ class ChargePhase(
                 upstreamDecisionClient = upstreamDecisionClient,
                 runId = runId,
                 createEventApi = eventApiFactory,
+                knowledgeRepository = knowledgeRepository,
             ),
         ).spawn(arcConfig, projectContext)
 

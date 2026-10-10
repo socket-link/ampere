@@ -30,7 +30,9 @@ Convergence and delivery. The system evaluates completion and delivers results.
 
 - Check success criteria (tests pass, goal complete)
 - Deliver artifacts (git commit, create PR)
-- Capture learnings for future runs
+- Capture learnings for future runs: one `Knowledge` entry per successful outcome, stored through
+  the producing agent's memory service and tagged with the run id, so the next run's Recall finds
+  it. A cancelled or failed run never reaches Pulse and owes a `CompletionManifest` instead.
 
 ## Built-in Arcs
 

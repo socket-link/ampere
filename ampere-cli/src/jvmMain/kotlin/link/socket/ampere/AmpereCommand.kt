@@ -21,7 +21,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.cli.goal.ARC_SETTLE_GRACE
 import link.socket.ampere.cli.goal.ArcShutdownHook
 import link.socket.ampere.cli.goal.GoalHandler
@@ -283,6 +286,8 @@ class AmpereCommand(
                             agentScope = agentScope,
                             manifestSink = context.completionManifestSink,
                             workspace = context.workspace,
+                            eventApiFactory = context.environmentService::createEventApi,
+                            knowledgeRepository = context.knowledgeRepository,
                             jazzPane = jazzPane,
                         ) { status -> systemStatus = status }
                     } else {
@@ -648,6 +653,8 @@ class AmpereCommand(
         agentScope: CoroutineScope,
         manifestSink: CompletionManifestSink,
         workspace: ExecutionWorkspace,
+        eventApiFactory: (AgentId) -> AgentEventApi,
+        knowledgeRepository: KnowledgeRepository,
         jazzPane: CognitiveProgressPane,
         updateStatus: (StatusBar.SystemStatus) -> Unit,
     ) {
@@ -660,6 +667,11 @@ class AmpereCommand(
                     projectDirPath = projectDirPath,
                     agentScope = agentScope,
                     completionManifestSink = manifestSink::record,
+                    // AMPR-402: a door and a knowledge store per spawned agent, so the run's
+                    // telemetry is persisted and Pulse can close the loop by storing what the
+                    // run learned. Without both, Pulse builds learnings and stores none.
+                    eventApiFactory = eventApiFactory,
+                    knowledgeRepository = knowledgeRepository,
                 )
                 val shutdownHook = ArcShutdownHook(cancelRun = runtime::cancel).install()
 
@@ -767,6 +779,8 @@ class AmpereCommand(
                             agentScope = agentScope,
                             manifestSink = context.completionManifestSink,
                             workspace = context.workspace,
+                            eventApiFactory = context.environmentService::createEventApi,
+                            knowledgeRepository = context.knowledgeRepository,
                         )
                         isOneShot = true
                     } else {
@@ -845,6 +859,8 @@ class AmpereCommand(
         agentScope: CoroutineScope,
         manifestSink: CompletionManifestSink,
         workspace: ExecutionWorkspace,
+        eventApiFactory: (AgentId) -> AgentEventApi,
+        knowledgeRepository: KnowledgeRepository,
     ) {
         // AMPR-300: the run is confined to the CLI's explicitly resolved workspace, not the CWD.
         val projectDirPath = workspace.baseDirectory
@@ -853,6 +869,9 @@ class AmpereCommand(
             projectDirPath = projectDirPath,
             agentScope = agentScope,
             completionManifestSink = manifestSink::record,
+            // AMPR-402: see the TUI path above — both are needed for Pulse to store anything.
+            eventApiFactory = eventApiFactory,
+            knowledgeRepository = knowledgeRepository,
         )
         val shutdownHook = ArcShutdownHook(cancelRun = runtime::cancel).install()
 

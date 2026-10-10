@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.emission.Emission
+import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
 import link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine
 import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceState
@@ -610,6 +611,12 @@ class ArcSession(
                 create
             }
 
+            // Long-term memory for the agents a run spawns (AMPR-402), over the same database as
+            // everything else here: Flow recalls prior runs from it and Pulse writes this run's
+            // learnings into it. No driver, so `findSimilarKnowledge` uses its LIKE fallback
+            // rather than FTS — the session holds a `Database`, not the driver behind it.
+            val knowledgeRepository = database?.let { KnowledgeRepositoryImpl(it) }
+
             // The relay's routing events go through the session's door, under the run they
             // belong to; silent without one.
             val onDevice = engine?.let {
@@ -632,6 +639,7 @@ class ArcSession(
                     upstreamLlmClient = onDevice?.client,
                     upstreamDecisionClient = decision,
                     eventApiFactory = eventApiFactory,
+                    knowledgeRepository = knowledgeRepository,
                     clock = clock,
                     completionManifestSink = manifestSink?.let { it::record },
                 ),
