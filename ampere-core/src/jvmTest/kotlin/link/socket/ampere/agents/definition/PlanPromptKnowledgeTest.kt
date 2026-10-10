@@ -48,7 +48,9 @@ import link.socket.ampere.domain.llm.LlmProvider
  * for the model, through the [LlmProvider] seam, and assert the recalled entry is in it.
  *
  * The re-plan lives in `SparkBasedAgent.runSubPlanForTask` since AMPR-396 took it out of
- * `runLLMToExecuteTask`, which now dispatches the step it was handed and makes no model call.
+ * `runLLMToExecuteTask`, which now dispatches the step it was handed rather than planning
+ * again (a step that nominates no tool is carried out by one EXECUTE call — AMPR-407 — which
+ * is why the sub-plan tests below count two calls and read the first).
  *
  * The last two pin the other half of the contract: when Recall finds nothing, the prompt is
  * byte-for-byte the one `PlanGenerator` built before this change.
@@ -137,7 +139,7 @@ class PlanPromptKnowledgeTest {
             outcome is Outcome.Success,
             "the tool-less step should succeed; got ${outcome::class.simpleName}",
         )
-        val prompt = assertSinglePrompt()
+        val prompt = assertPlanningPromptOf(expectedCalls = 2)
         assertTrue(
             prompt.contains("Approach: $STORED_APPROACH"),
             "the sub-plan's prompt should carry the recalled entry's approach; got:\n$prompt",
@@ -160,7 +162,7 @@ class PlanPromptKnowledgeTest {
             outcome is Outcome.Success,
             "the tool-less step should succeed; got ${outcome::class.simpleName}",
         )
-        val prompt = assertSinglePrompt()
+        val prompt = assertPlanningPromptOf(expectedCalls = 2)
         assertTrue(
             prompt.contains("Past Knowledge:\nNo relevant past knowledge available.\n\n"),
             "the no-knowledge block should render exactly as before; got:\n$prompt",
@@ -198,8 +200,9 @@ class PlanPromptKnowledgeTest {
     // ==================== Fixture ====================
 
     /**
-     * Returns a plan with a single tool-less step, so execution routes nothing and the only
-     * model call a test sees is the planning call itself.
+     * Returns a plan with a single tool-less step, so execution dispatches no tool. Since
+     * AMPR-407 such a step is still carried out by one model call of its own, which this
+     * same provider answers — so a cycle that executes its plan sees two calls, not one.
      *
      * `toolToUse` is omitted entirely. AMPR-396 made `"toolToUse": null` read as a tool-less
      * step too (`PlanGenerator.stringOrNull` rejects `JsonNull`, whose `content` is the string
@@ -274,6 +277,22 @@ class PlanPromptKnowledgeTest {
     private fun assertSinglePrompt(): String {
         assertEquals(1, prompts.size, "expected exactly one model call, got: $prompts")
         return prompts.single().substringAfterLast("\n\nUser: ")
+    }
+
+    /**
+     * The planning prompt of a cycle that also *executed* the plan it generated.
+     *
+     * The plan call comes first, and since AMPR-407 each tool-less step the plan produced
+     * makes one EXECUTE call of its own after it — so a one-step sub-plan is two calls, not
+     * one, and the planning prompt is the first.
+     */
+    private fun assertPlanningPromptOf(expectedCalls: Int): String {
+        assertEquals(
+            expectedCalls,
+            prompts.size,
+            "expected one planning call plus one per reasoning step, got: $prompts",
+        )
+        return prompts.first().substringAfterLast("\n\nUser: ")
     }
 
     private class FakeAIConfiguration : AIConfiguration {

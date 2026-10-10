@@ -7,6 +7,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -18,6 +19,7 @@ import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.cognition.FileAccessScope
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.Task
@@ -62,7 +64,36 @@ class SchemaParameterStrategyTest {
     }
 
     @Test
-    fun `the prompt renders prior results the request carries`() {
+    fun `the prompt renders what the earlier steps produced`() {
+        val prompt = strategy.buildPrompt(
+            TOOL,
+            request(
+                priorResults = listOf(
+                    StepOutcome.Success(
+                        id = "step-1",
+                        stepDescription = "list the mailboxes",
+                        startTimestamp = Instant.fromEpochSeconds(0),
+                        endTimestamp = Instant.fromEpochSeconds(1),
+                        details = "found: inbox, archive",
+                    ),
+                ),
+            ),
+            "Find last quarter's report",
+        )
+
+        // AMPR-412 (H17): the same block every hand-written strategy renders.
+        assertTrue("## Results of earlier steps" in prompt)
+        assertTrue("Results of the steps already executed in this plan" in prompt)
+        assertTrue("list the mailboxes" in prompt)
+        assertTrue("found: inbox, archive" in prompt)
+        assertTrue(
+            prompt.indexOf("found: inbox, archive") < prompt.indexOf("## Arguments"),
+            "the results sit inside the context, before the arguments to fill",
+        )
+    }
+
+    @Test
+    fun `the prompt renders what Recall found`() {
         val prompt = strategy.buildPrompt(
             TOOL,
             request(
@@ -78,15 +109,16 @@ class SchemaParameterStrategyTest {
             "Find last quarter's report",
         )
 
-        assertTrue("## Prior results and recalled context" in prompt)
+        assertTrue("## Recalled context" in prompt)
         assertTrue("listed the mailboxes — the archive mailbox is empty" in prompt)
     }
 
     @Test
-    fun `the prior results section is absent when there are none`() {
+    fun `the earlier-steps and recalled sections are absent when there is nothing to show`() {
         val prompt = strategy.buildPrompt(TOOL, request(), "Find last quarter's report")
 
-        assertTrue("## Prior results and recalled context" !in prompt)
+        assertTrue("## Results of earlier steps" !in prompt)
+        assertTrue("## Recalled context" !in prompt)
     }
 
     @Test
@@ -190,6 +222,7 @@ class SchemaParameterStrategyTest {
 
     private fun request(
         knowledge: List<Knowledge> = emptyList(),
+        priorResults: List<StepOutcome> = emptyList(),
     ): ExecutionRequest<ExecutionContext.NoChanges> {
         val now = Clock.System.now()
         return ExecutionRequest(
@@ -219,6 +252,7 @@ class SchemaParameterStrategyTest {
             constraints = ExecutionConstraints(requireTests = false, requireLinting = false),
             runId = "arc-run-1",
             fileAccessScope = FileAccessScope.Permissive,
+            priorResults = priorResults,
         )
     }
 
