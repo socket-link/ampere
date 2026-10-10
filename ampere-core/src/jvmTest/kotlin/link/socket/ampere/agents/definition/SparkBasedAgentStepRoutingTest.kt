@@ -23,16 +23,21 @@ import link.socket.ampere.agents.execution.tools.Tool
 
 /**
  * Exercises the AMPR-163 Task 5 routing contract on
- * [SparkBasedAgent.runLLMToExecuteTask]: plan steps dispatch strictly by
+ * [SparkBasedAgent.runLLMToExecuteTask]: a plan step dispatches strictly by
  * `Task.CodeChange.toolId` into the agent's `effectiveTools`, with no
  * keyword-routing fallback when the tool id is missing or unknown.
  * (AMPR-400 moved the lookup set from `requiredTools` to the spark-narrowed
  * `effectiveTools`; the git tools these cases nominate are permitted by the
  * `role-code` fixture, so the routing contract they pin is unchanged.)
  *
- * The test wires a mock reasoning instance so it can produce arbitrary
- * plans and observe tool invocations without standing up a real LLM or
- * git workspace.
+ * Since AMPR-396 the step handed to `runLLMToExecuteTask` is the step that
+ * gets dispatched — the method does not re-plan it first — so every mock
+ * reasoning instance here refuses planning outright. Re-planning is the
+ * separate, opt-in [SparkBasedAgent.runSubPlanForTask] sub-cycle, covered by
+ * [SparkBasedAgentPlanStepDispatchTest].
+ *
+ * The test wires a mock reasoning instance so it can observe tool invocations
+ * without standing up a real LLM or git workspace.
  */
 class SparkBasedAgentStepRoutingTest {
 
@@ -77,16 +82,10 @@ class SparkBasedAgentStepRoutingTest {
         )
 
     @Test
-    fun `plan step nominating an available tool invokes that tool exactly once`() {
+    fun `a step nominating an available tool invokes that tool exactly once`() {
         val recorder = RecordingTool(id = "git_commit")
-        val plan = Plan.ForTask(
-            task = parentTask(),
-            tasks = listOf(planStep("step-1-parent-task", "commit changes", toolId = "git_commit")),
-            estimatedComplexity = 1,
-            expectations = Expectations.blank,
-        )
         val reasoning = AgentReasoning.createForTesting(executorId = "routing-test") {
-            onPlanning { _, _ -> plan }
+            onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, request ->
                 @Suppress("UNCHECKED_CAST")
                 val typed = request as ExecutionRequest<ExecutionContext.NoChanges>
@@ -100,7 +99,9 @@ class SparkBasedAgentStepRoutingTest {
             reasoningOverride = reasoning,
         )
 
-        val outcome = agent.runLLMToExecuteTask(parentTask())
+        val outcome = agent.runLLMToExecuteTask(
+            planStep("step-1-parent-task", "commit changes", toolId = "git_commit"),
+        )
 
         assertEquals(1, recorder.invocations.size, "the nominated tool should be invoked exactly once")
         assertTrue(
@@ -110,16 +111,10 @@ class SparkBasedAgentStepRoutingTest {
     }
 
     @Test
-    fun `plan step nominating an unknown toolId fails fast with a clear error`() {
+    fun `a step nominating an unknown toolId fails fast with a clear error`() {
         val recorder = RecordingTool(id = "git_commit")
-        val plan = Plan.ForTask(
-            task = parentTask(),
-            tasks = listOf(planStep("step-1-parent-task", "stage files", toolId = "git_stage")),
-            estimatedComplexity = 1,
-            expectations = Expectations.blank,
-        )
         val reasoning = AgentReasoning.createForTesting(executorId = "routing-test") {
-            onPlanning { _, _ -> plan }
+            onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, _ -> error("must not be reached when toolId is unknown") }
         }
         val agent = SparkBasedAgent.Code(
@@ -129,7 +124,9 @@ class SparkBasedAgentStepRoutingTest {
             reasoningOverride = reasoning,
         )
 
-        val outcome = agent.runLLMToExecuteTask(parentTask())
+        val outcome = agent.runLLMToExecuteTask(
+            planStep("step-1-parent-task", "stage files", toolId = "git_stage"),
+        )
 
         assertEquals(0, recorder.invocations.size, "no tool should be invoked on routing failure")
         assertTrue(
@@ -139,16 +136,10 @@ class SparkBasedAgentStepRoutingTest {
     }
 
     @Test
-    fun `plan step with null toolId is treated as a no-op reasoning step`() {
+    fun `a step with null toolId is treated as a no-op reasoning step`() {
         val recorder = RecordingTool(id = "git_commit")
-        val plan = Plan.ForTask(
-            task = parentTask(),
-            tasks = listOf(planStep("step-1-parent-task", "think about it", toolId = null)),
-            estimatedComplexity = 1,
-            expectations = Expectations.blank,
-        )
         val reasoning = AgentReasoning.createForTesting(executorId = "routing-test") {
-            onPlanning { _, _ -> plan }
+            onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, _ -> error("must not be reached when toolId is null") }
         }
         val agent = SparkBasedAgent.Code(
@@ -158,17 +149,19 @@ class SparkBasedAgentStepRoutingTest {
             reasoningOverride = reasoning,
         )
 
-        val outcome = agent.runLLMToExecuteTask(parentTask())
+        val outcome = agent.runLLMToExecuteTask(
+            planStep("step-1-parent-task", "think about it", toolId = null),
+        )
 
         assertEquals(0, recorder.invocations.size, "no-op steps must not invoke any tool")
         assertTrue(
             outcome is Outcome.Success,
-            "a plan of pure-reasoning steps should still succeed",
+            "a pure-reasoning step should still succeed",
         )
     }
 
     @Test
-    fun `multiple steps dispatch to their respective tools in order`() {
+    fun `executePlan dispatches every step to its own tool exactly once`() {
         val first = RecordingTool(id = "git_stage")
         val second = RecordingTool(id = "git_commit")
         val plan = Plan.ForTask(
@@ -181,7 +174,7 @@ class SparkBasedAgentStepRoutingTest {
             expectations = Expectations.blank,
         )
         val reasoning = AgentReasoning.createForTesting(executorId = "routing-test") {
-            onPlanning { _, _ -> plan }
+            onPlanning { _, _ -> error("executePlan must not re-plan its own steps (AMPR-396)") }
             onToolExecution { tool, request ->
                 val recorder = when (tool.id) {
                     first.id -> first
@@ -201,9 +194,51 @@ class SparkBasedAgentStepRoutingTest {
             reasoningOverride = reasoning,
         )
 
-        agent.runLLMToExecuteTask(parentTask())
+        val outcome = runBlocking { agent.executePlan(plan) }
 
         assertEquals(1, first.invocations.size, "git_stage should fire once")
         assertEquals(1, second.invocations.size, "git_commit should fire once")
+        assertTrue(
+            outcome is Outcome.Success,
+            "both steps succeeded, so the plan should; got ${outcome::class.simpleName}",
+        )
+    }
+
+    @Test
+    fun `runSubPlanForTask is the opt-in cycle that re-plans a coarse task`() {
+        val recorder = RecordingTool(id = "git_commit")
+        val subPlan = Plan.ForTask(
+            task = parentTask(),
+            tasks = listOf(planStep("step-1-parent-task", "commit changes", toolId = "git_commit")),
+            estimatedComplexity = 1,
+            expectations = Expectations.blank,
+        )
+        var planningCalls = 0
+        val reasoning = AgentReasoning.createForTesting(executorId = "routing-test") {
+            onPlanning { _, _ ->
+                planningCalls++
+                subPlan
+            }
+            onToolExecution { _, request ->
+                @Suppress("UNCHECKED_CAST")
+                val typed = request as ExecutionRequest<ExecutionContext.NoChanges>
+                runBlocking { recorder.tool.execute(typed) } as ExecutionOutcome
+            }
+        }
+        val agent = SparkBasedAgent.Code(
+            sparkRegistry = phaseSparkLibrary,
+            agentId = "routing-agent",
+            tools = setOf(recorder.tool),
+            reasoningOverride = reasoning,
+        )
+
+        val outcome = agent.runSubPlanForTask(parentTask())
+
+        assertEquals(1, planningCalls, "the opt-in sub-cycle plans exactly once")
+        assertEquals(1, recorder.invocations.size, "the sub-plan's step should be dispatched")
+        assertTrue(
+            outcome is Outcome.Success,
+            "the sub-plan succeeded, so the outcome should; got ${outcome::class.simpleName}",
+        )
     }
 }

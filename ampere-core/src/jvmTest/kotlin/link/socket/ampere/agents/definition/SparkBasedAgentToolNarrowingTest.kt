@@ -43,7 +43,12 @@ import link.socket.ampere.domain.llm.LlmProvider
  * There is deliberately *one* lookup set behind dispatch, so a tool the stack
  * withdrew and a tool that never existed fail on the same line with the same
  * message. The tests below assert the observable half of that (failure outcome,
- * nothing invoked, the plan stops there); the single-path property is structural.
+ * nothing invoked); the single-path property is structural.
+ *
+ * Since AMPR-396 the dispatch cases hand `runLLMToExecuteTask` the step itself
+ * rather than a task it re-plans, so their mock reasoning refuses planning. What
+ * a denied step does to the *rest* of a plan moved with it — see
+ * `a denied step fails the plan without stopping its later steps`.
  */
 class SparkBasedAgentToolNarrowingTest {
 
@@ -117,6 +122,19 @@ class SparkBasedAgentToolNarrowingTest {
             id = "parent-task",
             status = TaskStatus.Pending,
             description = "do the work",
+        )
+
+    /**
+     * One plan step nominating [toolId]. Since AMPR-396 this is what
+     * `runLLMToExecuteTask` is handed and what it dispatches — it no longer
+     * re-plans the task into a sub-plan first.
+     */
+    private fun step(toolId: String?): Task.CodeChange =
+        Task.CodeChange(
+            id = "step-1-parent-task",
+            status = TaskStatus.Pending,
+            description = "act 0",
+            toolId = toolId,
         )
 
     private fun planOf(vararg toolIds: String?): Plan.ForTask =
@@ -228,7 +246,7 @@ class SparkBasedAgentToolNarrowingTest {
         val alpha = RecordingTool(ALPHA)
         val beta = RecordingTool(BETA)
         val reasoning = AgentReasoning.createForTesting(executorId = "narrowing-test") {
-            onPlanning { _, _ -> planOf(BETA, ALPHA) }
+            onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, _ -> error("no tool should be reached once a step is denied") }
         }
         val agent = agentWith(
@@ -237,25 +255,62 @@ class SparkBasedAgentToolNarrowingTest {
             reasoningOverride = reasoning,
         )
 
-        val outcome = agent.runLLMToExecuteTask(parentTask())
+        val outcome = agent.runLLMToExecuteTask(step(BETA))
 
         assertTrue(
             outcome is Outcome.Failure,
             "a step naming a withdrawn tool should fail the run; got ${outcome::class.simpleName}",
         )
         assertEquals(0, beta.invocations.size, "the withdrawn tool must never be dispatched")
-        assertEquals(
-            0,
-            alpha.invocations.size,
-            "the denial is critical, so the following permitted step is skipped rather than run",
+        assertEquals(0, alpha.invocations.size, "no other tool stands in for the denied one")
+    }
+
+    /**
+     * The denial is per step, and a plan's later steps still run.
+     *
+     * This used to read the other way: [SparkBasedAgent.runLLMToExecuteTask]
+     * re-planned each task into a sub-plan, and `PlanExecutor`'s critical-failure
+     * short-circuit then skipped the rest *of that sub-plan*. It never applied
+     * across a Plan phase plan's own steps — `AutonomousAgent.executePlan` maps
+     * every task eagerly and only its reduce prefers the first non-success — so
+     * the skip was a property of the sub-plan AMPR-396 deleted, not of plan
+     * execution. Pinned here as the behaviour that actually holds; making a
+     * critical step abort the plan is a separate decision, and `Outcome` carries
+     * no criticality at this level to make it on.
+     */
+    @Test
+    fun `a denied step fails the plan without stopping its later steps`() {
+        val alpha = RecordingTool(ALPHA)
+        val beta = RecordingTool(BETA)
+        val reasoning = AgentReasoning.createForTesting(executorId = "narrowing-test") {
+            onPlanning { _, _ -> error("executePlan must not re-plan its own steps (AMPR-396)") }
+            onToolExecution { _, request ->
+                @Suppress("UNCHECKED_CAST")
+                val typed = request as ExecutionRequest<ExecutionContext.NoChanges>
+                runBlocking { alpha.tool.execute(typed) } as ExecutionOutcome
+            }
+        }
+        val agent = agentWith(
+            tools = setOf(alpha.tool, beta.tool),
+            narrowing = setOf(ALPHA),
+            reasoningOverride = reasoning,
         )
+
+        val outcome = runBlocking { agent.executePlan(planOf(BETA, ALPHA)) }
+
+        assertTrue(
+            outcome is Outcome.Failure,
+            "the denied step's failure is the one reported; got ${outcome::class.simpleName}",
+        )
+        assertEquals(0, beta.invocations.size, "the withdrawn tool must never be dispatched")
+        assertEquals(1, alpha.invocations.size, "the permitted step that follows it still runs")
     }
 
     @Test
     fun `the same plan succeeds when no spark withdraws the tool`() {
         val beta = RecordingTool(BETA)
         val reasoning = AgentReasoning.createForTesting(executorId = "narrowing-test") {
-            onPlanning { _, _ -> planOf(BETA) }
+            onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, request ->
                 @Suppress("UNCHECKED_CAST")
                 val typed = request as ExecutionRequest<ExecutionContext.NoChanges>
@@ -268,7 +323,7 @@ class SparkBasedAgentToolNarrowingTest {
             reasoningOverride = reasoning,
         )
 
-        val outcome = agent.runLLMToExecuteTask(parentTask())
+        val outcome = agent.runLLMToExecuteTask(step(BETA))
 
         assertEquals(
             1,
@@ -315,7 +370,7 @@ class SparkBasedAgentToolNarrowingTest {
     fun `a step nominating a tool the agent never had still fails the same way`() {
         val alpha = RecordingTool(ALPHA)
         val reasoning = AgentReasoning.createForTesting(executorId = "narrowing-test") {
-            onPlanning { _, _ -> planOf("tool_that_never_existed") }
+            onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, _ -> error("an unknown tool id must not reach dispatch") }
         }
         val agent = agentWith(
@@ -324,7 +379,7 @@ class SparkBasedAgentToolNarrowingTest {
             reasoningOverride = reasoning,
         )
 
-        val outcome = agent.runLLMToExecuteTask(parentTask())
+        val outcome = agent.runLLMToExecuteTask(step("tool_that_never_existed"))
 
         assertTrue(
             outcome is Outcome.Failure,
@@ -337,7 +392,7 @@ class SparkBasedAgentToolNarrowingTest {
     fun `a narrowing spark does not disturb a tool-less reasoning step`() {
         val alpha = RecordingTool(ALPHA)
         val reasoning = AgentReasoning.createForTesting(executorId = "narrowing-test") {
-            onPlanning { _, _ -> planOf(null) }
+            onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, _ -> error("a null toolId invokes nothing") }
         }
         val agent = agentWith(
@@ -346,7 +401,7 @@ class SparkBasedAgentToolNarrowingTest {
             reasoningOverride = reasoning,
         )
 
-        val outcome = agent.runLLMToExecuteTask(parentTask())
+        val outcome = agent.runLLMToExecuteTask(step(null))
 
         assertTrue(
             outcome is Outcome.Success,

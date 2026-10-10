@@ -1,8 +1,10 @@
 package link.socket.ampere.agents.domain.reasoning
 
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.expectation.Expectations
@@ -230,9 +232,9 @@ class PlanGenerator(
         // Convert steps into Task objects
         val planTasks = stepsArray.mapIndexed { index, stepElement ->
             val stepObj = stepElement.jsonObject
-            val description = stepObj["description"]?.jsonPrimitive?.content
+            val description = stepObj.stringOrNull("description")
                 ?: "Step ${index + 1}"
-            val toolToUse = stepObj["toolToUse"]?.jsonPrimitive?.content
+            val toolToUse = stepObj.stringOrNull("toolToUse")
 
             taskFactory.create(
                 id = "step-${index + 1}-${originalTask.id}",
@@ -278,6 +280,23 @@ class PlanGenerator(
             expectations = Expectations.blank,
         )
     }
+
+    /**
+     * The string at [key], or null when the key is absent, its value is JSON
+     * `null`, or the value is blank or the four characters `null`.
+     *
+     * `jsonPrimitive.content` cannot be used directly here: [JsonNull] *is* a
+     * [JsonPrimitive], and its `content` is the string `"null"`. A step the
+     * model wrote as `"toolToUse": null` — the shape the planning prompt asks
+     * for — would otherwise nominate a tool literally named `null` and fail
+     * the executor's strict tool-id dispatch, rather than reading as the
+     * tool-less reasoning step it is.
+     */
+    private fun JsonObject.stringOrNull(key: String): String? =
+        (this[key] as? JsonPrimitive)
+            ?.takeUnless { it is JsonNull }
+            ?.content
+            ?.takeUnless { it.isBlank() || it == "null" }
 
     companion object {
         private const val PLANNING_SYSTEM_MESSAGE =

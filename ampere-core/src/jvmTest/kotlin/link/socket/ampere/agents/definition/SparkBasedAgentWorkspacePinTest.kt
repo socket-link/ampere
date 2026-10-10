@@ -14,10 +14,8 @@ import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.cognition.sparks.DefaultPhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
-import link.socket.ampere.agents.domain.expectation.Expectations
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.reasoning.AgentReasoning
-import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
@@ -48,11 +46,11 @@ class SparkBasedAgentWorkspacePinTest {
             sparkRegistry = phaseSparkLibrary,
             agentId = "pinned-agent",
             tools = setOf(recordingTool(seen)),
-            reasoningOverride = reasoningNominating("write_code_file", seen),
+            reasoningOverride = recordingReasoning(seen),
             workspace = pinned,
         )
 
-        agent.runLLMToExecuteTask(parentTask())
+        agent.runLLMToExecuteTask(planStep("write_code_file"))
 
         assertEquals(pinned, seen.single().workspace)
         assertEquals(pinned, agent.workspace)
@@ -65,10 +63,10 @@ class SparkBasedAgentWorkspacePinTest {
             sparkRegistry = phaseSparkLibrary,
             agentId = "unpinned-agent",
             tools = setOf(recordingTool(seen)),
-            reasoningOverride = reasoningNominating("write_code_file", seen),
+            reasoningOverride = recordingReasoning(seen),
         )
 
-        agent.runLLMToExecuteTask(parentTask())
+        agent.runLLMToExecuteTask(planStep("write_code_file"))
 
         assertNull(seen.single().workspace)
         assertNull(agent.workspace)
@@ -115,8 +113,13 @@ class SparkBasedAgentWorkspacePinTest {
         }
     }
 
-    private fun parentTask(): Task.CodeChange =
-        Task.CodeChange(id = "parent-task", status = TaskStatus.Pending, description = "do the work")
+    private fun planStep(toolId: String): Task.CodeChange =
+        Task.CodeChange(
+            id = "step-1-parent-task",
+            status = TaskStatus.Pending,
+            description = "write the file",
+            toolId = toolId,
+        )
 
     private fun recordingTool(seen: MutableList<ExecutionRequest<*>>): FunctionTool<ExecutionContext.NoChanges> =
         FunctionTool(
@@ -137,23 +140,15 @@ class SparkBasedAgentWorkspacePinTest {
             },
         )
 
-    /** Mock reasoning that plans one step nominating [toolId] and records the request handed to it. */
-    private fun reasoningNominating(toolId: String, seen: MutableList<ExecutionRequest<*>>): AgentReasoning {
-        val plan = Plan.ForTask(
-            task = parentTask(),
-            tasks = listOf(
-                Task.CodeChange(
-                    id = "step-1-parent-task",
-                    status = TaskStatus.Pending,
-                    description = "write the file",
-                    toolId = toolId,
-                ),
-            ),
-            estimatedComplexity = 1,
-            expectations = Expectations.blank,
-        )
-        return AgentReasoning.createForTesting(executorId = "pin-test") {
-            onPlanning { _, _ -> plan }
+    /**
+     * Mock reasoning that records the request each tool dispatch is handed.
+     *
+     * Planning is refused: since AMPR-396 executing a step dispatches that
+     * step, so nothing on this path should reach the Plan phase.
+     */
+    private fun recordingReasoning(seen: MutableList<ExecutionRequest<*>>): AgentReasoning =
+        AgentReasoning.createForTesting(executorId = "pin-test") {
+            onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, request ->
                 seen += request
                 ExecutionOutcome.NoChanges.Success(
@@ -166,5 +161,4 @@ class SparkBasedAgentWorkspacePinTest {
                 )
             }
         }
-    }
 }
