@@ -118,6 +118,12 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
     companion object {
         // Placeholder for uninitialized state - will be replaced on first access
         private val uninitializedSparkStack = SparkStack.withAffinity(CognitiveAffinity.INTEGRATIVE)
+
+        /**
+         * How long [runtimeLoop] waits between iterations, whether it ran a
+         * cognitive cycle or idled for want of an assignment.
+         */
+        private val RUNTIME_LOOP_INTERVAL = 1.seconds
     }
 
     /**
@@ -348,9 +354,26 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
 
     // ==================== Agent Runtime ====================
 
+    /**
+     * The agent's cognitive cycle, one PROPEL pass per iteration over whatever task
+     * the agent has been assigned.
+     *
+     * An iteration only runs when there *is* an assignment: an agent whose current
+     * task is [Task.Blank] has nothing to think about, so it idles without spending
+     * a model call and waits for the next assignment to arrive through
+     * [rememberNewTask]. Each iteration finishes the task it ran, because
+     * [executePlan] records every plan step as the current task and the plan's last
+     * step must not become the next iteration's assignment.
+     */
     protected suspend fun runtimeLoop() {
         while (agentIsRunning) {
             val currentTask = getCurrentState().getCurrentMemory().task
+
+            if (currentTask is Task.Blank) {
+                // No assignment: idle rather than reason about nothing.
+                delay(RUNTIME_LOOP_INTERVAL)
+                continue
+            }
 
             val previousIdea = getCurrentState().getCurrentMemory().idea
 
@@ -406,7 +429,15 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
                 rememberNewIdea(nextIdea)
             }
 
-            delay(1.seconds)
+            // Close out the assignment. Without this the current task is whatever
+            // plan step [executePlan] recorded last, and the next iteration would
+            // read the plan's own output back as its assignment and re-plan it.
+            finishCurrentTask()
+            // [finishCurrentTask] releases the plan step's spark; the assignment's
+            // own spark, pushed when it was remembered, is ours to release.
+            removeTaskSpark(currentTask.id)
+
+            delay(RUNTIME_LOOP_INTERVAL)
         }
     }
 
