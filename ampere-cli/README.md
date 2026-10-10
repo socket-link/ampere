@@ -162,6 +162,30 @@ System-wide status overview:
 ampere status
 ```
 
+### Reconcile Command
+
+Recover from an interrupted supervisor. Reaps the agent process groups a killed
+supervisor left running, repairs the git worktrees and branches those agents were
+writing to, releases the work-source claims no timeout will ever clear, and reports
+anything only a person can decide about. Safe to run at any time, including over the
+top of an interrupted run of itself.
+
+```bash
+ampere reconcile                                       # Journal, worktrees, branches
+ampere reconcile --repository ~/code/ampere            # Repair a specific checkout
+ampere reconcile --skip-worktrees                      # Claims only, no git surgery
+ampere reconcile --work-source https://mcp.example/sse # Release stale claims too
+```
+
+A deletion is authorised by the supervisor's journal, never by the flags: the pass
+only touches a worktree path or a branch name that a supervisor recorded *before*
+creating it, so pointing `--repository` at an unrelated checkout finds nothing to do.
+Uncommitted and unpushed work is held and reported, never deleted.
+
+Releasing a claim is a write to the issue tracker, so `--work-source` needs a token
+in `$AMPERE_WORK_SOURCE_TOKEN`. Without it the pass still runs every local step and
+reports the claims it could not reach.
+
 ### Outcomes Command
 
 View execution outcomes and accumulated experience:

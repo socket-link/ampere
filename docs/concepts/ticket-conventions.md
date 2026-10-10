@@ -6,7 +6,7 @@ tracked_sources:
   - ampere-work-linear/src/commonMain/kotlin/link/socket/ampere/work/linear/SupervisoryComment.kt
   - ampere-work-linear/src/commonMain/kotlin/link/socket/ampere/work/linear/SupervisoryLifecycle.kt
 related: [ChassisSpi, LifecycleTypes, DomainCanon]
-last_verified: 2026-10-04
+last_verified: 2026-10-09
 ---
 
 # Ticket Conventions
@@ -22,7 +22,7 @@ format of each piece. Seven conventions:
 | M2 | Wave membership | the label `wave:<id>` |
 | M3 | Verdict-gate marker | the label `gate:awaiting-verdict` |
 | M4 | Verification-manifest pointer | **nowhere — a deliberate non-convention** |
-| M5 | Claim-owner identity | a comment `claim:<issue>:<instance-id>` |
+| M5 | Claim-owner identity | a comment `claim:<issue>:<instance-id>`, retracted by `release:<issue>:<instance-id>` |
 | M6 | Escalation payload | a comment `esc:<issue>:<instance-id>` + blank line + body, with `gate:escalated` |
 | — | Model + effort recommendation | a bolded first line in the description |
 
@@ -70,7 +70,7 @@ agent or human that will not.
 ## Where it lives
 
 - `docs/templates/ticket-description.md` — the template to copy. The section order there is load-bearing (see *Invariants*).
-- `ampere-work-linear/.../SupervisoryComment.kt` — `SupervisoryComment.Claim` / `.Escalation`, their `render`/`parse`, and the `claim:` / `esc:` prefix constants. The authority for M5 and M6.
+- `ampere-work-linear/.../SupervisoryComment.kt` — `SupervisoryComment.Claim` / `.Release` / `.Escalation`, their `render`/`parse`, and the `claim:` / `release:` / `esc:` prefix constants. The authority for M5 and M6.
 - `ampere-work-linear/.../SupervisoryLifecycle.kt` — `WorkSourceLabels.WAVE_PREFIX`, `GATE_AWAITING_VERDICT`, `GATE_ESCALATED`, `GATES`, and `SupervisoryStatusMapping`. The authority for M2 and M3.
 - `ampere-work-linear/.../WorkSourceIssueSource.kt` — `readyQueueRule`, the predicate list a ticket has to satisfy to be offered.
 - `.ampere/verify.yml` — where the verification manifest *will* live, per decision D3 on AMPR-286. **No such file exists in this repo yet**, and M4 is the convention that no ticket ever points at it.
@@ -118,15 +118,26 @@ reinvents a `verify:` field: a manifest pointer on a ticket would be a second
 copy of a fact the repo already states, and the two would drift the first time
 a branch changed its own gates.
 
-### M5 — `claim:`
+### M5 — `claim:` and `release:`
 
 ```
 claim:AMPR-305:supervisor-7f3a
+release:AMPR-305:supervisor-7f3a
 ```
 
-One header line, three colon-separated fields, no body. Posted **before** the
-state transition, so the server's timestamp on it is the claim's position in
-the total order; earliest timestamp wins, comment id breaks ties.
+One header line, three colon-separated fields, no body, either form. A claim is
+posted **before** the state transition, so the server's timestamp on it is the
+claim's position in the total order; earliest timestamp wins, comment id breaks
+ties.
+
+A claim is **live** until a `release:` naming the same issue and instance follows
+it in that order, and only live claims arbitrate. The retraction exists because
+comments are append-only: without it a supervisor that died holding a ticket
+would stay the earliest claimant forever, and the ticket the AMPR-310
+reconciliation pass just put back in the queue could never be claimed again.
+Two writers post one: the reconciliation pass, for a dead instance's claim, and
+a losing claimant for its own (added in AMPR-310 — a losing claim left live is
+promoted to holder the moment the winner's is released).
 
 ### M6 — `esc:`
 
@@ -262,7 +273,8 @@ appear under two repos and mean two different sets of files.
 - **A stop never tidies away another stop.** Moving to `VERDICT_REQUESTED` or `ESCALATED` removes no existing gate label, so a ticket can legitimately carry both; the escalation is the one a human has to act on first.
 - **`gate:escalated` and an `esc:` comment are written together.** `SupervisoryStatusMapping.PROTOCOL_STATUSES` names `ESCALATED` and `CLAIMED` as protocols rather than writes, and `LinearWorkSource.markStatus` refuses them, precisely so half an expression cannot be written. The label alone hands someone a stopped ticket and no reason.
 - **An issue identifier and an instance id carry no colon and no newline.** Both are enforced in code (`SupervisoryComment.validateIssue`, `SupervisorInstanceId.init`), because an ambiguous claim comment is a lost race that reads as a won one.
-- **`claim:` comments never carry a body.** `SupervisoryComment.parse` returns null for one that does; a malformed claim that parsed anyway would enter arbitration with a guessed field.
+- **`claim:` and `release:` comments never carry a body.** `SupervisoryComment.parse` returns null for one that does; a malformed claim that parsed anyway would enter arbitration with a guessed field, and a misread release retracts a claim nobody retracted.
+- **A `release:` retracts only its own instance's claims, and only the ones it follows.** Scoped per instance because a release says "*my* claim is off" — a race loser tidying up must not free the winner's ticket — and ordered because a re-claim posted after a release is live again.
 - **No ticket field points at `.ampere/verify.yml`.** M4.
 - **Every convention has to survive a public mirror.** Each ticket and comment syncs to a public GitHub issue (verified). The formats here carry no prose the framework composes, and an escalation body is screened against `WorkSourceIssueSink.forbiddenTerms` before it leaves.
 - **Where this file and the adapter disagree, the adapter is right and this file is a bug.** The prefixes and labels are a wire format between supervisor processes; a rename makes every in-flight claim read as "nobody claimed this" rather than as a parse error.
@@ -273,6 +285,7 @@ appear under two repos and mean two different sets of files.
 - **Declare scope for a ticket you are about to file** — list the files you expect to write, not the module they live in. If you cannot name them, the ticket is a recon ticket and its scope is its deliverable (`.context/` or a doc path), not the code it is about.
 - **Widen a scope mid-flight** — edit the block on the ticket, then continue. If the ticket is already dispatched, that edit is also the signal to whoever is holding an overlapping one.
 - **Mark a verdict gate** — add `gate:awaiting-verdict`; move the ticket to the review state. Leave the wave label alone.
+- **Give a ticket back** — post `release:<issue>:<instance>` and then revert the state to the queued one, in that order: the comment is the durable half, so a process killed in between finds its own release on the next run and finishes the revert rather than commenting twice. `LinearWorkSource.release` is the whole protocol.
 - **Escalate** — post `esc:<issue>:<instance>` with a body that answers *what failed*, *what was tried*, *what decision is needed*, and add `gate:escalated`. Do not change the state: a ticket escalates from wherever it stopped, and overwriting the state destroys the record of where that was.
 - **Check whether a ticket is ready** — `wave:` label present, state is the queued one, neither member of `WorkSourceLabels.GATES` present, no open blocking relation. The first two push down to the server; the rest are client-side.
 

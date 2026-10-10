@@ -154,6 +154,7 @@ fun main(args: Array<String>) {
                 IssuesCommand(),
                 RespondCommand(),
                 WorkCommand { context },
+                ReconcileCommand { context },
                 TestCommand(),
                 DemoCommand(),
             )

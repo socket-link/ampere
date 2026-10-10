@@ -104,6 +104,7 @@ unreleased version, so the number to release is the one already in
 # Other CLI commands
 ./ampere-cli/ampere thread list                        # View conversation threads
 ./ampere-cli/ampere status                             # System status dashboard
+./ampere-cli/ampere reconcile                          # Recover from an interrupted supervisor
 ./ampere-cli/ampere outcomes stats                     # Execution outcome stats
 ./ampere-cli/ampere issues create -f epic.json         # Create issues from file
 ./ampere-cli/ampere test agent                         # Headless agent test

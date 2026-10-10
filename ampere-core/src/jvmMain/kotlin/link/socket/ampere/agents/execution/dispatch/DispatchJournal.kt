@@ -101,7 +101,17 @@ class DispatchJournal private constructor(
      */
     private val lines = mutableListOf<String>()
 
-    private var cleanShutdownMarked = false
+    /**
+     * The terminal marker already on this journal, named for an error message, or
+     * null while the journal is still open.
+     *
+     * One field rather than two booleans because the two markers are mutually
+     * exclusive by construction: a journal is sealed either by the supervisor
+     * exiting gracefully or by a reconciliation pass settling what it left, and the
+     * invariant that matters to a reader — *the marker is the last line* — is the
+     * same for both.
+     */
+    private var sealedBy: String? = null
 
     /**
      * Quarantined lines this journal has already announced.
@@ -133,8 +143,8 @@ class DispatchJournal private constructor(
                 "'${record.supervisorInstanceId}', but this journal is '$instanceId'"
         }
         mutex.withLock {
-            check(!cleanShutdownMarked) {
-                "Journal '$instanceId' is closed: a record cannot follow its clean-shutdown marker"
+            check(sealedBy == null) {
+                "Journal '$instanceId' is closed: a record cannot follow its $sealedBy"
             }
             commit(JSON.encodeToString(JournalLine.serializer(), JournalLine.Dispatch(record)))
             // Published under the lock so the event order on the bus is the line order
@@ -164,9 +174,12 @@ class DispatchJournal private constructor(
      */
     suspend fun markCleanShutdown() {
         mutex.withLock {
-            if (cleanShutdownMarked) return@withLock
+            if (sealedBy == CLEAN_SHUTDOWN_MARKER) return@withLock
+            check(sealedBy == null) {
+                "Journal '$instanceId' is already closed by its $sealedBy"
+            }
             commit(JSON.encodeToString(JournalLine.serializer(), JournalLine.CleanShutdown(now())))
-            cleanShutdownMarked = true
+            sealedBy = CLEAN_SHUTDOWN_MARKER
             publish(
                 SupervisorEvent.CleanShutdownMarked(
                     eventId = idGenerator(),
@@ -174,6 +187,66 @@ class DispatchJournal private constructor(
                     timestamp = now(),
                     instanceId = instanceId,
                     dispatchCount = parse(instanceId, lines).latestPerDispatch().size,
+                ),
+            )
+        }
+    }
+
+    /**
+     * Record on **another instance's** journal that this pass has settled what it
+     * left behind, so a later pass stops treating its dispatches as suspect.
+     *
+     * This is step 7 of the ratified reconciliation specification — *write the
+     * reconciliation outcome to the journal* — and it is what makes the pass cheap
+     * to re-run: a marked journal reports no suspects, so a supervisor that
+     * restarts twice does not re-read a dead instance's tickets off the work source
+     * for the rest of time.
+     *
+     * ### Why writing another instance's file is safe here
+     *
+     * The one-writer rule exists because the whole-file rewrite makes two *live*
+     * writers lose each other's records. A journal with no clean-shutdown marker
+     * belongs to a process that is gone — the pass has already proved that by
+     * reaping its process groups — so there is no second writer to lose anything
+     * to. The rewrite preserves the target's quarantined lines byte-for-byte, as it
+     * does for this instance's own.
+     *
+     * Only ever call this after every step for that journal's dispatches has
+     * settled: the marker's whole purpose is to stop the next pass looking, and a
+     * journal marked over the top of held residue hides it.
+     *
+     * @param deadInstanceId The dead supervisor whose journal is being settled.
+     * @throws IllegalArgumentException if [deadInstanceId] is this journal's own — a
+     *   live supervisor cannot be reconciled, and marking its own file would seal
+     *   it against its own next dispatch.
+     * @throws IllegalStateException if that journal already carries a terminal
+     *   marker. A cleanly shut-down supervisor owes nothing, so reconciling it is a
+     *   bug in the caller, not a no-op.
+     */
+    suspend fun markReconciled(deadInstanceId: String, mark: ReconciliationMark) {
+        require(deadInstanceId != instanceId) {
+            "Journal '$deadInstanceId' is this pass's own; a live supervisor's journal is never reconciled"
+        }
+        require(SAFE_INSTANCE_ID.matches(deadInstanceId)) {
+            "Supervisor instance id '$deadInstanceId' is not usable as a file name"
+        }
+        val target = directory.resolve("$deadInstanceId.$EXTENSION")
+        mutex.withLock {
+            val existing = withContext(Dispatchers.IO) { readRawLines(target) }
+            markerOf(parse(deadInstanceId, existing))?.let { marker ->
+                error("Journal '$deadInstanceId' is already closed by its $marker")
+            }
+            val line = JSON.encodeToString(JournalLine.serializer(), JournalLine.Reconciled(mark))
+            withContext(Dispatchers.IO) { writeAtomically(target, deadInstanceId, existing + line) }
+            publish(
+                SupervisorEvent.JournalReconciled(
+                    eventId = idGenerator(),
+                    eventSource = eventSource,
+                    timestamp = now(),
+                    instanceId = deadInstanceId,
+                    reconciledBy = mark.by,
+                    passId = mark.passId,
+                    dispatchCount = mark.dispositions.size,
                 ),
             )
         }
@@ -243,13 +316,21 @@ class DispatchJournal private constructor(
     /** Stage, fsync and rename the journal with [line] added, then record it in memory. */
     private suspend fun commit(line: String) {
         val updated = lines + line
-        withContext(Dispatchers.IO) { writeAtomically(updated) }
+        withContext(Dispatchers.IO) { writeAtomically(file, instanceId, updated) }
         lines += line
     }
 
-    private fun writeAtomically(contents: List<String>) {
+    /**
+     * Write [contents] as [target], staging under [owner]'s temp prefix.
+     *
+     * [owner] is a parameter rather than [instanceId] because [markReconciled]
+     * writes a file this journal does not own: naming the staged file after the
+     * *target* keeps it out of the `*.jsonl` scan and inside the sweep that
+     * reopening that journal would run.
+     */
+    private fun writeAtomically(target: Path, owner: String, contents: List<String>) {
         Files.createDirectories(directory)
-        val staged = Files.createTempFile(directory, tempPrefix(instanceId), TEMP_SUFFIX)
+        val staged = Files.createTempFile(directory, tempPrefix(owner), TEMP_SUFFIX)
         try {
             FileOutputStream(staged.toFile()).use { out ->
                 val writer = out.writer(StandardCharsets.UTF_8).buffered()
@@ -259,7 +340,7 @@ class DispatchJournal private constructor(
                 // the bytes it will point at have reached the device.
                 out.fd.sync()
             }
-            Files.move(staged, file, StandardCopyOption.ATOMIC_MOVE)
+            Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE)
         } catch (e: Throwable) {
             runCatching { Files.deleteIfExists(staged) }
             throw e
@@ -273,6 +354,12 @@ class DispatchJournal private constructor(
 
         /** The journal's file extension; JSON Lines, one record per line. */
         const val EXTENSION: String = "jsonl"
+
+        /** Names the clean-shutdown marker in the errors a sealed journal raises. */
+        internal const val CLEAN_SHUTDOWN_MARKER: String = "clean-shutdown marker"
+
+        /** Names the reconciliation marker in the errors a sealed journal raises. */
+        internal const val RECONCILED_MARKER: String = "reconciliation marker"
 
         /** How much of an unparseable line [JournalRead.quarantined] keeps verbatim. */
         const val MAX_QUARANTINED_CHARS: Int = 512
@@ -330,7 +417,7 @@ class DispatchJournal private constructor(
 
             val journal = DispatchJournal(instanceId, file, eventApi, eventSource, now, idGenerator)
             journal.lines += readRawLines(file)
-            journal.cleanShutdownMarked = parse(instanceId, journal.lines).cleanShutdown
+            journal.sealedBy = markerOf(parse(instanceId, journal.lines))
             return journal
         }
 
@@ -345,6 +432,7 @@ class DispatchJournal private constructor(
             val entries = mutableListOf<DispatchRecord>()
             val quarantined = mutableListOf<QuarantinedLine>()
             var cleanShutdownAt: Instant? = null
+            var reconciliation: ReconciliationMark? = null
 
             for ((index, text) in raw.withIndex()) {
                 val lineNumber = index + 1
@@ -364,14 +452,20 @@ class DispatchJournal private constructor(
                     continue
                 }
 
-                if (cleanShutdownAt != null) {
-                    // The marker is the last line by construction, so anything after it
-                    // means two writers shared the file or it was edited. Treating such
-                    // a record as live would let a "clean" journal hide an orphan.
+                val sealedBy = when {
+                    cleanShutdownAt != null -> CLEAN_SHUTDOWN_MARKER
+                    reconciliation != null -> RECONCILED_MARKER
+                    else -> null
+                }
+                if (sealedBy != null) {
+                    // A terminal marker is the last line by construction, so anything
+                    // after one means two writers shared the file or it was edited.
+                    // Treating such a record as live would let a sealed journal hide an
+                    // orphan.
                     quarantined += QuarantinedLine(
                         lineNumber = lineNumber,
                         raw = text.take(MAX_QUARANTINED_CHARS),
-                        reason = "line follows the clean-shutdown marker",
+                        reason = "line follows the $sealedBy",
                     )
                     continue
                 }
@@ -379,10 +473,18 @@ class DispatchJournal private constructor(
                 when (line) {
                     is JournalLine.Dispatch -> entries += line.record
                     is JournalLine.CleanShutdown -> cleanShutdownAt = line.at
+                    is JournalLine.Reconciled -> reconciliation = line.outcome
                 }
             }
 
-            return JournalRead(instanceId, entries, cleanShutdownAt, quarantined)
+            return JournalRead(instanceId, entries, cleanShutdownAt, quarantined, reconciliation)
+        }
+
+        /** The terminal marker [read] carries, named for an error message. */
+        private fun markerOf(read: JournalRead): String? = when {
+            read.cleanShutdown -> CLEAN_SHUTDOWN_MARKER
+            read.reconciled -> RECONCILED_MARKER
+            else -> null
         }
 
         /**
@@ -423,16 +525,24 @@ class DispatchJournal private constructor(
  *   never did.
  * @property quarantined Lines that could not be read as records. Non-empty means
  *   something was written that nothing can now interpret.
+ * @property reconciliation What a startup reconciliation pass did about this
+ *   journal, or null if none has. Non-null is the *second* way a journal stops
+ *   being suspect: the supervisor never came back, but a later pass reaped its
+ *   process groups, repaired its worktrees and released its claims.
  */
 data class JournalRead(
     val instanceId: String,
     val entries: List<DispatchRecord>,
     val cleanShutdownAt: Instant?,
     val quarantined: List<QuarantinedLine>,
+    val reconciliation: ReconciliationMark? = null,
 ) {
 
     /** Whether the supervisor that wrote this journal exited gracefully. */
     val cleanShutdown: Boolean get() = cleanShutdownAt != null
+
+    /** Whether a reconciliation pass has already settled this journal. */
+    val reconciled: Boolean get() = reconciliation != null
 
     /**
      * The most recent record for each dispatch, keyed by
@@ -443,13 +553,15 @@ data class JournalRead(
     /**
      * Dispatches that may still hold a claim or a running agent process group.
      *
-     * Empty when the supervisor shut down cleanly: it released what it held. Otherwise
-     * every dispatch whose latest phase is not [DispatchPhase.isTerminal], ordered by
-     * ticket id. What to *do* about them — release the claim, terminate the group, adopt
-     * the worktree — is the reconciliation pass's decision, not this module's.
+     * Empty on both the settled paths: the supervisor shut down cleanly and released
+     * what it held, or a reconciliation pass has since released it for them.
+     * Otherwise every dispatch whose latest phase is not [DispatchPhase.isTerminal],
+     * ordered by ticket id. What to *do* about them — release the claim, terminate
+     * the group, adopt the worktree — is the reconciliation pass's decision, not this
+     * module's.
      */
     fun suspectDispatches(): List<DispatchRecord> =
-        if (cleanShutdown) {
+        if (cleanShutdown || reconciled) {
             emptyList()
         } else {
             latestPerDispatch().values
@@ -485,4 +597,15 @@ private sealed interface JournalLine {
     @Serializable
     @SerialName("clean-shutdown")
     data class CleanShutdown(val at: Instant) : JournalLine
+
+    /**
+     * The outcome of the startup reconciliation pass that settled this journal.
+     *
+     * Terminal in the same way [CleanShutdown] is — a journal has at most one
+     * marker and it is the last line — because both answer the same question: does
+     * anything in this file still owe something?
+     */
+    @Serializable
+    @SerialName("reconciled")
+    data class Reconciled(val outcome: ReconciliationMark) : JournalLine
 }

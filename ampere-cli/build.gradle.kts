@@ -84,6 +84,10 @@ kotlin {
             dependencies {
                 implementation(project(":ampere-core"))
                 implementation(project(":ampere-phosphor"))
+                // The work-source adapter (AMPR-305), for `ampere reconcile`: releasing a
+                // dead supervisor's claim is step 4 of the reconciliation pass, and the
+                // adapter is the only door onto the issue tracker (AMPR-310).
+                implementation(project(":ampere-work-linear"))
                 implementation("link.socket:phosphor-core:0.6.2")
 
                 // CLI argument parsing
