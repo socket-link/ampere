@@ -20,6 +20,7 @@ import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.reasoning.AgentReasoning
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
@@ -175,6 +176,19 @@ open class SparkBasedAgent<S : AgentState>(
      */
     @Transient
     private val _cognitiveConfig: CognitiveConfig = CognitiveConfig(),
+    /**
+     * Episodic memory this agent's tool calls are recorded into (AMPR-406). Threaded into
+     * [AgentReasoning] and on into its
+     * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine], which
+     * is the persisting path for every `ExecutionOutcome` the agent's plan steps produce.
+     * Null leaves them unrecorded, which is what an agent built without a database gets.
+     *
+     * Note that an agent with no [_executor] builds no engine at all, so a store without an
+     * executor beside it records nothing — not because the wiring is wrong, but because no
+     * tool ever dispatches.
+     */
+    @Transient
+    private val _outcomeRepository: OutcomeMemoryRepository? = null,
 ) : ObservableAgent<S>(_eventApi, _observabilityScope) {
 
     @Transient
@@ -263,6 +277,7 @@ open class SparkBasedAgent<S : AgentState>(
             // `requiredTools`, which ignores what the spark stack permits.
             availableTools = { effectiveTools }
             executor = _executor
+            outcomeRepository = _outcomeRepository
             _userGrantProvider?.let { provider ->
                 execution { userGrants(provider) }
             }

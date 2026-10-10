@@ -15,6 +15,7 @@ import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.emission.Emission
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepositoryImpl
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
 import link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine
 import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceState
@@ -436,8 +437,14 @@ class ArcSession(
          * )
          * ```
          *
-         * @param database Where manifests are written and traces are read from. Its schema must
-         *   already be current, as every platform's driver factory leaves it.
+         * Runs started on a session with a database also record their outcomes there (AMPR-406):
+         * one row per run, keyed by the run id, read back by
+         * `OutcomeService.forTicket(runId)`. The run's agents record one row per tool call on
+         * top of that — but only once an `Executor` is bound to the runtime, which this builder
+         * does not do, so a session's runs write the run row alone today.
+         *
+         * @param database Where manifests and outcomes are written and traces are read from. Its
+         *   schema must already be current, as every platform's driver factory leaves it.
          */
         fun create(
             arcConfig: ArcConfig,
@@ -602,6 +609,12 @@ class ArcSession(
             }
             val manifestSink = eventApi?.let { CompletionManifestSink(eventApi = it) }
 
+            // Episodic memory for the runs this session hosts (AMPR-406): each run records its
+            // own outcome as it settles, and the agents it spawns record every tool outcome
+            // under the run's id. Without a database there is nowhere to write, so nothing is
+            // recorded — the same rule as the manifest and the model-call events above.
+            val outcomeRepository = database?.let { OutcomeMemoryRepositoryImpl(it) }
+
             // One door per spawned agent, over the same store and bus as the session's own, so
             // the run's model calls are persisted under its id and its trace can see them
             // (AMPR-240). Without a database there is nothing to persist to, and no door.
@@ -642,6 +655,7 @@ class ArcSession(
                     knowledgeRepository = knowledgeRepository,
                     clock = clock,
                     completionManifestSink = manifestSink?.let { it::record },
+                    outcomeRepository = outcomeRepository,
                 ),
                 eventSerialBus = bus,
                 eventApi = eventApi,

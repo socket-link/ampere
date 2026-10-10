@@ -16,12 +16,16 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
+import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.trace.ArcRunId
@@ -129,6 +133,22 @@ class AmpereRuntime(
      * change how the run is reported.
      */
     private val completionManifestSink: (suspend (CompletionManifest) -> Unit)? = null,
+    /**
+     * Episodic memory for what the run leaves behind (AMPR-406, F20).
+     *
+     * Two things are recorded into it. The agents a run spawns are handed it, so every
+     * `ExecutionOutcome` their tool calls produce is written under this run's id — the
+     * persisting path through
+     * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine]. That
+     * half is live only when [executor] is also set: with no executor no engine is built and
+     * no tool dispatches. And the run itself records one outcome as it settles, however it
+     * ends, keyed by its own run id so
+     * [OutcomeService.forTicket][link.socket.ampere.api.service.OutcomeService.forTicket] can
+     * be asked about a run by name.
+     *
+     * Null records nothing, which is what a runtime built without a database gets.
+     */
+    private val outcomeRepository: OutcomeMemoryRepository? = null,
 ) {
     init {
         // Declared-but-unimplemented policies fail here, at construction, rather than on the
@@ -244,9 +264,12 @@ class AmpereRuntime(
             job.cancel(CancellationException(CANCELLATION_MESSAGE))
         }
 
+        // Read from the Arc's clock (F29), so a run's recorded duration is the run's time.
+        val startedAt = clock.now()
+
         try {
             val attempt = runScope.async { runArc(userGoal, runId, runScope) }.await()
-            return attempt.getOrElse { cause ->
+            val settled = attempt.getOrElse { cause ->
                 ArcOutcome.Failed(
                     runId = runId,
                     cause = cause,
@@ -255,18 +278,23 @@ class AmpereRuntime(
                     flowResult = partialFlow(),
                 )
             }
+            recordRunOutcome(userGoal, startedAt, settled)
+            return settled
         } catch (e: CancellationException) {
             val manifest = closeOut(job, runId, TerminationReason.CANCELLED, cause = null)
-
-            // If the *caller* was cancelled this is not ours to swallow — rethrow it. The
-            // manifest is already written by now; only the returned outcome is lost.
-            coroutineContext.ensureActive()
-            return ArcOutcome.Cancelled(
+            val cancelled = ArcOutcome.Cancelled(
                 runId = runId,
                 manifest = manifest,
                 chargeResult = chargeResult,
                 flowResult = partialFlow(),
             )
+            recordRunOutcome(userGoal, startedAt, cancelled)
+
+            // If the *caller* was cancelled this is not ours to swallow — rethrow it. The
+            // manifest and the run's outcome are already written by now; only the returned
+            // outcome is lost.
+            coroutineContext.ensureActive()
+            return cancelled
         } finally {
             withContext(NonCancellable) {
                 job.cancelAndJoin()
@@ -342,6 +370,96 @@ class AmpereRuntime(
         return manifest
     }
 
+    /**
+     * Records one [ExecutionOutcome] for the run itself (AMPR-406), however it ended.
+     *
+     * The row is keyed by the run id in *both* the ticket and run columns. An Arc run has no
+     * ticket — it has a goal — and `OutcomeMemoryRepository` offers no read by run, so naming
+     * the run as the ticket is what makes `OutcomeService.forTicket(runId)` answer for a run
+     * while `run_id` keeps the row visible to `ArcTraceProjection`. The agents' own step
+     * outcomes are keyed by their real tickets and share only the run id.
+     *
+     * Written under [NonCancellable] and swallowing a throwing store, for the same reasons as
+     * [recordManifest]: the run has already happened, and a failed record must not change how
+     * it is reported.
+     */
+    private suspend fun recordRunOutcome(
+        userGoal: String,
+        startedAt: Instant,
+        outcome: ArcOutcome,
+    ) {
+        val repository = outcomeRepository ?: return
+        val settledAt = clock.now()
+        val executionOutcome = when (outcome) {
+            is ArcOutcome.Completed ->
+                if (outcome.success) {
+                    ExecutionOutcome.NoChanges.Success(
+                        executorId = runExecutorId,
+                        ticketId = outcome.runId,
+                        taskId = outcome.runId,
+                        executionStartTimestamp = startedAt,
+                        executionEndTimestamp = settledAt,
+                        message = "Arc '${arcConfig.name}' completed and met its goal",
+                    )
+                } else {
+                    runFailure(
+                        runId = outcome.runId,
+                        startedAt = startedAt,
+                        settledAt = settledAt,
+                        message = "Arc '${arcConfig.name}' completed without meeting its goal",
+                    )
+                }
+            is ArcOutcome.Failed -> runFailure(
+                runId = outcome.runId,
+                startedAt = startedAt,
+                settledAt = settledAt,
+                message = "Arc '${arcConfig.name}' failed: ${outcome.cause.message ?: outcome.cause}",
+            )
+            is ArcOutcome.Cancelled -> runFailure(
+                runId = outcome.runId,
+                startedAt = startedAt,
+                settledAt = settledAt,
+                message = "Arc '${arcConfig.name}' was cancelled: ${outcome.manifest.summary()}",
+            )
+        }
+
+        withContext(NonCancellable) {
+            try {
+                repository.recordOutcome(
+                    ticketId = outcome.runId,
+                    executorId = runExecutorId,
+                    approach = userGoal,
+                    outcome = executionOutcome,
+                    timestamp = settledAt,
+                    runId = outcome.runId,
+                )
+            } catch (_: Throwable) {
+                // Deliberate; see the KDoc above.
+            }
+        }
+    }
+
+    private fun runFailure(
+        runId: ArcRunId,
+        startedAt: Instant,
+        settledAt: Instant,
+        message: String,
+    ): ExecutionOutcome.NoChanges.Failure = ExecutionOutcome.NoChanges.Failure(
+        executorId = runExecutorId,
+        ticketId = runId,
+        taskId = runId,
+        executionStartTimestamp = startedAt,
+        executionEndTimestamp = settledAt,
+        message = message,
+    )
+
+    /**
+     * The executor a run's own outcome is attributed to — the Arc, not any one agent, since no
+     * single agent performed the run. `outcomes byExecutor "arc:<name>"` lists that Arc's runs.
+     */
+    private val runExecutorId: ExecutorId
+        get() = "arc:${arcConfig.name}"
+
     /** Flow's own result if it finished, otherwise a snapshot of how far it got. */
     private fun partialFlow(): FlowResult? = flowResult ?: flowPhase?.snapshot()
 
@@ -389,6 +507,7 @@ class AmpereRuntime(
         runId = runId,
         eventApiFactory = eventApiFactory,
         knowledgeRepository = knowledgeRepository,
+        outcomeRepository = outcomeRepository,
         clock = clock,
     )
 
@@ -551,6 +670,8 @@ class AmpereRuntime(
          *   parameter of the same name
          * @param knowledgeRepository Long-term memory for the spawned agents; pass it together
          *   with [eventApiFactory] or Pulse stores nothing. See the constructor parameter.
+         * @param outcomeRepository Where the run's own outcome and its agents' tool outcomes are
+         *   recorded; see the constructor parameter of the same name
          * @return AmpereRuntime configured with the specified Arc
          */
         fun create(
@@ -562,6 +683,7 @@ class AmpereRuntime(
             completionManifestSink: (suspend (CompletionManifest) -> Unit)? = null,
             eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
             knowledgeRepository: KnowledgeRepository? = null,
+            outcomeRepository: OutcomeMemoryRepository? = null,
         ): AmpereRuntime {
             return AmpereRuntime(
                 arcConfig = arcConfig,
@@ -572,6 +694,7 @@ class AmpereRuntime(
                 knowledgeRepository = knowledgeRepository,
                 clock = clock,
                 completionManifestSink = completionManifestSink,
+                outcomeRepository = outcomeRepository,
             )
         }
 

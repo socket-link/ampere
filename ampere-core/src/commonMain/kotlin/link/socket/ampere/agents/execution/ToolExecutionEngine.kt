@@ -13,6 +13,7 @@ import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
 import link.socket.ampere.agents.domain.event.PermissionDeniedReason
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.reasoning.AgentLLMService
 import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.status.ExecutionStatus
@@ -45,7 +46,8 @@ import link.socket.ampere.plug.permission.UserGrants
  * 3. Call LLM to generate parameters
  * 4. Enrich the execution request with generated parameters
  * 5. Execute via the executor
- * 6. Return the execution outcome
+ * 6. Record the outcome in episodic memory, when a store is wired
+ * 7. Return the execution outcome
  *
  * Usage:
  * ```kotlin
@@ -67,6 +69,11 @@ import link.socket.ampere.plug.permission.UserGrants
  *   [ToolAskHuman][link.socket.ampere.agents.execution.tools.ToolAskHuman] — can carry it
  *   into the output they produce. Null leaves dispatched requests unattributed, which is
  *   correct for tool calls made outside a run.
+ * @property outcomeRepository Episodic memory for the outcomes this engine produces (AMPR-406,
+ *   F20). This is the *persisting path*: when a store is wired, every [ExecutionOutcome]
+ *   returned by [execute] is recorded against the request's ticket and run, which is what
+ *   makes `OutcomeService` and the CLI `outcomes` command read a store something writes.
+ *   Null records nothing — correct for tests and for engines built without a database.
  */
 class ToolExecutionEngine(
     private val llmService: AgentLLMService,
@@ -75,6 +82,7 @@ class ToolExecutionEngine(
     private val eventApi: AgentEventApi? = null,
     private val userGrantProvider: suspend (PlugManifest) -> UserGrants = { UserGrants() },
     private val runId: RunId? = null,
+    private val outcomeRepository: OutcomeMemoryRepository? = null,
 ) {
 
     private val strategies = mutableMapOf<String, ParameterStrategy>()
@@ -90,13 +98,40 @@ class ToolExecutionEngine(
     }
 
     /**
-     * Executes a tool with LLM-generated parameters.
+     * Executes a tool with LLM-generated parameters, and records what came of it.
+     *
+     * The one public entry point, so it is also the one place every outcome this engine
+     * produces passes through — a refusal before dispatch (no intent, permission denied, an
+     * unsupported tool) just as much as a tool's own result. [recordOutcome] is called from
+     * here rather than from [executeViaExecutor] for that reason: a dispatch that never
+     * happened is still an attempt, and a failure is the more valuable half of the learning
+     * signal.
+     *
+     * That is deliberately a *wider* net than the `ToolExecutionStarted` /
+     * `ToolExecutionCompleted` pair [publishToolStarted] writes one layer down (AMPR-389),
+     * and the two are not meant to agree: a pair in the trace means a tool actually ran,
+     * while an outcome row means an attempt was made. A permission-denied call has a row and
+     * no pair, and that asymmetry is the point of each.
      *
      * @param tool The tool to execute
      * @param request The execution request containing context and intent
      * @return ExecutionOutcome indicating success or failure
      */
     suspend fun execute(
+        tool: Tool<*>,
+        request: ExecutionRequest<*>,
+    ): ExecutionOutcome {
+        val outcome = produceOutcome(tool, request)
+        recordOutcome(tool, request, outcome)
+        return outcome
+    }
+
+    /**
+     * Everything [execute] does bar the recording: strategy selection, the permission gate,
+     * parameter generation, and the executor call. Named apart from [dispatch], which is the
+     * executor call alone and the span the tool-event pair brackets.
+     */
+    private suspend fun produceOutcome(
         tool: Tool<*>,
         request: ExecutionRequest<*>,
     ): ExecutionOutcome {
@@ -338,12 +373,65 @@ class ToolExecutionEngine(
     }
 
     /**
+     * Writes [outcome] into episodic memory (AMPR-406), under the run the call belongs to.
+     *
+     * Under [NonCancellable]: by the time this runs the tool has already acted, so a
+     * cancellation landing here would lose the record of something that happened — the same
+     * reason the provider-call telemetry and the Arc's completion manifest are written this
+     * way.
+     *
+     * Best-effort by contract. [OutcomeMemoryRepository.recordOutcome] already returns its
+     * failure as a [Result] rather than throwing, and a store that throws anyway is swallowed:
+     * a memory write must not change what the tool call reports, and the caller has the
+     * outcome in hand either way.
+     */
+    private suspend fun recordOutcome(
+        tool: Tool<*>,
+        request: ExecutionRequest<*>,
+        outcome: ExecutionOutcome,
+    ) {
+        val repository = outcomeRepository ?: return
+        withContext(NonCancellable) {
+            try {
+                repository.recordOutcome(
+                    ticketId = request.context.ticket.id,
+                    executorId = executorId,
+                    approach = approachOf(tool, request),
+                    outcome = outcome,
+                    // The outcome's own end time, not "now": the repository derives the
+                    // recorded duration from it, and that duration is the tool's, not the
+                    // tool's plus however long the write queued behind the IO dispatcher.
+                    timestamp = outcome.executionEndTimestamp,
+                    // The same run the dispatch was stamped with — the caller's wins over
+                    // this engine's. Stripping it here would hide the row from
+                    // `ArcTraceProjection`.
+                    runId = request.effectiveRunId(),
+                )
+            } catch (_: Throwable) {
+                // Deliberate; see the KDoc above.
+            }
+        }
+    }
+
+    /**
      * The run this dispatch belongs to. Same precedence as [executeViaExecutor]: a request
      * that already names a run was dispatched by something closer to it than the reasoning
      * unit that built this engine.
      */
     private fun ExecutionRequest<*>.effectiveRunId(): RunId? =
         this.runId ?: this@ToolExecutionEngine.runId
+
+    /**
+     * The searchable description of what was tried — the field `findSimilarOutcomes` matches on.
+     *
+     * The tool id leads so a search can find every attempt made with one tool, and the intent
+     * follows. A request with no instructions of its own falls back to the ticket's
+     * description, which is what the intent would have been derived from anyway.
+     */
+    private fun approachOf(tool: Tool<*>, request: ExecutionRequest<*>): String {
+        val intent = request.context.instructions.ifBlank { request.context.ticket.description }
+        return "${tool.id}: $intent"
+    }
 
     /**
      * Creates a failure outcome.

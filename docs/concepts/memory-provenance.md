@@ -78,7 +78,8 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 
 ## Common operations
 
-- **Record an execution outcome** — your tool returns an `ExecutionResult`; `OutcomeEvaluator` wraps it into the appropriate `ExecutionOutcome` variant; `OutcomeMemoryRepository.recordOutcome` writes it. Don't bypass the evaluator.
+- **Record an execution outcome** — your tool's `executionFunction` returns the typed `ExecutionOutcome` variant itself, and `ToolExecutionEngine` writes it through `OutcomeMemoryRepository.recordOutcome` on the way back to the caller (AMPR-406). There is nothing to call by hand: wire the store into the engine — `ReasoningSettings.outcomeRepository`, supplied by `SparkAgentFactory` / `AmpereRuntime` / `ArcSession` — and every outcome the engine returns is recorded against the request's ticket and run id. An engine with no store records nothing and behaves identically otherwise.
+- **Record what a run itself came to** — an Arc run's close writes one outcome of its own, keyed by the run id in both the ticket and run columns, so `OutcomeService.forTicket(runId)` answers for a run. It is deliberately a pun: a run has a goal rather than a ticket, and the repository offers no read-by-run.
 - **Extract knowledge** — Loop phase: `KnowledgeExtractor` reads outcomes from the current run, distils into `Knowledge.FromOutcome` (or `FromPlan`, etc.), and `KnowledgeRepository.storeKnowledge` writes it. `KnowledgeStored` event emitted.
 - **Emit a milestone** — milestone detection is separate from knowledge storage. `MilestoneTracker` listens for per-agent task lifecycle transitions and publishes `MilestoneReached` for first successful task types and recovery after failure; external systems use `AgentEventApi.reachMilestone(...)`.
 - **Recall** — `AgentMemoryService.recallRelevantKnowledge(MemoryContext(...))` for in-loop reasoning. Returns scored entries.
@@ -89,6 +90,7 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 ## Anti-patterns
 
 - **Updating an outcome in place after the fact.** "I'll just patch the error message." No — write a new outcome. The original is the audit trail.
+- **Reaching for `OutcomeEvaluator` to build the `ExecutionOutcome` before storing it.** Its name and its place in Learn both suggest it, and this entry said so until AMPR-406 — but `OutcomeEvaluator.evaluate` takes `Outcome`s and returns learnings. Persisting through it would spend an LLM call to write a memory row.
 - **Storing tool-specific shapes in `ExecutionOutcome`.** Once a variant carries a `KafkaPartition` or similar, cross-executor recall stops working. Keep variants tool-agnostic; put tool detail in nested response types.
 - **Calling `KnowledgeRepository.storeKnowledge` from a tool.** Knowledge is the output of cognitive distillation, not a direct write target. Use `OutcomeMemoryRepository` from tools; let the Loop phase produce knowledge.
 - **Using `KnowledgeStored` as a milestone flag.** Routine memory writes are high volume. Publish `MilestoneReached` as a sibling event when the semantic payload represents a meaningful checkpoint.

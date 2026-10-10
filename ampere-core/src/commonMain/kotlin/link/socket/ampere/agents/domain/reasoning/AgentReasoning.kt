@@ -14,6 +14,7 @@ import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.state.AgentState
@@ -105,6 +106,9 @@ class AgentReasoning private constructor(
             // AMPR-351: the run reaches tools on the request the engine dispatches, which
             // is how ToolAskHuman's Emissions get a non-null EmissionProvenance.runId.
             runId = runId,
+            // AMPR-406: with a store wired, the engine is the persisting path for every
+            // ExecutionOutcome it produces. Null leaves the engine recording nothing.
+            outcomeRepository = settings.outcomeRepository,
         ).also { engine ->
             settings.parameterStrategies.forEach { (toolId, strategy) ->
                 engine.registerStrategy(toolId, strategy)
@@ -485,6 +489,8 @@ class AgentReasoning private constructor(
                 // non-nullable field, and mirrors the same safe fallback production
                 // callers get when they don't wire a `UserGrantStore`.
                 userGrantProvider = { UserGrants() },
+                // Nothing to persist to, for the same reason: no engine is ever built here.
+                outcomeRepository = null,
             )
             return AgentReasoning(
                 config = null,
@@ -601,6 +607,11 @@ data class ReasoningSettings(
      * type casts inside its own lambda.
      */
     val perceptionContextBuilder: ((AgentState) -> String)? = null,
+    /**
+     * Episodic memory for the outcomes this unit's tool calls produce (AMPR-406). Handed
+     * straight to [ToolExecutionEngine]; null leaves tool outcomes unrecorded.
+     */
+    val outcomeRepository: OutcomeMemoryRepository? = null,
 )
 
 /**
@@ -632,6 +643,12 @@ class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
      */
     var perceptionContextBuilder: ((AgentState) -> String)? = null
 
+    /**
+     * Episodic memory the tool-execution engine records into (AMPR-406). Set it to put this
+     * reasoning unit on the persisting path; leave it null and tool outcomes are not stored.
+     */
+    var outcomeRepository: OutcomeMemoryRepository? = null
+
     private val parameterStrategies = mutableMapOf<String, ParameterStrategy>()
     private var userGrantProvider: suspend (PlugManifest) -> UserGrants = { UserGrants() }
 
@@ -655,6 +672,7 @@ class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
         parameterStrategies = parameterStrategies.toMap(),
         userGrantProvider = userGrantProvider,
         perceptionContextBuilder = perceptionContextBuilder,
+        outcomeRepository = outcomeRepository,
     )
 }
 

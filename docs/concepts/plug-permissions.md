@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/PlugGrants.sq
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/ToolExecutionEngine.kt
 related: [SparkSystem, AgentSurface, EventSerialBus, LinkLayer]
-last_verified: 2026-07-30
+last_verified: 2026-10-09
 ---
 
 # Plug Permissions
