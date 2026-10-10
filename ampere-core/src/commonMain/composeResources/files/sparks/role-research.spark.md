@@ -11,10 +11,13 @@
     "search_codebase"
   ],
   "allowedTools": [
+    "plan_steps",
     "web_search",
     "read_code_file",
+    "read_codebase",
     "ask_human",
-    "search_codebase"
+    "search_codebase",
+    "knowledge_query"
   ],
   "fileAccessScope": {
     "read": ["**/*"],

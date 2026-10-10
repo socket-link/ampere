@@ -13,12 +13,16 @@
     "search_codebase"
   ],
   "allowedTools": [
+    "plan_steps",
+    "create_issues",
     "create_issue",
     "query_issues",
     "update_issue",
     "ask_human",
     "read_code_file",
-    "search_codebase"
+    "read_codebase",
+    "search_codebase",
+    "knowledge_query"
   ],
   "fileAccessScope": {
     "read": ["**/*"],

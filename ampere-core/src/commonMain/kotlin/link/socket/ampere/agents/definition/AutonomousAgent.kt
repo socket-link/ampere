@@ -190,15 +190,35 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         }
 
     /**
-     * The effective set of allowed tools given current Spark constraints.
+     * The effective set of allowed tool *ids* given current Spark constraints.
      *
-     * Returns null if no Sparks constrain tools (all tools available).
-     * When filtering tools for LLM calls, intersect with [requiredTools].
+     * Returns null if no Sparks constrain tools (all tools available). This is
+     * the raw permission set — a spark may name an id the agent was never built
+     * with. Use [effectiveTools] for the tools the agent can actually dispatch.
      */
     val availableTools: Set<ToolId>?
         get() {
             ensureSparkStackInitialized()
             return sparkStack.effectiveAllowedTools()
+        }
+
+    /**
+     * The tools this agent may actually act with: [requiredTools] narrowed by
+     * [availableTools].
+     *
+     * A null [availableTools] means no spark on the stack constrains tools, so
+     * the full [requiredTools] set is effective. This is the set to offer a
+     * planner and the set to dispatch against — reading [requiredTools] directly
+     * at either point ignores the spark stack's narrowing entirely (AMPR-400).
+     *
+     * Read it live at every use rather than capturing it once. The stack is
+     * mutable for the life of the agent ([spark] / [unspark]), so a captured set
+     * would keep offering tools a later spark has since withdrawn.
+     */
+    val effectiveTools: Set<Tool<*>>
+        get() {
+            val allowed = availableTools ?: return requiredTools
+            return requiredTools.filterTo(mutableSetOf<Tool<*>>()) { it.id in allowed }
         }
 
     /**
