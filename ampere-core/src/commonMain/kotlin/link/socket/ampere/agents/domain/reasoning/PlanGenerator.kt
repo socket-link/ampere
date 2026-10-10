@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.domain.reasoning
 
+import co.touchlab.kermit.Logger
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -13,6 +14,8 @@ import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.llm.MissingUpstreamLlmClientException
+import link.socket.ampere.util.logWith
 
 /**
  * Generates executable plans for accomplishing tasks.
@@ -47,6 +50,8 @@ import link.socket.ampere.agents.execution.tools.Tool
 class PlanGenerator(
     private val llmService: AgentLLMService,
 ) {
+
+    private val logger: Logger = logWith("PlanGenerator")
 
     /**
      * Generates a plan for accomplishing the given task.
@@ -103,6 +108,16 @@ class PlanGenerator(
                 ),
             )
             parsePlanFromResponse(jsonResponse.rawJson, task, taskFactory)
+        } catch (e: MissingUpstreamLlmClientException) {
+            // No transport means no model was reached at all, so there is nothing to degrade
+            // to: `createFallbackPlan`'s step nominates no tool, which the executor treats as
+            // a successful "reasoning step" and so reports work that no model did. A blank
+            // plan executes to `Outcome.blank` instead — not a success — which is what keeps
+            // a run with no transport from completing a goal (AMPR-395). It also makes the
+            // outcome agree with the telemetry, which already books the attempt as a failed
+            // call carrying this exception's name as its `errorType`.
+            logger.w(e) { "[PLAN] No upstream transport configured; planning nothing" }
+            Plan.blank
         } catch (e: Exception) {
             createFallbackPlan(task, taskFactory, "Plan generation failed: ${e.message}")
         }

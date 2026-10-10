@@ -57,15 +57,24 @@ import link.socket.ampere.eval.trace.TraceEvent
  *
  * Read the committed traces: every probe settles `COMPLETED` with `terminationReason =
  * MAX_TICKS_REACHED`, `completedGoalCount = 0`, `pulseSuccess = false`, and three outcomes of
- * which none succeeded and none failed. Those three outcomes are `Outcome.blank` — with no LLM on
- * the reasoning path, `determinePlanForTask` returns an empty plan and `executePlan` short-circuits
- * before any task runs. `FlowPhase.evaluateGoalCompletion` only fires on an `Outcome.Success`, so
- * no goal is ever marked complete, Flow always exhausts its budget, and Pulse always judges the
- * goal unmet.
+ * which none succeeded and none failed. Those three outcomes are `Outcome.blank`, and the reason
+ * is the one fact this suite keeps pinning: **a bench run has no `UpstreamLlmClient`**, so
+ * `PlanGenerator` cannot plan, returns `Plan.blank`, and `executePlan` short-circuits before any
+ * task runs. `FlowPhase.evaluateGoalCompletion` only fires on an `Outcome.Success`, so no goal is
+ * ever marked complete, Flow always exhausts its budget, and Pulse always judges the goal unmet.
  *
  * That is the suite's first finding about AMPERE, and the point of dogfooding: it is now pinned in
- * five committed files. When the Arc path gets a real reasoning loop, these traces go red, someone
- * re-records, and the diff is a precise before/after of what the pipeline started doing.
+ * five committed files. When the Arc path gets a transport and a real reasoning loop, these traces
+ * go red, someone re-records, and the diff is a precise before/after of what the pipeline started
+ * doing.
+ *
+ * AMPR-395 is the first test of that promise, and it is worth reading the shape of what it did
+ * *not* move. It fixed a genuine bug — `FlowPhase` read each tick's task from the agent's own
+ * memory cell, which nothing on the Arc path writes, so the goal the caller typed reached no
+ * agent — and the goldens did not budge, because these runs still cannot plan. The goal now
+ * reaches an agent; reaching a model is a separate claim, and [zeroModelCalls] is what keeps the
+ * two legible. A re-record that turns these probes green without a transport appearing in `Bench`
+ * is a bug in the pipeline, not progress.
  */
 internal object AmpereEvalSuite {
 
@@ -104,6 +113,11 @@ internal object AmpereEvalSuite {
                 every other probe: it is what lets a golden trace with no recorded model calls
                 replay without a PlaybackMiss. Asserting it here means the day that changes, one
                 probe says so in a sentence instead of five probes failing obscurely.
+
+                AMPR-395 made the tick hand its goal to an agent, which this probe's trace
+                deliberately does not show: with no transport the agent still cannot plan, so the
+                goal reaching an agent and the agent reaching a model stay two separate claims and
+                only the first one holds here.
             """.trimIndent(),
             meters = { golden ->
                 listOf(
