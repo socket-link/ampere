@@ -2,6 +2,7 @@ package link.socket.ampere.agents.domain.cognition
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import link.socket.ampere.agents.domain.cognition.sparks.AmpereProjectSpark
@@ -241,13 +242,21 @@ class AmpereProjectSparkTest {
     }
 
     @Test
-    fun `file access blocks writing by default`() {
+    fun `file access leaves writes to the role spark rather than denying them`() {
         val spark = AmpereProjectSpark.spark
         val fileAccess = spark.fileAccessScope
 
+        // AMPR-414: "role sparks decide writes" is a *lack* of constraint, and
+        // under set intersection the empty set is the strongest constraint
+        // there is — a project spark declaring no write patterns took write
+        // access away from every agent stacked on it.
         assertTrue(
-            fileAccess.writePatterns.isEmpty(),
-            "ProjectSpark should not enable writes (role sparks provide write access)",
+            fileAccess.allowsWrite("src/commonMain/kotlin/Thing.kt"),
+            "ProjectSpark should contribute no write constraint of its own",
+        )
+        assertFalse(
+            fileAccess.allowsWrite(".env"),
+            "the sensitive-file deny-list is the one write constraint it does contribute",
         )
     }
 

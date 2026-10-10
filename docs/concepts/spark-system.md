@@ -3,6 +3,8 @@ concept: SparkSystem
 status: stable
 tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/cognition/**
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/tools/ToolWriteCodeFile.kt
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/tools/ToolReadCodeFile.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/SparkAppliedEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/SparkRemovedEvent.kt
   - ampere-core/src/commonMain/composeResources/files/sparks/**
@@ -54,9 +56,12 @@ remain shareable as `.spark.md` artifacts:
   `AutonomousAgent.effectiveTools` is `requiredTools` narrowed by the stack,
   and it is both what the planner is offered and what plan-step dispatch
   looks up.
-- **File access narrowing** — optional `FileAccessScope` the Spark permits.
-  Computed (`AutonomousAgent.effectiveFileAccess`) but **not yet enforced** —
-  nothing reads it at a file-touching tool. See *Anti-patterns*.
+- **File access narrowing (subtractive)** — optional `FileAccessScope` the
+  Spark permits: `readPatterns` / `writePatterns` intersected across the stack,
+  `forbiddenPatterns` unioned. Enforced since AMPR-414:
+  `AutonomousAgent.effectiveFileAccess` rides on every plan-step
+  `ExecutionRequest`, and `write_code_file` / `read_code_file` refuse a path
+  outside it before touching the filesystem.
 
 Concrete subtypes include `ProjectSpark`, `TaskSpark`, `LanguageSpark`,
 `CoordinationSpark`, `PhaseSpark`, `DeclarativePhaseSpark`, and
@@ -154,7 +159,7 @@ exceed parent permissions, so adding a Spark is monotone safe.
 
 - `agents/domain/cognition/Spark.kt` — the interface; not sealed (subpackages need to extend).
 - `agents/domain/cognition/SparkStack.kt` — composition; `buildSystemPrompt(phase)` concatenates every spark's contribution plus its per-phase section; `effectiveAgentRole()` concatenates role fragments; `effectiveRequestedTools()` unions; `effectiveAllowedTools()` intersects; intersection-then-union semantics for file access.
-- `agents/domain/cognition/FileAccessScope.kt` — read/write/forbidden patterns.
+- `agents/domain/cognition/FileAccessScope.kt` — read/write/forbidden patterns, the pure-`commonMain` glob matcher (`matches`), the gate (`allowsRead` / `allowsWrite` / `forbiddingPattern`), and subsumption-aware `intersect`.
 - `agents/domain/cognition/CognitiveAffinity.kt` — Spark selection signals.
 - `agents/domain/cognition/sparks/ProjectSpark.kt`, `AmpereProjectSpark.kt` — project-level context; `ProjectSpark.kt` also adapts `"project"` fixtures and resolves env-var interpolation.
 - `agents/domain/cognition/sparks/TaskSpark.kt` — task-shaped narrowing.
@@ -172,7 +177,9 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - `agents/domain/cognition/sparks/AmpereSpikeFlags.kt` — `declarativeSparksEnabled: Boolean = false`; gates declarative spark application.
 - `composeResources/files/sparks/*.spark.md` — bundled declarative spark fixtures.
 - `agents/definition/AutonomousAgent.kt` — `availableTools` (the permitted *ids*, null when unconstrained) and `effectiveTools` (`requiredTools` ∩ permitted ids: the tools the agent may actually act with).
-- `agents/definition/SparkBasedAgent.kt` — the two enforcement sites: the reasoning unit is built with `availableTools = { effectiveTools }`, and `executePlanStep` resolves a step's `toolId` against `effectiveTools`.
+- `agents/definition/SparkBasedAgent.kt` — the tool-enforcement sites (the reasoning unit is built with `availableTools = { effectiveTools }`, and `executePlanStep` resolves a step's `toolId` against `effectiveTools`) plus `buildPlanStepRequest`, which stamps `effectiveFileAccess` onto the request.
+- `agents/execution/request/ExecutionRequest.kt` — `fileAccessScope`, the carrier that gets the stack's file narrowing to a tool; `withFileAccessScope` re-applies it at the dispatch funnel in `ToolExecutionEngine` after a `ParameterStrategy` has rebuilt the request.
+- `agents/execution/tools/ToolWriteCodeFile.kt`, `ToolReadCodeFile.kt` — the file-enforcement sites: each refuses the whole call, as an `ExecutionOutcome.*.Failure`, when any path it was handed is outside the request's scope.
 - `agents/domain/event/SparkAppliedEvent.kt`, `SparkRemovedEvent.kt` — observability.
 - `agents/domain/event/CognitivePhaseEvent.kt` — first-class phase boundary events.
 
@@ -186,6 +193,10 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - **A phase is active when `currentPhase != null`, not when sparks are on the stack.** The two were equivalent before AMPR-387 and are not now: a bracketed-but-not-injected phase pushes nothing. Any guard written as `appliedSparks.isNotEmpty()` silently disables `injectPhaseSparks = false`.
 - **`AMPERE_PHASE_SPARKS` is an override, not a default.** Set, it forces `enabled`, `publishBrackets`, and `injectPhaseSparks` on regardless of config; unset, it contributes nothing and the config decides alone. It is a developer switch — never the mechanism a consumer relies on.
 - **Narrowing is read, not just computed.** Every site that offers or dispatches tools reads `effectiveTools`, never `requiredTools`. There are two — the planner's available-tools list and `executePlanStep`'s lookup — and they share one set, so a tool the stack withdrew fails identically to one that never existed. A narrowing that nothing reads is decoration; that was the AMPR-400 bug. (One tool-advertising path is still unnarrowed: `AutonomousAgent.buildToolAwarenessIdea` lists every `ToolRegistry` tool to Perceive. Those tools are outside `requiredTools`, so they are already undispatchable by `executePlanStep` — the leak is that the model is told about them at all.)
+- **File narrowing is read too, at the tool.** `effectiveFileAccess` is stamped onto the plan-step `ExecutionRequest` and gated by the file-touching tools before any filesystem call, because the request is the only value that reaches a tool's execution function and a tool must not depend on `AutonomousAgent` (AMPR-414). A tool that takes a path and does not consult `ExecutionRequest.fileAccessScope` is a hole in the gate. Two are known and left alone deliberately: `git_stage`, which only records paths already on disk that whatever wrote them was gated for; and `read_codebase`, which ships no `ParameterStrategy` and so cannot be promoted out of the generic `ExecutionContext.NoChanges` a plan step dispatches with — it is undispatchable before it is ungated. Give either one a path source and it needs the gate.
+- **Composition keeps the narrower pattern, never the matching string.** `FileAccessScope.intersect` pairs the two sides and keeps the narrower of each *subsuming* pair, so `{"**/*"} ∩ {"**/*.kt"}` is `{"**/*.kt"}`. `FileAccessScope.subsumes` is sound and deliberately incomplete: it may miss a containment, which drops a pattern and narrows, but it must never report one that does not hold, which would widen. Every pattern in an intersection is one of its two inputs — the operation never synthesizes a pattern.
+- **An empty pattern set denies; `null` is how a Spark says nothing.** `emptySet()` is the strongest constraint under intersection, not the absence of one, which is what makes `FileAccessScope.NoAccess` and `ReadOnly` mean what they say. A Spark contributing no constraint on an axis widens it to `**/*` (as `ProjectSpark` does for writes); a Spark contributing no file constraint at all sets `fileAccessScope = null`.
+- **`forbiddenPatterns` spans reads and writes.** There is one deny-list, it is unioned across the stack, and it outranks every allow pattern on both axes. "This role does not *edit* code" is expressed by the write allow-list not naming source files, never by forbidding them — a forbid also blinds the role's `read_code_file` (AMPR-414, `role-operations`).
 - **The narrowed set is read live, never captured.** The stack is mutable for the agent's lifetime, so `ReasoningSettings.availableTools` is a `() -> Set<Tool<*>>` provider rather than a set. A snapshot taken when the reasoning unit was constructed would keep offering tools a later spark has since withdrawn.
 - **A capability-bearing spark's `allowedTools` is a real permission, so it must name real tool ids.** Because composition is intersection, an id that no tool in the repo carries contributes nothing, and a *missing* id silently withdraws a tool the agent was deliberately built with. A role spark must list every tool its factory hands the agent, `plan_steps` included.
 - **Tool-set composition is intersection.** When two Sparks both specify `allowedTools`, the effective set is `A ∩ B`, not `A ∪ B`. A change that switches to union is a permission expansion and violates the narrowing invariant.
@@ -201,6 +212,8 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - **Author a declarative role spark** — same path, `---json` / `---` frontmatter block of type `"role"` (id, name, agentRole required; `allowedTools` / `fileAccessScope` optional for narrowing). If you supply `allowedTools`, check it against the ids the agent's factory actually passes (`grep -r '_TOOL_ID' ampere-core/src` plus the private ids in `execution/tools/git/GitTools.kt`) and include `plan_steps`, which every `SparkBasedAgent` ships with — omitting an id withdraws that tool at dispatch. Body is the role's `promptContribution` verbatim — do not use `## When <Phase>` headers, they will not be extracted. Add the path to `DefaultPhaseSparkLibrary.DEFAULT_SPARKS`. Factory call sites resolve it via `SparkRegistry.roleSparkById(id)`.
 - **Author a declarative language spark** — use type `"language"` with optional `fileAccessScope`; body text outside `## When <Phase>` headers is always-on guidance, and matching phase sections become `phaseContributions`. Resolve through `SparkRegistry.languageSparkById(id)`.
 - **Author a declarative project spark** — use type `"project"`, put `## Project Description` and `## Project Conventions` in the body, and use `${env:VAR:-fallback}` for dynamic fields such as `repositoryRoot`. Resolve through `SparkRegistry.projectSparkById(id)`.
+- **Narrow what an agent may touch** — give the Spark a `fileAccessScope` whose `write`/`read` lists are a *subset* of what the sparks beneath it allow, remembering that composition keeps the narrower of each subsuming pair and drops pairs that merely overlap (`src/**` against `**/*.kt` composes to nothing, not to `src/**/*.kt`). Check the composed result with `SparkStack.effectiveFileAccess().allowsWrite(path)` rather than reading the fixture.
+- **Check whether a path is in scope** — `FileAccessScope.allowsRead(path)` / `allowsWrite(path)`; `forbiddingPattern(path)` names the deny-list entry that refused it, which is what a tool's refusal message should quote. Paths are normalized first, so a leading `./`, a leading `/` and a doubled separator are all insignificant; `..` is deliberately *not* resolved, because workspace containment is `ExecutionWorkspace`'s job (AMPR-300) and resolving it here would bless a match on a path that escapes.
 - **Apply a Spark transiently** — `SparkStack.push(spark)` and ensure a matching `pop` in `finally`. `PhaseSparkManager` handles this for phase boundaries.
 - **Compose a per-agent stack** — declarative role spark + `ProjectSpark` at agent construction, then `PhaseSpark` pushed/popped per phase (potentially multiple when declarative library is active), then `TaskSpark` pushed/popped per task.
 - **Inspect the active stack** — subscribe to `SparkAppliedEvent` / `SparkRemovedEvent` on the bus, or read `SparkStack.current`.
@@ -216,7 +229,10 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - **Skipping `SparkRemovedEvent` because "the run is ending anyway".** The trace doesn't know that. Always pair apply/remove; let the projector decide what's noise.
 - **`Spark.name` without `Type:Subtype`.** Trace projection strips the prefix to bucket events; an ad-hoc name like `"my-experiment"` will not be grouped with the rest of its kind.
 - **Reading `requiredTools` at a planning or dispatch site.** It is the set the agent was *built* with, not the set it may *use*. `effectiveTools` is the only correct answer to "which tools does this agent have"; `requiredTools` is the input to it.
-- **Assuming `fileAccessScope` gates anything.** It does not. `effectiveFileAccess` is computed and no file-touching tool consults it, and as composed today it would deny nearly everything if one did: `FileAccessScope.intersect` is literal set intersection over glob *strings*, so `{"**/*"} ∩ {"**/*.kt"}` is empty rather than `{"**/*.kt"}`. Enforcing it needs a glob matcher and subsumption-aware composition first.
+- **Reading `fileAccessScope` off a spark instead of the composition.** A single fixture's write list is not what the agent may write; the stack's intersection is. A production CODE agent stacks `role-code`, `project-ampere` and `language-kotlin`, and composes down to `{"**/*.kt", "**/*.kts"}` — `role-code` alone also names `**/*.md`, which that agent cannot write.
+- **Saying "no constraint" with `emptySet()`.** Under intersection the empty set denies everything downstream of it, which is how a `ProjectSpark` whose comment read "role sparks enable writing" took write access away from every agent built with it. Widen to `**/*`, or set `fileAccessScope = null`.
+- **Forbidding a file extension to stop a role writing it.** `forbiddenPatterns` is one list for reads and writes both, so forbidding `**/*.kt` also stops the role reading Kotlin — which is what `role-operations` did to an agent holding `read_code_file`. Leave the extension out of the write allow-list instead.
+- **Using `java.nio.file.PathMatcher` for the glob matcher.** It is JVM-only, and `ampere-core` also targets Android, iOS, JS and wasmJs. `FileAccessScope.matches` is pure `commonMain` for that reason, and the pattern syntax is deliberately small enough not to need an `expect`/`actual` per platform.
 - **Using `PhaseSpark` to narrow tools.** Phase sparks are advisory prompt content, not gates. Capability narrowing belongs in role, language, project, or task sparks.
 - **Building an `AgentConfiguration` without the `cognitiveConfig` you were handed.** This was the AMPR-387 bug exactly: `SparkBasedAgent.agentConfiguration` constructed `AgentConfiguration(...)` without one, so the default (`phaseSparks.enabled = false`) won and the documented config path did nothing for two releases while `AgentFactory(cognitiveConfig = …)` fed a private getter nothing read. A config parameter that is accepted and dropped reads as supported.
 - **Treating `currentCognitivePhase` as observability.** It is prompt state — `buildSystemPrompt` is its only reader. Subscribe to `CognitivePhaseEvent` to know what phase an agent is in; `getCurrentPhase()` on the manager is the in-process equivalent.

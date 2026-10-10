@@ -32,13 +32,6 @@
       "**/*.yml",
       "**/config/**"
     ],
-    "forbidden": [
-      "**/*.kt",
-      "**/*.java",
-      "**/*.py",
-      "**/*.js",
-      "**/*.ts"
-    ],
     "forbiddenRefs": ["sensitive-files"]
   }
 }

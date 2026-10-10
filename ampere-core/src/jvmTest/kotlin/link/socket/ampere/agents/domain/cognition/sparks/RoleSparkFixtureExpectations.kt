@@ -27,6 +27,13 @@ internal data class ExpectedRoleSpark(
  * `query_issues`, `update_issue`), which no tool in the repo carries yet and
  * which an intersection simply ignores. Trimming this set to "what the role
  * needs" is how you silently take git away from the Code agent.
+ *
+ * `fileAccessScope` became load-bearing in the same way in AMPR-414: the
+ * file-touching tools now gate on it, so a write pattern missing from a role
+ * is a write the role cannot make, and a `forbiddenPatterns` entry blocks
+ * reads as well as writes. Read the composed result, not the fixture alone —
+ * a production CODE agent stacks `role-code`, `project-ampere` and
+ * `language-kotlin`, and the composition is an intersection.
  */
 internal object RoleSparkFixtureExpectations {
     val code = ExpectedRoleSpark(
@@ -179,13 +186,15 @@ You are operating in a **research-focused** capacity. Your primary responsibilit
                 "**/*.yml",
                 "**/config/**",
             ),
-            forbiddenPatterns = setOf(
-                "**/*.kt",
-                "**/*.java",
-                "**/*.py",
-                "**/*.js",
-                "**/*.ts",
-            ) + FileAccessScope.SensitiveFileForbiddenPatterns,
+            // AMPR-414: the fixture used to forbid `**/*.kt` and the other
+            // source extensions outright. `forbiddenPatterns` is a single
+            // deny-list spanning reads *and* writes, so that policy left an
+            // Operations agent — one whose `allowedTools` include
+            // `read_code_file` — unable to open a single source file in a
+            // Kotlin repository. Writes to source files are already refused
+            // by the write allow-list above not naming them, which is where
+            // "operations does not edit code" belongs.
+            forbiddenPatterns = FileAccessScope.SensitiveFileForbiddenPatterns,
         ),
         promptContribution = """
 ## Role: Operations

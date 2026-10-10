@@ -66,9 +66,22 @@ data class ProjectSpark(
 
     override val allowedTools: Set<ToolId>? = null // Inherits from parent
 
-    override val fileAccessScope: FileAccessScope = FileAccessScope(
-        readPatterns = setOf("**/*"),
-        writePatterns = emptySet(), // Role sparks enable writing
+    /**
+     * Reads and writes anywhere, minus the central sensitive-file list.
+     *
+     * The write axis is deliberately [FileAccessScope.AnyPath] and not
+     * `emptySet()` (AMPR-414).
+     * The intent has always been "role sparks decide which files get written",
+     * but composition is set intersection, and an empty set is the *strongest*
+     * constraint there, not the absence of one: `∅ ∩ anything = ∅`, so a
+     * project spark declaring no write patterns took write access away from
+     * every agent it was stacked under — including the production CODE agent,
+     * which is built with this spark *and* `role-code`. Contributing no
+     * constraint on an axis means widening it to everything; contributing no
+     * constraint at all means `fileAccessScope = null`, which this spark can't
+     * use because it does have something to say about forbidden files.
+     */
+    override val fileAccessScope: FileAccessScope = FileAccessScope.Permissive.copy(
         forbiddenPatterns = FileAccessScope.SensitiveFileForbiddenPatterns,
     )
 
