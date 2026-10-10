@@ -11,8 +11,8 @@ package link.socket.ampere.api
  *     onEscalation { event -> println("${event.agent} needs help: ${event.reason}") }
  * }
  *
- * ampere.agents.pursue("Build authentication system")
  * ampere.events.observe().collect { event -> ... }
+ * ampere.status.snapshot()
  *
  * ampere.close()
  *

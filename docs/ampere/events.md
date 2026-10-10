@@ -78,7 +78,8 @@ a `TeamEvent`; the projection is never persisted and never enters the fold. To
 subscribe to the record itself, use `EventRelayService.subscribeToLiveEvents` or
 `EventSerialBus.subscribe`. To observe a team's activity in the DSL, collect
 `AgentTeam.events`, whose replay buffer exists for late UI subscribers and is not
-an event log. `TeamEventBoundaryTest` enforces that no `commonMain` code outside
+an event log — and which is deprecated along with the rest of `AgentTeam`, because
+the markers it replays are the only thing a declared team produces (AMPR-399). `TeamEventBoundaryTest` enforces that no `commonMain` code outside
 `dsl/` references `TeamEvent`.
 
 ## Threshold-driven cognitive escalation

@@ -12,7 +12,7 @@ Style guide for all Ampere content: documentation, README, code comments, error 
 |---------|------|---------|
 | README / hero | Evocative, confident | *"Every AI system today shares the same limitation: the space between input and output is dark."* |
 | Technical docs | Clear, warm, opinionated | *"Events are the fundamental primitive. If you're reaching for a direct method call, pause and ask what event this should emit."* |
-| API reference | Minimal, exact | *"`AgentTeam.pursue(goal: String)` -- Initiates the PROPEL loop across all agents with shared context."* |
+| API reference | Minimal, exact | *"`EventRouter.startRouting()` -- Begins fanning routable events out to the agents registered for their type. Idempotent."* |
 | Error messages | Honest, helpful | *"Confidence below escalation threshold (0.34). The agent is uncertain about OAuth2 implementation and is requesting human input."* |
 | Social / short-form | Sharp, visual | *"Most AI agents are black boxes. Here's what it looks like when you can see one think:"* |
 

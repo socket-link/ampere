@@ -66,7 +66,11 @@ import link.socket.ampere.dsl.team.AgentTeamBuilder
  *
  * Uses dummy implementations (not real infrastructure) to ensure the
  * public API surface is consumable before any real implementation exists.
+ *
+ * `team`, `pursue` and `wake` are deprecated (AMPR-399) and still exercised here, because
+ * "every method on every service interface can be called" is the point of this test.
  */
+@Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
 class ConsumerSimulationTest {
 
     private val now = Clock.System.now()

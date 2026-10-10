@@ -132,6 +132,11 @@ object MyCustomAgent : AgentDefinition {
 ```
 
 ### Registering Custom Agents
+
+> **`AgentTeam` is deprecated and runs nothing (AMPR-399).** Declaring a team no longer
+> implies that anything executes; the snippet shows how roles are declared, not how work
+> starts. `RunHost` (AMPR-393) is the hosted run that replaces it.
+
 ```kotlin
 val team = AgentTeam.create {
     // Built-in agents

@@ -29,8 +29,12 @@ import link.socket.ampere.memory.memoryStoreOf
  * iOS Native.
  *
  * Runs as part of `iosSimulatorArm64Test` in CI on the macOS runner.
+ *
+ * The smoke test drives the deprecated `agents.pursue` (AMPR-399) on purpose: one publish
+ * through the door is what it asserts, and that is all `pursue` claims to do.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("DEPRECATION")
 class AmpereFromEnvironmentIosTest {
 
     private val scope = TestScope(UnconfinedTestDispatcher())

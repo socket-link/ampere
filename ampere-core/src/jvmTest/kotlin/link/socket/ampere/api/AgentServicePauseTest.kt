@@ -22,7 +22,11 @@ import link.socket.ampere.dsl.team.AgentTeam
 /**
  * Tests for [link.socket.ampere.api.service.AgentService.pause], which pauses the one named
  * agent — not the whole team — and fails rather than reporting success it did not deliver.
+ *
+ * `team` and `AgentTeam.pursue` are deprecated (AMPR-399); `pause` is defined over the team
+ * they build, so these tests go on exercising them.
  */
+@Suppress("DEPRECATION")
 class AgentServicePauseTest {
 
     private lateinit var scope: CoroutineScope
