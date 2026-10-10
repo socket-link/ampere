@@ -120,6 +120,16 @@ class CognitiveProgressPane(
     val currentPhase: Phase
         get() = state.phase
 
+    /**
+     * What the last [setFailed] reported, or null if nothing has failed.
+     *
+     * The companion of [currentPhase]: a caller that can see the pane reached
+     * [Phase.FAILED] but not why has to scrape [render]'s output, where the reason is
+     * truncated to the pane width.
+     */
+    val currentErrorMessage: String?
+        get() = state.errorMessage
+
     fun updateState(newState: CognitiveState) {
         state = newState
     }

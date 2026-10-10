@@ -42,6 +42,12 @@ last_verified: 2026-10-10
 > `## When …` heading stays in the body. `SparkStack.buildSystemPrompt` takes an
 > optional `preamble` rendered ahead of the cognitive-context header.
 
+> **2026-10-10 (AMPR-405):** the four `SparkBasedAgent.<Role>(...)` factories take an
+> `executor` (and an `outcomeRepository`), which is what finally lets `AgentFactory`
+> hand its agents one. Narrowing is unchanged and still decides: a tool passed through
+> `AgentFactory(additionalTools = …)` whose id no role spark's `allowedTools` admits
+> stays undispatchable, executor or not. See [PropelLoop](propel-loop.md).
+
 # Spark System
 
 ## What it is

@@ -26,6 +26,7 @@ import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.ExecutorId
+import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.trace.ArcRunId
@@ -86,6 +87,19 @@ class AmpereRuntime(
     private val fileSystem: FileSystem = systemFileSystem,
     private val maxFlowTicks: Int = 100,
     private val cognitiveRelay: CognitiveRelay? = null,
+    /**
+     * What the agents a run spawns dispatch their tool calls through.
+     *
+     * Null here means those agents build no
+     * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine] at all,
+     * so every plan step naming a tool fails as "Tool execution engine not configured" — the
+     * right default for the primary constructor, which is what callers wiring their own
+     * executor use (the eval Bench's
+     * [NoOpExecutor][link.socket.ampere.agents.execution.executor.NoOpExecutor]). The shipped
+     * entry points, [create] and [fromTeamConfig], default to a real
+     * [FunctionExecutor][link.socket.ampere.agents.execution.executor.FunctionExecutor]
+     * instead (AMPR-405).
+     */
     private val executor: Executor? = null,
     private val upstreamLlmClient: UpstreamLlmClient? = null,
     /**
@@ -672,6 +686,13 @@ class AmpereRuntime(
          *   with [eventApiFactory] or Pulse stores nothing. See the constructor parameter.
          * @param outcomeRepository Where the run's own outcome and its agents' tool outcomes are
          *   recorded; see the constructor parameter of the same name
+         * @param executor What the agents a run spawns dispatch their tool calls through
+         *   (AMPR-405). Defaults to [FunctionExecutor.create] — unlike the primary
+         *   constructor, which stays null for callers wiring their own (the eval Bench's
+         *   [link.socket.ampere.agents.execution.executor.NoOpExecutor], say). This is the
+         *   shipped entry point, and a run whose agents cannot dispatch a tool is a run that
+         *   cannot change anything: before AMPR-405 it left this null, so every tool step of
+         *   every Arc run failed as "Tool execution engine not configured".
          * @return AmpereRuntime configured with the specified Arc
          */
         fun create(
@@ -684,12 +705,14 @@ class AmpereRuntime(
             eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
             knowledgeRepository: KnowledgeRepository? = null,
             outcomeRepository: OutcomeMemoryRepository? = null,
+            executor: Executor? = FunctionExecutor.create(),
         ): AmpereRuntime {
             return AmpereRuntime(
                 arcConfig = arcConfig,
                 projectDir = projectDirPath.toPath(),
                 agentScope = agentScope,
                 maxFlowTicks = maxFlowTicks,
+                executor = executor,
                 eventApiFactory = eventApiFactory,
                 knowledgeRepository = knowledgeRepository,
                 clock = clock,
@@ -722,6 +745,7 @@ class AmpereRuntime(
             projectDir: Path,
             agentScope: CoroutineScope,
             fileSystem: FileSystem = systemFileSystem,
+            executor: Executor? = FunctionExecutor.create(),
         ): AmpereRuntime {
             val arcConfig = teamConfigToArcConfig(teamRoles)
             return AmpereRuntime(
@@ -729,6 +753,7 @@ class AmpereRuntime(
                 projectDir = projectDir,
                 agentScope = agentScope,
                 fileSystem = fileSystem,
+                executor = executor,
             )
         }
 

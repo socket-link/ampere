@@ -9,6 +9,9 @@ import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.messages.DefaultThreadViewService
 import link.socket.ampere.agents.events.tickets.DefaultTicketViewService
+import link.socket.ampere.agents.execution.executor.Executor
+import link.socket.ampere.agents.execution.executor.FunctionExecutor
+import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.service.AgentActionService
 import link.socket.ampere.agents.service.MessageActionService
 import link.socket.ampere.agents.service.TicketActionService
@@ -82,6 +85,15 @@ import link.socket.ampere.memory.MemoryStore
  *   caller's real grants instead of the deny-all default every
  *   `requiredPermissions` tool otherwise falls back to. Null preserves that
  *   default, which stays correct for callers with no persisted store.
+ * @param executor What the agents built off [AmpereInstance.agentFactory] dispatch
+ *   their tool calls through (AMPR-405). Defaults to [FunctionExecutor.create], so a
+ *   composed instance's agents can actually run the in-process tools they are built
+ *   with — before AMPR-405 this path supplied no executor, so the bound factory's
+ *   agents built no `ToolExecutionEngine` and every plan step naming a tool failed.
+ *   Pass `null` to declare that these agents must not act.
+ * @param tools Extra tools layered onto every agent the bound factory builds
+ *   (AMPR-405), on top of each agent type's own set. Narrowed by the spark stack
+ *   like any other tool.
  */
 @AmpereStableApi
 fun Ampere.fromEnvironment(
@@ -94,6 +106,8 @@ fun Ampere.fromEnvironment(
     modelDescriptorSource: ModelDescriptorSource? = null,
     database: Database? = null,
     upstreamDecisionClient: UpstreamDecisionClient? = null,
+    executor: Executor? = FunctionExecutor.create(),
+    tools: Set<Tool<*>> = emptySet(),
 ): AmpereInstance {
     val sdkEventApi = environmentService.createEventApi("sdk-cli")
 
@@ -166,6 +180,15 @@ fun Ampere.fromEnvironment(
         upstreamDecisionClient = upstreamDecisionClient,
         modelDescriptorSource = modelDescriptorSource,
         database = database,
+        // AMPR-405: the seam that makes a factory-built agent able to act at all. Without
+        // an executor its reasoning unit builds no `ToolExecutionEngine`, so every plan
+        // step naming a tool comes back "Tool execution engine not configured".
+        executor = executor,
+        additionalTools = tools,
+        // AMPR-406: the same store [AmpereInstance.outcomes] reads, so what those agents'
+        // tool calls do is what this instance reports back. It only records anything with
+        // an executor beside it, which is why it is wired here and not before.
+        outcomeRepository = effectiveOutcomeRepository,
     )
 
     return object : AmpereInstance {

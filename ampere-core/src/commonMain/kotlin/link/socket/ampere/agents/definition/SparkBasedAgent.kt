@@ -301,6 +301,23 @@ open class SparkBasedAgent<S : AgentState>(
         }
     }
 
+    /**
+     * Whether this agent can actually run a tool (AMPR-405).
+     *
+     * False for an agent built with no [_executor]: its reasoning unit builds no
+     * `ToolExecutionEngine`, so every plan step naming a tool refuses. A host that
+     * drives the cognitive cycle should ask *before* spending a Perceive and a Plan
+     * call on a cycle whose Execute phase cannot act — a misconfigured agent plans
+     * plausibly and then refuses its own steps one at a time, which reads as several
+     * tool failures rather than the single wiring mistake it is.
+     *
+     * The production factories ([AgentFactory], [SparkAgentFactory]) supply an
+     * executor, so this is true for a factory-built agent unless the caller passed
+     * `executor = null` on purpose.
+     */
+    val canExecuteTools: Boolean
+        get() = reasoning.canExecuteTools
+
     // ========================================================================
     // Neural Agent Implementation
     // ========================================================================
@@ -788,6 +805,16 @@ open class SparkBasedAgent<S : AgentState>(
          * @param cognitiveConfig cognitive-loop configuration (AMPR-387); its
          *   `phaseSparks` block is what the agent's `PhaseSparkManager` is built
          *   from. Default leaves phase handling off, as before.
+         * @param executor what the agent's tool calls dispatch through (AMPR-405).
+         *   Null builds an agent that cannot run tools at all — its
+         *   [AgentReasoning] builds no `ToolExecutionEngine` — so every plan step
+         *   naming a tool fails. The production factories ([AgentFactory],
+         *   [SparkAgentFactory]) supply one; pass a
+         *   [FunctionExecutor][link.socket.ampere.agents.execution.executor.FunctionExecutor]
+         *   when hand-building an agent that is expected to act.
+         * @param outcomeRepository episodic store for the outcomes the agent's tool
+         *   calls produce (AMPR-406). Only has anything to record when [executor] is
+         *   set too — without one no engine is built and no tool dispatches.
          */
         fun Code(
             sparkRegistry: SparkRegistry,
@@ -806,6 +833,8 @@ open class SparkBasedAgent<S : AgentState>(
             userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
             workspace: ExecutionWorkspace? = null,
             cognitiveConfig: CognitiveConfig = CognitiveConfig(),
+            executor: Executor? = null,
+            outcomeRepository: OutcomeMemoryRepository? = null,
         ): SparkBasedAgent<CodeState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -830,6 +859,8 @@ open class SparkBasedAgent<S : AgentState>(
                 _userGrantProvider = userGrantProvider,
                 _workspace = workspace,
                 _cognitiveConfig = cognitiveConfig,
+                _executor = executor,
+                _outcomeRepository = outcomeRepository,
             )
             agent.spark<SparkBasedAgent<CodeState>>(roleSpark)
             return agent
@@ -879,6 +910,8 @@ open class SparkBasedAgent<S : AgentState>(
             userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
             workspace: ExecutionWorkspace? = null,
             cognitiveConfig: CognitiveConfig = CognitiveConfig(),
+            executor: Executor? = null,
+            outcomeRepository: OutcomeMemoryRepository? = null,
         ): SparkBasedAgent<ProductState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -901,6 +934,8 @@ open class SparkBasedAgent<S : AgentState>(
                 _userGrantProvider = userGrantProvider,
                 _workspace = workspace,
                 _cognitiveConfig = cognitiveConfig,
+                _executor = executor,
+                _outcomeRepository = outcomeRepository,
             )
             agent.spark<SparkBasedAgent<ProductState>>(roleSpark)
             return agent
@@ -937,6 +972,8 @@ open class SparkBasedAgent<S : AgentState>(
             userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
             workspace: ExecutionWorkspace? = null,
             cognitiveConfig: CognitiveConfig = CognitiveConfig(),
+            executor: Executor? = null,
+            outcomeRepository: OutcomeMemoryRepository? = null,
         ): SparkBasedAgent<ProjectState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -959,6 +996,8 @@ open class SparkBasedAgent<S : AgentState>(
                 _userGrantProvider = userGrantProvider,
                 _workspace = workspace,
                 _cognitiveConfig = cognitiveConfig,
+                _executor = executor,
+                _outcomeRepository = outcomeRepository,
             )
             agent.spark<SparkBasedAgent<ProjectState>>(roleSpark)
             return agent
@@ -995,6 +1034,8 @@ open class SparkBasedAgent<S : AgentState>(
             userGrantProvider: (suspend (PlugManifest) -> UserGrants)? = null,
             workspace: ExecutionWorkspace? = null,
             cognitiveConfig: CognitiveConfig = CognitiveConfig(),
+            executor: Executor? = null,
+            outcomeRepository: OutcomeMemoryRepository? = null,
         ): SparkBasedAgent<QualityState> {
             val roleSpark = resolveRequiredRoleSpark(
                 registry = sparkRegistry,
@@ -1017,6 +1058,8 @@ open class SparkBasedAgent<S : AgentState>(
                 _userGrantProvider = userGrantProvider,
                 _workspace = workspace,
                 _cognitiveConfig = cognitiveConfig,
+                _executor = executor,
+                _outcomeRepository = outcomeRepository,
             )
             agent.spark<SparkBasedAgent<QualityState>>(roleSpark)
             return agent

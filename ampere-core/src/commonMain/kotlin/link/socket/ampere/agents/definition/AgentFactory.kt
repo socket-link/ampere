@@ -12,6 +12,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.ProjectSpark
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.routing.CapabilityRoutingDefaults
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.domain.routing.CognitiveRelayImpl
@@ -26,6 +27,8 @@ import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.tickets.TicketOrchestrator
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.agents.execution.executor.Executor
+import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.ASK_HUMAN_TOOL_ID
 import link.socket.ampere.agents.execution.tools.Tool
@@ -89,6 +92,12 @@ enum class AgentType {
  *   model registry (AMPR-231); ignored when [cognitiveRelay] is supplied
  * @param workspace The directory every agent built here is confined to (AMPR-300);
  *   required, no default. See the constructor parameter.
+ * @param executor What every agent built here dispatches its tool calls through
+ *   (AMPR-405); defaults to a [FunctionExecutor]. See the constructor parameter.
+ * @param additionalTools Tools layered onto every agent built here, narrowed by the
+ *   spark stack like any other (AMPR-405)
+ * @param outcomeRepository Episodic store for the outcomes those tool calls produce
+ *   (AMPR-406)
  */
 class AgentFactory(
     private val scope: CoroutineScope,
@@ -169,6 +178,43 @@ class AgentFactory(
      * where no persisted store exists (tests, headless use).
      */
     private val database: Database? = null,
+    /**
+     * What every agent this factory builds dispatches its tool calls through
+     * (AMPR-405).
+     *
+     * Defaults to [FunctionExecutor.create], because a factory-built agent that
+     * cannot run a tool is not a useful agent: until AMPR-405 no shipped
+     * construction path supplied an `Executor` at all, so
+     * [AgentReasoning][link.socket.ampere.agents.domain.reasoning.AgentReasoning]
+     * built no `ToolExecutionEngine` and every plan step naming a tool failed with
+     * "Tool execution engine not configured". `FunctionExecutor` runs the
+     * in-process [link.socket.ampere.agents.execution.tools.FunctionTool]s this
+     * factory's tool sets are made of, which is what that default buys.
+     *
+     * Pass a different executor to route dispatch elsewhere (e.g.
+     * [link.socket.ampere.agents.execution.executor.NoOpExecutor] for an
+     * effect-free run), or `null` to declare that these agents must not act — a
+     * declaration, not an omission, and one a caller driving a cognitive cycle can
+     * read off [SparkBasedAgent.canExecuteTools] before spending a model call.
+     */
+    private val executor: Executor? = FunctionExecutor.create(),
+    /**
+     * Tools layered onto every agent this factory builds, on top of the per-type
+     * sets below (AMPR-405).
+     *
+     * The spark stack still narrows them: a tool whose id no role spark's
+     * `allowedTools` admits is as unreachable here as one the agent was never
+     * given (AMPR-400). Empty by default, which leaves each agent type with
+     * exactly the tools it had before.
+     */
+    private val additionalTools: Set<Tool<*>> = emptySet(),
+    /**
+     * Episodic store for the outcomes these agents' tool calls produce (AMPR-406).
+     * Handed to the agents' `ToolExecutionEngine`, which is the persisting path for
+     * every `ExecutionOutcome` their plan steps produce. Null leaves them
+     * unrecorded.
+     */
+    private val outcomeRepository: OutcomeMemoryRepository? = null,
 ) {
     private val toolWriteCodeFile: Tool<ExecutionContext.Code.WriteCode> =
         toolWriteCodeFileOverride ?: ToolWriteCodeFile(AgentActionAutonomy.ASK_BEFORE_ACTION)
@@ -373,6 +419,8 @@ class AgentFactory(
                 userGrantProvider = userGrantProvider,
                 workspace = workspace,
                 cognitiveConfig = cognitiveConfig,
+                executor = executor,
+                outcomeRepository = outcomeRepository,
                 tools = buildSet {
                     add(toolWriteCodeFile)
                     add(ToolReadCodeFile(AgentActionAutonomy.FULLY_AUTONOMOUS))
@@ -382,6 +430,7 @@ class AgentFactory(
                     add(ToolPush())
                     add(ToolCreatePullRequest())
                     add(ToolGitStatus())
+                    addAll(additionalTools)
                 },
             )
         }
@@ -402,6 +451,9 @@ class AgentFactory(
                 userGrantProvider = userGrantProvider,
                 workspace = workspace,
                 cognitiveConfig = cognitiveConfig,
+                executor = executor,
+                outcomeRepository = outcomeRepository,
+                tools = additionalTools,
             )
         }
         AgentType.PROJECT -> {
@@ -421,7 +473,9 @@ class AgentFactory(
                 userGrantProvider = userGrantProvider,
                 workspace = workspace,
                 cognitiveConfig = cognitiveConfig,
-                tools = setOfNotNull(toolCreateIssues, toolAskHuman),
+                executor = executor,
+                outcomeRepository = outcomeRepository,
+                tools = setOfNotNull(toolCreateIssues, toolAskHuman) + additionalTools,
             )
         }
         AgentType.QUALITY -> {
@@ -441,6 +495,9 @@ class AgentFactory(
                 userGrantProvider = userGrantProvider,
                 workspace = workspace,
                 cognitiveConfig = cognitiveConfig,
+                executor = executor,
+                outcomeRepository = outcomeRepository,
+                tools = additionalTools,
             )
         }
     }

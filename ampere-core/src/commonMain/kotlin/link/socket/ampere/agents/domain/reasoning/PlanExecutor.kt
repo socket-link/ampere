@@ -254,6 +254,13 @@ class PlanExecutor(
 
     /**
      * Builds a summary message from step outcomes.
+     *
+     * Every failure's own error is listed, not just how many there were (AMPR-405).
+     * This string becomes the `message` of the [ExecutionOutcome.NoChanges.Failure]
+     * the plan settles to, and it is the only thing a caller holding that outcome has
+     * to go on — a count told it that something failed and nothing about what, so a
+     * whole plan that could not run reported the same `✗ Failure: 3` whether the tools
+     * errored, the permissions were denied, or the agent had no executor at all.
      */
     private fun buildSummary(
         stepOutcomes: List<StepOutcome>,
@@ -261,7 +268,7 @@ class PlanExecutor(
     ): String = buildString {
         val successCount = stepOutcomes.count { it is StepOutcome.Success }
         val partialCount = stepOutcomes.count { it is StepOutcome.PartialSuccess }
-        val failureCount = stepOutcomes.count { it is StepOutcome.Failure }
+        val failures = stepOutcomes.filterIsInstance<StepOutcome.Failure>()
         val skippedCount = stepOutcomes.count { it is StepOutcome.Skipped }
 
         appendLine("Plan execution complete:")
@@ -269,8 +276,11 @@ class PlanExecutor(
         if (partialCount > 0) {
             appendLine("  ⚠ Partial: $partialCount")
         }
-        if (failureCount > 0) {
-            appendLine("  ✗ Failure: $failureCount")
+        if (failures.isNotEmpty()) {
+            appendLine("  ✗ Failure: ${failures.size}")
+            failures.forEach { failure ->
+                appendLine("      ${failure.stepDescription}: ${failure.error}")
+            }
         }
         if (skippedCount > 0) {
             appendLine("  ⊘ Skipped: $skippedCount")
