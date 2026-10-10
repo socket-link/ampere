@@ -17,6 +17,7 @@ import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.AutonomousAgent
 import link.socket.ampere.agents.definition.SparkAgentFactory
 import link.socket.ampere.agents.domain.knowledge.Knowledge
+import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.reasoning.Idea
@@ -278,7 +279,11 @@ class FlowPhaseTest {
 
         override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea =
             { _ -> Idea.blank }
-        override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan = { _, _ -> Plan.blank }
+        override val runLLMToPlan: (
+            task: Task,
+            ideas: List<Idea>,
+            relevantKnowledge: List<KnowledgeWithScore>,
+        ) -> Plan = { _, _, _ -> Plan.blank }
         override val runLLMToExecuteTask: (task: Task) -> Outcome = { _ -> Outcome.blank }
         override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome =
             { _, _ -> error("No tools in this test") }

@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.domain.knowledge.Knowledge
+import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.reasoning.Idea
@@ -83,7 +84,11 @@ class AutonomousAgentRuntimeLoopTest {
             Idea(name = "perceived")
         }
 
-        override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan = { task, _ ->
+        override val runLLMToPlan: (
+            task: Task,
+            ideas: List<Idea>,
+            relevantKnowledge: List<KnowledgeWithScore>,
+        ) -> Plan = { task, _, _ ->
             modelCalls += "plan:${task.id}"
             plannedTasks += task
             planFor(task)

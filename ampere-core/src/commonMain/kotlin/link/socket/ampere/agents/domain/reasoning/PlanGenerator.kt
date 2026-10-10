@@ -36,6 +36,7 @@ import link.socket.ampere.agents.execution.tools.Tool
  *     ideas = perceptionIdeas,
  *     agentRole = "Project Manager",
  *     availableTools = myTools,
+ *     relevantKnowledge = recalledKnowledge,
  *     taskFactory = { id, description -> PMTask.SomeTask(id, description) },
  * )
  * ```
@@ -53,7 +54,9 @@ class PlanGenerator(
      * @param ideas Insights from perception that inform planning
      * @param agentRole Description of the agent's role
      * @param availableTools Tools available to the agent
-     * @param relevantKnowledge Past knowledge relevant to this task
+     * @param relevantKnowledge Past knowledge Recall retrieved for this task. Rendered into
+     *   the prompt by `synthesizeKnowledge`; an empty list renders the no-knowledge block
+     *   and is the only case in which the prompt carries no past experience.
      * @param taskFactory Factory function to create domain-specific task objects
      * @param customPromptBuilder Optional custom prompt builder for agent-specific planning
      * @return A Plan containing sequential steps to accomplish the goal

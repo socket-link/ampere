@@ -18,6 +18,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
 import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
+import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
@@ -296,13 +297,22 @@ open class SparkBasedAgent<S : AgentState>(
         }
     }
 
-    override val runLLMToPlan: (Task, List<Idea>) -> Plan = { task, ideas ->
-        runBlockingCompat(ioDispatcher) {
-            withTimeout(60000) {
-                reasoning.generatePlan(task, ideas)
+    // `@Transient` because this class is `@Serializable` and the plugin resolves a serializer
+    // for every type argument of a property's function type. The other `runLLM*` lambdas get
+    // away without it only because theirs happen to be serializable; `KnowledgeWithScore` is a
+    // plain data class. A lambda is behaviour, not state, so none of them belong in a serial
+    // form anyway.
+    @Transient
+    override val runLLMToPlan: (Task, List<Idea>, List<KnowledgeWithScore>) -> Plan =
+        { task, ideas, relevantKnowledge ->
+            runBlockingCompat(ioDispatcher) {
+                withTimeout(60000) {
+                    // AMPR-388: knowledge Recall found reaches `PlanGenerator`'s prompt. This
+                    // used to call `generatePlan(task, ideas)` and take the empty default.
+                    reasoning.generatePlan(task, ideas, relevantKnowledge)
+                }
             }
         }
-    }
 
     /**
      * Dispatches [task] as the one plan step it is: no LLM call of its own.
@@ -333,11 +343,20 @@ open class SparkBasedAgent<S : AgentState>(
      * dispatches the steps the Plan phase already produced, one call each. A
      * host reaches for it when a step it holds is too coarse to dispatch
      * directly and it wants the agent to break that step down first.
+     *
+     * The sub-plan is a Plan generation like any other, so Recall precedes it
+     * (AMPR-388). It recalls for [task] rather than being handed knowledge: the
+     * entry point takes a `Task` and nothing else, so there is no outer plan to
+     * inherit from by construction, and recalling here scopes the knowledge to
+     * the step being broken down. With no memory service wired this is a no-op
+     * returning an empty list, and the prompt is then byte-identical to the one
+     * `generatePlan(task, emptyList())` built.
      */
     fun runSubPlanForTask(task: Task): Outcome =
         runBlockingCompat(ioDispatcher) {
             withTimeout(60000) {
-                val plan = reasoning.generatePlan(task, emptyList())
+                val relevantKnowledge = recallRelevantKnowledgeForTask(task)
+                val plan = reasoning.generatePlan(task, emptyList(), relevantKnowledge)
                 reasoning.executePlan(plan) { step, _ ->
                     executePlanStep(step, parentTask = task)
                 }.outcome

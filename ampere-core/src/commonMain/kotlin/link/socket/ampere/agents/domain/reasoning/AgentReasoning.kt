@@ -65,7 +65,7 @@ import link.socket.ampere.plug.permission.UserGrants
  * }
  *
  * val idea = reasoning.evaluatePerception(perception)
- * val plan = reasoning.generatePlan(task, ideas)
+ * val plan = reasoning.generatePlan(task, ideas, relevantKnowledge)
  * val outcome = reasoning.executeTool(tool, request)
  * val knowledge = reasoning.extractKnowledge(outcome, task, plan)
  * ```
@@ -155,6 +155,12 @@ class AgentReasoning private constructor(
 
     /**
      * Generates a plan for accomplishing a task.
+     *
+     * @param relevantKnowledge what Recall retrieved for [task]. It is rendered into the
+     *   planning prompt, so omitting it is skipping Recall — the canonical failure mode
+     *   `propel-loop.md` names, and the one AMPR-388 closed. The default
+     *   exists for callers that genuinely have no memory service; pass the recalled list
+     *   whenever there is one.
      */
     suspend fun generatePlan(
         task: Task,
