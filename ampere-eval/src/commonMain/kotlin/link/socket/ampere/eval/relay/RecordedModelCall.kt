@@ -46,8 +46,12 @@ data class RecordedModelCall(
     /** Whether the recorded call succeeded. */
     val success: Boolean get() = completed.success
 
-    /** The recorded routing reason, or `null` if the start event was not recorded. */
-    val routingReason: String? get() = started?.routingReason
+    /**
+     * The recorded routing reason: the transport's own when the completion carried one
+     * (AMPR-391), else the relay's from the start event, else `null` when no start was
+     * recorded.
+     */
+    val routingReason: String? get() = completed.servedRoutingReason ?: started?.routingReason
 }
 
 /**
@@ -86,12 +90,20 @@ data class DecodedModelCalls(
  * registered for `Event` or `CanonEntity` (see `docs/concepts/domain-canon.md`).
  *
  * ### Pairing
- * The pairing replicates `ArcTraceProjection.buildModelInvocations` (RECON-relay
- * §3.3) **verbatim**: each `ProviderCallCompletedEvent` is matched to the first
- * still-unconsumed `ProviderCallStartedEvent` satisfying the 6-part correlation
- * key (`timestamp <=`, `workflowId`, `agentId`, `providerId`, `modelId`,
- * `cognitivePhase`), and that start is then removed so it pairs at most once.
- * There is no correlation id — ordering is load-bearing (RECON-relay Guideline 5).
+ * Each `ProviderCallCompletedEvent` is matched to the first still-unconsumed
+ * `ProviderCallStartedEvent` satisfying the 6-part correlation key (`timestamp <=`,
+ * `workflowId`, `agentId`, `providerId`, `modelId`, `cognitivePhase`), and that start is
+ * then removed so it pairs at most once. There is no correlation id here — ordering is
+ * load-bearing (RECON-relay Guideline 5).
+ *
+ * This was `ArcTraceProjection.buildModelInvocations` **verbatim** until AMPR-391, which
+ * moved the projection's primary join onto the envelope's `caused_by`. A trace is captured
+ * off the bus, which carries the `Event` and not its envelope, so replay has no `caused_by`
+ * to join on and keeps the field-equality key — the projection's own fallback. The one
+ * consequence: a call whose transport reported a *different* served provider or model than
+ * the request pairs with no start here, so [RecordedModelCall.started] is null and the
+ * relay's reason is unavailable for it. Everything the recorded call is actually measured
+ * on — provider, model, usage, success — is read off the completion either way.
  *
  * Non-model events are ignored. Calls are enumerated in completion order, which
  * is call order for the sequential, deterministic runs evals replay.

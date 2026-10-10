@@ -53,6 +53,12 @@ import link.socket.ampere.domain.ai.provider.ProviderId
  * call and reads [probeLocalCapacity]. By the time a local configuration
  * reaches [call], the decision to run on the device has been made and shown.
  *
+ * ## What served the call
+ *
+ * [callDetailed] forwards to whichever side it dispatched to, so a consumer's
+ * cloud proxy reports what served through this client rather than being hidden
+ * behind it, and a local call is attributed to the device (AMPR-391).
+ *
  * ## Saying where a call ran
  *
  * This client is also the [InferenceLocalityClassifier] a surface should use
@@ -96,6 +102,34 @@ class DispatchingUpstreamLlmClient(
                 )
         } else {
             bundled.call(request, configuration)
+        }
+    }
+
+    /**
+     * Dispatches exactly as [call] and passes the chosen side's
+     * [UpstreamCompletion] straight back (AMPR-391).
+     *
+     * Forwarding rather than wrapping is the point on the cloud side: a
+     * consumer's proxy injected as [bundled] reports what served through its own
+     * `callDetailed`, and a dispatcher that called `bundled.call` instead would
+     * swallow it — the one seam a consumer has would be unreachable behind the
+     * one Ampere wires by default. On the local side the [LocalUpstreamLlmClient]
+     * attributes the call to the device.
+     */
+    override suspend fun callDetailed(
+        request: ChatCompletionRequest,
+        configuration: AIConfiguration,
+    ): UpstreamCompletion {
+        val localClient = local
+
+        return if (isLocalModel(configuration.model.name)) {
+            localClient?.callDetailed(request, configuration)
+                ?: throw LocalEngineNotBoundException(
+                    providerId = configuration.provider.id,
+                    modelId = configuration.model.name,
+                )
+        } else {
+            bundled.callDetailed(request, configuration)
         }
     }
 

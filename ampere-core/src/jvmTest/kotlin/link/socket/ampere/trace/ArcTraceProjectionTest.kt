@@ -164,6 +164,160 @@ class ArcTraceProjectionTest {
     }
 
     @Test
+    fun `a pair whose models differ is one invocation naming the served model`() = runTest {
+        // AMPR-391: the start names what the relay resolved, the completion what the
+        // consumer's proxy actually served. Pairing on provider+model equality would
+        // find no start here and project a half-trace priced from latencyMs; the
+        // envelope's `caused_by` is what makes this one call.
+        val runId = "run-served-divergent"
+
+        eventRepository.saveEvent(
+            ProviderCallStartedEvent(
+                eventId = "served-start",
+                timestamp = Instant.fromEpochMilliseconds(1_000),
+                eventSource = EventSource.Agent("planner-agent"),
+                workflowId = runId,
+                agentId = "planner-agent",
+                cognitivePhase = CognitivePhase.PLAN,
+                providerId = "openai",
+                modelId = "gpt-4.1",
+                routingReason = "phase=PLAN",
+            ),
+            envelope = EventEnvelope(runId = runId),
+        ).getOrThrow()
+
+        eventRepository.saveEvent(
+            ProviderCallCompletedEvent(
+                eventId = "served-complete",
+                timestamp = Instant.fromEpochMilliseconds(1_900),
+                eventSource = EventSource.Agent("planner-agent"),
+                workflowId = runId,
+                agentId = "planner-agent",
+                cognitivePhase = CognitivePhase.PLAN,
+                providerId = "anthropic",
+                modelId = "claude-sonnet-5",
+                usage = TokenUsage(inputTokens = 310, outputTokens = 44, estimatedCost = 0.0021),
+                latencyMs = 870,
+                success = true,
+                servedRoutingReason = "tier=premium",
+            ),
+            envelope = EventEnvelope(runId = runId, causedBy = "served-start"),
+        ).getOrThrow()
+
+        val trace = projection.project(runId).getOrThrow()
+        val plan = assertNotNull(trace.phases.firstOrNull { it.name == "PLAN" })
+        val invocation = plan.modelInvocations.single()
+
+        assertEquals("anthropic", invocation.providerId)
+        assertEquals("claude-sonnet-5", invocation.modelId)
+        // Paired, not reconstructed: the start's own timestamp, not completion - latency.
+        assertEquals(Instant.fromEpochMilliseconds(1_000), invocation.startedAt)
+        assertEquals(Instant.fromEpochMilliseconds(1_900), invocation.endedAt)
+        // The transport's reason outranks the relay's for a model the relay did not pick.
+        assertEquals("tier=premium", invocation.routingReason)
+        assertEquals(310, invocation.inputTokens)
+        assertEquals(0.0021, invocation.estimatedUsd)
+    }
+
+    @Test
+    fun `a completion with no served reason keeps the relay reason from its start`() = runTest {
+        val runId = "run-served-silent"
+
+        eventRepository.saveEvent(
+            ProviderCallStartedEvent(
+                eventId = "silent-start",
+                timestamp = Instant.fromEpochMilliseconds(1_000),
+                eventSource = EventSource.Agent("planner-agent"),
+                workflowId = runId,
+                agentId = "planner-agent",
+                cognitivePhase = CognitivePhase.PLAN,
+                providerId = "openai",
+                modelId = "gpt-4.1",
+                routingReason = "phase=PLAN",
+            ),
+            envelope = EventEnvelope(runId = runId),
+        ).getOrThrow()
+
+        eventRepository.saveEvent(
+            ProviderCallCompletedEvent(
+                eventId = "silent-complete",
+                timestamp = Instant.fromEpochMilliseconds(1_250),
+                eventSource = EventSource.Agent("planner-agent"),
+                workflowId = runId,
+                agentId = "planner-agent",
+                cognitivePhase = CognitivePhase.PLAN,
+                providerId = "openai",
+                modelId = "gpt-4.1",
+                usage = TokenUsage(inputTokens = 10, outputTokens = 5),
+                latencyMs = 250,
+                success = true,
+            ),
+            envelope = EventEnvelope(runId = runId, causedBy = "silent-start"),
+        ).getOrThrow()
+
+        val trace = projection.project(runId).getOrThrow()
+        val invocation = assertNotNull(trace.phases.firstOrNull { it.name == "PLAN" })
+            .modelInvocations
+            .single()
+
+        assertEquals("phase=PLAN", invocation.routingReason)
+    }
+
+    @Test
+    fun `two concurrent calls in one phase each pair with their own start`() = runTest {
+        // Same agent, same phase, same provider and model on both starts: before the
+        // `caused_by` join the only separator was order, and the second completion
+        // could take the first start. Each pair now names its own.
+        val runId = "run-served-concurrent"
+
+        for (index in 0..1) {
+            eventRepository.saveEvent(
+                ProviderCallStartedEvent(
+                    eventId = "concurrent-start-$index",
+                    timestamp = Instant.fromEpochMilliseconds(1_000L + index),
+                    eventSource = EventSource.Agent("planner-agent"),
+                    workflowId = runId,
+                    agentId = "planner-agent",
+                    cognitivePhase = CognitivePhase.PLAN,
+                    providerId = "openai",
+                    modelId = "gpt-4.1",
+                    routingReason = "phase=PLAN",
+                ),
+                envelope = EventEnvelope(runId = runId),
+            ).getOrThrow()
+        }
+
+        // Completions settle in the reverse order their starts were published in.
+        for (index in 1 downTo 0) {
+            eventRepository.saveEvent(
+                ProviderCallCompletedEvent(
+                    eventId = "concurrent-complete-$index",
+                    timestamp = Instant.fromEpochMilliseconds(2_000L + index),
+                    eventSource = EventSource.Agent("planner-agent"),
+                    workflowId = runId,
+                    agentId = "planner-agent",
+                    cognitivePhase = CognitivePhase.PLAN,
+                    providerId = "served-$index",
+                    modelId = "model-$index",
+                    usage = TokenUsage(inputTokens = 10, outputTokens = 5),
+                    latencyMs = 100,
+                    success = true,
+                ),
+                envelope = EventEnvelope(runId = runId, causedBy = "concurrent-start-$index"),
+            ).getOrThrow()
+        }
+
+        val trace = projection.project(runId).getOrThrow()
+        val invocations = assertNotNull(trace.phases.firstOrNull { it.name == "PLAN" }).modelInvocations
+
+        assertEquals(2, invocations.size)
+        assertEquals(
+            mapOf("model-0" to Instant.fromEpochMilliseconds(1_000), "model-1" to Instant.fromEpochMilliseconds(1_001)),
+            invocations.associate { it.modelId to it.startedAt },
+        )
+    }
+
+    @Test
     fun `projects one hundred event run within target budget`() = runTest {
         val runId = "run-trace-benchmark"
         repeat(100) { index ->

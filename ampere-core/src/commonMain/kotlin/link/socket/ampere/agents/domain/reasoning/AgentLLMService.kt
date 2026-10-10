@@ -12,6 +12,7 @@ import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
@@ -29,6 +30,8 @@ import link.socket.ampere.domain.util.toClientModelId
 import link.socket.ampere.llm.BundledUpstreamLlmClient
 import link.socket.ampere.llm.DispatchingUpstreamLlmClient
 import link.socket.ampere.llm.MissingUpstreamLlmClientException
+import link.socket.ampere.llm.ServedBy
+import link.socket.ampere.llm.UpstreamCompletion
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.util.ioDispatcher
 import link.socket.ampere.util.logWith
@@ -36,12 +39,20 @@ import link.socket.ampere.util.logWith
 /**
  * What one [AgentLLMService.callDetailed] produced, and who produced it.
  *
+ * Served, not requested (AMPR-391): when the transport reports a
+ * [ServedBy][link.socket.ampere.llm.ServedBy], every field here describes what
+ * answered rather than what the relay asked for. A consumer's proxy that routes
+ * server-side is therefore visible to its caller without a second telemetry
+ * pair of its own.
+ *
  * @property text The model's response — what [AgentLLMService.call] returns.
  * @property providerId The `AIProvider.id` of the provider that served the call.
  * @property modelId The `AIModel.name` of the model that served the call.
- * @property routingReason Why that model: the matched relay rule, or
- *   `"agent_configuration"` when no relay resolved the call.
- * @property latencyMs Wall-clock time the provider call took.
+ * @property routingReason Why that model: the transport's own reason when it
+ *   reported one, else the matched relay rule, else `"agent_configuration"`
+ *   when no relay resolved the call.
+ * @property latencyMs How long the provider call took — the serving side's own
+ *   measurement when it reported one, else Ampere's wall clock.
  */
 data class LlmCallResult(
     val text: String,
@@ -194,7 +205,7 @@ class AgentLLMService(
             val combinedPrompt = buildCombinedPrompt(effectiveSystemMessage, prompt)
             val providerId = resolveCustomProviderId()
             val modelId = resolveCustomModelId()
-            emitStartedTelemetry(
+            val startedEventId = emitStartedTelemetry(
                 routingContext = routingContext,
                 providerId = providerId,
                 modelId = modelId,
@@ -214,6 +225,7 @@ class AgentLLMService(
                     usage = TokenUsage(),
                     success = true,
                     startedAt = startedAt,
+                    causedBy = startedEventId,
                 )
                 LlmCallResult(
                     text = response,
@@ -234,6 +246,7 @@ class AgentLLMService(
                     success = false,
                     startedAt = startedAt,
                     errorType = CANCELLED_ERROR_TYPE,
+                    causedBy = startedEventId,
                 )
                 throw cancellation
             } catch (t: Throwable) {
@@ -245,6 +258,7 @@ class AgentLLMService(
                     success = false,
                     startedAt = startedAt,
                     errorType = t::class.simpleName ?: "UnknownError",
+                    causedBy = startedEventId,
                 )
                 throw t
             }
@@ -341,7 +355,12 @@ class AgentLLMService(
             maxTokens = maxTokens,
         )
 
-        emitStartedTelemetry(
+        // The started row names the *resolved* configuration, and only can: it is
+        // published before the transport runs, so nothing has served the call yet.
+        // Its completion may therefore name a different provider and model (AMPR-391),
+        // which is why the pair is joined by this event's id on `caused_by` rather than
+        // by provider+model equality.
+        val startedEventId = emitStartedTelemetry(
             routingContext = routingContext,
             providerId = effectiveConfig.provider.id,
             modelId = model.name,
@@ -352,33 +371,40 @@ class AgentLLMService(
         // Held outside the `try` so the cancellation handler can tell "cancelled before
         // the provider answered" from "cancelled after it answered but before we settled"
         // — the latter has real actuals and must not be downgraded to an estimate.
-        var upstreamCompletion: ChatCompletion? = null
-        val completion = try {
+        var upstreamCompletion: UpstreamCompletion? = null
+        val upstream = try {
             withContext(ioDispatcher) {
-                client.call(request, effectiveConfig).also { upstreamCompletion = it }
+                client.callDetailed(request, effectiveConfig).also { upstreamCompletion = it }
             }
         } catch (cancellation: CancellationException) {
             // AMPR-242: cancellation must still settle a cost record. `NonCancellable` is
             // what makes the write survive — without it every suspension point below
             // throws immediately on the cancelled Job and no row is ever inserted.
             withContext(NonCancellable) {
+                // A transport that answered before the cancellation landed also said what
+                // served it, so the row is booked against that rather than the request.
+                val served = upstreamCompletion?.served
                 emitCompletedTelemetry(
                     routingContext = routingContext,
-                    providerId = effectiveConfig.provider.id,
-                    modelId = model.name,
+                    providerId = served.providerIdOr(effectiveConfig.provider.id),
+                    modelId = served.modelIdOr(model.name),
                     usage = cancelledUsage(
-                        providerId = effectiveConfig.provider.id,
-                        modelId = model.name,
+                        providerId = served.providerIdOr(effectiveConfig.provider.id),
+                        modelId = served.modelIdOr(model.name),
                         messages = messages,
                         completion = upstreamCompletion,
                     ),
                     success = false,
                     startedAt = startedAt,
                     errorType = CANCELLED_ERROR_TYPE,
+                    causedBy = startedEventId,
+                    servedLatencyMs = served?.latencyMs,
+                    servedRoutingReason = served?.routingReason,
                 )
             }
             throw cancellation
         } catch (t: Throwable) {
+            // Nothing served the call, so the only ids there are belong to the request.
             emitCompletedTelemetry(
                 routingContext = routingContext,
                 providerId = effectiveConfig.provider.id,
@@ -387,10 +413,15 @@ class AgentLLMService(
                 success = false,
                 startedAt = startedAt,
                 errorType = t::class.simpleName ?: "UnknownError",
+                causedBy = startedEventId,
             )
             throw t
         }
-        val latencyMs = elapsedMillisSince(startedAt)
+        val completion = upstream.completion
+        val served = upstream.served
+        val servedProviderId = served.providerIdOr(effectiveConfig.provider.id)
+        val servedModelId = served.modelIdOr(model.name)
+        val latencyMs = served?.latencyMs ?: elapsedMillisSince(startedAt)
 
         // Log token usage for monitoring
         completion.usage?.let { usage ->
@@ -401,19 +432,23 @@ class AgentLLMService(
             }
         }
 
-        val usage = enrichUsageWithEstimatedCost(
-            providerId = effectiveConfig.provider.id,
-            modelId = model.name,
-            usage = TokenUsageExtractor.fromOpenAiUsage(completion.usage),
+        val usage = servedUsage(
+            served = served,
+            providerId = servedProviderId,
+            modelId = servedModelId,
+            completion = completion,
         )
 
         emitCompletedTelemetry(
             routingContext = routingContext,
-            providerId = effectiveConfig.provider.id,
-            modelId = model.name,
+            providerId = servedProviderId,
+            modelId = servedModelId,
             usage = usage,
             success = true,
             startedAt = startedAt,
+            causedBy = startedEventId,
+            servedLatencyMs = served?.latencyMs,
+            servedRoutingReason = served?.routingReason,
         )
 
         val text = completion.choices.firstOrNull()?.message?.content
@@ -421,9 +456,9 @@ class AgentLLMService(
 
         return LlmCallResult(
             text = text,
-            providerId = effectiveConfig.provider.id,
-            modelId = model.name,
-            routingReason = routingResolution.reason,
+            providerId = servedProviderId,
+            modelId = servedModelId,
+            routingReason = served?.routingReason ?: routingResolution.reason,
             latencyMs = latencyMs,
         )
     }
@@ -568,7 +603,12 @@ class AgentLLMService(
     }
 
     /**
-     * Emits the start row for a provider call.
+     * Emits the start row for a provider call, and returns its
+     * [EventId] so the completion can name it as its `caused_by` — the join
+     * `ArcTraceProjection.buildModelInvocations` pairs on now that a completion
+     * may name a different provider and model than its start (AMPR-391). Null
+     * when there is no door to publish through, in which case there is no pair
+     * to join either.
      *
      * Runs under [NonCancellable] (AMPR-242). Every hop below this — [AgentEventApi.publish]
      * → `EventRepository.saveEvent` → `withContext(ioDispatcher)` — is a suspension point,
@@ -581,12 +621,13 @@ class AgentLLMService(
         providerId: String,
         modelId: String,
         routingReason: String,
-    ) {
-        val publishingAgentId = eventApi?.agentId ?: return
+    ): EventId? {
+        val publishingAgentId = eventApi?.agentId ?: return null
+        val eventId = generateUUID("llm-start", publishingAgentId)
         withContext(NonCancellable) {
             eventApi.publish(
                 ProviderCallStartedEvent(
-                    eventId = generateUUID("llm-start", publishingAgentId),
+                    eventId = eventId,
                     timestamp = Clock.System.now(),
                     eventSource = EventSource.Agent(publishingAgentId),
                     workflowId = routingContext?.workflowId,
@@ -599,6 +640,7 @@ class AgentLLMService(
                 runId = routingContext?.workflowId,
             )
         }
+        return eventId
     }
 
     /**
@@ -617,6 +659,9 @@ class AgentLLMService(
         success: Boolean,
         startedAt: kotlinx.datetime.Instant,
         errorType: String? = null,
+        causedBy: EventId? = null,
+        servedLatencyMs: Long? = null,
+        servedRoutingReason: String? = null,
     ) {
         val publishingAgentId = eventApi?.agentId ?: return
         val completedAt = Clock.System.now()
@@ -632,11 +677,54 @@ class AgentLLMService(
                     providerId = providerId,
                     modelId = modelId,
                     usage = usage,
-                    latencyMs = (completedAt - startedAt).inWholeMilliseconds,
+                    latencyMs = servedLatencyMs ?: (completedAt - startedAt).inWholeMilliseconds,
                     success = success,
                     errorType = errorType,
+                    servedRoutingReason = servedRoutingReason,
                 ),
+                causedBy = causedBy,
                 runId = routingContext?.workflowId,
+            )
+        }
+    }
+
+    /**
+     * The provider that served the call, or the one the request named when the
+     * transport did not say (AMPR-391).
+     */
+    private fun ServedBy?.providerIdOr(requested: ProviderId): ProviderId = this?.providerId ?: requested
+
+    /** The model that served the call, or the one the request named. */
+    private fun ServedBy?.modelIdOr(requested: String): String = this?.modelId ?: requested
+
+    /**
+     * Token accounting and cost for a settled call, preferring what the
+     * transport reported over what Ampere can derive (AMPR-391).
+     *
+     * Three sources, in order: the [ServedBy]'s own counts, then the
+     * completion's, then nothing. Cost follows the same precedence and only
+     * falls through to [enrichUsageWithEstimatedCost] — the bundled catalog —
+     * when neither the transport nor the response priced the call. The catalog
+     * can only price by *some* provider and model, and a consumer's proxy with
+     * negotiated rates on a model Ampere does not ship knows a figure the
+     * catalog cannot reconstruct.
+     */
+    private suspend fun servedUsage(
+        served: ServedBy?,
+        providerId: ProviderId,
+        modelId: String,
+        completion: ChatCompletion?,
+    ): TokenUsage {
+        val reported = served?.usage ?: TokenUsageExtractor.fromOpenAiUsage(completion?.usage)
+        val reportedCost = served?.estimatedCostUsd ?: reported.estimatedCost
+
+        return if (reportedCost != null) {
+            reported.copy(estimatedCost = reportedCost)
+        } else {
+            enrichUsageWithEstimatedCost(
+                providerId = providerId,
+                modelId = modelId,
+                usage = reported,
             )
         }
     }
@@ -645,9 +733,10 @@ class AgentLLMService(
      * Settles a cancelled call to the best actuals available (AMPR-242).
      *
      * If [completion] is non-null the provider did answer — cancellation merely landed
-     * before the success-path write — so its reported counts are used verbatim. Otherwise
-     * the call is booked at its honest floor: the input tokens the prompt demonstrably put
-     * on the wire, with zero output.
+     * before the success-path write — so its reported counts are used verbatim, including
+     * anything its [ServedBy] metered (AMPR-391). Otherwise the call is booked at its
+     * honest floor: the input tokens the prompt demonstrably put on the wire, with zero
+     * output.
      *
      * Output is `0` rather than `null` deliberately — [ProviderPricingCalculator] returns
      * `null` for a null count, which would silently drop the cost back to nothing.
@@ -656,21 +745,28 @@ class AgentLLMService(
         providerId: String,
         modelId: String,
         messages: List<ChatMessage>,
-        completion: ChatCompletion?,
+        completion: UpstreamCompletion?,
     ): TokenUsage {
-        val usage = completion?.usage?.let(TokenUsageExtractor::fromOpenAiUsage)
+        val reported = completion?.served?.usage
+            ?: completion?.completion?.usage?.let(TokenUsageExtractor::fromOpenAiUsage)
+        val usage = reported
             ?: TokenUsage(
                 inputTokens = PromptTokenEstimator.estimateInputTokens(
                     messages.map { it.content.orEmpty() },
                 ),
                 outputTokens = 0,
             )
+        val reportedCost = completion?.served?.estimatedCostUsd ?: usage.estimatedCost
 
-        return enrichUsageWithEstimatedCost(
-            providerId = providerId,
-            modelId = modelId,
-            usage = usage,
-        )
+        return if (reportedCost != null) {
+            usage.copy(estimatedCost = reportedCost)
+        } else {
+            enrichUsageWithEstimatedCost(
+                providerId = providerId,
+                modelId = modelId,
+                usage = usage,
+            )
+        }
     }
 
     private fun elapsedMillisSince(startedAt: kotlinx.datetime.Instant): Long =

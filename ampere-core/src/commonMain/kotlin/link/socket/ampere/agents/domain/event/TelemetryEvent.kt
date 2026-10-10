@@ -77,6 +77,17 @@ data class ProviderCallCompletedEvent(
     val latencyMs: Long,
     val success: Boolean,
     val errorType: String? = null,
+    /**
+     * Which rule the *transport* matched, in its own vocabulary, when it reported one
+     * (AMPR-391) — a consumer's proxy routing server-side on a tier or a failover order.
+     *
+     * Null is the ordinary case and means the relay's reason on this call's
+     * [ProviderCallStartedEvent] is the whole story; a reader resolves the reason as
+     * `completed.servedRoutingReason ?: started.routingReason`. Distinct from that field
+     * rather than overwriting it, because the two answer different questions: why the call
+     * was *routed* this way, and why it was *served* that way.
+     */
+    val servedRoutingReason: String? = null,
 ) : TelemetryEvent {
 
     override val eventType: EventType = EVENT_TYPE
