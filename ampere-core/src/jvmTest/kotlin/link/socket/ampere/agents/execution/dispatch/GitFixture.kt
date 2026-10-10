@@ -38,14 +38,20 @@ internal object GitFixture {
         return path
     }
 
-    /** Runs git with a pinned identity, and fails the test if it does not succeed. */
+    /**
+     * Config every invocation carries: an identity, because `commit` needs one and a
+     * CI runner has none, and no signing, because a machine that signs by default
+     * would block a test on a passphrase.
+     */
+    private val OVERRIDES = listOf(
+        "user.email=reconcile@example.invalid",
+        "user.name=Reconciler",
+        "commit.gpgsign=false",
+    )
+
+    /** Runs git with [OVERRIDES] applied, and fails the test if it does not succeed. */
     fun git(directory: Path, vararg args: String): String {
-        val command = listOf(
-            "git",
-            "-c", "user.email=reconcile@example.invalid",
-            "-c", "user.name=Reconciler",
-            "-c", "commit.gpgsign=false",
-        ) + args
+        val command = listOf("git") + OVERRIDES.flatMap { listOf("-c", it) } + args
         val process = ProcessBuilder(command)
             .directory(directory.toFile())
             .redirectErrorStream(true)
