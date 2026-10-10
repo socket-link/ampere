@@ -25,7 +25,8 @@ import link.socket.ampere.agents.execution.tools.Tool
  * 1. Extract task description and synthesize ideas
  * 2. Build a planning prompt with task context and available tools
  * 3. Call LLM to generate structured plan steps
- * 4. Parse LLM response into Plan object with Task objects
+ * 4. Parse LLM response into Plan object with Task objects, including whether
+ *    the planner asked for a person ([Plan.requiresHumanInput])
  * 5. Fall back to simple plan if LLM call or parsing fails
  *
  * Usage:
@@ -188,6 +189,12 @@ class PlanGenerator(
         appendLine("For complex tasks, break down into logical phases (3-5 steps typically).")
         appendLine("Avoid excessive granularity - focus on meaningful phases of work.")
         appendLine()
+        appendLine(
+            "Set requiresHumanInput to true only when the plan cannot be carried out " +
+                "without a decision, an approval, or information that only a person can supply. " +
+                "A plan you can execute with the tools and context above sets it to false.",
+        )
+        appendLine()
         appendLine("Format your response as a JSON object:")
         appendLine(
             """
@@ -223,6 +230,7 @@ class PlanGenerator(
             ?: throw IllegalStateException("No steps in plan")
 
         val complexity = LLMResponseParser.getInt(planJson, "estimatedComplexity", 5)
+        val requiresHumanInput = LLMResponseParser.getBoolean(planJson, "requiresHumanInput", false)
 
         // Validate steps
         if (stepsArray.isEmpty()) {
@@ -249,6 +257,7 @@ class PlanGenerator(
             tasks = planTasks,
             estimatedComplexity = complexity,
             expectations = Expectations.blank,
+            requiresHumanInput = requiresHumanInput,
         )
     }
 
@@ -278,6 +287,8 @@ class PlanGenerator(
             tasks = listOf(fallbackTask),
             estimatedComplexity = 3,
             expectations = Expectations.blank,
+            // No planner ran, so no planner asked for a person.
+            requiresHumanInput = false,
         )
     }
 
