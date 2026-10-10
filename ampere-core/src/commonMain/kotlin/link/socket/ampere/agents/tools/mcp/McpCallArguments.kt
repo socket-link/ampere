@@ -9,21 +9,24 @@ import link.socket.ampere.agents.execution.request.ExecutionRequest
 /**
  * The single request -> `tools/call` arguments translation for MCP dispatch.
  *
- * Both MCP dispatch paths —
- * [McpToolExecutor] (reached via `McpTool.execute()`) and
- * [McpExecutor][link.socket.ampere.agents.execution.executor.McpExecutor] (reached via the
- * [Executor][link.socket.ampere.agents.execution.executor.Executor] framework) — build their
- * arguments here so the two cannot drift. They did drift: `McpToolExecutor` sent
- * `tool.inputSchema`, the tool's own JSON *schema*, where its arguments belong (AMPR-341).
+ * Every MCP dispatch builds its arguments here so no two can drift. They did drift:
+ * `McpToolExecutor` sent `tool.inputSchema`, the tool's own JSON *schema*, where its
+ * arguments belong (AMPR-341). The dispatches are
+ * [McpToolExecutor], reached both via `McpTool.execute()` and from
+ * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine]'s MCP
+ * branch (AMPR-401), and
+ * [McpExecutor][link.socket.ampere.agents.execution.executor.McpExecutor] in the
+ * [Executor][link.socket.ampere.agents.execution.executor.Executor] framework, which
+ * nothing constructs.
  *
  * The arguments are derived from the request's context, which is all a dispatch-time caller
  * has: an [ExecutionRequest] carries no per-call MCP argument object. That makes this an
  * envelope describing the work, not a payload shaped to any particular tool's `inputSchema`
  * — filling a specific tool's parameters needs a
  * [ParameterStrategy][link.socket.ampere.agents.execution.ParameterStrategy] and a context
- * that can carry what it generates, neither of which exists yet. Callers that do know the
- * real arguments (today [ExecuteStep][link.socket.ampere.propel.ExecuteStep]) pass them
- * straight to the connection and never come through here.
+ * that can carry what it generates, neither of which exists yet. No caller passes real
+ * arguments straight to a connection any more: the one that did, `propel/ExecuteStep`, was
+ * the dead half of a two-path plug dispatch and is gone.
  */
 internal object McpCallArguments {
 

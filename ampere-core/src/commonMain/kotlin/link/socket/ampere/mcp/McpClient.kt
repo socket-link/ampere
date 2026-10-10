@@ -44,6 +44,20 @@ class McpClient(
     val isConnected: Boolean
         get() = connection?.isConnected == true
 
+    /**
+     * The live connection, or null before [connect] and after [close].
+     *
+     * Exposed so the [ServerManager][link.socket.ampere.agents.tools.mcp.ServerManager] a
+     * [PlugContext][link.socket.ampere.plug.PlugContext] hands to
+     * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine] can
+     * resolve a plug's MCP connection by server id without reopening the transport
+     * (AMPR-401). `internal` because the connection is transport detail no consumer
+     * needs: [callTool] is the call this class publishes, and the engine reaches the
+     * server through the manager rather than holding a connection of its own.
+     */
+    internal val activeConnection: McpServerConnection?
+        get() = connection
+
     suspend fun connect(): Result<Unit> = mutex.withLock {
         val existing = connection
         if (existing != null && existing.isConnected) {

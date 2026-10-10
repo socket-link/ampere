@@ -2,8 +2,10 @@ package link.socket.ampere.plug
 
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.execution.tools.McpServerId
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.agents.tools.mcp.ServerManager
 import link.socket.ampere.agents.tools.mcp.connection.McpServerConnection
 import link.socket.ampere.link.LinkResolutionService
 import link.socket.ampere.mcp.McpClient
@@ -33,9 +35,17 @@ import link.socket.ampere.mcp.defaultHttpConnection
  * so one bad server doesn't kill the plug — including a dependency with no
  * matching requirement, or one whose requirement resolved to nothing.
  *
- * Tools are dispatched through
- * [link.socket.ampere.propel.ExecuteStep], which resolves the right
- * [McpClient] via [mcpClientFor].
+ * An agent dispatches these tools through
+ * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine],
+ * which gates every call carrying a [PlugManifest] through
+ * [PlugPermissionGate][link.socket.ampere.plug.permission.PlugPermissionGate]
+ * and reaches this plug's MCP servers through [mcpServerManager]. Since AMPR-401
+ * that is the only tool-dispatch path; the second entry point it used to share
+ * with `propel/ExecuteStep` is gone.
+ *
+ * [mcpClientFor] is the other door, and it is not a tool dispatch: an adapter
+ * *implementing* a plug calls its own pinned tools by name over its resolved
+ * Link (see `LinearWorkSource.open`), with no agent, no [Tool] and no gate.
  */
 class PlugContext private constructor(
     val manifest: PlugManifest,
@@ -49,10 +59,32 @@ class PlugContext private constructor(
         nativeTools + mcpToolsByServerUri.values.flatten()
 
     /**
+     * This plug's MCP connections, as the [ServerManager] that
+     * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine]
+     * resolves an [McpTool] against when it dispatches one (AMPR-401).
+     *
+     * Keyed by [McpServerDependency.uri], which is what [create] writes into each
+     * discovered tool's [McpTool.serverId]. A tool whose server never came up — or
+     * whose client has since been [closed][close] — resolves to no connection, and
+     * the dispatch fails with that as its reason rather than throwing.
+     *
+     * Hand this to the engine, not to a call site: the engine is where the
+     * permission gate runs, and a caller that dispatches an agent's [Tool]
+     * straight at a connection has skipped it.
+     */
+    val mcpServerManager: ServerManager = PlugMcpServerManager(mcpClientsByUri)
+
+    /**
      * Looks up the [McpClient] responsible for a tool's originating server.
      *
      * Returns null for tools without a matching server (e.g., a stale
      * [McpTool] referencing a server that failed to come up).
+     *
+     * For an adapter that *is* the plug and calls its own pinned tools by name —
+     * `LinearWorkSource.open` is the one caller — not for dispatching an agent's
+     * chosen [Tool]. That goes through
+     * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine]
+     * and [mcpServerManager], which is where the permission gate runs.
      */
     fun mcpClientFor(tool: McpTool): McpClient? =
         mcpClientsByUri[tool.serverId]
@@ -156,6 +188,29 @@ class PlugContext private constructor(
             )
         }
     }
+}
+
+/**
+ * [ServerManager] over a plug's own [McpClient]s, keyed by MCP server URI.
+ *
+ * The plug-side counterpart to
+ * [McpServerManager][link.socket.ampere.agents.tools.mcp.McpServerManager], which is the
+ * discovery-side implementation of the same interface. Sharing the interface is what lets
+ * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine] keep one
+ * MCP dispatch branch for plug-sourced and discovered tools alike.
+ *
+ * Reads the map on every call rather than snapshotting connections, so a client closed by
+ * [PlugContext.close] stops resolving.
+ */
+private class PlugMcpServerManager(
+    private val clientsByServerId: Map<String, McpClient>,
+) : ServerManager {
+
+    override suspend fun getConnection(serverId: McpServerId): McpServerConnection? =
+        clientsByServerId[serverId]?.activeConnection
+
+    override suspend fun isConnected(serverId: McpServerId): Boolean =
+        clientsByServerId[serverId]?.isConnected == true
 }
 
 /**

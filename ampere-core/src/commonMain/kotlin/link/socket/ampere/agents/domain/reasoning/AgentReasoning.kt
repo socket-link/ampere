@@ -27,6 +27,7 @@ import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.agents.tools.mcp.ServerManager
 import link.socket.ampere.llm.decide.DecisionRequest
 import link.socket.ampere.llm.decide.DecisionResponse
 import link.socket.ampere.llm.decide.MissingUpstreamDecisionClientException
@@ -109,6 +110,10 @@ class AgentReasoning private constructor(
             // AMPR-406: with a store wired, the engine is the persisting path for every
             // ExecutionOutcome it produces. Null leaves the engine recording nothing.
             outcomeRepository = settings.outcomeRepository,
+            // AMPR-401: the engine is the one execute path, so an MCP-sourced tool is
+            // dispatched by it too — but only if the host handed it a route. Null leaves
+            // this unit unable to call MCP tools, which it already was.
+            mcpServerManager = settings.mcpServerManager,
         ).also { engine ->
             settings.parameterStrategies.forEach { (toolId, strategy) ->
                 engine.registerStrategy(toolId, strategy)
@@ -618,6 +623,16 @@ data class ReasoningSettings(
      * straight to [ToolExecutionEngine]; null leaves tool outcomes unrecorded.
      */
     val outcomeRepository: OutcomeMemoryRepository? = null,
+    /**
+     * Where this unit's MCP tool calls are sent (AMPR-401) — a
+     * [PlugContext.mcpServerManager][link.socket.ampere.plug.PlugContext.mcpServerManager]
+     * for a plug's servers, or
+     * [McpServerManager][link.socket.ampere.agents.tools.mcp.McpServerManager] for
+     * discovered ones. Handed straight to [ToolExecutionEngine], which gates the call
+     * before it uses the route. Null leaves MCP tools undispatchable, with that as the
+     * failure's stated reason.
+     */
+    val mcpServerManager: ServerManager? = null,
 )
 
 /**
@@ -657,16 +672,18 @@ class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
 
     private val parameterStrategies = mutableMapOf<String, ParameterStrategy>()
     private var userGrantProvider: suspend (PlugManifest) -> UserGrants = { UserGrants() }
+    private var mcpServerManager: ServerManager? = null
 
     /**
-     * Configure execution settings (parameter strategies + user-grant
-     * provider). The only surviving per-phase DSL after AMPR-163 Task 11.
+     * Configure execution settings (parameter strategies, the user-grant provider, and
+     * the MCP route). The only surviving per-phase DSL after AMPR-163 Task 11.
      */
     fun execution(configure: ExecutionSettingsBuilder.() -> Unit) {
         val builder = ExecutionSettingsBuilder()
         builder.configure()
         parameterStrategies.putAll(builder.strategies)
         userGrantProvider = builder.userGrantProvider
+        mcpServerManager = builder.mcpServerManager
     }
 
     fun build(): ReasoningSettings = ReasoningSettings(
@@ -679,12 +696,14 @@ class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
         userGrantProvider = userGrantProvider,
         perceptionContextBuilder = perceptionContextBuilder,
         outcomeRepository = outcomeRepository,
+        mcpServerManager = mcpServerManager,
     )
 }
 
 class ExecutionSettingsBuilder {
     internal val strategies = mutableMapOf<String, ParameterStrategy>()
     internal var userGrantProvider: suspend (PlugManifest) -> UserGrants = { UserGrants() }
+    internal var mcpServerManager: ServerManager? = null
 
     fun registerStrategy(toolId: String, strategy: ParameterStrategy) {
         strategies[toolId] = strategy
@@ -692,5 +711,15 @@ class ExecutionSettingsBuilder {
 
     fun userGrants(provider: suspend (PlugManifest) -> UserGrants) {
         userGrantProvider = provider
+    }
+
+    /**
+     * The route this unit's MCP tool calls take (AMPR-401). Pass a
+     * [PlugContext.mcpServerManager][link.socket.ampere.plug.PlugContext.mcpServerManager]
+     * to let the agent call that plug's MCP tools; the permission gate still runs inside
+     * [ToolExecutionEngine] before the route is used.
+     */
+    fun mcpServers(manager: ServerManager?) {
+        mcpServerManager = manager
     }
 }
