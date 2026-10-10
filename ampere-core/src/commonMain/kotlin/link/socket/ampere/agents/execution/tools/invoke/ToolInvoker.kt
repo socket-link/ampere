@@ -26,8 +26,16 @@ import link.socket.ampere.agents.execution.tools.Tool
  * - Timing measurement
  * - Optional event emission for observability
  *
- * This is the abstraction that agents use directly when they need to invoke
- * specific tools during their cognitive loop.
+ * **Not on the live path.** Nothing in `ampere-core` constructs one, and the path an
+ * animated agent actually takes is `SparkBasedAgent.executePlanStep` →
+ * `AgentReasoning.executeTool` →
+ * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine], which
+ * since AMPR-389 owns the
+ * [ToolExecutionStarted][link.socket.ampere.agents.domain.event.ToolEvent.ToolExecutionStarted]
+ * / `ToolExecutionCompleted` pair this class also emits. There is exactly one producer per
+ * dispatch: the engine never routes through here, so the two cannot double-publish for one
+ * tool call. This class survives as a standalone single-tool entry point for an embedding
+ * consumer; AMPR-328 F20 proposes deleting it, and that row has no verdict yet.
  *
  * @param C The execution context type this tool operates on
  * @property tool The tool this invoker wraps and executes

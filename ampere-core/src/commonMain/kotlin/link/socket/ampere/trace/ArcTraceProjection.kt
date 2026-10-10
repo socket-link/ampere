@@ -9,6 +9,7 @@ import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.MemoryEvent
+import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.event.RoutingEvent
@@ -415,6 +416,12 @@ class ArcTraceProjection(
         is MemoryEvent.KnowledgeStored -> LEARN_PHASE
         is ToolEvent.ToolExecutionStarted -> default ?: EXECUTE_PHASE
         is ToolEvent.ToolExecutionCompleted -> default ?: EXECUTE_PHASE
+        // A plan step is Execute's own unit of work (AMPR-389): `PlanExecutor` is the
+        // Execute-phase service, so its pair is filed the same way the tool pair is —
+        // under the phase the run declared, or EXECUTE when it declared none. The other
+        // `PlanEvent`s are project-management records, not phase-scoped, and fall through.
+        is PlanEvent.PlanStepStarted -> default ?: EXECUTE_PHASE
+        is PlanEvent.PlanStepCompleted -> default ?: EXECUTE_PHASE
         is SparkAppliedEvent -> event.phaseSparkName() ?: default
         is SparkRemovedEvent -> event.phaseSparkName() ?: default
         // The run's own record belongs to the run envelope, not to whichever PROPEL phase happened

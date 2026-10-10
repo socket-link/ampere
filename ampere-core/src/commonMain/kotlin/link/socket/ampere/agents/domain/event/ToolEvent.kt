@@ -116,11 +116,24 @@ sealed interface ToolEvent : Event {
     /**
      * A tool invocation has started.
      *
-     * Emitted by ToolInvoker immediately before a tool's execute() method is called.
+     * Emitted by
+     * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine]
+     * immediately before it dispatches the tool through its
+     * [Executor][link.socket.ampere.agents.execution.executor.Executor] — the live path
+     * `SparkBasedAgent.executePlanStep` → `AgentReasoning.executeTool` takes (AMPR-389).
+     * The standalone
+     * [ToolInvoker][link.socket.ampere.agents.execution.tools.invoke.ToolInvoker] emits
+     * the same pair around a single tool it wraps directly, and has no production caller.
+     *
+     * A dispatch the [PlugPermissionGate][link.socket.ampere.plug.permission.PlugPermissionGate]
+     * refused never reaches the engine's bracket and is reported by
+     * [PermissionDeniedEvent] instead, so this pair means a tool actually ran.
      *
      * @property invocationId Unique identifier for this specific tool invocation
      * @property toolId The ID of the tool being executed
      * @property toolName The name of the tool being executed
+     * @property runId The Arc run the dispatch belongs to; also set on the envelope, which
+     *   is what `ArcTraceProjection` joins on. Null for a tool call made outside a run.
      */
     @Serializable
     data class ToolExecutionStarted(
@@ -152,7 +165,9 @@ sealed interface ToolEvent : Event {
     /**
      * A tool invocation has completed (successfully or with failure).
      *
-     * Emitted by ToolInvoker after a tool's execute() method returns.
+     * The pair to [ToolExecutionStarted], matched on [invocationId]; see that event for the
+     * producers and for [runId]. The projection reads a start with no completion as a call
+     * still in flight, so both halves are written under `NonCancellable`.
      *
      * @property invocationId Unique ID matching the Started event
      * @property toolId The ID of the tool that was executed

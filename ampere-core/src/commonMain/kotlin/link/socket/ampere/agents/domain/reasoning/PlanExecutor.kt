@@ -1,10 +1,19 @@
 package link.socket.ampere.agents.domain.reasoning
 
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.RunId
+import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.ExecutorId
 
 /**
@@ -33,9 +42,18 @@ import link.socket.ampere.agents.execution.executor.ExecutorId
  * ```
  *
  * @property executorId ID of the agent executing the plan
+ * @property eventApi The agent's event door (AMPR-389). With one, each executed step
+ *   leaves a [PlanEvent.PlanStepStarted] / [PlanEvent.PlanStepCompleted] pair under
+ *   [runId], so an Arc run's trace shows the steps Execute actually ran. Null keeps the
+ *   silence this class had before — a plan executed outside a run, or by a caller with
+ *   no door, publishes nothing.
+ * @property runId The Arc run the plan belongs to. Goes on both events and on their
+ *   envelope, which is what `ArcTraceProjection` joins on.
  */
 class PlanExecutor(
     private val executorId: ExecutorId,
+    private val eventApi: AgentEventApi? = null,
+    private val runId: RunId? = null,
 ) {
 
     /**
@@ -73,6 +91,7 @@ class PlanExecutor(
         // Execute steps sequentially
         for ((index, step) in plan.tasks.withIndex()) {
             val stepStartTime = Clock.System.now()
+            publishStepStarted(plan, step, index, stepStartTime)
 
             val stepResult = try {
                 stepExecutor(step, context.toImmutable())
@@ -91,6 +110,7 @@ class PlanExecutor(
                 endTimestamp = Clock.System.now(),
             )
             stepOutcomes.add(stepOutcome)
+            publishStepCompleted(plan, step, index, stepOutcome)
 
             // Update context with any values from this step
             stepResult.contextUpdates.forEach { (key, value) ->
@@ -148,6 +168,75 @@ class PlanExecutor(
     }
 
     /**
+     * The step is about to run. Published before the step executor is called, so a step
+     * that never returns still shows up in the trace as started-and-unfinished rather
+     * than not at all.
+     */
+    private suspend fun publishStepStarted(
+        plan: Plan.ForTask,
+        step: Task,
+        index: Int,
+        startedAt: Instant,
+    ) {
+        val door = eventApi ?: return
+        door.publishPlanEvent(
+            PlanEvent.PlanStepStarted(
+                eventId = generateUUID("plan-step-started", plan.id, step.id),
+                planId = plan.id,
+                stepId = step.id,
+                stepDescription = step.describe(),
+                stepIndex = index,
+                totalSteps = plan.tasks.size,
+                eventSource = EventSource.Agent(door.agentId),
+                timestamp = startedAt,
+                runId = runId,
+            ),
+        )
+    }
+
+    /**
+     * The step has run and its outcome is known. The description comes off the outcome
+     * rather than the task: that is what the step executor reported having done, where
+     * `Task.describe` is only what the plan asked for.
+     */
+    private suspend fun publishStepCompleted(
+        plan: Plan.ForTask,
+        step: Task,
+        index: Int,
+        outcome: StepOutcome,
+    ) {
+        val door = eventApi ?: return
+        door.publishPlanEvent(
+            PlanEvent.PlanStepCompleted(
+                eventId = generateUUID("plan-step-completed", plan.id, step.id),
+                planId = plan.id,
+                stepId = step.id,
+                stepDescription = outcome.stepDescription,
+                stepIndex = index,
+                totalSteps = plan.tasks.size,
+                outcome = outcome,
+                eventSource = EventSource.Agent(door.agentId),
+                timestamp = Clock.System.now(),
+                urgency = if (outcome is StepOutcome.Failure) Urgency.MEDIUM else Urgency.LOW,
+                runId = runId,
+            ),
+        )
+    }
+
+    /**
+     * Under [NonCancellable] for the same reason as the provider-call telemetry: the step
+     * has already run by the time the completion row is written, and a cancellation landing
+     * here would lose the record of work that happened. It also keeps [execute]'s control
+     * flow what it was — the loop catches a step's own cancellation and reports it as a
+     * critical failure, and a publish that threw instead would turn that into a throw.
+     */
+    private suspend fun AgentEventApi.publishPlanEvent(event: PlanEvent) {
+        withContext(NonCancellable) {
+            publish(event, runId = this@PlanExecutor.runId)
+        }
+    }
+
+    /**
      * Builds a summary message from step outcomes.
      */
     private fun buildSummary(
@@ -181,6 +270,16 @@ class PlanExecutor(
             }
         }
     }
+}
+
+/**
+ * What the plan asked this step to do. Only [Task.CodeChange] carries a description;
+ * anything else is named by its id, matching the fallback [PlanExecutor] already used
+ * when turning a thrown step into a [StepResult.Failure].
+ */
+private fun Task.describe(): String = when (this) {
+    is Task.CodeChange -> description
+    else -> "Execute step $id"
 }
 
 /**

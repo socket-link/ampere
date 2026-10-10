@@ -86,7 +86,14 @@ class AgentReasoning private constructor(
     private val perceptionEvaluator: PerceptionEvaluator? = llmService?.let { PerceptionEvaluator(it) }
     private val planGenerator: PlanGenerator? = llmService?.let { PlanGenerator(it) }
     private val outcomeEvaluator: OutcomeEvaluator? = llmService?.let { OutcomeEvaluator(it) }
-    private val planExecutor = PlanExecutor(settings.executorId)
+
+    // AMPR-389: Execute publishes its own steps. The door and the run are the two things
+    // the executor needs to do that; without a door it stays silent, as before.
+    private val planExecutor = PlanExecutor(
+        executorId = settings.executorId,
+        eventApi = eventApi,
+        runId = runId,
+    )
 
     private val toolExecutionEngine: ToolExecutionEngine? = if (llmService != null && settings.executor != null) {
         ToolExecutionEngine(

@@ -1,15 +1,20 @@
 package link.socket.ampere.agents.execution
 
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.last
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
 import link.socket.ampere.agents.domain.event.PermissionDeniedReason
+import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.reasoning.AgentLLMService
+import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.status.ExecutionStatus
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
@@ -146,6 +151,14 @@ class ToolExecutionEngine(
                 prompt = prompt,
                 systemMessage = strategy.systemMessage,
                 maxTokens = strategy.maxTokens,
+                // AMPR-389: parameter generation is a model call Execute makes, so it is
+                // routed and filed as one. Untagged it had no phase and no run, and
+                // `ArcTraceProjection` bucketed it under UNKNOWN.
+                routingContext = RoutingContext(
+                    phase = CognitivePhase.EXECUTE,
+                    agentId = executorId,
+                    workflowId = request.effectiveRunId(),
+                ),
             )
             strategy.parseAndEnrichRequest(jsonResponse.rawJson, request)
         } catch (e: Exception) {
@@ -197,6 +210,25 @@ class ToolExecutionEngine(
         // The caller's own run wins over this engine's: a request that already names a run
         // was dispatched by something closer to it than the reasoning unit that built us.
         val runScopedRequest = enrichedRequest.withRunId(originalRequest.runId ?: runId)
+        val dispatchRunId = runScopedRequest.runId
+        val invocationId = generateUUID("tool-invocation", tool.id, executorId)
+        val dispatchedAt = Clock.System.now()
+        publishToolStarted(tool, invocationId, dispatchedAt, dispatchRunId)
+        val outcome = dispatch(tool, runScopedRequest, startTime, originalRequest)
+        publishToolCompleted(tool, invocationId, dispatchedAt, outcome, dispatchRunId)
+        return outcome
+    }
+
+    /**
+     * The executor call itself, with every failure mode turned into an [ExecutionOutcome]
+     * so [executeViaExecutor] always has an outcome to complete the pair with.
+     */
+    private suspend fun dispatch(
+        tool: Tool<*>,
+        runScopedRequest: ExecutionRequest<*>,
+        startTime: Instant,
+        originalRequest: ExecutionRequest<*>,
+    ): ExecutionOutcome {
         return try {
             when (tool) {
                 is FunctionTool<*> -> {
@@ -235,6 +267,83 @@ class ToolExecutionEngine(
             )
         }
     }
+
+    /**
+     * The tool is about to be dispatched (AMPR-389, F20's lift).
+     *
+     * This is the live path's producer of the `ToolExecutionStarted` / `ToolExecutionCompleted`
+     * pair that `ArcTraceProjection` joins into `ArcRunTrace.toolCalls`. It wraps the executor
+     * call and nothing else: a dispatch refused by [PlugPermissionGate] never reaches here and
+     * is reported by [PermissionDeniedEvent] instead, so a pair in the trace means a tool
+     * actually ran.
+     */
+    private suspend fun publishToolStarted(
+        tool: Tool<*>,
+        invocationId: String,
+        dispatchedAt: Instant,
+        dispatchRunId: RunId?,
+    ) {
+        val door = eventApi ?: return
+        withContext(NonCancellable) {
+            door.publish(
+                ToolEvent.ToolExecutionStarted(
+                    eventId = generateUUID("tool-execution-started", invocationId),
+                    timestamp = dispatchedAt,
+                    eventSource = EventSource.Agent(door.agentId),
+                    urgency = Urgency.LOW,
+                    invocationId = invocationId,
+                    toolId = tool.id,
+                    toolName = tool.name,
+                    runId = dispatchRunId,
+                ),
+                runId = dispatchRunId,
+            )
+        }
+    }
+
+    /**
+     * The pair to [publishToolStarted], carrying the outcome's verdict and the time the
+     * dispatch took. Under [NonCancellable]: the tool has already run its side effects by
+     * the time this is written, and the projection reads a start with no completion as a
+     * call still in flight — which would be a lie about a call that finished.
+     */
+    private suspend fun publishToolCompleted(
+        tool: Tool<*>,
+        invocationId: String,
+        dispatchedAt: Instant,
+        outcome: ExecutionOutcome,
+        dispatchRunId: RunId?,
+    ) {
+        val door = eventApi ?: return
+        val completedAt = Clock.System.now()
+        val success = outcome is ExecutionOutcome.Success
+        withContext(NonCancellable) {
+            door.publish(
+                ToolEvent.ToolExecutionCompleted(
+                    eventId = generateUUID("tool-execution-completed", invocationId),
+                    timestamp = completedAt,
+                    eventSource = EventSource.Agent(door.agentId),
+                    urgency = if (success) Urgency.LOW else Urgency.MEDIUM,
+                    invocationId = invocationId,
+                    toolId = tool.id,
+                    toolName = tool.name,
+                    success = success,
+                    durationMs = (completedAt - dispatchedAt).inWholeMilliseconds,
+                    errorMessage = outcome.failureMessageOrNull(),
+                    runId = dispatchRunId,
+                ),
+                runId = dispatchRunId,
+            )
+        }
+    }
+
+    /**
+     * The run this dispatch belongs to. Same precedence as [executeViaExecutor]: a request
+     * that already names a run was dispatched by something closer to it than the reasoning
+     * unit that built this engine.
+     */
+    private fun ExecutionRequest<*>.effectiveRunId(): RunId? =
+        this.runId ?: this@ToolExecutionEngine.runId
 
     /**
      * Creates a failure outcome.
@@ -320,6 +429,21 @@ class ToolExecutionEngine(
                 "$reason for $permission",
         )
     }
+}
+
+/**
+ * The message a failed [ExecutionOutcome] carries, for the `errorMessage` on the tool-event
+ * pair. `else` covers the success and blank variants, and any failure variant added later —
+ * a missing message is better than a pair that stops being published.
+ */
+private fun ExecutionOutcome.failureMessageOrNull(): String? = when (this) {
+    is ExecutionOutcome.NoChanges.Failure -> message
+    is ExecutionOutcome.CodeReading.Failure -> error.message
+    is ExecutionOutcome.CodeChanged.Failure -> error.message
+    is ExecutionOutcome.IssueManagement.Failure -> error.message
+    is ExecutionOutcome.GitOperation.Failure -> error.message
+    is ExecutionOutcome.Planning.Failure -> error.message
+    else -> null
 }
 
 /**
