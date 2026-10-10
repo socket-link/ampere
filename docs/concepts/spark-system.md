@@ -6,6 +6,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/tools/ToolWriteCodeFile.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/tools/ToolReadCodeFile.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/SparkEvent.kt
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/CognitivePhaseEvent.kt
   - ampere-core/src/commonMain/composeResources/files/sparks/**
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/AutonomousAgent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/SparkBasedAgent.kt
@@ -143,10 +144,16 @@ by eligibility, tag intersection, and keyword match against `whenToUse`;
 `AmpereSpikeFlags.declarativeSparksEnabled` is on; the `SparkBasedAgent`
 role factories consult the role surface at construction time and fail fast
 if the bundled role fixture is missing.
-When an `EventSerialBus` is provided, `PhaseSparkManager` also emits
+When an `AgentEventApi` door is provided, `PhaseSparkManager` also emits
 `CognitivePhaseEvent.PhaseEntered` / `PhaseExited` at phase boundaries so
 phase changes are observable even when consumers do not inspect Spark stack
-events.
+events. `enabled` is the master gate — `enterPhaseInternal` and
+`withPhaseInternal` both return early on `if (!enabled)`
+(`PhaseSparkManager.kt:110, 161`), so with phase handling off a run emits no
+phase events at all. Under it, `publishBrackets` and `injectPhaseSparks` are
+independent (AMPR-387), so a run can be bracketed without its prompt changing.
+The door is the agent's own, so the events name the holder; with no door wired,
+phases still apply and nothing is published.
 
 ### The public markdown entry
 
@@ -230,7 +237,7 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - `agents/definition/SparkBasedAgent.kt` — the tool-enforcement sites (the reasoning unit is built with `availableTools = { effectiveTools }`, and `executePlanStep` resolves a step's `toolId` against `effectiveTools`) plus `buildPlanStepRequest`, which stamps `effectiveFileAccess` onto the request (alongside the workspace pin and, since AMPR-408, the earlier steps' results — none of which the spark stack narrows). A step that nominates *no* tool skips that lookup entirely and goes to `executeReasoningStep` — one `EXECUTE`-tagged model call by this agent, gated on `cognitiveConfig.reasoningSteps.execute` (AMPR-407) and handed the same earlier results (AMPR-412). See [PropelLoop](propel-loop.md).
 - `agents/execution/request/ExecutionRequest.kt` — `fileAccessScope`, the carrier that gets the stack's file narrowing to a tool; `withFileAccessScope` re-applies it at the dispatch funnel in `ToolExecutionEngine` after a `ParameterStrategy` has rebuilt the request.
 - `agents/execution/tools/ToolWriteCodeFile.kt`, `ToolReadCodeFile.kt` — the file-enforcement sites: each refuses the whole call, as an `ExecutionOutcome.*.Failure`, when any path it was handed is outside the request's scope.
-- `agents/domain/event/SparkAppliedEvent.kt`, `SparkRemovedEvent.kt` — observability.
+- `agents/domain/event/SparkEvent.kt` — `SparkAppliedEvent` (`:44`) and `SparkRemovedEvent` (`:83`), the observability pair. There are no per-class files of those names, despite the class names.
 - `agents/domain/event/CognitivePhaseEvent.kt` — first-class phase boundary events.
 
 ## Invariants

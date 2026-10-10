@@ -8,7 +8,7 @@ tracked_sources:
   - docs/AGENT_LIFECYCLE.md
   - docs/ARCS.md
 related: [PropelLoop, EventSerialBus, CognitiveRelay, MemoryProvenance, SparkSystem, AgentSurface, PlugPermissions, CognitionTrace]
-last_verified: 2026-10-02
+last_verified: 2026-10-10
 ---
 
 # Ampere — The Meta-Concept
@@ -50,6 +50,27 @@ ships a coordination layer based on direct method calls or bakes a
 provider into cognitive code is *not* — it may share the codebase, but
 the load-bearing architecture is different.
 
+### The cluster is the standard, not a description of today
+
+This list is what the repo is *held to*. Two of the eight are not yet fully
+true of the shipped code, and AMPR-390's docs sweep (2026-10-10, re-checked
+against each sibling as it landed) pinned down which:
+
+| # | Choice | Today |
+|---|--------|-------|
+| 2 | Animated agents carry persistent identity | A fresh UUID per spawn and no registry; identity does not survive a run (`domain/arc/ChargePhase.kt:345-371`) |
+| 5 | Agents publish typed events and *react* | They publish, and the task lifecycle has real publishers since AMPR-404. Reacting is a registration a consumer must make: `EnvironmentService.routeEventsToAgent` exists and nothing shipped calls it, so the fan-out map is empty |
+
+Choices 1, 3, 4, 6, 7 and 8 hold. Two closed during this sweep. Choice 4: Recall now reaches `PlanGenerator` — `runLLMToPlan` takes the recalled knowledge as a required argument, so a call site cannot drop it by omission (AMPR-388) — and Learn writes on both paths (AMPR-402). Choice 7: Execute now
+publishes its plan-step and tool pairs and tags its own model call (AMPR-389),
+and outcome rows have writers (AMPR-406). AMPR-405 then closed the last of it: every
+shipped entry point defaults an `Executor`, so a stock run's tool rows land too.
+
+Keep applying all eight to new code — the gap is
+work queued under [AMPR-385](https://linear.app/miley/issue/AMPR-385), not
+permission to widen it. The per-primitive cells carry the detail and name the
+ticket that closes each one.
+
 ## Why it exists
 
 Without an explicit meta-concept, the cluster of choices erodes one
@@ -85,7 +106,10 @@ property cluster?".
   happened, the change has gone opaque and is a regression.
 - **Agents coordinate via the bus.** No direct agent-to-agent method
   calls for coordination. (Internal helpers within one agent are fine;
-  cross-agent calls are not.)
+  cross-agent calls are not.) The no-RPC half holds. The subscribe
+  half has a registration path since AMPR-404 but no shipped caller, so nothing
+  is woken today. Adding a method call is still a violation — an empty
+  subscriber map is not a licence for one.
 - **Cognition is provider-agnostic.** No provider SDK imports under
   `agents/domain/reasoning/` or `agents/domain/cognition/`.
 - **State lives in append-only stores.** Read models project. In-memory
