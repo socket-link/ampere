@@ -95,6 +95,11 @@ data class TaskSpark(
                 title = "Code Change: ${task.description.take(50)}",
                 description = task.description,
             )
+            is Task.Step -> TaskSpark(
+                taskId = task.id,
+                title = "Step: ${task.description.take(50)}",
+                description = task.description,
+            )
             else -> TaskSpark(
                 taskId = task.id,
                 title = "Task: ${task.id.take(30)}",

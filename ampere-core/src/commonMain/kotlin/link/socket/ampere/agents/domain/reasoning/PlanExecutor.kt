@@ -12,6 +12,8 @@ import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.domain.task.planStepDescription
+import link.socket.ampere.agents.domain.task.planStepSeat
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.ExecutorId
@@ -206,6 +208,7 @@ class PlanExecutor(
                 eventSource = EventSource.Agent(door.agentId),
                 timestamp = startedAt,
                 runId = runId,
+                assignedTo = step.planStepSeat,
             ),
         )
     }
@@ -235,6 +238,7 @@ class PlanExecutor(
                 timestamp = Clock.System.now(),
                 urgency = if (outcome is StepOutcome.Failure) Urgency.MEDIUM else Urgency.LOW,
                 runId = runId,
+                assignedTo = step.planStepSeat,
             ),
         )
     }
@@ -299,14 +303,12 @@ class PlanExecutor(
 }
 
 /**
- * What the plan asked this step to do. Only [Task.CodeChange] carries a description;
- * anything else is named by its id, matching the fallback [PlanExecutor] already used
- * when turning a thrown step into a [StepResult.Failure].
+ * What the plan asked this step to do. Only the two plan-step types carry a
+ * description; anything else is named by its id, matching the fallback
+ * [PlanExecutor] already used when turning a thrown step into a
+ * [StepResult.Failure].
  */
-private fun Task.describe(): String = when (this) {
-    is Task.CodeChange -> description
-    else -> "Execute step $id"
-}
+private fun Task.describe(): String = planStepDescription ?: "Execute step $id"
 
 /**
  * Result of executing a single step.

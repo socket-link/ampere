@@ -30,6 +30,7 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.domain.task.planStepDescription
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.environment.workspace.containedFile
@@ -501,7 +502,7 @@ private suspend fun handleTicketAssignment(
         // The plan's steps are this task's decomposition — publish them as subtasks so the
         // event stream and the workspace checklist show what the plan actually asked for.
         plan.tasks.forEach { step ->
-            val stepDescription = (step as? Task.CodeChange)?.description ?: return@forEach
+            val stepDescription = step.planStepDescription ?: return@forEach
             lifecycle.subtaskCreated(
                 subtaskId = step.id,
                 description = stepDescription,

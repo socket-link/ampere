@@ -284,6 +284,12 @@ class FlowPhase(
                 tags = emptySet(),
                 description = task.description,
             )
+            // AMPR-410: a generic step recalls by its description, not by its id.
+            is Task.Step -> MemoryContext(
+                taskType = MemoryTaskTypes.GENERIC,
+                tags = emptySet(),
+                description = task.description,
+            )
             else -> MemoryContext(
                 taskType = MemoryTaskTypes.GENERIC,
                 tags = emptySet(),

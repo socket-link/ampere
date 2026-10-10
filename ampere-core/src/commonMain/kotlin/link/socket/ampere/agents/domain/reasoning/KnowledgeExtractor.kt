@@ -149,6 +149,7 @@ class ApproachBuilder(
     fun taskType(task: Task) {
         val description = when (task) {
             is Task.CodeChange -> "Code change: ${task.description}"
+            is Task.Step -> "Step: ${task.description}"
             is Task.Blank -> "No specific task"
             else -> "Task: ${task.id}"
         }

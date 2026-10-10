@@ -6,6 +6,7 @@ import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.outcome.StepOutcome
+import link.socket.ampere.agents.domain.task.AssignedTo
 
 /**
  * Events related to plan execution in the Project Manager Agent.
@@ -20,6 +21,11 @@ sealed interface PlanEvent : Event {
      * when it has a door (AMPR-389). [runId] is the Arc run the step belongs to, and is
      * also what the envelope's `run_id` is set to, so the step is visible in that run's
      * trace; null means the plan ran outside a run.
+     *
+     * [assignedTo] is the seat the step was dispatched to — the one its
+     * `Task.Step.assignedTo` / `Task.CodeChange.assignedTo` names (AMPR-410).
+     * Null means the plan named no seat and the agent that published this ran
+     * the step itself, which is every step of a single-agent plan.
      */
     @Serializable
     data class PlanStepStarted(
@@ -33,6 +39,7 @@ sealed interface PlanEvent : Event {
         override val timestamp: Instant,
         override val urgency: Urgency = Urgency.LOW,
         val runId: RunId? = null,
+        val assignedTo: AssignedTo? = null,
     ) : PlanEvent {
 
         override val eventType: EventType = EVENT_TYPE
@@ -40,7 +47,8 @@ sealed interface PlanEvent : Event {
         override fun getSummary(
             formatUrgency: (Urgency) -> String,
             formatSource: (EventSource) -> String,
-        ): String = "Plan step ${stepIndex + 1}/$totalSteps started: $stepDescription ${formatUrgency(urgency)}"
+        ): String = "Plan step ${stepIndex + 1}/$totalSteps started${seatSuffix(assignedTo)}: " +
+            "$stepDescription ${formatUrgency(urgency)}"
 
         companion object {
             const val EVENT_TYPE: EventType = "PlanStepStarted"
@@ -51,8 +59,8 @@ sealed interface PlanEvent : Event {
      * Emitted when a plan step completes execution.
      *
      * The pair to [PlanStepStarted], matched on [stepId] within [planId]; see that event
-     * for [runId]. A step that was never started — one the executor skipped after an
-     * earlier critical failure — emits neither event, and is reported only in
+     * for [runId] and [assignedTo]. A step that was never started — one the executor
+     * skipped after an earlier critical failure — emits neither event, and is reported only in
      * [PlanExecutionResult.stepOutcomes][link.socket.ampere.agents.domain.reasoning.PlanExecutionResult.stepOutcomes].
      */
     @Serializable
@@ -68,6 +76,7 @@ sealed interface PlanEvent : Event {
         override val timestamp: Instant,
         override val urgency: Urgency = Urgency.LOW,
         val runId: RunId? = null,
+        val assignedTo: AssignedTo? = null,
     ) : PlanEvent {
 
         override val eventType: EventType = EVENT_TYPE
@@ -84,7 +93,8 @@ sealed interface PlanEvent : Event {
                 is StepOutcome.Failure -> "✗ failed: ${outcome.error}"
                 is StepOutcome.Skipped -> "⊘ skipped: ${outcome.reason}"
             }
-            return "Plan step ${stepIndex + 1}/$totalSteps $status ${formatUrgency(urgency)}"
+            return "Plan step ${stepIndex + 1}/$totalSteps${seatSuffix(assignedTo)} $status " +
+                formatUrgency(urgency)
         }
 
         companion object {
@@ -147,3 +157,14 @@ sealed interface PlanEvent : Event {
         }
     }
 }
+
+/**
+ * ` [seat]`, or nothing when the plan named no seat (AMPR-410).
+ *
+ * A step's summary is what the CLI event stream prints, so a roster-hosted run
+ * reads as which seat ran what rather than as an undifferentiated step list. A
+ * single-agent plan assigns nothing and its summaries are byte-identical to
+ * what they were.
+ */
+private fun seatSuffix(assignedTo: AssignedTo?): String =
+    assignedTo?.let { " [${it.getIdentifier()}]" } ?: ""
