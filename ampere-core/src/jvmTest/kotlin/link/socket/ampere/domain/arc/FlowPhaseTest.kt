@@ -212,6 +212,77 @@ class FlowPhaseTest {
     }
 
     @Test
+    fun `each tick plans the Arc's current goal rather than the agent's own task cell`() = runTest {
+        // AMPR-395: the only writers of the agent's task cell are its own `executePlan`/
+        // `runTask`, neither of which the Arc path calls — so a tick that read the task from
+        // there planned `Task.Blank` forever and the user's goal reached no agent.
+        val arcConfig = ArcConfig(
+            name = "test-arc",
+            agents = listOf(ArcAgentConfig(role = "code")),
+            orchestration = OrchestrationConfig(type = OrchestrationType.SEQUENTIAL),
+        )
+        val goalTree = GoalTree(root = GoalNode(id = "goal-1", description = "Test goal"))
+
+        val agent = ClockReadingAgent()
+        val planned = mutableListOf<Task>()
+        agent.onPlan = { planned += it }
+
+        val flow = FlowPhase(
+            arcConfig = arcConfig,
+            agents = listOf(agent),
+            goalTree = goalTree,
+            maxTicks = 2,
+        )
+
+        val result = flow.execute()
+
+        assertEquals(TerminationReason.MAX_TICKS_REACHED, result.terminationReason)
+        assertEquals(
+            listOf("Test goal", "Test goal"),
+            planned.map { (it as Task.CodeChange).description },
+            "every tick must hand the current goal node to the agent as the task it plans",
+        )
+        assertEquals(
+            listOf("goal-1", "goal-1"),
+            planned.map { it.id },
+            "the task keeps the goal node's id, so a plan's steps trace back to the goal",
+        )
+    }
+
+    @Test
+    fun `a goal node with no description ends the tick before Perceive`() = runTest {
+        // A blank task plans `Plan.blank`, which executes to `Outcome.blank` — never a
+        // success. Perceiving first would spend a model call on a tick that cannot progress.
+        val arcConfig = ArcConfig(
+            name = "test-arc",
+            agents = listOf(ArcAgentConfig(role = "code")),
+            orchestration = OrchestrationConfig(type = OrchestrationType.SEQUENTIAL),
+        )
+        val goalTree = GoalTree(root = GoalNode(id = "goal-1", description = "  "))
+
+        val agent = ClockReadingAgent()
+        var perceptions = 0
+        val planned = mutableListOf<Task>()
+        agent.onPerceive = { perceptions++ }
+        agent.onPlan = { planned += it }
+
+        val flow = FlowPhase(
+            arcConfig = arcConfig,
+            agents = listOf(agent),
+            goalTree = goalTree,
+            maxTicks = 3,
+        )
+
+        val result = flow.execute()
+
+        assertEquals(TerminationReason.MAX_TICKS_REACHED, result.terminationReason)
+        assertEquals(3, result.finalTick, "the tick budget is still spent; only the calls are not")
+        assertEquals(0, perceptions, "a blank task must not reach Perceive")
+        assertTrue(planned.isEmpty(), "a blank task must not reach Plan either")
+        assertTrue(result.agentOutcomes.isEmpty(), "a tick that never ran records no outcome")
+    }
+
+    @Test
     fun `shared context tracks goal completion`() {
         val goalTree = GoalTree(
             root = GoalNode(
@@ -237,6 +308,11 @@ class FlowPhaseTest {
         context.markGoalComplete(goalTree.root.children[1])
 
         assertTrue(context.isGoalTreeComplete())
+
+        // Every agent in a tick works the same current goal and marks it on success, so the
+        // second and third marks of one node must not inflate the count (AMPR-395).
+        context.markGoalComplete(goalTree.root)
+        assertEquals(3, context.completedGoals.size, "marking a goal complete twice is a no-op")
     }
 
     @Test
@@ -266,9 +342,13 @@ class FlowPhaseTest {
         assertTrue(allNodes.any { it.id == "goal-4" })
     }
 
-    /** An agent that never completes a goal and runs [onPerceive] at the top of each of its ticks. */
+    /**
+     * An agent that never completes a goal, runs [onPerceive] at the top of each of its ticks,
+     * and reports the task the tick handed it to [onPlan].
+     */
     private class ClockReadingAgent : AutonomousAgent<AgentState>() {
         var onPerceive: () -> Unit = {}
+        var onPlan: (Task) -> Unit = {}
 
         override val id: AgentId = "ClockReadingAgent"
         override val initialState: AgentState = AgentState()
@@ -283,7 +363,10 @@ class FlowPhaseTest {
             task: Task,
             ideas: List<Idea>,
             relevantKnowledge: List<KnowledgeWithScore>,
-        ) -> Plan = { _, _, _ -> Plan.blank }
+        ) -> Plan = { task, _, _ ->
+            onPlan(task)
+            Plan.blank
+        }
         override val runLLMToExecuteTask: (task: Task) -> Outcome = { _ -> Outcome.blank }
         override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome =
             { _, _ -> error("No tools in this test") }
