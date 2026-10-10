@@ -25,6 +25,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.status.TaskStatus
@@ -435,9 +436,19 @@ private suspend fun handleTicketAssignment(
 
         // PHASE 1: PERCEIVE
         println("   🧠 [PHASE 1: PERCEIVE] Analyzing current state...")
+        // AMPR-403: the task reaches the perception prompt through the memory
+        // cell, and the ticket reaches it as an idea. Without both, Perceive is
+        // asked about a blank state and an empty idea list.
+        agent.rememberNewTask(task)
         val perception = phaseSparkManager.withPhase(CognitivePhase.PERCEIVE) {
             println("      🔥 Spark stack: ${agent.cognitiveState}")
-            agent.perceiveState(agent.getCurrentState())
+            agent.perceiveState(
+                agent.getCurrentState(),
+                Idea(
+                    name = "Assigned ticket: ${ticket.title}",
+                    description = ticket.description,
+                ),
+            )
         }
         println("      Generated ${perception.ideas.size} idea(s)")
         println()
