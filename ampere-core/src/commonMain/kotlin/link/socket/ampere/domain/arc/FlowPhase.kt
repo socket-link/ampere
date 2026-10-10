@@ -10,6 +10,7 @@ import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.Agent
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.memory.MemoryContext
+import link.socket.ampere.agents.domain.memory.MemoryTaskTypes
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
@@ -208,12 +209,12 @@ class FlowPhase(
     private suspend fun recallKnowledge(agent: Agent<*>, task: Task): List<KnowledgeWithScore> {
         val context = when (task) {
             is Task.CodeChange -> MemoryContext(
-                taskType = "code_change",
+                taskType = MemoryTaskTypes.CODE_CHANGE,
                 tags = emptySet(),
                 description = task.description,
             )
             else -> MemoryContext(
-                taskType = "generic",
+                taskType = MemoryTaskTypes.GENERIC,
                 tags = emptySet(),
                 description = "Generic task: ${task.id}",
             )

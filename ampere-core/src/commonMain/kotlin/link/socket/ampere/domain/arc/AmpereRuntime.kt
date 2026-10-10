@@ -17,6 +17,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
@@ -50,6 +51,11 @@ import okio.Path.Companion.toPath
  *   [ArcOutcome.Completed].
  * - [cancel] is a real coroutine cancellation. Flow stops at its next cancellation point,
  *   Pulse is skipped, and the outcome is [ArcOutcome.Cancelled].
+ *
+ * A run that reaches Pulse closes its loop there: Pulse distils each successful outcome into a
+ * `Knowledge` entry and stores it through the producing agent's own memory service, tagged with
+ * the run id (AMPR-402). That write needs both [knowledgeRepository] and [eventApiFactory]; a
+ * runtime built without them still runs Pulse, and reports every learning as unstored.
  *
  * A cancelled or failed run owes no `Knowledge` entry — it did not close its loop, and saying
  * otherwise would blunt the PropelLoop invariant. It owes a [CompletionManifest] instead
@@ -92,6 +98,20 @@ class AmpereRuntime(
      * API, no persisted telemetry).
      */
     private val eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
+    /**
+     * Long-term semantic memory for the agents a run spawns (AMPR-402).
+     *
+     * Supplying it is what lets Pulse close the loop: each spawned agent gets an
+     * [AgentMemoryService][link.socket.ampere.agents.domain.memory.AgentMemoryService] over this
+     * store and its own door, so Flow's Recall reads prior runs and Pulse writes this one's
+     * learnings under the run's id. It needs [eventApiFactory] as well — an agent with a repository
+     * but no door gets no memory service at all, because a `Knowledge` entry whose
+     * `KnowledgeStored` event has nowhere to go is a write with no provenance.
+     *
+     * Null leaves spawned agents without long-term memory: Recall returns nothing and Pulse
+     * reports every learning as `stored = false`.
+     */
+    private val knowledgeRepository: KnowledgeRepository? = null,
     /**
      * The one clock the Arc tick reads (AMPR-335), handed to every phase and exposed to agents
      * as [SharedContext.clock]. Inject a fixed or test-driven clock to make a run's time
@@ -277,7 +297,7 @@ class AmpereRuntime(
 
         // Phase 3: Pulse - Evaluate and capture learnings
         reachedPhase = ArcPhase.PULSE
-        val pulse = executePulse(charge, flow)
+        val pulse = executePulse(charge, flow, runId)
 
         Result.success(
             ArcOutcome.Completed(
@@ -368,6 +388,7 @@ class AmpereRuntime(
         upstreamDecisionClient = upstreamDecisionClient,
         runId = runId,
         eventApiFactory = eventApiFactory,
+        knowledgeRepository = knowledgeRepository,
         clock = clock,
     )
 
@@ -389,13 +410,21 @@ class AmpereRuntime(
         return phase.execute()
     }
 
-    private suspend fun executePulse(chargeResult: ChargeResult, flowResult: FlowResult): PulseResult {
+    private suspend fun executePulse(
+        chargeResult: ChargeResult,
+        flowResult: FlowResult,
+        runId: ArcRunId,
+    ): PulseResult {
         val pulsePhase = PulsePhase(
             arcConfig = arcConfig,
             flowResult = flowResult,
             projectContext = chargeResult.projectContext,
             goalTree = chargeResult.goalTree,
             clock = clock,
+            // Charge's own agents, so each learning is stored by the agent that earned it
+            // (AMPR-402), under this run's id.
+            agents = chargeResult.agents,
+            runId = runId,
         )
         return pulsePhase.execute()
     }
@@ -518,6 +547,10 @@ class AmpereRuntime(
          * @param clock The clock the Arc tick reads
          * @param completionManifestSink Where a cancelled or failed run's manifest goes; see the
          *   constructor parameter of the same name
+         * @param eventApiFactory Builds the door for each spawned agent; see the constructor
+         *   parameter of the same name
+         * @param knowledgeRepository Long-term memory for the spawned agents; pass it together
+         *   with [eventApiFactory] or Pulse stores nothing. See the constructor parameter.
          * @return AmpereRuntime configured with the specified Arc
          */
         fun create(
@@ -527,12 +560,16 @@ class AmpereRuntime(
             maxFlowTicks: Int = 100,
             clock: Clock = Clock.System,
             completionManifestSink: (suspend (CompletionManifest) -> Unit)? = null,
+            eventApiFactory: ((AgentId) -> AgentEventApi)? = null,
+            knowledgeRepository: KnowledgeRepository? = null,
         ): AmpereRuntime {
             return AmpereRuntime(
                 arcConfig = arcConfig,
                 projectDir = projectDirPath.toPath(),
                 agentScope = agentScope,
                 maxFlowTicks = maxFlowTicks,
+                eventApiFactory = eventApiFactory,
+                knowledgeRepository = knowledgeRepository,
                 clock = clock,
                 completionManifestSink = completionManifestSink,
             )
