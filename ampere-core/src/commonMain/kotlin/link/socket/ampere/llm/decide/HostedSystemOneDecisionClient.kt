@@ -128,8 +128,8 @@ class HostedSystemOneDecisionClient(
             if (pTrue !in 0.0..1.0) {
                 throw MalformedDecisionResponseException("Noul '$id' probability out of range: $pTrue")
             }
-            val key = if (pTrue >= 0.5) Question.Noul.TRUE else Question.Noul.FALSE
-            measured(key, mapOf(Question.Noul.TRUE to pTrue, Question.Noul.FALSE to 1.0 - pTrue), snapshot)
+            val key = if (pTrue >= 0.5) Question.Noul.TRUE_KEY else Question.Noul.FALSE_KEY
+            measured(key, mapOf(Question.Noul.TRUE_KEY to pTrue, Question.Noul.FALSE_KEY to 1.0 - pTrue), snapshot)
         }
 
         is Question.Choice -> {

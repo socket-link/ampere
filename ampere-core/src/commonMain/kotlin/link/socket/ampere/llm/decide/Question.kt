@@ -42,7 +42,7 @@ sealed interface Question {
     /**
      * A yes/no proposition. A decision model returns the probability of `true`.
      *
-     * [criteria] holds exactly two entries, keyed [TRUE] and [FALSE], each
+     * [criteria] holds exactly two entries, keyed [TRUE_KEY] and [FALSE_KEY], each
      * describing what that answer means for this question.
      */
     @Serializable
@@ -54,23 +54,26 @@ sealed interface Question {
 
         init {
             require(instructions.isNotBlank()) { "A noul needs instructions" }
-            require(criteria.keys == setOf(TRUE, FALSE)) {
-                "A noul's criteria must be keyed exactly '$TRUE' and '$FALSE', was ${criteria.keys}"
+            require(criteria.keys == setOf(TRUE_KEY, FALSE_KEY)) {
+                "A noul's criteria must be keyed exactly '$TRUE_KEY' and '$FALSE_KEY', was ${criteria.keys}"
             }
         }
 
         override val answerKeys: List<String>
-            get() = listOf(TRUE, FALSE)
+            get() = listOf(TRUE_KEY, FALSE_KEY)
 
         override fun describe(key: String): String? = criteria[key]
 
         companion object {
-            const val TRUE: String = "true"
-            const val FALSE: String = "false"
+            // Suffixed on purpose: a public member named TRUE or FALSE exports to the
+            // Objective-C header as `NSString *TRUE`, which CoreFoundation's macro expands
+            // to `*1` and the iOS build no longer parses.
+            const val TRUE_KEY: String = "true"
+            const val FALSE_KEY: String = "false"
 
             /** A noul from its two answer descriptions. */
             fun of(instructions: String, whenTrue: String, whenFalse: String): Noul =
-                Noul(instructions = instructions, criteria = mapOf(TRUE to whenTrue, FALSE to whenFalse))
+                Noul(instructions = instructions, criteria = mapOf(TRUE_KEY to whenTrue, FALSE_KEY to whenFalse))
         }
     }
 

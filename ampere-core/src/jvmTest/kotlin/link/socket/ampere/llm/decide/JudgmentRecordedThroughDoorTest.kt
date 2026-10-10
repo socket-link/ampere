@@ -80,7 +80,7 @@ class JudgmentRecordedThroughDoorTest {
         val runId = "run-decide-1"
         val rule = DeterministicDecisionClient(name = "refund-rule") { s, q ->
             when (q) {
-                is Question.Noul -> if (s.contains("refund")) Question.Noul.TRUE else Question.Noul.FALSE
+                is Question.Noul -> if (s.contains("refund")) Question.Noul.TRUE_KEY else Question.Noul.FALSE_KEY
                 else -> q.answerKeys.first()
             }
         }

@@ -83,10 +83,10 @@ class ModelBackedDecisionClient(
         val raw = reported.contentOrNull?.trim() ?: return null
         if (raw in question.answerKeys) return raw
         if (question is Question.Noul) {
-            reported.booleanOrNull?.let { return if (it) Question.Noul.TRUE else Question.Noul.FALSE }
+            reported.booleanOrNull?.let { return if (it) Question.Noul.TRUE_KEY else Question.Noul.FALSE_KEY }
             when (raw.lowercase()) {
-                "true", "yes" -> return Question.Noul.TRUE
-                "false", "no" -> return Question.Noul.FALSE
+                "true", "yes" -> return Question.Noul.TRUE_KEY
+                "false", "no" -> return Question.Noul.FALSE_KEY
             }
         }
         return question.answerKeys.firstOrNull { it.equals(raw, ignoreCase = true) }

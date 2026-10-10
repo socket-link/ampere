@@ -22,7 +22,7 @@ class DeterministicDecisionClientTest {
     @Test
     fun `a deterministic judge yields a measured one-hot judgment that ran on-device`() = runTest {
         val client = DeterministicDecisionClient(name = "any-success") { state, _ ->
-            if (state.contains("SUCCESS")) Question.Noul.TRUE else Question.Noul.FALSE
+            if (state.contains("SUCCESS")) Question.Noul.TRUE_KEY else Question.Noul.FALSE_KEY
         }
 
         val response = client.decide(
