@@ -210,6 +210,13 @@ class RunScopedPublishersTraceTest {
                     delay(POLL_MS)
                 }
             }
+            // The knowledge row lands before its event does: `AgentMemoryService.storeKnowledge`
+            // writes the row through the repository and only then publishes `KnowledgeStored`
+            // through the door. So the poll above can win the race against the publish, and the
+            // envelope assertion below has to wait for the envelope — while the loop is still
+            // running, because `shutdownAgent` cancels a publish still in flight and the next
+            // iteration is what would land it.
+            awaitEnvelopeRows(MemoryEvent.KnowledgeStored.EVENT_TYPE)
         } finally {
             agent.shutdownAgent()
         }
