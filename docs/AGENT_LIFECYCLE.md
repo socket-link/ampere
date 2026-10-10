@@ -2,9 +2,21 @@
 
 This document explains how agents in Ampere autonomously work through tasks using the **PROPEL** cycle: **Perceive → Recall → Observe → Plan → Execute → Learn**.
 
+> **Status (verified against `main`, 2026-10-10).** This document describes the
+> cycle as designed. Two of the six phases do not run yet, and several steps in
+> the walkthrough below are the planned API rather than today's code. What is
+> and is not reachable from a consumer's hands is tracked per-phase in
+> [`docs/concepts/propel-loop.md`](concepts/propel-loop.md) under *"What a
+> consumer can and cannot drive today"*; the parent epic is
+> [AMPR-385](https://linear.app/miley/issue/AMPR-385).
+
 ## The Core Loop
 
-Agents in Ampere follow a continuous cycle:
+Agents in Ampere follow a continuous cycle. Two drivers implement it, and
+neither runs all six phases: `AutonomousAgent.runtimeLoop` brackets
+Perceive → Plan → Execute → Learn (Recall runs between them, unbracketed), and
+the Arc path's `FlowPhase` tick runs Perceive → Recall → Plan → Execute. The
+phases marked below are the gaps.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -22,7 +34,7 @@ Agents in Ampere follow a continuous cycle:
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────┐
-│                     OBSERVE STATE                       │
+│              OBSERVE STATE  (not implemented)           │
 │  Read: Current environment, work-in-progress, drift     │
 │  Compare: Against Ideas (Perceive) and Knowledge (Recall) │
 │  Surface: Deltas that should re-trigger planning        │
@@ -31,9 +43,8 @@ Agents in Ampere follow a continuous cycle:
                   ▼
 ┌─────────────────────────────────────────────────────────┐
 │                       PLAN SOLUTION                     │
-│  Input: Ticket, Observed State, Recalled Knowledge      │
+│  Input: Ticket, Ideas, recalled Knowledge               │
 │  Output: Plan with Task list                            │
-│  Status: Ticket moves InProgress                        │
 └─────────────────┬───────────────────────────────────────┘
                   │
                   ▼
@@ -52,6 +63,7 @@ Agents in Ampere follow a continuous cycle:
 │  Create: Knowledge entries                              │
 │  Store: In KnowledgeRepository with tags                │
 │  Publish: KnowledgeStored events; loop re-enters PERCEIVE │
+│  (Arc runs close in Pulse, once per run: AMPR-402)      │
 └─────────────────┬───────────────────────────────────────┘
                   │
                   ▼
@@ -104,6 +116,13 @@ forces `enabled`, `publishBrackets`, and `injectPhaseSparks` on for every agent 
 the process, whatever the config says. Use it to inspect phase behaviour in a local
 run; configure `cognitiveConfig` for anything a consumer depends on.
 
+One gap left: an Arc run has no seam for this. `ChargePhase` builds the run's
+`SparkAgentFactory` itself and passes no `cognitiveConfig`
+(`domain/arc/ChargePhase.kt:130-143`), so a consumer driving the loop through
+`ArcSession` can only reach phase handling with the environment variable. It is
+moot while nothing in the Arc path calls `withPhase` — `FlowPhase` brackets no
+phases at all — but both are worth fixing together.
+
 Trade-offs:
 - Pros: clearer phase focus, more consistent reasoning at each step
 - Cons: larger prompts (more tokens/latency) and more context to review in logs —
@@ -113,7 +132,7 @@ Trade-offs:
 
 ## Complete Example: Authentication Feature
 
-> **Note:** Some of the code examples below show the planned high-level API that is currently in development. For accurate details of the current API implementation, see the [CLI Guide](ampere-cli/README.md) and [AGENTS.md](../AGENTS.md).
+> **Note:** Some of the code examples below show the planned high-level API that is currently in development. For accurate details of the current API implementation, see the [CLI Guide](../ampere-cli/README.md) and [AGENTS.md](../AGENTS.md).
 
 Let's walk through how an authentication feature flows through the system, from ticket creation to completion.
 
@@ -232,30 +251,52 @@ val observation = agent.observe(
 - Flags drift, anomalies, and contradictions for the planner
 - Refines the working context that Plan will consume
 
+**Not implemented.** There is no `Agent.observe`, no `Observation` type and no
+OBSERVE service. `PlanGenerator.generate` takes a task, ideas, recalled
+knowledge and the available tools, and nothing else (`PlanGenerator.kt:62-106`).
+`CognitivePhase.OBSERVE` exists in the enum and in `PhaseSpark.Observe`'s prompt
+(`PhaseSpark.kt:134-160`), but nothing enters the phase. This section describes
+the target shape; see [`docs/concepts/propel-loop.md`](concepts/propel-loop.md)
+for the invariant it is held against.
+
 ---
 
 ### 6. Agent Creates Plan
 
 ```kotlin
-val plan = Plan.ForTicket(
-    ticket = ticket,
-    observation = observation,
+// What PlanGenerator actually returns (PlanGenerator.kt:258-263):
+val plan = Plan.ForTask(
+    task = originalTask,
     tasks = listOf(
         Task.CodeChange("Create User model"),
         Task.CodeChange("Add JWT library"),
         Task.CodeChange("Implement auth middleware"),
         Task.CodeChange("Write tests")
-    )
+    ),
+    estimatedComplexity = complexity,
+    expectations = Expectations.blank,
 )
-// → Status: Ready → InProgress
 ```
 
 **What happens:**
-- Agent converts optimized approach into concrete Tasks
+- Agent converts the recalled context and ideas into concrete Tasks
 - Breaks work into executable steps
-- Sets expectations and success criteria
-- Ticket status transitions to InProgress
 - Plan is remembered in agent's working memory
+
+Three details the older version of this section got wrong:
+
+- **The plan is a `Plan.ForTask`, not a `Plan.ForTicket`,** and `ForTicket` has
+  no `observation` field — neither variant does (`Plan.kt:80-103`). The planner
+  plans against the `Task` it was handed.
+- **Planning does not move the ticket to `InProgress`.** `SparkBasedAgent`
+  builds a throwaway `Ticket(id = "spark-task-…", status = InProgress)` per plan
+  step so a tool has an `ExecutionContext` (`SparkBasedAgent.kt:473-485`); the
+  real ticket's status is never touched.
+- **No success criteria are set.** `expectations` is always
+  `Expectations.blank` (`PlanGenerator.kt:262`). The model is asked for a
+  `"steps"` array (`:205`) and each entry becomes a `Task` through the injected
+  `taskFactory` (`:224-256`), which defaults to `Task.CodeChange`
+  (`:350-365`).
 
 ---
 
@@ -393,6 +434,15 @@ ticketOrchestrator.blockTicket(
    - Original ticket unblocked: Blocked → InProgress
    - Agent perceives the new work and continues
 
+**Status.** The pieces exist; the chain does not run.
+`TicketOrchestrator.blockTicket` does publish `TicketBlocked`, schedule the
+meeting and notify the human (`agents/events/tickets/TicketOrchestrator.kt:322-449`)
+— but it has no caller: no agent decides it is stuck. `MeetingScheduler` is
+constructed only in tests, so meetings never run on a cadence. And step 5 does
+not happen at all: a meeting's outcomes are formatted into a message
+(`agents/events/meetings/MeetingOrchestrator.kt:405-432`) and never turned into
+a Task or Ticket.
+
 ---
 
 ## Event Flow Visualization
@@ -412,7 +462,6 @@ Time  Event                    Publisher       Subscribers
       (Ready → InProgress)
 14:25 TaskCreated              engineer-agent  [executor, UI]
 14:28 TaskCompleted            executor        [engineer-agent, UI]
-14:28 OutcomeRecorded          executor        [knowledge-service]
 ...   (more tasks)
 14:45 KnowledgeStored          knowledge-svc   [all agents]
 14:45 TicketStatusChanged      TicketOrch      [all agents, UI]
@@ -420,7 +469,21 @@ Time  Event                    Publisher       Subscribers
 14:45 TicketCompleted          TicketOrch      [pm-agent, UI]
 ```
 
-Every action is observable, persistent, and can trigger reactive behavior in other agents.
+**Two corrections to the trace above.** There is no `OutcomeRecorded` event —
+`MemoryEvent` declares `KnowledgeStored`, `KnowledgeRecalled` and
+`MilestoneReached` and nothing else, so an outcome write leaves a row and no
+event. And the "Subscribers" column still overstates what happens: the task
+lifecycle *is* published now — since AMPR-404 `AutonomousWorkLoop` opens a
+`TaskLifecycle` per claimed issue and reports its terminal event in a `finally`
+(`agents/execution/AutonomousWorkLoop.kt:140-166`), which is what finally lets
+`MilestoneTracker` count a completion — and `EventRouter` has a registration
+path (`EnvironmentService.routeEventsToAgent`). But nothing in the shipped code
+calls that path, so the fan-out map is empty and no core agent is woken by
+another's event.
+
+Every action is observable and persistent. An agent *reacting* to another's
+event is a registration a consumer must make; see
+[`docs/concepts/event-serial-bus.md`](concepts/event-serial-bus.md).
 
 ---
 

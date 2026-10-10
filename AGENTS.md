@@ -116,14 +116,18 @@ See [ampere-cli/README.md](ampere-cli/README.md) for full CLI documentation.
 
 Ampere follows a layered architecture built on the **PROPEL** cognitive loop (Perceive, Recall, Observe, Plan, Execute, Learn) and six core primitives (Tickets, Tasks, Plans, Meetings, Outcomes, Knowledge).
 
+Paths are relative to `ampere-core/src/commonMain/kotlin/link/socket/ampere/`.
+
 | Layer | Location | Purpose |
 |-------|----------|---------|
 | AI Providers | `domain/ai/` | Multi-provider support (Anthropic, OpenAI, Google) with fallback chains |
 | Agent Definitions | `domain/agent/` | Agent identities, prompts, and bundled agent catalog |
-| Cognitive Core | `agents/core/` | PROPEL loop, autonomous agent contracts |
+| Cognitive Core | `agents/definition/`, `agents/domain/reasoning/` | PROPEL loop (`AutonomousAgent`, `SparkBasedAgent`), autonomous agent contracts, the per-phase reasoning services |
+| Arc Runtime | `domain/arc/` | Charge → Flow → Pulse, `AmpereRuntime`, `ArcSession` |
 | Event System | `agents/events/` | EventBus, routing, persistence, messaging, escalation |
-| Coordination | `agents/meetings/` | Standup, sprint planning, code review, ad-hoc meetings |
-| Tools | `agents/tools/` | WriteCode, RunTests, ReadCodebase, AskHuman |
+| Coordination | `agents/events/meetings/` | Standup, sprint planning, code review, ad-hoc meetings |
+| Tools | `agents/execution/tools/` | WriteCode, RunTests, ReadCodebase, AskHuman |
+| Tool Registry | `agents/tools/` | Registration and MCP server wiring (not the tool implementations) |
 | Persistence | `data/` | SQLDelight repositories with observable state |
 | UI | `ui/` | Compose Multiplatform screens and components |
 | CLI | `ampere-cli/` | TUI dashboard, event streaming, thread management |
