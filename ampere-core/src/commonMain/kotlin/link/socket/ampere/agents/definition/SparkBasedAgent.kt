@@ -555,7 +555,7 @@ open class SparkBasedAgent<S : AgentState>(
         parentTask: Task,
         priorResults: List<StepOutcome>,
     ): StepResult {
-        val stepConfig = agentConfiguration.cognitiveConfig.reasoningSteps
+        val stepConfig: ReasoningStepConfig = agentConfiguration.cognitiveConfig.reasoningSteps
         if (!stepConfig.execute) {
             return StepResult.success(
                 description = step.description,
