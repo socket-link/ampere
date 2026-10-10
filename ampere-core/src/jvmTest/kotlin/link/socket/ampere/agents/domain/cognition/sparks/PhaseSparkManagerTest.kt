@@ -20,6 +20,7 @@ import link.socket.ampere.agents.definition.AutonomousAgent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.knowledge.Knowledge
+import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.reasoning.Idea
@@ -61,7 +62,8 @@ class PhaseSparkManagerTest {
         override val initialState: AgentState = AgentState()
 
         override val runLLMToEvaluatePerception: (Perception<AgentState>) -> Idea = { Idea.blank }
-        override val runLLMToPlan: (Task, List<Idea>) -> Plan = { _, _ -> Plan.blank }
+        override val runLLMToPlan: (Task, List<Idea>, List<KnowledgeWithScore>) -> Plan =
+            { _, _, _ -> Plan.blank }
         override val runLLMToExecuteTask: (Task) -> Outcome = { stubOutcome }
         override val runLLMToExecuteTool: (Tool<*>, ExecutionRequest<*>) -> ExecutionOutcome = { _, _ -> stubOutcome }
         override val runLLMToEvaluateOutcomes: (List<Outcome>) -> Idea = { Idea.blank }

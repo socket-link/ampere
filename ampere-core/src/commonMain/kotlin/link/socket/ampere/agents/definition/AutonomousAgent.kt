@@ -467,8 +467,14 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
      *
      * Queries the agent's long-term memory for past experiences with similar tasks.
      * Returns an empty list if memory service is unavailable or recall fails.
+     *
+     * `protected` rather than private because the Recall step is not unique to
+     * [runtimeLoop]: a subclass that generates a Plan at another seam — e.g.
+     * `SparkBasedAgent.runSubPlanForTask`, which re-plans one coarse step into a
+     * sub-plan — owes that Plan a Recall too, and recalls through here so there is
+     * one definition of what a task's [MemoryContext] is (AMPR-388).
      */
-    private suspend fun recallRelevantKnowledgeForTask(task: Task): List<KnowledgeWithScore> {
+    protected suspend fun recallRelevantKnowledgeForTask(task: Task): List<KnowledgeWithScore> {
         // Build context from the task description
         val context = when (task) {
             is Task.CodeChange -> MemoryContext(
@@ -585,10 +591,10 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         vararg ideas: Idea,
         relevantKnowledge: List<KnowledgeWithScore>,
     ): Plan {
-        // Note: AutonomousAgent implementations should override this to incorporate
-        // relevantKnowledge into their planning. The base implementation here
-        // ignores knowledge for backwards compatibility.
-        val plan = runLLMToPlan(task, ideas.toList())
+        // AMPR-388: what Recall retrieved reaches the planner. This used to call
+        // `runLLMToPlan(task, ideas.toList())`, so every `KnowledgeRecalled` the loop
+        // recorded described knowledge no planning prompt ever saw.
+        val plan = runLLMToPlan(task, ideas.toList(), relevantKnowledge)
         rememberNewPlan(plan)
         return plan
     }

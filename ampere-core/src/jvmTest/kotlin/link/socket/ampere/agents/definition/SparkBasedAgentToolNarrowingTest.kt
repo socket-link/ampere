@@ -223,7 +223,7 @@ class SparkBasedAgentToolNarrowingTest {
             },
         )
 
-        val plan = agent.runLLMToPlan(parentTask(), emptyList())
+        val plan = agent.runLLMToPlan(parentTask(), emptyList(), emptyList())
 
         assertEquals(1, captured.size, "planning should have made exactly one model call")
         val payload = captured.single()
@@ -350,14 +350,14 @@ class SparkBasedAgentToolNarrowingTest {
             },
         )
 
-        agent.runLLMToPlan(parentTask(), emptyList())
+        agent.runLLMToPlan(parentTask(), emptyList(), emptyList())
         assertTrue(
             captured.last().contains(BETA),
             "before any narrowing spark, every tool is on offer; got: ${captured.last()}",
         )
 
         agent.spark<SparkBasedAgent<CodeState>>(NarrowingSpark(setOf(ALPHA)))
-        agent.runLLMToPlan(parentTask(), emptyList())
+        agent.runLLMToPlan(parentTask(), emptyList(), emptyList())
 
         assertFalse(
             captured.last().contains(BETA),

@@ -18,6 +18,7 @@ import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.AutonomousAgent
 import link.socket.ampere.agents.domain.knowledge.Knowledge
+import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.reasoning.Idea
@@ -118,7 +119,11 @@ class MinimalAutonomousAgentTest {
 
         override val runLLMToEvaluatePerception: (perception: Perception<AgentState>) -> Idea =
             { _ -> perceiveResult }
-        override val runLLMToPlan: (task: Task, ideas: List<Idea>) -> Plan = { _, _ -> planResult }
+        override val runLLMToPlan: (
+            task: Task,
+            ideas: List<Idea>,
+            relevantKnowledge: List<KnowledgeWithScore>,
+        ) -> Plan = { _, _, _ -> planResult }
         override val runLLMToExecuteTask: (task: Task) -> Outcome = { _ -> executeResult }
         override val runLLMToExecuteTool: (tool: Tool<*>, request: ExecutionRequest<*>) -> ExecutionOutcome =
             { _, _ -> executeResult }
