@@ -10,7 +10,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/AutonomousAgent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/SparkBasedAgent.kt
 related: [PropelLoop, CognitiveRelay, PlugPermissions, CognitionTrace]
-last_verified: 2026-10-09
+last_verified: 2026-10-10
 ---
 
 > **2026-05-17 (AMPR-165):** Declarative `.spark.md` documents now use JSON
@@ -32,6 +32,15 @@ last_verified: 2026-10-09
 > governs the `PhaseEntered` / `PhaseExited` pair and `injectPhaseSparks` governs
 > everything that reaches the prompt, so a run can be bracketed silently. Both
 > default to `true`, so `enabled = true` alone is unchanged.
+
+> **2026-10-10 (AMPR-392):** The markdown-to-`Spark` path is public.
+> `Spark.fromMarkdown(id, body, frontmatter, contributeRole)` returns a
+> `MarkdownSpark`, and the internal `.spark.md` parser delegates its section
+> split to it, so the `## When <Phase>` heading rules have one definition. Six
+> headings are recognised now (`Recalling` and `Observing` joined the four the
+> parser knew), a section ends at the next level-*two* heading, and any other
+> `## When …` heading stays in the body. `SparkStack.buildSystemPrompt` takes an
+> optional `preamble` rendered ahead of the cognitive-context header.
 
 # Spark System
 
@@ -84,9 +93,10 @@ misspelled `requestedToolIds` must not silently ship without its tools.
 Four variants exist today, addressed by the `"type"` discriminator:
 
 - **`"phase"`** (`PhaseSparkFrontmatter`) — prompt-only guidance. The body
-  may contain `## When Perceiving / Planning / Executing / Learning`
-  sections, which the parser extracts into `phaseContributions`; text
-  outside those headers becomes the base `promptContribution`. Fields:
+  may contain any of the six `## When <Phase>` sections (see
+  **The public markdown entry** below), which the parser extracts into
+  `phaseContributions`; text outside those headers becomes the base
+  `promptContribution`. Fields:
   `id`, `name`, `whenToUse`, `phases`, `tags`, `agentRole`,
   `requestedToolIds`, `modelPreference`.
 - **`"role"`** (`RoleSparkFrontmatter`) — capability-bearing. The body is
@@ -132,6 +142,40 @@ When an `EventSerialBus` is provided, `PhaseSparkManager` also emits
 phase changes are observable even when consumers do not inspect Spark stack
 events.
 
+### The public markdown entry
+
+`Spark.fromMarkdown(id, body, frontmatter = emptyMap(), contributeRole = false)`
+is how a consumer with its own spark catalogue gets Ampere's rules instead of
+re-deriving them. It returns a `MarkdownSpark`:
+
+- `name` is the `id`. Pass one already shaped `Type:Subtype` — trace bucketing
+  reads that prefix.
+- `promptContribution` is the body with the phase sections lifted out, in source
+  order.
+- `phaseContributions` comes from exactly these six level-two headings, matched
+  case-insensitively: `## When Perceiving`, `## When Recalling`,
+  `## When Observing`, `## When Planning`, `## When Executing`,
+  `## When Learning`. A section runs to the next level-two heading or the end of
+  the body; a level-three heading (`### …`) is structure *inside* the open
+  section and does not close it; any other level-two heading —
+  `## When nothing matches` included — closes the section and stays in the body
+  verbatim.
+- `requestedToolIds` comes from a `tools` frontmatter key, comma- or
+  whitespace-separated.
+- `agentRole` comes from a `role` key only when `contributeRole = true`.
+- `allowedTools` and `fileAccessScope` are always null. Prose cannot declare a
+  permission; narrowing is frontmatter's job and the stack's to compose.
+
+The frontmatter map is flat `Map<String, String>` on purpose: it is not the
+typed `SparkFrontmatter` schema, and the public entry deliberately says less
+than a bundled `.spark.md` can. `AmpereSpikeFlags` does not gate it.
+
+`SparkStack.buildSystemPrompt(currentPhase, preamble)` renders a trimmed
+`preamble` plus a `---` separator ahead of the cognitive-context header, so a
+host that must speak first does not concatenate around the header and cannot
+get the separators wrong. Null or blank leaves the prompt byte-for-byte what it
+was.
+
 ## Why it exists
 
 Three properties motivate the cellular-differentiation model over discrete
@@ -156,8 +200,9 @@ exceed parent permissions, so adding a Spark is monotone safe.
 
 ## Where it lives
 
-- `agents/domain/cognition/Spark.kt` — the interface; not sealed (subpackages need to extend).
-- `agents/domain/cognition/SparkStack.kt` — composition; `buildSystemPrompt(phase)` concatenates every spark's contribution plus its per-phase section; `effectiveAgentRole()` concatenates role fragments; `effectiveRequestedTools()` unions; `effectiveAllowedTools()` intersects; intersection-then-union semantics for file access.
+- `agents/domain/cognition/Spark.kt` — the interface; not sealed (subpackages need to extend). Its companion carries `fromMarkdown`, the public markdown entry.
+- `agents/domain/cognition/MarkdownSpark.kt` — the `Spark` a markdown body becomes, plus `splitMarkdownSparkBody`: the one definition of the `## When <Phase>` heading rules.
+- `agents/domain/cognition/SparkStack.kt` — composition; `buildSystemPrompt(phase, preamble)` concatenates every spark's contribution plus its per-phase section; `effectiveAgentRole()` concatenates role fragments; `effectiveRequestedTools()` unions; `effectiveAllowedTools()` intersects; intersection-then-union semantics for file access.
 - `agents/domain/cognition/FileAccessScope.kt` — read/write/forbidden patterns, the pure-`commonMain` glob matcher (`matches`), the gate (`allowsRead` / `allowsWrite` / `forbiddingPattern`), and subsumption-aware `intersect`.
 - `agents/domain/cognition/CognitiveAffinity.kt` — Spark selection signals.
 - `agents/domain/cognition/sparks/ProjectSpark.kt`, `AmpereProjectSpark.kt` — project-level context; `ProjectSpark.kt` also adapts `"project"` fixtures and resolves env-var interpolation.
@@ -169,7 +214,7 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - `agents/domain/cognition/sparks/DeclarativeRoleSpark.kt` — markdown-authored role spark; capability-bearing (`allowedTools`, `fileAccessScope`).
 - `agents/domain/cognition/sparks/DeclarativeSparkSource.kt` — sealed parser output: `Phase` / `Role` / `Language` / `Project`.
 - `agents/domain/cognition/sparks/SparkFrontmatter.kt` — sealed `@Serializable` frontmatter schema with `"phase"`, `"role"`, `"language"`, and `"project"` variants.
-- `agents/domain/cognition/sparks/SparkParser.kt` — JSON-fenced (`---json` / `---`) parser; extracts `## When <Phase>` sections for phase and language variants.
+- `agents/domain/cognition/sparks/SparkParser.kt` — JSON-fenced (`---json` / `---`) parser; extracts `## When <Phase>` sections for phase and language variants by delegating to `Spark.fromMarkdown`.
 - `agents/domain/cognition/sparks/SparkRegistry.kt` — public role/language/project lookup consumed by factories and default spark helpers.
 - `agents/domain/cognition/sparks/DefaultSparkCatalog.kt`, `DeclarativeSparkIds.kt` — synchronous bundled registry access for legacy non-suspend factory paths plus canonical ids.
 - `agents/domain/cognition/sparks/PhaseSparkLibrary.kt`, `DefaultPhaseSparkLibrary.kt` — read-only catalog with deterministic `selectFor` ordering; extends `SparkRegistry`.
@@ -201,6 +246,8 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - **Tool-set composition is intersection.** When two Sparks both specify `allowedTools`, the effective set is `A ∩ B`, not `A ∪ B`. A change that switches to union is a permission expansion and violates the narrowing invariant.
 - **PhaseSparks add context only.** They do not narrow tools (`allowedTools = null`) or file access (`fileAccessScope = null`). Their job is prompt augmentation, not capability gating.
 - **Spark `name` follows `Type:Subtype`.** `Role:Code`, `Phase:Perceive`, `Project:ampere`, `PhaseSpark:cooking-domain`. The trace projection extracts subtype from this prefix; ad-hoc names break trace bucketing. Declarative sparks use `PhaseSpark:<id>` so trace bucketing that keys on `Phase:` still treats built-in phases distinctly.
+- **The `## When <Phase>` heading rules have one definition.** `Spark.fromMarkdown` owns them and `SparkParser.extractPhaseSections` delegates to it, so a consumer's `.spark.md` and a bundled fixture split identically. A second splitter — in the parser, in a consumer, in a test helper — is the drift this was built to close (AMPR-392).
+- **A markdown spark narrows nothing.** `MarkdownSpark.allowedTools` and `fileAccessScope` are `null`, always. `requestedToolIds` from a `tools` key is a request, not a grant. A public factory that let a caller's prose set an allow-list would hand a consumer a widening lever, since nothing above it in the stack vetoes.
 - **Sparks are pure data.** No Kotlin lambdas on the `Spark` interface — behavioral guidance is expressed as markdown in `promptContribution` / `phaseContributions`, interpreted by the LLM. This is what makes a `.spark.md` file a complete, shareable unit of customization.
 - **Composition is additive, not exclusive.** When `N` sparks are on the stack, `buildSystemPrompt` includes contributions from all `N` — not "the topmost wins". `effectiveAgentRole` concatenates fragments with `" + "` (e.g. `Code Writer + Cooking Domain`). `effectiveRequestedTools` unions.
 
@@ -213,6 +260,8 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - **Author a declarative project spark** — use type `"project"`, put `## Project Description` and `## Project Conventions` in the body, and use `${env:VAR:-fallback}` for dynamic fields such as `repositoryRoot`. Resolve through `SparkRegistry.projectSparkById(id)`.
 - **Narrow what an agent may touch** — give the Spark a `fileAccessScope` whose `write`/`read` lists are a *subset* of what the sparks beneath it allow, remembering that composition keeps the narrower of each subsuming pair and drops pairs that merely overlap (`src/**` against `**/*.kt` composes to nothing, not to `src/**/*.kt`). Check the composed result with `SparkStack.effectiveFileAccess().allowsWrite(path)` rather than reading the fixture.
 - **Check whether a path is in scope** — `FileAccessScope.allowsRead(path)` / `allowsWrite(path)`; `forbiddingPattern(path)` names the deny-list entry that refused it, which is what a tool's refusal message should quote. Paths are normalized first, so a leading `./`, a leading `/` and a doubled separator are all insignificant; `..` is deliberately *not* resolved, because workspace containment is `ExecutionWorkspace`'s job (AMPR-300) and resolving it here would bless a match on a path that escapes.
+- **Build a Spark from markdown outside the module** — `Spark.fromMarkdown(id = "Consumer:charter", body = markdown)`, optionally with `frontmatter = mapOf("tools" to "read_code_file, write_code_file")` and `contributeRole = true` for a `role` key. No flag gates it, and no bundled fixture is involved.
+- **Put a consumer's charter ahead of the stack** — `stack.buildSystemPrompt(phase, preamble = charter)` rather than `charter + stack.buildSystemPrompt(phase)`.
 - **Apply a Spark transiently** — `SparkStack.push(spark)` and ensure a matching `pop` in `finally`. `PhaseSparkManager` handles this for phase boundaries.
 - **Compose a per-agent stack** — declarative role spark + `ProjectSpark` at agent construction, then `PhaseSpark` pushed/popped per phase (potentially multiple when declarative library is active), then `TaskSpark` pushed/popped per task.
 - **Inspect the active stack** — subscribe to `SparkAppliedEvent` / `SparkRemovedEvent` on the bus, or read `SparkStack.current`.
@@ -232,6 +281,8 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - **Saying "no constraint" with `emptySet()`.** Under intersection the empty set denies everything downstream of it, which is how a `ProjectSpark` whose comment read "role sparks enable writing" took write access away from every agent built with it. Widen to `**/*`, or set `fileAccessScope = null`.
 - **Forbidding a file extension to stop a role writing it.** `forbiddenPatterns` is one list for reads and writes both, so forbidding `**/*.kt` also stops the role reading Kotlin — which is what `role-operations` did to an agent holding `read_code_file`. Leave the extension out of the write allow-list instead.
 - **Using `java.nio.file.PathMatcher` for the glob matcher.** It is JVM-only, and `ampere-core` also targets Android, iOS, JS and wasmJs. `FileAccessScope.matches` is pure `commonMain` for that reason, and the pattern syntax is deliberately small enough not to need an `expect`/`actual` per platform.
+- **Re-implementing the `## When <Phase>` split in a consumer.** That is what AMPR-392 closed: the rules are small enough to re-derive and subtle enough to re-derive *wrongly* (four headings instead of six, a section that swallows the appendix behind it, a `## When nothing matches` silently eaten). Call `Spark.fromMarkdown`.
+- **Concatenating around `buildSystemPrompt` to get a charter in first.** The prompt's separator structure is the stack's; a caller gluing text to the front of the returned string owns a `---` it cannot see. Pass `preamble`.
 - **Using `PhaseSpark` to narrow tools.** Phase sparks are advisory prompt content, not gates. Capability narrowing belongs in role, language, project, or task sparks.
 - **Building an `AgentConfiguration` without the `cognitiveConfig` you were handed.** This was the AMPR-387 bug exactly: `SparkBasedAgent.agentConfiguration` constructed `AgentConfiguration(...)` without one, so the default (`phaseSparks.enabled = false`) won and the documented config path did nothing for two releases while `AgentFactory(cognitiveConfig = …)` fed a private getter nothing read. A config parameter that is accepted and dropped reads as supported.
 - **Treating `currentCognitivePhase` as observability.** It is prompt state — `buildSystemPrompt` is its only reader. Subscribe to `CognitivePhaseEvent` to know what phase an agent is in; `getCurrentPhase()` on the manager is the in-process equivalent.

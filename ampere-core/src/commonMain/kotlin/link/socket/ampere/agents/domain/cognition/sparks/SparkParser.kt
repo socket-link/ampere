@@ -2,6 +2,7 @@ package link.socket.ampere.agents.domain.cognition.sparks
 
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import link.socket.ampere.agents.domain.cognition.Spark
 
 /**
  * Outcome of [parseSpark]. Either a parsed source declaration or a typed
@@ -213,55 +214,25 @@ private fun extractEnumValue(message: String): String =
     ENUM_VALUE_REGEX.find(message)?.groupValues?.getOrNull(1) ?: "<unknown>"
 
 /**
- * Splits a spark body into the always-on base content plus per-phase sections
- * introduced by `## When Perceiving`, `## When Planning`, `## When Executing`,
- * or `## When Learning` headers.
+ * Splits a spark body into the always-on base content plus per-phase sections,
+ * by delegating to the public [Spark.fromMarkdown].
  *
- * Any text that appears before the first `## When <Phase>` header becomes the base
- * content. Sections terminate at the next `## When <Phase>` header or end-of-body.
+ * The delegation is the point: the `## When <Phase>` heading rules have exactly one
+ * definition, so a bundled fixture and a consumer's own `.spark.md` cannot drift apart.
+ * Only the split is wanted here — the frontmatter has already been decoded against the
+ * typed [SparkFrontmatter] schema, which says strictly more than [Spark.fromMarkdown]'s
+ * flat key/value map can.
  */
 private fun extractPhaseSections(body: String): Pair<String, Map<CognitivePhase, String>> {
-    val lines = body.lines()
-    val baseLines = mutableListOf<String>()
-    val phaseSections = mutableMapOf<CognitivePhase, MutableList<String>>()
-    var currentPhase: CognitivePhase? = null
-
-    for (line in lines) {
-        val phaseFromHeader = matchPhaseHeader(line)
-        if (phaseFromHeader != null) {
-            currentPhase = phaseFromHeader
-            phaseSections.getOrPut(phaseFromHeader) { mutableListOf() }
-            continue
-        }
-        if (currentPhase == null) {
-            baseLines += line
-        } else {
-            phaseSections.getValue(currentPhase) += line
-        }
-    }
-
-    val base = baseLines.joinToString("\n").trim('\n', ' ', '\t')
-    val finalized = phaseSections.mapValues { (_, sectionLines) ->
-        sectionLines.joinToString("\n").trim('\n', ' ', '\t')
-    }
-    return base to finalized
+    val split = Spark.fromMarkdown(id = SECTION_SPLIT_ONLY_ID, body = body)
+    return split.promptContribution to split.phaseContributions
 }
 
-private val PHASE_HEADER = Regex(
-    "^\\s*##\\s+When\\s+(Perceiving|Planning|Executing|Learning)\\s*$",
-    RegexOption.IGNORE_CASE,
-)
-
-private fun matchPhaseHeader(line: String): CognitivePhase? {
-    val match = PHASE_HEADER.matchEntire(line) ?: return null
-    return when (match.groupValues[1].lowercase()) {
-        "perceiving" -> CognitivePhase.PERCEIVE
-        "planning" -> CognitivePhase.PLAN
-        "executing" -> CognitivePhase.EXECUTE
-        "learning" -> CognitivePhase.LEARN
-        else -> null
-    }
-}
+/**
+ * Placeholder name for the throwaway spark [extractPhaseSections] builds. The caller
+ * reads only the body split off it; the real `name` comes from the frontmatter.
+ */
+private const val SECTION_SPLIT_ONLY_ID = "Spark:section-split"
 
 private fun findClosingFence(text: String): Int? {
     var searchStart = 0

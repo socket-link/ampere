@@ -71,6 +71,7 @@ class SparkStack private constructor(
      * Builds the complete system prompt from the affinity and all Spark contributions.
      *
      * The prompt is structured as:
+     * 0. The caller's [preamble] and a horizontal rule, when one is given
      * 1. Affinity header and prompt fragment
      * 2. Effective role label (concatenated across the stack), if any spark contributes one
      * 3. Each Spark's [Spark.promptContribution], separated by horizontal rules
@@ -82,9 +83,24 @@ class SparkStack private constructor(
      * @param currentPhase Optional cognitive phase. When non-null, each spark's per-phase
      *   contribution for that phase is appended after its base contribution. When null,
      *   only base contributions are included.
+     * @param preamble Optional caller-owned text rendered trimmed, ahead of everything the
+     *   stack contributes, followed by a `---` separator. This is the slot for a consumer's
+     *   own charter: a host that must speak first does not have to concatenate around the
+     *   cognitive-context header, and so cannot get the separators wrong. Null or blank
+     *   leaves the prompt byte-for-byte what it would be without the parameter.
      * @return The complete system prompt as markdown
      */
-    fun buildSystemPrompt(currentPhase: CognitivePhase? = null): String = buildString {
+    fun buildSystemPrompt(
+        currentPhase: CognitivePhase? = null,
+        preamble: String? = null,
+    ): String = buildString {
+        if (!preamble.isNullOrBlank()) {
+            appendLine(preamble.trim())
+            appendLine()
+            appendLine("---")
+            appendLine()
+        }
+
         // Start with affinity
         appendLine("# Cognitive Context")
         appendLine()

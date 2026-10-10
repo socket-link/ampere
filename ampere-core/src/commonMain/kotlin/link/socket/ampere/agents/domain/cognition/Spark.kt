@@ -51,8 +51,9 @@ interface Spark {
      * Per-phase markdown sections. The runtime selects the entry matching the
      * agent's current cognitive phase and appends it to the system prompt.
      *
-     * Empty by default. Declarative `.spark.md` documents populate this via
-     * `## When Perceiving / Planning / Executing / Learning` sections.
+     * Empty by default. Declarative `.spark.md` documents populate this via the six
+     * `## When Perceiving / Recalling / Observing / Planning / Executing / Learning`
+     * sections, whose rules are [fromMarkdown]'s.
      */
     val phaseContributions: Map<CognitivePhase, String>
         get() = emptyMap()
@@ -96,4 +97,70 @@ interface Spark {
      * Uses intersection semantics for read/write and union for forbidden.
      */
     val fileAccessScope: FileAccessScope?
+
+    companion object {
+
+        /**
+         * Builds a [Spark] from a markdown spark body — the public entry point for
+         * consumers with their own `.spark.md` catalogue.
+         *
+         * Exactly these six level-two headings, matched case-insensitively, become
+         * [Spark.phaseContributions] entries:
+         *
+         * ```
+         * ## When Perceiving
+         * ## When Recalling
+         * ## When Observing
+         * ## When Planning
+         * ## When Executing
+         * ## When Learning
+         * ```
+         *
+         * A section runs from its heading to the next level-two heading or end of body.
+         * A level-*three* heading (`### …`) is structure inside the open section and does
+         * not close it. Every other level-two heading — `## When nothing matches` included —
+         * closes the open section and stays in the body verbatim. What is left after the
+         * phase sections are lifted out, in source order, is [Spark.promptContribution].
+         *
+         * The result narrows nothing: `allowedTools` and `fileAccessScope` are null, because
+         * a body of prose cannot declare a permission. Narrowing is frontmatter's job and
+         * [SparkStack]'s to compose.
+         *
+         * This is the same splitter the bundled `.spark.md` parser uses, so a consumer's
+         * document and an Ampere fixture split identically.
+         *
+         * @param id Identity for the spark; becomes its [Spark.name]. Trace projections
+         *   bucket on a `Type:Subtype` prefix (`"Role:Code"`, `"PhaseSpark:cooking-domain"`),
+         *   so prefer an id already in that shape.
+         * @param body The markdown body, frontmatter already stripped.
+         * @param frontmatter Optional flat key/value frontmatter. `tools` is read as a
+         *   comma- or whitespace-separated list of [ToolId] into [Spark.requestedToolIds];
+         *   `role` is read into [Spark.agentRole] only when [contributeRole] is true.
+         *   Unrecognised keys are ignored.
+         * @param contributeRole Whether a `role` key should become [Spark.agentRole]. Off by
+         *   default: a role fragment lands in the agent's effective role label, which is a
+         *   visible identity change, so the caller opts in.
+         */
+        fun fromMarkdown(
+            id: String,
+            body: String,
+            frontmatter: Map<String, String> = emptyMap(),
+            contributeRole: Boolean = false,
+        ): Spark {
+            val split = splitMarkdownSparkBody(body)
+            return MarkdownSpark(
+                name = id,
+                promptContribution = split.base,
+                phaseContributions = split.phaseContributions,
+                agentRole = if (contributeRole) {
+                    frontmatter[MARKDOWN_SPARK_ROLE_KEY]?.trim()?.takeIf { it.isNotEmpty() }
+                } else {
+                    null
+                },
+                requestedToolIds = frontmatter[MARKDOWN_SPARK_TOOLS_KEY]
+                    ?.let(::parseMarkdownSparkToolIds)
+                    .orEmpty(),
+            )
+        }
+    }
 }
