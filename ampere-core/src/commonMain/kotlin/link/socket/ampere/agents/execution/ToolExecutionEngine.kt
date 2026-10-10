@@ -26,6 +26,8 @@ import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.agents.tools.mcp.McpToolExecutor
+import link.socket.ampere.agents.tools.mcp.ServerManager
 import link.socket.ampere.plug.PlugManifest
 import link.socket.ampere.plug.permission.GateResult
 import link.socket.ampere.plug.permission.PlugPermission
@@ -74,6 +76,16 @@ import link.socket.ampere.plug.permission.UserGrants
  *   returned by [execute] is recorded against the request's ticket and run, which is what
  *   makes `OutcomeService` and the CLI `outcomes` command read a store something writes.
  *   Null records nothing — correct for tests and for engines built without a database.
+ * @property mcpServerManager Where an [McpTool] dispatched by this engine is sent (AMPR-401):
+ *   either a [PlugContext][link.socket.ampere.plug.PlugContext]'s
+ *   [mcpServerManager][link.socket.ampere.plug.PlugContext.mcpServerManager] for plug-sourced
+ *   tools, or the discovery-side
+ *   [McpServerManager][link.socket.ampere.agents.tools.mcp.McpServerManager]. Null means this
+ *   engine cannot speak MCP and says so per call, which is correct for an engine wired with
+ *   function tools only. Handing the route to the engine rather than stamping it onto the
+ *   tools is what keeps the gate in front of it: the engine is the only holder of an MCP
+ *   route for a [Tool], so an agent's MCP call cannot be made without passing
+ *   [checkPlugPermissions] first.
  */
 class ToolExecutionEngine(
     private val llmService: AgentLLMService,
@@ -83,9 +95,21 @@ class ToolExecutionEngine(
     private val userGrantProvider: suspend (PlugManifest) -> UserGrants = { UserGrants() },
     private val runId: RunId? = null,
     private val outcomeRepository: OutcomeMemoryRepository? = null,
+    private val mcpServerManager: ServerManager? = null,
 ) {
 
     private val strategies = mutableMapOf<String, ParameterStrategy>()
+
+    /**
+     * The MCP dispatch arm, built only when a [ServerManager] was supplied.
+     *
+     * Shared with the `McpTool.execute()` path rather than reimplemented, so there is one
+     * request -> `tools/call` translation
+     * ([McpCallArguments][link.socket.ampere.agents.tools.mcp.McpCallArguments]) and one
+     * `ToolCallResult` -> [ExecutionOutcome] translation for every MCP call Ampere makes.
+     */
+    private val mcpToolExecutor: McpToolExecutor? =
+        mcpServerManager?.let { McpToolExecutor(serverManager = it) }
 
     /**
      * Registers a parameter generation strategy for a tool.
@@ -101,8 +125,8 @@ class ToolExecutionEngine(
      * Executes a tool with LLM-generated parameters, and records what came of it.
      *
      * The one public entry point, so it is also the one place every outcome this engine
-     * produces passes through — a refusal before dispatch (no intent, permission denied, an
-     * unsupported tool) just as much as a tool's own result. [recordOutcome] is called from
+     * produces passes through — a refusal before dispatch (no intent, permission denied, a
+     * tool with nowhere to dispatch to) just as much as a tool's own result. [recordOutcome] is called from
      * here rather than from [executeViaExecutor] for that reason: a dispatch that never
      * happened is still an attempt, and a failure is the more valuable half of the learning
      * signal.
@@ -150,15 +174,6 @@ class ToolExecutionEngine(
         val permissionFailure = checkPlugPermissions(tool, request, startTime)
         if (permissionFailure != null) {
             return permissionFailure
-        }
-
-        // Check for MCP tools (not yet supported)
-        if (tool is McpTool) {
-            return createFailure(
-                request = request,
-                startTime = startTime,
-                message = "MCP tool execution not yet supported",
-            )
         }
 
         // Get strategy for this tool — prefer the tool's own strategy, fall back to
@@ -263,6 +278,17 @@ class ToolExecutionEngine(
     /**
      * The executor call itself, with every failure mode turned into an [ExecutionOutcome]
      * so [executeViaExecutor] always has an outcome to complete the pair with.
+     *
+     * The two tool kinds leave by different doors on purpose. A [FunctionTool] runs through
+     * the injected [Executor], which on the live path is a
+     * [FunctionExecutor][link.socket.ampere.agents.execution.executor.FunctionExecutor] and
+     * cannot speak MCP. An [McpTool] runs through [mcpToolExecutor], the same arm
+     * `McpTool.execute()` uses, reached from here rather than by calling `tool.execute`:
+     * a plug-sourced [McpTool] carries no executor of its own, and giving it one would be a
+     * dispatch route that skips [checkPlugPermissions] (AMPR-401). The
+     * [McpExecutor][link.socket.ampere.agents.execution.executor.McpExecutor] in the executor
+     * framework is a third implementation of this dispatch that nothing constructs; it is not
+     * used here.
      */
     private suspend fun dispatch(
         tool: Tool<*>,
@@ -293,11 +319,28 @@ class ToolExecutionEngine(
                     }
                 }
                 is McpTool -> {
-                    createFailure(
-                        request = originalRequest,
-                        startTime = startTime,
-                        message = "MCP tool execution not yet supported",
-                    )
+                    val mcpExecutor = mcpToolExecutor
+                    if (mcpExecutor == null) {
+                        createFailure(
+                            request = originalRequest,
+                            startTime = startTime,
+                            message = "Cannot execute MCP tool '${tool.id}': this engine was " +
+                                "built without an MCP ServerManager",
+                        )
+                    } else {
+                        @Suppress("UNCHECKED_CAST")
+                        val typedRequest = runScopedRequest as ExecutionRequest<ExecutionContext>
+
+                        when (val outcome = mcpExecutor.execute(tool, typedRequest)) {
+                            is ExecutionOutcome -> outcome
+                            else -> createFailure(
+                                request = originalRequest,
+                                startTime = startTime,
+                                message = "MCP tool '${tool.id}' returned an unexpected " +
+                                    "outcome: ${outcome::class.simpleName}",
+                            )
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {

@@ -3,10 +3,28 @@ package link.socket.ampere.plug
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.JsonElement
+import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.reasoning.AgentLLMService
+import link.socket.ampere.agents.domain.status.TaskStatus
+import link.socket.ampere.agents.domain.status.TicketStatus
+import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.events.tickets.Ticket
+import link.socket.ampere.agents.events.tickets.TicketPriority
+import link.socket.ampere.agents.events.tickets.TicketType
+import link.socket.ampere.agents.execution.ToolExecutionEngine
+import link.socket.ampere.agents.execution.executor.FunctionExecutor
+import link.socket.ampere.agents.execution.request.ExecutionConstraints
+import link.socket.ampere.agents.execution.request.ExecutionContext
+import link.socket.ampere.agents.execution.request.ExecutionRequest
+import link.socket.ampere.agents.execution.tools.McpTool
+import link.socket.ampere.agents.tools.mcp.ServerManager
 import link.socket.ampere.agents.tools.mcp.connection.McpServerConnection
 import link.socket.ampere.agents.tools.mcp.protocol.ContentItem
 import link.socket.ampere.agents.tools.mcp.protocol.InitializeResult
@@ -15,6 +33,10 @@ import link.socket.ampere.agents.tools.mcp.protocol.ServerCapabilities
 import link.socket.ampere.agents.tools.mcp.protocol.ServerInfo
 import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
 import link.socket.ampere.canon.CanonType
+import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
+import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
+import link.socket.ampere.domain.ai.model.AIModel_Claude
+import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.link.EgressClass
 import link.socket.ampere.link.InMemoryLinkStore
 import link.socket.ampere.link.Link
@@ -27,9 +49,16 @@ import link.socket.ampere.link.Transport
 import link.socket.ampere.mcp.InMemoryMcpCredentialBinding
 import link.socket.ampere.plug.permission.PlugPermission
 import link.socket.ampere.plug.permission.UserGrants
-import link.socket.ampere.propel.ExecuteResult
-import link.socket.ampere.propel.ExecuteStep
 
+/**
+ * The plug execute path, end to end: manifest -> Link resolution -> MCP handshake ->
+ * tool discovery -> permission gate -> `tools/call`.
+ *
+ * Driven through [ToolExecutionEngine] because that is the only execute path (AMPR-401).
+ * It used to be driven through `propel/ExecuteStep`, a second entry point nothing in
+ * production constructed, while the engine refused every `McpTool` with "MCP tool
+ * execution not yet supported".
+ */
 class PlugContextEndToEndTest {
 
     private val mcpUri = "mcp://github"
@@ -75,91 +104,164 @@ class PlugContextEndToEndTest {
     }
 
     @Test
-    fun `granted user invokes mcp tool successfully`() = runTest {
+    fun `granted user invokes mcp tool through the engine`() = runTest {
         val expected = ToolCallResult(
             content = listOf(ContentItem(type = "text", text = "ampere")),
             isError = false,
         )
-        val mock = RecordingMcpConnection(
-            serverId = mcpUri,
-            toolsToReturn = listOf(
-                McpToolDescriptor(name = toolName, description = "List repos"),
-            ),
-            invokeResult = expected,
-        )
+        val mock = recordingConnection(invokeResult = expected)
+        val context = plugContext(mock)
+        val tool = context.mcpTool()
 
-        val context = PlugContext.create(
-            manifest = manifest,
-            credentialBinding = InMemoryMcpCredentialBinding(),
-            linkResolutionService = grantedLinkResolutionService(),
-            connectionFactory = { _, _ -> mock },
-        ).getOrThrow()
+        // The namespaced "<dependency>:<remote tool>" id is how a plug tool is addressed.
+        assertEquals("github:$toolName", tool.id)
+        assertEquals(manifest, tool.plugManifest)
 
-        val step = ExecuteStep(
+        val outcome = engine(
             context = context,
-            userGrantProvider = { UserGrants.granted(PlugPermission.MCPServer(mcpUri)) },
-        )
+            grants = UserGrants.granted(PlugPermission.MCPServer(mcpUri)),
+        ).execute(tool, request())
 
-        val toolId = "github:$toolName"
-        val result = step.execute(toolId, arguments = null)
+        val success = assertIs<ExecutionOutcome.NoChanges.Success>(outcome)
+        assertEquals("ampere", success.message)
+        assertEquals(0, llmCalls, "MCP dispatch takes no parameter-generation call")
 
-        val success = assertIs<ExecuteResult.Success>(result)
-        assertEquals(expected, success.result)
-        assertEquals(1, mock.invocations.size)
-        assertEquals(toolName, mock.invocations.single().first)
+        val invocation = mock.invocations.single()
+        assertEquals(toolName, invocation.first)
+        // The envelope McpCallArguments builds from the request, not the tool's own schema.
+        assertNotNull(invocation.second)
     }
 
     @Test
     fun `missing grant denies dispatch and never invokes the connection`() = runTest {
-        val mock = RecordingMcpConnection(
-            serverId = mcpUri,
-            toolsToReturn = listOf(
-                McpToolDescriptor(name = toolName, description = "List repos"),
-            ),
-        )
+        val mock = recordingConnection()
+        val context = plugContext(mock)
 
-        val context = PlugContext.create(
-            manifest = manifest,
-            credentialBinding = InMemoryMcpCredentialBinding(),
-            linkResolutionService = grantedLinkResolutionService(),
-            connectionFactory = { _, _ -> mock },
-        ).getOrThrow()
+        val outcome = engine(context = context, grants = UserGrants())
+            .execute(context.mcpTool(), request())
 
-        val step = ExecuteStep(
-            context = context,
-            userGrantProvider = { UserGrants() },
-        )
-
-        val toolId = "github:$toolName"
-        val result = step.execute(toolId, arguments = null)
-
-        val denied = assertIs<ExecuteResult.PermissionDenied>(result)
-        assertEquals(PlugPermission.MCPServer(mcpUri), denied.permission)
+        val failure = assertIs<ExecutionOutcome.NoChanges.Failure>(outcome)
+        assertTrue(failure.message.contains("Permission denied"), failure.message)
+        assertTrue(failure.message.contains(mcpUri), failure.message)
         assertTrue(mock.invocations.isEmpty())
     }
 
     @Test
-    fun `unknown tool id returns UnknownTool`() = runTest {
-        val mock = RecordingMcpConnection(
-            serverId = mcpUri,
-            toolsToReturn = emptyList(),
-        )
+    fun `a closed plug resolves no connection and fails rather than throwing`() = runTest {
+        val mock = recordingConnection()
+        val context = plugContext(mock)
+        val tool = context.mcpTool()
+        context.close()
 
-        val context = PlugContext.create(
+        val outcome = engine(
+            context = context,
+            grants = UserGrants.granted(PlugPermission.MCPServer(mcpUri)),
+        ).execute(tool, request())
+
+        val failure = assertIs<ExecutionOutcome.NoChanges.Failure>(outcome)
+        assertTrue(failure.message.contains("not connected"), failure.message)
+        assertTrue(mock.invocations.isEmpty())
+    }
+
+    @Test
+    fun `an engine built without a server manager refuses the plug tool`() = runTest {
+        val mock = recordingConnection()
+        val context = plugContext(mock)
+
+        val outcome = engine(
+            context = context,
+            grants = UserGrants.granted(PlugPermission.MCPServer(mcpUri)),
+            serverManager = null,
+        ).execute(context.mcpTool(), request())
+
+        val failure = assertIs<ExecutionOutcome.NoChanges.Failure>(outcome)
+        assertTrue(failure.message.contains("without an MCP ServerManager"), failure.message)
+        assertTrue(mock.invocations.isEmpty())
+    }
+
+    private var llmCalls = 0
+
+    private val executor = FunctionExecutor.create()
+
+    private suspend fun plugContext(connection: McpServerConnection): PlugContext =
+        PlugContext.create(
             manifest = manifest,
             credentialBinding = InMemoryMcpCredentialBinding(),
             linkResolutionService = grantedLinkResolutionService(),
-            connectionFactory = { _, _ -> mock },
+            connectionFactory = { _, _ -> connection },
         ).getOrThrow()
 
-        val step = ExecuteStep(
-            context = context,
-            userGrantProvider = { UserGrants.granted(PlugPermission.MCPServer(mcpUri)) },
+    /** The single MCP tool the manifest's one server exposes. */
+    private fun PlugContext.mcpTool(): McpTool =
+        availableTools().filterIsInstance<McpTool>().single()
+
+    private fun recordingConnection(
+        invokeResult: ToolCallResult = ToolCallResult(),
+    ): RecordingMcpConnection = RecordingMcpConnection(
+        serverId = mcpUri,
+        toolsToReturn = listOf(
+            McpToolDescriptor(name = toolName, description = "List repos"),
+        ),
+        invokeResult = invokeResult,
+    )
+
+    private fun engine(
+        context: PlugContext,
+        grants: UserGrants,
+        serverManager: ServerManager? = context.mcpServerManager,
+    ): ToolExecutionEngine = ToolExecutionEngine(
+        llmService = AgentLLMService(
+            AgentConfiguration(
+                agentDefinition = WriteCodeAgent,
+                aiConfiguration = AIConfiguration_Default(
+                    provider = AIProvider_Anthropic,
+                    model = AIModel_Claude.Sonnet_5,
+                ),
+                llmProvider = {
+                    llmCalls += 1
+                    "{}"
+                },
+            ),
+        ),
+        executor = executor,
+        executorId = executor.id,
+        userGrantProvider = { grants },
+        mcpServerManager = serverManager,
+    )
+
+    private fun request(): ExecutionRequest<ExecutionContext.NoChanges> {
+        val now = Clock.System.now()
+        val ticket = Ticket(
+            id = "ticket-1",
+            title = "List the repositories",
+            description = "List the repositories through the GitHub plug",
+            type = TicketType.TASK,
+            priority = TicketPriority.MEDIUM,
+            status = TicketStatus.InProgress,
+            assignedAgentId = "agent-1",
+            createdByAgentId = "agent-1",
+            createdAt = now,
+            updatedAt = now,
+            dueDate = null,
+        )
+        val task = Task.CodeChange(
+            id = "task-1",
+            status = TaskStatus.Pending,
+            description = "List repos",
         )
 
-        val result = step.execute("github:does_not_exist", arguments = null)
-
-        assertIs<ExecuteResult.UnknownTool>(result)
+        return ExecutionRequest(
+            context = ExecutionContext.NoChanges(
+                executorId = executor.id,
+                ticket = ticket,
+                task = task,
+                instructions = "List the repositories",
+            ),
+            constraints = ExecutionConstraints(
+                requireTests = false,
+                requireLinting = false,
+            ),
+        )
     }
 }
 

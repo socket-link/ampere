@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/PlugGrants.sq
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/ToolExecutionEngine.kt
 related: [SparkSystem, AgentSurface, EventSerialBus, LinkLayer]
-last_verified: 2026-10-09
+last_verified: 2026-10-10
 ---
 
 # Plug Permissions
@@ -72,12 +72,12 @@ Two design pressures shaped the gate:
 - `plug/PlugManifest.kt` — declares `requiredPermissions`, plus the `requiredLinks` / `emits` / `consumes` declarations owned by [LinkLayer](link-layer.md).
 - `plug/PlugManifestValidator.kt` — structural manifest checks, including duplicate `DeviceCapability` declarations. Expected to run at plug install time on every host that accepts manifests; today only `PlugContext.create` calls it.
 - `commonMain/sqldelight/link/socket/ampere/db/PlugGrants.sq` — schema for user grants.
-- `agents/execution/ToolExecutionEngine.kt` — the call site that gates dispatch.
+- `agents/execution/ToolExecutionEngine.kt` — the call site that gates dispatch, and since AMPR-401 the *only* one: it is also where an `McpTool` is dispatched, through the `ServerManager` it is constructed with (a `PlugContext.mcpServerManager` for plug tools, `McpServerManager` for discovered ones). The dead second path, `propel/ExecuteStep`, is gone.
 - `agents/domain/event/PermissionDeniedEvent.kt` — emitted on `Deny*` results.
 
 ## Invariants
 
-- **The gate runs before tool dispatch.** No plug tool call may execute without a `GateResult.Allow`. A code path that dispatches a plug tool without consulting `PlugPermissionGate.check` is a critical security regression.
+- **The gate runs before tool dispatch.** No plug tool call may execute without a `GateResult.Allow`. A code path that dispatches a plug tool without consulting `PlugPermissionGate.check` is a critical security regression. For a `Tool` the engine dispatches, AMPR-401 made this structural as well: a plug-sourced `McpTool` carries no executor of its own and `McpClient.activeConnection` is `internal`, so the engine's `ServerManager` is the only route to a plug's MCP server and the gate sits in front of it. One non-dispatch path remains and is not gated: `PlugContext.mcpClientFor` hands an adapter that *implements* a plug (`LinearWorkSource.open`) the client for its own pinned tools, called by name over a Link `PlugContext.create` already resolved. No agent and no `Tool` is involved there, but it does mean "every MCP call is gated" is not true today — only every MCP call an agent makes.
 - **Revoked beats granted.** If a permission is in `userGrants.revoked`, the gate returns `DenyRevoked` regardless of whether it is also in `granted`. The order in `PlugPermissionGate.check` is intentional and load-bearing.
 - **Permissions are sealed.** New permission kinds must be added as variants of the sealed `PlugPermission` interface, with stable `@SerialName`s. Plugs cannot declare ad-hoc string permissions.
 - **Manifest and tool-call permissions are unioned, then deduplicated.** A permission listed in either is required. A change that ANDs them (only check the intersection) is a privilege escalation.
@@ -100,3 +100,4 @@ Two design pressures shaped the gate:
 - **AND-ing manifest and tool-call permissions.** Some manifests under-declare; some tool calls over-declare. Both views must be satisfied.
 - **Not emitting `PermissionDeniedEvent` on denial.** The trace shows a tool that didn't run with no explanation. Always emit.
 - **Caching `userGrants` for "performance" without invalidation on revoke.** Stale grants let a revoked permission act granted. Revocation must invalidate.
+- **Giving a plug-sourced `McpTool` an executor so `tool.execute()` works.** Tempting while unifying the two plug execute paths (AMPR-401), because it is what `McpServerManager` does for the tools it discovers — but those carry no `plugManifest`, and `Tool.execute` does not consult the gate, so stamping one onto a plug's tool creates a dispatch route around it. Hand the route to the engine instead.
