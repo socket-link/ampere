@@ -19,6 +19,8 @@ import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.api.TaskLifecycle
+import link.socket.ampere.agents.events.api.openTaskLifecycle
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.environment.workspace.containedFile
 import link.socket.ampere.agents.events.api.EventHandler
@@ -191,6 +193,9 @@ class GoalHandler(
         ticketId: String,
     ) {
         val api = eventApi
+        // The whole cognitive cycle is one task, and the lifecycle outlives every early return
+        // below — the `finally` closes it if one of them beat us to the end (AMPR-404).
+        var lifecycle: TaskLifecycle? = null
         try {
             val ticketResult = context.environmentService.ticketRepository.getTicket(ticketId)
             val ticket = ticketResult.getOrNull() ?: run {
@@ -204,12 +209,14 @@ class GoalHandler(
                 description = ticket.description
             )
 
-            // Publish task created event
-            api?.publishTaskCreated(
+            // Open the task's lifecycle: TaskCreated, then TaskStarted, both on one run id
+            lifecycle = api?.openTaskLifecycle(
                 taskId = task.id,
-                urgency = Urgency.MEDIUM,
                 description = ticket.title,
-                assignedTo = agent.id
+                assignedTo = agent.id,
+                urgency = Urgency.MEDIUM,
+                taskType = GOAL_TASK_TYPE,
+                workspace = workspace
             )
 
             // PHASE 1: PERCEIVE
@@ -219,8 +226,13 @@ class GoalHandler(
 
             if (perception.ideas.isEmpty()) {
                 progressPane.setFailed("No ideas generated")
+                lifecycle?.failed("PERCEIVE produced no ideas to plan against")
                 return
             }
+            lifecycle?.progressed(
+                description = "Perceived ${perception.ideas.size} idea(s)",
+                progress = PERCEIVE_PROGRESS
+            )
 
             // PHASE 2: PLAN
             progressPane.setPhase(CognitiveProgressPane.Phase.PLAN, "Creating plan...")
@@ -231,6 +243,21 @@ class GoalHandler(
             )
             progressPane.setPlanResult(plan)
 
+            // The plan's steps are this task's decomposition, so the checklist gets them as
+            // child items rather than only ever showing the goal as one opaque row.
+            plan.tasks.forEach { step ->
+                val stepDescription = (step as? Task.CodeChange)?.description ?: return@forEach
+                lifecycle?.subtaskCreated(
+                    subtaskId = step.id,
+                    description = stepDescription,
+                    assignedTo = agent.id
+                )
+            }
+            lifecycle?.progressed(
+                description = "Planned ${plan.tasks.size} step(s)",
+                progress = PLAN_PROGRESS
+            )
+
             // PHASE 3: EXECUTE
             progressPane.setPhase(CognitiveProgressPane.Phase.EXECUTE, "Calling LLM...")
             val outcome = agent.executePlan(plan)
@@ -238,6 +265,7 @@ class GoalHandler(
             when (outcome) {
                 is ExecutionOutcome.CodeChanged.Failure -> {
                     progressPane.setFailed(outcome.error.message)
+                    lifecycle?.failed(outcome.error.message)
                     return
                 }
                 is ExecutionOutcome.CodeChanged.Success -> {
@@ -248,7 +276,8 @@ class GoalHandler(
                             filePath = filePath,
                             changeDescription = "Written by CodeAgent",
                             reviewRequired = false,
-                            assignedTo = null
+                            assignedTo = null,
+                            runId = lifecycle?.runId
                         )
                     }
                 }
@@ -256,6 +285,10 @@ class GoalHandler(
                     // Files are already tracked in the write_code_file tool
                 }
             }
+            lifecycle?.progressed(
+                description = "Executed the plan",
+                progress = EXECUTE_PROGRESS
+            )
 
             // PHASE 4: LEARN
             progressPane.setPhase(CognitiveProgressPane.Phase.LEARN, "Extracting knowledge...")
@@ -264,9 +297,13 @@ class GoalHandler(
 
             // Complete!
             progressPane.setPhase(CognitiveProgressPane.Phase.COMPLETED)
-
+            lifecycle?.completed(knowledge.approach)
         } catch (e: Exception) {
             progressPane.setFailed(e.message ?: "Unknown error")
+            lifecycle?.failed(e)
+        } finally {
+            // The backstop for a path that returned without reporting at all. A no-op above.
+            lifecycle?.failed("Abandoned before the cognitive cycle reported an outcome")
         }
     }
 
@@ -336,5 +373,20 @@ class GoalHandler(
                 }
             }
         )
+    }
+
+    companion object {
+        /**
+         * The task type `MilestoneTracker` counts a goal's completion against.
+         *
+         * One constant for every goal, so the agent's `FIRST_SUCCESS` milestone means "it
+         * finished its first goal", not "it finished this one".
+         */
+        private const val GOAL_TASK_TYPE: String = "cli-goal"
+
+        /** Progress recorded on the task's `WorkItem` as each PROPEL phase lands. */
+        private const val PERCEIVE_PROGRESS: Float = 0.25f
+        private const val PLAN_PROGRESS: Float = 0.5f
+        private const val EXECUTE_PROGRESS: Float = 0.75f
     }
 }

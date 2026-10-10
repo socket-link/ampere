@@ -19,6 +19,13 @@ process-local state for that agent. APIs created from the same
 
 `KEY_INSIGHT` and `CHECKPOINT` are reserved for future publish sites.
 
+The tracker only fires if something publishes the task lifecycle it listens for. Use
+`AgentEventApi.openTaskLifecycle(...)` (`agents/events/api/TaskLifecycle.kt`) rather than a
+bare `publishTaskCreated`: it publishes `TaskCreated` and `TaskStarted`, and its `completed` /
+`failed` are the `TaskCompleted` / `TaskFailed` the table above keys off. Pass a `taskType`
+that names the *kind* of work — one constant per workflow, not one per instance — or every task
+is its own `FIRST_SUCCESS`.
+
 ## Bridge Reference
 
 The Lumos bridge can map AMPERE milestones to STAR by subscribing to:

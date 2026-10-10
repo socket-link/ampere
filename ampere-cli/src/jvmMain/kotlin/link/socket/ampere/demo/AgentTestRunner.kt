@@ -34,6 +34,8 @@ import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.environment.workspace.containedFile
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.api.TaskLifecycle
+import link.socket.ampere.agents.events.api.openTaskLifecycle
 import link.socket.ampere.agents.events.tickets.TicketBuilder
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
@@ -47,6 +49,13 @@ import link.socket.ampere.llm.BundledUpstreamLlmClient
 
 /** Default timeout for escalation prompts */
 private const val ESCALATION_TIMEOUT_SECONDS = 30L
+
+/** The task type `MilestoneTracker` counts this demo's completions against. */
+private const val DEMO_TASK_TYPE: String = "demo-cognitive-cycle"
+
+/** Progress recorded on the task's `WorkItem` as each PROPEL phase lands. */
+private const val PERCEIVE_PROGRESS: Float = 0.25f
+private const val PLAN_PROGRESS: Float = 0.5f
 
 /**
  * The Agent Test Runner - Demonstrates end-to-end autonomous agent behavior.
@@ -392,6 +401,8 @@ private suspend fun handleTicketAssignment(
     escalation: Boolean = false,
 ) {
     val phaseSparkManager = PhaseSparkManager(agent, enabled = true, eventApi = eventApi)
+    // Closed by the `finally` below if any of the early returns beats us to the end.
+    var lifecycle: TaskLifecycle? = null
 
     try {
 
@@ -413,12 +424,13 @@ private suspend fun handleTicketAssignment(
             description = ticket.description
         )
 
-        // Publish TaskCreated for visibility in the event stream
-        eventApi.publishTaskCreated(
+        // Open the task's lifecycle: TaskCreated, then TaskStarted, both on one run id
+        lifecycle = eventApi.openTaskLifecycle(
             taskId = task.id,
-            urgency = Urgency.MEDIUM,
             description = ticket.title,
             assignedTo = agent.id,
+            urgency = Urgency.MEDIUM,
+            taskType = DEMO_TASK_TYPE,
         )
 
         // PHASE 1: PERCEIVE
@@ -432,8 +444,10 @@ private suspend fun handleTicketAssignment(
 
         if (perception.ideas.isEmpty()) {
             println("   ❌ No ideas generated, aborting")
+            lifecycle.failed("PERCEIVE produced no ideas to plan against")
             return
         }
+        lifecycle.progressed("Perceived ${perception.ideas.size} idea(s)", progress = PERCEIVE_PROGRESS)
 
         // ESCALATION POINT: After PERCEIVE, before finalizing PLAN
         // Only prompt if escalation mode is enabled
@@ -473,6 +487,18 @@ private suspend fun handleTicketAssignment(
         println("      Estimated complexity: ${plan.estimatedComplexity}")
         println()
 
+        // The plan's steps are this task's decomposition — publish them as subtasks so the
+        // event stream and the workspace checklist show what the plan actually asked for.
+        plan.tasks.forEach { step ->
+            val stepDescription = (step as? Task.CodeChange)?.description ?: return@forEach
+            lifecycle.subtaskCreated(
+                subtaskId = step.id,
+                description = stepDescription,
+                assignedTo = agent.id,
+            )
+        }
+        lifecycle.progressed("Planned ${plan.tasks.size} step(s)", progress = PLAN_PROGRESS)
+
         // PHASE 3: EXECUTE
         println("   ⚡ [PHASE 3: EXECUTE] Executing plan...")
         println("      📤 Calling LLM to generate code...")
@@ -492,11 +518,13 @@ private suspend fun handleTicketAssignment(
                         changeDescription = "Written by CodeAgent",
                         reviewRequired = false,
                         assignedTo = null,
+                        runId = lifecycle.runId,
                     )
                 }
             }
             is ExecutionOutcome.CodeChanged.Failure -> {
                 println("      ❌ Failure: ${outcome.error}")
+                lifecycle.failed(outcome.error.message)
             }
             else -> {
                 println("      ℹ️  Outcome: ${outcome::class.simpleName}")
@@ -524,13 +552,18 @@ private suspend fun handleTicketAssignment(
         println("✅ [COGNITIVE CYCLE] Complete!")
         println()
 
+        lifecycle.completed(knowledge.approach)
+
         // Allow time for output to flush before shutdown
         delay(500)
 
     } catch (e: Exception) {
         println("   ❌ [ERROR] Cognitive cycle failed: ${e.message}")
         e.printStackTrace()
+        lifecycle?.failed(e)
     } finally {
+        // The backstop for a path that returned without reporting at all. A no-op above.
+        lifecycle?.failed("Abandoned before the cognitive cycle reported an outcome")
         phaseSparkManager.cleanup()
     }
 }
