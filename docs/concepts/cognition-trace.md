@@ -12,8 +12,9 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/MemoryEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/RoutingEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/ArcRunEvent.kt
-related: [PropelLoop, EventSerialBus, MemoryProvenance, CognitiveRelay, SparkSystem]
-last_verified: 2026-10-02
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/CognitiveEvent.kt
+related: [PropelLoop, EventSerialBus, MemoryProvenance, CognitiveRelay, SparkSystem, DecideSeam]
+last_verified: 2026-10-09
 ---
 
 # Cognition Trace
@@ -29,6 +30,7 @@ and `OutcomeMemoryStore` by `run_id` and assembles an `ArcRunTrace`:
 - `ToolCallTrace`s joining `ToolEvent.ToolExecutionStarted` ↔ `ToolExecutionCompleted` with duration and success.
 - `MemoryWriteTrace`s for `KnowledgeStored` / `OutcomeRecorded`, with `MilestoneReached` persisted as a queryable checkpoint event rather than a memory write row.
 - `WattCost` per phase and per invocation, aggregated by `WattCostAggregator`.
+- `CognitiveEvent.JudgmentRecorded` rows — one per judgment a decision call returned (AMPR-384), filed as `TraceEvent`s under the phase that asked. The row carries a digest of the state, the distribution when the adapter measured one, the model snapshot, locality, latency and usage; the state itself is never in the trace.
 - `completion` — for a run that ended without closing its loop (cancelled, or a phase threw), the `CompletionRecord` its `ArcRunEvent.CompletionManifestRecorded` carried: which phases ran and did not, the tick Flow reached, what each agent produced, and which intended goals did not happen (AMPR-359). `null` for a run that completed.
 
 What the projection folds is a `ReplayWindow`, not a bare run id. Replay
@@ -74,6 +76,7 @@ the projection that makes the run *legible*:
 - `agents/domain/event/ToolEvent.kt` — tool-call event pair (`ToolCallTrace` payload).
 - `agents/domain/event/MemoryEvent.kt` — `KnowledgeStored`, `KnowledgeRecalled`, `MilestoneReached`, `OutcomeRecorded`.
 - `agents/domain/event/ArcRunEvent.kt` — `CompletionManifestRecorded`, a cut-short run's manifest as a row of its own trace.
+- `agents/domain/event/CognitiveEvent.kt` — `JudgmentRecorded`, the record of one judgment; `phaseNameFor` reads its `cognitivePhase`.
 - `domain/arc/CompletionRecord.kt` — the bounded, persisted form of a `CompletionManifest`; `domain/arc/CompletionManifestSink.kt` — the production sink that writes it through `AgentEventApi`.
 
 ## Invariants
@@ -86,6 +89,7 @@ the projection that makes the run *legible*:
 - **`WattCost` is monotone-additive.** `WattCost.plus` only adds; entries are never subtracted. A change that subtracts cost (e.g., to "correct" a previous estimate) breaks the running aggregate.
 - **The schema migration that introduced `run_id` is not reversible without losing trace fidelity.** If the migration is renumbered or dropped, every persisted run before the change becomes opaque.
 - **A cut-short run's manifest is run-level.** `CompletionManifestRecorded` folds into `ArcRunTrace.completion` and is bucketed into the synthetic `RUN` phase — never into the PROPEL phase that happened to be active when the run was cut short — and it does not move the projector's active phase. `completion` is matched on the record's own `runId`, not just on the rows the payload fallback drags in.
+- **A judgment is filed under the phase that asked, and never carries the state.** `JudgmentRecorded.cognitivePhase` is the phase signal; the projector adds none. Its `payload` holds `stateDigest`, not the state — a trace is streamed and persisted, and state may hold a person's data.
 - **The manifest is written before the run is reported over.** `AmpereRuntime` hands it to its sink under `NonCancellable` before `execute` returns or rethrows, so a trace folded after `await`/`cancel` — or after the caller's scope was cancelled — already has it. A sink write that fails is counted (`CompletionManifestSink.failures`) and logged; it never changes the outcome.
 
 ## Common operations
@@ -104,4 +108,5 @@ the projection that makes the run *legible*:
 - **Persisting rows without `run_id`.** Even "metadata" rows: if it relates to a run, it carries the id. Otherwise the trace can't see it.
 - **Treating the projection as a write-through cache.** It rebuilds from stores on each call. Caching is fine; lying about the source of truth is not.
 - **Persisting the whole `CompletionManifest`.** Its `producedOutcomes` hold full `Outcome` graphs — tasks, plans, tool results — and grow with every tick, on the teardown path. `CompletionRecord` is the bounded form; widen it deliberately in `CompletionRecord.of`, never by serializing the manifest.
+- **Reading a judgment's confidence off the trace without its `source`.** A `SELF_REPORTED` `confidence` on a `JudgmentRecorded` row is the F10 mapping of a word the model wrote; only a `MEASURED` one with a `distribution` is fittable (see [DecideSeam](decide-seam.md)).
 - **Inventing phase names on the projector side.** `phaseNameFor` is intentionally a switch over event types — events own their phase tag. A "default to PLAN" fallback hides events that should have been tagged.

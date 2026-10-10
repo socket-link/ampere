@@ -38,6 +38,7 @@ import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.llm.MissingUpstreamLlmClientException
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.llm.decide.DeterministicDecisionClient
 import link.socket.ampere.memory.MemoryStore
 import link.socket.ampere.memory.memoryStoreOf
 
@@ -159,6 +160,46 @@ class AmpereFromEnvironmentTest {
         )
         // AMPR-236: omission no longer means "call the provider directly".
         assertNull(instance.upstreamLlmClient)
+    }
+
+    @Test
+    fun `fromEnvironment exposes the supplied upstreamDecisionClient and leaves it unset when omitted`() {
+        val decision = DeterministicDecisionClient(name = "test") { _, q -> q.answerKeys.first() }
+
+        val with = Ampere.fromEnvironment(
+            environmentService = environmentService,
+            knowledgeRepository = knowledgeRepository,
+            workspace = "/tmp/ampr300-test-workspace",
+            upstreamDecisionClient = decision,
+        )
+        val without = Ampere.fromEnvironment(
+            environmentService = environmentService,
+            knowledgeRepository = knowledgeRepository,
+            workspace = "/tmp/ampr300-test-workspace",
+        )
+
+        assertSame(decision, with.upstreamDecisionClient)
+        // AMPR-384: a decision transport is opted into, never inherited — not even from the chat seam.
+        assertNull(without.upstreamDecisionClient)
+    }
+
+    @Test
+    fun `injected decision client governs agents built off the instance factory`() {
+        val decision = DeterministicDecisionClient(name = "test") { _, q -> q.answerKeys.first() }
+        val instance = Ampere.fromEnvironment(
+            environmentService = environmentService,
+            knowledgeRepository = knowledgeRepository,
+            workspace = "/tmp/ampr300-test-workspace",
+            upstreamDecisionClient = decision,
+            agentScope = scope,
+        )
+
+        val factory = assertNotNull(instance.agentFactory)
+        val agent = factory.create<SparkBasedAgent<CodeState>>(AgentType.CODE)
+
+        assertSame(decision, agent.agentConfiguration.upstreamDecisionClient)
+        // Independent of the chat seam: injecting one does not conjure the other.
+        assertNull(agent.agentConfiguration.upstreamLlmClient)
     }
 
     @Test

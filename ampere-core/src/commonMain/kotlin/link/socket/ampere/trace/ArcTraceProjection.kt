@@ -5,6 +5,7 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.domain.event.ArcRunEvent
+import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.MemoryEvent
@@ -403,6 +404,8 @@ class ArcTraceProjection(
     private fun phaseNameFor(event: Event, default: String? = null): String? = when (event) {
         is ProviderCallStartedEvent -> event.cognitivePhase?.name
         is ProviderCallCompletedEvent -> event.cognitivePhase?.name
+        // A judgment is filed under the phase of the call that asked it (AMPR-384).
+        is CognitiveEvent.JudgmentRecorded -> event.cognitivePhase?.name
         is RoutingEvent.RouteSelected -> event.phase?.name
         is RoutingEvent.RouteFallback -> event.phase?.name
         is RoutingEvent.RouteResolved -> event.phase?.name

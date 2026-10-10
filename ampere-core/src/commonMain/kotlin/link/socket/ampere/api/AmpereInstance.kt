@@ -11,6 +11,7 @@ import link.socket.ampere.api.service.ThreadService
 import link.socket.ampere.api.service.TicketService
 import link.socket.ampere.llm.BundledUpstreamLlmClient
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.llm.decide.UpstreamDecisionClient
 
 /**
  * A running AMPERE instance. Provides access to all SDK subsystems.
@@ -70,6 +71,18 @@ interface AmpereInstance : AutoCloseable {
      * per-provider call.
      */
     val upstreamLlmClient: UpstreamLlmClient?
+        get() = null
+
+    /**
+     * Runtime transport for outbound decision calls (AMPR-384), the sibling of
+     * [upstreamLlmClient] for the Decide call kind. Set via
+     * [Ampere.fromEnvironment] and already wired into [agentFactory].
+     *
+     * `null` means none was supplied; an agent's first `decide` then throws
+     * [MissingUpstreamDecisionClientException][link.socket.ampere.llm.decide.MissingUpstreamDecisionClientException].
+     * A transport is opted into, never inherited.
+     */
+    val upstreamDecisionClient: UpstreamDecisionClient?
         get() = null
 
     /**

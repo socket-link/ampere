@@ -212,6 +212,8 @@ kotlin {
                 implementation(kotlin("test"))
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
                 implementation(project(":ampere-core-test-fixtures"))
+                // The hosted decision adapter is one Ktor POST; its tests answer it from a mock engine.
+                implementation("io.ktor:ktor-client-mock:3.2.2")
             }
         }
         val androidMain by getting {

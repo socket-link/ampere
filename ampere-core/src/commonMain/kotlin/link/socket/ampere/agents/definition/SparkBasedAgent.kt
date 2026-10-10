@@ -42,6 +42,7 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.plug.PlugManifest
 import link.socket.ampere.plug.permission.UserGrants
 import link.socket.ampere.util.ioDispatcher
@@ -94,6 +95,14 @@ open class SparkBasedAgent<S : AgentState>(
      */
     @Transient
     private val _upstreamLlmClient: UpstreamLlmClient? = null,
+    /**
+     * Outbound decision transport (AMPR-384). Null declares none: the agent's
+     * first `decide` throws
+     * [MissingUpstreamDecisionClientException][link.socket.ampere.llm.decide.MissingUpstreamDecisionClientException].
+     * Nothing in the loop calls `decide` yet (W1 is shadow only).
+     */
+    @Transient
+    private val _upstreamDecisionClient: UpstreamDecisionClient? = null,
     @Transient
     private val _observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
     @Transient
@@ -216,6 +225,7 @@ open class SparkBasedAgent<S : AgentState>(
             llmProvider = _llmProvider,
             cognitiveRelay = _cognitiveRelay,
             upstreamLlmClient = _upstreamLlmClient,
+            upstreamDecisionClient = _upstreamDecisionClient,
         )
 
     // Initialize the SparkStack with the configured affinity
@@ -476,6 +486,7 @@ open class SparkBasedAgent<S : AgentState>(
             memoryService: AgentMemoryService? = null,
             llmProvider: LlmProvider? = null,
             upstreamLlmClient: UpstreamLlmClient? = null,
+            upstreamDecisionClient: UpstreamDecisionClient? = null,
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
@@ -499,6 +510,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _aiConfiguration = aiConfiguration,
                 _llmProvider = llmProvider,
                 _upstreamLlmClient = upstreamLlmClient,
+                _upstreamDecisionClient = upstreamDecisionClient,
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
                 _cognitiveRelay = cognitiveRelay,
@@ -547,6 +559,7 @@ open class SparkBasedAgent<S : AgentState>(
             memoryService: AgentMemoryService? = null,
             llmProvider: LlmProvider? = null,
             upstreamLlmClient: UpstreamLlmClient? = null,
+            upstreamDecisionClient: UpstreamDecisionClient? = null,
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
@@ -568,6 +581,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _aiConfiguration = aiConfiguration,
                 _llmProvider = llmProvider,
                 _upstreamLlmClient = upstreamLlmClient,
+                _upstreamDecisionClient = upstreamDecisionClient,
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
                 _userGrantProvider = userGrantProvider,
@@ -601,6 +615,7 @@ open class SparkBasedAgent<S : AgentState>(
             memoryService: AgentMemoryService? = null,
             llmProvider: LlmProvider? = null,
             upstreamLlmClient: UpstreamLlmClient? = null,
+            upstreamDecisionClient: UpstreamDecisionClient? = null,
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
@@ -622,6 +637,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _aiConfiguration = aiConfiguration,
                 _llmProvider = llmProvider,
                 _upstreamLlmClient = upstreamLlmClient,
+                _upstreamDecisionClient = upstreamDecisionClient,
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
                 _userGrantProvider = userGrantProvider,
@@ -655,6 +671,7 @@ open class SparkBasedAgent<S : AgentState>(
             memoryService: AgentMemoryService? = null,
             llmProvider: LlmProvider? = null,
             upstreamLlmClient: UpstreamLlmClient? = null,
+            upstreamDecisionClient: UpstreamDecisionClient? = null,
             observabilityScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
             tools: Set<Tool<*>> = emptySet(),
             reasoningOverride: AgentReasoning? = null,
@@ -676,6 +693,7 @@ open class SparkBasedAgent<S : AgentState>(
                 _aiConfiguration = aiConfiguration,
                 _llmProvider = llmProvider,
                 _upstreamLlmClient = upstreamLlmClient,
+                _upstreamDecisionClient = upstreamDecisionClient,
                 _observabilityScope = observabilityScope,
                 _reasoningOverride = reasoningOverride,
                 _userGrantProvider = userGrantProvider,

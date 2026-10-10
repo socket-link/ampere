@@ -15,6 +15,10 @@ import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MilestoneCategory
 import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
 import link.socket.ampere.agents.domain.event.PermissionDeniedReason
+import link.socket.ampere.agents.domain.reasoning.ConfidenceSource
+import link.socket.ampere.agents.domain.routing.local.InferenceLocality
+import link.socket.ampere.api.model.TokenUsage
+import link.socket.ampere.llm.decide.ModelSnapshot
 import link.socket.ampere.plug.permission.PlugPermission
 
 class EventSerializationTest {
@@ -182,5 +186,38 @@ class EventSerializationTest {
         assertIs<CognitiveEvent.EscalationConsidered>(decoded)
         assertEquals(original, decoded)
         assertEquals(Urgency.LOW, decoded.urgency)
+    }
+
+    @Test
+    fun `serialize and deserialize judgment recorded event polymorphic`() {
+        val original: Event = CognitiveEvent.JudgmentRecorded(
+            eventId = "77777777-7777-7777-7777-777777777777",
+            timestamp = stubTimestamp,
+            eventSource = stubEventSource,
+            agentId = "agent-X",
+            callId = "decide-1",
+            questionId = "refund",
+            questionVersion = "a".repeat(64),
+            questionType = "noul",
+            stateDigest = "b".repeat(64),
+            answer = "true",
+            distribution = mapOf("true" to 0.82, "false" to 0.18),
+            confidence = 0.82,
+            source = ConfidenceSource.MEASURED,
+            modelSnapshot = ModelSnapshot("openrouter", "typesafe/jev-1.13", "typesafe/jev-1.13-20260917"),
+            locality = InferenceLocality.CLOUD,
+            latencyMs = 412,
+            usage = TokenUsage(inputTokens = 287, outputTokens = 20, estimatedCost = 0.000012054),
+            causedBy = "action-42",
+            cognitivePhase = CognitivePhase.PLAN,
+        )
+
+        val text = json.encodeToString(Event.serializer(), original)
+        val decoded = json.decodeFromString(Event.serializer(), text)
+
+        assertIs<CognitiveEvent.JudgmentRecorded>(decoded)
+        assertEquals(original, decoded)
+        assertEquals(Urgency.LOW, decoded.urgency)
+        assertEquals(null, decoded.band)
     }
 }

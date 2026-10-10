@@ -37,6 +37,7 @@ import link.socket.ampere.domain.arc.CompletionManifestSink
 import link.socket.ampere.domain.arc.TerminationReason
 import link.socket.ampere.llm.OnDeviceInferenceBinding
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.trace.ArcRunId
 import link.socket.ampere.trace.ArcRunTrace
 import link.socket.ampere.trace.ArcTraceProjection
@@ -524,6 +525,55 @@ class ArcSession(
             cloud = cloud,
         )
 
+        /**
+         * [create] with a [database] and a [decision] transport (AMPR-384): the agents of every run
+         * carry the transport, and each judgment they ask for is recorded under the run id through
+         * the session's door, so [ArcRunHandle.trace] files it under the phase that asked.
+         *
+         * A separate overload rather than a defaulted parameter, for the same reason as the
+         * others: the Objective-C export drops Kotlin defaults. Nothing in the loop calls
+         * `decide` yet; this is the injection point W2's consumers will read from.
+         *
+         * @param decision Transport for decision calls. There is no default and no fallback.
+         */
+        fun create(
+            arcConfig: ArcConfig,
+            projectDirPath: String,
+            maxFlowTicks: Int,
+            database: Database,
+            decision: UpstreamDecisionClient,
+        ): ArcSession = build(
+            arcConfig = arcConfig,
+            projectDirPath = projectDirPath,
+            maxFlowTicks = maxFlowTicks,
+            clock = Clock.System,
+            database = database,
+            decision = decision,
+        )
+
+        /**
+         * [create] with a [database], an on-device [engine], a [cloud] transport and a [decision]
+         * transport (AMPR-374, AMPR-384). See the overloads that take each.
+         */
+        fun create(
+            arcConfig: ArcConfig,
+            projectDirPath: String,
+            maxFlowTicks: Int,
+            database: Database,
+            engine: LocalInferenceEngine,
+            cloud: UpstreamLlmClient?,
+            decision: UpstreamDecisionClient?,
+        ): ArcSession = build(
+            arcConfig = arcConfig,
+            projectDirPath = projectDirPath,
+            maxFlowTicks = maxFlowTicks,
+            clock = Clock.System,
+            database = database,
+            engine = engine,
+            cloud = cloud,
+            decision = decision,
+        )
+
         private fun build(
             arcConfig: ArcConfig,
             projectDirPath: String,
@@ -532,6 +582,7 @@ class ArcSession(
             database: Database?,
             engine: LocalInferenceEngine? = null,
             cloud: UpstreamLlmClient? = null,
+            decision: UpstreamDecisionClient? = null,
         ): ArcSession {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val bus = EventSerialBus(scope = scope)
@@ -579,6 +630,7 @@ class ArcSession(
                     maxFlowTicks = maxFlowTicks,
                     cognitiveRelay = onDevice?.relay,
                     upstreamLlmClient = onDevice?.client,
+                    upstreamDecisionClient = decision,
                     eventApiFactory = eventApiFactory,
                     clock = clock,
                     completionManifestSink = manifestSink?.let { it::record },

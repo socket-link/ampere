@@ -13,8 +13,11 @@ import link.socket.ampere.agents.domain.event.MilestoneCategory
 import link.socket.ampere.agents.domain.event.SparkAppliedEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.memory.MemoryContext
+import link.socket.ampere.agents.domain.reasoning.ConfidenceSource
+import link.socket.ampere.agents.domain.routing.local.InferenceLocality
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
+import link.socket.ampere.llm.decide.ModelSnapshot
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
@@ -98,6 +101,29 @@ class EventCategorizerTest {
             threshold = 0.7,
             fired = false,
             cognitivePhase = null,
+        )
+
+        val significance = EventCategorizer.categorize(event)
+        assertEquals(EventSignificance.ROUTINE, significance)
+    }
+
+    @Test
+    fun `ROUTINE - JudgmentRecorded events are routine telemetry`() {
+        val event = CognitiveEvent.JudgmentRecorded(
+            eventId = "evt-judgment",
+            timestamp = Clock.System.now(),
+            eventSource = EventSource.Agent("agent-test"),
+            agentId = "agent-test",
+            callId = "decide-1",
+            questionId = "done",
+            questionVersion = "v",
+            questionType = "noul",
+            stateDigest = "d",
+            answer = "true",
+            source = ConfidenceSource.MEASURED,
+            modelSnapshot = ModelSnapshot("deterministic", "rule"),
+            locality = InferenceLocality.ON_DEVICE,
+            latencyMs = 1,
         )
 
         val significance = EventCategorizer.categorize(event)

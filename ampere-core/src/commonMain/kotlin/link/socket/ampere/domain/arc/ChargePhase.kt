@@ -20,6 +20,7 @@ import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.trace.ArcRunId
 import link.socket.ampere.util.systemFileSystem
 import okio.FileSystem
@@ -88,6 +89,8 @@ class ChargePhase(
     private val cognitiveRelay: CognitiveRelay? = null,
     private val executor: Executor? = null,
     private val upstreamLlmClient: UpstreamLlmClient? = null,
+    /** Outbound decision transport (AMPR-384), threaded into spawned agents. */
+    private val upstreamDecisionClient: UpstreamDecisionClient? = null,
     /** Ambient Arc-run identity (AMPR-240), threaded into spawned agents. */
     private val runId: ArcRunId? = null,
     /** Optional per-agent [AgentEventApi] factory (AMPR-240), threaded into spawned agents. */
@@ -117,6 +120,7 @@ class ChargePhase(
                 cognitiveRelay = cognitiveRelay,
                 executor = executor,
                 upstreamLlmClient = upstreamLlmClient,
+                upstreamDecisionClient = upstreamDecisionClient,
                 runId = runId,
                 createEventApi = eventApiFactory,
             ),

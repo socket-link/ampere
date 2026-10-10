@@ -111,6 +111,7 @@ class SignificanceAwareEventLogger(
         is Event.QuestionRaised -> EventSignificance.CRITICAL
         is CognitiveEvent.EscalationFired -> EventSignificance.CRITICAL
         is CognitiveEvent.EscalationConsidered -> EventSignificance.ROUTINE
+        is CognitiveEvent.JudgmentRecorded -> EventSignificance.ROUTINE
         is TicketEvent.TicketBlocked -> EventSignificance.CRITICAL
         is MessageEvent.EscalationRequested -> EventSignificance.CRITICAL
         is PermissionDeniedEvent -> EventSignificance.CRITICAL

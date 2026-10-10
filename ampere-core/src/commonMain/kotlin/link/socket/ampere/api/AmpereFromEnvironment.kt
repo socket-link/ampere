@@ -23,6 +23,7 @@ import link.socket.ampere.api.internal.DefaultTicketService
 import link.socket.ampere.db.Database
 import link.socket.ampere.llm.BundledUpstreamLlmClient
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.memory.MemoryStore
 
 /**
@@ -61,6 +62,13 @@ import link.socket.ampere.memory.MemoryStore
  *   [MissingUpstreamLlmClientException][link.socket.ampere.llm.MissingUpstreamLlmClientException]
  *   rather than calling a provider directly (AMPR-236). Pass
  *   [BundledUpstreamLlmClient] to opt into the direct per-provider call.
+ * @param upstreamDecisionClient Transport for outbound decision calls (AMPR-384),
+ *   the sibling of [upstreamLlmClient] for the Decide call kind. Wired into the
+ *   returned [AmpereInstance.agentFactory] and exposed on
+ *   [AmpereInstance.upstreamDecisionClient]. Omitting it leaves agents without
+ *   one: their first `decide` throws
+ *   [MissingUpstreamDecisionClientException][link.socket.ampere.llm.decide.MissingUpstreamDecisionClientException];
+ *   nothing falls back to the model-backed adapter.
  * @param agentScope Coroutine scope the instance's [AmpereInstance.agentFactory]
  *   hands to the agents it builds. Defaults to a fresh `Dispatchers.Default`
  *   scope; pass the environment's own scope to share cancellation.
@@ -85,6 +93,7 @@ fun Ampere.fromEnvironment(
     agentScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
     modelDescriptorSource: ModelDescriptorSource? = null,
     database: Database? = null,
+    upstreamDecisionClient: UpstreamDecisionClient? = null,
 ): AmpereInstance {
     val sdkEventApi = environmentService.createEventApi("sdk-cli")
 
@@ -154,6 +163,7 @@ fun Ampere.fromEnvironment(
         workspace = ExecutionWorkspace(baseDirectory = workspace),
         createEventApi = environmentService::createEventApi,
         upstreamLlmClient = upstreamLlmClient,
+        upstreamDecisionClient = upstreamDecisionClient,
         modelDescriptorSource = modelDescriptorSource,
         database = database,
     )
@@ -168,6 +178,7 @@ fun Ampere.fromEnvironment(
         override val knowledge = knowledgeService
         override val status = statusService
         override val upstreamLlmClient: UpstreamLlmClient? = upstreamLlmClient
+        override val upstreamDecisionClient: UpstreamDecisionClient? = upstreamDecisionClient
         override val agentFactory: AgentFactory = boundAgentFactory
         override fun close() {
             // No-op: caller owns the lifecycle of shared resources

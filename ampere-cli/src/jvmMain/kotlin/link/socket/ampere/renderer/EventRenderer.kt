@@ -152,6 +152,7 @@ class EventRenderer(
             is Event.TaskCreated -> "📋" to green
             is CognitiveEvent.EscalationFired -> "❓" to red
             is CognitiveEvent.EscalationConsidered -> "❔" to gray
+            is CognitiveEvent.JudgmentRecorded -> "⚖️" to gray
             is TaskEvent -> "📋" to green
             is FileSystemEvent -> "📄" to cyan
             is GitEvent -> "🪾" to cyan
