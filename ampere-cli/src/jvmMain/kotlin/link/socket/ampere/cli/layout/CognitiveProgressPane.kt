@@ -194,6 +194,7 @@ class CognitiveProgressPane(
         return plan.tasks.take(3).joinToString(" → ") { task ->
             when (task) {
                 is Task.CodeChange -> "write code"
+                is Task.Step -> task.toolId ?: "reason"
                 is Task.Blank -> "initialize"
                 else -> "task"
             }

@@ -22,6 +22,7 @@ import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
+import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.InMemoryEventDoor
 import link.socket.ampere.agents.events.tickets.Ticket
@@ -206,6 +207,66 @@ class ExecutePublishesItsStepsTest {
         assertEquals(
             listOf("step-1"),
             execute.decode<PlanEvent.PlanStepCompleted>().map { it.stepId },
+        )
+    }
+
+    @Test
+    fun `the step pair names the seat that ran the step`() {
+        val runId = "run-execute-5"
+        val reasoning = reasoningWith(runId)
+        val seat = AssignedTo.Agent("greeter")
+        val plan = planOf(
+            Task.Step(
+                id = "step-1",
+                status = TaskStatus.Pending,
+                description = "Write the greeting",
+                toolId = greetingTool.id,
+                assignedTo = seat,
+            ),
+        )
+
+        runBlocking {
+            reasoning.executePlan(plan, priorResults = emptyList()) { stepTask, _ ->
+                reasoning.executeTool(greetingTool, requestFor(stepTask))
+                StepResult.success(description = "ran ${greetingTool.id}")
+            }
+        }
+
+        val execute = assertNotNull(trace(runId).phases.singleOrNull { it.name == CognitivePhase.EXECUTE.name })
+        assertEquals(
+            seat,
+            execute.decode<PlanEvent.PlanStepStarted>().single().assignedTo,
+            "AMPR-410: a roster-hosted run reads its trace as which seat ran what",
+        )
+        assertEquals(
+            seat,
+            execute.decode<PlanEvent.PlanStepCompleted>().single().assignedTo,
+            "both halves of the pair, so a reader does not have to join to find out",
+        )
+        assertEquals(
+            "Write the greeting",
+            execute.decode<PlanEvent.PlanStepStarted>().single().stepDescription,
+            "a generic step is described by its description, not by its id",
+        )
+    }
+
+    @Test
+    fun `an unassigned step names no seat`() {
+        val runId = "run-execute-6"
+        val reasoning = reasoningWith(runId)
+        val plan = planOf(step("step-1", "Write the greeting"))
+
+        runBlocking {
+            reasoning.executePlan(plan, priorResults = emptyList()) { stepTask, _ ->
+                reasoning.executeTool(greetingTool, requestFor(stepTask))
+                StepResult.success(description = "ran ${greetingTool.id}")
+            }
+        }
+
+        val execute = assertNotNull(trace(runId).phases.singleOrNull { it.name == CognitivePhase.EXECUTE.name })
+        assertNull(
+            execute.decode<PlanEvent.PlanStepStarted>().single().assignedTo,
+            "a single-agent plan assigns nothing, so its pairs are what they were",
         )
     }
 

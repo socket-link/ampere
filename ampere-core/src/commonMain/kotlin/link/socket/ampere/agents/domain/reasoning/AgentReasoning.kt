@@ -186,11 +186,16 @@ class AgentReasoning private constructor(
      *   `propel-loop.md` names, and the one AMPR-388 closed. The default
      *   exists for callers that genuinely have no memory service; pass the recalled list
      *   whenever there is one.
+     * @param seats the seats the plan may assign steps to (AMPR-410). Non-empty makes this
+     *   a roster-aware plan: the prompt lists `seat: tools` and every step names the seat
+     *   that runs it. Empty — the default, and what the PROPEL loop itself passes — plans
+     *   for the one agent doing the planning, as before.
      */
     suspend fun generatePlan(
         task: Task,
         ideas: List<Idea>,
         relevantKnowledge: List<KnowledgeWithScore> = emptyList(),
+        seats: List<PlanSeat> = emptyList(),
     ): Plan {
         // Use mock response if available
         mockResponses?.planGenerator?.let { generator ->
@@ -202,6 +207,7 @@ class AgentReasoning private constructor(
             ideas = ideas,
             agentRole = settings.agentRole,
             availableTools = settings.availableTools(),
+            seats = seats,
             relevantKnowledge = relevantKnowledge,
             taskFactory = settings.taskFactory,
             customPromptBuilder = null,

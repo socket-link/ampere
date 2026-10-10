@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
+import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.config.CognitiveConfig
 import link.socket.ampere.agents.config.ReasoningStepConfig
@@ -36,6 +37,7 @@ import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.domain.task.planStepDescription
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
@@ -458,8 +460,14 @@ open class SparkBasedAgent<S : AgentState>(
 
     /**
      * Routes a plan step to its nominated tool. Strict tool-id dispatch with no
-     * keyword fallback — if [Task.CodeChange.toolId] is missing or doesn't
-     * match a tool in [effectiveTools], the step fails fast with a clear error.
+     * keyword fallback — if the step's `toolId` is missing or doesn't match a
+     * tool in [effectiveTools], the step fails fast with a clear error.
+     *
+     * [Task.CodeChange] and [Task.Step] dispatch identically (AMPR-410): both
+     * carry a description and a nominated tool, and nothing about routing a step
+     * to a tool depends on whether the step changes code. The planner picks
+     * which type a step is (`DefaultTaskFactory`), and this reads the pair off
+     * either.
      *
      * Dispatch is against [effectiveTools], the same narrowed set the planner
      * was offered, so a tool the spark stack withdrew is as unreachable as one
@@ -483,25 +491,27 @@ open class SparkBasedAgent<S : AgentState>(
                 details = "no-op",
             )
         }
-        if (step !is Task.CodeChange) {
-            return StepResult.failure(
+        val (description, toolId) = when (step) {
+            is Task.CodeChange -> step.description to step.toolId
+            is Task.Step -> step.description to step.toolId
+            else -> return StepResult.failure(
                 description = step.id,
                 error = "Plan step ${step.id} is of unsupported type " +
                     "${step::class.simpleName}; spark-based execution only " +
-                    "handles Task.CodeChange steps emitted by plan_steps.",
+                    "handles the Task.CodeChange and Task.Step steps a planner " +
+                    "emits.",
                 isCritical = true,
             )
         }
 
-        val toolId = step.toolId
         if (toolId == null) {
-            return executeReasoningStep(step, parentTask, priorResults)
+            return executeReasoningStep(step, description, parentTask, priorResults)
         }
 
         val dispatchable = effectiveTools
         val tool = dispatchable.firstOrNull { it.id == toolId }
             ?: return StepResult.failure(
-                description = step.description,
+                description = description,
                 error = "Plan step ${step.id} nominated toolToUse=\"$toolId\", " +
                     "which is not in the agent's effective tool set " +
                     "(${dispatchable.joinToString { it.id }}) — the tools it was " +
@@ -510,20 +520,20 @@ open class SparkBasedAgent<S : AgentState>(
                 isCritical = true,
             )
 
-        val request = buildPlanStepRequest(step, parentTask, priorResults)
+        val request = buildPlanStepRequest(step, description, parentTask, priorResults)
         return when (val outcome = reasoning.executeTool(tool, request)) {
             is ExecutionOutcome.Success -> StepResult.success(
-                description = step.description,
+                description = description,
                 details = outcome.stepDetails(toolId),
             )
             is ExecutionOutcome.Failure -> StepResult.failure(
-                description = step.description,
+                description = description,
                 error = "tool=$toolId failed: ${outcome::class.simpleName}; " +
                     outcome.describeResult(),
                 isCritical = true,
             )
             else -> StepResult.success(
-                description = step.description,
+                description = description,
                 details = outcome.stepDetails(toolId),
             )
         }
@@ -568,28 +578,29 @@ open class SparkBasedAgent<S : AgentState>(
      * the old behaviour by declaration rather than by accident.
      */
     private suspend fun executeReasoningStep(
-        step: Task.CodeChange,
+        step: Task,
+        description: String,
         parentTask: Task,
         priorResults: List<StepOutcome>,
     ): StepResult {
         val stepConfig: ReasoningStepConfig = agentConfiguration.cognitiveConfig.reasoningSteps
         if (!stepConfig.execute) {
             return StepResult.success(
-                description = step.description,
+                description = description,
                 details = "reasoning step not executed: cognitiveConfig.reasoningSteps.execute is off",
             )
         }
 
         val text = try {
             reasoning.callLLM(
-                prompt = buildReasoningStepPrompt(step, parentTask, priorResults),
+                prompt = buildReasoningStepPrompt(description, parentTask, priorResults),
                 phase = CognitivePhase.EXECUTE,
             ).trim()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             return StepResult.failure(
-                description = step.description,
+                description = description,
                 error = "Reasoning step ${step.id} nominated no tool, so carrying it out is " +
                     "one model call — and that call failed: " +
                     "${e::class.simpleName}: ${e.message}. Set " +
@@ -601,7 +612,7 @@ open class SparkBasedAgent<S : AgentState>(
 
         if (text.isBlank()) {
             return StepResult.failure(
-                description = step.description,
+                description = description,
                 error = "Reasoning step ${step.id} produced no text, so it reached no " +
                     "conclusion for the steps after it to read.",
                 isCritical = true,
@@ -609,7 +620,7 @@ open class SparkBasedAgent<S : AgentState>(
         }
 
         return StepResult.success(
-            description = step.description,
+            description = description,
             details = text,
         )
     }
@@ -630,7 +641,7 @@ open class SparkBasedAgent<S : AgentState>(
      * the ask.
      */
     private fun buildReasoningStepPrompt(
-        step: Task.CodeChange,
+        description: String,
         parentTask: Task,
         priorResults: List<StepOutcome>,
     ): String = buildString {
@@ -641,10 +652,10 @@ open class SparkBasedAgent<S : AgentState>(
         )
         appendLine()
         val taskDescription = parentTask.promptDescription()
-        if (taskDescription.isNotBlank() && taskDescription != step.description) {
+        if (taskDescription.isNotBlank() && taskDescription != description) {
             appendLine("Task: $taskDescription")
         }
-        appendLine("Step to carry out: ${step.description}")
+        appendLine("Step to carry out: $description")
         appendLine()
         priorResultsSection(priorResults).takeIf { it.isNotBlank() }?.let { section ->
             appendLine(section)
@@ -666,16 +677,21 @@ open class SparkBasedAgent<S : AgentState>(
      * from them. A reasoning step's conclusion travels the same way — as one of those
      * results — rather than being folded into `instructions`, so a tool step is told
      * it once, under the same heading as every other earlier result (AMPR-412).
+     *
+     * [step] is whichever of the two plan-step types the planner emitted, and
+     * [description] is passed beside it because only those two carry one
+     * (AMPR-410).
      */
     private fun buildPlanStepRequest(
-        step: Task.CodeChange,
+        step: Task,
+        description: String,
         parentTask: Task,
         priorResults: List<StepOutcome>,
     ): ExecutionRequest<*> {
         val ticket = link.socket.ampere.agents.events.tickets.Ticket(
             id = "spark-task-${parentTask.id}",
             title = parentTask.id,
-            description = step.description,
+            description = description,
             type = link.socket.ampere.agents.events.tickets.TicketType.TASK,
             priority = link.socket.ampere.agents.events.tickets.TicketPriority.LOW,
             status = link.socket.ampere.agents.domain.status.TicketStatus.InProgress,
@@ -689,7 +705,7 @@ open class SparkBasedAgent<S : AgentState>(
                 executorId = id,
                 ticket = ticket,
                 task = step,
-                instructions = step.description,
+                instructions = description,
             ),
             constraints = link.socket.ampere.agents.execution.request.ExecutionConstraints(),
             // AMPR-300: the pin a code tool's strategy roots its Code context in.
@@ -704,6 +720,14 @@ open class SparkBasedAgent<S : AgentState>(
             // which is the only way a step can be parameterised from an earlier
             // step's result.
             priorResults = priorResults,
+            // AMPR-410: a step that already states its arguments is one of the two
+            // writers of `ExecutionRequest.arguments` (AMPR-411 is the other, via
+            // `SchemaParameterStrategy`). Copying them here rather than leaving them
+            // on the step is what lets `ToolExecutionEngine` settle the call without a
+            // parameter model call: it validates this one field against the tool's
+            // schema and never looks at the task. Null when the step states none, which
+            // is every `Task.CodeChange` and every step for a tool declaring no schema.
+            arguments = (step as? Task.Step)?.arguments as? JsonObject,
         )
     }
 
@@ -1072,7 +1096,8 @@ open class SparkBasedAgent<S : AgentState>(
  * description; anything else is named by its id, the same fallback
  * `PlanExecutor` uses when it has to describe a step it was handed.
  */
-private fun Task.promptDescription(): String = when (this) {
-    is Task.CodeChange -> description
-    else -> id.ifBlank { "unnamed task" }
-}
+private fun Task.promptDescription(): String =
+    // Through the shared accessor so a `Task.Step` parent is named by what it is
+    // for rather than by its id (AMPR-410) — the reader this would otherwise have
+    // been, silently.
+    planStepDescription ?: id.ifBlank { "unnamed task" }

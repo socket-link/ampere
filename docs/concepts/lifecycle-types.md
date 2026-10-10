@@ -4,7 +4,7 @@ status: experimental
 tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/lifecycle/**
 related: [DomainCanon, Probe, PlugPermissions, ChiProtocol]
-last_verified: 2026-09-27
+last_verified: 2026-10-10
 ---
 
 # Lifecycle Types
@@ -73,4 +73,5 @@ nothing has proven the type necessary.
 - **Reading `Open` as "the gate is open, go ahead".** It is the ticket sense of the word.
 - **Putting a name string beside `lockedBy` or `closedBy`.** `Principal` has one variant (`Ambient`) until the principal contract lands (AMPR-274), so a lock cannot yet name a person. A free-form name would become the identity everyone reads, and the one nothing verifies.
 - **Deriving `CanonWorkStatus.VERDICT_REQUESTED` from a gate inside `ampere-core`, or a gate from the status.** Keeping a provider's status and labels in step with a gate is a binding's job.
+- **Reaching for `LifecycleDecision` to model a plan step, or `Task.Step` to model a decision.** They look alike from a distance — both are ordered, both carry an identity, both can be waiting on something — and they are opposites in the one way that matters. A plan step (`agents/domain/task/Task.kt`, AMPR-410: a description, a nominated `toolId`, the seat in `assignedTo`, the tool's `arguments`) is work a machine runs, and its vocabulary lives with [PropelLoop](propel-loop.md). A `LifecycleDecision` is a question only a person closes, and holding one open is the point. A plan step placed with a seat is not a gate, and a locked decision is not a step: the register is what a run is *built from*, not what it *does*.
 - **Adding a `Wave` type.** See *Why it exists*.

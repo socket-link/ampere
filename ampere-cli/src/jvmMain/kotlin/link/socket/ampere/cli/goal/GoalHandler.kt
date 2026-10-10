@@ -22,6 +22,7 @@ import link.socket.ampere.agents.execution.describeResult
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.domain.task.planStepDescription
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.api.TaskLifecycle
 import link.socket.ampere.agents.events.api.openTaskLifecycle
@@ -277,7 +278,7 @@ class GoalHandler(
             // The plan's steps are this task's decomposition, so the checklist gets them as
             // child items rather than only ever showing the goal as one opaque row.
             plan.tasks.forEach { step ->
-                val stepDescription = (step as? Task.CodeChange)?.description ?: return@forEach
+                val stepDescription = step.planStepDescription ?: return@forEach
                 lifecycle?.subtaskCreated(
                     subtaskId = step.id,
                     description = stepDescription,

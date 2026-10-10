@@ -37,6 +37,7 @@ import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.domain.task.TaskId
+import link.socket.ampere.agents.domain.task.planStepDescription
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.describeResult
@@ -372,8 +373,7 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
 
     private fun taskTextFor(task: Task): String {
         if (task is Task.Blank) return ""
-        val codeDescription = (task as? Task.CodeChange)?.description
-        return codeDescription ?: task.toString()
+        return task.planStepDescription ?: task.toString()
     }
 
     // ==================== Agent Runtime ====================
@@ -482,6 +482,15 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         val context = when (task) {
             is Task.CodeChange -> MemoryContext(
                 taskType = MemoryTaskTypes.CODE_CHANGE,
+                tags = emptySet(),
+                description = task.description,
+            )
+            // AMPR-410: a generic step has no narrower retrieval bucket than
+            // GENERIC, but it does have a description, and Recall's similarity
+            // strategy is the one that reads it. Filing it as "Generic task:
+            // step-2-xyz" would make every step of every plan look alike.
+            is Task.Step -> MemoryContext(
+                taskType = MemoryTaskTypes.GENERIC,
                 tags = emptySet(),
                 description = task.description,
             )

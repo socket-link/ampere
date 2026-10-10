@@ -8,6 +8,7 @@ import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.domain.task.planStepDescription
 import link.socket.ampere.agents.execution.tools.Tool
 
 /**
@@ -243,6 +244,15 @@ fun defaultPerceptionContext(state: AgentState): String = buildString {
             appendLine("  Status: ${task.status}")
             task.assignedTo?.let { appendLine("  Assigned To: $it") }
         }
+        // AMPR-410: the same four lines, because a generic step carries the same
+        // four facts. Dropping through to the `else` below would have rendered
+        // "Kind: Step" and hidden the one line that says what the step is for.
+        is Task.Step -> {
+            appendLine("  Description: ${task.description}")
+            appendLine("  Id: ${task.id}")
+            appendLine("  Status: ${task.status}")
+            task.assignedTo?.let { appendLine("  Assigned To: $it") }
+        }
         // `PMTask`, `TicketTask` and `MeetingTask` are open families with no
         // shared description field. Their members are data classes, so their
         // own `toString()` names their fields — unlike a role state's, which
@@ -264,7 +274,7 @@ fun defaultPerceptionContext(state: AgentState): String = buildString {
         appendLine()
         appendLine("Current Plan (${planTasks.size} steps):")
         planTasks.forEach { step ->
-            val description = (step as? Task.CodeChange)?.description ?: step.id
+            val description = step.planStepDescription ?: step.id
             appendLine("  - [${step.status}] $description")
         }
     }
