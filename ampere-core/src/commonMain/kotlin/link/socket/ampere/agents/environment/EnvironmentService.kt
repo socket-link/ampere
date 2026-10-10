@@ -10,6 +10,7 @@ import link.socket.ampere.agents.domain.event.EventRegistry
 import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.events.EventRepository
+import link.socket.ampere.agents.events.EventRouter
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
@@ -19,6 +20,7 @@ import link.socket.ampere.agents.events.messages.AgentMessageApi
 import link.socket.ampere.agents.events.messages.MessageRepository
 import link.socket.ampere.agents.events.relay.EventRelayService
 import link.socket.ampere.agents.events.relay.EventRelayServiceImpl
+import link.socket.ampere.agents.events.subscription.EventSubscription
 import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.agents.events.tickets.TicketOrchestrator
 import link.socket.ampere.agents.events.tickets.TicketRepository
@@ -141,6 +143,51 @@ class EnvironmentService(
         get() = orchestrator.eventSerialBus
 
     /**
+     * Access to the event router, which fans [EventRouter.ROUTABLE_EVENT_TYPES] out to
+     * registered agents as `NotificationEvent.ToAgent`s.
+     *
+     * Prefer [routeEventsToAgent] / [stopRoutingEventsToAgent] over reaching in here.
+     */
+    val eventRouter: EventRouter
+        get() = orchestrator.eventRouter
+
+    /**
+     * Register [agentId] to be notified of every [eventType] the router fans out.
+     *
+     * This is the public registration path onto [EventRouter] (AMPR-404): before it existed
+     * the router iterated an empty registry at startup and no agent was ever notified. Order
+     * does not matter — registering after [start] takes effect on the next matching event.
+     *
+     * Routing is a *second* delivery of an event the agent could also have subscribed to
+     * directly with [subscribe]. Use it when the agent should react to events of a type
+     * without knowing who produces them; use [subscribe] when it wants the event itself.
+     *
+     * @param eventType one of [EventRouter.ROUTABLE_EVENT_TYPES]; any other type registers
+     * fine and simply never matches, because nothing fans it out.
+     * @return the agent's merged routing subscription, covering every type it is registered for
+     */
+    fun routeEventsToAgent(
+        agentId: AgentId,
+        eventType: EventType,
+    ): EventSubscription.ByEventClassType =
+        eventRouter.subscribeToEventClassType(agentId, eventType)
+
+    /**
+     * Stop notifying [agentId] of [eventType], leaving its other registrations intact.
+     *
+     * @return what the agent is left registered for
+     */
+    fun stopRoutingEventsToAgent(
+        agentId: AgentId,
+        eventType: EventType,
+    ): EventSubscription.ByEventClassType =
+        eventRouter.unsubscribeFromEventClassType(agentId, eventType)
+
+    /** Every agent currently registered to be notified of [eventType]. */
+    fun agentsRoutedFor(eventType: EventType): List<AgentId> =
+        eventRouter.getSubscribedAgentsFor(eventType)
+
+    /**
      * Subscribe to events of a specific type.
      *
      * @param agentId The agent subscribing to the events
@@ -176,7 +223,8 @@ class EnvironmentService(
      * Start all orchestrator services.
      *
      * This starts the event routing system. Should be called once during
-     * application startup.
+     * application startup — before or after [routeEventsToAgent], which takes effect either
+     * way (AMPR-404).
      */
     fun start() {
         orchestrator.start()

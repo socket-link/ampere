@@ -66,8 +66,8 @@ class EventSubscriptionTest {
         assertTrue(Event.TaskCreated.EVENT_TYPE in s2.eventTypes)
         assertTrue(Event.QuestionRaised.EVENT_TYPE in s2.eventTypes)
 
-        // Unsubscribe from one (call extension within router scope)
-        val s3 = router.run { s2.unsubscribeFromEventClassType(Event.TaskCreated.EVENT_TYPE) }
+        // Unsubscribe from one
+        val s3 = router.unsubscribeFromEventClassType(agentId, Event.TaskCreated.EVENT_TYPE)
         assertTrue(Event.QuestionRaised.EVENT_TYPE in s3.eventTypes)
         assertTrue(Event.TaskCreated.EVENT_TYPE !in s3.eventTypes)
 

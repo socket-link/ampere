@@ -109,6 +109,9 @@ class EnvironmentOrchestrator(
      *
      * This starts the event routing system. Individual orchestrators don't need
      * explicit startup as they respond to method calls.
+     *
+     * Call it whenever: [EventRouter] reads its registry at dispatch, so an agent registered
+     * before or after this runs is notified either way (AMPR-404).
      */
     fun start() {
         eventRouter.startRouting()

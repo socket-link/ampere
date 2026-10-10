@@ -18,7 +18,10 @@ import link.socket.ampere.agents.definition.AutonomousAgent
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.api.TaskLifecycle
+import link.socket.ampere.agents.events.api.openTaskLifecycle
 import link.socket.ampere.agents.execution.issue.CodeIssueWorkflow
+import link.socket.ampere.integrations.issues.ExistingIssue
 
 /**
  * Configuration for autonomous work loop behavior.
@@ -101,25 +104,7 @@ class AutonomousWorkLoop<S : AgentState>(
                             continue
                         }
 
-                        eventApi?.publishTaskCreated(
-                            taskId = "issue-${issue.number}",
-                            urgency = Urgency.MEDIUM,
-                            description = "Working on issue #${issue.number}: ${issue.title}",
-                            assignedTo = agent.id,
-                        )
-
-                        val result = workflow.workOnIssue(issue, agent)
-                        issuesProcessedThisHour++
-
-                        if (result.isSuccess) {
-                            eventApi?.publishCodeSubmitted(
-                                urgency = Urgency.LOW,
-                                filePath = "issue-${issue.number}",
-                                changeDescription = "Completed issue #${issue.number}: ${result.getOrNull()}",
-                                reviewRequired = true,
-                                assignedTo = null,
-                            )
-                        }
+                        workIssue(issue)
 
                         delay(config.pollingInterval)
                     } catch (e: CancellationException) {
@@ -142,6 +127,53 @@ class AutonomousWorkLoop<S : AgentState>(
         job?.cancel()
     }
 
+    /**
+     * Hand one claimed [issue] to the agent, publishing its task lifecycle around the work.
+     *
+     * The loop used to publish a bare `TaskCreated` here and nothing else, so every issue it
+     * picked up left a `Pending` item in `WorkspaceStateStore` that never moved and
+     * `MilestoneTracker` never saw a completion to count (AMPR-404). The `finally` is what
+     * makes that true for a [stop] mid-issue and for a throw out of `workOnIssue` as well as
+     * for the ordinary paths: [TaskLifecycle] is terminal exactly once, so it is a no-op when
+     * the work already reported how it ended.
+     */
+    private suspend fun workIssue(issue: ExistingIssue) {
+        val lifecycle = eventApi?.openTaskLifecycle(
+            taskId = "issue-${issue.number}",
+            description = "Working on issue #${issue.number}: ${issue.title}",
+            assignedTo = agent.id,
+            urgency = Urgency.MEDIUM,
+            taskType = ISSUE_TASK_TYPE,
+        )
+
+        try {
+            val result = workflow.workOnIssue(issue, agent)
+            issuesProcessedThisHour++
+
+            result
+                .onSuccess { summary ->
+                    lifecycle?.completed(summary)
+                    eventApi?.publishCodeSubmitted(
+                        urgency = Urgency.LOW,
+                        filePath = "issue-${issue.number}",
+                        changeDescription = "Completed issue #${issue.number}: $summary",
+                        reviewRequired = true,
+                        assignedTo = null,
+                        runId = lifecycle?.runId,
+                    )
+                }
+                .onFailure { throwable -> lifecycle?.failed(throwable) }
+        } catch (throwable: Throwable) {
+            // Report the real reason, then let the loop's own handlers decide what to do with
+            // it. Rethrown unchanged, including a CancellationException.
+            lifecycle?.failed(throwable)
+            throw throwable
+        } finally {
+            // The backstop for a path that returned without reporting at all. A no-op above.
+            lifecycle?.failed("Abandoned while working on issue #${issue.number}")
+        }
+    }
+
     private fun calculateBackoff(consecutiveNoWork: Int): Duration {
         val seconds = minOf(
             30 * 2.0.pow(consecutiveNoWork.toDouble()).toLong(),
@@ -161,5 +193,16 @@ class AutonomousWorkLoop<S : AgentState>(
         }
 
         return issuesProcessedThisHour >= config.maxIssuesPerHour
+    }
+
+    companion object {
+        /**
+         * The task type every issue this loop works is counted under.
+         *
+         * One constant, not one per issue: `MilestoneTracker` reports `FIRST_SUCCESS` the
+         * first time it sees a type complete, and "this agent finished its first issue" is the
+         * milestone worth having — not "it finished issue #412".
+         */
+        const val ISSUE_TASK_TYPE: String = "code-issue"
     }
 }
