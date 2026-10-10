@@ -39,7 +39,6 @@ class AgentServicePauseTest {
         handle = InMemoryEventApi.open(agentId = "sdk-test", scope = scope)
         agentService = DefaultAgentService(
             agentActionService = AgentActionService(eventApi = handle.api),
-            eventApi = handle.api,
         )
     }
 
@@ -54,7 +53,12 @@ class AgentServicePauseTest {
         agentService.team {
             agent(Engineer)
             agent(QATester)
-        }.also { it.pursue("Build authentication system") }
+            // AgentTeam.pursue is deprecated (AMPR-393) and is still what sets the flag
+            // `getMembers` reports as `isActive`, which is what this test is about.
+        }.also {
+            @Suppress("DEPRECATION")
+            it.pursue("Build authentication system")
+        }
 
     @Test
     fun `pause pauses only the named agent`() = runBlocking<Unit> {

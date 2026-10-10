@@ -58,7 +58,21 @@ class PlanExecutor(
     private val executorId: ExecutorId,
     private val eventApi: AgentEventApi? = null,
     private val runId: RunId? = null,
+    private val stepEventApi: ((Task) -> AgentEventApi?)? = null,
 ) {
+
+    /**
+     * The door [step]'s pair leaves through: the one [stepEventApi] names for it,
+     * else [eventApi].
+     *
+     * One plan, several publishers, because a roster-hosted run's steps run on
+     * different seats and a seat's provenance *is* its door's identity (AMPR-393).
+     * Without this the whole plan's pairs would be attributed to whoever walked it,
+     * and the trace could not say which seat ran which step — only which seat the
+     * step was assigned to, which is a different claim. A caller with one executor
+     * passes no resolver and every pair leaves through [eventApi], as before.
+     */
+    private fun doorFor(step: Task): AgentEventApi? = stepEventApi?.invoke(step) ?: eventApi
 
     /**
      * Executes a plan step by step.
@@ -196,7 +210,7 @@ class PlanExecutor(
         index: Int,
         startedAt: Instant,
     ) {
-        val door = eventApi ?: return
+        val door = doorFor(step) ?: return
         door.publishPlanEvent(
             PlanEvent.PlanStepStarted(
                 eventId = generateUUID("plan-step-started", plan.id, step.id),
@@ -224,7 +238,7 @@ class PlanExecutor(
         index: Int,
         outcome: StepOutcome,
     ) {
-        val door = eventApi ?: return
+        val door = doorFor(step) ?: return
         door.publishPlanEvent(
             PlanEvent.PlanStepCompleted(
                 eventId = generateUUID("plan-step-completed", plan.id, step.id),

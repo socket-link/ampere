@@ -32,23 +32,28 @@ import link.socket.ampere.dsl.events.AgentInitialized
 import link.socket.ampere.dsl.events.GoalSet
 import link.socket.ampere.dsl.events.Planned
 import link.socket.ampere.dsl.team.AgentTeam
+import link.socket.ampere.propel.rosterRunHost
 
 /**
- * AMPR-399 (B5): no method on the stable [AgentService] silently no-ops.
+ * No method on the stable [AgentService] silently no-ops (AMPR-399 B5, re-pointed by
+ * AMPR-393 row H13).
  *
- * [AgentService.team], [AgentService.pursue] and [AgentService.wake] start no work — the team
- * is a DSL value and the two publishers put one task event on the record that nothing consumes
- * — so each is `@Deprecated` with a message that says so. The register row (H13) chose that
- * over wiring: `RunHost` (AMPR-393) is where they are re-pointed.
+ * AMPR-399 deprecated [AgentService.team], [AgentService.pursue] and [AgentService.wake]
+ * because none of them started work. AMPR-393 re-pointed the first two: `team` declares the
+ * roster and `pursue` opens a hosted run over it. [AgentService.wake] is the one left — a
+ * seat exists for the length of a run, so there is nothing dormant for a wake to reach —
+ * and it keeps its deprecation.
  *
- * Two halves, and both matter. The reflection tests are the tripwire: when AMPR-393 re-points
- * one of these, its deprecation goes away and the test here fails, which is the reminder to
- * move the method into the "does something" list below. The behaviour tests pin what the
- * deprecated methods still do, so the messages stay true: exactly one publish each, nothing
- * after it.
+ * Two halves, and both matter. The reflection tests are the tripwire: a member that gains or
+ * loses its deprecation fails here, which is the reminder to move it between the lists below
+ * and to cover it with a behaviour test. The behaviour tests pin what each member does, so
+ * the messages stay true.
+ *
+ * What `pursue` does when it *can* open a run is [link.socket.ampere.propel.HostedRunTest]'s;
+ * here it is the two refusals, which are this service's own contract.
  */
 @Suppress("DEPRECATION")
-class AgentServiceDormantSurfaceTest {
+class AgentServiceSurfaceTest {
 
     private lateinit var scope: CoroutineScope
     private lateinit var handle: InMemoryEventApi.Handle
@@ -60,7 +65,6 @@ class AgentServiceDormantSurfaceTest {
         handle = InMemoryEventApi.open(agentId = "sdk-test", scope = scope)
         agentService = DefaultAgentService(
             agentActionService = AgentActionService(eventApi = handle.api),
-            eventApi = handle.api,
         )
     }
 
@@ -104,6 +108,15 @@ class AgentServiceDormantSurfaceTest {
     }
 
     @Test
+    fun `AgentService is a hosted-run surface, not a dormant one`() {
+        assertEquals(
+            setOf("wake"),
+            DORMANT_MEMBERS,
+            "AMPR-393 re-pointed team and pursue at RunHost; only wake has no successor",
+        )
+    }
+
+    @Test
     fun `the observable members are not deprecated`() {
         OBSERVABLE_MEMBERS.forEach { name ->
             assertNull(
@@ -128,11 +141,17 @@ class AgentServiceDormantSurfaceTest {
     }
 
     @Test
-    fun `AgentTeam and the wake publisher are deprecated`() {
-        assertNotNull(
+    fun `AgentTeam is re-pointed, and only its own pursue stays deprecated`() {
+        assertNull(
             AgentTeam::class.java.getAnnotation(Deprecated::class.java),
-            "AgentTeam declares a team that does not run (AMPR-399)",
+            "AgentTeam.roster() is the roster a hosted run is opened over (AMPR-393), so the " +
+                "class is no longer a value nothing runs",
         )
+        val deprecation = assertNotNull(
+            deprecationOf(AgentTeam::class.java.method("pursue")),
+            "AgentTeam.pursue still only emits UI markers; AgentService.pursue is the run",
+        )
+        assertContains(deprecation.message, "AgentService.pursue")
         assertNotNull(
             deprecationOf(AgentActionService::class.java.method("wakeAgent")),
             "AgentActionService.wakeAgent is the orphan publish behind AgentService.wake",
@@ -141,20 +160,42 @@ class AgentServiceDormantSurfaceTest {
 
     // ==================== What the deprecated methods still do ====================
 
+    /**
+     * The two refusals, and that each one says which dependency is missing.
+     *
+     * This service is composed by hand here — no `RunHost`, no transport — which is the
+     * state a caller hits by composing an instance without one. Both answers must name the
+     * missing piece rather than reporting a generic failure, because the fix is different in
+     * each case and the message is the only evidence of which it is.
+     */
     @Test
-    fun `pursue publishes one unassigned task and nothing else`() = runBlocking<Unit> {
-        val goalId = agentService.pursue("Build authentication system").getOrThrow()
+    fun `pursue refuses without a host, and then without a team`() = runBlocking<Unit> {
+        val noHost = agentService.pursue("Build authentication system")
+        assertTrue(noHost.isFailure, "this service was composed with no RunHost")
+        assertContains(
+            noHost.exceptionOrNull()?.message.orEmpty(),
+            "AmpereInstance.runs",
+            message = "the refusal names what is missing",
+        )
 
-        val recorded = handle.repository.getAllEvents().getOrThrow()
-        assertEquals(1, recorded.size, "pursue must put exactly one event on the record")
+        val hosted = DefaultAgentService(
+            agentActionService = AgentActionService(eventApi = handle.api),
+            // One door for every seat: this test never gets as far as building one.
+            runHost = rosterRunHost(createEventApi = { handle.api }, agentScope = scope),
+        )
+        val noTeam = hosted.pursue("Build authentication system")
+        assertTrue(noTeam.isFailure, "there is no roster to run over")
+        assertContains(noTeam.exceptionOrNull()?.message.orEmpty(), "No team configured")
 
-        val created = assertIs<Event.TaskCreated>(recorded.single())
-        assertEquals(goalId, created.taskId, "the returned id must name the published task")
-        assertEquals("Build authentication system", created.description)
-        assertNull(created.assignedTo, "pursue assigns the task to no one")
+        hosted.team { agent(Engineer) }
+        val noTransport = hosted.pursue("Build authentication system")
+        assertTrue(noTransport.isFailure, "and no transport for the seats' model calls")
+        assertContains(noTransport.exceptionOrNull()?.message.orEmpty(), "UpstreamLlmClient")
 
-        // Nothing picked it up: no run opened, so there is no agent to report on either.
-        assertTrue(agentService.listAll().isEmpty())
+        assertTrue(
+            handle.repository.getAllEvents().getOrThrow().isEmpty(),
+            "a refused pursue publishes nothing: it never opened a run",
+        )
     }
 
     @Test
@@ -178,7 +219,7 @@ class AgentServiceDormantSurfaceTest {
     }
 
     @Test
-    fun `a pursued team reports Active members while the record stays empty`() = runBlocking<Unit> {
+    fun `a DSL-pursued team reports Active members while the record stays empty`() = runBlocking<Unit> {
         val team = agentService.team {
             agent(Engineer)
             agent(QATester)
@@ -186,8 +227,8 @@ class AgentServiceDormantSurfaceTest {
 
         team.pursue("Build authentication system")
 
-        // GoalSet, one AgentInitialized per member, then the Planned placeholder: the four
-        // markers AgentTeam.pursue emits before it reaches its TODO.
+        // GoalSet, one AgentInitialized per member, then the Planned marker: the four
+        // markers AgentTeam.pursue emits, and all it emits.
         val markers = withTimeout(10.seconds) { team.events.take(4).toList() }
         assertIs<GoalSet>(markers[0])
         assertIs<AgentInitialized>(markers[1])
@@ -200,7 +241,8 @@ class AgentServiceDormantSurfaceTest {
         )
         assertTrue(
             handle.repository.getAllEvents().getOrThrow().isEmpty(),
-            "while nothing at all reached the event record: no task, no plan, no phase",
+            "while nothing at all reached the event record: AgentTeam.pursue is the UI " +
+                "projection, and AgentService.pursue is the run",
         )
     }
 
@@ -222,10 +264,19 @@ class AgentServiceDormantSurfaceTest {
 
     private companion object {
 
-        /** Advertise work and start none. Each is `@Deprecated` until AMPR-393 re-points it. */
-        val DORMANT_MEMBERS = setOf("team", "pursue", "wake")
+        /**
+         * Advertises work and starts none, with no successor to re-point at.
+         *
+         * One member, after AMPR-393: `wake` names an agent, and a seat only exists for the
+         * length of a run, so there is nothing for it to wake.
+         */
+        val DORMANT_MEMBERS = setOf("wake")
 
-        /** Report or mutate the roster the (deprecated) team declared. Covered elsewhere. */
-        val OBSERVABLE_MEMBERS = setOf("inspect", "listAll", "pause")
+        /**
+         * Does something observable. `team` declares the roster and `pursue` opens a run
+         * over it (AMPR-393 row H13); the other three report and mutate what the open runs
+         * and the declared roster say.
+         */
+        val OBSERVABLE_MEMBERS = setOf("team", "pursue", "inspect", "listAll", "pause")
     }
 }

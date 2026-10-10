@@ -74,7 +74,6 @@ class AmpereInstanceTest {
 
         agentService = DefaultAgentService(
             agentActionService = AgentActionService(eventApi = sdkEventApi),
-            eventApi = sdkEventApi,
         )
 
         ticketService = DefaultTicketService(
@@ -248,13 +247,22 @@ class AmpereInstanceTest {
 
     // ==================== AgentService Tests ====================
 
+    /**
+     * This service is composed here with no `RunHost`, which is what AMPR-393 made
+     * `pursue` need: it opens a hosted run rather than publishing a task event. The
+     * refusal naming `AmpereInstance.runs` is the contract for a composition without one;
+     * what `pursue` does when it can host is `AgentServiceSurfaceTest`'s and
+     * `HostedRunTest`'s.
+     */
     @Test
-    fun `AgentService pursue publishes goal and returns task ID`() = runBlocking {
+    fun `AgentService pursue refuses when the instance cannot host a run`() = runBlocking {
         val result = agentService.pursue("Build authentication system")
 
-        assertTrue(result.isSuccess)
-        val taskId = result.getOrNull()!!
-        assertTrue(taskId.startsWith("goal-"))
+        assertTrue(result.isFailure)
+        assertTrue(
+            result.exceptionOrNull()?.message.orEmpty().contains("AmpereInstance.runs"),
+            "the refusal names what is missing; got ${result.exceptionOrNull()?.message}",
+        )
     }
 
     @Test
