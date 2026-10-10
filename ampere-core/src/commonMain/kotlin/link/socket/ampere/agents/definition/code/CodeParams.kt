@@ -10,6 +10,7 @@ import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.execution.ParameterStrategy
+import link.socket.ampere.agents.execution.priorResultsSection
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.READ_CODE_FILE_TOOL_ID
@@ -26,6 +27,19 @@ import link.socket.ampere.agents.execution.tools.WRITE_CODE_FILE_TOOL_ID
 sealed class CodeParams {
 
     companion object {
+        /**
+         * The blocks of a parameter prompt, in order, blank-separated.
+         *
+         * Exists because a `"""…"""` template with a multi-line value interpolated
+         * into it cannot be `trimIndent()`ed: the trim is applied to the *result*, so
+         * the interpolated block's own un-indented lines make the common indent zero
+         * and the template keeps its source indentation. Each block is trimmed on its
+         * own and joined here instead; a blank block (no prior results) drops out
+         * rather than leaving a hole.
+         */
+        internal fun promptOf(vararg blocks: String): String =
+            blocks.filter { it.isNotBlank() }.joinToString("\n\n")
+
         /**
          * The workspace a code tool must operate in (AMPR-300).
          *
@@ -70,14 +84,16 @@ sealed class CodeParams {
         ): String {
             val workspace = pinnedWorkspace(request, tool.id).baseDirectory
 
-            return """
+            val header = """
                 You are a precise code generation system for the CodeWriterAgent.
                 Your task is to generate production-quality Kotlin code based on the given intent.
 
                 Intent: $intent
 
                 Workspace: $workspace
+            """.trimIndent()
 
+            val instructions = """
                 Generate COMPLETE, WORKING code that:
                 1. Is syntactically correct and follows Kotlin conventions
                 2. Uses idiomatic Kotlin patterns (data classes, sealed classes, extension functions where appropriate)
@@ -109,6 +125,11 @@ sealed class CodeParams {
 
                 Respond ONLY with the JSON object, no other text.
             """.trimIndent()
+
+            // AMPR-408: what the earlier steps produced goes between the intent and
+            // the response schema — before the "respond ONLY with JSON" line, which
+            // anything appended after would be read as part of.
+            return promptOf(header, priorResultsSection(request.priorResults), instructions)
         }
 
         override fun parseAndEnrichRequest(
@@ -183,14 +204,16 @@ sealed class CodeParams {
         ): String {
             val workspace = pinnedWorkspace(request, tool.id).baseDirectory
 
-            return """
+            val header = """
                 You are a code analysis system for the CodeWriterAgent.
                 Your task is to determine which files need to be read to accomplish the given intent.
 
                 Intent: $intent
 
                 Workspace: $workspace
+            """.trimIndent()
 
+            val instructions = """
                 Analyze the intent and determine which files should be read to:
                 1. Understand existing code structure
                 2. Find relevant classes, functions, or modules
@@ -207,6 +230,9 @@ sealed class CodeParams {
 
                 Respond ONLY with the JSON object, no other text.
             """.trimIndent()
+
+            // AMPR-408: see CodeWriting.buildPrompt.
+            return promptOf(header, priorResultsSection(request.priorResults), instructions)
         }
 
         override fun parseAndEnrichRequest(

@@ -101,6 +101,7 @@ class SparkBasedAgentStepRoutingTest {
 
         val outcome = agent.runLLMToExecuteTask(
             planStep("step-1-parent-task", "commit changes", toolId = "git_commit"),
+            emptyList(),
         )
 
         assertEquals(1, recorder.invocations.size, "the nominated tool should be invoked exactly once")
@@ -126,6 +127,7 @@ class SparkBasedAgentStepRoutingTest {
 
         val outcome = agent.runLLMToExecuteTask(
             planStep("step-1-parent-task", "stage files", toolId = "git_stage"),
+            emptyList(),
         )
 
         assertEquals(0, recorder.invocations.size, "no tool should be invoked on routing failure")
@@ -151,6 +153,7 @@ class SparkBasedAgentStepRoutingTest {
 
         val outcome = agent.runLLMToExecuteTask(
             planStep("step-1-parent-task", "think about it", toolId = null),
+            emptyList(),
         )
 
         assertEquals(0, recorder.invocations.size, "no-op steps must not invoke any tool")

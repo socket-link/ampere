@@ -6,6 +6,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import link.socket.ampere.agents.execution.ParameterStrategy
+import link.socket.ampere.agents.execution.priorResultsSection
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
@@ -61,6 +62,11 @@ sealed class GitParams {
                     appendLine("Files already staged in this step's context:")
                     existingFiles.forEach { appendLine("- $it") }
                     appendLine()
+                }
+                // AMPR-408: a commit message is the clearest case for this — the
+                // earlier steps are what there is to describe.
+                priorResultsSection(request.priorResults).takeIf { it.isNotBlank() }?.let {
+                    appendLine(it)
                 }
                 appendLine("Respond with a JSON object of exactly this shape:")
                 appendLine(

@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.FileAccessScope
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 
 /** Platform-agnostic request for executing a tool */
@@ -81,6 +82,30 @@ data class ExecutionRequest<Context : ExecutionContext>(
      * none — a real answer, and the one a schema that declares no properties produces.
      */
     val arguments: JsonObject? = null,
+    /**
+     * What the steps before this one produced, oldest first (AMPR-408, AMPR-412).
+     *
+     * A plan step's parameters are *generated* by a model call a
+     * [ParameterStrategy][link.socket.ampere.agents.execution.ParameterStrategy]
+     * prompts for, and that prompt used to see the step's own description and
+     * nothing else — so a plan whose second step consumes the first step's
+     * output ("search for X, then summarise what you found") generated step
+     * two's parameters with no idea what step one found. These are the results
+     * the dispatching agent had in hand when it built this request, rendered
+     * into the parameter prompt by
+     * [priorResultsSection][link.socket.ampere.agents.execution.priorResultsSection].
+     *
+     * Rides on the request rather than on the
+     * [ExecutionContext][link.socket.ampere.agents.execution.request.ExecutionContext]
+     * for the same reason the workspace and the file access scope do: a
+     * strategy rebuilds the context to carry its generated parameters, so what
+     * the agent stamped has to live somewhere a rebuild cannot drop, and be
+     * re-applied at the dispatch funnel.
+     *
+     * Empty is the honest value for a plan's first step, for a single-step plan,
+     * and for a tool invoked outside a plan.
+     */
+    val priorResults: List<StepOutcome> = emptyList(),
 ) {
 
     /**
@@ -123,4 +148,22 @@ data class ExecutionRequest<Context : ExecutionContext>(
      */
     fun withArguments(arguments: JsonObject?): ExecutionRequest<Context> =
         if (arguments == this.arguments) this else copy(arguments = arguments)
+
+    /**
+     * This request carrying [priorResults], or this request unchanged when
+     * [priorResults] is empty or already the list it carries.
+     *
+     * Same rebuild problem as [withRunId] and [withFileAccessScope], and the same
+     * reason an empty list never clears what is already stated: the strategy that
+     * *reads* the prior results to build its prompt then throws them away when it
+     * constructs the request for its generated parameters, so the dispatch funnel
+     * re-applies them. A tool that wants to see what came before it reads them off
+     * the request it was dispatched with.
+     */
+    fun withPriorResults(priorResults: List<StepOutcome>): ExecutionRequest<Context> =
+        if (priorResults.isEmpty() || priorResults == this.priorResults) {
+            this
+        } else {
+            copy(priorResults = priorResults)
+        }
 }
