@@ -1,0 +1,60 @@
+-- AMPR-416 (F30): structural edges between Field primitives
+-- (`link.socket.ampere.field.Relationship`). Structure is kept as edges rather than as nested
+-- members — a Group has no member list — so that joining, leaving and linking are events in the
+-- fold, and so an edge can be queried from either end.
+--
+-- `from_ref` / `to_ref` are `Ref` values: for `MemberOf`, the member and the group; for
+-- `Mirrors`, the external view and the thing it mirrors (F8, the goal-branch ticket). `kind` is
+-- the simple name of the `RelationshipKind` object — `MemberOf`, `Mirrors` — and is deliberately
+-- not CHECKed: `RelationshipKind` is sealed rather than an enum so a later kind can carry data
+-- without a schema change here, and an unknown kind is a row this build skips, not a row the
+-- schema forbids. No foreign keys to SubjectStore either: a `Mirrors` edge points at a Goal
+-- (11.sqm), and the fold resolves refs, not the database.
+--
+-- The composite key means an edge exists once. `created_by` / `created_at` are its `Provenance`:
+-- the event that recorded the edge and the envelope's `recorded_at`.
+CREATE TABLE RelationshipStore (
+  from_ref TEXT NOT NULL,
+  to_ref TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (from_ref, to_ref, kind)
+);
+
+-- The primary key already serves "edges from X"; this is "edges into X": the members of a
+-- group, the mirrors of a goal.
+CREATE INDEX idx_relationship_store_to_ref_kind ON RelationshipStore(to_ref, kind);
+
+-- OR IGNORE: recording an edge that exists is the same edge, and the first record keeps its
+-- provenance. The registry reads back to learn whether its write landed.
+insertRelationship:
+INSERT OR IGNORE INTO RelationshipStore(from_ref, to_ref, kind, created_by, created_at)
+VALUES (?, ?, ?, ?, ?);
+
+selectRelationship:
+SELECT from_ref, to_ref, kind, created_by, created_at
+FROM RelationshipStore
+WHERE from_ref = ? AND to_ref = ? AND kind = ?;
+
+selectRelationshipsFrom:
+SELECT from_ref, to_ref, kind, created_by, created_at
+FROM RelationshipStore
+WHERE from_ref = ?
+ORDER BY created_at ASC, to_ref ASC, kind ASC;
+
+selectRelationshipsTo:
+SELECT from_ref, to_ref, kind, created_by, created_at
+FROM RelationshipStore
+WHERE to_ref = ?
+ORDER BY created_at ASC, from_ref ASC, kind ASC;
+
+selectRelationshipsToByKind:
+SELECT from_ref, to_ref, kind, created_by, created_at
+FROM RelationshipStore
+WHERE to_ref = ? AND kind = ?
+ORDER BY created_at ASC, from_ref ASC;
+
+deleteRelationship:
+DELETE FROM RelationshipStore
+WHERE from_ref = ? AND to_ref = ? AND kind = ?;

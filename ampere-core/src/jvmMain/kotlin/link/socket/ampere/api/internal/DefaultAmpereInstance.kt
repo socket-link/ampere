@@ -32,6 +32,9 @@ import link.socket.ampere.dsl.events.TeamEventAdapter
 import link.socket.ampere.memory.memoryStoreOf
 import link.socket.ampere.propel.RunHost
 import link.socket.ampere.propel.rosterRunHost
+import link.socket.ampere.subject.SqlDelightRelationshipStore
+import link.socket.ampere.subject.SqlDelightSubjectStore
+import link.socket.ampere.subject.SubjectRegistry
 
 /**
  * JVM implementation of [AmpereInstance].
@@ -70,6 +73,16 @@ internal class DefaultAmpereInstance(
     private val sdkEventApi = environmentService.createEventApi("sdk")
 
     /**
+     * The Subject registry (AMPR-416, F30): where [agents] registers the teams it declares and
+     * reads the agents it lists. Registrations go out through the SDK's own door.
+     */
+    private val subjectRegistry = SubjectRegistry(
+        subjects = SqlDelightSubjectStore(database),
+        relationships = SqlDelightRelationshipStore(database),
+        eventApi = sdkEventApi,
+    )
+
+    /**
      * The hosted run (AMPR-393). This path supplies no `UpstreamLlmClient` — the heavy
      * constructor takes a provider configuration, not a transport — so a run opened
      * here must be given its seats' transports on each [HostedAgent]; [agents]'s
@@ -83,6 +96,7 @@ internal class DefaultAmpereInstance(
     override val agents: AgentService = DefaultAgentService(
         agentActionService = AgentActionService(eventApi = sdkEventApi),
         runHost = runs,
+        subjectRegistry = subjectRegistry,
         aiConfiguration = aiConfiguration,
         memoryStore = memoryStoreOf(
             knowledge = KnowledgeRepositoryImpl(database, driver),

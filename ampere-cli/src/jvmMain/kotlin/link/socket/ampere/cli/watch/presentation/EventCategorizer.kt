@@ -27,6 +27,7 @@ import link.socket.ampere.agents.domain.event.ProductEvent
 import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.StoreRowUndecodableEvent
+import link.socket.ampere.agents.domain.event.SubjectEvent
 import link.socket.ampere.agents.domain.event.SupervisorEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
@@ -163,6 +164,9 @@ object EventCategorizer {
         is AssetAccessEvent,
         is BenchEvent.ProbeGraded,
         is BenchEvent.ArcSettled,
+        // The Subject registry grew (AMPR-416): a record the fold resolves against, not a
+        // decision anyone has to see.
+        is SubjectEvent,
         is SupervisorEvent.DispatchRecorded -> EventSignificance.ROUTINE
 
         is RoutingEvent.RouteFallback,

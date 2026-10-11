@@ -165,6 +165,10 @@ object EventRegistry {
         // Persistence decode types
         StoreRowUndecodableEvent.EVENT_TYPE,
 
+        // SubjectEvent types (the Subject registry, AMPR-416)
+        SubjectEvent.SubjectRegistered.EVENT_TYPE,
+        SubjectEvent.RelationshipRecorded.EVENT_TYPE,
+
         // LinkEvent types
         LinkEvent.LinkGranted.EVENT_TYPE,
         LinkEvent.LinkRevoked.EVENT_TYPE,

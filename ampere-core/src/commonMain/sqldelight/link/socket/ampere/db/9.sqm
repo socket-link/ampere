@@ -1,0 +1,55 @@
+-- AMPR-416 (F30): the Subject registry. Until now an agent id was a bare String nobody could
+-- look up, no team id was ever issued, and the human behind `EventSource.Human` was an anonymous
+-- singleton. This adds the two tables that make Subjects registered, lookupable rows and team
+-- membership an edge. Definitions copied from SubjectStore.sq and RelationshipStore.sq;
+-- IF NOT EXISTS keeps this a no-op on a database that already has them.
+--
+-- This ticket owns 9.sqm and only 9.sqm: the belief columns (F9) are 10.sqm and the goal branch
+-- (F8) is 11.sqm. The three are content-independent, so merge order does not matter.
+CREATE TABLE IF NOT EXISTS SubjectStore (
+  id TEXT NOT NULL PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('AGENT', 'HUMAN', 'GROUP')),
+  display_name TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_subject_store_kind ON SubjectStore(kind);
+
+CREATE TABLE IF NOT EXISTS RelationshipStore (
+  from_ref TEXT NOT NULL,
+  to_ref TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (from_ref, to_ref, kind)
+);
+
+CREATE INDEX IF NOT EXISTS idx_relationship_store_to_ref_kind ON RelationshipStore(to_ref, kind);
+
+-- The two rows every database carries, written here as well as at open (`SubjectSeed`, run by
+-- `DatabaseSchemaManager`) so that an Android or iOS database migrated by its own driver has
+-- them too. `human` is the Principal — the first Human row, and the id `EventSource.Human`
+-- already stamps on every stored event. `system` is the pseudo-Subject the F9 backfill points
+-- pre-existing memory rows at. OR IGNORE: a database seeded by an earlier open keeps its rows.
+INSERT OR IGNORE INTO SubjectStore(id, kind, display_name, created_by, created_at)
+VALUES ('human', 'HUMAN', 'Principal', 'migration:9', CAST(strftime('%s', 'now') AS INTEGER) * 1000);
+
+INSERT OR IGNORE INTO SubjectStore(id, kind, display_name, created_by, created_at)
+VALUES ('system', 'AGENT', 'system', 'migration:9', CAST(strftime('%s', 'now') AS INTEGER) * 1000);
+
+-- Backfill: the agents this database already knows are the ones that published events or
+-- recorded outcomes. Each is registered once under its existing id, as of its first appearance,
+-- so a fold over the legacy log resolves every holder it meets. `human` is skipped because the
+-- Principal row above is that source.
+INSERT OR IGNORE INTO SubjectStore(id, kind, display_name, created_by, created_at)
+SELECT source_id, 'AGENT', source_id, 'migration:9', MIN(timestamp)
+FROM EventStore
+WHERE source_id != 'human'
+GROUP BY source_id;
+
+INSERT OR IGNORE INTO SubjectStore(id, kind, display_name, created_by, created_at)
+SELECT executor_id, 'AGENT', executor_id, 'migration:9', MIN(timestamp)
+FROM OutcomeMemoryStore
+WHERE executor_id != 'human'
+GROUP BY executor_id;

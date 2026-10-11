@@ -119,30 +119,36 @@ interface AgentService {
     /**
      * Get the current state of a specific agent.
      *
-     * Reads the seats of the runs this instance has open, and falls back to the roster
-     * given to [team] when it has none. A seat reports `Active` with the run's goal as
-     * its `currentTask`; a declared role nobody is filling reports what [team]'s flags
-     * say about it, with no task.
+     * Reads the seats of the runs this instance has open, and falls back to the Subject
+     * registry when it has none (AMPR-416): [agentId] must name a registered
+     * `Subject.Agent`, and the first call after [team] registers that team's roles. A
+     * seat reports `Active` with the run's goal as its `currentTask`; a registered agent
+     * reports what [team]'s flags say about it when it is a member of the current team,
+     * `Idle` otherwise, with no task. An instance composed without a registry falls back
+     * to the declared roster instead.
      *
      * ```
      * val agent = ampere.agents.inspect("engineer-agent")
      * println("${agent.role} is ${agent.state}")
      * ```
      *
-     * @param agentId The agent id of an open seat, or the role name of a declared
-     *   member
-     * @return [Result.failure] if there is no open run and no team has been configured,
-     *   or if [agentId] names neither an open seat nor a member of the current team
+     * @param agentId The agent id of an open seat, or of a registered agent — a declared
+     *   member's id is its role name
+     * @return [Result.failure] if [agentId] names neither an open seat nor a registered
+     *   agent; without a registry, if no team has been configured or [agentId] is not a
+     *   member of it
      */
     suspend fun inspect(agentId: AgentId): Result<AgentSnapshot>
 
     /**
      * List all agents and their current states.
      *
-     * The seats of every run this instance has open, oldest run first; the roster given
-     * to [team] when it has none. Empty until one or the other exists — which is why
+     * The seats of every run this instance has open, oldest run first; every registered
+     * agent when it has none (AMPR-416), each with the current team's flags when it is a
+     * member and `Idle` otherwise. The `system` pseudo-Subject is never listed, so the
+     * list is empty until a run opens or something registers — which is why
      * `StatusService.health()` reports `Unhealthy` ("No agents configured") on a fresh
-     * instance.
+     * instance. An instance composed without a registry lists the roster given to [team].
      *
      * ```
      * val agents = ampere.agents.listAll()
