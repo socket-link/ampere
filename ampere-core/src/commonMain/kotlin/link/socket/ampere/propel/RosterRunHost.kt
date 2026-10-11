@@ -63,7 +63,7 @@ internal class RosterRunHost(
         tools: Set<Tool<*>>,
         policy: RunPolicy,
     ): HostedRun {
-        validate(roster, seats)
+        validate(roster, seats, policy)
 
         val runId = generateUUID("hosted-run", roster.host.value)
         val built = seats.mapValues { (role, descriptor) ->
@@ -124,8 +124,19 @@ internal class RosterRunHost(
      * allowed through. Two seats sharing an agent id share an event door, so the
      * trace could no longer say which of them did what — and the door's identity is
      * the only provenance a seat has.
+     *
+     * The last two are the half-configured decision call (AMPR-421). A run that asks a
+     * question on a seat with no decision transport would charge four phases and then
+     * throw `MissingUpstreamDecisionClientException`
+     * out of the first cycle's `assess` — except that `assess` drops what it catches,
+     * so in fact it would ask nothing, silently, for the whole run. Refusing at `open`
+     * is what makes "I asked for records and got none" impossible to reach by
+     * configuration. A *non*-verifier seat's [HostedAgent.questions] are ignored rather
+     * than refused, exactly as its [HostedAgent.probes] are: OBSERVE is one phase of the
+     * run, not one per seat, so a question declared on a seat nobody asks is the same
+     * kind of unused declaration.
      */
-    private fun validate(roster: Roster, seats: Map<RoleId, HostedAgent>) {
+    private fun validate(roster: Roster, seats: Map<RoleId, HostedAgent>, policy: RunPolicy) {
         require(seats.containsKey(roster.host)) {
             "the roster's host '${roster.host.value}' has no seat; filled: " +
                 seats.keys.joinToString { it.value }
@@ -143,6 +154,21 @@ internal class RosterRunHost(
         require(sharedIds.isEmpty()) {
             "two seats cannot share an agent id, which is their event door's identity; " +
                 "shared: ${sharedIds.joinToString()}"
+        }
+        if (policy.goalCheck == GoalCheck.Record) {
+            require(seats.getValue(roster.host).upstreamDecisionClient != null) {
+                "GoalCheck.Record asks the host seat '${roster.host.value}' one question per " +
+                    "executed cycle, and that seat carries no upstreamDecisionClient; a " +
+                    "decision transport is opted into, never inherited"
+            }
+        }
+        val verifier = roster.verifier?.let { seats[it] }
+        if (verifier != null && verifier.questions.isNotEmpty()) {
+            require(verifier.upstreamDecisionClient != null) {
+                "the verifier seat '${verifier.role.value}' declares the questions " +
+                    "${verifier.questions.keys.joinToString()} and carries no " +
+                    "upstreamDecisionClient; a decision transport is opted into, never inherited"
+            }
         }
     }
 
@@ -184,6 +210,9 @@ internal class RosterRunHost(
             _memoryService = memory,
             _aiConfiguration = descriptor.aiConfiguration,
             _upstreamLlmClient = descriptor.upstreamLlmClient,
+            // AMPR-385 row H21: the seat's decision transport, or null — which is inert
+            // until something asks, and is what every seat of a run that asks nothing has.
+            _upstreamDecisionClient = descriptor.upstreamDecisionClient,
             _observabilityScope = agentScope,
             _cognitiveRelay = descriptor.cognitiveRelay,
             _executor = executor,

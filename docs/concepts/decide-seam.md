@@ -7,7 +7,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/reasoning/ConfidenceSource.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/CognitiveEvent.kt
 related: [CognitiveRelay, CognitionTrace, PropelLoop, EventSerialBus, Probe]
-last_verified: 2026-10-09
+last_verified: 2026-10-11
 ---
 
 # Decide Seam
@@ -22,8 +22,10 @@ the question up front (`Noul` yes/no, `Choice` one-of, `Score` ordered
 rubric), and it returns a probability per declared answer. `AgentReasoning.decide`
 is the one entry point; it routes through the injected client and publishes
 one `CognitiveEvent.JudgmentRecorded` per judgment through the agent's event
-door. W1 (AMPR-384) is shadow only: the seam exists, records, and nothing in
-the loop calls it yet.
+door. The seam shipped shadow-only in `0.18.0` (AMPR-384) and has its first
+callers in `0.19.0`: a hosted run asks whether its goal is met, and a verifier
+seat asks its own declared questions (AMPR-421). Both are record-only — no
+call site reads a judgment.
 
 ## Why it exists
 
@@ -73,7 +75,7 @@ model wrote about itself (AMPR-381, G1). Three pressures shaped the seam:
 - **No band is ever fitted on a self-reported value.** `BandFitGuard` is the entry to every fit; it refuses `SELF_REPORTED` and refuses a measured judgment with no distribution. Every `Confidence` level is self-reported by construction, and the F10 mapping (`asProbability()`) produces a self-reported number still.
 - **One record per judgment, through the one door, and never the state.** `AgentReasoning.decide` publishes `JudgmentRecorded` via `AgentEventApi.publish` under the run id, carrying `stateDigest` (SHA-256), `questionId` + `questionVersion`, the distribution when there is one, the band (null in W1), model snapshot, locality, latency, usage and `causedBy`. The state text appears in no event. Without a door nothing is recorded, as with the `ProviderCall*` pair; a transport that throws leaves no record.
 - **A judgment is filed under the phase that asked.** `JudgmentRecorded.cognitivePhase` is read by `ArcTraceProjection.phaseNameFor`; a call with no phase falls under whatever phase is active.
-- **Shadow only in W1.** No existing call site switches to `decide`. `FlowPhase.evaluateGoalCompletion` is unchanged until J9. No new routing rule, rung or locality; `RoutingContext` is reused; metering stays `WattCostAggregator.costFor` (J13).
+- **Record-only callers in the hosted run; no call site acts on a judgment.** The first callers are a hosted run's own "is the goal met?" on the host seat and the verifier seat's declared questions, both after an executed cycle and both opted into (AMPR-421, `HostedRun`). Every answer is recorded and discarded: `RunResult` is identical whatever came back, and mapping a judgment onto a `Verdict` (J6), onto an escalation (J8) or onto a goal-completion decision that ends a run (J9) has no verdict. No *existing* call site switched: `FlowPhase.evaluateGoalCompletion` is unchanged until J9. No new routing rule, rung or locality; `RoutingContext` is reused; metering stays `WattCostAggregator.costFor` (J13).
 - **Every public parameter is constructible from Swift.** Strings, maps of strings, lists of strings, enums and data classes only. A Swift-implemented `UpstreamDecisionClient` would need the callback-style bridge the chat seam has; it is not in W1.
 
 ## Common operations
@@ -82,6 +84,7 @@ model wrote about itself (AMPR-381, G1). Three pressures shaped the seam:
 - **Bind a hosted decision model** — `HostedSystemOneDecisionClient(endpoint, credential, model = ModelSnapshot("openrouter", "typesafe/jev-1.13"), bodyExtras = mapOf("model" to JsonPrimitive("typesafe/jev-1.13")))`, then `Ampere.fromEnvironment(…, upstreamDecisionClient = it)`. For Clef on Workers AI the endpoint is the `/ai/run/@cf/cloudflare/clef` URL and the extra is `"model": "clef"`.
 - **Turn a heuristic into an explicit judgment** — `DeterministicDecisionClient(name = "any-success") { state, question -> … }`. The record names the rule on `modelSnapshot.modelId`.
 - **Make a self-reported confidence a number** — `confidence.asProbability()`. Do not put the result anywhere a band is fitted.
+- **Have a hosted run ask whether it met its goal** — give the host seat a `HostedAgent.upstreamDecisionClient` and open the run with `RunPolicy(goalCheck = GoalCheck.Record)`. One decision call per executed cycle, one `JudgmentRecorded` under `questionId == RunQuestions.GOAL_MET_ID`, and nothing about the run changes. A verifier seat's own `HostedAgent.questions` are asked beside it, all of them in one request, on that seat's transport.
 - **Stream the records** — `eventApi.onJudgmentRecorded { … }` or `events.judgmentRecordedEvents()`; filter on `source == MEASURED` before fitting anything.
 - **Join a record back to its state** — compare `stateDigest(state)` to the record's `stateDigest`. The state itself is not recoverable from the record, by design.
 
@@ -90,6 +93,7 @@ model wrote about itself (AMPR-381, G1). Three pressures shaped the seam:
 - *Falling back to `ModelBackedDecisionClient` when no decision transport is bound* — it turns a configuration gap into a generative call nobody opted into, with a self-reported confidence someone will later mistake for a measured one. AMPR-236 closed this door for the chat seam; it stays closed here.
 - *Tunnelling a decision through `callLLMForJson` and calling it measured* — a generative model's JSON `probability` field is text it generated, not a distribution it computed. It is `SELF_REPORTED` or it is a lie.
 - *Putting the state on the record "for debugging"* — state may hold a person's data, and the record is persisted and streamed. The digest is the join key.
+- *Rendering a state that is unique per call* — the digest is the only join key back to what was asked about, so a state carrying a minted id or a timestamp makes every digest unique and the join worthless. `RunObservation.asDecisionState` renders a fixed key order and leaves both out for exactly that reason.
 - *Declaring a `Choice`'s options anywhere but `criteria`* — the wire format has no separate options list, and a key without a description is a key the model decides against blind.
 - *Treating the model-backed adapter's `confidence` as `p(answer)`* — it is the F10 mapping of a word. `distribution == null` is the tell; `BandFitGuard` is the guard.
 - *Reusing `Verdict`, `Decision`, `Reading`, `Meter` or `Calibration` for these types* — each is taken and means something else (`Decision` is an ask to a person). A model's answer is a `Judgment`.

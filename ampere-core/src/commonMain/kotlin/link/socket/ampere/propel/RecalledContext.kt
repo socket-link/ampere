@@ -153,8 +153,13 @@ private fun Recalled.asLine(): RecalledLine = RecalledLine(
  * measured, or the clip would spend its budget on newlines it is about to remove. Text
  * longer than [max] is cut there and an ellipsis appended, so a clipped fragment is
  * [max] + 1 characters and is visibly a fragment.
+ *
+ * `internal` rather than private because a decision call's state clips by the same
+ * convention (AMPR-421, [asDecisionState]), and two definitions of "clipped" would be
+ * two things to keep in step — a state whose clip drifted from the prompt's would
+ * digest differently for the same run.
  */
-private fun String.clipTo(max: Int): String {
+internal fun String.clipTo(max: Int): String {
     val oneLine = trim().replace(WHITESPACE_RUN, " ")
     return if (oneLine.length <= max) oneLine else oneLine.take(max) + "…"
 }

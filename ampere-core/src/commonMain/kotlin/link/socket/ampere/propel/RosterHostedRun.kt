@@ -35,6 +35,7 @@ import link.socket.ampere.probe.ProbeSuite
 import link.socket.ampere.roster.RoleId
 import link.socket.ampere.roster.Roster
 import link.socket.ampere.roster.SeatTool
+import link.socket.ampere.util.logWith
 
 /**
  * One run over one roster (AMPR-385 rows H1, H6).
@@ -42,6 +43,11 @@ import link.socket.ampere.roster.SeatTool
  * The host seat charges PERCEIVE → RECALL → OBSERVE → PLAN; [execute] runs the gated
  * plan a step at a time on the seat each step was assigned to, re-entering OBSERVE →
  * PLAN while cycles remain; [close] is LEARN.
+ *
+ * A cycle that executed something may also be *asked* about itself before the loop
+ * decides whether to continue ([assess], AMPR-421). Every answer is recorded and none
+ * is read: the loop, [currentStatus] and LEARN are the same with a judgment as without
+ * one, which is the whole of what makes the question affordable to ask this early.
  *
  * Every phase is bracketed on the host seat's door, and a step's work is bracketed
  * again on the seat that did it — so a run's EXECUTE is one span in the trace with the
@@ -309,6 +315,7 @@ internal class RosterHostedRun(
         while (true) {
             if (stoppedAt == null && gatedPlan.tasks.isNotEmpty()) {
                 runCycle(gatedPlan)
+                assess()
             }
             captureCancellation()
             if (cancellation != null || stoppedAt != null) break
@@ -368,6 +375,102 @@ internal class RosterHostedRun(
 
         results += execution.stepOutcomes
         lastPlanOutcome = execution.outcome
+    }
+
+    /**
+     * The questions a cycle that executed is asked, recorded and never read (AMPR-421).
+     *
+     * Two of them, both optional and independently opted into: the run's own "is the
+     * goal met?" on the host seat when [RunPolicy.goalCheck] is [GoalCheck.Record], and
+     * whatever the roster's verifier seat declared on [HostedAgent.questions]. A roster
+     * that opted into neither returns before the phase is even entered, which is what
+     * makes the default run's event stream what it was, event for event.
+     *
+     * Here — after EXECUTE, before the loop decides whether to continue — rather than
+     * folded into the next cycle's OBSERVE, and that placement is the point of the
+     * ticket rather than a detail of it. This is where a judgment that *acts* would
+     * sit: the last cycle's results are in hand and nothing has been committed to about
+     * what happens next. An OBSERVE one cycle later cannot be that seam, because by
+     * then the run has already decided to continue, and the final cycle never reaches
+     * one at all. Nothing acts yet (AMPR-381 rows J6, J8, J9 have no verdict); the
+     * records are what AMPR-422 measures before one is taken.
+     *
+     * Bracketed as OBSERVE on the host seat even when the only question asked is the
+     * verifier's, because the phase is the run's and the trace files a judgment under
+     * the phase that asked — `JudgmentRecorded.cognitivePhase` is what
+     * `ArcTraceProjection.phaseNameFor` reads. The state is rendered once and both calls
+     * are given the same string, so the two records share a `stateDigest` and a reader
+     * can tell they are about one moment.
+     *
+     * Nothing is asked after a cancelled cycle. The [cancellation] field covers a
+     * cancellation `dispatch` caught; the live check covers the common case it cannot —
+     * a tool's cancellation is swallowed into a failed step by
+     * `FunctionExecutor`, so the walk returns normally on a dead scope. Without the
+     * check a `DeterministicDecisionClient`, which has no suspension point to be
+     * cancelled at, would answer and the record would go out under `NonCancellable`.
+     */
+    private suspend fun assess() {
+        if (cancellation != null || !coroutineContext.isActive) return
+
+        val asksGoal = policy.goalCheck == GoalCheck.Record
+        val verifier = roster.verifier
+            ?.let { seats[it] }
+            ?.takeIf { it.descriptor.questions.isNotEmpty() }
+        if (!asksGoal && verifier == null) return
+
+        host.phases.withPhase(CognitivePhase.OBSERVE, runId) {
+            val state = RunObservation(
+                runId = runId,
+                goal = goal,
+                cycle = cyclesUsed,
+                priorResults = results.toList(),
+            ).asDecisionState(policy.judgmentResultClip)
+
+            if (asksGoal) {
+                recordOnly(host) {
+                    host.agent.reasoningUnit.decide(
+                        state = state,
+                        questions = mapOf(RunQuestions.GOAL_MET_ID to RunQuestions.goalMet),
+                        phase = CognitivePhase.OBSERVE,
+                    )
+                }
+            }
+            verifier?.let { seat ->
+                recordOnly(seat) {
+                    seat.agent.reasoningUnit.decide(
+                        state = state,
+                        questions = seat.descriptor.questions,
+                        phase = CognitivePhase.OBSERVE,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Asks, and drops whatever comes back.
+     *
+     * The judgments are discarded at the call site rather than stored unread, so that
+     * "nothing reads the answer" is visible here rather than asserted in a comment.
+     *
+     * A transport that throws costs the run nothing: `AgentReasoning.decide` records
+     * nothing when the call fails, and a question the consumer asked for its own
+     * records is not a reason to fail a run whose work is already done. A
+     * [CancellationException] is held in [cancellation] exactly as [dispatch] holds
+     * one, so [execute] rethrows it after the loop unwinds rather than losing it to
+     * this `catch`.
+     */
+    private suspend fun recordOnly(seat: HostedSeat, ask: suspend () -> Unit) {
+        try {
+            ask()
+        } catch (e: CancellationException) {
+            cancellation = e
+        } catch (throwable: Throwable) {
+            logWith("RosterHostedRun").w(throwable) {
+                "A decision call for seat '${seat.role.value}' of run $runId failed; " +
+                    "no judgment was recorded and the run is unaffected"
+            }
+        }
     }
 
     /**
