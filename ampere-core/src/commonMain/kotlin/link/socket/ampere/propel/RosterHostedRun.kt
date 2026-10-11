@@ -137,17 +137,76 @@ internal class RosterHostedRun(
     }
 
     /**
-     * RECALL, on the host seat's own memory, scoped to the goal.
+     * RECALL: the host seat's own memory and the consumer's corpora, scoped to the goal
+     * (rows H4a, H4b).
      *
-     * What it finds goes to PLAN (row H4a, AMPR-388) and nowhere else yet: rendering
-     * recalled items into the seat's active prompt as a "Recalled context" section,
-     * and the `RecallSource` SPI that would let a consumer's own corpus join in, are
-     * AMPR-394's.
+     * Two reads, one event, two destinations. The memory half goes to PLAN as
+     * `relevantKnowledge` (AMPR-388); both halves go to every seat's active prompt as
+     * the "# Recalled context" section, so a step dispatched three phases later is
+     * answered by an agent that still knows what the run recalled (AMPR-394).
+     *
+     * Each [link.socket.ampere.memory.RecallSource] is asked once, for at most
+     * [RecallPolicy.perSourceLimit] items, and only when the host seat declared scopes
+     * to ask under — an unscoped corpus query is a request for the whole corpus. The
+     * sources are asked *before* the event is published, so the one
+     * `KnowledgeRecalled` this phase leaves behind summarises what the whole phase
+     * found rather than only the half Ampere stores.
+     *
+     * No model call: both halves are retrieval, and the clip lengths are what keeps
+     * what they return affordable rather than a summarising call.
      */
     private suspend fun recall() {
         host.phases.withPhase(CognitivePhase.RECALL, runId) {
-            recalled = host.agent.recallForRun(goal)
+            val recallPolicy = policy.recall
+            val scopes = host.descriptor.recallScopes
+            val context = host.agent.recallContextForRun(goal, scopes)
+
+            val found = RecalledContext(
+                fromMemory = host.agent.recallForRun(context, recallPolicy.memoryLimit),
+                fromSources = if (scopes.isEmpty()) {
+                    emptyList()
+                } else {
+                    recallPolicy.sources
+                        .flatMap { source ->
+                            source.recall(
+                                intent = context.description,
+                                scopes = scopes,
+                                limit = recallPolicy.perSourceLimit,
+                            ).take(recallPolicy.perSourceLimit)
+                        }
+                        .sortedByDescending { it.score }
+                },
+            )
+
+            recalled = found.fromMemory
+            // The publish result is deliberately not folded into the run, as in
+            // `ProbeSuite`: the door logs a persist failure and reports it on the bus,
+            // and a run that recalled something should go on to plan with it rather
+            // than lose the phase to the event store.
+            host.door.publish(
+                found.asRecalledEvent(
+                    agentId = host.id,
+                    context = context,
+                    runId = runId,
+                    timestamp = Clock.System.now(),
+                ),
+                runId = runId,
+            )
+            tellSeats(found.promptSection(recallPolicy.titleClip, recallPolicy.textClip))
         }
+    }
+
+    /**
+     * Puts the recalled section on every seat's prompt, not only the host's.
+     *
+     * RECALL happens once, on the host seat, because a run is one cognition — so what
+     * it found is the *run's* context, and the seat that executes a step three phases
+     * later is exactly the one that would otherwise go looking for it again. A seat
+     * that recalled nothing is told nothing: null leaves each prompt byte-for-byte what
+     * it was.
+     */
+    private fun tellSeats(section: String?) {
+        seats.values.forEach { seat -> seat.agent.recalledContext = section }
     }
 
     /**

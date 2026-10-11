@@ -56,6 +56,13 @@ import link.socket.ampere.roster.RoleId
  *   the run still closes. Ampere's own `KnowledgeStore` has no holder column, so two
  *   seats sharing one store recall each other's knowledge; per-seat separation is
  *   whatever the consumer's store scopes (AMPR-385 row H22, no verdict).
+ * @property recallScopes The tags this seat's RECALL reads under (AMPR-394). They are
+ *   the `MemoryContext.tags` of the knowledge query *and* the scopes every
+ *   [RecallSource][link.socket.ampere.memory.RecallSource] the run was given is asked
+ *   with. Empty — the default — is memory only: a corpus query with no scope is a
+ *   request for the whole corpus, which is not a recall, so the sources are not asked
+ *   at all. Only the host seat's is read, because RECALL is one phase of the run
+ *   rather than one per seat — the same reason only the verifier's [probes] run.
  * @property affinity How this seat thinks, the base of its prompt beneath the sparks.
  * @property probes Predicates this seat evaluates in OBSERVE, as the roster's
  *   verifier. Only the verifier seat's probes run, and only when the roster names one
@@ -74,6 +81,7 @@ data class HostedAgent(
     val cognitiveRelay: CognitiveRelay? = null,
     val upstreamLlmClient: UpstreamLlmClient,
     val memory: MemoryStore? = null,
+    val recallScopes: Set<String> = emptySet(),
     val affinity: CognitiveAffinity = CognitiveAffinity.INTEGRATIVE,
     val probes: List<Probe<RunObservation>> = emptyList(),
 ) {
@@ -99,6 +107,7 @@ data class HostedAgent(
             charter: String? = null,
             cognitiveRelay: CognitiveRelay? = null,
             memory: MemoryStore? = null,
+            recallScopes: Set<String> = emptySet(),
             affinity: CognitiveAffinity = CognitiveAffinity.INTEGRATIVE,
             probes: List<Probe<RunObservation>> = emptyList(),
         ): HostedAgent = HostedAgent(
@@ -110,6 +119,7 @@ data class HostedAgent(
             cognitiveRelay = cognitiveRelay,
             upstreamLlmClient = upstreamLlmClient,
             memory = memory,
+            recallScopes = recallScopes,
             affinity = affinity,
             probes = probes,
         )

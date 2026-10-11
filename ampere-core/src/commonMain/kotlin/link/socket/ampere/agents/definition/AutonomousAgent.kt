@@ -129,6 +129,15 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
          * cognitive cycle or idled for want of an assignment.
          */
         private val RUNTIME_LOOP_INTERVAL = 1.seconds
+
+        /**
+         * How many knowledge entries an in-loop Recall asks for.
+         *
+         * A hosted run takes its own from
+         * [RecallPolicy][link.socket.ampere.propel.RecallPolicy] instead, because the
+         * consumer is the one paying for the context those entries occupy.
+         */
+        internal const val DEFAULT_RECALL_LIMIT: Int = 10
     }
 
     /**
@@ -188,16 +197,40 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
     internal var currentCognitivePhase: CognitivePhase? = null
 
     /**
+     * What this agent's RECALL found, as the prompt section that carries it, or null
+     * when nothing was recalled (AMPR-394).
+     *
+     * Set by the driver once RECALL has run, so every model call after it is told what
+     * the agent remembered — before AMPR-394 what Recall found reached the planner's
+     * own prompt (AMPR-388) and nothing else, so a tool's parameter call or a reasoning
+     * step was answered by an agent that had forgotten it. Rendered ahead of everything
+     * the spark stack contributes, which is where [SparkStack.buildSystemPrompt] puts
+     * it; the text is the caller's, because how much of a recalled item is worth
+     * spending context on is a policy, not a fact
+     * ([RecallPolicy][link.socket.ampere.propel.RecallPolicy]).
+     *
+     * A `var` for the same reason [currentCognitivePhase] is one: the prompt is built
+     * fresh on every call, and what the agent currently knows changes under it. Null
+     * leaves the prompt byte-for-byte what it was.
+     */
+    @Transient
+    internal var recalledContext: String? = null
+
+    /**
      * The current system prompt, dynamically built from the SparkStack.
      *
      * Includes per-phase Spark contributions corresponding to [currentCognitivePhase]
-     * when set. Used when making LLM calls so the agent's cognitive context reflects
-     * both the role-level sparks and the currently-active phase guidance.
+     * when set, and the [recalledContext] section when RECALL has put one there. Used
+     * when making LLM calls so the agent's cognitive context reflects the role-level
+     * sparks, the currently-active phase guidance, and what it recalled for this work.
      */
     val currentSystemPrompt: String
         get() {
             ensureSparkStackInitialized()
-            return sparkStack.buildSystemPrompt(currentCognitivePhase)
+            return sparkStack.buildSystemPrompt(
+                currentPhase = currentCognitivePhase,
+                recalledContext = recalledContext,
+            )
         }
 
     /**
@@ -474,15 +507,38 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
      * `protected` rather than private because the Recall step is not unique to
      * [runtimeLoop]: a subclass that generates a Plan at another seam — e.g.
      * `SparkBasedAgent.runSubPlanForTask`, which re-plans one coarse step into a
-     * sub-plan — owes that Plan a Recall too, and recalls through here so there is
-     * one definition of what a task's [MemoryContext] is (AMPR-388).
+     * sub-plan — owes that Plan a Recall too, and recalls through here (AMPR-388).
+     * What it asks for is [memoryContextForTask]'s, which is the one definition of a
+     * task's [MemoryContext] and is reachable on its own for a driver that needs the
+     * query as well as the answer.
      */
-    protected suspend fun recallRelevantKnowledgeForTask(task: Task): List<KnowledgeWithScore> {
-        // Build context from the task description
-        val context = when (task) {
+    protected suspend fun recallRelevantKnowledgeForTask(task: Task): List<KnowledgeWithScore> =
+        recallRelevantKnowledge(memoryContextForTask(task), limit = DEFAULT_RECALL_LIMIT)
+            .getOrElse { emptyList<KnowledgeWithScore>() }
+
+    /**
+     * What Recall asks for, given [task]: one definition of a task's [MemoryContext].
+     *
+     * The task type is the retrieval bucket the write side files under
+     * ([MemoryTaskTypes]) and nothing else — the match is exact, so a context that
+     * invents its own string asks for rows nothing wrote. The description is what the
+     * similarity strategy reads.
+     *
+     * `protected` rather than private, and separate from [recallRelevantKnowledgeForTask],
+     * because a driver that publishes its own `KnowledgeRecalled` still has to ask the
+     * same question: a hosted run's RECALL merges this query's results with its
+     * consumer's corpora and reports both in one event (AMPR-394), so it needs the
+     * context in hand rather than only the answer.
+     *
+     * @param tags Thematic tags to recall under, which Recall's second strategy matches
+     *   against stored tags. Empty — the loop's own case — leaves the task type and the
+     *   description as the whole query.
+     */
+    protected fun memoryContextForTask(task: Task, tags: Set<String> = emptySet()): MemoryContext =
+        when (task) {
             is Task.CodeChange -> MemoryContext(
                 taskType = MemoryTaskTypes.CODE_CHANGE,
-                tags = emptySet(),
+                tags = tags,
                 description = task.description,
             )
             // AMPR-410: a generic step has no narrower retrieval bucket than
@@ -491,19 +547,15 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
             // step-2-xyz" would make every step of every plan look alike.
             is Task.Step -> MemoryContext(
                 taskType = MemoryTaskTypes.GENERIC,
-                tags = emptySet(),
+                tags = tags,
                 description = task.description,
             )
             else -> MemoryContext(
                 taskType = MemoryTaskTypes.GENERIC,
-                tags = emptySet(),
+                tags = tags,
                 description = "Generic task: ${task.id}",
             )
         }
-
-        return recallRelevantKnowledge(context, limit = 10)
-            .getOrElse { emptyList<KnowledgeWithScore>() }
-    }
 
     /**
      * Extract knowledge from completed outcome and store for future recall.

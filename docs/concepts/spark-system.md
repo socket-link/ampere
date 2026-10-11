@@ -11,7 +11,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/AutonomousAgent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/SparkBasedAgent.kt
 related: [PropelLoop, CognitiveRelay, PlugPermissions, CognitionTrace, HostedRun]
-last_verified: 2026-10-10
+last_verified: 2026-10-11
 ---
 
 > **2026-05-17 (AMPR-165):** Declarative `.spark.md` documents now use JSON
@@ -25,6 +25,21 @@ last_verified: 2026-10-10
 > with env-var interpolation for `repositoryRoot`. The old `RoleSpark` Kotlin
 > singleton hierarchy has been removed.
 
+> **2026-10-11 (AMPR-394):** `SparkStack.buildSystemPrompt` takes a second
+> caller-owned slot beside `preamble`: `recalledContext`, rendered between the
+> `preamble` and the cognitive-context header, each behind its own `---`. A hosted run
+> stacks its charter as a spark rather than as a preamble, so there the section renders
+> ahead of the charter — everything the stack contributes is behind both slots.
+> `AutonomousAgent` holds the text in an `internal var recalledContext` that
+> `currentSystemPrompt` passes through — a `var` for the same reason
+> `currentCognitivePhase` is one, because the prompt is rebuilt per call and what the
+> agent knows changes under it. A hosted run's RECALL is what sets it, on every seat;
+> null leaves the prompt byte-for-byte what it was, so nothing outside a hosted run is
+> affected. `SparkBasedAgent.recallForRun` now takes the `MemoryContext` rather than
+> the `Task` and publishes no event, and `recallContextForRun` is the seam that builds
+> that context from the run's scopes.
+> See [MemoryProvenance](memory-provenance.md) and [HostedRun](hosted-run.md).
+
 > **2026-10-10 (AMPR-393):** A roster-hosted run differentiates one seat per role
 > from this one class: `SparkBasedAgent` with the seat's `HostedAgent.sparks` stacked
 > (its `charter` among them, through `Spark.fromMarkdown`, so what a seat was told is
@@ -32,7 +47,8 @@ last_verified: 2026-10-10
 > event. Three seams were opened for it, all `internal`: `reasoningUnit` — the phase
 > services as the suspending functions they are, because the `runLLMTo*` lambdas wrap
 > them in `runBlockingCompat` and a hosted run must not block; `recallForRun`, so the
-> run's RECALL asks the same question the loop's does; and `executePlanStep`, now
+> run's RECALL asks the same question the loop's does (re-shaped by AMPR-394, above);
+> and `executePlanStep`, now
 > `internal` rather than private, so step dispatch has one definition across both
 > drivers. A seat's tools are its role's, namespaced `<seat>/<tool>`, and the spark
 > stack narrows them on top (AMPR-400). See [HostedRun](hosted-run.md).

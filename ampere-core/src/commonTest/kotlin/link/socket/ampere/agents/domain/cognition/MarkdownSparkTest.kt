@@ -9,7 +9,8 @@ import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 
 /**
  * Covers the public markdown entry point added in AMPR-392: [Spark.fromMarkdown] and
- * the preamble slot on [SparkStack.buildSystemPrompt].
+ * the preamble slot on [SparkStack.buildSystemPrompt] — plus the recalled-context slot
+ * beside it (AMPR-394).
  *
  * The contract under test is a *consumer's*, so it is asserted through the public
  * surface only — a consumer with its own `.spark.md` catalogue must be able to reach
@@ -245,5 +246,38 @@ class MarkdownSparkTest {
         val baseline = stack.buildSystemPrompt(CognitivePhase.PLAN)
         assertEquals(baseline, stack.buildSystemPrompt(CognitivePhase.PLAN, preamble = null))
         assertEquals(baseline, stack.buildSystemPrompt(CognitivePhase.PLAN, preamble = "   \n  "))
+    }
+
+    /** AMPR-394: the slot RECALL's findings are rendered into, behind the charter. */
+    @Test
+    fun `recalled context renders between the preamble and the stack`() {
+        val stack = SparkStack.withAffinity(CognitiveAffinity.ANALYTICAL)
+            .push(Spark.fromMarkdown(id = "Consumer:charter", body = "Spark guidance."))
+
+        val prompt = stack.buildSystemPrompt(
+            preamble = "# Host Charter\n\nSpeak plainly.",
+            recalledContext = "# Recalled context\n\n- A thing — that was learned",
+        )
+
+        val charter = prompt.indexOf("Speak plainly.")
+        val recalled = prompt.indexOf("# Recalled context")
+        val header = prompt.indexOf("# Cognitive Context")
+        assertTrue(charter in 0 until recalled, "the charter comes first: $prompt")
+        assertTrue(recalled in 0 until header, "then what was recalled: $prompt")
+        assertTrue(
+            prompt.substring(recalled, header).contains("---"),
+            "a separator must sit between the section and the header: $prompt",
+        )
+        assertTrue(prompt.endsWith(stack.buildSystemPrompt()), "the stack is unchanged behind both")
+    }
+
+    @Test
+    fun `a null or blank recalled context leaves the prompt unchanged`() {
+        val stack = SparkStack.withAffinity(CognitiveAffinity.ANALYTICAL)
+            .push(Spark.fromMarkdown(id = "Consumer:charter", body = "Spark guidance."))
+
+        val baseline = stack.buildSystemPrompt(CognitivePhase.PLAN)
+        assertEquals(baseline, stack.buildSystemPrompt(CognitivePhase.PLAN, recalledContext = null))
+        assertEquals(baseline, stack.buildSystemPrompt(CognitivePhase.PLAN, recalledContext = " \n "))
     }
 }

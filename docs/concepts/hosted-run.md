@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/service/AgentService.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/internal/DefaultAgentService.kt
 related: [PropelLoop, TeamLayer, SparkSystem, MemoryProvenance, CognitionTrace, Probe]
-last_verified: 2026-10-10
+last_verified: 2026-10-11
 ---
 
 # Hosted Run
@@ -81,6 +81,12 @@ that loop, moved into Ampere, so the consumer can delete its copy.
    There is no second planner.
 10. **A non-code agent is first class.** No `CodeState`, no project directory, no
     workspace required.
+11. **RECALL reads twice and reports once.** The host seat's own memory and every
+    `RecallSource` the run was given, merged into one `KnowledgeRecalled` through the
+    host's door (AMPR-394). The memory half reaches PLAN as `relevantKnowledge`; both
+    halves reach *every* seat's active prompt as the "# Recalled context" section, so
+    the seat that runs a step three phases later still knows what the run recalled.
+    No model call: RECALL is two retrievals and a clip.
 
 ## How it composes
 
@@ -108,12 +114,17 @@ val run = ampere.runs!!.open(
             aiConfiguration = sonnet,
             upstreamLlmClient = myProxy,
             memory = myStore,
+            recallScopes = setOf("uploader", "runbooks"),
         ),
         RoleId("scout") to HostedAgent(/* … */),
     ),
     goal = Task.Step(id = "goal-1", status = TaskStatus.Pending, description = "Find the retry policy"),
     tools = setOf(webSearchTool),
-    policy = RunPolicy(cycles = 2, planGate = myReviewSheet),
+    policy = RunPolicy(
+        cycles = 2,
+        planGate = myReviewSheet,
+        recall = RecallPolicy(sources = listOf(myDocumentCorpus)),
+    ),
 )
 
 try {
@@ -127,14 +138,58 @@ try {
 context (`withContext(run) { … }`) and read it back as `coroutineContext[HostedRun]`.
 The run does not put itself there — where it is visible is the caller's decision.
 
+## What RECALL reads, and where it goes
+
+Two reads and two destinations (row H4, AMPR-388 for a, AMPR-394 for b):
+
+| Half | Query | Reaches |
+|------|-------|---------|
+| The seat's memory | `MemoryContext(taskType = GENERIC, tags = recallScopes, description = goal)`, through the host seat's `AgentMemoryService` | `PlanGenerator`'s `relevantKnowledge`, **and** the prompt section |
+| The consumer's corpora | `RecallSource.recall(intent = goal, scopes = recallScopes, limit = perSourceLimit)`, per source | the prompt section only |
+
+The task type is `MemoryTaskTypes.GENERIC` — the bucket a hosted run's own LEARN files
+under — and the scopes are the context's *tags*, not its task type. AMPR-394 proposed
+`taskType = agent.role`; that would have made a hosted run unable to recall the
+Knowledge its own LEARN wrote, because Recall matches `task_type` exactly and LEARN
+stores `GENERIC` with the role as a tag. The symmetric reading of the same intent is
+the one implemented: the role and the scopes are tags on both sides.
+
+The prompt section is rendered once, at the end of RECALL, and set on every seat. It
+sits ahead of everything the spark stack contributes — which includes the seat's
+charter, since a hosted run stacks the charter as a spark rather than passing it as
+`buildSystemPrompt`'s `preamble`:
+
+```markdown
+# Recalled context
+
+Drawn from past work and saved material; use it only where it bears on the task at
+hand, and never repeat it back.
+
+- Retried the upload with a capped backoff — Three attempts was enough…
+- Uploader runbook — The uploader retries on 503 and gives up on 400
+```
+
+One line per item, best first, each half clipped (`titleClip` 200, `textClip` 400 by
+default) with whitespace collapsed first, because the section is one line per item and
+a learning written as three paragraphs is not. A run that recalled nothing renders no
+heading at all — a heading over no items reads as "the agent remembered nothing
+relevant", which is a claim a seat with no memory and no sources has no standing to
+make.
+
+Nothing recalled from a `RecallSource` is stored. Corpus items are typed `FROM_TASK`
+in the event's `retrievedKnowledge` so a trace reader can tell the halves apart; the
+type is a label on a summary, not a row in `KnowledgeStore`.
+
 ## The public surface
 
 | Type | Role |
 |------|------|
 | `RunHost` | `open`, `openSeats(roster, seats: List<HostedAgent>, …)` (the Swift-friendly overload), `openRunSeats(): List<OpenSeat>` |
-| `HostedAgent` | Who fills a seat: id, role, sparks, charter, `AIConfiguration`, `CognitiveRelay?`, **required** `UpstreamLlmClient`, `MemoryStore?`, affinity, `probes` |
+| `HostedAgent` | Who fills a seat: id, role, sparks, charter, `AIConfiguration`, `CognitiveRelay?`, **required** `UpstreamLlmClient`, `MemoryStore?`, `recallScopes`, affinity, `probes` |
 | `HostedRun` | `runId`, `plan`, `execute()`, `close()` |
-| `RunPolicy` | `cycles`, `learn`, `planGate` |
+| `RunPolicy` | `cycles`, `learn`, `planGate`, `recall` |
+| `RecallPolicy` | `sources`, `perSourceLimit`, `memoryLimit`, `titleClip`, `textClip` |
+| `RecallSource` / `Recalled` | The consumer-implemented corpus SPI (`memory/`, beside `MemoryStore`) and one item of it |
 | `PlanGate` / `PlanDecision` | `review(plan)` → `Approved(plan)` (possibly trimmed) or `Stopped(reason)` |
 | `RunResult` / `RunStatus` | `cyclesUsed`, `stepOutcomes`, `outcome`; `Succeeded` / `Failed` / `Stopped` |
 | `RunObservation` | What OBSERVE hands the verifier's Probes: run id, goal, cycle, prior results |
@@ -166,6 +221,21 @@ documented as the caller's to own. `AgentService.team {}` declares the roster an
 - **Publishing a run's own `TaskCreated` before PLAN.** The plan is the first thing
   about a run there is anything to say about, and the lifecycle opens once, on the
   first cycle, *before* the gate — so a plan a person stopped is still on the record.
+- **Reading the section in the PLAN prompt as the only place recall lands.** The PLAN
+  prompt carries recalled memory *twice* and on purpose: once as the planner's own
+  "Relevant past experiences" block with relevance percentages (AMPR-388), and once as
+  the active prompt's "# Recalled context". They are different views for different
+  readers, and an assertion over the whole prompt proves nothing about either — slice
+  the section.
+- **Giving a seat `RecallSource`s and no `recallScopes`.** The sources are never asked:
+  a corpus query with no scope is a request for the whole corpus. The scopes live on
+  the seat and the sources on the policy because the consumer wires its corpus once per
+  run and the seat declares which slice of it this run is about.
+- **Catching a `RecallSource` that throws.** It propagates, like a `Probe` that throws
+  in OBSERVE: `RunHost.open` fails and the run never opens. A source that treats an
+  unreachable backend as an empty recall should return `emptyList()` and say so in its
+  own code, where the decision is legible — swallowing it here would make "the agent
+  remembered nothing" and "the corpus was down" the same observation.
 - **Assuming per-seat memory is separated.** Ampere's `KnowledgeStore` has no holder
   column, so two seats sharing a `MemoryStore` recall each other's knowledge.
   Separation is whatever the consumer's store scopes (row H22, no verdict).
@@ -177,8 +247,14 @@ them is built: the shared tick functions and judgment seams (H19), four-valued s
 run results with dependent-skipping and `maxStepsPerCycle` (H20),
 `HostedAgent.upstreamDecisionClient` (H21), a `holder` column for per-seat memory
 (H22), the F19–F21 reconciliation (H23), `External` provenance on a step result (H24),
-and re-gating a step whose arguments changed after approval (H25). The "Recalled
-context" prompt section and the `RecallSource` SPI are AMPR-394's.
+and re-gating a step whose arguments changed after approval (H25).
+
+Within RECALL, two things are deliberately absent. There is no embedding or search
+inside Ampere — a `RecallSource` does its own retrieval — and there is no ranking
+across sources beyond score order: a corpus's scores and `AgentMemoryService`'s
+relevance are not calibrated against each other, and the merge does not pretend
+otherwise. RECALL also runs once per run, in `charge`, not once per cycle, so a
+second cycle plans with what the first one recalled.
 
 ## See also
 
