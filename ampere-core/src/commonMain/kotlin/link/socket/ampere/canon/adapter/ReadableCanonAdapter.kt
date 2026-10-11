@@ -59,12 +59,19 @@ abstract class ReadableCanonAdapter<E : CanonEntity> {
      *   entity. Default on: it makes write-back a pure merge with no re-fetch.
      *   Turn it off for payloads too large to carry, at the cost of a
      *   [fetchNative] round trip on write.
+     * @param perceiveEventId The id of the perceive event this projection is
+     *   part of, stamped onto [CanonProvenance.perceiveEventId] (F7). A
+     *   [link.socket.ampere.plug.spi.PerceiveSource] passes its
+     *   [link.socket.ampere.plug.spi.PerceiveQuery.perceiveEventId] straight
+     *   through. Stamped here rather than copied on afterwards so that every
+     *   child entity the projection builds with `forChild` carries it too.
      */
     fun project(
         payload: NativePayload,
         handle: SourceHandle,
         observedAt: Instant,
         carryNativePayload: Boolean = true,
+        perceiveEventId: String? = null,
     ): Result<E> {
         if (payload.schema != nativeSchema) {
             return canonFailure(
@@ -82,6 +89,7 @@ abstract class ReadableCanonAdapter<E : CanonEntity> {
                 sourceHandle = handle,
                 observedAt = observedAt,
                 nativePayload = if (carryNativePayload) payload else null,
+                perceiveEventId = perceiveEventId,
             ),
         )
     }

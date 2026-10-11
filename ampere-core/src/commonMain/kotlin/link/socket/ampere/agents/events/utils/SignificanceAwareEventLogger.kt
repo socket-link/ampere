@@ -6,6 +6,7 @@ import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.ArcRunEvent
 import link.socket.ampere.agents.domain.event.AssetAccessEvent
 import link.socket.ampere.agents.domain.event.BenchEvent
+import link.socket.ampere.agents.domain.event.CanonPerceivedEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.EmissionEvent
@@ -247,6 +248,10 @@ class SignificanceAwareEventLogger(
 
         // Asset resolution - routine, mirroring LinkResolved.
         is AssetAccessEvent -> EventSignificance.ROUTINE
+
+        // A Plug read its Link (F7): the record observed entities point back at. Routine, like
+        // an asset resolving - metadata about a read, not a decision anyone must see.
+        is CanonPerceivedEvent -> EventSignificance.ROUTINE
 
         // An Arc run that did not close its loop - a failure needs a human; a cancellation
         // was usually asked for, but what it left undone is still worth seeing.

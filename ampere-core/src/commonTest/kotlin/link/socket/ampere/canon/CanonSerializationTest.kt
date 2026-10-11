@@ -43,7 +43,14 @@ class CanonSerializationTest {
         ),
     )
 
-    private fun samples(): Map<String, CanonEntity> = mapOf(
+    /** The same provenance as recorded by a perceive (F7). */
+    private val stampedProvenance = provenance.copy(perceiveEventId = "perceive-event-1")
+
+    /**
+     * One entity per canon type. Parameterised on [provenance] so the F7 tests can run every
+     * sample with a perceive event id; the default is the provenance every sample has always used.
+     */
+    private fun samples(provenance: CanonProvenance = this.provenance): Map<String, CanonEntity> = mapOf(
         "canon.person" to CanonPerson(CanonId("p"), provenance, displayName = "Ada"),
         "canon.email_message" to CanonEmailMessage(CanonId("m"), provenance, subject = "hi", from = null),
         "canon.email_draft" to CanonEmailDraft(CanonId("d"), provenance, subject = "wip"),
@@ -319,6 +326,55 @@ class CanonSerializationTest {
         assertEquals(provenance.sourceHandle, decoded.provenance.sourceHandle)
         assertEquals(provenance.nativePayload, decoded.provenance.nativePayload)
         assertEquals(provenance.observedAt, decoded.provenance.observedAt)
+    }
+
+    @Test
+    fun `an unstamped entity encodes exactly as it did before perceiveEventId existed`() {
+        // F7 added perceiveEventId with a null default. encodeDefaults is on here and in
+        // DEFAULT_JSON, so without EncodeDefault.NEVER every trace written from now on would grow
+        // a "perceiveEventId":null key. The provenance object must carry exactly its pre-F7 keys.
+        samples().forEach { (discriminator, entity) ->
+            val encoded = json.encodeToJsonElement(CanonEntity.serializer(), entity).jsonObject
+
+            assertEquals(
+                setOf("sourceHandle", "observedAt", "nativePayload"),
+                encoded.getValue("provenance").jsonObject.keys,
+                "unstamped $discriminator changed its wire shape",
+            )
+        }
+    }
+
+    @Test
+    fun `every canon entity round-trips with a perceive event id`() {
+        samples(stampedProvenance).forEach { (discriminator, entity) ->
+            val encoded = json.encodeToString(CanonEntity.serializer(), entity)
+            val decoded = json.decodeFromString(CanonEntity.serializer(), encoded)
+
+            assertTrue(
+                encoded.contains("\"perceiveEventId\":\"perceive-event-1\""),
+                "expected $discriminator to carry its perceive event id, got $encoded",
+            )
+            assertEquals(entity, decoded, "round-trip changed stamped $discriminator")
+            assertEquals("perceive-event-1", decoded.provenance.perceiveEventId)
+        }
+    }
+
+    @Test
+    fun `an entity recorded before perceiveEventId landed still decodes`() {
+        // A trace written before F7 carries no perceiveEventId key. Replaying it must give the
+        // same entity it always did, with the id absent rather than invented.
+        val unstamped = samples()
+        samples(stampedProvenance).forEach { (discriminator, stamped) ->
+            val encoded = json.encodeToJsonElement(CanonEntity.serializer(), stamped).jsonObject
+            val preChange = JsonObject(
+                encoded + ("provenance" to JsonObject(encoded.getValue("provenance").jsonObject - "perceiveEventId")),
+            )
+
+            val decoded = json.decodeFromJsonElement(CanonEntity.serializer(), preChange)
+
+            assertEquals(unstamped.getValue(discriminator), decoded, "pre-F7 $discriminator decoded differently")
+            assertNull(decoded.provenance.perceiveEventId)
+        }
     }
 
     @Test

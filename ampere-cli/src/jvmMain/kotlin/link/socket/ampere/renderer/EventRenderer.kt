@@ -16,6 +16,7 @@ import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.ArcRunEvent
 import link.socket.ampere.agents.domain.event.AssetAccessEvent
 import link.socket.ampere.agents.domain.event.BenchEvent
+import link.socket.ampere.agents.domain.event.CanonPerceivedEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.EmissionEvent
@@ -196,6 +197,8 @@ class EventRenderer(
             is LinkEvent.LinkResolutionFailed -> "🔌" to red
             // Asset resolution: out-of-band, mirroring Link's icon family
             is AssetAccessEvent -> "🖼" to green
+            // A Plug read its Link (F7). Green, like an asset resolving: a read, not a decision.
+            is CanonPerceivedEvent -> "👁" to green
             // Room lifecycle (AMPR-379): the roster deliberating. A review that withheld
             // a card is the one Room line that is not routine.
             is RoomEvent.ReviewCompleted -> "🏠" to if (event.released) green else yellow

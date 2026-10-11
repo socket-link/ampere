@@ -84,6 +84,12 @@ interface PerceiveSource<out T> {
  *   entry. This is the whole query as the caller means it, whether or not the
  *   source can evaluate it — a source that can't returns the predicate in
  *   [PerceivePage.residual] rather than the caller leaving it out.
+ * @property perceiveEventId The id of the perceive event this enumeration will
+ *   be recorded under, when the caller records one ([recordedPerceive] always
+ *   does). A source that projects canon entities passes it to
+ *   [link.socket.ampere.canon.adapter.ReadableCanonAdapter.project], so every
+ *   entity on the page — children included — names the event that observed it
+ *   (F7). Null for an unrecorded enumeration; a canon-external source ignores it.
  */
 data class PerceiveQuery(
     val linkId: LinkId,
@@ -92,6 +98,7 @@ data class PerceiveQuery(
     val limit: Int? = null,
     val cursor: String? = null,
     val predicates: List<PerceivePredicate> = emptyList(),
+    val perceiveEventId: String? = null,
 )
 
 /**
