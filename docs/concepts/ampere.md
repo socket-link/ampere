@@ -58,7 +58,7 @@ against each sibling as it landed) pinned down which:
 
 | # | Choice | Today |
 |---|--------|-------|
-| 2 | Animated agents carry persistent identity | Still a fresh UUID per spawn on the Arc path, with no registry (`domain/arc/ChargePhase.kt:345-371`). A hosted run is the half that holds (AMPR-393): a seat's agent id is the consumer's to supply and the same roster declares the same seats across runs, and `RunHost.openRunSeats()` is a registry of who is filling what — for the length of the run, which is the lifetime a seat has |
+| 2 | Animated agents carry persistent identity | Still a fresh UUID per spawn on the Arc path, with no registry (`domain/arc/ChargePhase.kt:399-425`). A hosted run is the half that holds (AMPR-393): a seat's agent id is the consumer's to supply and the same roster declares the same seats across runs, and `RunHost.openRunSeats()` is a registry of who is filling what — for the length of the run, which is the lifetime a seat has |
 | 5 | Agents publish typed events and *react* | They publish, and the task lifecycle has real publishers since AMPR-404. Reacting is a registration a consumer must make: `EnvironmentService.routeEventsToAgent` exists and nothing shipped calls it, so the fan-out map is empty |
 
 Choices 1, 3, 4, 6, 7 and 8 hold. Two closed during this sweep. Choice 4: Recall now reaches `PlanGenerator` — `runLLMToPlan` takes the recalled knowledge as a required argument, so a call site cannot drop it by omission (AMPR-388) — and Learn writes on both paths (AMPR-402). Choice 7: Execute now

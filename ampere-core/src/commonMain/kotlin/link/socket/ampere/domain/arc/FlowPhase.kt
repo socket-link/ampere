@@ -8,9 +8,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.Agent
-import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
-import link.socket.ampere.agents.domain.memory.MemoryContext
-import link.socket.ampere.agents.domain.memory.MemoryTaskTypes
+import link.socket.ampere.agents.definition.AutonomousAgent
+import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
+import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.status.TaskStatus
@@ -118,6 +118,13 @@ class FlowPhase(
             require(arcConfig.orchestration.type == OrchestrationType.SEQUENTIAL) {
                 "FlowPhase currently only supports SEQUENTIAL orchestration"
             }
+            // The tick enters each phase through the agent's own phase manager (AMPR-441),
+            // which only an `AutonomousAgent` has. Every agent Charge spawns is one.
+            require(agents.all { it is AutonomousAgent<*> }) {
+                "FlowPhase brackets each agent's phases through its own PhaseSparkManager, " +
+                    "which only an AutonomousAgent has; not one: " +
+                    agents.filterNot { it is AutonomousAgent<*> }.joinToString { it.id }
+            }
 
             while (!isComplete && currentTick < maxTicks) {
                 // The tick loop is the Arc's cancellation point: a tick can be long and an
@@ -184,12 +191,13 @@ class FlowPhase(
     }
 
     private suspend fun executeAgentTick(agent: Agent<*>) {
-        // Use a helper function to work around star projection
-        executeAgentTickTyped(agent)
+        // Use a helper function to work around star projection. The cast holds because
+        // `execute` refused any agent that is not an `AutonomousAgent` before the first tick.
+        executeAgentTickTyped(agent as AutonomousAgent<*>)
     }
 
     @Suppress("UNCHECKED_CAST")
-    private suspend fun <S : AgentState> executeAgentTickTyped(agent: Agent<S>) {
+    private suspend fun <S : AgentState> executeAgentTickTyped(agent: AutonomousAgent<S>) {
         // 0. Take the tick's task from the Arc's current goal (AMPR-395).
         //
         // The tick is what connects Charge's goal tree to an agent. Reading the task back out
@@ -215,26 +223,40 @@ class FlowPhase(
         // task, and an unassigned cell asks Perceive to reason about "(none assigned yet)".
         agent.rememberNewTask(currentTask)
 
+        // Every phase of the tick is entered through the agent's own phase manager (AMPR-441),
+        // so each bracket leaves through the agent's door stamped with its `currentRunId`. The
+        // agent methods wrapped below open no phase of their own; one that did would nest inside
+        // the bracket here, on the same manager, and show in the trace as a duplicate.
+        val phases = agent.phaseSparkManager
+
         val plan = try {
-            // 1. Perceive - observe current state
-            val currentState = agent.getCurrentState()
-            val previousIdea = currentState.getCurrentMemory().idea
+            // 1. Perceive - read the agent's current state
+            val perception = phases.withPhase(CognitivePhase.PERCEIVE) {
+                val currentState = agent.getCurrentState()
+                val previousIdea = currentState.getCurrentMemory().idea
 
-            val perception = agent.perceiveState(
-                currentState = currentState,
-                previousIdea,
-            )
+                agent.perceiveState(
+                    currentState = currentState,
+                    previousIdea,
+                )
+            }
 
-            // 2. Remember - recall relevant knowledge
-            val relevantKnowledge = recallKnowledge(agent, currentTask)
+            // 2. Recall - what the agent's memory holds for this task, asked the agent's way
+            val relevantKnowledge = phases.withPhase(CognitivePhase.RECALL) {
+                agent.recallForTask(currentTask)
+            }
 
-            // 3. Optimize - determine best plan (determinePlanForTask does this)
+            // 3. Observe - nothing to read yet; see `observe`
+            observe(phases)
+
             // 4. Plan - construct execution plan
-            agent.determinePlanForTask(
-                task = currentTask,
-                relevantKnowledge = relevantKnowledge,
-                ideas = perception.ideas.toTypedArray(),
-            )
+            phases.withPhase(CognitivePhase.PLAN) {
+                agent.determinePlanForTask(
+                    task = currentTask,
+                    relevantKnowledge = relevantKnowledge,
+                    ideas = perception.ideas.toTypedArray(),
+                )
+            }
         } finally {
             // Close the assignment out while the cell still holds it, which is the only moment
             // `finishCurrentTask` can release the `TaskSpark` that `rememberNewTask` pushed:
@@ -246,7 +268,9 @@ class FlowPhase(
         }
 
         // 5. Execute - run the plan
-        val outcome = agent.executePlan(plan)
+        val outcome = phases.withPhase(CognitivePhase.EXECUTE) {
+            agent.executePlan(plan)
+        }
 
         // Record outcome in shared context
         sharedContext.recordOutcome(agent.id, outcome)
@@ -256,7 +280,25 @@ class FlowPhase(
             evaluateGoalCompletion()
         }
 
-        // 6. Sync happens after this method via syncAtBarrier()
+        // 6. Learn is not a step of the tick: `PulsePhase` enters it once per run, not once per
+        // tick. Sync happens after this method via syncAtBarrier().
+    }
+
+    /**
+     * OBSERVE, entered and left with nothing in it (AMPR-441).
+     *
+     * The bracket is here so the trace says the tick passed through the phase: a phase entered
+     * and found empty is a different fact from a phase skipped, and only the first is true of
+     * this tick. What OBSERVE would read has no source on this path yet. F18's OBSERVE runs
+     * Probes over perceived canon, and nothing on the Arc path perceives canon. Nor does an Arc
+     * agent declare Probes of its own: `ArcAgentConfig` carries a role, sparks and a rung floor,
+     * and nothing else. The one driver that runs declared Probes today is a hosted run
+     * (`RosterHostedRun.observe`, over the run's own progress). This bracket is where that work
+     * lands once the Arc path has an input for it. Until then PLAN is given nothing from
+     * OBSERVE, as on every other driver.
+     */
+    private suspend fun observe(phases: PhaseSparkManager<*>) {
+        phases.withPhase(CognitivePhase.OBSERVE) {}
     }
 
     /**
@@ -282,30 +324,6 @@ class FlowPhase(
             status = TaskStatus.Pending,
             description = goal.description,
         )
-    }
-
-    private suspend fun recallKnowledge(agent: Agent<*>, task: Task): List<KnowledgeWithScore> {
-        val context = when (task) {
-            is Task.CodeChange -> MemoryContext(
-                taskType = MemoryTaskTypes.CODE_CHANGE,
-                tags = emptySet(),
-                description = task.description,
-            )
-            // AMPR-410: a generic step recalls by its description, not by its id.
-            is Task.Step -> MemoryContext(
-                taskType = MemoryTaskTypes.GENERIC,
-                tags = emptySet(),
-                description = task.description,
-            )
-            else -> MemoryContext(
-                taskType = MemoryTaskTypes.GENERIC,
-                tags = emptySet(),
-                description = "Generic task: ${task.id}",
-            )
-        }
-
-        return agent.recallRelevantKnowledge(context, limit = 10)
-            .getOrElse { emptyList() }
     }
 
     private suspend fun evaluateGoalCompletion() {

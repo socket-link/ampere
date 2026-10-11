@@ -3,6 +3,8 @@ package link.socket.ampere.domain.arc
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.config.CognitiveConfig
+import link.socket.ampere.agents.config.PhaseSparkConfig
 import link.socket.ampere.agents.definition.Agent
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.definition.SparkAgentFactory
@@ -94,6 +96,12 @@ data class GoalNode(
  * @param logger Where a goal tree that could not be persisted is reported. Persistence never
  *   fails the run: the in-memory tree still drives Flow, and the failure is logged here — the
  *   door has already logged and announced a refused event.
+ * @param cognitiveConfig What every agent this run spawns is built with (AMPR-441). The default
+ *   turns phase brackets on and phase guidance off: an Arc run is a run someone opened to watch,
+ *   which is the case brackets exist for (the same reasoning a hosted run's seats follow), and
+ *   with `injectPhaseSparks = false` each agent's prompts are byte-for-byte what they are with
+ *   phases off. A caller that passes a configuration of its own gets exactly that one, phase
+ *   switches included. `AMPERE_PHASE_SPARKS=true` still forces guidance on, as it does everywhere.
  */
 class ChargePhase(
     private val arcConfig: ArcConfig,
@@ -126,6 +134,9 @@ class ChargePhase(
     private val clock: Clock = Clock.System,
     private val goalBranch: GoalBranch? = null,
     private val logger: EventLogger = ConsoleEventLogger(),
+    private val cognitiveConfig: CognitiveConfig = CognitiveConfig(
+        phaseSparks = PhaseSparkConfig(enabled = true, injectPhaseSparks = false),
+    ),
 ) {
     suspend fun execute(userGoal: String): ChargeResult {
         require(userGoal.isNotBlank()) { "ChargePhase requires a non-empty user goal." }
@@ -155,6 +166,7 @@ class ChargePhase(
                 createEventApi = eventApiFactory,
                 knowledgeRepository = knowledgeRepository,
                 outcomeRepository = outcomeRepository,
+                cognitiveConfig = cognitiveConfig,
             ),
         ).spawn(arcConfig, projectContext)
 
