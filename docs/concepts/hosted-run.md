@@ -7,7 +7,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/AmpereInstance.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/service/AgentService.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/internal/DefaultAgentService.kt
-related: [PropelLoop, TeamLayer, SparkSystem, MemoryProvenance, CognitionTrace, Probe]
+related: [PropelLoop, TeamLayer, SparkSystem, MemoryProvenance, CognitionTrace, Probe, SubjectRegistry]
 last_verified: 2026-10-11
 ---
 
@@ -198,7 +198,11 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 `Ampere.fromEnvironment` exposes one as `AmpereInstance.runs`, and `agentScope` is
 documented as the caller's to own. `AgentService.team {}` declares the roster and
 `AgentService.pursue(goal)` opens a run over it; `AgentService.listAll()` and
-`inspect()` report the seats of open runs.
+`inspect()` report the seats of open runs. With no run open they read the Subject
+registry (AMPR-416, `SubjectRegistry`): the first `pursue`, `inspect` or `listAll` after
+`team {}` registers the team as a `Subject.Group` under `AgentTeam.id` with one `MemberOf`
+edge per role, and `listAll` then lists every registered agent — not the team's role
+strings.
 
 ## Anti-patterns
 

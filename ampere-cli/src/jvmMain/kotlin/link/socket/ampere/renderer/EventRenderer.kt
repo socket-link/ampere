@@ -43,6 +43,7 @@ import link.socket.ampere.agents.domain.event.SparkAppliedEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.SparkRemovedEvent
 import link.socket.ampere.agents.domain.event.StoreRowUndecodableEvent
+import link.socket.ampere.agents.domain.event.SubjectEvent
 import link.socket.ampere.agents.domain.event.SupervisorEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
@@ -230,6 +231,10 @@ class EventRenderer(
             // A stored row this build cannot decode, skipped so the query could finish. Red: the
             // row is still there, and nothing reading the store can see it.
             is StoreRowUndecodableEvent -> "🧩" to red
+            // The Subject registry (AMPR-416): a holder the fold can now resolve, or an edge
+            // between two. Blue: a record, not a decision.
+            is SubjectEvent.SubjectRegistered -> "🪪" to blue
+            is SubjectEvent.RelationshipRecorded -> "🔗" to blue
         }
     }
 

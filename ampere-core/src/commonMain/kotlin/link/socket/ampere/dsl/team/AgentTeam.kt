@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.dsl.agent.Capability
 import link.socket.ampere.dsl.events.AgentInitialized
 import link.socket.ampere.dsl.events.GoalSet
@@ -53,6 +54,13 @@ import link.socket.ampere.roster.RosterConfig
 class AgentTeam private constructor(
     private val config: AgentTeamConfig,
     private val scope: CoroutineScope,
+    /**
+     * The team's issued id (AMPR-416, F30): the `Ref` value of the `Subject.Group` the Subject
+     * registry registers this team as, with one `MemberOf` edge per declared role. Minted once
+     * at [create] — before it, no team id was ever issued (C51) and a team was only its role
+     * strings. Members are still addressed by role name; this names the team itself.
+     */
+    val id: String,
 ) {
     /**
      * Replay buffer for late UI subscribers; not an event log.
@@ -305,7 +313,7 @@ class AgentTeam private constructor(
         fun create(block: AgentTeamBuilder.() -> Unit): AgentTeam {
             val config = AgentTeamBuilder().apply(block).build()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            return AgentTeam(config, scope)
+            return AgentTeam(config, scope, id = generateUUID("team"))
         }
 
         /**
@@ -317,7 +325,7 @@ class AgentTeam private constructor(
             block: AgentTeamBuilder.() -> Unit,
         ): AgentTeam {
             val config = AgentTeamBuilder().apply(block).build()
-            return AgentTeam(config, scope)
+            return AgentTeam(config, scope, id = generateUUID("team"))
         }
     }
 }

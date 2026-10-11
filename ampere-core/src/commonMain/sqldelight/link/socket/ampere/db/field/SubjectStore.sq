@@ -1,0 +1,64 @@
+-- AMPR-416 (F30): the Subject registry. Before this table an agent id was a bare String with
+-- no registry (C44), no team id was ever issued (C51), and the only human identity anywhere was
+-- `InputProvided.respondedBy`. A fold cannot resolve a holder it cannot look up, and the
+-- belief columns (F9, 10.sqm) write `holder` values that must resolve here.
+--
+-- One row per Subject of the Field (`link.socket.ampere.field.Subject`): an agent, a human, or
+-- a group. `id` is the Field's `Ref` value — for an agent it *is* the existing `AgentId` string,
+-- with no translation table; for the Principal it is `EventSource.Human.ID` ("human"), so the
+-- anonymous human source of every stored event resolves to the first Human row without a lookup
+-- of its own. `system` is the pseudo-Subject the F9 backfill points pre-existing memory rows at;
+-- it is kind AGENT (the process itself) and is never listed as a team member.
+--
+-- `kind` is a closed set checked in the schema, because `Subject` is a sealed interface with
+-- exactly those three branches: a fourth value here would be a row no build could decode.
+-- `display_name` is display only, never identity (`Subject.name`).
+--
+-- `created_by` / `created_at` are the row's `Provenance`: the id of the event whose fold step
+-- registered the Subject and the envelope's `recorded_at`. Two sentinel prefixes exist for rows
+-- no event produced — `seed:` for the rows `DatabaseSchemaManager` seeds at open, and
+-- `migration:` for the agents 9.sqm backfilled from the event log.
+CREATE TABLE SubjectStore (
+  id TEXT NOT NULL PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('AGENT', 'HUMAN', 'GROUP')),
+  display_name TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+-- `listAll` reads one kind at a time; the id tiebreak is in the ORDER BY, not the index.
+CREATE INDEX idx_subject_store_kind ON SubjectStore(kind);
+
+-- Plain INSERT, not OR REPLACE: a Subject row is a registration, and re-registering an id under
+-- another kind is the conflict the store reports rather than silently rewrites. The registry
+-- reads before it writes; the PRIMARY KEY is what makes two racing registrations of the same id
+-- resolve to one row.
+insertSubject:
+INSERT INTO SubjectStore(id, kind, display_name, created_by, created_at)
+VALUES (?, ?, ?, ?, ?);
+
+-- The seed path: present or not, the row ends up there once and the first write wins.
+insertSubjectIfAbsent:
+INSERT OR IGNORE INTO SubjectStore(id, kind, display_name, created_by, created_at)
+VALUES (?, ?, ?, ?, ?);
+
+selectSubject:
+SELECT id, kind, display_name, created_by, created_at
+FROM SubjectStore
+WHERE id = ?;
+
+-- Registration order, id as the tiebreak: the order a reader sees the registry grow in.
+selectSubjectsByKind:
+SELECT id, kind, display_name, created_by, created_at
+FROM SubjectStore
+WHERE kind = ?
+ORDER BY created_at ASC, id ASC;
+
+selectAllSubjects:
+SELECT id, kind, display_name, created_by, created_at
+FROM SubjectStore
+ORDER BY created_at ASC, id ASC;
+
+deleteSubject:
+DELETE FROM SubjectStore
+WHERE id = ?;

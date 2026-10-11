@@ -5,6 +5,7 @@ import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver
 import co.touchlab.kermit.Logger
 import link.socket.ampere.db.Database
+import link.socket.ampere.subject.SubjectSeed
 
 /**
  * Brings a JVM database to [Database.Schema]'s version, and is the only JVM caller of
@@ -17,6 +18,10 @@ import link.socket.ampere.db.Database
  * JVM databases opened before this existed were built by a bare `Schema.create` that never
  * stamped `user_version`, so they read as v0 with tables present. [inferLegacyVersion] recovers
  * their version from the schema itself so the ordinary migration path can take them forward.
+ *
+ * Once the schema is current, [SubjectSeed] writes the Principal and `system` Subject rows if
+ * they are absent (AMPR-416, F30). Seeding is part of [ensure] rather than of any service so that
+ * every JVM open — SDK, CLI, test — sees the same two rows before anything registers.
  */
 object DatabaseSchemaManager {
 
@@ -45,7 +50,11 @@ object DatabaseSchemaManager {
      */
     fun ensure(driver: SqlDriver): Result<SchemaState> = runCatching {
         val transacter = object : TransacterImpl(driver) {}
-        transacter.transactionWithResult { ensureInTransaction(driver) }
+        transacter.transactionWithResult {
+            val state = ensureInTransaction(driver)
+            SubjectSeed.apply(driver)
+            state
+        }
     }
 
     private fun ensureInTransaction(driver: SqlDriver): SchemaState {

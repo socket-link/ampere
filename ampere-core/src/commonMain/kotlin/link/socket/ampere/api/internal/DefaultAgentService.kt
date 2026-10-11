@@ -1,5 +1,7 @@
 package link.socket.ampere.api.internal
 
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
@@ -17,6 +19,8 @@ import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.dsl.team.AgentTeam
 import link.socket.ampere.dsl.team.AgentTeamBuilder
 import link.socket.ampere.dsl.team.TeamMemberStatus
+import link.socket.ampere.field.Ref
+import link.socket.ampere.field.Subject
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.memory.MemoryStore
 import link.socket.ampere.propel.HostedAgent
@@ -24,6 +28,8 @@ import link.socket.ampere.propel.OpenSeat
 import link.socket.ampere.propel.RunHost
 import link.socket.ampere.roster.RoleId
 import link.socket.ampere.roster.RosterConfig
+import link.socket.ampere.subject.SubjectKind
+import link.socket.ampere.subject.SubjectRegistry
 
 /**
  * The shipped [AgentService].
@@ -38,9 +44,20 @@ import link.socket.ampere.roster.RosterConfig
  * [wake] keeps its deprecation, because nothing re-points it: a seat exists for the
  * length of a run, so there is no dormant agent for a wake to reach.
  *
+ * With a [subjectRegistry] (AMPR-416, F30) the fallback is the Subject registry rather
+ * than the declared team's role strings: [team] declares, and the first [pursue],
+ * [inspect] or [listAll] after it registers the team as a `Subject.Group` under
+ * [AgentTeam.id] with one `MemberOf` edge per role, each role a `Subject.Agent` under
+ * its existing id. [listAll] then reports every registered agent, and [inspect] resolves
+ * an id against the store — an id nothing registered is not an agent. Without a
+ * registry the service keeps reading the declared team, which is the composition the
+ * surface tests build.
+ *
  * @param runHost Where [pursue] opens its run. Null leaves [pursue] reporting that
  *   this instance cannot host — which is a composition the stub path can produce and
  *   `fromEnvironment` cannot.
+ * @param subjectRegistry Where declared teams are registered and listed agents are read
+ *   from. Null keeps the pre-F30 behaviour of reporting the declared team.
  * @param upstreamLlmClient The transport every seat [pursue] builds is given. Null
  *   fails the call rather than building a seat whose first model call throws: a
  *   transport is opted into (AMPR-236), and the clearer place to say so is here.
@@ -55,6 +72,7 @@ import link.socket.ampere.roster.RosterConfig
 internal class DefaultAgentService(
     private val agentActionService: AgentActionService,
     private val runHost: RunHost? = null,
+    private val subjectRegistry: SubjectRegistry? = null,
     private val upstreamLlmClient: UpstreamLlmClient? = null,
     private val aiConfiguration: AIConfiguration = AIConfigurationFactory.getDefaultConfiguration(),
     private val cognitiveRelay: CognitiveRelay? = null,
@@ -63,6 +81,10 @@ internal class DefaultAgentService(
 ) : AgentService {
 
     private var currentTeam: AgentTeam? = null
+
+    /** The team [registerTeamIfNeeded] last wrote, by identity: a new [team] call re-registers. */
+    private var registeredTeam: AgentTeam? = null
+    private val registrationLock = Mutex()
 
     override fun team(configure: AgentTeamBuilder.() -> Unit): AgentTeam {
         val team = AgentTeam.create(configure)
@@ -96,6 +118,7 @@ internal class DefaultAgentService(
         )
 
         return runCatching {
+            registerTeamIfNeeded().getOrThrow()
             val roster = team.roster()
             val run = host.open(
                 roster = roster,
@@ -130,6 +153,39 @@ internal class DefaultAgentService(
         openSeats().firstOrNull { it.agentId == agentId || it.role.value == agentId }
             ?.let { return Result.success(it.asSnapshot()) }
 
+        val registry = subjectRegistry ?: return inspectDeclared(agentId)
+        registerTeamIfNeeded().onFailure { return Result.failure(it) }
+
+        val subject = registry.resolve(Ref<Subject>(agentId)).getOrElse { cause ->
+            return Result.failure(IllegalArgumentException("Agent not found: $agentId", cause))
+        }
+        if (subject !is Subject.Agent) {
+            return Result.failure(
+                IllegalArgumentException(
+                    "Subject '$agentId' is registered as a ${SubjectKind.of(subject)}, not an agent",
+                ),
+            )
+        }
+        return Result.success(subject.asSnapshot(currentTeam?.getMembers()?.find { it.role == agentId }))
+    }
+
+    override suspend fun listAll(): List<AgentSnapshot> {
+        val seats = openSeats()
+        if (seats.isNotEmpty()) {
+            return seats.map { it.asSnapshot() }
+        }
+        val registry = subjectRegistry ?: return listDeclared()
+        // A registry that cannot be read falls back to the declaration rather than to an empty
+        // list: an empty list reads as "no agents configured" to StatusService.health, which
+        // would turn a store failure into a different, wrong diagnosis.
+        registerTeamIfNeeded().onFailure { return listDeclared() }
+        val agents = registry.agents().getOrElse { return listDeclared() }
+        val members = currentTeam?.getMembers()?.associateBy { it.role }.orEmpty()
+        return agents.map { agent -> agent.asSnapshot(members[agent.id.value]) }
+    }
+
+    /** The pre-F30 fallback: the declared team's roles, with the role name as the id. */
+    private fun inspectDeclared(agentId: AgentId): Result<AgentSnapshot> {
         val team = currentTeam ?: return Result.failure(
             IllegalStateException("No team configured and no run open. Call team {} first."),
         )
@@ -139,12 +195,31 @@ internal class DefaultAgentService(
         return Result.success(member.asSnapshot(agentId))
     }
 
-    override suspend fun listAll(): List<AgentSnapshot> {
-        val seats = openSeats()
-        if (seats.isNotEmpty()) {
-            return seats.map { it.asSnapshot() }
+    private fun listDeclared(): List<AgentSnapshot> =
+        currentTeam?.getMembers()?.map { it.asSnapshot(it.role) }.orEmpty()
+
+    /**
+     * Register the current team once (AMPR-416, F30): each role as a `Subject.Agent` under its
+     * role name — the id the public API has always used for it (C44) — then the team as a
+     * `Subject.Group` under [AgentTeam.id] with one `MemberOf` edge per role. Every row's
+     * provenance is the registration event the registry published through the door first.
+     *
+     * Idempotent per team instance; a later [team] call registers the new team on its next use.
+     * Nothing to do without a registry or without a team.
+     */
+    private suspend fun registerTeamIfNeeded(): Result<Unit> {
+        val registry = subjectRegistry ?: return Result.success(Unit)
+        val team = currentTeam ?: return Result.success(Unit)
+        return registrationLock.withLock {
+            if (registeredTeam === team) return@withLock Result.success(Unit)
+            runCatching {
+                val members = team.getMembers().map { member ->
+                    registry.registerAgent(member.role).getOrThrow().id
+                }
+                registry.registerGroup(id = team.id, displayName = "team", members = members).getOrThrow()
+                registeredTeam = team
+            }
         }
-        return currentTeam?.getMembers()?.map { it.asSnapshot(it.role) }.orEmpty()
     }
 
     override suspend fun pause(agentId: AgentId): Result<Unit> {
@@ -187,6 +262,25 @@ internal class DefaultAgentService(
         state = AgentState.Active,
         currentTask = goal,
         sparkStack = sparkNames,
+        lastActivity = Clock.System.now(),
+    )
+
+    /**
+     * A registered agent, with the declared team's flags when it is a member of the current
+     * team and `Idle` with no capabilities when it is not: a registration says who exists, and
+     * the team says who is at work.
+     */
+    private fun Subject.Agent.asSnapshot(member: TeamMemberStatus?): AgentSnapshot = AgentSnapshot(
+        id = id.value,
+        role = member?.role ?: name,
+        state = when {
+            member == null -> AgentState.Idle
+            member.isPaused -> AgentState.Paused
+            member.isActive -> AgentState.Active
+            else -> AgentState.Idle
+        },
+        currentTask = null,
+        sparkStack = member?.capabilities.orEmpty(),
         lastActivity = Clock.System.now(),
     )
 

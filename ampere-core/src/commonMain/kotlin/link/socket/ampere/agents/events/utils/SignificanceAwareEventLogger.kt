@@ -31,6 +31,7 @@ import link.socket.ampere.agents.domain.event.RoomEvent
 import link.socket.ampere.agents.domain.event.RoutingEvent
 import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.StoreRowUndecodableEvent
+import link.socket.ampere.agents.domain.event.SubjectEvent
 import link.socket.ampere.agents.domain.event.SupervisorEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
@@ -261,6 +262,10 @@ class SignificanceAwareEventLogger(
         // A stored row this build cannot read (AMPR-364). The query survived by skipping it,
         // which means something the Field holds is invisible to everything reading it.
         is StoreRowUndecodableEvent -> EventSignificance.CRITICAL
+
+        // The Subject registry grew (AMPR-416): a new holder the fold can resolve. Routine, like
+        // a Link resolving - the registration is the record, not a decision anyone must see.
+        is SubjectEvent -> EventSignificance.ROUTINE
     }
 
     private fun formatUrgency(urgency: Urgency): String = when (urgency) {

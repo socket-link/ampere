@@ -38,6 +38,28 @@ class DatabaseSchemaManagerTest {
     }
 
     @Test
+    fun `a created database carries the Principal and system rows`() {
+        inMemoryDriver().use { driver ->
+            DatabaseSchemaManager.ensure(driver).getOrThrow()
+
+            assertEquals(
+                listOf("human HUMAN seed:subject-registry", "system AGENT seed:subject-registry"),
+                query(driver, "SELECT id, kind, created_by FROM SubjectStore ORDER BY id") {
+                    "${it.getString(0)} ${it.getString(1)} ${it.getString(2)}"
+                },
+            )
+
+            // A second open keeps the rows as they were.
+            driver.execute(null, "UPDATE SubjectStore SET display_name = 'Miley' WHERE id = 'human'", 0)
+            DatabaseSchemaManager.ensure(driver).getOrThrow()
+            assertEquals(
+                listOf("Miley"),
+                query(driver, "SELECT display_name FROM SubjectStore WHERE id = 'human'") { it.getString(0)!! },
+            )
+        }
+    }
+
+    @Test
     fun `ensure on a current database changes nothing`() {
         inMemoryDriver().use { driver ->
             DatabaseSchemaManager.ensure(driver).getOrThrow()
@@ -84,6 +106,18 @@ class DatabaseSchemaManagerTest {
                 listOf("evt-1"),
                 query(driver, "SELECT event_id FROM EventStore WHERE run_id IS NULL") { it.getString(0)!! },
             )
+            // 9.sqm registers the agents the legacy log already knows, as of their first event,
+            // and seeds the Principal and `system` for a database no JVM open has seen yet.
+            assertEquals(
+                listOf("agent-A AGENT migration:9", "human HUMAN migration:9", "system AGENT migration:9"),
+                query(driver, "SELECT id, kind, created_by FROM SubjectStore ORDER BY id") {
+                    "${it.getString(0)} ${it.getString(1)} ${it.getString(2)}"
+                },
+            )
+            assertEquals(
+                listOf(42L),
+                query(driver, "SELECT created_at FROM SubjectStore WHERE id = 'agent-A'") { it.getLong(0)!! },
+            )
         }
 
         fileDriver(path).use { driver ->
@@ -100,6 +134,8 @@ class DatabaseSchemaManagerTest {
             "Links",
             "LinkGrants",
             "PauseStore",
+            "SubjectStore",
+            "RelationshipStore",
         ) + UNMIGRATED_SQ_TABLES
         val fresh = inMemoryDriver().use { driver ->
             DatabaseSchemaManager.ensure(driver).getOrThrow()
