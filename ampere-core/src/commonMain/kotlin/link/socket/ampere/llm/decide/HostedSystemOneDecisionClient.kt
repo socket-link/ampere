@@ -31,12 +31,13 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
 /**
  * The hosted System One adapter (AMPR-384, J2): one Ktor POST, no provider SDK.
  *
- * Jev (TypeSafe, through OpenRouter) and Clef / Clef-flash (Cloudflare Workers
- * AI) read the same body — `{state, questions}` — and answer with the same
- * `answers` object, so one adapter serves all three. What differs is adapter
- * configuration, not type: the endpoint, the credential, and whatever extra
- * fields the body wants (`"model": "typesafe/jev-1.13"` for OpenRouter, a bare
- * `"model": "clef"` on Workers AI).
+ * Jev (TypeSafe, direct or through OpenRouter) and Clef / Clef-flash
+ * (Cloudflare Workers AI) read the same body — `{state, questions}` — and
+ * answer with the same `answers` object, so one adapter serves all three. What
+ * differs is adapter configuration, not type: the endpoint, the credential,
+ * and whatever extra fields the body wants. Bind a named model over a named
+ * route with [of] — `of(DecisionModels.Jev_1_13, DecisionRoutes.jevViaOpenRouter(), key)`
+ * — rather than building the snapshot and extras by hand.
  *
  * Two response envelopes are accepted: the bare System One body, and
  * Cloudflare's REST envelope `{"result": <body>, "success": true}`.
@@ -210,8 +211,44 @@ class HostedSystemOneDecisionClient(
         return primitive.doubleOrNull ?: primitive.contentOrNull?.toDoubleOrNull()
     }
 
-    private companion object {
-        const val ERROR_BODY_PREVIEW = 200
-        val QuestionsSerializer = MapSerializer(String.serializer(), Question.serializer())
+    companion object {
+        private const val ERROR_BODY_PREVIEW = 200
+        private val QuestionsSerializer = MapSerializer(String.serializer(), Question.serializer())
+
+        /**
+         * Bind [model] over [route] (AMPR-435). The snapshot names the maker
+         * and records the route on [ModelSnapshot.via]; the route's
+         * [DecisionRoute.wireModelId], when it has one, is merged into the body
+         * as `"model"`. Binding builds a client and nothing more: it is still
+         * opted into by whoever hands it to `upstreamDecisionClient`.
+         *
+         * Nothing checks that [route] serves [model]; pair them as
+         * [DecisionRoutes] documents.
+         *
+         * This overload POSTs with the platform's discovered engine. It is a
+         * separate function rather than a default argument because Swift sees
+         * no defaults and cannot build a Ktor `HttpClient`.
+         */
+        fun of(
+            model: DecisionModel,
+            route: DecisionRoute,
+            credential: String,
+        ): HostedSystemOneDecisionClient = of(model, route, credential, HttpClient())
+
+        /** [of] over a caller-supplied [httpClient]; tests pass one over a mock engine. */
+        fun of(
+            model: DecisionModel,
+            route: DecisionRoute,
+            credential: String,
+            httpClient: HttpClient,
+        ): HostedSystemOneDecisionClient = HostedSystemOneDecisionClient(
+            endpoint = route.endpoint,
+            credential = credential,
+            model = ModelSnapshot(providerId = model.makerId, modelId = model.modelId, via = route.via),
+            bodyExtras = route.wireModelId
+                ?.let { route.bodyExtras + ("model" to JsonPrimitive(it)) }
+                ?: route.bodyExtras,
+            httpClient = httpClient,
+        )
     }
 }

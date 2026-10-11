@@ -90,24 +90,99 @@ class HostedSystemOneDecisionClientTest {
         status: HttpStatusCode = HttpStatusCode.OK,
         captured: Captured = Captured(),
         bodyExtras: Map<String, JsonPrimitive> = mapOf("model" to JsonPrimitive("typesafe/jev-1.13")),
-    ): HostedSystemOneDecisionClient {
-        val engine = MockEngine { call ->
-            captured.body = call.body.toByteArray().decodeToString()
-            captured.authorization = call.headers[HttpHeaders.Authorization]
-            captured.url = call.url.toString()
-            respond(
-                content = responseBody,
-                status = status,
-                headers = headersOf(HttpHeaders.ContentType, "application/json"),
-            )
-        }
-        return HostedSystemOneDecisionClient(
-            endpoint = "https://openrouter.ai/api/alpha/decisions",
-            credential = "sk-test",
-            model = ModelSnapshot(providerId = "openrouter", modelId = "typesafe/jev-1.13"),
-            bodyExtras = bodyExtras,
-            httpClient = HttpClient(engine),
+    ): HostedSystemOneDecisionClient = HostedSystemOneDecisionClient(
+        endpoint = "https://openrouter.ai/api/alpha/decisions",
+        credential = "sk-test",
+        model = ModelSnapshot(providerId = "openrouter", modelId = "typesafe/jev-1.13"),
+        bodyExtras = bodyExtras,
+        httpClient = recording(responseBody, status, captured),
+    )
+
+    private fun recording(responseBody: String, status: HttpStatusCode, captured: Captured): HttpClient =
+        HttpClient(
+            MockEngine { call ->
+                captured.body = call.body.toByteArray().decodeToString()
+                captured.authorization = call.headers[HttpHeaders.Authorization]
+                captured.url = call.url.toString()
+                respond(
+                    content = responseBody,
+                    status = status,
+                    headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                )
+            },
         )
+
+    private fun bound(route: DecisionRoute, captured: Captured): HostedSystemOneDecisionClient =
+        HostedSystemOneDecisionClient.of(
+            model = DecisionModels.Jev_1_13,
+            route = route,
+            credential = "sk-test",
+            httpClient = recording(jevResponse, HttpStatusCode.OK, captured),
+        )
+
+    @Test
+    fun `Jev bound over OpenRouter posts the gateway slug and records TypeSafe as the maker`() = runTest {
+        val captured = Captured()
+        val response = bound(DecisionRoutes.jevViaOpenRouter(), captured).decide(request, configuration)
+
+        assertEquals("https://openrouter.ai/api/alpha/decisions", captured.url)
+        assertEquals("Bearer sk-test", captured.authorization)
+        val body = Json.parseToJsonElement(assertNotNull(captured.body)).jsonObject
+        assertEquals("typesafe/jev-1.13", body.getValue("model").jsonPrimitive.content)
+
+        val snapshot = response.judgments.getValue("team").modelSnapshot
+        assertEquals("typesafe", snapshot.providerId)
+        assertEquals("jev-1.13.0", snapshot.modelId)
+        assertEquals("openrouter", snapshot.via)
+        assertEquals("typesafe/jev-1.13-20260917", snapshot.revision)
+    }
+
+    @Test
+    fun `Jev bound direct to TypeSafe posts its model id and records TypeSafe as the maker`() = runTest {
+        val captured = Captured()
+        val response = bound(DecisionRoutes.jevViaTypeSafe(), captured).decide(request, configuration)
+
+        assertEquals("https://api.typesafe.ai/v1/systemone", captured.url)
+        val body = Json.parseToJsonElement(assertNotNull(captured.body)).jsonObject
+        assertEquals("jev-1.13.0", body.getValue("model").jsonPrimitive.content)
+
+        val snapshot = response.judgments.getValue("team").modelSnapshot
+        assertEquals("typesafe", snapshot.providerId)
+        assertEquals("jev-1.13.0", snapshot.modelId)
+        assertEquals("typesafe", snapshot.via)
+    }
+
+    @Test
+    fun `one model reached two ways joins on maker and model id`() = runTest {
+        val viaGateway = bound(DecisionRoutes.jevViaOpenRouter(), Captured()).decide(request, configuration)
+        val direct = bound(DecisionRoutes.jevViaTypeSafe(), Captured()).decide(request, configuration)
+
+        val a = viaGateway.judgments.getValue("refund").modelSnapshot
+        val b = direct.judgments.getValue("refund").modelSnapshot
+        assertEquals(a.providerId to a.modelId, b.providerId to b.modelId)
+    }
+
+    @Test
+    fun `the route wire model id wins over a model in its body extras`() = runTest {
+        val captured = Captured()
+        val route = DecisionRoutes.jevViaTypeSafe().copy(
+            bodyExtras = mapOf("model" to JsonPrimitive("stale"), "tier" to JsonPrimitive("fast")),
+        )
+        bound(route, captured).decide(request, configuration)
+
+        val body = Json.parseToJsonElement(assertNotNull(captured.body)).jsonObject
+        assertEquals("jev-1.13.0", body.getValue("model").jsonPrimitive.content)
+        assertEquals("fast", body.getValue("tier").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `a route with no wire model id sends no model field`() = runTest {
+        val captured = Captured()
+        bound(DecisionRoute(via = "typesafe", endpoint = "https://example.test/decide", wireModelId = null), captured)
+            .decide(request, configuration)
+
+        val body = Json.parseToJsonElement(assertNotNull(captured.body)).jsonObject
+        assertNull(body["model"])
     }
 
     @Test
