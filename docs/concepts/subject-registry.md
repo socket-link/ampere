@@ -41,7 +41,8 @@ where a goal id was expected and compile.
 - `subject/SubjectSeed.kt` — the two seeded rows, run inside `DatabaseSchemaManager.ensure`
 - `agents/domain/event/SubjectEvent.kt` — `SubjectRegistered`, `RelationshipRecorded`
 - `sqldelight/.../db/field/SubjectStore.sq`, `RelationshipStore.sq`, `9.sqm` — schema,
-  migration, seed and backfill
+  migration, seed and backfill. `db/field/GoalStore.sq` sits beside them but belongs to the
+  [Goal branch](goal-branch.md) (`11.sqm`)
 - `api/internal/DefaultAgentService.kt` — the first consumer: `team {}` registers,
   `listAll` / `inspect` read
 - `jvmTest/.../subject/`, `api/AgentServiceRegistryTest.kt`,
@@ -75,7 +76,9 @@ where a goal id was expected and compile.
 - **Resolve an event's source** — `registry.resolve(event.eventSource)`.
 - **Resolve a responder** — `registry.resolveResponder(inputProvided.respondedBy)`; `null`
   is the Principal, a name must be a registered Human.
-- **Add a migration after 9** — the belief columns took `10.sqm` (AMPR-417; `KnowledgeStore.holder` holds a Subject id, `system` for the backfill — a plain id, not a foreign key), and the goal branch owns `11.sqm`.
+- **Add a migration after 11** — the belief columns took `10.sqm` (AMPR-417; `KnowledgeStore.holder` holds a Subject id, `system` for the backfill — a plain id, not a foreign key), and the goal branch took `11.sqm` (AMPR-419).
+- **Record a `Mirrors` edge** — through `GoalBranch.mirror`, which checks both ends and then
+  calls `relate`; the edge's event is a `RelationshipRecorded` like any other.
 
 ## Anti-patterns
 

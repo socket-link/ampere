@@ -31,6 +31,8 @@ import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
+import link.socket.ampere.goal.GoalBranch
+import link.socket.ampere.goal.GoalStatus
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.trace.ArcTraceProjection
 import okio.Path.Companion.toPath
@@ -165,7 +167,34 @@ class ArcGoalHandoffTest {
         )
     }
 
-    private fun TestScope.runtime(client: UpstreamLlmClient, maxFlowTicks: Int): AmpereRuntime =
+    /**
+     * AMPR-419: the goal the run met is completed on the Goal branch the tick Flow meets it, and a
+     * goal the run never met stays open there after the run settles.
+     */
+    @Test
+    fun `the Goal branch records which goals a run met`() = runTest {
+        val branch = GoalBranch.over(database, eventApiFactory.create(CompletionManifestSink.DEFAULT_AGENT_ID))
+
+        assertCompleted(
+            runtime(ScriptedUpstreamLlmClient(planStepToolId = null), maxFlowTicks = 3, goalBranch = branch)
+                .execute(goal, runId = "ampr419-met"),
+        )
+        assertCompleted(
+            runtime(ScriptedUpstreamLlmClient(planStepToolId = "no-such-tool"), maxFlowTicks = 1, goalBranch = branch)
+                .execute(goal, runId = "ampr419-unmet"),
+        )
+
+        val met = branch.records("ampr419-met").getOrThrow()
+        assertEquals(listOf(goal), met.map { it.goal.description })
+        assertEquals(listOf(GoalStatus.COMPLETED), met.map { it.status })
+        assertEquals(listOf(GoalStatus.OPEN), branch.records("ampr419-unmet").getOrThrow().map { it.status })
+    }
+
+    private fun TestScope.runtime(
+        client: UpstreamLlmClient,
+        maxFlowTicks: Int,
+        goalBranch: GoalBranch? = null,
+    ): AmpereRuntime =
         AmpereRuntime(
             arcConfig = ArcConfig(
                 name = "goal-handoff-arc",
@@ -176,6 +205,7 @@ class ArcGoalHandoffTest {
             maxFlowTicks = maxFlowTicks,
             upstreamLlmClient = client,
             eventApiFactory = { agentId -> eventApiFactory.create(agentId) },
+            goalBranch = goalBranch,
         )
 
     private fun assertCompleted(outcome: ArcOutcome): ArcOutcome.Completed {

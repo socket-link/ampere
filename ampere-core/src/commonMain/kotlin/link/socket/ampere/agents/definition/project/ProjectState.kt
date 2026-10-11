@@ -9,6 +9,7 @@ import link.socket.ampere.agents.domain.reasoning.perception
 import link.socket.ampere.agents.domain.reasoning.perceptionText
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.goal.GoalRecord
 
 /**
  * State for Project Manager agent responsible for goal decomposition,
@@ -27,6 +28,11 @@ data class ProjectState(
     /** Current plan for task execution */
     val plan: Plan,
     /** Active goals being decomposed or monitored */
+    @Deprecated(
+        message = "String-typed goals are retired (AMPR-419, F8). The agent's goals live on the " +
+            "Goal branch: read them with GoalBranch.open() and pass them to toPerceptionText(goals). " +
+            "Nothing reads this field; it stays one release so stored states still decode.",
+    )
     val activeGoals: List<Goal> = emptyList(),
     /** Current work breakdown structures */
     val workBreakdowns: List<WorkBreakdown> = emptyList(),
@@ -57,17 +63,21 @@ data class ProjectState(
      *
      * Highlights active goals, work breakdowns, assignments, and blockers to
      * enable the PM agent to make informed coordination decisions.
+     *
+     * @param goals The agent's goals as the Goal branch holds them (AMPR-419) — typically
+     *   `GoalBranch.open()`. The string-typed [activeGoals] is not read: a goal's weight is
+     *   derived, never stored (F28), so no priority is rendered either.
      */
-    fun toPerceptionText(): String = perceptionText {
+    fun toPerceptionText(goals: List<GoalRecord> = emptyList()): String = perceptionText {
         header("Project Manager - State Perception")
         timestamp()
 
-        // Active goals
-        sectionIf(activeGoals.isNotEmpty(), "ACTIVE GOALS") {
-            activeGoals.forEach { goal ->
-                line("Goal: ${goal.description}")
-                field("Status", goal.status)
-                field("Priority", goal.priority)
+        // Active goals, from the Goal branch
+        sectionIf(goals.isNotEmpty(), "ACTIVE GOALS") {
+            goals.forEach { record ->
+                line("Goal: ${record.goal.description}")
+                field("Status", record.status.name)
+                record.goal.parent?.let { parent -> field("Part of", parent.value) }
                 line("")
             }
         }
@@ -115,7 +125,6 @@ data class ProjectState(
                 outcome = Outcome.blank,
                 task = Task.Blank,
                 plan = Plan.blank,
-                activeGoals = emptyList(),
                 workBreakdowns = emptyList(),
                 taskAssignments = emptyMap(),
                 createdIssues = emptyList(),
@@ -127,7 +136,16 @@ data class ProjectState(
 
 /**
  * Represents a high-level goal to be decomposed.
+ *
+ * String-typed throughout (recon C28): a priority with no scale and a status with no states. The
+ * agent's goals are the Field's Goal branch now — `link.socket.ampere.field.Goal`, persisted as a
+ * `GoalRecord` by `GoalBranch` (AMPR-419, F8).
  */
+@Deprecated(
+    message = "String-typed goals are retired (AMPR-419, F8). Use the Goal branch: " +
+        "link.socket.ampere.goal.GoalRecord, read through GoalBranch.",
+    replaceWith = ReplaceWith("GoalRecord", "link.socket.ampere.goal.GoalRecord"),
+)
 @Serializable
 data class Goal(
     val id: String,

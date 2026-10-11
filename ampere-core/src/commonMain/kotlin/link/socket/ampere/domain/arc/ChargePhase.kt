@@ -1,5 +1,6 @@
 package link.socket.ampere.domain.arc
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.Agent
@@ -19,8 +20,11 @@ import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.utils.ConsoleEventLogger
+import link.socket.ampere.agents.events.utils.EventLogger
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
+import link.socket.ampere.goal.GoalBranch
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.trace.ArcRunId
@@ -82,6 +86,14 @@ data class GoalNode(
  *   cancellation path, which is the orphaned-coroutine hole this parameter exists to close.
  * @param clock The Arc's clock (AMPR-335). Charge reads no time today; it takes the clock so
  *   any time it comes to read is the run's time rather than wall-clock.
+ * @param goalBranch Where the goal tree Charge builds is persisted (AMPR-419, F8). With it and a
+ *   [runId], the tree goes onto the Field's Goal branch — one `GoalFormed` per node through the
+ *   branch's door, then the row — and the tree Charge returns is the one read back from the
+ *   store. A run whose tree is already on the branch gets that tree back rather than a second
+ *   one. Null keeps the tree in memory only, as before.
+ * @param logger Where a goal tree that could not be persisted is reported. Persistence never
+ *   fails the run: the in-memory tree still drives Flow, and the failure is logged here — the
+ *   door has already logged and announced a refused event.
  */
 class ChargePhase(
     private val arcConfig: ArcConfig,
@@ -112,6 +124,8 @@ class ChargePhase(
     private val outcomeRepository: OutcomeMemoryRepository? = null,
     @Suppress("unused")
     private val clock: Clock = Clock.System,
+    private val goalBranch: GoalBranch? = null,
+    private val logger: EventLogger = ConsoleEventLogger(),
 ) {
     suspend fun execute(userGoal: String): ChargeResult {
         require(userGoal.isNotBlank()) { "ChargePhase requires a non-empty user goal." }
@@ -121,10 +135,11 @@ class ChargePhase(
             "ChargePhase produced invalid project context. Sources=${projectContext.sources.map { it.path }}"
         }
 
-        val goalTree = GoalTreeBuilder().build(userGoal)
-        require(isValidGoalTree(goalTree)) {
+        val builtTree = GoalTreeBuilder().build(userGoal)
+        require(isValidGoalTree(builtTree)) {
             "ChargePhase produced invalid goal tree for goal: $userGoal"
         }
+        val goalTree = persistGoalTree(builtTree)
 
         val agents = ArcAgentSpawner(
             agentFactory = SparkAgentFactory(
@@ -148,6 +163,25 @@ class ChargePhase(
             goalTree = goalTree,
             agents = agents,
         )
+    }
+
+    /**
+     * Put [tree] on the Goal branch under this run and return what the branch holds (AMPR-419).
+     * Falls back to [tree] itself when there is no branch, no run to key it by, or the write
+     * failed — see the `goalBranch` parameter.
+     */
+    private suspend fun persistGoalTree(tree: GoalTree): GoalTree {
+        val branch = goalBranch ?: return tree
+        val run = runId ?: return tree
+        return branch.form(tree, run).getOrElse { failure ->
+            if (failure is CancellationException) throw failure
+            logger.logError(
+                message = "Goal tree for Arc run $run was not persisted to the Goal branch; " +
+                    "the run continues on the in-memory tree",
+                throwable = failure,
+            )
+            tree
+        }
     }
 
     fun isValidContext(projectContext: ProjectContext): Boolean = projectContext.sources.isNotEmpty() &&

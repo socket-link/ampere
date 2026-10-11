@@ -16,6 +16,7 @@ import link.socket.ampere.agents.domain.event.EventStoreEvent
 import link.socket.ampere.agents.domain.event.EventType
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
+import link.socket.ampere.agents.domain.event.GoalEvent
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.event.LinkEvent
 import link.socket.ampere.agents.domain.event.MeetingEvent
@@ -271,6 +272,10 @@ class SignificanceAwareEventLogger(
         // The Subject registry grew (AMPR-416): a new holder the fold can resolve. Routine, like
         // a Link resolving - the registration is the record, not a decision anyone must see.
         is SubjectEvent -> EventSignificance.ROUTINE
+
+        // The Goal branch grew or moved (AMPR-419): the run's own goals on the record. Routine -
+        // the goal tree is what the run already shows; the row is its durable form.
+        is GoalEvent -> EventSignificance.ROUTINE
     }
 
     private fun formatUrgency(urgency: Urgency): String = when (urgency) {

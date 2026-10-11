@@ -47,6 +47,7 @@ import link.socket.ampere.db.fts.FtsSchema
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.arc.CompletionManifestSink
 import link.socket.ampere.domain.llm.LlmProvider
+import link.socket.ampere.goal.GoalBranch
 
 /**
  * Context that provides dependencies for CLI commands.
@@ -208,6 +209,18 @@ class AmpereContext(
         CompletionManifestSink(
             eventApi = environmentService.createEventApi(CompletionManifestSink.DEFAULT_AGENT_ID),
             logger = logger,
+        )
+    }
+
+    /**
+     * The Field's Goal branch (AMPR-419): where every Arc run this CLI starts persists its goal
+     * tree, under the run's id. Announced through the same runtime door as the completion
+     * manifest, so the run's goals are attributed to the runtime that decomposed them.
+     */
+    val goalBranch: GoalBranch by lazy {
+        GoalBranch.over(
+            database = database,
+            eventApi = environmentService.createEventApi(CompletionManifestSink.DEFAULT_AGENT_ID),
         )
     }
 
