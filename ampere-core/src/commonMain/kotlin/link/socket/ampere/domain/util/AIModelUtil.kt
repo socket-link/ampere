@@ -4,6 +4,7 @@ import ai.koog.prompt.executor.clients.google.GoogleModels
 import ai.koog.prompt.executor.clients.openai.OpenAIModels
 import ai.koog.prompt.llm.LLModel
 import com.aallam.openai.api.model.ModelId as ClientModelId
+import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModel
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
@@ -12,6 +13,10 @@ import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
 fun AIModel.toClientModelId(): ClientModelId =
     ClientModelId(name)
+
+/** The id to send for this configuration's model, which a routed configuration takes from its route (AMPR-434). */
+fun AIConfiguration.toClientModelId(): ClientModelId =
+    ClientModelId(wireModelId)
 
 fun AIModel.toKoogLLMModel(): LLModel? = when (this) {
     is AIModel_OpenAI -> when (this) {

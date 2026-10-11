@@ -14,6 +14,7 @@ import link.socket.ampere.domain.ai.provider.AIProvider
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.domain.ai.provider.AIProvider_Google
 import link.socket.ampere.domain.ai.provider.AIProvider_OpenAI
+import link.socket.ampere.domain.ai.provider.AIProvider_OpenRouter
 import link.socket.ampere.dsl.agent.AgentRole
 import link.socket.ampere.dsl.agent.Architect
 import link.socket.ampere.dsl.agent.Engineer
@@ -25,6 +26,7 @@ import link.socket.ampere.dsl.agent.TechnicalWriter
 import link.socket.ampere.dsl.config.AnthropicConfig
 import link.socket.ampere.dsl.config.GeminiConfig
 import link.socket.ampere.dsl.config.OpenAIConfig
+import link.socket.ampere.dsl.config.OpenRouterConfig
 import link.socket.ampere.dsl.config.ProviderConfig
 import link.socket.ampere.dsl.team.AgentTeam
 import link.socket.ampere.dsl.team.TeamMember
@@ -90,6 +92,7 @@ object ConfigConverter {
             "anthropic" -> AnthropicConfig(model = toClaudeModel(config.model))
             "openai" -> OpenAIConfig(model = toOpenAIModel(config.model))
             "gemini" -> GeminiConfig(model = toGeminiModel(config.model))
+            "openrouter" -> OpenRouterConfig(model = toModel(config))
             else -> throw IllegalArgumentException("Unknown provider: ${config.provider}")
         }
 
@@ -99,6 +102,7 @@ object ConfigConverter {
                 is AnthropicConfig -> acc.withBackup(toProviderConfig(backup))
                 is OpenAIConfig -> acc.withBackup(toProviderConfig(backup))
                 is GeminiConfig -> acc.withBackup(toProviderConfig(backup))
+                is OpenRouterConfig -> acc.withBackup(toProviderConfig(backup))
             }
         }
     }
@@ -110,7 +114,7 @@ object ConfigConverter {
     fun toAIConfiguration(config: AIProviderConfig): AIConfiguration {
         val primary = AIConfiguration_Default(
             provider = toProvider(config.provider),
-            model = toModel(config.provider, config.model),
+            model = toModel(config),
         )
 
         return if (config.backups.isEmpty()) {
@@ -211,15 +215,28 @@ object ConfigConverter {
         "anthropic" -> AIProvider_Anthropic
         "openai" -> AIProvider_OpenAI
         "gemini" -> AIProvider_Google
+        "openrouter" -> AIProvider_OpenRouter
         else -> throw IllegalArgumentException("Unknown provider: $provider")
     }
 
-    // Model mapping
-    private fun toModel(provider: String, model: String): AIModel = when (provider.lowercase()) {
+    // Model mapping. A route has no model table of its own: OpenRouter reads `model`
+    // from the table of the maker the config names.
+    private fun toModel(config: AIProviderConfig): AIModel = when (config.provider.lowercase()) {
+        "openrouter" -> toModel(
+            maker = requireNotNull(config.maker) {
+                "Provider 'openrouter' requires a 'maker' field naming whose model table " +
+                    "'model' is read from. Supported: anthropic, openai, gemini"
+            },
+            model = config.model,
+        )
+        else -> toModel(maker = config.provider, model = config.model)
+    }
+
+    private fun toModel(maker: String, model: String): AIModel = when (maker.lowercase()) {
         "anthropic" -> toClaudeModel(model)
         "openai" -> toOpenAIModel(model)
         "gemini" -> toGeminiModel(model)
-        else -> throw IllegalArgumentException("Unknown provider: $provider")
+        else -> throw IllegalArgumentException("Unknown provider: $maker")
     }
 
     private fun toClaudeModel(model: String): AIModel_Claude = when (model.lowercase()) {

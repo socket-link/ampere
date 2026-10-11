@@ -7,6 +7,7 @@ import io.ktor.util.date.Month
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeSpeed
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs
+import link.socket.ampere.domain.ai.provider.ProviderId
 import link.socket.ampere.domain.limits.ModelLimits
 import link.socket.ampere.domain.limits.RateLimits
 import link.socket.ampere.domain.limits.TokenCount
@@ -28,6 +29,10 @@ sealed class AIModel_OnDevice(
     override val features: AIModelFeatures,
     override val limits: ModelLimits,
 ) : AIModel(name, displayName, description, features, limits) {
+
+    /** The on-device provider's id; the model never leaves the device, so maker and route coincide. */
+    override val makerId: ProviderId
+        get() = "apple-on-device"
 
     /**
      * Apple Foundation Models' on-device model (iOS 26+ / Apple Intelligence).

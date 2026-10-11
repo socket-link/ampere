@@ -77,10 +77,7 @@ object ConfigParser {
         }
 
         // Validate model for provider
-        val models = MODELS_BY_PROVIDER[config.ai.provider]
-        if (models != null && config.ai.model !in models) {
-            errors.add("Unknown model '${config.ai.model}' for provider '${config.ai.provider}'. Supported: ${models.joinToString()}")
-        }
+        errors.addAll(validateModel(config.ai))
 
         // Validate team roles
         config.team.forEach { agent ->
@@ -102,6 +99,9 @@ object ConfigParser {
         config.ai.backups.forEachIndexed { index, backup ->
             if (backup.provider !in SUPPORTED_PROVIDERS) {
                 errors.add("Unknown provider '${backup.provider}' in backup[$index]")
+            }
+            if (backup.provider == OPENROUTER) {
+                errors.addAll(validateModel(backup).map { error -> "backup[$index]: $error" })
             }
         }
 
@@ -127,7 +127,36 @@ object ConfigParser {
         return errors
     }
 
-    private val SUPPORTED_PROVIDERS = setOf("anthropic", "openai", "gemini")
+    /**
+     * A model is read from its provider's table, or for `openrouter` — a route, not a
+     * maker — from the table of the `maker` it names.
+     */
+    private fun validateModel(config: AIProviderConfig): List<String> {
+        val makers = MODELS_BY_PROVIDER.keys.joinToString()
+        val table = if (config.provider == OPENROUTER) {
+            val maker = config.maker
+                ?: return listOf("Provider '$OPENROUTER' requires a 'maker' field. Supported: $makers")
+            if (maker !in MODELS_BY_PROVIDER) {
+                return listOf("Unknown maker '$maker' for provider '$OPENROUTER'. Supported: $makers")
+            }
+            maker
+        } else {
+            config.provider
+        }
+        val models = MODELS_BY_PROVIDER[table]
+        return if (models != null && config.model !in models) {
+            listOf(
+                "Unknown model '${config.model}' for provider '${config.provider}'. " +
+                    "Supported: ${models.joinToString()}",
+            )
+        } else {
+            emptyList()
+        }
+    }
+
+    private const val OPENROUTER = "openrouter"
+
+    private val SUPPORTED_PROVIDERS = setOf("anthropic", "openai", "gemini", OPENROUTER)
 
     private val SUPPORTED_ROLES = setOf(
         "product-manager",

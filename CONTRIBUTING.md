@@ -36,11 +36,12 @@ kdoctor will identify any missing dependencies or configuration issues.
 
 AMPERE supports multiple AI providers. You'll need at least one API key:
 
-| Provider  | Get Key                                                              | Required    |
-|-----------|----------------------------------------------------------------------|-------------|
-| Anthropic | [console.anthropic.com](https://console.anthropic.com/settings/keys) | Recommended |
-| Google    | [aistudio.google.com](https://aistudio.google.com/app/apikey)        | Optional    |
-| OpenAI    | [platform.openai.com](https://platform.openai.com/account/api-keys)  | Optional    |
+| Provider   | Get Key                                                              | Required    |
+|------------|----------------------------------------------------------------------|-------------|
+| Anthropic  | [console.anthropic.com](https://console.anthropic.com/settings/keys) | Recommended |
+| Google     | [aistudio.google.com](https://aistudio.google.com/app/apikey)        | Optional    |
+| OpenAI     | [platform.openai.com](https://platform.openai.com/account/api-keys)  | Optional    |
+| OpenRouter | [openrouter.ai](https://openrouter.ai/settings/keys)                 | Optional    |
 
 ### Configuration
 
@@ -50,6 +51,8 @@ Create `local.properties` in the project root (this file is gitignored):
 anthropic_api_key=sk-ant-...
 google_api_key=AI...
 openai_api_key=sk-...
+# Optional: one key that reaches Claude, GPT and Gemini models through OpenRouter
+openrouter_api_key=sk-or-...
 ```
 
 ---

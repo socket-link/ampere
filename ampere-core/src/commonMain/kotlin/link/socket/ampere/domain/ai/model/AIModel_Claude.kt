@@ -8,6 +8,7 @@ import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeSpeed
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs.Companion.TEXT_IMAGE_AND_PDF
+import link.socket.ampere.domain.ai.provider.ProviderId
 import link.socket.ampere.domain.limits.ModelLimits
 import link.socket.ampere.domain.limits.RateLimitsFactory
 import link.socket.ampere.domain.limits.TokenCount
@@ -30,6 +31,9 @@ sealed class AIModel_Claude(
     override val features: AIModelFeatures,
     override val limits: ModelLimits,
 ) : AIModel(name, displayName, description, features, limits) {
+
+    override val makerId: ProviderId
+        get() = "anthropic"
 
     data object Opus_4_5 : AIModel_Claude(
         name = Opus_4_5_NAME,

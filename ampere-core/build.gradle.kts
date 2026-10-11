@@ -354,10 +354,20 @@ val kotlinConfiguration = tasks.register("kotlinConfiguration") {
         load(FileInputStream(File(rootProject.rootDir, "local.properties")))
     }
 
-    val properties = localProperties.entries
-        .filter { (key, _) ->
-            (key as? String)?.contains(".") == false
-        }
+    // Keys the code reads that a local.properties may predate (AMPR-434): generated empty
+    // when absent, so a checkout without one still compiles.
+    val optionalKeys = listOf("openrouter_api_key")
+
+    val properties = (
+        localProperties.entries
+            .filter { (key, _) ->
+                (key as? String)?.contains(".") == false
+            }
+            .map { (key, value) -> "$key" to "$value" } +
+            optionalKeys
+                .filterNot(localProperties::containsKey)
+                .map { key -> key to "" }
+        )
         .joinToString("\n") { (key, value) ->
             "\tconst val $key = \"$value\""
         }

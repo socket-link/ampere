@@ -61,6 +61,22 @@ data class AIConfiguration_WithBackups(
             mainConfiguration.model
         }
 
+    /** The wire id of whichever configuration [model] is currently read from. */
+    override val wireModelId: String
+        get() = if (usedSecondBackupConfiguration) {
+            secondBackupConfigurationProvider?.wireModelId
+                ?: throw IllegalStateException(
+                    "Failed to initialize LLM for ${secondBackupConfigurationProvider?.model?.name}",
+                )
+        } else if (usedBackupConfiguration) {
+            backupConfigurationProvider?.wireModelId
+                ?: throw IllegalStateException(
+                    "Failed to initialize LLM for ${backupConfigurationProvider?.model?.name}",
+                )
+        } else {
+            mainConfiguration.wireModelId
+        }
+
     override fun getAvailableModels(): List<Pair<AIProvider<*, *>, AIModel>> {
         return configurations.flatMap { configuration ->
             configuration.getAvailableModels()
