@@ -5,6 +5,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.event.CognitiveEvent
@@ -219,5 +221,59 @@ class EventSerializationTest {
         assertEquals(original, decoded)
         assertEquals(Urgency.LOW, decoded.urgency)
         assertEquals(null, decoded.band)
+    }
+
+    private fun judgmentRecorded(modelSnapshot: ModelSnapshot) = CognitiveEvent.JudgmentRecorded(
+        eventId = "88888888-8888-8888-8888-888888888888",
+        timestamp = stubTimestamp,
+        eventSource = stubEventSource,
+        agentId = "agent-X",
+        callId = "decide-2",
+        questionId = "refund",
+        questionVersion = "a".repeat(64),
+        questionType = "noul",
+        stateDigest = "b".repeat(64),
+        answer = "true",
+        distribution = mapOf("true" to 0.82, "false" to 0.18),
+        confidence = 0.82,
+        source = ConfidenceSource.MEASURED,
+        modelSnapshot = modelSnapshot,
+        locality = InferenceLocality.CLOUD,
+        latencyMs = 412,
+        usage = TokenUsage(inputTokens = 287, outputTokens = 20, estimatedCost = 0.000012054),
+        causedBy = "action-42",
+        cognitivePhase = CognitivePhase.PLAN,
+    )
+
+    @Test
+    fun `a judgment recorded event round-trips the route its call travelled`() {
+        val original: Event = judgmentRecorded(
+            ModelSnapshot(
+                providerId = "typesafe",
+                modelId = "jev-1.13.0",
+                revision = "typesafe/jev-1.13-20260917",
+                via = "openrouter",
+            ),
+        )
+
+        val decoded = json.decodeFromString(Event.serializer(), json.encodeToString(Event.serializer(), original))
+
+        assertIs<CognitiveEvent.JudgmentRecorded>(decoded)
+        assertEquals(original, decoded)
+        assertEquals("openrouter", decoded.modelSnapshot.via)
+    }
+
+    @Test
+    fun `a judgment recorded event stored before the route existed still decodes`() {
+        val original: Event = judgmentRecorded(ModelSnapshot("typesafe", "jev-1.13.0"))
+        val encoded = json.encodeToJsonElement(Event.serializer(), original).jsonObject
+        val snapshot = encoded.getValue("modelSnapshot").jsonObject
+        val stored = JsonObject(encoded + ("modelSnapshot" to JsonObject(snapshot - "via")))
+
+        val decoded = json.decodeFromJsonElement(Event.serializer(), stored)
+
+        assertIs<CognitiveEvent.JudgmentRecorded>(decoded)
+        assertEquals(original, decoded)
+        assertEquals(null, decoded.modelSnapshot.via)
     }
 }

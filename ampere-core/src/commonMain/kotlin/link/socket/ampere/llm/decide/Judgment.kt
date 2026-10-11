@@ -12,6 +12,12 @@ import link.socket.ampere.api.AmpereStableApi
  * carries. [revision] is the dated or hashed build a hosted provider reports
  * back (Jev answers `typesafe/jev-1.13-20260917` for a request that named
  * `typesafe/jev-1.13`); null when the provider reports none.
+ *
+ * [providerId] names the model's maker, never a gateway: Jev is `typesafe`
+ * whichever route carried the call, so records of one model reached two ways
+ * join. The route is [via] (AMPR-435) — `openrouter` for a gateway, the maker's
+ * own id for the direct route, and null for "direct, or not stated", which is
+ * every record written before the field existed.
  */
 @AmpereStableApi
 @Serializable
@@ -19,6 +25,7 @@ data class ModelSnapshot(
     val providerId: String,
     val modelId: String,
     val revision: String? = null,
+    val via: String? = null,
 )
 
 /**
