@@ -3,8 +3,8 @@ concept: Probe
 status: experimental
 tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/probe/**
-related: [DomainCanon, MemoryProvenance, PropelLoop]
-last_verified: 2026-10-02
+related: [DomainCanon, MemoryProvenance, PropelLoop, HostedRun]
+last_verified: 2026-10-10
 ---
 
 # Probe
@@ -17,9 +17,16 @@ manifest, a recalled fact — that returns a four-valued `Verdict`: `Holds`,
 or `Undetermined` (not decided; carries an `UndeterminedCause`). A
 `ProbeSuite` runs an ordered list over one subject and yields `ProbeReport`s;
 a `ProbeRegistry` lists Probes for discovery (Oscilloscope), not dispatch. A
-suite handed an `EventSerialBus` also publishes one
+suite handed an `AgentEventApi` also publishes one
 `ProbeEvent.VerdictReached` per report, so the verdict is legible in the trace
-and not only to whoever called `evaluate`.
+and not only to whoever called `evaluate`. Since AMPR-393 it also takes a
+`runId`, stamped on each verdict's envelope: `VerdictReached` carries no run in
+its payload, so the envelope is the only place a verdict can say which run
+reached it, and a verdict `ArcTraceProjection.project(runId)` cannot find is a
+verdict outside the record. A roster-hosted run's OBSERVE passes its own and
+builds the suite around the verifier seat's door, so a verdict is attributed to
+the seat that convicted (see [HostedRun](hosted-run.md)); null stays right for a
+Bench fixture or a unit test.
 
 `SequenceProbe : Probe<CanonWorkGraph>`, `FreshnessProbe : Probe<Observed>` and
 `SafetyProbe : Probe<WorkPlanSubject>` are the shipped Probes. `Observed` is

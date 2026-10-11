@@ -12,11 +12,21 @@ This document explains how agents in Ampere autonomously work through tasks usin
 
 ## The Core Loop
 
-Agents in Ampere follow a continuous cycle. Two drivers implement it, and
-neither runs all six phases: `AutonomousAgent.runtimeLoop` brackets
-Perceive → Plan → Execute → Learn (Recall runs between them, unbracketed), and
-the Arc path's `FlowPhase` tick runs Perceive → Recall → Plan → Execute. The
-phases marked below are the gaps.
+Agents in Ampere follow a continuous cycle. Three drivers implement it, and
+only one runs all six phases:
+
+- **A hosted run** — `RunHost.open(roster, seats, goal, tools, policy)` in
+  `propel/`, the consumer-facing entry (AMPR-393). The roster's host seat runs
+  Perceive → Recall → Observe → Plan, the consumer may hold the plan at a
+  `PlanGate`, each step runs on the seat it was assigned to, and `close()` is
+  Learn. All six phases bracketed, every event through the seat's own door under
+  one run id. See [HostedRun](concepts/hosted-run.md).
+- **`AutonomousAgent.runtimeLoop`** — brackets Perceive → Plan → Execute → Learn
+  (Recall runs between them, unbracketed).
+- **The Arc path's `FlowPhase` tick** — runs Perceive → Recall → Plan → Execute
+  and brackets nothing.
+
+The phases marked below as gaps are the gaps on the second and third drivers.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -116,7 +126,11 @@ forces `enabled`, `publishBrackets`, and `injectPhaseSparks` on for every agent 
 the process, whatever the config says. Use it to inspect phase behaviour in a local
 run; configure `cognitiveConfig` for anything a consumer depends on.
 
-One gap left: an Arc run has no seam for this. `ChargePhase` builds the run's
+A hosted run needs none of this: `RunHost` builds each seat with
+`phaseSparks.enabled = true`, because a run the consumer opened in order to watch
+is the case brackets exist for (AMPR-393).
+
+One gap left: an Arc run has no seam for it. `ChargePhase` builds the run's
 `SparkAgentFactory` itself and passes no `cognitiveConfig`
 (`domain/arc/ChargePhase.kt:130-143`), so a consumer driving the loop through
 `ArcSession` can only reach phase handling with the environment variable. It is

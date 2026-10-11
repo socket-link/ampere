@@ -1,7 +1,3 @@
-// This file declares the deprecated AgentTeam (AMPR-399) and constructs it in its own
-// companion factories, so the warning is suppressed for the whole file.
-@file:Suppress("DEPRECATION")
-
 package link.socket.ampere.dsl.team
 
 import kotlinx.coroutines.CoroutineScope
@@ -19,45 +15,41 @@ import link.socket.ampere.dsl.events.GoalSet
 import link.socket.ampere.dsl.events.Planned
 import link.socket.ampere.dsl.events.TeamEvent
 import link.socket.ampere.dsl.events.TeamEventAdapter
+import link.socket.ampere.roster.PromptRef
+import link.socket.ampere.roster.RoleConfig
+import link.socket.ampere.roster.RoleId
+import link.socket.ampere.roster.RosterConfig
 
 /**
- * A declared team of AI agents. **Nothing in this class runs an agent (AMPR-399).**
+ * A declared team of AI agents: the roles, and a UI's view of them.
  *
- * What it does provide:
- * - the roles you declared, as [TeamMemberStatus] values from [getMembers]
+ * It declares; it does not run. [roster] is what makes the declaration useful — the
+ * [RosterConfig] a hosted run is opened over (AMPR-393, row H13) — and
+ * `AgentService.pursue` is what opens it, building one seat per role and handing the
+ * lot to [RunHost][link.socket.ampere.propel.RunHost]. Nothing on this class
+ * instantiates an agent, builds a spark stack, calls a model or publishes to the
+ * event bus; [pursue] is deprecated for saying otherwise, and emits markers.
+ *
+ * What it provides:
+ * - the roles you declared, as a roster ([roster]) and as [TeamMemberStatus] values
+ *   from [getMembers]
  * - two flags over those roles: team-wide [pause]/[resume] and per-member
  *   [pauseMember]/[resumeMember]
- * - a [Flow] of [TeamEvent] markers this class emits about itself
+ * - a [Flow] of [TeamEvent] markers this class emits about itself. A view for a UI,
+ *   not the record: the durable record of a run is the `Event` stream on the bus,
+ *   which a hosted run's seats publish through their own doors.
  *
- * What it does not provide, despite the names: no agent is instantiated from a member, no
- * spark stack is built, no model is called, no task is scheduled, and nothing is published
- * to the event bus. [pursue] emits a marker per declared member plus two of its own and
- * returns; its delegation step is a `TODO`. The flags it keeps are therefore a description of what [getMembers] reports, not
- * of any running work.
- *
- * The entry point that does charge PERCEIVE → … → LEARN over a roster is `RunHost`
- * (AMPR-393); this class is re-pointed at it when that ships. Until then the paths that run
- * agents are the CLI (`ampere --goal`, `ampere --issues`) and `AmpereRuntime`.
- *
- * Example of what is observable today:
  * ```kotlin
- * val team = AgentTeam.create {
+ * val team = ampere.agents.team {
  *     agent(ProductManager) { personality { directness = 0.8 } }
  *     agent(Engineer) { personality { creativity = 0.7 } }
  *     agent(QATester)
  * }
  *
- * team.pursue("Build a user authentication system")
- *
- * // GoalSet, then one AgentInitialized per member, then one Planned marker. No more.
- * team.events.collect { event -> println(event) }
+ * // The run: PERCEIVE → … → LEARN over the roles above.
+ * val runId = ampere.agents.pursue("Build a user authentication system").getOrThrow()
  * ```
  */
-@Deprecated(
-    message = "AgentTeam declares a team that does not run: no agent is constructed from a " +
-        "member and pursue only emits UI markers (AMPR-399). Run agents through the CLI or " +
-        "AmpereRuntime; this class is re-pointed at RunHost when AMPR-393 ships.",
-)
 class AgentTeam private constructor(
     private val config: AgentTeamConfig,
     private val scope: CoroutineScope,
@@ -105,6 +97,11 @@ class AgentTeam private constructor(
      *
      * @param goal High-level description of what to accomplish
      */
+    @Deprecated(
+        message = "AgentTeam.pursue emits UI markers and starts no work. The run that does " +
+            "is AgentService.pursue, which opens a hosted run over roster() (AMPR-393).",
+        replaceWith = ReplaceWith("ampere.agents.pursue(goal)"),
+    )
     fun pursue(goal: String) {
         require(!isRunning) { "Team is already pursuing a goal. Call stop() first." }
         isRunning = true
@@ -186,6 +183,45 @@ class AgentTeam private constructor(
     }
 
     /**
+     * This team's declared roles as a [RosterConfig] — the roster a hosted run is
+     * opened over (AMPR-393, row H13).
+     *
+     * What re-points this class at `RunHost`: the DSL stays the place a consumer
+     * *declares* a team, and the run is what happens to it.
+     * `AgentService.pursue` builds one seat per role of this roster and hands the
+     * lot to [RunHost][link.socket.ampere.propel.RunHost].
+     *
+     * The host is the member holding [Capability.DELEGATION], else the first one —
+     * the same choice [pursue] makes when it decides who to attribute its `Planned`
+     * marker to, because it is the same question. No verifier: a DSL member declares
+     * capabilities, not Probes, so there is no seat to convict.
+     *
+     * Each role declares no tools. A role's tools are ids the consumer wires
+     * (`RoleConfig.tools`), and this DSL has no vocabulary for them, so a run over
+     * this roster plans and reasons and dispatches nothing — which is what the
+     * declaration actually says. Author a [RosterConfig] directly to give a seat
+     * tools.
+     *
+     * @throws IllegalStateException when the team declared no members; a roster needs
+     *   a host, and there is nobody to be one.
+     */
+    fun roster(): RosterConfig {
+        val members = config.members
+        check(members.isNotEmpty()) { "an empty team has no host, so there is no roster to run" }
+        val host = members.find { Capability.DELEGATION in it.role.capabilities } ?: members.first()
+        return RosterConfig(
+            host = RoleId(host.role.name),
+            roles = members.map { member ->
+                RoleConfig(
+                    id = RoleId(member.role.name),
+                    title = member.role.name,
+                    instructions = PromptRef(id = "dsl-team/${member.role.name}", version = 1),
+                )
+            },
+        )
+    }
+
+    /**
      * Get the current team members and their status.
      */
     fun getMembers(): List<TeamMemberStatus> {
@@ -232,12 +268,12 @@ class AgentTeam private constructor(
                 ),
             )
 
-            // TODO(AMPR-393): delegate to a hosted run instead of marking one.
-            // This placeholder is why `AgentTeam` and `AgentService.team`/`pursue` are
-            // deprecated (AMPR-399): a real delegation would construct agents from
-            // config.members, bridge their events through the door, and hand the goal to the
-            // coordinator. `RunHost.open(roster, seats, goal, tools, policy)` is the shape
-            // that does it, over the `roster/` types rather than this DSL.
+            // Still a marker, and now a marker beside the real thing (AMPR-393): the
+            // delegation this stood in for is `AgentService.pursue`, which builds one seat
+            // per role of `roster()` and opens `RunHost.open(roster, seats, goal, tools,
+            // policy)` over them. This method stays because its `TeamEvent` projections are
+            // what a UI subscribed to `events` renders, and those are not events a hosted
+            // run publishes — the run's record is the `Event` stream on the bus.
         }
     }
 

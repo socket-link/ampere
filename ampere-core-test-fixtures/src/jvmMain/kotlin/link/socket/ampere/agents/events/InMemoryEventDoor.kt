@@ -38,7 +38,34 @@ object InMemoryEventDoor {
         val database: Database,
         val driver: JdbcSqliteDriver,
         val bus: EventSerialBus,
+        private val clock: Clock = Clock.System,
     ) : AutoCloseable {
+
+        private val doors = mutableMapOf(api.agentId to api)
+
+        /**
+         * A second door onto *this* store, for [agentId].
+         *
+         * A door's identity is the provenance of everything it publishes, so a test
+         * with several agents needs several doors — and a test that then reads the
+         * trace needs them to be several doors onto one store, which [open] cannot
+         * give it (each call stands up its own database). Pass
+         * `handle::doorFor` where production passes
+         * `EnvironmentService::createEventApi`.
+         *
+         * Doors are cached per id, so asking twice gives the same one, as the
+         * environment's own factory does not — this matters for a test that compares
+         * instances.
+         */
+        fun doorFor(agentId: AgentId): AgentEventApi = doors.getOrPut(agentId) {
+            AgentEventApi(
+                agentId = agentId,
+                eventRepository = repository,
+                eventSerialBus = bus,
+                clock = clock,
+            )
+        }
+
         override fun close() = driver.close()
     }
 
@@ -66,6 +93,6 @@ object InMemoryEventDoor {
             eventSerialBus = bus,
             clock = clock,
         )
-        return Handle(api, repository, database, driver, bus)
+        return Handle(api, repository, database, driver, bus, clock)
     }
 }

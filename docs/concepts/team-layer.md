@@ -7,7 +7,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/standup/**
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/RoomEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/events/messages/MessageChannel.kt
-related: [EventSerialBus, ChiProtocol, Emission, Probe, DomainCanon]
+related: [EventSerialBus, ChiProtocol, Emission, Probe, DomainCanon, HostedRun]
 last_verified: 2026-10-10
 ---
 

@@ -20,8 +20,10 @@ import link.socket.ampere.dsl.agent.QATester
  * create a stub instance, exercise all 7 services including new methods, close.
  * No internal types or implementation details are referenced.
  *
- * `agents.team`, `agents.pursue` and `agents.wake` are deprecated (AMPR-399); the sweep keeps
- * calling them so a consumer still on them keeps a passing contract.
+ * `agents.wake` is the one member still deprecated (AMPR-399; `team` and `pursue` were
+ * re-pointed at `RunHost` by AMPR-393); the sweep keeps calling it so a consumer still on it
+ * keeps a passing contract. `pursue` here is the stub's, which counts ids rather than opening
+ * a run — the stub has no infrastructure to open one on.
  */
 @Suppress("DEPRECATION")
 class ExternalConsumerTest {

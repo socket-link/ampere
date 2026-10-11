@@ -116,6 +116,23 @@ val Task.planStepDescription: String?
     }
 
 /**
+ * The tool this task nominates, or null when it nominates none (AMPR-393).
+ *
+ * The third reader of the two plan-step types, beside [planStepDescription] and
+ * [planStepSeat], and here for the same reason: a `when` written over
+ * `Task.CodeChange` alone would read a `Task.Step`'s nominated tool as "no tool"
+ * and carry the step out as a reasoning step — a silent substitution of thinking
+ * for acting. Null is a real answer, not a missing one: it is what a reasoning
+ * step says (AMPR-407).
+ */
+val Task.planStepToolId: String?
+    get() = when (this) {
+        is Task.CodeChange -> toolId
+        is Task.Step -> toolId
+        else -> null
+    }
+
+/**
  * The seat this task is assigned to, or null when nothing assigned it
  * (AMPR-410). Null for a kind that cannot name a seat, which is the same
  * answer: the plan did not say.

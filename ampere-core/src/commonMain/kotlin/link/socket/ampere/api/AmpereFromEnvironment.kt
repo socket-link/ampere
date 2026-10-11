@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import link.socket.ampere.agents.definition.AgentFactory
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
+import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorSource
 import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
@@ -28,6 +29,9 @@ import link.socket.ampere.llm.BundledUpstreamLlmClient
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.memory.MemoryStore
+import link.socket.ampere.memory.memoryStoreOf
+import link.socket.ampere.propel.RunHost
+import link.socket.ampere.propel.rosterRunHost
 
 /**
  * Create an [AmpereInstance] backed by existing infrastructure.
@@ -73,8 +77,13 @@ import link.socket.ampere.memory.MemoryStore
  *   [MissingUpstreamDecisionClientException][link.socket.ampere.llm.decide.MissingUpstreamDecisionClientException];
  *   nothing falls back to the model-backed adapter.
  * @param agentScope Coroutine scope the instance's [AmpereInstance.agentFactory]
- *   hands to the agents it builds. Defaults to a fresh `Dispatchers.Default`
- *   scope; pass the environment's own scope to share cancellation.
+ *   hands to the agents it builds, and the one a hosted run's seats publish their
+ *   spark events and cognitive snapshots on. **The caller's to own**: nothing here
+ *   cancels it, and a scope that outlives the database those publishes write to is
+ *   how a closed driver gets written to. Defaults to a fresh `Dispatchers.Default`
+ *   scope; pass the environment's own to share cancellation. It is not the scope a
+ *   run executes on — that is whichever scope calls
+ *   [RunHost.open][link.socket.ampere.propel.RunHost.open].
  * @param modelDescriptorSource Catalog source for the default relay's model
  *   registry (AMPR-231). Null keeps the bundled cloud catalog. Has no effect
  *   if a caller constructs agents with their own [AgentFactory] supplying a
@@ -93,7 +102,16 @@ import link.socket.ampere.memory.MemoryStore
  *   Pass `null` to declare that these agents must not act.
  * @param tools Extra tools layered onto every agent the bound factory builds
  *   (AMPR-405), on top of each agent type's own set. Narrowed by the spark stack
- *   like any other tool.
+ *   like any other tool. A hosted run's tools are the ones passed to
+ *   [RunHost.open][link.socket.ampere.propel.RunHost.open] instead: a run declares
+ *   what it may dispatch, per run, rather than inheriting an instance-wide set.
+ * @param cognitiveRelay Capability- and cost-aware routing for the agents this
+ *   instance builds (AMPR-219, row H9). Reaches the bound [AgentFactory], so a
+ *   factory-built agent routes through the relay rather than using its static
+ *   [link.socket.ampere.domain.ai.configuration.AIConfiguration] directly. Null keeps
+ *   the factory's own default relay. A hosted run's seats declare their own on
+ *   [HostedAgent][link.socket.ampere.propel.HostedAgent], because a roster is where
+ *   per-seat routing belongs.
  */
 @AmpereStableApi
 fun Ampere.fromEnvironment(
@@ -108,15 +126,38 @@ fun Ampere.fromEnvironment(
     upstreamDecisionClient: UpstreamDecisionClient? = null,
     executor: Executor? = FunctionExecutor.create(),
     tools: Set<Tool<*>> = emptySet(),
+    cognitiveRelay: CognitiveRelay? = null,
 ): AmpereInstance {
     val sdkEventApi = environmentService.createEventApi("sdk-cli")
 
     val effectiveKnowledgeRepository = memoryStore?.knowledge ?: knowledgeRepository
     val effectiveOutcomeRepository = memoryStore?.outcomes ?: environmentService.outcomeMemoryRepository
 
+    // AMPR-393: the hosted run. Its seats get their own doors off the same environment,
+    // so a seat's events are attributed to the seat and not to the SDK's own door, and
+    // they dispatch through the same executor the bound factory's agents do.
+    val runHost: RunHost = rosterRunHost(
+        createEventApi = environmentService::createEventApi,
+        agentScope = agentScope,
+        executor = executor,
+    )
+
     val agentService = DefaultAgentService(
         agentActionService = AgentActionService(eventApi = sdkEventApi),
-        eventApi = sdkEventApi,
+        runHost = runHost,
+        upstreamLlmClient = upstreamLlmClient,
+        cognitiveRelay = cognitiveRelay,
+        // Not `memoryStore` — the caller's override when there is one, else the same two
+        // repositories this instance's own `knowledge` and `outcomes` services read. A
+        // seat with nowhere to write recalls nothing and stores nothing, and a run that
+        // produced outcomes and no Knowledge has not closed its loop; this path has both
+        // repositories in hand, so there is no reason for a run opened off it to be in
+        // that state because the caller did not pass a store it never needed.
+        memoryStore = memoryStore ?: memoryStoreOf(
+            knowledge = effectiveKnowledgeRepository,
+            outcomes = effectiveOutcomeRepository,
+        ),
+        tools = tools,
     )
 
     val ticketService = DefaultTicketService(
@@ -176,6 +217,12 @@ fun Ampere.fromEnvironment(
         ticketOrchestrator = environmentService.ticketOrchestrator,
         workspace = ExecutionWorkspace(baseDirectory = workspace),
         createEventApi = environmentService::createEventApi,
+        // AMPR-393 (row H9): the half of "fromEnvironment can host" that was missing.
+        // `memoryStore` reached this instance's services and not the agents it builds,
+        // so a factory-built agent recalled nothing and stored nothing — it had no
+        // memory at all. It is the same repository `AmpereInstance.knowledge` reads.
+        knowledgeRepository = effectiveKnowledgeRepository,
+        cognitiveRelay = cognitiveRelay,
         upstreamLlmClient = upstreamLlmClient,
         upstreamDecisionClient = upstreamDecisionClient,
         modelDescriptorSource = modelDescriptorSource,
@@ -203,6 +250,7 @@ fun Ampere.fromEnvironment(
         override val upstreamLlmClient: UpstreamLlmClient? = upstreamLlmClient
         override val upstreamDecisionClient: UpstreamDecisionClient? = upstreamDecisionClient
         override val agentFactory: AgentFactory = boundAgentFactory
+        override val runs: RunHost = runHost
         override fun close() {
             // No-op: caller owns the lifecycle of shared resources
         }

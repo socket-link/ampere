@@ -2,6 +2,7 @@ package link.socket.ampere.probe
 
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.ProbeEvent
 import link.socket.ampere.agents.events.api.AgentEventApi
@@ -30,6 +31,17 @@ class ProbeSuite<in S>(
     private val eventSource: EventSource = EventSource.Agent(DEFAULT_SOURCE_ID),
     private val now: () -> Instant = { Clock.System.now() },
     private val idGenerator: () -> String = { generateUUID() },
+    /**
+     * The run these verdicts belong to, stamped on each one's envelope (F4).
+     *
+     * `VerdictReached` carries no run in its payload, so the envelope is the only
+     * place a verdict can say which run reached it — and a verdict
+     * `ArcTraceProjection.project(runId)` cannot find is a verdict that happened
+     * outside the record. A hosted run's OBSERVE passes its own (AMPR-393); null is
+     * a suite evaluated outside any run, which is what a Bench fixture or a unit
+     * test is.
+     */
+    private val runId: RunId? = null,
 ) {
 
     suspend fun evaluate(subjectId: String, subject: S): List<ProbeReport> {
@@ -55,6 +67,7 @@ class ProbeSuite<in S>(
                         subjectId = report.subjectId,
                         verdict = report.verdict,
                     ),
+                    runId = runId,
                 )
             }
         }

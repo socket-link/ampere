@@ -1,8 +1,3 @@
-// The deprecated AgentTeam surface (AMPR-399) is named throughout this file — in the
-// imports, in the deprecated members and in their return types — so the warning is
-// suppressed for the whole file rather than nine times inside it.
-@file:Suppress("DEPRECATION")
-
 package link.socket.ampere.api.service
 
 import link.socket.ampere.agents.definition.AgentId
@@ -16,22 +11,26 @@ import link.socket.ampere.dsl.team.AgentTeamBuilder
  *
  * Maps to CLI commands: `run --goal`, `agent wake`, `status` (agent portion)
  *
- * ### The team-and-goal surface does not run work (AMPR-399)
+ * ### The team-and-goal surface runs a hosted run (AMPR-393, row H13)
  *
- * [team], [pursue] and [wake] are deprecated because none of them starts a run. The
- * roster [team] builds is a DSL value that no agent is constructed from; [pursue] and
- * [wake] publish one `TaskCreated` each and nothing in AMPERE opens a run from a task
- * event. Each method's own KDoc states exactly what it does today.
+ * [team] declares the roster and [pursue] opens a run over it: PERCEIVE → RECALL →
+ * OBSERVE → PLAN → EXECUTE → LEARN on
+ * [AmpereInstance.runs][link.socket.ampere.api.AmpereInstance.runs], every event
+ * through its seats' own doors under one run id. Before AMPR-393 neither did anything
+ * — the roster was a DSL value no agent was built from, and `pursue` published one
+ * `TaskCreated` that nothing consumed as work (AMPR-399).
  *
- * What remains truthful on this service is read-only: [inspect] and [listAll] report the
- * roster [team] was given, and [pause] changes what they report. A hosted run — the entry
- * point that will actually charge PERCEIVE → … → LEARN for a goal — arrives with
- * `RunHost` (AMPR-393), and these methods are re-pointed at it then.
- *
- * Until then, the paths that do run agents are the CLI (`ampere --goal`, `ampere --issues`)
- * and `AmpereRuntime`.
+ * [inspect] and [listAll] report the seats of the runs this instance has open, and
+ * fall back to the declared roster when it has none. [wake] is still deprecated:
+ * a run is opened for a goal, so there is no "wake this agent" to re-point it at.
  *
  * ```
+ * ampere.agents.team {
+ *     agent(ProductManager)
+ *     agent(Engineer)
+ * }
+ * val runId = ampere.agents.pursue("Add retry logic to payment auth").getOrThrow()
+ *
  * val agents = ampere.agents.listAll()
  * agents.forEach { println("${it.role}: ${it.state}") }
  * ```
@@ -40,14 +39,18 @@ import link.socket.ampere.dsl.team.AgentTeamBuilder
 interface AgentService {
 
     /**
-     * Create an agent team using the builder DSL.
+     * Declare the roster [pursue] runs over, using the builder DSL.
      *
-     * **This does nothing beyond building a value.** [AgentTeam] is a DSL projection: it
-     * holds the roles you declared and a replay buffer of UI markers. No agent is
-     * instantiated from it, no spark stack is built, nothing is scheduled, and
-     * [AgentTeam.pursue] ends in a `TODO` rather than delegating to anything. The only
-     * observable effect of calling this method is that [inspect], [listAll] and [pause]
-     * start reporting the roles you declared.
+     * Declaring is all it does — no agent is built here, and no model is called. The
+     * roles become a [link.socket.ampere.roster.RosterConfig]
+     * ([AgentTeam.roster]) whose host is the member holding
+     * `Capability.DELEGATION`, or the first one; [pursue] builds one seat per role
+     * and opens a run over them.
+     *
+     * A DSL role declares capabilities, not tool ids, so a run over this roster plans
+     * and reasons and dispatches no tool. Author a `RosterConfig` and open the run
+     * through [link.socket.ampere.api.AmpereInstance.runs] directly to give seats
+     * tools.
      *
      * ```
      * ampere.agents.team {
@@ -57,49 +60,46 @@ interface AgentService {
      * }
      * ```
      */
-    @Deprecated(
-        message = "team {} builds a roster that nothing runs: no agent is constructed from " +
-            "it and AgentTeam.pursue only emits UI markers. Run agents through the CLI or " +
-            "AmpereRuntime; this method is re-pointed at RunHost when AMPR-393 ships.",
-    )
     fun team(configure: AgentTeamBuilder.() -> Unit): AgentTeam
 
     /**
-     * Give the current team a goal to pursue.
+     * Give the current team a goal to pursue: one hosted run, start to finish.
      *
-     * **This starts no work.** It publishes one `Event.TaskCreated` with
-     * `assignedTo = null` through the event door and returns that task's id. No agent
-     * perceives, plans or executes as a result: since AMPR-404 the event does reach any
-     * agent registered through `EnvironmentService.routeEventsToAgent` as a
-     * `NotificationEvent.ToAgent`, but nothing in AMPERE turns such a notification into a
-     * run. The returned id names a task that stays `Pending` forever, and
-     * [EventService.observe] shows the `TaskCreated` and nothing after it.
+     * Opens a run over [AgentTeam.roster] through
+     * [AmpereInstance.runs][link.socket.ampere.api.AmpereInstance.runs], executes it
+     * and closes it — so it suspends for the whole run, which is as long as the
+     * model calls take, and the run id it returns names a run whose every phase is on
+     * the record. This is AMPR-393's re-point: before it, the call published one
+     * `TaskCreated(assignedTo = null)` that nothing consumed as work (AMPR-399).
      *
-     * The id is still a real event id, so a consumer that drives its own agents off the
-     * bus can use this as a publish helper — knowing that is all it is.
+     * The run uses the default [link.socket.ampere.propel.RunPolicy]: one cycle, a
+     * LEARN that bills nothing, and no plan gate. A consumer that wants a gate,
+     * several cycles, or tools goes through
+     * [AmpereInstance.runs][link.socket.ampere.api.AmpereInstance.runs] instead —
+     * this method is the one-line path, not the configurable one.
      *
      * ```
-     * val goalId = ampere.agents.pursue("Add retry logic to payment auth").getOrThrow()
+     * val runId = ampere.agents.pursue("Add retry logic to payment auth").getOrThrow()
+     * ampere.events.query(...)   // every phase of runId
      * ```
      *
      * @param goal High-level description of what to accomplish
-     * @return Result containing the id of the published task
+     * @return the run id, or a failure when no team has been declared, when this
+     *   instance has no host, or when it carries no `UpstreamLlmClient` — a seat with
+     *   no transport cannot make the call PERCEIVE is, and a transport is opted into
+     *   rather than inherited (AMPR-236)
      */
-    @Deprecated(
-        message = "pursue starts no work: it publishes one TaskCreated(assignedTo = null) " +
-            "that nothing consumes as work. Drive a goal through the CLI or AmpereRuntime; " +
-            "this method is re-pointed at RunHost when AMPR-393 ships.",
-    )
     suspend fun pursue(goal: String): Result<String>
 
     /**
      * Wake a dormant agent, making it available for work.
      *
-     * **This wakes nothing.** Like [pursue], it publishes one `Event.TaskCreated` — this
-     * one carrying `assignedTo = agentId` — and returns success once that event is on the
-     * record. There is no `AgentWakeRequested` event and no agent-side handler that turns
-     * a task event into a perceive-reason-act cycle, so a dormant agent stays dormant and
-     * [inspect] reports the same state after the call as before it.
+     * **This wakes nothing.** It publishes one `Event.TaskCreated` carrying
+     * `assignedTo = agentId` and returns success once that event is on the record. There
+     * is no `AgentWakeRequested` event and no agent-side handler that turns a task event
+     * into a perceive-reason-act cycle, so a dormant agent stays dormant and [inspect]
+     * reports the same state after the call as before it. A seat exists for the length of
+     * a run, so there is nothing dormant for this to wake: [pursue] opens the run.
      *
      * ```
      * ampere.agents.wake("reviewer-agent")
@@ -109,36 +109,40 @@ interface AgentService {
      */
     @Deprecated(
         message = "wake wakes nothing: it publishes one TaskCreated for the agent and no " +
-            "handler turns that into a cycle. This method is re-pointed at RunHost when " +
-            "AMPR-393 ships.",
+            "handler turns that into a cycle. A RunHost seat exists for the length of a " +
+            "run, so there is nothing dormant to wake: use pursue, or AmpereInstance.runs " +
+            "(AMPR-393).",
+        replaceWith = ReplaceWith("pursue(goal)"),
     )
     suspend fun wake(agentId: AgentId): Result<Unit>
 
     /**
      * Get the current state of a specific agent.
      *
-     * Reads the roster given to [team], so it fails until a team has been configured and
-     * `currentTask` is always `null`: nothing on this service runs a task. `RunHost`
-     * (AMPR-393) makes this read the seats of open runs instead.
+     * Reads the seats of the runs this instance has open, and falls back to the roster
+     * given to [team] when it has none. A seat reports `Active` with the run's goal as
+     * its `currentTask`; a declared role nobody is filling reports what [team]'s flags
+     * say about it, with no task.
      *
      * ```
      * val agent = ampere.agents.inspect("engineer-agent")
      * println("${agent.role} is ${agent.state}")
      * ```
      *
-     * @param agentId The ID of the agent to inspect
-     * @return [Result.failure] if no team has been configured, or if [agentId] does not
-     *   name a member of the current team
+     * @param agentId The agent id of an open seat, or the role name of a declared
+     *   member
+     * @return [Result.failure] if there is no open run and no team has been configured,
+     *   or if [agentId] names neither an open seat nor a member of the current team
      */
     suspend fun inspect(agentId: AgentId): Result<AgentSnapshot>
 
     /**
      * List all agents and their current states.
      *
-     * Reads the roster given to [team], so it is empty until a team has been configured —
-     * which is why `StatusService.health()` reports `Unhealthy` ("No agents configured")
-     * on a fresh instance. Every snapshot carries `currentTask = null`, as in [inspect].
-     * `RunHost` (AMPR-393) makes this list the seats of open runs instead.
+     * The seats of every run this instance has open, oldest run first; the roster given
+     * to [team] when it has none. Empty until one or the other exists — which is why
+     * `StatusService.health()` reports `Unhealthy` ("No agents configured") on a fresh
+     * instance.
      *
      * ```
      * val agents = ampere.agents.listAll()
@@ -153,11 +157,10 @@ interface AgentService {
      * The paused agent reports [AgentState.Paused] from [inspect] and [listAll] until it
      * is resumed through the team ([AgentTeam.resumeMember]).
      *
-     * What this pauses today is the *report*, not a running agent: nothing on this service
-     * executes, so there is no cycle to interrupt. It is listed here rather than
-     * deprecated because its contract — which agent [inspect] and [listAll] call paused,
-     * and a failure rather than a silent success for an unknown agent — holds as written,
-     * and `RunHost` (AMPR-393) gives it a seat to actually pause.
+     * What this pauses is the *report*, not a run in flight: a hosted run is driven by
+     * the scope that called it, so stopping one is cancelling that scope, not a flag on
+     * this service. Its contract — which agent [inspect] and [listAll] call paused, and
+     * a failure rather than a silent success for an unknown agent — holds as written.
      *
      * ```
      * ampere.agents.pause(Engineer.name)

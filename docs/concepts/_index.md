@@ -22,6 +22,7 @@ How the agent thinks: the loop, the routing, the memory, the differentiation, th
 | [MemoryProvenance](memory-provenance.md) | stable | Episodic (Outcome) and semantic (Knowledge) memory cells. Every cell is timestamped, attributable, and indexed by `run_id` for time-travel. |
 | [SparkSystem](spark-system.md) | stable | Cellular differentiation: Sparks layer onto a single agent class to narrow capability. Sparks can only narrow, never expand. |
 | [DreamCycle](dream-cycle.md) | experimental | Async memory consolidation. Target shape only — no implementation yet. |
+| [HostedRun](hosted-run.md) | experimental | One consumer-opened PROPEL run over a roster: the host seat plans behind a `PlanGate`, each step runs on its seat, `close()` is LEARN. Suspend-only; every event through the seat's own door under the run id. |
 | [CognitionTrace](cognition-trace.md) | stable | Per-`run_id` Arc trace projection: phases, model invocations, memory writes, tool calls, Watt cost, and the completion manifest of a run cut short. The glass-brain read model. |
 | [DecideSeam](decide-seam.md) | experimental | The second call kind: `UpstreamDecisionClient` takes a state plus typed `Question`s (`Noul`, `Choice`, `Score`) and returns `Judgment`s with a measured confidence. Opted into, never inherited; three adapters (hosted System One, model-backed, deterministic); one `JudgmentRecorded` per judgment carrying a digest of the state, never the state; no band on a `SelfReported` value. Shadow only in W1. |
 

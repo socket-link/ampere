@@ -12,6 +12,7 @@ import link.socket.ampere.api.service.TicketService
 import link.socket.ampere.llm.BundledUpstreamLlmClient
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.llm.decide.UpstreamDecisionClient
+import link.socket.ampere.propel.RunHost
 
 /**
  * A running AMPERE instance. Provides access to all SDK subsystems.
@@ -29,8 +30,8 @@ import link.socket.ampere.llm.decide.UpstreamDecisionClient
  * ampere.close()
  * ```
  *
- * `agents.pursue` and `agents.team` are deprecated and start no work (AMPR-399); the hosted
- * run that does is `RunHost` (AMPR-393).
+ * [runs] is the hosted run: one run per goal over a roster of seats, every phase on the
+ * record (AMPR-393). `agents.pursue` opens one over the roster `agents.team {}` declared.
  */
 @AmpereStableApi
 interface AmpereInstance : AutoCloseable {
@@ -58,6 +59,28 @@ interface AmpereInstance : AutoCloseable {
 
     /** System-wide status and health */
     val status: StatusService
+
+    /**
+     * Opens hosted runs: one run per goal, over a roster of seats (AMPR-393).
+     *
+     * The entry into the PROPEL loop. The host seat perceives, recalls, observes and
+     * plans; the consumer may hold the plan at a
+     * [PlanGate][link.socket.ampere.propel.PlanGate]; each step runs on the seat the
+     * plan assigned it to; closing the run learns. Every event carries the run id, so
+     * `ArcTraceProjection.project(runId)` is the whole run.
+     *
+     * ```
+     * val run = ampere.runs!!.open(roster, seats, goal, tools)
+     * try { run.execute() } finally { run.close() }
+     * ```
+     *
+     * `null` on instances that carry no agent-capable environment (the stub); the
+     * [Ampere.fromEnvironment] path always supplies one. The seats it builds dispatch
+     * through that instance's executor, the same way [agentFactory]'s agents do; the
+     * tools are each run's own, declared when it is opened.
+     */
+    val runs: RunHost?
+        get() = null
 
     /**
      * Runtime transport for outbound LLM calls.
