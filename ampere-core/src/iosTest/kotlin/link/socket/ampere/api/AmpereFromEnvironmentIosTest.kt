@@ -33,6 +33,7 @@ import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.memory.memoryStoreOf
+import link.socket.ampere.plug.permission.UserGrants
 import link.socket.ampere.propel.HostedAgent
 import link.socket.ampere.propel.RunPolicy
 import link.socket.ampere.roster.PromptRef
@@ -56,7 +57,8 @@ import link.socket.ampere.roster.RosterConfig
  * to `Any?`, so a Swift caller cannot write one and every type a consumer authors needs a
  * plain-id factory (`RoleConfig.of`, `RosterConfig.of`, `HostedAgent.of`,
  * `RunHost.openSeats`). This test builds a run *only* through those, so a parameter that
- * loses its factory fails here rather than in the consumer's Xcode build.
+ * loses its factory fails here rather than in the consumer's Xcode build. The seat's
+ * consent grants and the caller-chosen run id (AMPR-423) go through the same two calls.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AmpereFromEnvironmentIosTest {
@@ -140,6 +142,7 @@ class AmpereFromEnvironmentIosTest {
             upstreamLlmClient = FixedUpstream(PLAN_JSON),
             charter = "You are the host of this run.",
             memory = store,
+            userGrants = { UserGrants() },
         )
 
         val run = runs.openSeats(
@@ -151,7 +154,9 @@ class AmpereFromEnvironmentIosTest {
                 description = "decide what to do next",
             ),
             policy = RunPolicy(cycles = 1),
+            runId = CALLER_RUN_ID,
         )
+        assertEquals(CALLER_RUN_ID, run.runId, "the run is known by the id its caller chose")
         assertTrue(run.plan.tasks.isNotEmpty(), "the host seat planned on iOS")
 
         val result = run.execute()
@@ -179,6 +184,7 @@ class AmpereFromEnvironmentIosTest {
 
     private companion object {
         const val HOST_ROLE = "planner"
+        const val CALLER_RUN_ID = "ios-caller-run"
 
         /** One reasoning step, as `PlanGenerator` parses it. */
         val PLAN_JSON = """

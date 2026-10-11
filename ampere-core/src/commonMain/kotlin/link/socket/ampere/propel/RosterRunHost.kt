@@ -31,7 +31,8 @@ import link.socket.ampere.roster.SeatTool
  * The shipped [RunHost] (AMPR-385 rows H1, H6, H9).
  *
  * Builds one agent per seat from its [HostedAgent], charges a [RosterHostedRun] over
- * them, and keeps the open runs so [openSeats] can report who is filling what.
+ * them, and keeps the open runs so [openSeats] can report who is filling what and so
+ * no two of them share a run id.
  *
  * Seat construction is the whole of what this class does that the run does not: a
  * seat is a [SparkBasedAgent] with its own event door, its own reasoning unit, its
@@ -47,14 +48,19 @@ internal class RosterRunHost(
 ) : RunHost {
 
     /**
-     * The runs charged and not yet closed.
+     * The runs charged and not yet closed, by run id, oldest first.
      *
-     * An [AtomicReference] over an immutable list rather than a lock: the writes are
-     * two per run and the reads are a status pane's, so the contention that would
+     * An [AtomicReference] over an immutable map rather than a lock: the writes are
+     * three per run and the reads are a status pane's, so the contention that would
      * justify a mutex does not exist, and [openSeats] has to answer without
      * suspending.
+     *
+     * An id is in the map from the moment [register] admits it, with no run against it
+     * until its seats are built. That reservation is what makes the uniqueness check
+     * hold under concurrency (AMPR-385 row H27): two `open` calls naming one id race on
+     * one compare-and-set, and the loser is refused before it builds a seat.
      */
-    private val openRuns = AtomicReference<List<RosterHostedRun>>(emptyList())
+    private val openRuns = AtomicReference<Map<RunId, RosterHostedRun?>>(emptyMap())
 
     override suspend fun open(
         roster: Roster,
@@ -62,29 +68,36 @@ internal class RosterRunHost(
         goal: Task,
         tools: Set<Tool<*>>,
         policy: RunPolicy,
+        runId: RunId?,
     ): HostedRun {
-        validate(roster, seats, policy)
+        validate(roster, seats, policy, runId)
 
-        val runId = generateUUID("hosted-run", roster.host.value)
-        val built = seats.mapValues { (role, descriptor) ->
-            buildSeat(
-                runId = runId,
-                descriptor = descriptor,
-                config = requireNotNull(roster.byId(role)) { "role '${role.value}' is not on the roster" },
-                tools = tools,
+        val id = runId ?: generateUUID("hosted-run", roster.host.value)
+        register(id)
+
+        val run = try {
+            val built = seats.mapValues { (role, descriptor) ->
+                buildSeat(
+                    runId = id,
+                    descriptor = descriptor,
+                    config = requireNotNull(roster.byId(role)) { "role '${role.value}' is not on the roster" },
+                    tools = tools,
+                )
+            }
+            RosterHostedRun(
+                runId = id,
+                roster = roster,
+                seats = built,
+                goal = goal,
+                policy = policy,
+                onClosed = ::forget,
             )
+        } catch (throwable: Throwable) {
+            release(id, holder = null)
+            throw throwable
         }
 
-        val run = RosterHostedRun(
-            runId = runId,
-            roster = roster,
-            seats = built,
-            goal = goal,
-            policy = policy,
-            onClosed = ::forget,
-        )
-
-        register(run)
+        install(run)
         return try {
             // The run is registered before it charges so that a seat's PERCEIVE is
             // already reportable by `openRunSeats()` while the call is still in flight —
@@ -97,20 +110,48 @@ internal class RosterRunHost(
         }
     }
 
-    override fun openRunSeats(): List<OpenSeat> = openRuns.load().flatMap { it.openSeats() }
+    override fun openRunSeats(): List<OpenSeat> =
+        openRuns.load().values.filterNotNull().flatMap { it.openSeats() }
 
-    private fun register(run: RosterHostedRun) {
+    /**
+     * Reserve [runId] for a run about to be built, or refuse it.
+     *
+     * The check is inside the loop, against the same snapshot the compare-and-set
+     * replaces, so an id admitted here was not open at the instant it was admitted. In
+     * memory and per host: it says nothing about ids a closed run used, or ids another
+     * host or another process holds.
+     */
+    private fun register(runId: RunId) {
         while (true) {
             val current = openRuns.load()
-            if (openRuns.compareAndSet(current, current + run)) return
+            require(runId !in current) {
+                "the run id '$runId' names a run this host still has open; a run id is " +
+                    "accepted again once the run holding it has closed"
+            }
+            if (openRuns.compareAndSet(current, current + (runId to null))) return
         }
     }
 
-    private fun forget(run: RosterHostedRun) {
+    /** Put [run] against the id [register] reserved for it, keeping its place in order. */
+    private fun install(run: RosterHostedRun) {
         while (true) {
             val current = openRuns.load()
-            if (run !in current) return
-            if (openRuns.compareAndSet(current, current - run)) return
+            if (openRuns.compareAndSet(current, current + (run.runId to run))) return
+        }
+    }
+
+    private fun forget(run: RosterHostedRun) = release(run.runId, holder = run)
+
+    /**
+     * Drop [runId], but only while [holder] is what holds it — the run itself, or null
+     * for a reservation whose seats never got built. A run that closes late can never
+     * release an id a newer run with the same id has since taken.
+     */
+    private fun release(runId: RunId, holder: RosterHostedRun?) {
+        while (true) {
+            val current = openRuns.load()
+            if (runId !in current || current[runId] !== holder) return
+            if (openRuns.compareAndSet(current, current - runId)) return
         }
     }
 
@@ -125,7 +166,7 @@ internal class RosterRunHost(
      * trace could no longer say which of them did what — and the door's identity is
      * the only provenance a seat has.
      *
-     * The last two are the half-configured decision call (AMPR-421). A run that asks a
+     * The next two are the half-configured decision call (AMPR-421). A run that asks a
      * question on a seat with no decision transport would charge four phases and then
      * throw `MissingUpstreamDecisionClientException`
      * out of the first cycle's `assess` — except that `assess` drops what it catches,
@@ -135,8 +176,19 @@ internal class RosterRunHost(
      * than refused, exactly as its [HostedAgent.probes] are: OBSERVE is one phase of the
      * run, not one per seat, so a question declared on a seat nobody asks is the same
      * kind of unused declaration.
+     *
+     * The last is a blank caller-supplied run id (AMPR-385 row H27). The id is the only
+     * thing that joins the run's events, its task lifecycle and its outcome, and a blank
+     * one joins them to nothing a reader can query by. Whether the id is already *open*
+     * is not checked here but in [register], where the check and the reservation are
+     * one step.
      */
-    private fun validate(roster: Roster, seats: Map<RoleId, HostedAgent>, policy: RunPolicy) {
+    private fun validate(
+        roster: Roster,
+        seats: Map<RoleId, HostedAgent>,
+        policy: RunPolicy,
+        runId: RunId?,
+    ) {
         require(seats.containsKey(roster.host)) {
             "the roster's host '${roster.host.value}' has no seat; filled: " +
                 seats.keys.joinToString { it.value }
@@ -169,6 +221,10 @@ internal class RosterRunHost(
                     "${verifier.questions.keys.joinToString()} and carries no " +
                     "upstreamDecisionClient; a decision transport is opted into, never inherited"
             }
+        }
+        require(runId == null || runId.isNotBlank()) {
+            "a supplied run id is what every event of the run is filed under, so it cannot " +
+                "be blank; pass null to have one minted"
         }
     }
 
@@ -213,6 +269,9 @@ internal class RosterRunHost(
             // AMPR-385 row H21: the seat's decision transport, or null — which is inert
             // until something asks, and is what every seat of a run that asks nothing has.
             _upstreamDecisionClient = descriptor.upstreamDecisionClient,
+            // AMPR-385 row H26: this seat's own consent, or null — which leaves the
+            // engine's provider in place, and that grants nothing. Never another seat's.
+            _userGrantProvider = descriptor.userGrants,
             _observabilityScope = agentScope,
             _cognitiveRelay = descriptor.cognitiveRelay,
             _executor = executor,
