@@ -118,7 +118,7 @@ private class RecordingKnowledgeRepository : KnowledgeRepository {
                 taskType = taskType,
                 complexityLevel = complexityLevel,
                 holder = holder,
-                confidence = confidence?.value,
+                confidence = confidence?.probability,
                 sensitivity = sensitivity,
                 createdByEvent = createdByEvent,
             ),

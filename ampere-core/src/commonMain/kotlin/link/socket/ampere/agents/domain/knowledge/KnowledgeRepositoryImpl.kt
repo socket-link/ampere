@@ -102,7 +102,7 @@ class KnowledgeRepositoryImpl(
                 task_type = taskType,
                 complexity_level = complexityLevel,
                 holder = holder.value,
-                confidence = confidence?.value,
+                confidence = confidence?.probability,
                 sensitivity = sensitivity.name,
                 created_by_event = createdByEvent,
             )
@@ -130,7 +130,7 @@ class KnowledgeRepositoryImpl(
                 complexityLevel = complexityLevel,
                 tags = tags,
                 holder = holder,
-                confidence = confidence?.value,
+                confidence = confidence?.probability,
                 sensitivity = sensitivity,
                 createdByEvent = createdByEvent,
             )

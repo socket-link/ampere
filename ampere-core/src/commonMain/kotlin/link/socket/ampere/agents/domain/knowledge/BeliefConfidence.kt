@@ -19,33 +19,32 @@ import link.socket.ampere.agents.domain.reasoning.ConfidenceSource
  * only, so a reader of the column cannot tell the two apart. Nothing fits a band on it for that
  * reason — bands are fitted on measured judgments, through `BandFitGuard`, never on this column.
  *
- * A sealed *class*, not an interface, on purpose: `ampere-core` is exported to Objective-C, where
- * interface members share one namespace across every protocol. An interface `value: Double` there
- * collides with `kotlinx.coroutines.StateFlow.value`, and the exporter renames `StateFlow`'s —
- * which breaks every Swift caller reading a flow's `value`. Class members are scoped to their own
- * hierarchy.
+ * The number is [probability], never `value`: `ampere-core` is exported to Objective-C, and the
+ * exporter lets two properties share a name only when one is declared in a final class or their
+ * types bridge alike. A `value: Double` here — on an interface *or* this sealed (so non-final)
+ * class — could share a subtype with `kotlinx.coroutines.StateFlow`, whose `value` is an object,
+ * so the exporter renames `StateFlow`'s and every Swift caller reading a flow's `value` breaks.
  */
 sealed class BeliefConfidence {
 
     /** The number written to the column, in `[0, 1]`. */
-    abstract val value: Double
+    abstract val probability: Double
 
-    /** Where [value] came from. */
+    /** Where [probability] came from. */
     abstract val source: ConfidenceSource
 
     /** A level a generative model reported about itself, stored as its F10 mapping. */
     data class SelfReported(val level: Confidence) : BeliefConfidence() {
-        override val value: Double get() = level.asProbability()
+        override val probability: Double get() = level.asProbability()
         override val source: ConfidenceSource get() = ConfidenceSource.SELF_REPORTED
     }
 
     /** A probability a decision model measured, stored as-is. */
-    data class Measured(val probability: Double) : BeliefConfidence() {
+    data class Measured(override val probability: Double) : BeliefConfidence() {
         init {
             require(probability in 0.0..1.0) { "A measured confidence must be in [0, 1], was $probability" }
         }
 
-        override val value: Double get() = probability
         override val source: ConfidenceSource get() = ConfidenceSource.MEASURED
     }
 }
