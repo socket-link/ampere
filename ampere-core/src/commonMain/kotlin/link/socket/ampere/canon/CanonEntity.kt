@@ -2,6 +2,23 @@ package link.socket.ampere.canon
 
 import kotlinx.serialization.Serializable
 
+/*
+ * Package `link.socket.ampere.canon` — the Environment branch of the Field (F7).
+ *
+ * The Field's three branches are Subject, Goal and Environment, and the canon is the third:
+ * every `CanonEntity` here is Environment state — what agents act on and with — and nothing in
+ * `link.socket.ampere.field` re-declares one. `field.Environment` is a marker that points back
+ * here. Two domain models for the same nouns (C42) is the failure this rule exists to prevent.
+ *
+ * An entity enters the Field as an *Observation*: `field.observe.toObservation` maps it to a
+ * `Belief` held by the perceiving Subject, about the entity, with `Provenance.createdBy` set to
+ * [CanonProvenance.perceiveEventId] — the perceive event `plug.spi.recordedPerceive` published
+ * through the one door.
+ *
+ * The canon stays pure: it imports nothing from `agents.domain`, which is why that id is typed
+ * `String` here rather than as the `EventId` alias.
+ */
+
 /**
  * A provenance-carrying instance of a [CanonType].
  *

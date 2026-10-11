@@ -2,6 +2,9 @@ package link.socket.ampere.canon
 
 import kotlin.jvm.JvmInline
 import kotlinx.datetime.Instant
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.link.LinkId
@@ -72,10 +75,24 @@ data class NativePayload(
  * @property nativePayload Null when the adapter could not or would not carry
  *   the native object (large binaries, provider policy). A null payload does
  *   not disable write-back; it forces the adapter to re-fetch before merging.
+ * @property perceiveEventId The `EventId` of the `CanonPerceivedEvent`
+ *   whose perceive produced this entity (F7) — the link from an observed entity
+ *   to the event that observed it, and what an Observation's
+ *   `Provenance.createdBy` is when the entity enters the Field. Typed as
+ *   `String` rather than the `EventId` alias because the alias lives in
+ *   `agents.domain.event`, which canon must not import. Bound once, at
+ *   projection, like [observedAt]; nothing downstream re-stamps it. Null for an
+ *   entity projected outside a recorded perceive, and for every entity recorded
+ *   before the field existed. A null value is never written to the wire, so an
+ *   unstamped entity encodes byte-identically to the pre-F7 shape.
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class CanonProvenance(
     val sourceHandle: SourceHandle,
     override val observedAt: Instant,
     val nativePayload: NativePayload? = null,
+    @SerialName("perceiveEventId")
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val perceiveEventId: String? = null,
 ) : Observed

@@ -131,9 +131,11 @@ data class Goal(
  * What is acted on and with: affordances, resources, artifacts.
  *
  * A marker only. The canon (`link.socket.ampere.canon`) *is* the Environment branch
- * (F7): its 33 provenance-carrying entities enter the Field as Observations through
- * `CanonEntity` and `CanonProvenance : Observed`, and this package re-declares none of
- * them. The marker is an open interface rather than a sealed one for exactly that
- * reason — the implementations live in another package.
+ * (F7), and this package re-declares none of its entities — see the canon's own package
+ * comment on `CanonEntity`. A perceived entity is referred to by a `Ref<Environment>`
+ * built with `field.observe.canonEnvironmentRef`, and enters the Field as an Observation
+ * through `field.observe.toObservation`: a [Belief] whose provenance is the entity's
+ * `CanonProvenance.perceiveEventId`. The marker is an open interface rather than a
+ * sealed one for exactly that reason — the implementations live in another package.
  */
 interface Environment : Primitive

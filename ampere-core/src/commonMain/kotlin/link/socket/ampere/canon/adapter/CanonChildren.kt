@@ -33,7 +33,8 @@ import link.socket.ampere.canon.CanonProvenance
  * work. A child that needs write-back gets it from the adapter that owns its own schema.
  *
  * [CanonProvenance.observedAt] is preserved, because the child was observed at the same moment
- * as its parent. The parent's `etag` is dropped for the same reason as the payload: it is an
+ * as its parent, and [CanonProvenance.perceiveEventId] for the same reason: one perceive observed
+ * both. The parent's `etag` is dropped for the same reason as the payload: it is an
  * optimistic-concurrency token for the parent object, and applying it to a child would let a
  * stale-check pass on the wrong record.
  */

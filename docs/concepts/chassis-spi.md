@@ -5,7 +5,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/plug/spi/**
   - ampere-core-test-fixtures/src/commonMain/kotlin/link/socket/ampere/plug/spi/**
 related: [LinkLayer, DomainCanon, PlugPermissions]
-last_verified: 2026-09-20
+last_verified: 2026-10-11
 ---
 
 # Chassis SPI
@@ -26,6 +26,13 @@ predicate, whether the source `evaluated` it or left it `residual` for the
 caller. `isExact` is derived: a page is over-approximate exactly when it has
 residual predicates, and `applyResidual(evaluator)` is the standard way to
 make it exact.
+
+A Perceive over canon entities can be *recorded* (F7, AMPR-418):
+`source.recordedPerceive(query, eventApi)` mints a perceive event id, runs the
+query under it as `PerceiveQuery.perceiveEventId`, checks every entity came back
+stamped with it, and publishes a `CanonPerceivedEvent` naming the entities
+through the one door before the page reaches the caller. That id is what a
+perceived entity's Observation points at when it enters the Field.
 
 On the Execute side, `execute(command)` is an unconditional write.
 `executeIf(command, precondition)` is a conditional one — compare-and-swap
@@ -71,6 +78,7 @@ loud refusal structural.
 - `plug/spi/WritePrecondition.kt` — `WritePrecondition` (`MatchVersion`) and `WritePreconditionKind`.
 - `plug/spi/ExecuteFailure.kt` — `PreconditionUnsupported` / `PreconditionFailed`, `ExecuteException`, `executeFailure()`.
 - `plug/spi/AssetResolver.kt`, `plug/spi/ConsentEnforcingAssetResolver.kt` — asset resolution and its consent wrapper.
+- `plug/spi/RecordedPerceive.kt` — `recordedPerceive`, `RecordedPerception` (+ `observations(holder)`), `UnstampedPerceiveException` (F7).
 - `canon/table/TableWriteSink.kt` — the AMPR-263 capability-gated `ExecuteSink` for `TABLE`.
 - `ampere-core-test-fixtures/.../plug/spi/PerceiveSourceContract.kt` — inheritable suite + `assertPerceiveContract`: every predicate is evaluated or residual, never dropped.
 - `ampere-core-test-fixtures/.../plug/spi/VersionedInMemoryExecuteSink.kt` — reference sink with real versioned writes.
@@ -91,12 +99,15 @@ loud refusal structural.
 - **The version token is `SourceHandle.etag`.** Receipts carry the post-write version on `handle.etag`; `PreconditionFailed.current` carries the current one. Do not add a parallel version field.
 - **`postWriteState` is native, not canon.** It is a `NativePayload`; projecting it is the adapter's job.
 - **Every `PerceiveQuery`/`ExecuteReceipt` names its `LinkId`.** Consent and provenance are keyed on it.
+- **A canon source stamps `query.perceiveEventId` at projection.** It passes the id to `ReadableCanonAdapter.project`, so children built with `forChild` carry it too. `recordedPerceive` refuses a page with any entity not stamped with its id (`UnstampedPerceiveException`) and publishes nothing — a page the event cannot account for is never recorded as if it could be.
+- **A recorded perceive publishes before it returns.** A door failure drops the page: an entity whose perceive event was never stored would point at nothing. The event carries `CanonId`s and the `LinkId`, never entities.
 
 ## Common operations
 
 - **Implement a source that pushes nothing down** — return `PerceivePage.unfiltered(query, entities, nextCursor, partialFailures)`.
 - **Push a predicate down** — apply it natively and list it in `evaluated`; list every other query predicate in `residual`.
 - **Consume a page** — `page.applyResidual(evaluator)` with a `PredicateEvaluator<T>` that answers `Equals` and `HasNoRelation` for one entity; the framework handles `Not` and the conjunction. An exact page returns as-is without touching the evaluator.
+- **Record a canon perceive** — `source.recordedPerceive(query, eventApi, runId)`; then `perception.page` as any page, and `perception.observations(holder)` for the Field. A source supports it by passing `query.perceiveEventId` to `adapter.project(…, perceiveEventId = …)`.
 - **Prove a new source conformant** — subclass `PerceiveSourceContract<T>` in the source's tests, supplying `source()` and `fixturePredicates()`.
 - **Write conditionally where the provider allows it** —
   ```kotlin
@@ -113,6 +124,7 @@ loud refusal structural.
 
 ## Anti-patterns
 
+- *Stamping `perceiveEventId` onto entities after the page returns* — a top-level `copy` misses every child the projection built with `forChild`. Stamp at projection, through the query.
 - *Reading `page.entities` directly when `isExact` is false* — that is the over-approximation; a blocked or gated item is still in it.
 - *Dropping a predicate the source can't evaluate* — the page then claims exactness it doesn't have. Return it as residual.
 - *Failing `perceive` over an unrecognised predicate* — unknown is residual, not an error; the caller may well know how to evaluate it.

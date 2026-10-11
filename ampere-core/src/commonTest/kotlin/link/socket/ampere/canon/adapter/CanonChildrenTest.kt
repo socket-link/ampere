@@ -41,6 +41,14 @@ class CanonChildrenTest {
     }
 
     @Test
+    fun `a child keeps the parent's perceive event id`() {
+        // One perceive observed both (F7), so a child points at the same event its parent does.
+        val stamped = parent.copy(perceiveEventId = "perceive-1")
+
+        assertEquals("perceive-1", stamped.forChild("event-42:place:self").perceiveEventId)
+    }
+
+    @Test
     fun `a child does not carry the parent's etag`() {
         // An etag is an optimistic-concurrency token for the parent object. Applied to a child it
         // would let a staleness check pass against the wrong record.

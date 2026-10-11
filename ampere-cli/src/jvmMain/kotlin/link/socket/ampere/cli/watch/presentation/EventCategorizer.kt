@@ -4,6 +4,7 @@ import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.ArcRunEvent
 import link.socket.ampere.agents.domain.event.AssetAccessEvent
 import link.socket.ampere.agents.domain.event.BenchEvent
+import link.socket.ampere.agents.domain.event.CanonPerceivedEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.EmissionEvent
@@ -162,6 +163,8 @@ object EventCategorizer {
         is BenchEvent.BenchRunStarted,
         is LinkEvent.LinkResolved,
         is AssetAccessEvent,
+        // A Plug read its Link (F7): the provenance observed entities point at, not news.
+        is CanonPerceivedEvent,
         is BenchEvent.ProbeGraded,
         is BenchEvent.ArcSettled,
         // The Subject registry grew (AMPR-416): a record the fold resolves against, not a

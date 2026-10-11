@@ -178,6 +178,9 @@ object EventRegistry {
         // AssetAccessEvent types
         AssetAccessEvent.EVENT_TYPE,
 
+        // CanonPerceivedEvent types (the Field's Observation entry, F7)
+        CanonPerceivedEvent.EVENT_TYPE,
+
         // AgentSurfaceEvent types
         AgentSurfaceEvent.Requested.EVENT_TYPE,
         AgentSurfaceEvent.Responded.EVENT_TYPE,
