@@ -5,9 +5,11 @@ package link.socket.ampere.bundle
  *
  * The parser is intentionally agnostic about how a bundle is laid out on disk
  * — ZIP archives, on-disk directories, and in-memory test fixtures are all
- * exposed through this interface. Concrete platform-specific implementations
- * (e.g. ZIP-on-JVM) live alongside their platform's source set; commonMain
- * ships only [MapBundleSource] for tests and trusted in-process callers.
+ * exposed through this interface. A factory that needs more than commonMain
+ * offers lives in the narrowest source set that can host it — ZIP reading in
+ * `zipMain`, because okio's `openZip` does not reach Kotlin/JS or Wasm — while
+ * commonMain ships [MapBundleSource] for tests and trusted in-process callers
+ * and `fromDirectory` for every target.
  */
 interface PlugBundleSource {
 

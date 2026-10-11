@@ -216,7 +216,18 @@ kotlin {
                 implementation("io.ktor:ktor-client-mock:3.2.2")
             }
         }
+        // ZIP reading comes from okio's own `zlibMain`, which reaches JVM, Android and every
+        // Native target, but not Kotlin/JS or Wasm. So `PlugBundleSource.fromZipFile` cannot
+        // live in commonMain while this module targets js(IR)/wasmJs, and
+        // `applyDefaultHierarchyTemplate()` has no JVM-and-Apple intersection set to hold it.
+        // These two are that intersection (AMPR-158). Keep the leaves below in sync: a target
+        // that okio's zlibMain reaches but that is missing a `dependsOn` here simply loses
+        // `fromZipFile`, with no error anywhere.
+        val zipMain by creating { dependsOn(commonMain) }
+        val zipTest by creating { dependsOn(commonTest) }
+
         val androidMain by getting {
+            dependsOn(zipMain)
             dependencies {
                 implementation(project(":ampere-compose"))
                 implementation("org.jetbrains.compose.ui:ui-tooling:$composeVersion")
@@ -237,6 +248,7 @@ kotlin {
             }
         }
         val jvmMain by getting {
+            dependsOn(zipMain)
             dependencies {
                 implementation("org.jetbrains.compose.desktop:desktop-jvm:$composeVersion")
 
@@ -247,6 +259,7 @@ kotlin {
             }
         }
         val jvmTest by getting {
+            dependsOn(zipTest)
             dependencies {
                 implementation(kotlin("test"))
                 implementation("io.mockk:mockk:1.13.14")
@@ -254,6 +267,7 @@ kotlin {
             }
         }
         val androidUnitTest by getting {
+            dependsOn(zipTest)
             dependencies {
                 implementation(kotlin("test"))
                 // Robolectric's SQLite has no FTS5 module and cannot load the bundled
@@ -281,11 +295,15 @@ kotlin {
         val iosArm64Main by getting
         val iosSimulatorArm64Main by getting
         val iosMain by getting {
+            dependsOn(zipMain)
             dependencies {
                 implementation(project(":ampere-compose"))
                 implementation("app.cash.sqldelight:native-driver:2.2.1")
                 implementation("io.ktor:ktor-client-darwin:3.2.2")
             }
+        }
+        val iosTest by getting {
+            dependsOn(zipTest)
         }
     }
 

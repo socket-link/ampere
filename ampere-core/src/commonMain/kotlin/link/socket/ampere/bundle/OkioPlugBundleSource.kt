@@ -8,8 +8,8 @@ import okio.Path
  * [PlugBundleSource] backed by an okio [FileSystem].
  *
  * Used by [PlugBundleSource.fromDirectory] (commonMain) and
- * `PlugBundleSource.fromZipFile` (jvmMain — okio's `openZip` is JVM-only
- * in this version).
+ * `PlugBundleSource.fromZipFile` (zipMain — okio's `openZip` reaches JVM,
+ * Android and Native, but not Kotlin/JS or Wasm).
  *
  * Entry keys are normalised to forward-slash paths relative to the bundle
  * root, so a bundle imported as a directory and the same bundle imported as a
