@@ -107,10 +107,15 @@ data class RunResult(
     /** How the run ended. */
     val status: RunStatus,
     /**
-     * How many cycles ran, counting from 1 — the PLAN `open` charged included.
+     * How many PLAN calls the run made, counting from 1 — the one `open` charged
+     * included.
      *
-     * Less than [RunPolicy.cycles] when the planner ran out of steps before the cap
-     * did, which is the normal way a multi-cycle run ends.
+     * Less than [RunPolicy.cycles] when the run ended before the cap: a later cycle's
+     * planner, shown the work done so far, answered with no steps (AMPR-424), or the
+     * [PlanGate] trimmed a plan to nothing. That final PLAN *counts* — it was a model
+     * call the run made, and the cycle it opened is the one that executed nothing — so
+     * a two-cycle run whose second planner said "done" reports `2`, with the first
+     * cycle's steps in [stepOutcomes].
      */
     val cyclesUsed: Int,
     /** Every step of every cycle, oldest first. */

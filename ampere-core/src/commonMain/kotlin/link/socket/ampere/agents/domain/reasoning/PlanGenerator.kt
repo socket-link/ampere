@@ -11,12 +11,14 @@ import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.expectation.Expectations
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
+import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.domain.task.ExecutionAssignment
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.execution.ToolArgumentSchema
+import link.socket.ampere.agents.execution.completedWorkSection
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.llm.MissingUpstreamLlmClientException
@@ -37,6 +39,13 @@ import link.socket.ampere.util.logWith
  *    the planner asked for a person ([Plan.requiresHumanInput]), which seat runs
  *    each step, and a schema-described tool's arguments inline ([PlanSeat])
  * 5. Fall back to simple plan if LLM call or parsing fails
+ *
+ * A caller planning a *later cycle* of the same task — a hosted run with cycles left
+ * (AMPR-424) — passes the step results so far as `priorResults` and the cycle number
+ * as `cycle`. The prompt then carries one more block, the work already done, the
+ * planner may answer with no steps to say the task is complete, and step ids carry
+ * the cycle so no two steps of one run share one. With the defaults — no results,
+ * cycle 1 — nothing about the prompt, the ids or the fallback is different.
  *
  * Usage:
  * ```kotlin
@@ -75,7 +84,21 @@ class PlanGenerator(
      *   the prompt by `synthesizeKnowledge`; an empty list renders the no-knowledge block
      *   and is the only case in which the prompt carries no past experience.
      * @param taskFactory Factory function to create domain-specific task objects
-     * @param customPromptBuilder Optional custom prompt builder for agent-specific planning
+     * @param customPromptBuilder Optional custom prompt builder for agent-specific planning.
+     *   Its signature is unchanged by AMPR-424: a custom builder is *not* handed
+     *   [priorResults], so a caller that supplies one and plans later cycles renders the
+     *   earlier work itself or plans without it.
+     * @param priorResults The step outcomes of this task's earlier cycles, oldest first
+     *   (AMPR-424). Non-empty adds the "work already done" block to the prompt — after the
+     *   knowledge block, as data, never in the system message — and makes an empty `steps`
+     *   array a valid answer: the task is complete, and the plan has no tasks. Empty, the
+     *   default, is a first cycle: the prompt is byte-identical to one planned without this
+     *   parameter, and an empty `steps` array is still a parse failure that becomes the
+     *   fallback plan.
+     * @param cycle Which cycle of the task this plan is for, counting from 1 (AMPR-424).
+     *   Cycle 1 keeps the step ids it always had, `step-<n>-<taskId>`; cycle 2 and later
+     *   prefix them, `c<cycle>-step-<n>-<taskId>`, so no two steps of one run share an id.
+     *   The fallback plan's step follows the same rule.
      * @return A Plan containing sequential steps to accomplish the goal
      */
     suspend fun generate(
@@ -88,6 +111,8 @@ class PlanGenerator(
         taskFactory: TaskFactory = DefaultTaskFactory,
         customPromptBuilder: ((Task, List<Idea>, Set<Tool<*>>, List<KnowledgeWithScore>) -> String)? = null,
         runId: RunId? = null,
+        priorResults: List<StepOutcome> = emptyList(),
+        cycle: Int = 1,
     ): Plan {
         // Handle blank task
         if (task is Task.Blank) {
@@ -106,6 +131,7 @@ class PlanGenerator(
                 agentRole = agentRole,
                 availableTools = availableTools,
                 seats = seats,
+                priorResults = priorResults,
             )
 
         return try {
@@ -120,7 +146,15 @@ class PlanGenerator(
                     workflowId = runId ?: task.id,
                 ),
             )
-            parsePlanFromResponse(jsonResponse.rawJson, task, taskFactory, availableTools, seats)
+            parsePlanFromResponse(
+                jsonResponse = jsonResponse.rawJson,
+                originalTask = task,
+                taskFactory = taskFactory,
+                availableTools = availableTools,
+                seats = seats,
+                priorResults = priorResults,
+                cycle = cycle,
+            )
         } catch (e: MissingUpstreamLlmClientException) {
             // No transport means no model was reached at all, so there is nothing to degrade
             // to: `createFallbackPlan`'s step nominates no tool, which the executor treats as
@@ -132,7 +166,7 @@ class PlanGenerator(
             logger.w(e) { "[PLAN] No upstream transport configured; planning nothing" }
             Plan.blank
         } catch (e: Exception) {
-            createFallbackPlan(task, taskFactory, "Plan generation failed: ${e.message}")
+            createFallbackPlan(task, taskFactory, "Plan generation failed: ${e.message}", cycle)
         }
     }
 
@@ -182,6 +216,14 @@ class PlanGenerator(
 
     /**
      * Builds the planning prompt.
+     *
+     * The "work already done" block (AMPR-424) sits after the knowledge block and
+     * before the tools, and only when there is work to report: with [priorResults]
+     * empty this function appends nothing there, which is what keeps a first cycle's
+     * prompt byte-identical to the one it rendered before later cycles existed. The
+     * block is rendered by `completedWorkSection`, the same per-result rendering a
+     * step's own parameter prompt uses, so the detail of every result is clipped on
+     * the way in and the prompt grows by a bounded amount per step.
      */
     private fun buildPlanningPrompt(
         taskDescription: String,
@@ -190,6 +232,7 @@ class PlanGenerator(
         agentRole: String,
         availableTools: Set<Tool<*>>,
         seats: List<PlanSeat>,
+        priorResults: List<StepOutcome>,
     ): String = buildString {
         appendLine("You are the planning module of an autonomous $agentRole agent.")
         appendLine("Your task is to create a concrete, executable plan to accomplish the given task.")
@@ -202,6 +245,11 @@ class PlanGenerator(
         appendLine("Past Knowledge:")
         appendLine(knowledgeSummary)
         appendLine()
+
+        val completedWork = completedWorkSection(priorResults)
+        if (completedWork.isNotEmpty()) {
+            appendLine(completedWork)
+        }
 
         if (seats.isNotEmpty()) {
             appendSeatRoster(seats, availableTools)
@@ -354,6 +402,12 @@ class PlanGenerator(
 
     /**
      * Parses the LLM response into a Plan object.
+     *
+     * An empty `steps` array is read two ways (AMPR-424). When [priorResults] is
+     * non-empty the prompt invited it — "if the task is complete, answer with an empty
+     * steps array" — so it is the planner's answer and the plan has no tasks. With no
+     * prior results nothing invited it, so it is what it always was: a malformed plan,
+     * thrown here and turned into the fallback plan by [generate].
      */
     private fun parsePlanFromResponse(
         jsonResponse: String,
@@ -361,6 +415,8 @@ class PlanGenerator(
         taskFactory: TaskFactory,
         availableTools: Set<Tool<*>>,
         seats: List<PlanSeat>,
+        priorResults: List<StepOutcome>,
+        cycle: Int,
     ): Plan {
         val cleanedResponse = LLMResponseParser.cleanJsonResponse(jsonResponse)
         val planJson = LLMResponseParser.parseJsonObject(cleanedResponse)
@@ -373,6 +429,15 @@ class PlanGenerator(
 
         // Validate steps
         if (stepsArray.isEmpty()) {
+            if (priorResults.isNotEmpty()) {
+                return Plan.ForTask(
+                    task = originalTask,
+                    tasks = emptyList(),
+                    estimatedComplexity = complexity,
+                    expectations = Expectations.blank,
+                    requiresHumanInput = requiresHumanInput,
+                )
+            }
             throw IllegalStateException("Plan must contain at least one step")
         }
 
@@ -386,7 +451,7 @@ class PlanGenerator(
 
             taskFactory.create(
                 PlanStepDraft(
-                    id = "step-${index + 1}-${originalTask.id}",
+                    id = stepId(index = index + 1, taskId = originalTask.id, cycle = cycle),
                     description = description,
                     toolId = toolToUse,
                     assignedTo = seat?.assignedTo,
@@ -407,12 +472,31 @@ class PlanGenerator(
     }
 
     /**
+     * The id of step [index] (counting from 1) of [taskId]'s plan for [cycle]
+     * (AMPR-424).
+     *
+     * `step-<n>-<taskId>` on the first cycle — the id every step has carried since
+     * there were plans, left exactly as it was — and `c<cycle>-step-<n>-<taskId>` from
+     * the second cycle on, so that cycle 2's first step and cycle 1's first step are
+     * two ids. Anything keyed on a step id — a `PlanStepStarted`/`PlanStepCompleted`
+     * pair, a consumer's per-step record, a tool's own once-only guard — collided
+     * before this. The one function serves [parsePlanFromResponse] and
+     * [createFallbackPlan] alike, so a fallback step follows the same rule.
+     *
+     * A cycle below 1 is a caller's mistake and renders as the first cycle rather than
+     * as `c0-…`: the plain form is the one every existing reader of a step id knows.
+     */
+    private fun stepId(index: Int, taskId: String, cycle: Int): String =
+        if (cycle <= 1) "step-$index-$taskId" else "c$cycle-step-$index-$taskId"
+
+    /**
      * Creates a fallback plan when generation fails.
      */
     private fun createFallbackPlan(
         task: Task,
         taskFactory: TaskFactory,
         reason: String,
+        cycle: Int,
     ): Plan {
         if (task is Task.Blank) {
             return Plan.blank
@@ -421,7 +505,7 @@ class PlanGenerator(
         val taskDescription = extractTaskDescription(task)
 
         val fallbackTask = taskFactory.create(
-            id = "step-1-${task.id}",
+            id = stepId(index = 1, taskId = task.id, cycle = cycle),
             description = "Execute: $taskDescription (Note: Advanced planning unavailable - $reason)",
             toolId = null,
             originalTask = task,

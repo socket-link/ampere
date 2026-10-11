@@ -268,14 +268,28 @@ internal class RosterHostedRun(
      * because the plan is the first thing about the run there is anything to say about,
      * and they go out *before* the gate so a plan a person stopped is still a plan the
      * record holds.
+     *
+     * A later cycle plans with the results so far (AMPR-424, row H28): every step
+     * outcome in [results] and the cycle number go to the planner, which renders them
+     * as the "work already done" block and may answer with no steps. The first cycle
+     * passes an empty list and `cycle = 1`, so its prompt and its step ids are exactly
+     * what they were. A later plan with no steps is the planner saying the task is
+     * complete, and it ends the run: there is nothing for the gate to approve or trim,
+     * so it is not sent there, and [execute] sees an empty plan and stops. The status
+     * is whatever the earlier steps made it — ending early is not a stop and not a
+     * failure. Only a *later* cycle reads an empty plan that way: on the first, with
+     * nothing in [results], an empty plan is what a missing transport leaves
+     * (`Plan.blank`) and goes to the gate as before.
      */
-    private suspend fun planCycle(): PlanDecision =
+    private suspend fun planCycle(): Unit =
         host.phases.withPhase(CognitivePhase.PLAN, runId) {
             val generated = host.agent.reasoningUnit.generatePlan(
                 task = goal,
                 ideas = ideas,
                 relevantKnowledge = recalled,
                 seats = planSeats,
+                priorResults = results.toList(),
+                cycle = cyclesUsed + 1,
             )
             host.agent.rememberNewPlan(generated)
 
@@ -289,18 +303,21 @@ internal class RosterHostedRun(
                 )
             }
 
+            if (generated.tasks.isEmpty() && results.isNotEmpty()) {
+                gatedPlan = generated
+                return@withPhase
+            }
+
             when (val decision = policy.planGate.review(generated)) {
                 is PlanDecision.Approved -> {
                     gatedPlan = decision.plan
                     stoppedAt = null
-                    decision
                 }
                 is PlanDecision.Stopped -> {
                     // The plan is dropped rather than kept-but-unrun: `plan` is what is
                     // about to happen, and after a stop that is nothing.
                     gatedPlan = Plan.blank
                     stoppedAt = decision
-                    decision
                 }
             }
         }

@@ -190,12 +190,22 @@ class AgentReasoning private constructor(
      *   a roster-aware plan: the prompt lists `seat: tools` and every step names the seat
      *   that runs it. Empty — the default, and what the PROPEL loop itself passes — plans
      *   for the one agent doing the planning, as before.
+     * @param priorResults the step outcomes of [task]'s earlier cycles, oldest first
+     *   (AMPR-424). A hosted run with cycles left passes them so a later PLAN is shown what
+     *   the earlier ones did and may answer with no steps; forwarded to
+     *   [PlanGenerator.generate] unchanged. Empty — the default, and what every single-cycle
+     *   caller passes — is a first cycle, and the prompt is byte-identical to one planned
+     *   before this parameter existed.
+     * @param cycle which cycle of [task] this plan is for, counting from 1 (AMPR-424). Cycle 2
+     *   and later prefix every step id with `c<cycle>-` so no two steps of one run share one.
      */
     suspend fun generatePlan(
         task: Task,
         ideas: List<Idea>,
         relevantKnowledge: List<KnowledgeWithScore> = emptyList(),
         seats: List<PlanSeat> = emptyList(),
+        priorResults: List<StepOutcome> = emptyList(),
+        cycle: Int = 1,
     ): Plan {
         // Use mock response if available
         mockResponses?.planGenerator?.let { generator ->
@@ -212,6 +222,8 @@ class AgentReasoning private constructor(
             taskFactory = settings.taskFactory,
             customPromptBuilder = null,
             runId = runId,
+            priorResults = priorResults,
+            cycle = cycle,
         ) ?: throw IllegalStateException("No plan generator configured")
     }
 

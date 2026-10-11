@@ -20,7 +20,8 @@ seats, from the public API. `RunHost.open(roster, seats, goal, tools, policy, ru
 PERCEIVE → RECALL → OBSERVE → PLAN on the roster's **host seat** and returns a
 `HostedRun` whose plan has already passed the consumer's `PlanGate`;
 `HostedRun.execute()` is EXECUTE plus a re-entry into OBSERVE → PLAN while cycles
-remain; `HostedRun.close()` is LEARN.
+remain — each later PLAN shown the step results so far, and free to answer with no
+steps, which ends the run (AMPR-424); `HostedRun.close()` is LEARN.
 
 The vocabulary:
 
@@ -110,6 +111,20 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     reservation are one compare-and-set, so two concurrent `open`s with one id cannot
     both pass. A closed run's id is free again. The check is in memory and per host —
     it says nothing about ids another host or another process uses.
+15. **A later cycle plans with the results so far** (AMPR-424, row H28). `planCycle`
+    hands `PlanGenerator` every step outcome the run holds (`priorResults`) and the
+    cycle number (`cycle = cyclesUsed + 1`); the planner renders the results as the
+    "work already done" block — after the knowledge block, as data, never in the
+    system message, each detail clipped — and may answer with an empty `steps` array,
+    which is a plan with no tasks. That plan **ends the run**: it is not sent to the
+    `PlanGate` (there is nothing to approve), nothing is dispatched, `RunStatus` is
+    whatever the earlier steps made it, and `RunResult.cyclesUsed` counts the PLAN
+    that said so. Step ids carry the cycle from the second on
+    (`c<cycle>-step-<n>-<taskId>`), fallback step included, so no two steps of one
+    run share an id. The first cycle passes an empty list and `cycle = 1`, and its
+    prompt, its ids and its fallback are byte-for-byte what they were — pinned by
+    `PlanningPromptGoldenTest`. PERCEIVE and RECALL still run once per run; what a
+    later cycle gains is the work, not a fresh perception.
 
 ## How it composes
 
@@ -244,9 +259,22 @@ strings.
   `availableTools` by id and lists anything unmatched under "Unassigned tools"; the two
   must come off the same objects, which is why the run namespaces the tool objects
   rather than only the declared ids.
-- **Expecting a plan with no steps from the planner.** `PlanGenerator` turns an empty
-  `steps` array into a one-step *fallback* plan. With a transport wired — which
-  `HostedAgent` requires — a plan with no steps is what a gate left, or `Plan.Blank`.
+- **Expecting a *first* cycle's plan to have no steps.** With nothing in `priorResults`
+  nothing invited an empty `steps` array, so `PlanGenerator` still turns one into the
+  one-step *fallback* plan. On the first cycle a plan with no steps is what a gate left,
+  or `Plan.Blank` from a missing transport; only from the second cycle on is it the
+  planner's own answer (AMPR-424) — and `planCycle` reads it that way only when
+  `results` is non-empty, which is the same condition the planner was shown the block
+  under.
+- **Keying anything on a step id without the cycle in it.** Since AMPR-424 the ids are
+  distinct across cycles by construction (`c2-step-1-…`), so a consumer's per-step map
+  or a tool's once-only guard keyed on `stepId` is safe — but a reader that *parses*
+  `step-<n>-` off the front of an id, or assumes `step-1-<goal>` is the run's first
+  step, breaks on the second cycle. Match on the whole id.
+- **Sending an empty later plan to the gate.** A `PlanGate` approves or trims steps;
+  shown none it can only echo the emptiness or `Stopped` a run that already ended,
+  which would record the planner's "done" as a person's "no". The gate sees every
+  plan that has something in it and no plan that does not.
 - **Publishing a run's own `TaskCreated` before PLAN.** The plan is the first thing
   about a run there is anything to say about, and the lifecycle opens once, on the
   first cycle, *before* the gate — so a plan a person stopped is still on the record.
@@ -299,6 +327,14 @@ strings.
 
 ## Not implemented here
 
+Row H28 (a later cycle plans with the results so far) was recorded ✅ on 2026-10-11 and
+is built (AMPR-424). What it deliberately does *not* come with: re-running PERCEIVE or
+RECALL per cycle (both stay once per run); a model judging whether the goal was met
+(AMPR-421 records that judgment, AMPR-422 measures it, and nothing reads it — the
+planner's empty answer is the planner's, not a verdict over one); a per-cycle step cap
+in Ampere (a consumer trims in its `PlanGate`); a step that ends *held* (row H20); and
+handing prior results to a `customPromptBuilder`, whose signature is unchanged.
+
 Rows H26 (a seat's consent grants) and H27 (a caller-chosen run id) were recorded ✅ on
 2026-10-11 and are built (AMPR-423); granting, revoking and storing grants stay the
 consumer's `UserGrantStore`, and run-id uniqueness is never durable or cross-process.
@@ -323,7 +359,8 @@ inside Ampere — a `RecallSource` does its own retrieval — and there is no ra
 across sources beyond score order: a corpus's scores and `AgentMemoryService`'s
 relevance are not calibrated against each other, and the merge does not pretend
 otherwise. RECALL also runs once per run, in `charge`, not once per cycle, so a
-second cycle plans with what the first one recalled.
+second cycle plans with what the first one recalled — plus what the first one *did*,
+which reaches it through `priorResults` rather than through memory (AMPR-424).
 
 ## See also
 
