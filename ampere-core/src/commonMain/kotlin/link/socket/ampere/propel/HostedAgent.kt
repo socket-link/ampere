@@ -10,6 +10,8 @@ import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.llm.decide.Question
 import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.memory.MemoryStore
+import link.socket.ampere.plug.PlugManifest
+import link.socket.ampere.plug.permission.UserGrants
 import link.socket.ampere.probe.Probe
 import link.socket.ampere.roster.RoleId
 
@@ -55,9 +57,11 @@ import link.socket.ampere.roster.RoleId
  * @property memory This seat's durable memory: `knowledge` is what RECALL reads and
  *   what LEARN writes, `outcomes` is where the run's own outcome is recorded. Null
  *   gives a seat with no memory — RECALL finds nothing and LEARN stores nothing, and
- *   the run still closes. Ampere's own `KnowledgeStore` has no holder column, so two
- *   seats sharing one store recall each other's knowledge; per-seat separation is
- *   whatever the consumer's store scopes (AMPR-385 row H22, no verdict).
+ *   the run still closes. Ampere's own `KnowledgeStore` has a holder on every row
+ *   since AMPR-417, but a seat writes PUBLIC by default and PUBLIC rows are every
+ *   Subject's, so two seats sharing one store still recall each other's knowledge;
+ *   per-seat separation is whatever the consumer's store scopes (AMPR-385 row H22, no
+ *   verdict).
  * @property recallScopes The tags this seat's RECALL reads under (AMPR-394). They are
  *   the `MemoryContext.tags` of the knowledge query *and* the scopes every
  *   [RecallSource][link.socket.ampere.memory.RecallSource] the run was given is asked
@@ -90,6 +94,18 @@ import link.socket.ampere.roster.RoleId
  *   to have a generative model answer, or
  *   [HostedSystemOneDecisionClient][link.socket.ampere.llm.decide.HostedSystemOneDecisionClient]
  *   for a decision model that measures a distribution.
+ * @property userGrants The consent this seat's Plug-backed tools are checked against
+ *   (AMPR-385 row H26). Consulted only for a tool that declares a
+ *   [plugManifest][link.socket.ampere.agents.execution.tools.Tool.plugManifest]: the
+ *   seat's `ToolExecutionEngine` asks it for that manifest's [UserGrants] and hands both
+ *   to [PlugPermissionGate][link.socket.ampere.plug.permission.PlugPermissionGate]
+ *   before the tool runs. It is called on every dispatch of such a tool and its answer
+ *   is never cached, so a revocation takes effect on the next call. **Null denies**: the
+ *   engine's own provider grants nothing, so a seat given no grants is refused every
+ *   permission its tools require — never allowed, and never lent another seat's.
+ *   Granting and revoking are the consumer's
+ *   [UserGrantStore][link.socket.ampere.plug.permission.UserGrantStore]; this only
+ *   carries the reading of it.
  */
 @AmpereStableApi
 data class HostedAgent(
@@ -106,6 +122,7 @@ data class HostedAgent(
     val probes: List<Probe<RunObservation>> = emptyList(),
     val questions: Map<String, Question> = emptyMap(),
     val upstreamDecisionClient: UpstreamDecisionClient? = null,
+    val userGrants: (suspend (PlugManifest) -> UserGrants)? = null,
 ) {
 
     companion object {
@@ -134,6 +151,7 @@ data class HostedAgent(
             probes: List<Probe<RunObservation>> = emptyList(),
             questions: Map<String, Question> = emptyMap(),
             upstreamDecisionClient: UpstreamDecisionClient? = null,
+            userGrants: (suspend (PlugManifest) -> UserGrants)? = null,
         ): HostedAgent = HostedAgent(
             id = id,
             role = RoleId(role),
@@ -148,6 +166,7 @@ data class HostedAgent(
             probes = probes,
             questions = questions,
             upstreamDecisionClient = upstreamDecisionClient,
+            userGrants = userGrants,
         )
     }
 }

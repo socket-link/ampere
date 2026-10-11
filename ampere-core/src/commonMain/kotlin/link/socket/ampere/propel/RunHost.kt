@@ -2,6 +2,7 @@ package link.socket.ampere.propel
 
 import kotlinx.coroutines.CoroutineScope
 import link.socket.ampere.agents.definition.AgentId
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.execution.executor.Executor
@@ -66,12 +67,22 @@ interface RunHost {
      *   (AMPR-413), which is the id a plan step names and the id the run dispatches
      *   on, so two seats sharing a tool stay unambiguous about who runs it.
      * @param policy Cycles, LEARN and the gate. See [RunPolicy].
+     * @param runId The id this run is known by (AMPR-385 row H27), for a caller that
+     *   reserved budget, opened a trace or filed records under an id before the run
+     *   existed. It becomes [HostedRun.runId] and [RunResult.runId], the run id on the
+     *   envelope of every event the run and its seats publish, the id of the run's task
+     *   lifecycle, and the `ticketId` and `runId` of the outcome LEARN records. Null —
+     *   the default — mints one. Uniqueness is checked against the runs *this host*
+     *   has open and nothing else: an id a closed run used is accepted again, and no
+     *   claim is made about ids in use by another host or another process.
      * @throws IllegalArgumentException if no seat fills the roster's host, if a seat
-     *   names a role the roster does not hold, if two seats share an agent id, or if a
+     *   names a role the roster does not hold, if two seats share an agent id, if a
      *   seat is asked a question it has no decision transport to answer on —
      *   [RunPolicy.goalCheck] is [GoalCheck.Record] with no
      *   [HostedAgent.upstreamDecisionClient] on the host seat, or a verifier seat
-     *   declaring [HostedAgent.questions] with none on its own (AMPR-421).
+     *   declaring [HostedAgent.questions] with none on its own (AMPR-421) — if [runId]
+     *   is blank, or if [runId] names a run this host still has open. Every refusal
+     *   happens before any seat is built or any phase is charged.
      */
     suspend fun open(
         roster: Roster,
@@ -79,6 +90,7 @@ interface RunHost {
         goal: Task,
         tools: Set<Tool<*>> = emptySet(),
         policy: RunPolicy = RunPolicy(),
+        runId: RunId? = null,
     ): HostedRun
 
     /**
@@ -95,13 +107,21 @@ interface RunHost {
         goal: Task,
         tools: Set<Tool<*>> = emptySet(),
         policy: RunPolicy = RunPolicy(),
+        runId: RunId? = null,
     ): HostedRun {
         val byRole = seats.groupBy { it.role }
         val duplicated = byRole.filterValues { it.size > 1 }.keys
         require(duplicated.isEmpty()) {
             "one agent fills one seat; duplicated: ${duplicated.joinToString { it.value }}"
         }
-        return open(roster, byRole.mapValues { (_, filling) -> filling.single() }, goal, tools, policy)
+        return open(
+            roster = roster,
+            seats = byRole.mapValues { (_, filling) -> filling.single() },
+            goal = goal,
+            tools = tools,
+            policy = policy,
+            runId = runId,
+        )
     }
 
     /**

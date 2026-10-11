@@ -7,7 +7,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/AmpereInstance.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/service/AgentService.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/internal/DefaultAgentService.kt
-related: [PropelLoop, TeamLayer, SparkSystem, MemoryProvenance, CognitionTrace, Probe, SubjectRegistry]
+related: [PropelLoop, TeamLayer, SparkSystem, MemoryProvenance, CognitionTrace, Probe, SubjectRegistry, PlugPermissions]
 last_verified: 2026-10-11
 ---
 
@@ -16,7 +16,7 @@ last_verified: 2026-10-11
 ## What it is
 
 A **hosted run** is one PROPEL run a consumer opens for one goal, over a roster of
-seats, from the public API. `RunHost.open(roster, seats, goal, tools, policy)` charges
+seats, from the public API. `RunHost.open(roster, seats, goal, tools, policy, runId)` charges
 PERCEIVE → RECALL → OBSERVE → PLAN on the roster's **host seat** and returns a
 `HostedRun` whose plan has already passed the consumer's `PlanGate`;
 `HostedRun.execute()` is EXECUTE plus a re-entry into OBSERVE → PLAN while cycles
@@ -34,6 +34,9 @@ The vocabulary:
 The consumer supplies the roster, the seats, the goal, the tools and a policy. It
 never constructs an agent: the run builds one `SparkBasedAgent` per seat, with that
 seat's sparks stacked, its own event door, and the run id on every event it publishes.
+The run id is the caller's when it supplies one — a consumer that reserved budget or
+opened a trace under an id before the run existed hands that id to `open` — and minted
+when it does not.
 
 ## Why it exists
 
@@ -95,6 +98,18 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     halves reach *every* seat's active prompt as the "# Recalled context" section, so
     the seat that runs a step three phases later still knows what the run recalled.
     No model call: RECALL is two retrievals and a clip.
+13. **A seat without grants is denied** (AMPR-423, row H26). A tool that declares a
+    `plugManifest` is checked against the `UserGrants` its seat's
+    `HostedAgent.userGrants` returns, asked on every dispatch. A seat whose provider is
+    null runs on the engine's own, which grants nothing — so every permission its
+    Plug-backed tools require is refused. Nothing in `propel/` defaults a seat to
+    allowed, lends one seat another's provider, or caches what a provider answered.
+14. **A run id is unique among the runs its host has open** (AMPR-423, row H27).
+    `open` refuses a blank `runId` and one a still-open run of the same host holds,
+    both before any seat is built or any phase is charged; the open-id check and the
+    reservation are one compare-and-set, so two concurrent `open`s with one id cannot
+    both pass. A closed run's id is free again. The check is in memory and per host —
+    it says nothing about ids another host or another process uses.
 
 ## How it composes
 
@@ -192,8 +207,8 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 
 | Type | Role |
 |------|------|
-| `RunHost` | `open`, `openSeats(roster, seats: List<HostedAgent>, …)` (the Swift-friendly overload), `openRunSeats(): List<OpenSeat>` |
-| `HostedAgent` | Who fills a seat: id, role, sparks, charter, `AIConfiguration`, `CognitiveRelay?`, **required** `UpstreamLlmClient`, `MemoryStore?`, `recallScopes`, affinity, `probes`, `questions`, `UpstreamDecisionClient?` |
+| `RunHost` | `open(…, runId: RunId? = null)`, `openSeats(roster, seats: List<HostedAgent>, …, runId)` (the Swift-friendly overload), `openRunSeats(): List<OpenSeat>`. A supplied `runId` is `HostedRun.runId`, `RunResult.runId`, the envelope run id of every event, the task lifecycle's id and LEARN's outcome `ticketId`/`runId`; null mints one |
+| `HostedAgent` | Who fills a seat: id, role, sparks, charter, `AIConfiguration`, `CognitiveRelay?`, **required** `UpstreamLlmClient`, `MemoryStore?`, `recallScopes`, affinity, `probes`, `questions`, `UpstreamDecisionClient?`, `userGrants: (suspend (PlugManifest) -> UserGrants)?` (null denies) |
 | `HostedRun` | `runId`, `plan`, `execute()`, `close()` |
 | `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip` |
 | `GoalCheck` | `Off` / `Record`: whether the run asks itself, after each executed cycle, whether the goal is met. `Record` is one decision call per executed cycle on the host seat's transport |
@@ -266,12 +281,27 @@ strings.
   state that is unique per render makes the join useless.
   `RunObservation.asDecisionState` renders the goal, the cycle, and per step a
   description, a status word and a clipped result, in a fixed key order, for that reason.
+- **Querying a seat's permission denials by run id.** `ToolExecutionEngine` publishes
+  `PermissionDeniedEvent` without a run id on its envelope, so a `run_id` query of a
+  hosted run does not return the denials its seats were dealt — the one known exception
+  to invariant 2. Read them by source until the engine stamps its run id there.
+- **Caching a seat's grants, or resolving them once at `open`.** The engine asks the
+  provider on every dispatch so that a revocation in the middle of a run takes effect on
+  the next step; a provider memoised in `propel/` would keep acting granted
+  ([PlugPermissions](plug-permissions.md)).
+- **Treating a supplied run id as globally unique.** `open` only refuses an id this host
+  has *open*. A consumer that needs ids unique across hosts, processes or closed runs
+  has to mint them that way itself.
 - **Assuming per-seat memory is separated.** Since AMPR-417 every row has a `holder` and
   every read a viewer, but a seat writes PUBLIC by default and PUBLIC rows are every
   Subject's — so two seats sharing a `MemoryStore` still recall each other's knowledge.
   Only PRIVATE and PROTECTED rows stay with the seat that wrote them (row H22, no verdict).
 
 ## Not implemented here
+
+Rows H26 (a seat's consent grants) and H27 (a caller-chosen run id) were recorded ✅ on
+2026-10-11 and are built (AMPR-423); granting, revoking and storing grants stay the
+consumer's `UserGrantStore`, and run-id uniqueness is never durable or cross-process.
 
 AMPR-385 rows H19–H25 were proposed on 2026-10-09. H21 was recorded ✅ on 2026-10-11
 and is built — `HostedAgent.upstreamDecisionClient`, with `HostedAgent.questions`,
