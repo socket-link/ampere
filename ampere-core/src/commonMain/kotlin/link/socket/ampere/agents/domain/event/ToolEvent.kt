@@ -1,6 +1,8 @@
 package link.socket.ampere.agents.domain.event
 
 import kotlinx.datetime.Instant
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.Urgency
@@ -175,8 +177,13 @@ sealed interface ToolEvent : Event {
      *   ran and had nothing to report, which is not a failure, so it reports `true` with no
      *   [errorMessage] (AMPR-420).
      * @property durationMs Execution duration in milliseconds
-     * @property errorMessage Error message if failed, null if succeeded
+     * @property errorMessage Error message if failed, null if succeeded — and null if held
+     * @property held Whether the tool's action is waiting on a person (AMPR-425). A held call
+     *   reports `success = false` with no [errorMessage]: it did not succeed, and it did not
+     *   fail. Never written when false, so every other completion encodes exactly as it did
+     *   before the field existed, and a stored one without the key decodes as not held.
      */
+    @OptIn(ExperimentalSerializationApi::class)
     @Serializable
     data class ToolExecutionCompleted(
         override val eventId: EventId,
@@ -190,6 +197,8 @@ sealed interface ToolEvent : Event {
         val durationMs: Long,
         val errorMessage: String? = null,
         val runId: String? = null,
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        val held: Boolean = false,
     ) : ToolEvent {
 
         override val eventType: EventType = EVENT_TYPE
@@ -199,7 +208,12 @@ sealed interface ToolEvent : Event {
             formatSource: (EventSource) -> String,
         ): String = buildString {
             append("Tool completed: $toolName ($toolId)")
-            append(" - ${if (success) "SUCCESS" else "FAILED"}")
+            val verdict = when {
+                held -> "HELD"
+                success -> "SUCCESS"
+                else -> "FAILED"
+            }
+            append(" - $verdict")
             append(" in ${durationMs}ms")
             errorMessage?.let { append(" - $it") }
             append(" ${formatUrgency(urgency)}")

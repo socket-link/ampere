@@ -52,6 +52,35 @@ sealed interface ExecutionOutcome : Outcome {
         override val executionEndTimestamp: Instant = Instant.DISTANT_PAST
     }
 
+    /**
+     * The action is waiting on a person, and cannot finish inside this run (AMPR-425,
+     * AMPR-385 row H20).
+     *
+     * Neither a [Success] nor a [Failure], on purpose: a tool that has to wait for
+     * someone's approval before it sends or writes on their behalf did not succeed — a
+     * later step would be handed a result that does not exist — and did not fail, so no
+     * fault is recorded for it. A held step ends the plan walk, and a hosted run that
+     * holds plans no further cycle and ends `RunStatus.Held`.
+     *
+     * @property reason What is being waited on, for a person to read.
+     * @property reference An opaque handle the tool chooses — the id of the record a
+     *   person will answer, say. Ampere carries it and never reads it.
+     */
+    @Serializable
+    data class Held(
+        override val executorId: ExecutorId,
+        override val ticketId: TicketId,
+        override val taskId: TaskId,
+        override val executionStartTimestamp: Instant,
+        override val executionEndTimestamp: Instant,
+        val reason: String,
+        val reference: String? = null,
+    ) : ExecutionOutcome {
+
+        override val id: OutcomeId =
+            generateUUID(executorId)
+    }
+
     /** Successful execution with all validation passing */
     @Serializable
     sealed interface Success : ExecutionOutcome, Outcome.Success

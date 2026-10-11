@@ -586,6 +586,13 @@ open class SparkBasedAgent<S : AgentState>(
                     outcome.describeResult(),
                 isCritical = true,
             )
+            // Waiting on a person: not done, and not a fault (AMPR-425). Ahead of the
+            // `else`, which would otherwise report the step succeeded.
+            is ExecutionOutcome.Held -> StepResult.held(
+                description = description,
+                reason = outcome.reason,
+                reference = outcome.reference,
+            )
             else -> StepResult.success(
                 description = description,
                 details = outcome.stepDetails(toolId),

@@ -105,22 +105,26 @@ fun RunObservation.asDecisionState(clip: Int): String {
 /**
  * The one word a decision model reads a step's outcome as.
  *
- * Four words for four outcomes, including the one the ticket's three did not name:
+ * One word per outcome, including the one the ticket's three did not name:
  * a [StepOutcome.Skipped] step is not a failed step, and calling it one would have the
  * model judge a run against work it was never asked to do (the walk skips what came
- * after a critical failure, which is already reported as that failure).
+ * after a critical failure, which is already reported as that failure). A
+ * [StepOutcome.Held] step is its own word for the same reason (AMPR-425), although the
+ * run itself never asks about a held cycle.
  */
 private fun StepOutcome.statusWord(): String = when (this) {
     is StepOutcome.Success -> "succeeded"
     is StepOutcome.PartialSuccess -> "partial"
     is StepOutcome.Failure -> "failed"
+    is StepOutcome.Held -> "held"
     is StepOutcome.Skipped -> "skipped"
 }
 
-/** What this step says about itself: its details, its error, or why it was skipped. */
+/** What this step says about itself: its details, its error, what it waits on, or why it was skipped. */
 private fun StepOutcome.reportedText(): String = when (this) {
     is StepOutcome.Success -> details
     is StepOutcome.PartialSuccess -> details
     is StepOutcome.Failure -> error
+    is StepOutcome.Held -> reason
     is StepOutcome.Skipped -> reason
 }

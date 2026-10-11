@@ -91,6 +91,7 @@ sealed interface PlanEvent : Event {
                     "⚠ partially completed " +
                         "(${outcome.successCount}/${outcome.successCount + outcome.failureCount})"
                 is StepOutcome.Failure -> "✗ failed: ${outcome.error}"
+                is StepOutcome.Held -> "⏸ held: ${outcome.reason}"
                 is StepOutcome.Skipped -> "⊘ skipped: ${outcome.reason}"
             }
             return "Plan step ${stepIndex + 1}/$totalSteps${seatSuffix(assignedTo)} $status " +

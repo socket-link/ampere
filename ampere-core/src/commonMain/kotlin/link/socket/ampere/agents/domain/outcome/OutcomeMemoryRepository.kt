@@ -27,7 +27,8 @@ interface OutcomeMemoryRepository {
      * @param ticketId Which ticket was being worked on
      * @param executorId Which executor performed the work
      * @param approach Description of what was tried (from ticket + context)
-     * @param outcome The execution outcome (success or failure)
+     * @param outcome The execution outcome (success or failure). A held outcome is
+     *   neither, and is refused with a failed [Result] rather than recorded (AMPR-425).
      * @param timestamp When this execution completed
      * @param runId Optional Arc run correlation ID for trace projection
      * @return Result with the created OutcomeMemory or an error

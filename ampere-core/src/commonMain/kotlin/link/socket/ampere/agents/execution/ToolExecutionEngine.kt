@@ -160,12 +160,15 @@ class ToolExecutionEngine(
      * and the two are not meant to agree: a pair in the trace means a tool actually ran,
      * while an outcome row means an attempt was made. A permission-denied call has a row and
      * no pair, and that asymmetry is the point of each. A blank outcome is the mirror of it:
-     * the tool ran, so it has a pair, and it left nothing to remember, so it has no row.
+     * the tool ran, so it has a pair, and it left nothing to remember, so it has no row. A
+     * held outcome is the same shape for a different reason: the call ran, and it has not
+     * finished, so there is no succeeded-or-failed for the row to say (AMPR-425).
      *
      * @param tool The tool to execute
      * @param request The execution request containing context and intent
      * @return the tool's own outcome — a success or a failure — or [ExecutionOutcome.Blank]
-     *   for a tool that ran and had nothing to report, which is neither
+     *   for a tool that ran and had nothing to report, or [ExecutionOutcome.Held] for one
+     *   whose action is waiting on a person; the last two are neither
      */
     suspend fun execute(
         tool: Tool<*>,
@@ -412,6 +415,8 @@ class ToolExecutionEngine(
                         // The tool ran and had nothing to report. Returned as itself rather
                         // than dressed as a success or a failure (AMPR-420).
                         is ExecutionStatus.Blank -> ExecutionOutcome.Blank
+                        // Waiting on a person: the tool's own hold, unchanged (AMPR-425).
+                        is ExecutionStatus.Held -> finalStatus.result
                         else -> createFailure(
                             request = originalRequest,
                             startTime = startTime,
@@ -505,13 +510,16 @@ class ToolExecutionEngine(
         // and a pair that read as one — unsuccessful, medium urgency, no message to say why —
         // would send a reader looking for a fault that is not there (AMPR-420).
         val success = outcome is ExecutionOutcome.Success || outcome is ExecutionOutcome.Blank
+        // A held call is waiting on a person: not a success, and not a failure either, so it
+        // carries no error message and no failure urgency — only `held` (AMPR-425).
+        val held = outcome is ExecutionOutcome.Held
         withContext(NonCancellable) {
             door.publish(
                 ToolEvent.ToolExecutionCompleted(
                     eventId = generateUUID("tool-execution-completed", invocationId),
                     timestamp = completedAt,
                     eventSource = EventSource.Agent(door.agentId),
-                    urgency = if (success) Urgency.LOW else Urgency.MEDIUM,
+                    urgency = if (success || held) Urgency.LOW else Urgency.MEDIUM,
                     invocationId = invocationId,
                     toolId = tool.id,
                     toolName = tool.name,
@@ -519,6 +527,7 @@ class ToolExecutionEngine(
                     durationMs = (completedAt - dispatchedAt).inWholeMilliseconds,
                     errorMessage = outcome.failureMessageOrNull(),
                     runId = dispatchRunId,
+                    held = held,
                 ),
                 runId = dispatchRunId,
             )
@@ -550,6 +559,10 @@ class ToolExecutionEngine(
         // at the year -100001 (AMPR-420). The tool's pair is still published, so the call is
         // on the trace.
         if (outcome is ExecutionOutcome.Blank) return
+        // A held call is neither: the store's `success` column can only say succeeded or
+        // failed, and a call waiting on a person is not finished (AMPR-425). Its pair still
+        // goes out, with `held = true`, so the call is on the trace.
+        if (outcome is ExecutionOutcome.Held) return
         withContext(NonCancellable) {
             try {
                 repository.recordOutcome(

@@ -35,6 +35,7 @@ import link.socket.ampere.agents.health.ExecutorSystemHealth
  * Error handling philosophy:
  * - All failures are represented as ExecutionStatus.Failed or ExecutionOutcome.Failure
  * - A tool that returns a blank outcome did not fail: it ends with ExecutionStatus.Blank
+ * - A tool that returns a held outcome is waiting on a person: it ends with ExecutionStatus.Held
  * - Nothing throws exceptions from execute()
  * - Clear error messages guide users toward resolution
  *
@@ -161,6 +162,17 @@ class FunctionExecutor(
                         ExecutionStatus.Blank(
                             executorId = id,
                             timestamp = Clock.System.now(),
+                        ),
+                    )
+                }
+                // Waiting on a person: handed on as itself, never as a failure (AMPR-425).
+                is ExecutionOutcome.Held -> {
+                    logger.i { "FunctionTool '${tool.name}' is held: ${outcome.reason}" }
+                    emit(
+                        ExecutionStatus.Held(
+                            executorId = id,
+                            timestamp = Clock.System.now(),
+                            result = outcome,
                         ),
                     )
                 }

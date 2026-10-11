@@ -15,8 +15,9 @@ import link.socket.ampere.memory.RecallSource
  * @property cycles How many times the host seat may plan and execute. The default of
  *   1 is one pass: PERCEIVE → RECALL → OBSERVE → PLAN → EXECUTE → LEARN. Above 1 the
  *   run re-enters OBSERVE → PLAN after EXECUTE with the results in context, and stops
- *   early when the planner returns no steps (AMPR-385 row H17). The cap is the
- *   consumer's, because the consumer is the one quoting for it.
+ *   early when the planner returns no steps (AMPR-385 row H17) or a step is held
+ *   waiting on a person (AMPR-425). The cap is the consumer's, because the consumer is
+ *   the one quoting for it.
  * @property learn Whether LEARN spends a model call. See [LearnPolicy].
  * @property planGate Who approves the plan before EXECUTE runs it. The gate rides
  *   here rather than on `RunHost.open`'s parameter list so that list stays the one

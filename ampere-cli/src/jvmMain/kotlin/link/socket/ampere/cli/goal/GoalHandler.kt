@@ -205,6 +205,8 @@ class GoalHandler(
         // The whole cognitive cycle is one task, and the lifecycle outlives every early return
         // below — the `finally` closes it if one of them beat us to the end (AMPR-404).
         var lifecycle: TaskLifecycle? = null
+        // A held goal is left blocked rather than ended, so the backstop must not fail it.
+        var held = false
         try {
             val ticketResult = context.environmentService.ticketRepository.getTicket(ticketId)
             val ticket = ticketResult.getOrNull() ?: run {
@@ -311,6 +313,16 @@ class GoalHandler(
                     lifecycle?.failed(reason)
                     return
                 }
+                // AMPR-425: the plan stopped on a step whose tool is waiting on a person. That
+                // is not a failure and not a finished goal — reporting COMPLETED, which the
+                // `else` branch would, claims work that has not happened. The goal is left
+                // blocked on the held step, and nothing is learned from it.
+                is ExecutionOutcome.Held -> {
+                    progressPane.setPhase(CognitiveProgressPane.Phase.EXECUTE, "Held: ${outcome.reason}")
+                    lifecycle?.blocked(blockedByTaskId = outcome.taskId, reason = outcome.reason)
+                    held = true
+                    return
+                }
                 is ExecutionOutcome.CodeChanged.Success -> {
                     // Publish code submitted events for each file
                     outcome.changedFiles.forEach { filePath ->
@@ -346,7 +358,7 @@ class GoalHandler(
             lifecycle?.failed(e)
         } finally {
             // The backstop for a path that returned without reporting at all. A no-op above.
-            lifecycle?.failed("Abandoned before the cognitive cycle reported an outcome")
+            if (!held) lifecycle?.failed("Abandoned before the cognitive cycle reported an outcome")
         }
     }
 

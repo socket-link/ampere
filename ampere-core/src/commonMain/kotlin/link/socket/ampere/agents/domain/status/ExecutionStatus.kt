@@ -126,6 +126,23 @@ sealed interface ExecutionStatus : Status {
     }
 
     /**
+     * Execution is waiting on a person (AMPR-425).
+     *
+     * Neither [Completed] nor [Failed], for the reason [Blank] is neither: the executor
+     * protocol's terminal statuses can only say succeeded or failed, so without this a
+     * tool that returned [ExecutionOutcome.Held] would leave its executor no way to hand
+     * the hold on except as a failed dispatch.
+     */
+    data class Held(
+        override val executorId: ExecutorId,
+        override val timestamp: Instant,
+        val result: ExecutionOutcome.Held,
+    ) : ExecutionStatus {
+
+        override val isClosed: Boolean = true
+    }
+
+    /**
      * Execution failed.
      */
     data class Failed(

@@ -44,6 +44,10 @@ import link.socket.ampere.util.logWith
  * plan a step at a time on the seat each step was assigned to, re-entering OBSERVE →
  * PLAN while cycles remain; [close] is LEARN.
  *
+ * A step whose tool is waiting on a person ends the run there (AMPR-425): `PlanExecutor`
+ * skips the rest of that cycle, and the run plans no further cycle, asks nothing about
+ * the one that held, and learns nothing from it. Its task is left blocked, not ended.
+ *
  * A cycle that executed something may also be *asked* about itself before the loop
  * decides whether to continue ([assess], AMPR-421). Every answer is recorded and none
  * is read: the loop, [currentStatus] and LEARN are the same with a judgment as without
@@ -88,6 +92,7 @@ internal class RosterHostedRun(
 
     private var gatedPlan: Plan = Plan.blank
     private var stoppedAt: PlanDecision.Stopped? = null
+    private var heldAt: StepOutcome.Held? = null
     private var lifecycle: TaskLifecycle? = null
     private var ideas: List<Idea> = emptyList()
     private var recalled: List<KnowledgeWithScore> = emptyList()
@@ -332,10 +337,14 @@ internal class RosterHostedRun(
         while (true) {
             if (stoppedAt == null && gatedPlan.tasks.isNotEmpty()) {
                 runCycle(gatedPlan)
-                assess()
+                // A held cycle is not asked whether the goal is met: it is waiting, and
+                // the run has already decided that nothing follows it.
+                if (heldAt == null) assess()
             }
             captureCancellation()
-            if (cancellation != null || stoppedAt != null) break
+            // A hold is a full stop, whatever `cycles` says: the next PLAN would be planning
+            // past a step whose output does not exist yet (AMPR-425).
+            if (cancellation != null || stoppedAt != null || heldAt != null) break
             // The cap and the planner are the two ways a run ends: whichever comes
             // first. An empty plan means the host had nothing left to ask for.
             if (cyclesUsed >= policy.cycles || gatedPlan.tasks.isEmpty()) break
@@ -374,6 +383,11 @@ internal class RosterHostedRun(
      * (AMPR-407), the earlier steps' results on the request (AMPR-408, AMPR-412), and
      * a step's inline arguments settling the call without a parameter model call
      * (AMPR-410, AMPR-411). None of it is re-implemented here.
+     *
+     * A held step is noticed here, not decided here: `PlanExecutor` has already stopped
+     * the walk on it and skipped the rest (AMPR-425). What the run adds is the record —
+     * its task is marked blocked on the held step, which is the state a resumed run would
+     * pick up — and [execute]'s decision not to plan again.
      */
     private suspend fun runCycle(toRun: Plan) {
         val execution = host.phases.withPhase(CognitivePhase.EXECUTE, runId) {
@@ -392,6 +406,11 @@ internal class RosterHostedRun(
 
         results += execution.stepOutcomes
         lastPlanOutcome = execution.outcome
+
+        execution.stepOutcomes.firstNotNullOfOrNull { it as? StepOutcome.Held }?.let { held ->
+            heldAt = held
+            lifecycle?.blocked(blockedByTaskId = held.id, reason = held.reason)
+        }
     }
 
     /**
@@ -603,6 +622,15 @@ internal class RosterHostedRun(
      * A cancelled run records its outcome and stores no Knowledge: the outcome is what
      * happened, and Knowledge is a claim about what was learned from work that
      * finished.
+     *
+     * A held run writes nothing at all (AMPR-425). The phase is still entered and
+     * bracketed — a LEARN that found nothing to learn is still a LEARN — but there is no
+     * outcome row, because the store can only say succeeded or failed and the run did
+     * neither; no Knowledge, because the work did not finish; no model-backed evaluation;
+     * and no terminal task event, because the run is waiting, not finished. Its task was
+     * marked blocked when the step held, and stays that way. That is decided by the run's
+     * own status, so a caller that cancels its scope after a held [execute] and closes
+     * the run in a `finally` does not turn the hold into a failure.
      */
     private suspend fun learn(cancelled: Boolean) {
         host.phases.withPhase(CognitivePhase.LEARN, runId) {
@@ -611,6 +639,8 @@ internal class RosterHostedRun(
     }
 
     private suspend fun learnWithin(cancelled: Boolean) {
+        if (currentStatus() == RunStatus.Held) return
+
         val outcome = executionOutcome(cancelled)
 
         host.descriptor.memory?.outcomes?.recordOutcome(
@@ -675,9 +705,15 @@ internal class RosterHostedRun(
         }
     }
 
+    /**
+     * How the run ended, in precedence order (AMPR-425): cancelled, stopped by the gate,
+     * held, failed, succeeded. A hold outranks an earlier cycle's failure because it is
+     * why the run ended.
+     */
     private fun currentStatus(): RunStatus = when {
         cancellation != null -> RunStatus.Failed
         stoppedAt != null -> RunStatus.Stopped
+        heldAt != null -> RunStatus.Held
         results.any { it is StepOutcome.Failure } -> RunStatus.Failed
         else -> RunStatus.Succeeded
     }
@@ -689,6 +725,10 @@ internal class RosterHostedRun(
      * names every failed step and what it said — and a stated one otherwise, because a
      * run that was stopped, cancelled, or planned into nothing still happened and the
      * store is where that is visible.
+     *
+     * For a held run that is the held cycle's outcome — the run stops on the cycle that
+     * held, so the last plan outcome *is* the [ExecutionOutcome.Held], carrying the held
+     * step's reason and reference. [RunResult.outcome] reports it; LEARN records nothing.
      */
     private fun executionOutcome(cancelled: Boolean): ExecutionOutcome {
         (lastPlanOutcome as? ExecutionOutcome)?.takeIf { results.isNotEmpty() && !cancelled }?.let { return it }
