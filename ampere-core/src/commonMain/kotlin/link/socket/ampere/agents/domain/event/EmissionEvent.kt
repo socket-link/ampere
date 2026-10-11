@@ -8,6 +8,7 @@ import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.emission.AffordanceId
 import link.socket.ampere.agents.domain.emission.Emission
 import link.socket.ampere.agents.domain.emission.EmissionId
+import link.socket.ampere.agents.domain.emission.EmissionKind
 
 /**
  * Bus-level events that carry an [Emission].
@@ -72,7 +73,12 @@ sealed interface EmissionEvent : Event {
             formatSource: (EventSource) -> String,
         ): String = buildString {
             append("Emission produced: ")
-            append(emission.kind::class.simpleName ?: "Unknown")
+            append(
+                when (val kind = emission.kind) {
+                    is EmissionKind.Domain -> "Domain(${kind.id})"
+                    else -> kind::class.simpleName ?: "Unknown"
+                },
+            )
             append(" (id=${emission.id})")
             emission.provenance.parentEmissionId?.let { append(" parent=$it") }
             emission.dedupKey?.let { append(" dedup=$it") }

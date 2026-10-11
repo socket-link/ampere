@@ -25,7 +25,10 @@ CHI — **Computer-Human Interface** — is the runtime protocol by which the
 where HCI is the design discipline for how humans reach into computers, CHI
 is the protocol for how the system reaches out to a person. Every
 uncertainty escalation, confirmation request, ambient notification,
-decision query, or sensor report is an instance of CHI. `HumanInteractionEvent`
+decision query, or sensor report is an instance of CHI — as is presenting a
+typed domain object (a recipe, say) through `EmissionKind.Domain`, which
+rides the same [Emission](emission.md) primitive without a core kind of its
+own. `HumanInteractionEvent`
 — the request/response event pair for human input — was already collapsed
 into the `EmissionEvent` family by [AMPR-180](https://linear.app/miley/issue/AMPR-180)
 (`db0329a2`): it is a sealed interface extending `EmissionEvent`, with

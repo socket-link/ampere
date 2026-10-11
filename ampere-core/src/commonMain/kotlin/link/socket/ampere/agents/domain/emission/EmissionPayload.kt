@@ -2,6 +2,7 @@ package link.socket.ampere.agents.domain.emission
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /**
  * Format applied to an [EmissionPayload.Prose] body. Renderers honour the
@@ -26,11 +27,15 @@ enum class DangerLevel {
 }
 
 /**
- * Typed body of an [Emission]. One variant per [EmissionKind]; the pairing
- * is established by callers and validated lightly in [Emission.init].
+ * Typed body of an [Emission]. One variant per [EmissionKind]. The pairing is
+ * established by callers; `Emission`'s `init` enforces it for [Domain] only
+ * (a `Domain` kind must carry a `Domain` payload with the same id, and vice
+ * versa). The four core kinds are not checked, so existing producers are
+ * untouched.
  *
- * Adding a payload variant is a wire-format change — pick a stable
- * `@SerialName` and never rename it.
+ * Adding a *core* payload variant is a wire-format change — pick a stable
+ * `@SerialName` and never rename it. Domain kinds ride the one [Domain]
+ * variant and need no new core variant.
  */
 @Serializable
 sealed interface EmissionPayload {
@@ -79,4 +84,40 @@ sealed interface EmissionPayload {
         val unit: String? = null,
         val refreshUri: String? = null,
     ) : EmissionPayload
+
+    /**
+     * The body of a domain kind: a typed payload that lives outside this sealed
+     * hierarchy, carried as data. `body` is the typed value encoded with the
+     * kind's own serializer; `fallbackText` is what text-only surfaces (console,
+     * voice, digest) show, and what a consumer that does not know [kindId]
+     * shows instead of skipping the Emission.
+     *
+     * Build one through
+     * [link.socket.ampere.agents.domain.emission.kinds.DomainEmissionKind.encode]
+     * rather than by hand, so `body` is encoded canonically and the digest is
+     * stable.
+     *
+     * @property kindId the domain kind's lowercase slug; equals the paired
+     *   [EmissionKind.Domain.id].
+     * @property schemaVersion the version of the kind's body schema, `>= 1`. A
+     *   consumer whose descriptor is older than this version does not decode the
+     *   body and shows [fallbackText].
+     * @property body the typed payload, encoded with the kind's own serializer.
+     * @property fallbackText human-readable prose, never JSON. Required and
+     *   never blank.
+     */
+    @Serializable
+    @SerialName("EmissionPayload.Domain")
+    data class Domain(
+        val kindId: String,
+        val schemaVersion: Int,
+        val body: JsonElement,
+        val fallbackText: String,
+    ) : EmissionPayload {
+        init {
+            requireDomainKindId(kindId)
+            require(schemaVersion >= 1) { "schemaVersion must be >= 1, got $schemaVersion" }
+            require(fallbackText.isNotBlank()) { "fallbackText must not be blank for domain kind '$kindId'" }
+        }
+    }
 }

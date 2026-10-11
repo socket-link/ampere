@@ -9,6 +9,7 @@ import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Principal
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.emission.kinds.DomainEmissionKind
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
@@ -30,11 +31,13 @@ import link.socket.ampere.util.randomUUID
  * - [confirm] — an [EmissionKind.Confirmation] gating an effect
  * - [emit] — fire-and-forget [EmissionKind.Prose] narration
  * - [sense] — fire-and-forget [EmissionKind.Sensor] readings
+ * - [present] — fire-and-forget [EmissionKind.Domain] Emissions, typed through a [DomainEmissionKind]
  *
  * [ask], [askHuman], and [confirm] publish, register a reply waiter in
  * [replyRegistry], and suspend until the matching [EmissionEvent.Resolved]
- * arrives or [EmissionTimeout] fires. [emit] and [sense] publish and return
- * immediately — narration and ambient readings have no reply to await.
+ * arrives or [EmissionTimeout] fires. [emit], [sense] and [present] publish
+ * and return immediately — narration, ambient readings and domain objects
+ * have no reply to await.
  *
  * [publish] is the seam a host uses to intercept or wrap outgoing events —
  * for example to carry [Emission.surfaces] to its own renderers — before
@@ -207,6 +210,33 @@ class EmissionScope(
             Emission(
                 id = randomUUID(),
                 kind = EmissionKind.Sensor,
+                payload = payload,
+                provenance = provenance ?: defaultProvenance(payload),
+                producedAt = clock.now(),
+                surfaces = surfaces,
+            ),
+        )
+    }
+
+    /**
+     * Author and publish an [EmissionKind.Domain] Emission carrying [value],
+     * typed by [kind]. Fire-and-forget — like [emit] and [sense], no
+     * affordances are attached and no reply is awaited.
+     *
+     * The payload is [DomainEmissionKind.encode]d, so `body` is canonical and
+     * the provenance digest is stable for equal values.
+     */
+    suspend fun <T> present(
+        kind: DomainEmissionKind<T>,
+        value: T,
+        surfaces: List<Surface> = emptyList(),
+        provenance: EmissionProvenance? = null,
+    ): Emission {
+        val payload = kind.encode(value)
+        return publishOnly(
+            Emission(
+                id = randomUUID(),
+                kind = kind.kind,
                 payload = payload,
                 provenance = provenance ?: defaultProvenance(payload),
                 producedAt = clock.now(),

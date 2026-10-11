@@ -5,7 +5,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/emission/EmissionDigest.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/emission/Emission.kt
 related: [Emission, ChiProtocol]
-last_verified: 2026-06-04
+last_verified: 2026-10-11
 ---
 
 # EmissionDedup
@@ -30,9 +30,9 @@ the same Emission collide with its predecessor and lose audit trail.
 
 Effect-bearing kinds need dedup. A `Confirmation` raised twice in
 quick succession for the same action is noise that the human shouldn't
-see twice. Observation kinds (`Prose`, `Sensor`) often don't: two
-identical sensor readings a minute apart may legitimately want to
-render twice.
+see twice. Observation kinds (`Prose`, `Sensor`, and `Domain`, which
+`computeDedupKey` also leaves `null`) often don't: two identical sensor
+readings a minute apart may legitimately want to render twice.
 
 ## Where it lives
 
