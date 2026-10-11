@@ -18,23 +18,29 @@ import link.socket.ampere.agents.domain.reasoning.ConfidenceSource
  * The source is not stored beside the number: `field.Belief` carries the already-mapped value
  * only, so a reader of the column cannot tell the two apart. Nothing fits a band on it for that
  * reason — bands are fitted on measured judgments, through `BandFitGuard`, never on this column.
+ *
+ * A sealed *class*, not an interface, on purpose: `ampere-core` is exported to Objective-C, where
+ * interface members share one namespace across every protocol. An interface `value: Double` there
+ * collides with `kotlinx.coroutines.StateFlow.value`, and the exporter renames `StateFlow`'s —
+ * which breaks every Swift caller reading a flow's `value`. Class members are scoped to their own
+ * hierarchy.
  */
-sealed interface BeliefConfidence {
+sealed class BeliefConfidence {
 
     /** The number written to the column, in `[0, 1]`. */
-    val value: Double
+    abstract val value: Double
 
     /** Where [value] came from. */
-    val source: ConfidenceSource
+    abstract val source: ConfidenceSource
 
     /** A level a generative model reported about itself, stored as its F10 mapping. */
-    data class SelfReported(val level: Confidence) : BeliefConfidence {
+    data class SelfReported(val level: Confidence) : BeliefConfidence() {
         override val value: Double get() = level.asProbability()
         override val source: ConfidenceSource get() = ConfidenceSource.SELF_REPORTED
     }
 
     /** A probability a decision model measured, stored as-is. */
-    data class Measured(val probability: Double) : BeliefConfidence {
+    data class Measured(val probability: Double) : BeliefConfidence() {
         init {
             require(probability in 0.0..1.0) { "A measured confidence must be in [0, 1], was $probability" }
         }
