@@ -10,6 +10,7 @@ import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.outcome.OutcomeMemory
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.reasoning.AgentLLMService
@@ -91,6 +92,19 @@ class ToolExecutionEngineOutcomeRecordingTest {
     }
 
     @Test
+    fun `a blank outcome is not recorded`() = runTest {
+        val store = RecordingOutcomeRepository()
+        val engine = engineWith(runId = "arc-run-1", store = store)
+
+        val outcome = engine.execute(blankTool(), request())
+
+        assertTrue(outcome is ExecutionOutcome.Blank, "the tool had nothing to report and the call says so")
+        // A tool that ran and left nothing is no attempt worth remembering, and a blank's
+        // placeholder timestamps (`Instant.DISTANT_PAST`) would file the row at the year -100001.
+        assertTrue(store.calls.isEmpty(), "a blank outcome must not reach the store: ${store.calls}")
+    }
+
+    @Test
     fun `the run named by the request wins over the engine's own`() = runTest {
         val store = RecordingOutcomeRepository()
         val engine = engineWith(runId = "engine-run", store = store)
@@ -121,6 +135,15 @@ class ToolExecutionEngineOutcomeRecordingTest {
             "a failed memory write must not turn a successful tool call into a failure",
         )
     }
+
+    private fun blankTool() =
+        FunctionTool<ExecutionContext>(
+            id = "do-nothing",
+            name = "Do Nothing",
+            description = "Runs and has nothing to report",
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
+            executionFunction = { Outcome.blank },
+        )
 
     private fun succeedingTool(endedAt: Instant? = null) =
         FunctionTool<ExecutionContext>(

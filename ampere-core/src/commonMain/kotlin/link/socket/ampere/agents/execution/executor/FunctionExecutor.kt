@@ -7,6 +7,7 @@ import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.status.ExecutionStatus
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
@@ -33,6 +34,7 @@ import link.socket.ampere.agents.health.ExecutorSystemHealth
  *
  * Error handling philosophy:
  * - All failures are represented as ExecutionStatus.Failed or ExecutionOutcome.Failure
+ * - A tool that returns a blank outcome did not fail: it ends with ExecutionStatus.Blank
  * - Nothing throws exceptions from execute()
  * - Clear error messages guide users toward resolution
  *
@@ -67,10 +69,10 @@ class FunctionExecutor(
      * 1. Validates tool type (must be FunctionTool)
      * 2. Emits Started status
      * 3. Invokes the tool's execute method
-     * 4. Emits Completed or Failed status based on outcome
+     * 4. Emits Completed, Failed or Blank status based on outcome
      *
      * Returns a Flow that emits progress updates throughout execution.
-     * The flow always completes with either Completed or Failed status.
+     * The flow always completes with a terminal status: Completed, Failed or Blank.
      *
      * @param request The execution request with context and constraints
      * @param tool The tool to execute (must be a FunctionTool)
@@ -147,6 +149,18 @@ class FunctionExecutor(
                             executorId = id,
                             timestamp = Clock.System.now(),
                             result = outcome,
+                        ),
+                    )
+                }
+                // Both blanks, as AutonomousAgent.asPriorResult reads them: a tool that ran and
+                // had nothing to hand back. It did not fail, so it is not reported as a
+                // failure, and there is no result to complete with (AMPR-420).
+                is Outcome.Blank, is ExecutionOutcome.Blank -> {
+                    logger.i { "FunctionTool '${tool.name}' returned a blank outcome" }
+                    emit(
+                        ExecutionStatus.Blank(
+                            executorId = id,
+                            timestamp = Clock.System.now(),
                         ),
                     )
                 }
