@@ -10,6 +10,7 @@ import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 import link.socket.ampere.dsl.config.AnthropicConfig
 import link.socket.ampere.dsl.config.GeminiConfig
 import link.socket.ampere.dsl.config.OpenAIConfig
+import link.socket.ampere.dsl.config.OpenRouterConfig
 import link.socket.ampere.dsl.config.ProviderConfig
 
 /**
@@ -74,6 +75,7 @@ internal data class YamlAIProviderConfig(
                 is AnthropicConfig -> acc.withBackup(backup.toProviderConfig())
                 is OpenAIConfig -> acc.withBackup(backup.toProviderConfig())
                 is GeminiConfig -> acc.withBackup(backup.toProviderConfig())
+                is OpenRouterConfig -> acc.withBackup(backup.toProviderConfig())
             }
         }
     }

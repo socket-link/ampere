@@ -28,6 +28,10 @@ sealed interface AIProvider<
 
     companion object Companion {
 
+        /**
+         * The makers: one entry per provider whose models Ampere catalogues. A route
+         * such as [AIProvider_OpenRouter] is not listed, because its models are these.
+         */
         val ALL_PROVIDERS = listOf(
             AIProvider_Anthropic,
             AIProvider_Google,

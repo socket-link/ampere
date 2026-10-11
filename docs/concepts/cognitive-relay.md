@@ -10,7 +10,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/RoutingEvent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/TelemetryEvent.kt
 related: [PropelLoop, EventSerialBus, CognitionTrace, DecideSeam]
-last_verified: 2026-10-10
+last_verified: 2026-10-11
 ---
 
 # CognitiveRelay
@@ -24,6 +24,17 @@ agent identity, task hints) and resolves an `AIConfiguration` to use.
 The first matching rule wins; if no rule matches, the agent's default
 configuration is used as fallback. Every routing decision emits a
 `RoutingEvent`.
+
+A resolved configuration carries two facts that used to be one. Its
+**maker** travels with its model (`AIModel.makerId`: Anthropic makes
+Claude); its **route** is its provider — whose endpoint and key carry the
+call. Usually they coincide. `AIProvider_OpenRouter` is a route that is
+not a maker: `OpenRouterConfig(model = Claude.Sonnet5)` holds the same
+model object `AnthropicConfig` does, and only `AIConfiguration.wireModelId`
+differs — the slug from `OpenRouterModelSlugs` rather than the model's
+name. The relay chooses a model; the route decides only how it is reached
+(AMPR-434). `AIProvider.ALL_PROVIDERS` lists the makers, and the catalogue
+built from it has one row per model whatever the route.
 
 ## Why it exists
 
@@ -126,4 +137,5 @@ change.
 - **Reading a completed call's provider and model as the relay's decision.** Since AMPR-391 they are what *answered*. The relay's decision is on the start row, beside the `routingReason` that explains it. A consumer whose proxy routes server-side makes the two genuinely different, and a reader that treats them as interchangeable will attribute a cost to a model that was never called.
 - **Publishing a second `ProviderCall*` pair from a consumer's own response.** That is the duplication the served seam removes: two pairs for one call, one of them naming a model that did not answer, and no way for a reader to tell which is which. Report a `ServedBy` and there is one pair, correct.
 - **Substituting an engine-private model identity for the catalog's on the local path.** `LocalUpstreamLlmClient` reports the on-device provider and model the dispatch keyed on, deliberately. Two readers key on that pair: the on-device ledger balances a start against a completion on `(workflowId, agentId, providerId, modelId, cognitivePhase)`, and `DispatchingUpstreamLlmClient.localityOf` resolves a descriptor by model id. A name the catalog does not hold leaves the "generating now" indicator stuck on and labels a call that never left the device `CLOUD`. The engine's own reported model already reaches a surface through `LocalCapacity.modelId`.
+- **Registering a routed model as a second catalogue row.** A model reached through OpenRouter is the model its maker serves, so it already has a `ModelDescriptor` under its maker's id. A second row keyed on the route would duplicate a `modelName` the registry rejects, or — under another name — give one model two rungs and two prices, and let cheapest-capable pick a route as if it were a different model. A route changes how a chosen model is reached, never which model is chosen.
 - **Rebuilding the relay to change a model's rung.** The registry is the mutable surface — `refresh()` (whole catalog) or `register()` (one descriptor). Tearing down a live relay drops the rule set and every in-flight reasoning session along with it.

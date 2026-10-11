@@ -52,7 +52,10 @@ data class AmpereConfig(
 /**
  * AI provider configuration.
  *
- * Supported providers: anthropic, openai, gemini
+ * Supported providers: anthropic, openai, gemini, openrouter
+ *
+ * `openrouter` is a route rather than a maker: it reaches the same models through one
+ * OpenRouter key, so it also takes a `maker` naming whose model table `model` is read from.
  *
  * Models are specified using human-friendly names:
  * - Anthropic: opus-4.5, opus-4.1, opus-4, sonnet-4.5, sonnet-4, sonnet-3.7, haiku-4.5, haiku-3.5, haiku-3
@@ -61,11 +64,14 @@ data class AmpereConfig(
  */
 @Serializable
 data class AIProviderConfig(
-    /** Provider name: anthropic, openai, or gemini */
+    /** Provider name: anthropic, openai, gemini, or openrouter */
     val provider: String,
 
-    /** Model name (provider-specific) */
+    /** Model name (provider-specific; for openrouter, specific to [maker]) */
     val model: String,
+
+    /** Required with provider openrouter: anthropic, openai, or gemini. Ignored otherwise. */
+    val maker: String? = null,
 
     /** Optional fallback providers if primary fails */
     val backups: List<AIProviderConfig> = emptyList(),

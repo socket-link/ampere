@@ -11,6 +11,7 @@ import link.socket.ampere.domain.ai.provider.AIProvider
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.domain.ai.provider.AIProvider_Google
 import link.socket.ampere.domain.ai.provider.AIProvider_OpenAI
+import link.socket.ampere.domain.ai.provider.AIProvider_OpenRouter
 import link.socket.ampere.domain.tool.AITool
 
 /**
@@ -154,6 +155,55 @@ data class GeminiConfig(
      * Add a backup configuration that will be used if the primary fails.
      */
     fun withBackup(config: ProviderConfig): GeminiConfig = copy(
+        backups = backups + config.toAIConfiguration(),
+    )
+}
+
+/**
+ * Configuration for any bundled model, reached through OpenRouter rather than its
+ * maker's key (AMPR-434).
+ *
+ * The model is the same object its maker's config takes — `model.makerId` still
+ * names the maker — and the request carries OpenRouter's slug for it. There is no
+ * default model: the caller names one.
+ *
+ * Example:
+ * ```kotlin
+ * val config = AnthropicConfig(model = Claude.Sonnet5)
+ *     .withBackup(OpenRouterConfig(model = Claude.Sonnet5))
+ * ```
+ *
+ * @param apiKey Optional runtime API key. When omitted, falls back to the generated KotlinConfig value.
+ * @param model The model to reach through OpenRouter. One OpenRouter does not offer
+ * fails when the configuration's wire id is read.
+ */
+data class OpenRouterConfig(
+    val apiKey: String? = null,
+    val model: AIModel,
+    private val backups: List<AIConfiguration> = emptyList(),
+) : ProviderConfig {
+
+    override fun toAIConfiguration(): AIConfiguration {
+        val primary = AIConfiguration_Default(
+            provider = runtimeProviderOrDefault(
+                apiKey = apiKey,
+                defaultProvider = AIProvider_OpenRouter,
+                runtimeProviderFactory = AIProvider_OpenRouter::withApiToken,
+            ),
+            model = model,
+        )
+
+        return if (backups.isEmpty()) {
+            primary
+        } else {
+            AIConfiguration_WithBackups(listOf(primary) + backups)
+        }
+    }
+
+    /**
+     * Add a backup configuration that will be used if the primary fails.
+     */
+    fun withBackup(config: ProviderConfig): OpenRouterConfig = copy(
         backups = backups + config.toAIConfiguration(),
     )
 }

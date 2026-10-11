@@ -6,6 +6,7 @@ import io.ktor.util.date.GMTDate
 import io.ktor.util.date.Month
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs.Companion.TEXT
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs.Companion.TEXT_AND_IMAGE
+import link.socket.ampere.domain.ai.provider.ProviderId
 import link.socket.ampere.domain.limits.ModelLimits
 import link.socket.ampere.domain.limits.RateLimitsFactory
 import link.socket.ampere.domain.limits.TokenCount
@@ -20,6 +21,9 @@ sealed class AIModel_OpenAI(
     override val features: AIModelFeatures,
     override val limits: ModelLimits,
 ) : AIModel(name, displayName, description, features, limits) {
+
+    override val makerId: ProviderId
+        get() = "openai"
 
     data object GPT_5 : AIModel_OpenAI(
         name = GPT_5_NAME,

@@ -7,6 +7,7 @@ import io.ktor.util.date.Month
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeSpeed
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs
+import link.socket.ampere.domain.ai.provider.ProviderId
 import link.socket.ampere.domain.limits.ModelLimits
 import link.socket.ampere.domain.limits.RateLimitsFactory
 import link.socket.ampere.domain.limits.TokenCount
@@ -21,6 +22,9 @@ sealed class AIModel_Gemini(
     override val features: AIModelFeatures,
     override val limits: ModelLimits,
 ) : AIModel(name, displayName, description, features, limits) {
+
+    override val makerId: ProviderId
+        get() = "google"
 
     data object Pro_2_5 : AIModel_Gemini(
         name = _2_5_Pro_NAME,

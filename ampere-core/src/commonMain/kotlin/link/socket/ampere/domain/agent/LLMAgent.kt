@@ -212,7 +212,9 @@ interface LLMAgent {
         }
 
         return ChatCompletionRequest(
-            model = model.toClientModelId(),
+            // The agent's own model goes out under its configuration's wire id, so a routed
+            // configuration sends the route's id for it; any other model is sent by name.
+            model = config.takeIf { it.model == model }?.toClientModelId() ?: model.toClientModelId(),
             messages = messages,
             tools = tools.ifEmpty { null },
             topP = 0.2.takeIf { model.features.supportsSamplingParameters },

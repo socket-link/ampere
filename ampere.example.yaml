@@ -14,7 +14,7 @@
 # -------------------------
 # Choose your AI provider and model. Backups will only be used if the preferred provider fails.
 ai:
-  provider: anthropic           # Options: anthropic, openai, gemini
+  provider: anthropic           # Options: anthropic, openai, gemini, openrouter
   model: sonnet-5               # See the model list below
 
   # Optional: Fallback providers (tried in order if primary fails)
@@ -23,6 +23,27 @@ ai:
       model: gpt-5.4
     - provider: gemini
       model: flash-3.8
+
+# OpenRouter
+# ----------
+# `openrouter` is a route, not a maker: one key (openrouter_api_key) reaching the
+# models listed below through OpenRouter. It takes a `maker` field (anthropic,
+# openai or gemini) naming which list `model` is read from, and fails without one:
+#
+#   ai:
+#     provider: openrouter
+#     maker: gemini
+#     model: flash-3.8
+#
+# As a backup, it reaches the same model through a different key:
+#
+#   ai:
+#     provider: anthropic
+#     model: sonnet-5
+#     backups:
+#       - provider: openrouter
+#         maker: anthropic
+#         model: sonnet-5
 
 # Available Models:
 # -----------------
