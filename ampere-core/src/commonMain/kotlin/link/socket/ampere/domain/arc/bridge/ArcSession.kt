@@ -38,6 +38,7 @@ import link.socket.ampere.domain.arc.ArcRunRejectedException
 import link.socket.ampere.domain.arc.CompletionManifest
 import link.socket.ampere.domain.arc.CompletionManifestSink
 import link.socket.ampere.domain.arc.TerminationReason
+import link.socket.ampere.goal.GoalBranch
 import link.socket.ampere.llm.OnDeviceInferenceBinding
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.llm.decide.UpstreamDecisionClient
@@ -631,6 +632,11 @@ class ArcSession(
             // rather than FTS — the session holds a `Database`, not the driver behind it.
             val knowledgeRepository = database?.let { KnowledgeRepositoryImpl(it) }
 
+            // The Field's Goal branch (AMPR-419): each run's goal tree persisted under its id,
+            // announced through the session's own door, so a run's goals outlive the run and its
+            // trace carries them. Without a database there is no branch to write to.
+            val goalBranch = database?.let { db -> eventApi?.let { GoalBranch.over(db, it) } }
+
             // The relay's routing events go through the session's door, under the run they
             // belong to; silent without one.
             val onDevice = engine?.let {
@@ -663,6 +669,7 @@ class ArcSession(
                     clock = clock,
                     completionManifestSink = manifestSink?.let { it::record },
                     outcomeRepository = outcomeRepository,
+                    goalBranch = goalBranch,
                 ),
                 eventSerialBus = bus,
                 eventApi = eventApi,

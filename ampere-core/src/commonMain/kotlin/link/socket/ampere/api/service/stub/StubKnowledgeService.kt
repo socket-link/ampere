@@ -40,7 +40,7 @@ class StubKnowledgeService : KnowledgeService {
                 approach = knowledge.approach,
                 learnings = knowledge.learnings,
                 timestamp = Clock.System.now(),
-                confidence = confidence?.value,
+                confidence = confidence?.probability,
                 sensitivity = sensitivity,
             ),
         )

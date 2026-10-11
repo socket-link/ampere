@@ -169,6 +169,10 @@ object EventRegistry {
         SubjectEvent.SubjectRegistered.EVENT_TYPE,
         SubjectEvent.RelationshipRecorded.EVENT_TYPE,
 
+        // GoalEvent types (the Goal branch, AMPR-419)
+        GoalEvent.GoalFormed.EVENT_TYPE,
+        GoalEvent.GoalUpdated.EVENT_TYPE,
+
         // LinkEvent types
         LinkEvent.LinkGranted.EVENT_TYPE,
         LinkEvent.LinkRevoked.EVENT_TYPE,

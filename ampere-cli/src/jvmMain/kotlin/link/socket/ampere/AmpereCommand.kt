@@ -60,6 +60,7 @@ import link.socket.ampere.domain.arc.ArcOutcome
 import link.socket.ampere.domain.arc.ArcRegistry
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.domain.arc.CompletionManifestSink
+import link.socket.ampere.goal.GoalBranch
 import link.socket.ampere.terminal.TerminalFactory
 
 /**
@@ -290,6 +291,7 @@ class AmpereCommand(
                             eventApiFactory = context.environmentService::createEventApi,
                             knowledgeRepository = context.knowledgeRepository,
                             outcomeRepository = context.outcomeMemoryRepository,
+                            goalBranch = context.goalBranch,
                             jazzPane = jazzPane,
                         ) { status -> systemStatus = status }
                     } else {
@@ -658,6 +660,7 @@ class AmpereCommand(
         eventApiFactory: (AgentId) -> AgentEventApi,
         knowledgeRepository: KnowledgeRepository,
         outcomeRepository: OutcomeMemoryRepository,
+        goalBranch: GoalBranch,
         jazzPane: CognitiveProgressPane,
         updateStatus: (StatusBar.SystemStatus) -> Unit,
     ) {
@@ -677,6 +680,8 @@ class AmpereCommand(
                     knowledgeRepository = knowledgeRepository,
                     // AMPR-406: so `ampere outcomes ticket <runId>` can answer for this run.
                     outcomeRepository = outcomeRepository,
+                    // AMPR-419: the run's goal tree on the Field's Goal branch, under its id.
+                    goalBranch = goalBranch,
                 )
                 val shutdownHook = ArcShutdownHook(cancelRun = runtime::cancel).install()
 
@@ -787,6 +792,7 @@ class AmpereCommand(
                             eventApiFactory = context.environmentService::createEventApi,
                             knowledgeRepository = context.knowledgeRepository,
                             outcomeRepository = context.outcomeMemoryRepository,
+                            goalBranch = context.goalBranch,
                         )
                         isOneShot = true
                     } else {
@@ -868,6 +874,7 @@ class AmpereCommand(
         eventApiFactory: (AgentId) -> AgentEventApi,
         knowledgeRepository: KnowledgeRepository,
         outcomeRepository: OutcomeMemoryRepository,
+        goalBranch: GoalBranch,
     ) {
         // AMPR-300: the run is confined to the CLI's explicitly resolved workspace, not the CWD.
         val projectDirPath = workspace.baseDirectory
@@ -881,6 +888,8 @@ class AmpereCommand(
             knowledgeRepository = knowledgeRepository,
             // AMPR-406: see the TUI path above.
             outcomeRepository = outcomeRepository,
+            // AMPR-419: see the TUI path above.
+            goalBranch = goalBranch,
         )
         val shutdownHook = ArcShutdownHook(cancelRun = runtime::cancel).install()
 

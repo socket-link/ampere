@@ -23,10 +23,13 @@ import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.utils.ConsoleEventLogger
+import link.socket.ampere.agents.events.utils.EventLogger
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
+import link.socket.ampere.goal.GoalBranch
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.trace.ArcRunId
@@ -163,6 +166,17 @@ class AmpereRuntime(
      * Null records nothing, which is what a runtime built without a database gets.
      */
     private val outcomeRepository: OutcomeMemoryRepository? = null,
+    /**
+     * The Field's Goal branch (AMPR-419, F8): where each run's goal tree is persisted.
+     *
+     * Charge forms the tree it builds onto the branch under the run's id — one `GoalFormed` per
+     * node through the branch's door, under the run — and Flow marks each goal complete there the
+     * tick it completes. A goal the run did not finish stays open on the branch. A write that
+     * fails is logged and never changes how the run goes or is reported.
+     *
+     * Null keeps the tree in memory only, which is what a runtime built without a database gets.
+     */
+    private val goalBranch: GoalBranch? = null,
 ) {
     init {
         // Declared-but-unimplemented policies fail here, at construction, rather than on the
@@ -176,6 +190,9 @@ class AmpereRuntime(
 
     private var chargeResult: ChargeResult? = null
     private var flowResult: FlowResult? = null
+
+    /** Where a Goal branch write that failed is reported; see [goalBranch]. */
+    private val goalBranchLogger: EventLogger = ConsoleEventLogger()
 
     /**
      * Admission and liveness in one atomic cell (AMPR-358), so claiming the runtime is a single
@@ -334,7 +351,7 @@ class AmpereRuntime(
 
         // Phase 2: Flow - Execute agent loop
         reachedPhase = ArcPhase.FLOW
-        val flow = executeFlow(charge)
+        val flow = executeFlow(charge, runId)
         flowResult = flow
 
         // Phase 3: Pulse - Evaluate and capture learnings
@@ -523,15 +540,21 @@ class AmpereRuntime(
         knowledgeRepository = knowledgeRepository,
         outcomeRepository = outcomeRepository,
         clock = clock,
+        goalBranch = goalBranch,
+        logger = goalBranchLogger,
     )
 
-    private suspend fun executeFlow(chargeResult: ChargeResult): FlowResult {
+    private suspend fun executeFlow(chargeResult: ChargeResult, runId: ArcRunId): FlowResult {
         val phase = FlowPhase(
             arcConfig = arcConfig,
             agents = chargeResult.agents,
             goalTree = chargeResult.goalTree,
             maxTicks = maxFlowTicks,
             clock = clock,
+            onGoalCompleted = goalBranch?.let { branch ->
+                val complete: suspend (GoalNode) -> Unit = { goal -> completeOnBranch(branch, runId, goal) }
+                complete
+            },
         )
         flowPhase = phase
 
@@ -541,6 +564,17 @@ class AmpereRuntime(
         }
 
         return phase.execute()
+    }
+
+    /** Mark [goal] complete on the Goal branch; a failure is logged, never thrown into the tick. */
+    private suspend fun completeOnBranch(branch: GoalBranch, runId: ArcRunId, goal: GoalNode) {
+        branch.complete(runId, goal.id).onFailure { failure ->
+            if (failure is CancellationException) throw failure
+            goalBranchLogger.logError(
+                message = "Goal '${goal.id}' of Arc run $runId was not marked complete on the Goal branch",
+                throwable = failure,
+            )
+        }
     }
 
     private suspend fun executePulse(
@@ -686,6 +720,8 @@ class AmpereRuntime(
          *   with [eventApiFactory] or Pulse stores nothing. See the constructor parameter.
          * @param outcomeRepository Where the run's own outcome and its agents' tool outcomes are
          *   recorded; see the constructor parameter of the same name
+         * @param goalBranch Where each run's goal tree is persisted (AMPR-419); see the constructor
+         *   parameter of the same name
          * @param executor What the agents a run spawns dispatch their tool calls through
          *   (AMPR-405). Defaults to [FunctionExecutor.create] — unlike the primary
          *   constructor, which stays null for callers wiring their own (the eval Bench's
@@ -706,6 +742,7 @@ class AmpereRuntime(
             knowledgeRepository: KnowledgeRepository? = null,
             outcomeRepository: OutcomeMemoryRepository? = null,
             executor: Executor? = FunctionExecutor.create(),
+            goalBranch: GoalBranch? = null,
         ): AmpereRuntime {
             return AmpereRuntime(
                 arcConfig = arcConfig,
@@ -718,6 +755,7 @@ class AmpereRuntime(
                 clock = clock,
                 completionManifestSink = completionManifestSink,
                 outcomeRepository = outcomeRepository,
+                goalBranch = goalBranch,
             )
         }
 

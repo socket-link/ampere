@@ -25,6 +25,7 @@ import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.EventStoreEvent
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
+import link.socket.ampere.agents.domain.event.GoalEvent
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.event.LinkEvent
 import link.socket.ampere.agents.domain.event.MeetingEvent
@@ -238,6 +239,10 @@ class EventRenderer(
             // between two. Blue: a record, not a decision.
             is SubjectEvent.SubjectRegistered -> "🪪" to blue
             is SubjectEvent.RelationshipRecorded -> "🔗" to blue
+            // The Goal branch (AMPR-419): a goal formed, or one whose status moved. Blue: a
+            // record of the run's own intent, not a decision.
+            is GoalEvent.GoalFormed -> "🎯" to blue
+            is GoalEvent.GoalUpdated -> "🏁" to blue
         }
     }
 

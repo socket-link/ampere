@@ -12,6 +12,7 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventStoreEvent
 import link.socket.ampere.agents.domain.event.FileSystemEvent
 import link.socket.ampere.agents.domain.event.GitEvent
+import link.socket.ampere.agents.domain.event.GoalEvent
 import link.socket.ampere.agents.domain.event.HumanInteractionEvent
 import link.socket.ampere.agents.domain.event.LinkEvent
 import link.socket.ampere.agents.domain.event.MeetingEvent
@@ -170,6 +171,8 @@ object EventCategorizer {
         // The Subject registry grew (AMPR-416): a record the fold resolves against, not a
         // decision anyone has to see.
         is SubjectEvent,
+        // The Goal branch (AMPR-419): the run's goal tree on the record, not a decision.
+        is GoalEvent,
         is SupervisorEvent.DispatchRecorded -> EventSignificance.ROUTINE
 
         is RoutingEvent.RouteFallback,

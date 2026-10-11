@@ -6,11 +6,16 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.definition.SparkAgentFactory
+import link.socket.ampere.agents.domain.event.GoalEvent
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
+import link.socket.ampere.agents.events.InMemoryEventApi
+import link.socket.ampere.goal.GoalBranch
 import okio.FileSystem
 import okio.Path.Companion.toPath
 
@@ -150,4 +155,63 @@ class ChargePhaseTest {
         assertEquals("Implement auth and add tests", result.goalTree.root.description)
         assertEquals(1, result.agents.size)
     }
+
+    /**
+     * AMPR-419: Charge puts the tree it builds onto the Goal branch, and what it hands Flow is the
+     * tree read back from the store — so a second Charge of the same run gets the stored tree and
+     * forms nothing new.
+     */
+    @Test
+    fun `charge phase persists its goal tree and hands back the stored one`() = runBlocking<Unit> {
+        val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        val handle = InMemoryEventApi.open(agentId = CompletionManifestSink.DEFAULT_AGENT_ID, scope = scope)
+        try {
+            val branch = GoalBranch.over(handle.database, handle.api)
+            val projectDir = chargeableProjectDir()
+            val runId = "ampr419-charge"
+            val userGoal = "Implement auth and add tests"
+            fun charge() = ChargePhase(
+                arcConfig = ArcConfig(name = "charge-goal-arc", agents = listOf(ArcAgentConfig(role = "code"))),
+                projectDir = projectDir,
+                agentScope = scope,
+                runId = runId,
+                goalBranch = branch,
+            )
+            suspend fun formedCount() =
+                handle.repository.getAllEvents().getOrThrow().count { it is GoalEvent.GoalFormed }
+
+            val first = charge().execute(userGoal)
+
+            assertEquals(GoalTreeBuilder().build(userGoal), first.goalTree)
+            assertEquals(first.goalTree, branch.tree(runId).getOrThrow())
+            assertEquals(3, formedCount(), "one GoalFormed per node")
+
+            val second = charge().execute(userGoal)
+
+            assertEquals(first.goalTree, second.goalTree)
+            assertEquals(3, formedCount(), "a tree already on the branch is not formed again")
+        } finally {
+            scope.cancel()
+            handle.close()
+        }
+    }
+
+    /** A project [ChargePhase] accepts: sources present, with a tech stack, architecture and conventions. */
+    private fun chargeableProjectDir() = createTempDirectory("charge-goal-branch").also { dir ->
+        dir.resolve("README.md").writeText("# GoalBranchProject\n\nA project whose goals are persisted.")
+        dir.resolve("AGENTS.md").writeText(
+            """
+            # AGENTS
+
+            ## Dependencies
+            - Kotlin
+
+            ## Conventions
+            - Use Kotlin style
+
+            ## Architecture
+            - Modular design
+            """.trimIndent(),
+        )
+    }.toString().toPath()
 }

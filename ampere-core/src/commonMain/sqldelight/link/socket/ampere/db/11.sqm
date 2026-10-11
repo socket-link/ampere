@@ -1,0 +1,26 @@
+-- AMPR-419 (F8): the Goal branch. Until now an Arc run's `GoalTree` lived only in memory and was
+-- gone when the run settled, and the only other "goal" anywhere was the string-typed
+-- `ProjectState.Goal`. This adds the table that persists the agent's own goals; a tracker's view
+-- of them is a `Mirrors` edge in RelationshipStore (9.sqm), not a row here. Definition copied
+-- from GoalStore.sq; IF NOT EXISTS keeps this a no-op on a database that already has it.
+--
+-- This ticket owns 11.sqm and only 11.sqm: the Subject registry is 9.sqm and the belief columns
+-- (F9) are 10.sqm, which landed first. The contents are independent; the order matters only
+-- because SQLDelight runs a migration solely for a database below its number.
+CREATE TABLE IF NOT EXISTS GoalStore (
+  id TEXT NOT NULL PRIMARY KEY,
+  parent_id TEXT,
+  ordinal INTEGER NOT NULL,
+  description TEXT NOT NULL,
+  status TEXT NOT NULL,
+  subject_ref TEXT NOT NULL,
+  run_id TEXT,
+  created_by_event TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_by_event TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_goal_store_run_id ON GoalStore(run_id);
+CREATE INDEX IF NOT EXISTS idx_goal_store_parent_id ON GoalStore(parent_id, ordinal);
+CREATE INDEX IF NOT EXISTS idx_goal_store_subject_status ON GoalStore(subject_ref, status);

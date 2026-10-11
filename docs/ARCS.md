@@ -23,12 +23,18 @@ Building potential. The system prepares by understanding the project context and
 
 - Analyze project structure (from `AGENTS.md`, `README.md`, etc.)
 - Decompose the user's goal into a `GoalTree`. This is a regex split on
-  `and then` / `then` / `and` / `;` / newline (`ChargePhase.kt:334-338`), not a
+  `and then` / `then` / `and` / `;` / newline (`ChargePhase.kt:376-380`), not a
   model call — one goal node per clause.
+- Persist that tree as the run's goals on the Field's Goal branch when the
+  runtime has one ([AMPR-419](https://linear.app/miley/issue/AMPR-419)): one
+  `GoalEvent.GoalFormed` per node through the branch's door, under the run id,
+  then a `GoalStore` row keyed `<run id>/<node id>`. The tree Flow runs on is
+  the one read back from the store. `ArcSession` with a database and the CLI
+  wire a branch; the eval Bench does not.
 - Spawn the agents defined for this arc: one `SparkBasedAgent` per configured
   role, with the project spark, the role spark and any extra sparks stacked
-  (`ChargePhase.kt:345-371`). Each spawn gets a fresh id; there is no agent
-  registry and no identity across runs.
+  (`ChargePhase.kt:387-413`). Each spawn gets a fresh id and is not entered
+  in the Subject registry, so there is no identity across runs.
 
 ### Flow
 Active work. Agents take turns, each turn running perceive → recall → plan → execute.
@@ -39,10 +45,13 @@ Active work. Agents take turns, each turn running perceive → recall → plan �
 - Runs until the goal tree is marked complete or `maxFlowTicks` is reached
   (default 100). Each tick takes its task from the Arc's current goal since
   [AMPR-395](https://linear.app/miley/issue/AMPR-395)
-  (`FlowPhase.taskForCurrentGoal`, `:267-278`) — before that it read the agent's
+  (`FlowPhase.taskForCurrentGoal`, `:274-285`) — before that it read the agent's
   own memory cell, which nothing on this path writes, so the goal never arrived.
   One caveat remains: a goal is marked complete on *any* successful outcome,
-  with no check that it was met (`FlowPhase.kt:298-310`).
+  with no check that it was met (`FlowPhase.kt:311-328`). With a Goal branch
+  wired, each first completion also moves the stored goal to `COMPLETED`
+  (`GoalEvent.GoalUpdated`) in the tick that made it; a goal the run never
+  meets stays `OPEN` after the run settles.
 - A tick has no Observe step, and no Learn step of its own — the Arc's closing
   phase is Pulse, once per run rather than once per tick. The comments calling
   the tick's steps "remember" and "optimize" are pre-PROPEL naming

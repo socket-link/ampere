@@ -78,12 +78,19 @@ data class SharedContext(
     }
 }
 
+/**
+ * @param onGoalCompleted Called once per goal, the first time Flow marks it complete, from the
+ *   tick that did. `AmpereRuntime` hands the Goal branch's status write in here (AMPR-419), so
+ *   the persisted goal moves as the run does rather than when it settles. It must not throw: a
+ *   tick that throws ends the run as ERROR.
+ */
 class FlowPhase(
     private val arcConfig: ArcConfig,
     private val agents: List<Agent<*>>,
     private val goalTree: GoalTree,
     private val maxTicks: Int = 100,
     private val clock: Clock = Clock.System,
+    private val onGoalCompleted: (suspend (GoalNode) -> Unit)? = null,
 ) {
     // Volatile because [stop] is called from another thread while the tick loop is running, and
     // [getCurrentTick]/[snapshot] are read from another thread while it is still ticking.
@@ -301,10 +308,15 @@ class FlowPhase(
             .getOrElse { emptyList() }
     }
 
-    private fun evaluateGoalCompletion() {
+    private suspend fun evaluateGoalCompletion() {
         // Simple heuristic: mark current goal as complete on any success
         // In a real implementation, this would use more sophisticated criteria
-        sharedContext.markGoalComplete(sharedContext.currentGoal)
+        val goal = sharedContext.currentGoal
+        val newlyCompleted = goal !in sharedContext.completedGoals
+        sharedContext.markGoalComplete(goal)
+        if (newlyCompleted) {
+            onGoalCompleted?.invoke(goal)
+        }
 
         // Move to next incomplete goal if available
         val nextGoal = goalTree.allNodes()

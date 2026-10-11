@@ -102,6 +102,7 @@ class DatabaseSchemaManagerTest {
             assertTrue(tableExists(driver, "Links"))
             assertTrue(tableExists(driver, "LinkGrants"))
             assertTrue(tableExists(driver, "PauseStore"))
+            assertTrue(tableExists(driver, "GoalStore"))
             assertEquals(
                 listOf("evt-1"),
                 query(driver, "SELECT event_id FROM EventStore WHERE run_id IS NULL") { it.getString(0)!! },
@@ -136,6 +137,7 @@ class DatabaseSchemaManagerTest {
             "PauseStore",
             "SubjectStore",
             "RelationshipStore",
+            "GoalStore",
         ) + UNMIGRATED_SQ_TABLES
         val fresh = inMemoryDriver().use { driver ->
             DatabaseSchemaManager.ensure(driver).getOrThrow()
@@ -146,6 +148,43 @@ class DatabaseSchemaManagerTest {
             DatabaseSchemaManager.ensure(driver).getOrThrow()
 
             assertEquals(fresh, migratedTables.associateWith { tableShape(driver, it) })
+        }
+    }
+
+    @Test
+    fun `a database one migration behind gains the goal branch and keeps its edges`() {
+        // Stamped just below 11.sqm, with RelationshipStore present and no GoalStore: only 11.sqm
+        // has a step to run (AMPR-419). Built from the current schema and stamped 11 rather than
+        // 10: replaying 10.sqm's ADD COLUMNs onto a schema that already has them would fail for a
+        // reason that is not this migration's.
+        val path = tempDir / "pre-goal-branch.db"
+        fileDriver(path).use { driver ->
+            DatabaseSchemaManager.ensure(driver).getOrThrow()
+            driver.execute(null, "DROP TABLE GoalStore", 0)
+            driver.execute(
+                null,
+                "INSERT INTO RelationshipStore VALUES ('wi-1', 'run-1/goal-0', 'Mirrors', 'evt-1', 1000)",
+                0,
+            )
+            DatabaseSchemaManager.writeUserVersion(driver, GOAL_BRANCH_MIGRATION)
+        }
+
+        fileDriver(path).use { driver ->
+            assertEquals(
+                SchemaState.Migrated(from = GOAL_BRANCH_MIGRATION, to = schemaVersion),
+                DatabaseSchemaManager.ensure(driver).getOrThrow(),
+            )
+            assertTrue(tableExists(driver, "GoalStore"))
+            assertEquals(
+                listOf("idx_goal_store_parent_id", "idx_goal_store_run_id", "idx_goal_store_subject_status"),
+                indexes(driver, "GoalStore").filterNot { it.startsWith("sqlite_autoindex") }.sorted(),
+            )
+            assertEquals(
+                listOf("wi-1 Mirrors run-1/goal-0"),
+                query(driver, "SELECT from_ref, kind, to_ref FROM RelationshipStore") {
+                    "${it.getString(0)} ${it.getString(1)} ${it.getString(2)}"
+                },
+            )
         }
     }
 
@@ -477,6 +516,9 @@ class DatabaseSchemaManagerTest {
         ).value
 
     private companion object {
+        /** `11.sqm`: a database below this version gets the goal branch (AMPR-419). */
+        const val GOAL_BRANCH_MIGRATION = 11L
+
         /** 1.sqm as first shipped (AMPR-152), before AMPR-333 rewrote it to rebuild KnowledgeStore. */
         val ORIGINAL_1_SQM = listOf(
             "ALTER TABLE EventStore ADD COLUMN run_id TEXT",

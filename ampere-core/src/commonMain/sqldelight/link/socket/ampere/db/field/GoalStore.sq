@@ -1,0 +1,81 @@
+-- AMPR-419 (F8): the Goal branch of the Field. One row per goal the agent itself holds — a
+-- `GoalNode` of an Arc run's `GoalTree`, persisted (`link.socket.ampere.field.Goal`). A tracker's
+-- view of the same work (`CanonWorkItem`, `CanonProject`, `CanonMilestone`) is *not* a row here:
+-- it is perceived Environment, linked to a goal by a `Mirrors` edge in RelationshipStore
+-- (`from_ref` = the entity's Link-qualified `canon/<link>/<id>` ref, `to_ref` = this table's `id`). The tracker's view mirrors the goal;
+-- it never replaces it.
+--
+-- `id` is the goal's `Ref` value. A goal formed by an Arc run is keyed `<run_id>/<node id>`,
+-- because `GoalTreeBuilder` numbers every run's nodes from `goal-0`. `parent_id` is the enclosing
+-- goal's `id`, NULL at a root; `ordinal` is the node's place among its siblings, which is the
+-- order Flow works them in. No foreign key to this table or to SubjectStore: the fold resolves
+-- refs, not the database.
+--
+-- `status` is the name of a `GoalStatus` and is deliberately not CHECKed: a later status is a new
+-- Kotlin value, not a table rebuild, and a row whose status this build does not know is reported
+-- by name when read. `subject_ref` is whose goal it is — the Subject that formed it.
+--
+-- `created_by_event` / `created_at` are the row's `Provenance`: the `GoalFormed` event and its
+-- envelope's `recorded_at`. `updated_by_event` / `updated_at` name the event of the row's latest
+-- write — the `GoalFormed` itself until a `GoalUpdated` moves the status.
+CREATE TABLE GoalStore (
+  id TEXT NOT NULL PRIMARY KEY,
+  parent_id TEXT,
+  ordinal INTEGER NOT NULL,
+  description TEXT NOT NULL,
+  status TEXT NOT NULL,
+  subject_ref TEXT NOT NULL,
+  run_id TEXT,
+  created_by_event TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_by_event TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- A run's tree is read whole; a Subject's open goals are read by status.
+CREATE INDEX idx_goal_store_run_id ON GoalStore(run_id);
+CREATE INDEX idx_goal_store_parent_id ON GoalStore(parent_id, ordinal);
+CREATE INDEX idx_goal_store_subject_status ON GoalStore(subject_ref, status);
+
+-- OR IGNORE: forming a goal that exists is the same goal, and the first write keeps its
+-- provenance. The branch reads back to learn which row won.
+insertGoal:
+INSERT OR IGNORE INTO GoalStore(
+  id, parent_id, ordinal, description, status, subject_ref, run_id,
+  created_by_event, created_at, updated_by_event, updated_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectGoal:
+SELECT id, parent_id, ordinal, description, status, subject_ref, run_id,
+  created_by_event, created_at, updated_by_event, updated_at
+FROM GoalStore
+WHERE id = ?;
+
+-- Parents before children is not guaranteed by this order; the branch assembles the tree by
+-- `parent_id`, and `ordinal` orders siblings.
+selectGoalsByRun:
+SELECT id, parent_id, ordinal, description, status, subject_ref, run_id,
+  created_by_event, created_at, updated_by_event, updated_at
+FROM GoalStore
+WHERE run_id = ?
+ORDER BY ordinal ASC, id ASC;
+
+selectChildGoals:
+SELECT id, parent_id, ordinal, description, status, subject_ref, run_id,
+  created_by_event, created_at, updated_by_event, updated_at
+FROM GoalStore
+WHERE parent_id = ?
+ORDER BY ordinal ASC, id ASC;
+
+selectGoalsBySubjectAndStatus:
+SELECT id, parent_id, ordinal, description, status, subject_ref, run_id,
+  created_by_event, created_at, updated_by_event, updated_at
+FROM GoalStore
+WHERE subject_ref = ? AND status = ?
+ORDER BY created_at ASC, ordinal ASC, id ASC;
+
+updateGoalStatus:
+UPDATE GoalStore
+SET status = ?, updated_by_event = ?, updated_at = ?
+WHERE id = ?;
