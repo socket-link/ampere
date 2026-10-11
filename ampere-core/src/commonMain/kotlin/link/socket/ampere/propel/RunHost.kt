@@ -67,7 +67,11 @@ interface RunHost {
      *   on, so two seats sharing a tool stay unambiguous about who runs it.
      * @param policy Cycles, LEARN and the gate. See [RunPolicy].
      * @throws IllegalArgumentException if no seat fills the roster's host, if a seat
-     *   names a role the roster does not hold, or if two seats share an agent id.
+     *   names a role the roster does not hold, if two seats share an agent id, or if a
+     *   seat is asked a question it has no decision transport to answer on —
+     *   [RunPolicy.goalCheck] is [GoalCheck.Record] with no
+     *   [HostedAgent.upstreamDecisionClient] on the host seat, or a verifier seat
+     *   declaring [HostedAgent.questions] with none on its own (AMPR-421).
      */
     suspend fun open(
         roster: Roster,

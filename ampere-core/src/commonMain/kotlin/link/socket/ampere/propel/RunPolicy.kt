@@ -23,6 +23,12 @@ import link.socket.ampere.memory.RecallSource
  *   row H1 locked.
  * @property recall Which corpora RECALL reads besides the seat's memory, and how much
  *   of what it finds reaches the prompt. See [RecallPolicy].
+ * @property goalCheck Whether the run asks itself, after each executed cycle, whether
+ *   the goal is met. See [GoalCheck]; the default asks nothing and bills nothing.
+ * @property judgmentResultClip How many characters of any one step's result reach the
+ *   state a decision call is given ([asDecisionState]). Only read when something is
+ *   asked. Longer text is cut there and an ellipsis appended, so a decision model sees
+ *   that a result was a fragment.
  */
 @AmpereStableApi
 data class RunPolicy(
@@ -30,11 +36,57 @@ data class RunPolicy(
     val learn: LearnPolicy = LearnPolicy.Deterministic,
     val planGate: PlanGate = PlanGate.Pass,
     val recall: RecallPolicy = RecallPolicy(),
+    val goalCheck: GoalCheck = GoalCheck.Off,
+    val judgmentResultClip: Int = 400,
 ) {
 
     init {
         require(cycles >= 1) { "a run runs at least one cycle; got $cycles" }
+        require(judgmentResultClip > 0) {
+            "a clipped result has at least one character; got $judgmentResultClip"
+        }
     }
+}
+
+/**
+ * Whether a hosted run asks whether it met its goal (AMPR-421, AMPR-381 row J9).
+ *
+ * ## What it costs
+ *
+ * Stated here because the consumer is the one quoting for it, and because a decision
+ * call bills on a transport the consumer supplied:
+ *
+ * - [Record] is **one decision call per executed cycle**, on the host seat's
+ *   [HostedAgent.upstreamDecisionClient], carrying one question.
+ * - A verifier seat that declared [HostedAgent.questions] is **one more decision call
+ *   per executed cycle**, on *that* seat's transport, carrying all of its questions in
+ *   one request. That is opted into by declaring the questions, independently of this
+ *   enum: a run can ask the verifier's questions with the goal check [Off].
+ *
+ * Neither is a generative call, so neither shows up in the run's prompts or in its
+ * `ProviderCall*` pairs. A cycle that did not execute — stopped at the gate, planned
+ * into nothing, cancelled — asks nothing.
+ */
+@AmpereStableApi
+enum class GoalCheck {
+
+    /**
+     * Ask nothing. The default, and the only setting under which a hosted run's event
+     * stream is what it was before AMPR-421, event for event.
+     */
+    Off,
+
+    /**
+     * Ask [RunQuestions.goalMet] on the host seat after each executed cycle, record the
+     * answer, and change nothing.
+     *
+     * Record-only, deliberately: the run does not stop early on a `true`, does not
+     * re-plan on a `false`, and [RunResult] is identical whatever came back. Acting on
+     * the answer is AMPR-381 row J9 and waits on AMPR-422 — whether a model can answer
+     * this well enough to be allowed to end a run — which is the measurement these
+     * records exist to feed.
+     */
+    Record,
 }
 
 /**

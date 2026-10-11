@@ -81,7 +81,15 @@ that loop, moved into Ampere, so the consumer can delete its copy.
    There is no second planner.
 10. **A non-code agent is first class.** No `CodeState`, no project directory, no
     workspace required.
-11. **RECALL reads twice and reports once.** The host seat's own memory and every
+11. **A judgment asked by the run is recorded and never read** (AMPR-421). A cycle
+    that executed may be asked whether the goal is met, and the verifier seat may be
+    asked its own declared questions; every answer leaves a `JudgmentRecorded` and
+    nothing consults it. The loop, `currentStatus()`, LEARN and every `Verdict` are the
+    same with a judgment as without one, and `RunResult` is identical whatever came
+    back. Acting on one is AMPR-381 rows J6, J8 and J9, none of which has a verdict —
+    the records exist so that AMPR-422 can measure whether a model answers well enough
+    for a verdict to be taken at all.
+12. **RECALL reads twice and reports once.** The host seat's own memory and every
     `RecallSource` the run was given, merged into one `KnowledgeRecalled` through the
     host's door (AMPR-394). The memory half reaches PLAN as `relevantKnowledge`; both
     halves reach *every* seat's active prompt as the "# Recalled context" section, so
@@ -185,9 +193,11 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | Type | Role |
 |------|------|
 | `RunHost` | `open`, `openSeats(roster, seats: List<HostedAgent>, …)` (the Swift-friendly overload), `openRunSeats(): List<OpenSeat>` |
-| `HostedAgent` | Who fills a seat: id, role, sparks, charter, `AIConfiguration`, `CognitiveRelay?`, **required** `UpstreamLlmClient`, `MemoryStore?`, `recallScopes`, affinity, `probes` |
+| `HostedAgent` | Who fills a seat: id, role, sparks, charter, `AIConfiguration`, `CognitiveRelay?`, **required** `UpstreamLlmClient`, `MemoryStore?`, `recallScopes`, affinity, `probes`, `questions`, `UpstreamDecisionClient?` |
 | `HostedRun` | `runId`, `plan`, `execute()`, `close()` |
-| `RunPolicy` | `cycles`, `learn`, `planGate`, `recall` |
+| `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip` |
+| `GoalCheck` | `Off` / `Record`: whether the run asks itself, after each executed cycle, whether the goal is met. `Record` is one decision call per executed cycle on the host seat's transport |
+| `RunQuestions` | The run's own question (`goalMet`, `GOAL_MET_ID`) and `RunObservation.asDecisionState(clip)`, the fixed-key-order JSON a decision call is given |
 | `RecallPolicy` | `sources`, `perSourceLimit`, `memoryLimit`, `titleClip`, `textClip` |
 | `RecallSource` / `Recalled` | The consumer-implemented corpus SPI (`memory/`, beside `MemoryStore`) and one item of it |
 | `PlanGate` / `PlanDecision` | `review(plan)` → `Approved(plan)` (possibly trimmed) or `Stopped(reason)` |
@@ -240,18 +250,41 @@ strings.
   unreachable backend as an empty recall should return `emptyList()` and say so in its
   own code, where the decision is legible — swallowing it here would make "the agent
   remembered nothing" and "the corpus was down" the same observation.
+- **Expecting a wired decision transport to be asked anything.**
+  `HostedAgent.upstreamDecisionClient` is inert on its own: the host seat is asked only
+  under `RunPolicy.goalCheck == Record`, and a seat's `questions` only when it is the
+  roster's verifier — a non-verifier's are ignored exactly as its `probes` are. The
+  converse is refused rather than ignored: `open` throws when a seat *would* be asked
+  and carries no transport, because `assess` drops what a failed decision call throws,
+  so the alternative is a run that silently records nothing all the way through.
+- **Folding the goal question into the next cycle's OBSERVE.** It is asked after
+  EXECUTE, before the loop decides whether to continue, because that is where a
+  judgment that *acts* would have to sit. A cycle later the run has already decided to
+  continue, and the final cycle never reaches another OBSERVE at all.
+- **Putting a step's id or timestamps in a decision state.** The record carries a
+  `stateDigest` and never the state, so the digest is the only join key back — and a
+  state that is unique per render makes the join useless.
+  `RunObservation.asDecisionState` renders the goal, the cycle, and per step a
+  description, a status word and a clipped result, in a fixed key order, for that reason.
 - **Assuming per-seat memory is separated.** Ampere's `KnowledgeStore` has no holder
   column, so two seats sharing a `MemoryStore` recall each other's knowledge.
   Separation is whatever the consumer's store scopes (row H22, no verdict).
 
 ## Not implemented here
 
-AMPR-385 rows H19–H25 were proposed on 2026-10-09 and carry **no verdict**, so none of
-them is built: the shared tick functions and judgment seams (H19), four-valued step and
-run results with dependent-skipping and `maxStepsPerCycle` (H20),
-`HostedAgent.upstreamDecisionClient` (H21), a `holder` column for per-seat memory
-(H22), the F19–F21 reconciliation (H23), `External` provenance on a step result (H24),
-and re-gating a step whose arguments changed after approval (H25).
+AMPR-385 rows H19–H25 were proposed on 2026-10-09. H21 was recorded ✅ on 2026-10-11
+and is built — `HostedAgent.upstreamDecisionClient`, with `HostedAgent.questions`,
+`RunPolicy.goalCheck` and `RunQuestions` beside it (AMPR-421). The rest carry **no
+verdict**, so none of them is built: the shared tick functions and judgment seams
+(H19), four-valued step and run results with dependent-skipping and `maxStepsPerCycle`
+(H20), a `holder` column for per-seat memory (H22), the F19–F21 reconciliation (H23),
+`External` provenance on a step result (H24), and re-gating a step whose arguments
+changed after approval (H25).
+
+What H21 deliberately does *not* come with: a way to name the seat's own generative
+model as its decision transport (`ModelBackedDecisionClient` needs an `AgentLLMService`
+the run builds internally), threshold bands (row J10), replay (row J14), and anything
+that reads an answer.
 
 Within RECALL, two things are deliberately absent. There is no embedding or search
 inside Ampere — a `RecallSource` does its own retrieval — and there is no ranking

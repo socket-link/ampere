@@ -7,6 +7,8 @@ import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.api.AmpereStableApi
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.llm.UpstreamLlmClient
+import link.socket.ampere.llm.decide.Question
+import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.memory.MemoryStore
 import link.socket.ampere.probe.Probe
 import link.socket.ampere.roster.RoleId
@@ -70,6 +72,24 @@ import link.socket.ampere.roster.RoleId
  *   run rather than one per seat. The run wraps them in a
  *   [ProbeSuite][link.socket.ampere.probe.ProbeSuite] built around this seat's own
  *   door, so each `VerdictReached` is attributed to the verifier and carries the run.
+ * @property questions Questions this seat is asked after each executed cycle, as the
+ *   roster's verifier, keyed by the id its record carries (AMPR-421). Asked exactly as
+ *   [probes] are: only the verifier seat's, only when the roster names one, every other
+ *   seat's ignored. All of them go out in one decision call per cycle, through this
+ *   seat's own [upstreamDecisionClient] — which a seat declaring any must therefore
+ *   carry, or `RunHost.open` refuses the run. The answers are recorded and nothing
+ *   reads them: a judgment does not change the plan, the status or what LEARN writes.
+ * @property upstreamDecisionClient Where this seat's decision calls go (AMPR-385 row
+ *   H21). **Opted into, never defaulted**, like [upstreamLlmClient] and for the same
+ *   reason (AMPR-236, AMPR-384): null means this seat's first `decide` throws
+ *   [MissingUpstreamDecisionClientException][link.socket.ampere.llm.decide.MissingUpstreamDecisionClientException]
+ *   rather than falling back to the seat's generative model. Null is inert — a run
+ *   that asks nothing never reaches it — so the default is a seat that cannot decide
+ *   and is never asked to. Name
+ *   [ModelBackedDecisionClient][link.socket.ampere.llm.decide.ModelBackedDecisionClient]
+ *   to have a generative model answer, or
+ *   [HostedSystemOneDecisionClient][link.socket.ampere.llm.decide.HostedSystemOneDecisionClient]
+ *   for a decision model that measures a distribution.
  */
 @AmpereStableApi
 data class HostedAgent(
@@ -84,6 +104,8 @@ data class HostedAgent(
     val recallScopes: Set<String> = emptySet(),
     val affinity: CognitiveAffinity = CognitiveAffinity.INTEGRATIVE,
     val probes: List<Probe<RunObservation>> = emptyList(),
+    val questions: Map<String, Question> = emptyMap(),
+    val upstreamDecisionClient: UpstreamDecisionClient? = null,
 ) {
 
     companion object {
@@ -110,6 +132,8 @@ data class HostedAgent(
             recallScopes: Set<String> = emptySet(),
             affinity: CognitiveAffinity = CognitiveAffinity.INTEGRATIVE,
             probes: List<Probe<RunObservation>> = emptyList(),
+            questions: Map<String, Question> = emptyMap(),
+            upstreamDecisionClient: UpstreamDecisionClient? = null,
         ): HostedAgent = HostedAgent(
             id = id,
             role = RoleId(role),
@@ -122,6 +146,8 @@ data class HostedAgent(
             recallScopes = recallScopes,
             affinity = affinity,
             probes = probes,
+            questions = questions,
+            upstreamDecisionClient = upstreamDecisionClient,
         )
     }
 }
