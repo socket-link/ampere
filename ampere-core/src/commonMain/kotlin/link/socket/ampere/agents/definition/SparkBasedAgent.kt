@@ -54,10 +54,12 @@ import link.socket.ampere.domain.agent.bundled.AgentDefinition
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.llm.LlmProvider
+import link.socket.ampere.field.Admission
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.plug.PlugManifest
 import link.socket.ampere.plug.permission.UserGrants
+import link.socket.ampere.propel.Breaker
 import link.socket.ampere.util.ioDispatcher
 import link.socket.ampere.util.runBlockingCompat
 
@@ -302,6 +304,21 @@ open class SparkBasedAgent<S : AgentState>(
                 execution { userGrants(provider) }
             }
         }
+    }
+
+    /**
+     * Admits each plan step before its tool runs (AMPR-440, F16).
+     *
+     * Built over the same grant provider [reasoning]'s engine was handed, and over the
+     * same deny-all `UserGrants()` the engine falls back to when this agent has none, so
+     * the Breaker and the engine's own gate always answer a step the same way.
+     */
+    private val breaker: Breaker by lazy {
+        Breaker(
+            userGrants = _userGrantProvider ?: { UserGrants() },
+            eventApi = _eventApi,
+            executorId = id,
+        )
     }
 
     /**
@@ -573,6 +590,24 @@ open class SparkBasedAgent<S : AgentState>(
                     "routes strictly by tool id — no keyword fallback.",
                 isCritical = true,
             )
+
+        // AMPR-440: the Breaker admits the step before anything is spent on it. A trip
+        // returns here, before the parameter-strategy call and before the engine, with the
+        // reason on the step; an admission that could not be decided fails closed.
+        val admission = breaker.admit(tool, Breaker.rulesFor(tool)).getOrElse { e ->
+            return StepResult.failure(
+                description = description,
+                error = "Plan step ${step.id} was not admitted: ${e.message}",
+                isCritical = true,
+            )
+        }
+        if (admission is Admission.Trip) {
+            return StepResult.failure(
+                description = description,
+                error = admission.reason,
+                isCritical = true,
+            )
+        }
 
         val request = buildPlanStepRequest(step, description, parentTask, priorResults)
         return when (val outcome = reasoning.executeTool(tool, request)) {

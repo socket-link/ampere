@@ -623,6 +623,12 @@ class ToolExecutionEngine(
         )
     }
 
+    /**
+     * The engine's own gate, for every path that reaches it directly. A plan step has
+     * already been admitted by the [Breaker][link.socket.ampere.propel.Breaker] against the
+     * same grants before it gets here (AMPR-440), so on that path this sees `Allow` unless
+     * consent was withdrawn in between — and then it still refuses.
+     */
     private suspend fun checkPlugPermissions(
         tool: Tool<*>,
         request: ExecutionRequest<*>,
@@ -668,28 +674,55 @@ class ToolExecutionEngine(
         permission: PlugPermission,
         reason: PermissionDeniedReason,
     ): ExecutionOutcome {
-        eventApi?.publish(
-            PermissionDeniedEvent(
-                eventId = generateUUID("permission-denied", manifest.id.value, tool.id, executorId),
-                timestamp = Clock.System.now(),
-                eventSource = EventSource.Agent(eventApi.agentId),
-                urgency = Urgency.HIGH,
-                plugId = manifest.id.value,
-                toolId = tool.id,
-                toolName = tool.name,
-                permission = permission,
-                reason = reason,
-            ),
-        )
+        publishPermissionDenied(eventApi, executorId, manifest, tool, permission, reason)
 
         return createFailure(
             request = request,
             startTime = startTime,
-            message = "Permission denied for plug '${manifest.id.value}' tool '${tool.id}': " +
-                "$reason for $permission",
+            message = permissionDeniedMessage(manifest, tool, permission, reason),
         )
     }
 }
+
+/**
+ * Publishes the [PermissionDeniedEvent] for a plug tool call [PlugPermissionGate] refused.
+ *
+ * Shared by the two places a refusal is decided (AMPR-440): this engine's own gate, for
+ * every path that reaches it directly, and the [Breaker][link.socket.ampere.propel.Breaker]
+ * that admits each plan step before the step reaches the engine. One construction, so a
+ * step the Breaker trips is on the record in exactly the shape the engine always put it
+ * there. Null [eventApi] publishes nothing.
+ */
+internal suspend fun publishPermissionDenied(
+    eventApi: AgentEventApi?,
+    executorId: ExecutorId,
+    manifest: PlugManifest,
+    tool: Tool<*>,
+    permission: PlugPermission,
+    reason: PermissionDeniedReason,
+) {
+    eventApi?.publish(
+        PermissionDeniedEvent(
+            eventId = generateUUID("permission-denied", manifest.id.value, tool.id, executorId),
+            timestamp = Clock.System.now(),
+            eventSource = EventSource.Agent(eventApi.agentId),
+            urgency = Urgency.HIGH,
+            plugId = manifest.id.value,
+            toolId = tool.id,
+            toolName = tool.name,
+            permission = permission,
+            reason = reason,
+        ),
+    )
+}
+
+/** The reason a refused plug tool call is reported with: the plug, the tool and the permission. */
+internal fun permissionDeniedMessage(
+    manifest: PlugManifest,
+    tool: Tool<*>,
+    permission: PlugPermission,
+    reason: PermissionDeniedReason,
+): String = "Permission denied for plug '${manifest.id.value}' tool '${tool.id}': $reason for $permission"
 
 /**
  * The message a failed [ExecutionOutcome] carries, for the `errorMessage` on the tool-event
