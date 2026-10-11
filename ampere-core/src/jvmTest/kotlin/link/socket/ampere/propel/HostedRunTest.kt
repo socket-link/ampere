@@ -459,14 +459,9 @@ class HostedRunTest {
     /**
      * How a seat answers. The host has to tell PERCEIVE's question from PLAN's; every
      * other seat answers the same text, because its only work here is a reasoning step.
-     *
-     * A named function rather than an `if` with a lambda in its `else`: `else { _ -> … }`
-     * parses as a block.
      */
     private fun answersFor(role: RoleId, answering: () -> String): (String) -> String =
         if (role == HOST_ROLE) hostAnswers(answering) else fixedAnswer(answering)
-
-    private fun fixedAnswer(answering: () -> String): (String) -> String = { answering() }
 
     private suspend fun openRun(
         host: Seat,

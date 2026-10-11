@@ -72,10 +72,11 @@ class SparkStack private constructor(
      *
      * The prompt is structured as:
      * 0. The caller's [preamble] and a horizontal rule, when one is given
-     * 1. Affinity header and prompt fragment
-     * 2. Effective role label (concatenated across the stack), if any spark contributes one
-     * 3. Each Spark's [Spark.promptContribution], separated by horizontal rules
-     * 4. For each Spark, its [Spark.phaseContributions] entry for [currentPhase] when present
+     * 1. The caller's [recalledContext] and a horizontal rule, when one is given
+     * 2. Affinity header and prompt fragment
+     * 3. Effective role label (concatenated across the stack), if any spark contributes one
+     * 4. Each Spark's [Spark.promptContribution], separated by horizontal rules
+     * 5. For each Spark, its [Spark.phaseContributions] entry for [currentPhase] when present
      *
      * Brute-force composition — every spark on the stack contributes; nothing is dropped or
      * overridden. Later sparks appear later in the prompt (closer to the user message).
@@ -88,14 +89,31 @@ class SparkStack private constructor(
      *   own charter: a host that must speak first does not have to concatenate around the
      *   cognitive-context header, and so cannot get the separators wrong. Null or blank
      *   leaves the prompt byte-for-byte what it would be without the parameter.
+     * @param recalledContext Optional caller-owned text rendered the same way, between the
+     *   [preamble] and everything the stack contributes. The slot for what RECALL found
+     *   (AMPR-394): it belongs ahead of the stack because it is a fact about *this* piece
+     *   of work rather than part of who the agent is, and behind [preamble] because a
+     *   charter that had to speak first still does. A caller that stacks its charter as a
+     *   spark instead — which is what a hosted run does, so the charter is on the record
+     *   as a `SparkAppliedEvent` — gets the section ahead of that charter, because the
+     *   whole stack is behind this. Null or blank leaves the prompt byte-for-byte what it
+     *   would be without the parameter.
      * @return The complete system prompt as markdown
      */
     fun buildSystemPrompt(
         currentPhase: CognitivePhase? = null,
         preamble: String? = null,
+        recalledContext: String? = null,
     ): String = buildString {
         if (!preamble.isNullOrBlank()) {
             appendLine(preamble.trim())
+            appendLine()
+            appendLine("---")
+            appendLine()
+        }
+
+        if (!recalledContext.isNullOrBlank()) {
+            appendLine(recalledContext.trim())
             appendLine()
             appendLine("---")
             appendLine()

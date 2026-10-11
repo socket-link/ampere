@@ -2,10 +2,12 @@ package link.socket.ampere.agents.domain.memory
 
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MemoryEvent
+import link.socket.ampere.agents.domain.event.RetrievedKnowledgeSummary
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
@@ -74,15 +76,6 @@ class AgentMemoryService(
 
         // Emit event on success; a door failure folds into the result
         result.mapCatching { entry ->
-            // Extract source ID based on knowledge type
-            val sourceId = when (knowledge) {
-                is Knowledge.FromIdea -> knowledge.ideaId
-                is Knowledge.FromOutcome -> knowledge.outcomeId
-                is Knowledge.FromPerception -> knowledge.perceptionId
-                is Knowledge.FromPlan -> knowledge.planId
-                is Knowledge.FromTask -> knowledge.taskId
-            }
-
             val event = MemoryEvent.KnowledgeStored(
                 eventId = generateUUID("knowledge-stored", agentId, entry.id),
                 timestamp = Clock.System.now(),
@@ -93,7 +86,7 @@ class AgentMemoryService(
                 tags = entry.tags,
                 approach = knowledge.approach,
                 learnings = knowledge.learnings,
-                sourceId = sourceId,
+                sourceId = knowledge.sourceId,
                 runId = runId,
             )
 
@@ -126,83 +119,8 @@ class AgentMemoryService(
         runId: RunId? = null,
     ): Result<List<KnowledgeWithScore>> = withContext(ioDispatcher) {
         runCatching {
-            val candidates = mutableListOf<KnowledgeEntry>()
-
-            // Strategy 1: Find by task type if specified
-            if (context.taskType.isNotEmpty()) {
-                knowledgeRepository.findKnowledgeByTaskType(
-                    taskType = context.taskType,
-                    limit = limit * 2, // Get more candidates for scoring
-                ).onSuccess { entries ->
-                    candidates.addAll(entries)
-                }
-            }
-
-            // Strategy 2: Find by tags
-            if (context.tags.isNotEmpty()) {
-                knowledgeRepository.findKnowledgeByTags(
-                    tags = context.tags.toList(),
-                    limit = limit,
-                ).onSuccess { entries ->
-                    candidates.addAll(entries)
-                }
-            }
-
-            // Strategy 3: Full-text search in approach/learnings
-            if (context.description.isNotEmpty()) {
-                knowledgeRepository.findSimilarKnowledge(
-                    description = context.description,
-                    limit = limit * 2,
-                ).onSuccess { entries ->
-                    candidates.addAll(entries)
-                }
-            }
-
-            // Strategy 4: Temporal filtering if time constraint specified
-            context.timeConstraint?.let { timeRange ->
-                knowledgeRepository.findKnowledgeByTimeRange(
-                    fromTimestamp = timeRange.start,
-                    toTimestamp = timeRange.end,
-                ).onSuccess { entries ->
-                    candidates.addAll(entries)
-                }
-            }
-
-            // Deduplicate and score each candidate against context
             val currentTime = Clock.System.now()
-            val scoredKnowledge = candidates
-                .distinctBy { it.id }
-                .map { entry ->
-                    // Convert KnowledgeEntry back to Knowledge for scoring
-                    val knowledge = entryToKnowledge(entry)
-                    KnowledgeWithScore(
-                        entry = entry,
-                        knowledge = knowledge,
-                        relevanceScore = context.similarityScore(knowledge, currentTime),
-                    )
-                }
-                .sortedByDescending { it.relevanceScore }
-                .take(limit)
-
-            // Emit event for observability
-            val retrievedSummaries = scoredKnowledge.take(5).map { scored ->
-                // Extract source ID based on knowledge type
-                val sourceId = when (scored.knowledge) {
-                    is Knowledge.FromIdea -> scored.knowledge.ideaId
-                    is Knowledge.FromOutcome -> scored.knowledge.outcomeId
-                    is Knowledge.FromPerception -> scored.knowledge.perceptionId
-                    is Knowledge.FromPlan -> scored.knowledge.planId
-                    is Knowledge.FromTask -> scored.knowledge.taskId
-                }
-
-                link.socket.ampere.agents.domain.event.RetrievedKnowledgeSummary(
-                    knowledgeType = scored.entry.knowledgeType,
-                    approach = scored.knowledge.approach,
-                    learnings = scored.knowledge.learnings,
-                    relevanceScore = scored.relevanceScore,
-                    sourceId = sourceId,
-                )
-            }
+            val scoredKnowledge = scoreCandidates(context, limit, currentTime)
 
             val event = MemoryEvent.KnowledgeRecalled(
                 eventId = generateUUID("knowledge-recalled", agentId),
@@ -210,13 +128,9 @@ class AgentMemoryService(
                 eventSource = EventSource.Agent(agentId),
                 context = context,
                 resultsFound = scoredKnowledge.size,
-                averageRelevance = if (scoredKnowledge.isNotEmpty()) {
-                    scoredKnowledge.map { it.relevanceScore }.average()
-                } else {
-                    0.0
-                },
+                averageRelevance = scoredKnowledge.averageRelevance(),
                 topKnowledgeIds = scoredKnowledge.map { it.entry.id },
-                retrievedKnowledge = retrievedSummaries,
+                retrievedKnowledge = scoredKnowledge.retrievedSummaries(),
                 runId = runId,
             )
 
@@ -224,6 +138,99 @@ class AgentMemoryService(
 
             scoredKnowledge
         }
+    }
+
+    /**
+     * [recallRelevantKnowledge] without the event: the same query, the same scoring,
+     * nothing published (AMPR-394).
+     *
+     * For the one caller that publishes a `KnowledgeRecalled` of its own because its
+     * RECALL found more than this: a hosted run merges what this returns with what the
+     * consumer's [RecallSource][link.socket.ampere.memory.RecallSource]s returned and
+     * publishes *one* event summarising both. Two events — one here for the memory half
+     * and one there for the whole — would double-count a single phase on the trace.
+     *
+     * `internal`, and deliberately not the easy call: an in-loop recall that leaves no
+     * `KnowledgeRecalled` behind is a recall the trace cannot show, so the only caller
+     * that may skip it is one that publishes the event itself.
+     */
+    internal suspend fun scoreRecall(
+        context: MemoryContext,
+        limit: Int = 10,
+    ): Result<List<KnowledgeWithScore>> = withContext(ioDispatcher) {
+        runCatching { scoreCandidates(context, limit, Clock.System.now()) }
+    }
+
+    /**
+     * The four candidate strategies, deduplicated, scored against [context] and cut to
+     * [limit].
+     *
+     * Each strategy's failure is dropped rather than failing the recall: a repository
+     * whose full-text index rejects the query still leaves the task-type and tag hits
+     * worth scoring. Which is also why a recall that returns nothing is not evidence
+     * that nothing is stored.
+     */
+    private suspend fun scoreCandidates(
+        context: MemoryContext,
+        limit: Int,
+        currentTime: Instant,
+    ): List<KnowledgeWithScore> {
+        val candidates = mutableListOf<KnowledgeEntry>()
+
+        // Strategy 1: Find by task type if specified
+        if (context.taskType.isNotEmpty()) {
+            knowledgeRepository.findKnowledgeByTaskType(
+                taskType = context.taskType,
+                limit = limit * 2, // Get more candidates for scoring
+            ).onSuccess { entries ->
+                candidates.addAll(entries)
+            }
+        }
+
+        // Strategy 2: Find by tags
+        if (context.tags.isNotEmpty()) {
+            knowledgeRepository.findKnowledgeByTags(
+                tags = context.tags.toList(),
+                limit = limit,
+            ).onSuccess { entries ->
+                candidates.addAll(entries)
+            }
+        }
+
+        // Strategy 3: Full-text search in approach/learnings
+        if (context.description.isNotEmpty()) {
+            knowledgeRepository.findSimilarKnowledge(
+                description = context.description,
+                limit = limit * 2,
+            ).onSuccess { entries ->
+                candidates.addAll(entries)
+            }
+        }
+
+        // Strategy 4: Temporal filtering if time constraint specified
+        context.timeConstraint?.let { timeRange ->
+            knowledgeRepository.findKnowledgeByTimeRange(
+                fromTimestamp = timeRange.start,
+                toTimestamp = timeRange.end,
+            ).onSuccess { entries ->
+                candidates.addAll(entries)
+            }
+        }
+
+        // Deduplicate and score each candidate against context
+        return candidates
+            .distinctBy { it.id }
+            .map { entry ->
+                // Convert KnowledgeEntry back to Knowledge for scoring
+                val knowledge = entryToKnowledge(entry)
+                KnowledgeWithScore(
+                    entry = entry,
+                    knowledge = knowledge,
+                    relevanceScore = context.similarityScore(knowledge, currentTime),
+                )
+            }
+            .sortedByDescending { it.relevanceScore }
+            .take(limit)
     }
 
     /**
@@ -326,6 +333,49 @@ class AgentMemoryService(
         }
     }
 }
+
+/**
+ * The id of the cognitive element [this] was distilled from — exactly one of five,
+ * decided by which source the entry records.
+ *
+ * A knowledge entry records one source and no lineage, so this is the whole of its
+ * provenance within its run. It is a *source* id, not a knowledge id: nothing resolves
+ * it back to a row, and `getKnowledgeById` on it can never match.
+ */
+internal val Knowledge.sourceId: String
+    get() = when (this) {
+        is Knowledge.FromIdea -> ideaId
+        is Knowledge.FromOutcome -> outcomeId
+        is Knowledge.FromPerception -> perceptionId
+        is Knowledge.FromPlan -> planId
+        is Knowledge.FromTask -> taskId
+    }
+
+/**
+ * The top few entries as [MemoryEvent.KnowledgeRecalled] summarises what it retrieved.
+ *
+ * Capped rather than complete: the event is a record of the recall, not a copy of the
+ * store, and a recall of ten entries would otherwise put ten whole learnings on the
+ * bus and in the `EventStore`.
+ */
+internal fun List<KnowledgeWithScore>.retrievedSummaries(
+    cap: Int = RECALL_SUMMARY_CAP,
+): List<RetrievedKnowledgeSummary> = take(cap).map { scored ->
+    RetrievedKnowledgeSummary(
+        knowledgeType = scored.entry.knowledgeType,
+        approach = scored.knowledge.approach,
+        learnings = scored.knowledge.learnings,
+        relevanceScore = scored.relevanceScore,
+        sourceId = scored.knowledge.sourceId,
+    )
+}
+
+/** The mean relevance of a scored recall; `0.0` when it found nothing. */
+internal fun List<KnowledgeWithScore>.averageRelevance(): Double =
+    if (isEmpty()) 0.0 else map { it.relevanceScore }.average()
+
+/** How many retrieved entries a `KnowledgeRecalled` carries summaries for. */
+internal const val RECALL_SUMMARY_CAP: Int = 5
 
 /**
  * Knowledge entry paired with its relevance score to the query context.

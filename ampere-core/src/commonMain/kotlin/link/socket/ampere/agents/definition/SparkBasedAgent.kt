@@ -23,6 +23,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.SparkRegistry
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
+import link.socket.ampere.agents.domain.memory.MemoryContext
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
@@ -339,15 +340,30 @@ open class SparkBasedAgent<S : AgentState>(
         get() = reasoning
 
     /**
-     * What Recall finds for [task], under this agent's own memory (AMPR-393).
+     * What a hosted run's RECALL asks this seat's memory for (AMPR-393, AMPR-394).
      *
-     * Delegates to [recallRelevantKnowledgeForTask] so a hosted run's RECALL asks
-     * the same question the loop's does — one definition of what a task's
-     * `MemoryContext` is, which is the reason that method is `protected` rather
-     * than private (AMPR-388). Empty with no memory service wired.
+     * Delegates to [memoryContextForTask] so a hosted run's RECALL asks the same
+     * question the loop's does — one definition of what a task's `MemoryContext` is,
+     * which is the reason that method is `protected` rather than private (AMPR-388).
+     *
+     * @param scopes The run's [recall scopes][link.socket.ampere.propel.HostedAgent.recallScopes],
+     *   which become the context's tags. Empty leaves the query what the loop's is.
      */
-    internal suspend fun recallForRun(task: Task): List<KnowledgeWithScore> =
-        recallRelevantKnowledgeForTask(task)
+    internal fun recallContextForRun(task: Task, scopes: Set<String>): MemoryContext =
+        memoryContextForTask(task, tags = scopes)
+
+    /**
+     * What Recall finds for [context], under this agent's own memory, publishing
+     * nothing (AMPR-394).
+     *
+     * A hosted run publishes one `KnowledgeRecalled` of its own covering both this and
+     * whatever the consumer's corpora returned, so this must not publish a second one
+     * for the memory half alone. Empty with no memory service wired, and empty rather
+     * than failing when the recall itself fails — a seat whose store is unreadable
+     * plans without it, which is what the loop's own Recall does too.
+     */
+    internal suspend fun recallForRun(context: MemoryContext, limit: Int): List<KnowledgeWithScore> =
+        memoryService?.scoreRecall(context, limit)?.getOrElse { emptyList() }.orEmpty()
 
     // ========================================================================
     // Neural Agent Implementation

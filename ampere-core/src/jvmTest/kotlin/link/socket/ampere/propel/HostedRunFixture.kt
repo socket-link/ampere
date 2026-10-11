@@ -74,6 +74,15 @@ fun hostAnswers(steps: () -> String): (String) -> String = { prompt ->
 }
 
 /**
+ * A seat that answers the same text whatever it was asked.
+ *
+ * A named function rather than an `if` with a lambda in its `else` branch:
+ * `else { _ -> … }` parses as a block whose value is the lambda's *declaration*, not a
+ * `(String) -> String`.
+ */
+fun fixedAnswer(answering: () -> String): (String) -> String = { answering() }
+
+/**
  * What `PerceptionEvaluator` parses into one
  * [link.socket.ampere.agents.domain.reasoning.Idea]: a JSON *array* of insights, which
  * is the shape its own prompt asks for.

@@ -2,12 +2,14 @@ package link.socket.ampere.propel
 
 import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.api.AmpereStableApi
+import link.socket.ampere.memory.RecallSource
 
 /**
  * What a consumer declares about how its run is driven (AMPR-385 row H1).
  *
  * Everything on it has a default, and the defaults are the cheapest honest run: one
- * cycle, a LEARN that bills nothing, and a gate that approves what the host planned.
+ * cycle, a LEARN that bills nothing, a gate that approves what the host planned, and
+ * a RECALL that reads the seat's own memory and nothing else.
  * A consumer that wants more says so.
  *
  * @property cycles How many times the host seat may plan and execute. The default of
@@ -19,16 +21,61 @@ import link.socket.ampere.api.AmpereStableApi
  * @property planGate Who approves the plan before EXECUTE runs it. The gate rides
  *   here rather than on `RunHost.open`'s parameter list so that list stays the one
  *   row H1 locked.
+ * @property recall Which corpora RECALL reads besides the seat's memory, and how much
+ *   of what it finds reaches the prompt. See [RecallPolicy].
  */
 @AmpereStableApi
 data class RunPolicy(
     val cycles: Int = 1,
     val learn: LearnPolicy = LearnPolicy.Deterministic,
     val planGate: PlanGate = PlanGate.Pass,
+    val recall: RecallPolicy = RecallPolicy(),
 ) {
 
     init {
         require(cycles >= 1) { "a run runs at least one cycle; got $cycles" }
+    }
+}
+
+/**
+ * What RECALL reads, and how much of it the agent is told (AMPR-385 row H4b).
+ *
+ * The defaults are a run that recalls from the seat's own memory only and renders
+ * what it found in a few hundred characters an item. Every number here is a parameter
+ * rather than a constant because the right value depends on the model's context
+ * budget and on how long the consumer's documents are, and neither is Ampere's to
+ * guess.
+ *
+ * @property sources The consumer's own corpora, asked in order. Empty — the default —
+ *   is a run that recalls from memory only. A source is asked once per run, during
+ *   RECALL, and only when the host seat declares
+ *   [HostedAgent.recallScopes][HostedAgent.recallScopes] to ask under.
+ * @property perSourceLimit The most items any one source may contribute. Applied per
+ *   source rather than across all of them, so adding a second corpus does not
+ *   quietly halve the first one's share; a source that returns more than this has the
+ *   first [perSourceLimit] of its own ordering taken.
+ * @property memoryLimit The most entries the seat's own memory may contribute. The
+ *   default matches what the PROPEL loop's own Recall asks for.
+ * @property titleClip How many characters of an item's approach or title reach the
+ *   prompt. Longer text is cut and an ellipsis appended.
+ * @property textClip How many characters of an item's learnings or text reach the
+ *   prompt, cut the same way. Larger than [titleClip] because this is the half that
+ *   carries the content.
+ */
+@AmpereStableApi
+data class RecallPolicy(
+    val sources: List<RecallSource> = emptyList(),
+    val perSourceLimit: Int = 3,
+    val memoryLimit: Int = 10,
+    val titleClip: Int = 200,
+    val textClip: Int = 400,
+) {
+
+    init {
+        require(perSourceLimit >= 0) { "a source cannot contribute a negative number of items; got $perSourceLimit" }
+        require(memoryLimit >= 0) { "memory cannot contribute a negative number of entries; got $memoryLimit" }
+        require(titleClip > 0) { "a clipped title has at least one character; got $titleClip" }
+        require(textClip > 0) { "clipped text has at least one character; got $textClip" }
     }
 }
 
