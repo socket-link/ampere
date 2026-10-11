@@ -29,6 +29,11 @@ nextSequence:
 SELECT COALESCE(MAX(sequence), 0) + 1
 FROM EventStore;
 
+-- The newest sequence in the log, 0 when it holds none: where a Field read anchors (AMPR-439).
+latestSequence:
+SELECT COALESCE(MAX(sequence), 0)
+FROM EventStore;
+
 insertEvent:
 INSERT INTO EventStore(event_id, event_type, source_id, timestamp, payload, run_id, sequence, caused_by, recorded_at, truncated)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);

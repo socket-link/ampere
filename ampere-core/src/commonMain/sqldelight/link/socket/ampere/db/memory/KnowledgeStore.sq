@@ -109,6 +109,15 @@ WHERE id = ? AND sensitivity != 'PROTECTED';
 getTagsForKnowledge:
 SELECT tag FROM KnowledgeTag WHERE knowledge_id = ? ORDER BY tag;
 
+-- Everything one viewer may see, newest first: the belief half of a Field read (AMPR-439). Not
+-- getAllKnowledge with a filter after it — the predicate sits ahead of the LIMIT here as in
+-- every other Subject's read.
+findKnowledgeVisibleTo:
+SELECT * FROM KnowledgeStore
+WHERE (sensitivity = 'PUBLIC' OR (:viewer IS NOT NULL AND holder = :viewer))
+ORDER BY timestamp DESC
+LIMIT :limit;
+
 -- Find knowledge by type (e.g., all FROM_OUTCOME learnings)
 findKnowledgeByType:
 SELECT * FROM KnowledgeStore

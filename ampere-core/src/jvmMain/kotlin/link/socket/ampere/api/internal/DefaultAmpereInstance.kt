@@ -15,9 +15,11 @@ import link.socket.ampere.agents.service.AgentActionService
 import link.socket.ampere.agents.service.MessageActionService
 import link.socket.ampere.agents.service.TicketActionService
 import link.socket.ampere.api.AmpereConfig
+import link.socket.ampere.api.AmpereExperimentalApi
 import link.socket.ampere.api.AmpereInstance
 import link.socket.ampere.api.service.AgentService
 import link.socket.ampere.api.service.EventService
+import link.socket.ampere.api.service.FieldService
 import link.socket.ampere.api.service.KnowledgeService
 import link.socket.ampere.api.service.OutcomeService
 import link.socket.ampere.api.service.PricingService
@@ -143,6 +145,17 @@ internal class DefaultAmpereInstance(
         knowledgeRepository = KnowledgeRepositoryImpl(database, driver),
         eventApi = sdkEventApi,
         eventRepository = environmentService.eventRepository,
+    )
+
+    /**
+     * The Field read (AMPR-439) over this instance's own database: the Subject and goal stores
+     * the SDK door and the hosted runs write, and the knowledge [knowledge] reads.
+     */
+    @AmpereExperimentalApi
+    override val field: FieldService = DefaultFieldService.over(
+        database = database,
+        knowledge = KnowledgeRepositoryImpl(database, driver),
+        events = environmentService.eventRepository,
     )
 
     override val status: StatusService = DefaultStatusService(

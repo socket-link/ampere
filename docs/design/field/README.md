@@ -9,6 +9,10 @@ F27 on [AMPR-328](https://linear.app/miley/issue/AMPR-328)).
 | [`FieldPrimitives.kt`](FieldPrimitives.kt) | The reviewed Kotlin sketch of the primitives, kept as a design artifact. The shipped package is `ampere-core/src/commonMain/kotlin/link/socket/ampere/field/`; where the two differ, the package is authoritative and the differences are listed at the top of the sketch. |
 | `recon/field-foundation.md` | **Not in this repository.** The four-slice recon (R0–R10, Tables A/B/C, mismatches C1–C62) that the ADR cites was written in the recon workspace for [AMPR-329](https://linear.app/miley/issue/AMPR-329) and was never committed; its findings are summarised in the Gate and Slice-4 sections of AMPR-328. If the file is recovered it belongs beside this README. |
 
+The read over the shipped stores — `FieldService` and the `field.Field` snapshot it returns,
+which the ADR left for "once the W2 stores exist" — is documented as the
+[Field concept cell](../../concepts/field.md) (AMPR-439).
+
 ## Provenance of these files
 
 AMPR-328 lists all three artifacts as "pre-existing; commit under `docs/design/field/`

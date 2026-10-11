@@ -278,6 +278,19 @@ class EventRepository(
         }
 
     /**
+     * The newest `sequence` in the store, or `0` when it holds no event (AMPR-439).
+     *
+     * Read without decoding anything, so a row this build cannot read still counts: the number
+     * names a position in the log, not an event this build understands.
+     */
+    suspend fun latestSequence(): Result<Long> =
+        withContext(ioDispatcher) {
+            runCatching {
+                queries.latestSequence().executeAsOne()
+            }
+        }
+
+    /**
      * Retrieve every event whose `sequence` is at or after [sequence], in fold order.
      *
      * Rows this build cannot decode are skipped and counted; see [DecodedRows].
