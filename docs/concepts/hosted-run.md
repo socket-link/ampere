@@ -102,7 +102,8 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     No model call: RECALL is two retrievals and a clip.
 13. **A seat without grants is denied** (AMPR-423, row H26). A tool that declares a
     `plugManifest` is checked against the `UserGrants` its seat's
-    `HostedAgent.userGrants` returns, asked on every dispatch. A seat whose provider is
+    `HostedAgent.userGrants` returns, asked on every dispatch — on a plan step by the
+    seat's Breaker at `executePlanStep` and again by its engine (AMPR-440). A seat whose provider is
     null runs on the engine's own, which grants nothing — so every permission its
     Plug-backed tools require is refused. Nothing in `propel/` defaults a seat to
     allowed, lends one seat another's provider, or caches what a provider answered.
@@ -326,12 +327,13 @@ strings.
   state that is unique per render makes the join useless.
   `RunObservation.asDecisionState` renders the goal, the cycle, and per step a
   description, a status word and a clipped result, in a fixed key order, for that reason.
-- **Querying a seat's permission denials by run id.** `ToolExecutionEngine` publishes
-  `PermissionDeniedEvent` without a run id on its envelope, so a `run_id` query of a
+- **Querying a seat's permission denials by run id.** `publishPermissionDenied`, which
+  both the seat's Breaker and its engine call, publishes `PermissionDeniedEvent` without
+  a run id on its envelope, so a `run_id` query of a
   hosted run does not return the denials its seats were dealt — the one known exception
-  to invariant 2. Read them by source until the engine stamps its run id there.
-- **Caching a seat's grants, or resolving them once at `open`.** The engine asks the
-  provider on every dispatch so that a revocation in the middle of a run takes effect on
+  to invariant 2. Read them by source until the denial carries its run id there.
+- **Caching a seat's grants, or resolving them once at `open`.** The Breaker and the
+  engine ask the provider on every dispatch so that a revocation in the middle of a run takes effect on
   the next step; a provider memoised in `propel/` would keep acting granted
   ([PlugPermissions](plug-permissions.md)).
 - **Treating a supplied run id as globally unique.** `open` only refuses an id this host

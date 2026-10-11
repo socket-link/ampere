@@ -118,10 +118,12 @@ class HostedRunGrantsTest {
         assertEquals(RunStatus.Succeeded, result.status)
         assertEquals(1, dispatched.size, "the tool's own function ran")
         assertEquals(run.runId, dispatched.single().runId, "under the run")
+        // AMPR-440: the Breaker admits the step against the provider, then the engine's own
+        // gate asks it again — two reads of live consent, never one remembered.
         assertEquals(
-            listOf(MANIFEST),
+            listOf(MANIFEST, MANIFEST),
             consent.askedFor,
-            "the provider was asked once, for the manifest of the tool being dispatched",
+            "the provider was asked by the Breaker and by the engine, for the manifest of the tool being dispatched",
         )
         assertTrue(permissionDenials().isEmpty(), "and nothing was denied")
     }
@@ -146,7 +148,9 @@ class HostedRunGrantsTest {
         val result = run.execute()
         run.close()
 
-        assertEquals(2, consent.askedFor.size, "asked on every dispatch, never cached")
+        // Twice for the first step (Breaker, then engine), once for the second: the Breaker
+        // trips it, so the engine is never reached (AMPR-440).
+        assertEquals(3, consent.askedFor.size, "asked on every dispatch, never cached")
         assertEquals(1, dispatched.size, "only the first step's tool ran")
         assertEquals(2, result.stepOutcomes.size)
         assertIs<StepOutcome.Success>(result.stepOutcomes[0])

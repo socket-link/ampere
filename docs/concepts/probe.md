@@ -4,7 +4,7 @@ status: experimental
 tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/probe/**
 related: [DomainCanon, MemoryProvenance, PropelLoop, HostedRun]
-last_verified: 2026-10-10
+last_verified: 2026-10-11
 ---
 
 # Probe
@@ -46,6 +46,19 @@ observation**: Socket copies `fetchedAt` onto its `ManifestLine` at bind time,
 and `Observed` is the name Ampere gives to what that binding implements.
 Contravariance in `S` is the whole mechanism; constraining `S` to an Ampere
 type would leave foreign subjects with no base to extend.
+
+## A probe measures; a breaker protects
+
+A Probe reports on something that already exists — a plan graph, a manifest line, a
+recalled fact — and its `Verdict` goes on the record for someone else to act on.
+Nothing in Ampere routes on it (see *Anti-patterns*). The Breaker (`propel/Breaker.kt`,
+AMPR-440) stands in front of something about to happen — a plan step's tool — and its
+`field.Admission` (`Pass`, `Resist`, `Trip`) decides whether it runs. The two are
+deliberately different types (F13): `Verdict` is serialized inside
+`ProbeEvent.VerdictReached` and has `Undetermined`; `Admission` is never serialized,
+has `Resist`, and has no undetermined case — a rule the Breaker cannot evaluate is a
+`Result` failure, which stops the step. A Probe never trips a step, and a Breaker never
+publishes a verdict. See [PropelLoop](propel-loop.md).
 
 ## The hazard Probe
 
@@ -141,4 +154,5 @@ and is never re-stamped on receipt, cache hit, or Plan.
 - **Reading `LineRef.appliesTo` as optional.** It is the join between the manifest and the Tasks. A hazardous line it attaches to nothing is reported against the line itself (`HazardSubject.Line`) and inserts no Task — dropping it instead would leave a solvent in the room with nobody told.
 - **Stemming or substring-matching the keyword rules.** `substring` reads "execute" as a cutting hazard and "remains" as mains voltage. Tokens are whole words and inflections are listed, so the vocabulary is auditable by reading it.
 - **Letting a mitigation Task invent a provider.** It keeps the hazardous Task's `linkId` (the same-Link rule) and says `ampere.probe.safety` in `sourceSystem`. Reusing the provider's `sourceSystem` would make a Task Ampere proposed look perceived.
+- **Returning a `Verdict` from something that gates an action.** A gate that answers `Undetermined` invites a caller to read it as a pass, and one that answers `Violated` puts a decision on the record under a measurement's name. A gate returns `field.Admission`; see the section above.
 - **Reaching for a subject-typed verdict event.** The pull is real — a `VerdictReached<S>` would carry more — and it is exactly what makes the event unusable by a consumer whose subject Ampere cannot name.
