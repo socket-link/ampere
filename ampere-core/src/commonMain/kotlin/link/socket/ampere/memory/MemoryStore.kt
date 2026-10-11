@@ -29,14 +29,19 @@ import link.socket.ampere.api.AmpereStableApi
  * continue to back Ampere's default construction path; the only consumer of
  * `MemoryStore` directly is the public injection seam.
  *
- * ## Agent-scoped persistence
+ * ## Holders and viewers
  *
- * Implementations are expected to scope persistence to the owning agent /
- * user. Ampere does not pass an `AgentId` through the repository calls — it
- * treats each `MemoryStore` as already bound to whatever scope the consumer
- * defines (typically per-user, per-installation on Socket clients). When
- * Socket needs per-user durable on-device memory, it constructs a new
- * `MemoryStore` instance per user and passes it to Ampere.
+ * Scoping is not left to the implementation (F9, F12, AMPR-417 — this
+ * withdraws the earlier "Ampere does not pass an `AgentId`" contract). Every
+ * knowledge write names its holder, its sensitivity, its confidence and the
+ * event that recorded it, and every knowledge read names the Subject it is
+ * made for. An implementation stores those columns as given and applies the
+ * read predicate — PUBLIC rows plus the viewer's own, PUBLIC only for a null
+ * viewer — before any limit. See [KnowledgeRepository].
+ *
+ * A consumer may still construct one `MemoryStore` per user or installation
+ * (Socket does, for per-user durable on-device memory); that partitions the
+ * storage, and the holder/viewer predicate applies within each partition.
  *
  * ## Default implementation
  *
@@ -56,7 +61,8 @@ interface MemoryStore {
      * Repository for storing and recalling agent learnings (Knowledge).
      *
      * Consumers implementing this property should provide durable, queryable
-     * storage scoped to the owning agent / user.
+     * storage that keeps every belief column a write passes and honours the
+     * viewer every read passes.
      */
     val knowledge: KnowledgeRepository
 

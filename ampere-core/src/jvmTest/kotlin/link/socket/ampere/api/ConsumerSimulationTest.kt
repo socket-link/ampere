@@ -12,6 +12,8 @@ import kotlinx.datetime.Instant
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventId
+import link.socket.ampere.agents.domain.knowledge.BeliefConfidence
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
@@ -58,6 +60,7 @@ import link.socket.ampere.api.service.ThreadService
 import link.socket.ampere.api.service.TicketService
 import link.socket.ampere.dsl.team.AgentTeam
 import link.socket.ampere.dsl.team.AgentTeamBuilder
+import link.socket.ampere.field.Sensitivity
 
 /**
  * Consumer simulation test — validates that every method on every service
@@ -219,6 +222,9 @@ class ConsumerSimulationTest {
             taskType: String?,
             complexityLevel: String?,
             runId: RunId?,
+            confidence: BeliefConfidence?,
+            sensitivity: Sensitivity,
+            causedBy: EventId?,
         ) =
             Result.success(
                 KnowledgeEntry(

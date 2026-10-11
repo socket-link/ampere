@@ -195,6 +195,8 @@ fun Ampere.fromEnvironment(
 
     val knowledgeService = DefaultKnowledgeService(
         knowledgeRepository = effectiveKnowledgeRepository,
+        eventApi = sdkEventApi,
+        eventRepository = environmentService.eventRepository,
     )
 
     val statusService = DefaultStatusService(

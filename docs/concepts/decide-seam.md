@@ -85,6 +85,7 @@ model wrote about itself (AMPR-381, G1). Three pressures shaped the seam:
 - **Turn a heuristic into an explicit judgment** — `DeterministicDecisionClient(name = "any-success") { state, question -> … }`. The record names the rule on `modelSnapshot.modelId`.
 - **Make a self-reported confidence a number** — `confidence.asProbability()`. Do not put the result anywhere a band is fitted.
 - **Have a hosted run ask whether it met its goal** — give the host seat a `HostedAgent.upstreamDecisionClient` and open the run with `RunPolicy(goalCheck = GoalCheck.Record)`. One decision call per executed cycle, one `JudgmentRecorded` under `questionId == RunQuestions.GOAL_MET_ID`, and nothing about the run changes. A verifier seat's own `HostedAgent.questions` are asked beside it, all of them in one request, on that seat's transport.
+- **Store a confidence on a belief row** — pass a `BeliefConfidence` (`agents/domain/knowledge/BeliefConfidence.kt`, AMPR-417): `SelfReported(level)` is written as its F10 mapping, `Measured(probability)` as given. The `KnowledgeStore.confidence` column keeps the number and not the source, so nothing fits a band on it.
 - **Stream the records** — `eventApi.onJudgmentRecorded { … }` or `events.judgmentRecordedEvents()`; filter on `source == MEASURED` before fitting anything.
 - **Join a record back to its state** — compare `stateDigest(state)` to the record's `stateDigest`. The state itself is not recoverable from the record, by design.
 

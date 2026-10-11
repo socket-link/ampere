@@ -1,0 +1,27 @@
+-- AMPR-417 (F9, F11, and the storage halves of F10 and F12): the belief columns. Until now a
+-- stored memory recorded no holder (C13), carried its confidence only as prose inside
+-- `learnings` (C15), had no sensitivity, and pointed at no event (C14). Each row now says who
+-- holds it, how confident the holder is, who may read it, and which event recorded it.
+--
+-- ADD COLUMN is safe here even though every KnowledgeStore read is a SELECT * mapped by
+-- position: KnowledgeStore.sq declares the four columns last, which is exactly where ADD COLUMN
+-- puts them (see 4.sqm for what a mismatch between declared and physical order costs).
+--
+-- Backfill (F9): every pre-existing row belongs to the `system` pseudo-Subject — the row 9.sqm
+-- seeds — and is PUBLIC, with no confidence and no producing event. Both come from the column
+-- defaults, so there is no UPDATE to run. Nothing here reads SubjectStore: the two migrations
+-- are content-independent, and `holder` is a plain id rather than a foreign key into it.
+--
+-- `sensitivity` carries no CHECK: SQLDelight cannot resolve a column inside a CHECK on ADD COLUMN,
+-- and the .sq declaration has to match this one exactly. Its only writer is the Kotlin
+-- `Sensitivity` enum's `name`, and the reader maps it back with `Sensitivity.valueOf`.
+--
+-- This ticket owns 10.sqm and only 10.sqm: the Subject registry is 9.sqm and the goal branch
+-- (F8) is 11.sqm.
+ALTER TABLE KnowledgeStore ADD COLUMN holder TEXT NOT NULL DEFAULT 'system';
+ALTER TABLE KnowledgeStore ADD COLUMN confidence REAL;
+ALTER TABLE KnowledgeStore ADD COLUMN sensitivity TEXT NOT NULL DEFAULT 'PUBLIC';
+ALTER TABLE KnowledgeStore ADD COLUMN created_by_event TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_holder ON KnowledgeStore(holder);
+CREATE INDEX IF NOT EXISTS idx_knowledge_created_by_event ON KnowledgeStore(created_by_event);

@@ -3,6 +3,7 @@ package link.socket.ampere.agents.domain.knowledge
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.outcome.OutcomeId
+import link.socket.ampere.agents.domain.reasoning.Confidence
 import link.socket.ampere.agents.domain.reasoning.IdeaId
 import link.socket.ampere.agents.domain.reasoning.PerceptionId
 import link.socket.ampere.agents.domain.reasoning.PlanId
@@ -24,12 +25,20 @@ sealed class Knowledge {
     /** The time when this attempt was made */
     abstract val timestamp: Instant
 
+    /**
+     * How confident the model that distilled this was, as it reported it; null when it said
+     * nothing. Carried here rather than written into [learnings] (F10, C15): prose cannot be
+     * queried, and the store writes this to its `confidence` column as the F10 mapping.
+     */
+    abstract val confidence: Confidence?
+
     @Serializable
     data class FromIdea(
         val ideaId: IdeaId,
         override val approach: String,
         override val learnings: String,
         override val timestamp: Instant,
+        override val confidence: Confidence? = null,
     ) : Knowledge()
 
     @Serializable
@@ -38,6 +47,7 @@ sealed class Knowledge {
         override val approach: String,
         override val learnings: String,
         override val timestamp: Instant,
+        override val confidence: Confidence? = null,
     ) : Knowledge()
 
     @Serializable
@@ -46,6 +56,7 @@ sealed class Knowledge {
         override val approach: String,
         override val learnings: String,
         override val timestamp: Instant,
+        override val confidence: Confidence? = null,
     ) : Knowledge()
 
     @Serializable
@@ -54,6 +65,7 @@ sealed class Knowledge {
         override val approach: String,
         override val learnings: String,
         override val timestamp: Instant,
+        override val confidence: Confidence? = null,
     ) : Knowledge()
 
     @Serializable
@@ -62,5 +74,6 @@ sealed class Knowledge {
         override val approach: String,
         override val learnings: String,
         override val timestamp: Instant,
+        override val confidence: Confidence? = null,
     ) : Knowledge()
 }

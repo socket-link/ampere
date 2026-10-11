@@ -171,11 +171,17 @@ class DatabaseSchemaManagerTest {
 
             // getKnowledgeById is a SELECT *, so this fails if run_id was appended instead of
             // sitting where KnowledgeStore.sq declares it.
-            val row = queries.getKnowledgeById("k-1").executeAsOne()
+            val row = queries.getKnowledgeById(id = "k-1", viewer = null).executeAsOne()
             assertNull(row.run_id)
             assertEquals("idea-1", row.idea_id)
             assertEquals("refactor", row.task_type)
             assertEquals("SIMPLE", row.complexity_level)
+            // 10.sqm's backfill (F9, AMPR-417): a row older than the belief columns is held by
+            // the `system` pseudo-Subject, PUBLIC, with no confidence and no producing event.
+            assertEquals("system", row.holder)
+            assertEquals("PUBLIC", row.sensitivity)
+            assertNull(row.confidence)
+            assertNull(row.created_by_event)
             assertEquals(listOf("legacy"), queries.getTagsForKnowledge("k-1").executeAsList())
             // KnowledgeFts is an external-content index keyed on rowid, so the rebuild must keep them.
             assertEquals(
@@ -222,7 +228,7 @@ class DatabaseSchemaManagerTest {
             }
             assertEquals(fresh, tableShape(driver, "KnowledgeStore"))
 
-            val row = Database(driver).knowledgeStoreQueries.getKnowledgeById("k-1").executeAsOne()
+            val row = Database(driver).knowledgeStoreQueries.getKnowledgeById(id = "k-1", viewer = null).executeAsOne()
             assertEquals("k-1", row.id)
             assertEquals("FROM_IDEA", row.knowledge_type)
             assertEquals("approach", row.approach)

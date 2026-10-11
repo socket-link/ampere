@@ -19,7 +19,7 @@ How the agent thinks: the loop, the routing, the memory, the differentiation, th
 |---------|--------|------------------|
 | [PropelLoop](propel-loop.md) | stable | Six-phase autonomous cognitive cycle (Perceive → Recall → Observe → Plan → Execute → Learn). Recall must precede Plan. |
 | [CognitiveRelay](cognitive-relay.md) | stable | Provider-agnostic LLM routing: declarative rules pick an `AIConfiguration` per `RoutingContext`. Cognition layer never imports provider SDKs. |
-| [MemoryProvenance](memory-provenance.md) | stable | Episodic (Outcome) and semantic (Knowledge) memory cells. Every cell is timestamped, attributable, and indexed by `run_id` for time-travel. |
+| [MemoryProvenance](memory-provenance.md) | stable | Episodic (Outcome) and semantic (Knowledge) memory cells. Every cell is timestamped, attributable, and indexed by `run_id` for time-travel. A knowledge row is a stored Belief: holder, confidence, sensitivity, and the event that recorded it; provenance walks events, and a `PROTECTED` row never leaves its holder's reads. |
 | [SparkSystem](spark-system.md) | stable | Cellular differentiation: Sparks layer onto a single agent class to narrow capability. Sparks can only narrow, never expand. |
 | [DreamCycle](dream-cycle.md) | experimental | Async memory consolidation. Target shape only — no implementation yet. |
 | [HostedRun](hosted-run.md) | experimental | One consumer-opened PROPEL run over a roster: the host seat plans behind a `PlanGate`, each step runs on its seat, `close()` is LEARN. Suspend-only; every event through the seat's own door under the run id. A seat may carry a decision transport, and a cycle that executed may be asked whether the goal is met — recorded, never read. |

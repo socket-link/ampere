@@ -5,15 +5,22 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
+import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.RetrievedKnowledgeSummary
+import link.socket.ampere.agents.domain.knowledge.BeliefConfidence
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
+import link.socket.ampere.agents.domain.knowledge.reportedConfidence
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.field.Ref
+import link.socket.ampere.field.Sensitivity
+import link.socket.ampere.field.Subject
+import link.socket.ampere.subject.asSubjectRef
 import link.socket.ampere.util.ioDispatcher
 
 /**
@@ -30,6 +37,10 @@ import link.socket.ampere.util.ioDispatcher
  * it to the `EventStore` before dispatching it on the bus, so `KnowledgeStored` is a durable
  * record whose `eventSource` names the holding agent (the F9/F11 provenance anchor).
  *
+ * [agentId] is also the Subject this service writes and reads as (F9, F12, AMPR-417): every row
+ * it stores is held by the agent, and every read is made with the agent as the viewer, so it
+ * recalls PUBLIC rows and its own and never another Subject's PRIVATE or PROTECTED ones.
+ *
  * @param agentId the agent whose memory this is; also the door's identity, so the two must
  *   agree — factories build the door with `createEventApi(agentId)`.
  * @param eventApi the one door every event leaves through.
@@ -39,6 +50,9 @@ class AgentMemoryService(
     private val knowledgeRepository: KnowledgeRepository,
     private val eventApi: AgentEventApi,
 ) {
+
+    /** The Subject this memory belongs to: the holder of every write and the viewer of every read. */
+    private val self: Ref<Subject> = agentId.asSubjectRef()
 
     /**
      * Store a knowledge entry for future recall.
@@ -50,12 +64,24 @@ class AgentMemoryService(
      * persisted through the door before this returns; a persist failure fails the result,
      * so a caller never sees a stored entry whose provenance record is missing.
      *
+     * The row and the event agree by construction (F11): the event's id is chosen first and
+     * written to the row as `created_by_event`, and the row's run is the envelope's run. The
+     * row is written before the event because the repository is what picks the knowledge id
+     * the event names; if the door then refuses the event, the result fails and the row is
+     * left pointing at an event id the store does not have — a provenance walk from it stops
+     * at once and reports that id as unresolved.
+     *
      * @param knowledge The knowledge to persist
      * @param tags Optional tags for categorization and filtering
      * @param taskType Optional task type for context-based retrieval
      * @param complexityLevel Optional complexity level for similarity matching
      * @param runId Optional Arc run correlation ID for trace projection; also stamped on
      *   the event's envelope (F4)
+     * @param confidence How confident this agent is (F10); defaults to what [knowledge]
+     *   reported about itself, as its F10 mapping
+     * @param sensitivity Who may read the row (F12)
+     * @param causedBy The event this write is reacting to, if any; the envelope's `caused_by`,
+     *   and the next step of a provenance walk after the `KnowledgeStored` itself (F2, F11)
      * @return Result containing the stored KnowledgeEntry or an error
      */
     suspend fun storeKnowledge(
@@ -64,33 +90,69 @@ class AgentMemoryService(
         taskType: String? = null,
         complexityLevel: ComplexityLevel? = null,
         runId: RunId? = null,
+        confidence: BeliefConfidence? = knowledge.reportedConfidence,
+        sensitivity: Sensitivity = Sensitivity.PUBLIC,
+        causedBy: EventId? = null,
+    ): Result<KnowledgeEntry> = store(
+        knowledge = knowledge,
+        tags = tags,
+        taskType = taskType,
+        complexityLevel = complexityLevel?.name,
+        runId = runId,
+        confidence = confidence,
+        sensitivity = sensitivity,
+        causedBy = causedBy,
+    )
+
+    /**
+     * [storeKnowledge] with the complexity level as the repository's free-form string, for the
+     * SDK's `KnowledgeService.store`, whose contract has always taken one.
+     */
+    internal suspend fun store(
+        knowledge: Knowledge,
+        tags: List<String>,
+        taskType: String?,
+        complexityLevel: String?,
+        runId: RunId?,
+        confidence: BeliefConfidence?,
+        sensitivity: Sensitivity,
+        causedBy: EventId?,
     ): Result<KnowledgeEntry> = withContext(ioDispatcher) {
-        // Store knowledge using the repository
+        val eventId = generateUUID("knowledge-stored", agentId)
+
         val result = knowledgeRepository.storeKnowledge(
             knowledge = knowledge,
             tags = tags,
             taskType = taskType,
-            complexityLevel = complexityLevel?.name,
+            complexityLevel = complexityLevel,
             runId = runId,
+            holder = self,
+            confidence = confidence,
+            sensitivity = sensitivity,
+            createdByEvent = eventId,
         )
 
         // Emit event on success; a door failure folds into the result
         result.mapCatching { entry ->
+            val isProtected = sensitivity == Sensitivity.PROTECTED
             val event = MemoryEvent.KnowledgeStored(
-                eventId = generateUUID("knowledge-stored", agentId, entry.id),
+                eventId = eventId,
                 timestamp = Clock.System.now(),
                 eventSource = EventSource.Agent(agentId),
                 knowledgeId = entry.id,
                 knowledgeType = entry.knowledgeType,
                 taskType = entry.taskType,
-                tags = entry.tags,
-                approach = knowledge.approach,
-                learnings = knowledge.learnings,
+                // A PROTECTED belief's content stays on its row: the event log is replayed.
+                tags = if (isProtected) emptyList() else entry.tags,
+                approach = knowledge.approach.takeUnless { isProtected },
+                learnings = knowledge.learnings.takeUnless { isProtected },
                 sourceId = knowledge.sourceId,
                 runId = runId,
+                sensitivity = sensitivity,
+                confidence = entry.confidence,
             )
 
-            eventApi.publish(event, runId = runId).getOrThrow()
+            eventApi.publish(event, causedBy = causedBy, runId = runId).getOrThrow()
             entry
         }
     }
@@ -182,6 +244,7 @@ class AgentMemoryService(
             knowledgeRepository.findKnowledgeByTaskType(
                 taskType = context.taskType,
                 limit = limit * 2, // Get more candidates for scoring
+                viewer = self,
             ).onSuccess { entries ->
                 candidates.addAll(entries)
             }
@@ -192,6 +255,7 @@ class AgentMemoryService(
             knowledgeRepository.findKnowledgeByTags(
                 tags = context.tags.toList(),
                 limit = limit,
+                viewer = self,
             ).onSuccess { entries ->
                 candidates.addAll(entries)
             }
@@ -202,6 +266,7 @@ class AgentMemoryService(
             knowledgeRepository.findSimilarKnowledge(
                 description = context.description,
                 limit = limit * 2,
+                viewer = self,
             ).onSuccess { entries ->
                 candidates.addAll(entries)
             }
@@ -212,6 +277,7 @@ class AgentMemoryService(
             knowledgeRepository.findKnowledgeByTimeRange(
                 fromTimestamp = timeRange.start,
                 toTimestamp = timeRange.end,
+                viewer = self,
             ).onSuccess { entries ->
                 candidates.addAll(entries)
             }
@@ -242,7 +308,7 @@ class AgentMemoryService(
      * @return Result containing the knowledge entry or null if not found
      */
     suspend fun recallKnowledgeById(id: String): Result<KnowledgeEntry?> = withContext(ioDispatcher) {
-        knowledgeRepository.getKnowledgeById(id)
+        knowledgeRepository.getKnowledgeById(id, viewer = self)
     }
 
     /**
@@ -258,7 +324,7 @@ class AgentMemoryService(
         knowledgeType: KnowledgeType,
         limit: Int = 10,
     ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
-        knowledgeRepository.findKnowledgeByType(knowledgeType, limit)
+        knowledgeRepository.findKnowledgeByType(knowledgeType, limit, viewer = self)
     }
 
     /**
@@ -274,7 +340,7 @@ class AgentMemoryService(
         taskType: String,
         limit: Int = 10,
     ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
-        knowledgeRepository.findKnowledgeByTaskType(taskType, limit)
+        knowledgeRepository.findKnowledgeByTaskType(taskType, limit, viewer = self)
     }
 
     /**
@@ -290,7 +356,7 @@ class AgentMemoryService(
         tag: String,
         limit: Int = 10,
     ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
-        knowledgeRepository.findKnowledgeByTag(tag, limit)
+        knowledgeRepository.findKnowledgeByTag(tag, limit, viewer = self)
     }
 
     /**
@@ -357,18 +423,24 @@ internal val Knowledge.sourceId: String
  * Capped rather than complete: the event is a record of the recall, not a copy of the
  * store, and a recall of ten entries would otherwise put ten whole learnings on the
  * bus and in the `EventStore`.
+ *
+ * A [Sensitivity.PROTECTED] entry is never summarised, even when its holder is the one
+ * recalling it: the summary would copy its content into the event log, which every replay
+ * and bake reads (F12). It still counts toward the recall and its id is still listed.
  */
 internal fun List<KnowledgeWithScore>.retrievedSummaries(
     cap: Int = RECALL_SUMMARY_CAP,
-): List<RetrievedKnowledgeSummary> = take(cap).map { scored ->
-    RetrievedKnowledgeSummary(
-        knowledgeType = scored.entry.knowledgeType,
-        approach = scored.knowledge.approach,
-        learnings = scored.knowledge.learnings,
-        relevanceScore = scored.relevanceScore,
-        sourceId = scored.knowledge.sourceId,
-    )
-}
+): List<RetrievedKnowledgeSummary> = filterNot { it.entry.sensitivity == Sensitivity.PROTECTED }
+    .take(cap)
+    .map { scored ->
+        RetrievedKnowledgeSummary(
+            knowledgeType = scored.entry.knowledgeType,
+            approach = scored.knowledge.approach,
+            learnings = scored.knowledge.learnings,
+            relevanceScore = scored.relevanceScore,
+            sourceId = scored.knowledge.sourceId,
+        )
+    }
 
 /** The mean relevance of a scored recall; `0.0` when it found nothing. */
 internal fun List<KnowledgeWithScore>.averageRelevance(): Double =

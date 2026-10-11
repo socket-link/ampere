@@ -68,14 +68,18 @@ fun SqlDriver.searchKnowledgeChunksByText(query: String, limit: Long): List<Know
  *
  * Only valid to call when [FtsSchema.install] returned [FtsAvailability.Available] for this
  * driver — the `KnowledgeFts` virtual table must already exist.
+ *
+ * [viewer] scopes the match the way every `KnowledgeStore.sq` read is scoped (F12, AMPR-417):
+ * PUBLIC rows plus the viewer's own, and PUBLIC rows only for a null viewer.
  */
-fun SqlDriver.searchKnowledgeByText(query: String, limit: Long): List<KnowledgeStore> =
+fun SqlDriver.searchKnowledgeByText(query: String, limit: Long, viewer: String? = null): List<KnowledgeStore> =
     executeQuery(
         identifier = null,
         sql = """
             SELECT k.* FROM KnowledgeStore k
             INNER JOIN KnowledgeFts fts ON k.rowid = fts.rowid
             WHERE KnowledgeFts MATCH ?
+            AND (k.sensitivity = 'PUBLIC' OR (? IS NOT NULL AND k.holder = ?))
             ORDER BY fts.rank, k.timestamp DESC
             LIMIT ?
         """.trimIndent(),
@@ -97,16 +101,22 @@ fun SqlDriver.searchKnowledgeByText(query: String, limit: Long): List<KnowledgeS
                             task_id = cursor.getString(10),
                             task_type = cursor.getString(11),
                             complexity_level = cursor.getString(12),
+                            holder = cursor.getString(13)!!,
+                            confidence = cursor.getDouble(14),
+                            sensitivity = cursor.getString(15)!!,
+                            created_by_event = cursor.getString(16),
                         ),
                     )
                 }
             }
             QueryResult.Value(results)
         },
-        parameters = 2,
+        parameters = 4,
         binders = {
             bindString(0, query)
-            bindLong(1, limit)
+            bindString(1, viewer)
+            bindString(2, viewer)
+            bindLong(3, limit)
         },
     ).value
 

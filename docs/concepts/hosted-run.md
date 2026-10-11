@@ -266,9 +266,10 @@ strings.
   state that is unique per render makes the join useless.
   `RunObservation.asDecisionState` renders the goal, the cycle, and per step a
   description, a status word and a clipped result, in a fixed key order, for that reason.
-- **Assuming per-seat memory is separated.** Ampere's `KnowledgeStore` has no holder
-  column, so two seats sharing a `MemoryStore` recall each other's knowledge.
-  Separation is whatever the consumer's store scopes (row H22, no verdict).
+- **Assuming per-seat memory is separated.** Since AMPR-417 every row has a `holder` and
+  every read a viewer, but a seat writes PUBLIC by default and PUBLIC rows are every
+  Subject's — so two seats sharing a `MemoryStore` still recall each other's knowledge.
+  Only PRIVATE and PROTECTED rows stay with the seat that wrote them (row H22, no verdict).
 
 ## Not implemented here
 
@@ -277,7 +278,8 @@ and is built — `HostedAgent.upstreamDecisionClient`, with `HostedAgent.questio
 `RunPolicy.goalCheck` and `RunQuestions` beside it (AMPR-421). The rest carry **no
 verdict**, so none of them is built: the shared tick functions and judgment seams
 (H19), four-valued step and run results with dependent-skipping and `maxStepsPerCycle`
-(H20), a `holder` column for per-seat memory (H22), the F19–F21 reconciliation (H23),
+(H20), per-seat memory (H22 — AMPR-417 added the `holder` column, but seats still write
+PUBLIC), the F19–F21 reconciliation (H23),
 `External` provenance on a step result (H24), and re-gating a step whose arguments
 changed after approval (H25).
 
