@@ -12,6 +12,7 @@ import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.agents.events.subscription.Subscription
+import link.socket.phosphor.lumos.LumosGlyph
 import link.socket.phosphor.lumos.VoxelFrameBuilder
 import link.socket.phosphor.palette.AtmospherePresets
 import link.socket.phosphor.runtime.CognitiveSceneRuntime
@@ -29,7 +30,11 @@ import link.socket.phosphor.signal.AtmosphereState
  * to [AtmospherePresets.UNCERTAIN], interrupting any transition in flight.
  *
  * Glyphs are not coalesced — every event that resolves to a non-null
- * [link.socket.phosphor.lumos.LumosGlyph] is queued via [voxelFrameBuilder].
+ * [LumosGlyph] is handed to [glyphSink], which by default queues it on
+ * [voxelFrameBuilder]. That queue only drains inside [VoxelFrameBuilder.build],
+ * so a consumer that never calls `build()` — one replaying a recorded trace
+ * rather than rendering live frames — passes its own sink and overlays the
+ * glyph on the replayed frame itself.
  *
  * The bridge does not own a frame loop. The consumer must call [onFrameTick]
  * once per frame after [CognitiveSceneRuntime.update] so that pending
@@ -42,6 +47,8 @@ class AmperePhosphorBridge(
     private val strategy: PropelToAtmosphereStrategy = DefaultPropelStrategy,
     private val agentId: String = BRIDGE_AGENT_ID,
     private val glyphDurationSeconds: Float = DEFAULT_GLYPH_DURATION_SECONDS,
+    private val glyphSink: (glyph: LumosGlyph, durationSeconds: Float) -> Unit =
+        { glyph, duration -> voxelFrameBuilder.queueGlyph(glyph, duration) },
 ) {
     private val mutex = Mutex()
     private var pendingAtmosphere: AtmosphereState? = null
@@ -127,7 +134,7 @@ class AmperePhosphorBridge(
 
     private fun handleGlyphSource(event: Event) {
         val glyph = strategy.glyphFor(event) ?: return
-        voxelFrameBuilder.queueGlyph(glyph, glyphDurationSeconds)
+        glyphSink(glyph, glyphDurationSeconds)
     }
 
     companion object {
