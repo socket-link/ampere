@@ -39,6 +39,13 @@ class CountingUpstreamLlmClient(
 
     val prompts: MutableList<String> = CopyOnWriteArrayList()
 
+    /**
+     * Every request as sent, in order — the messages with their roles, for a test that
+     * has to tell the system half from the user half (AMPR-424: earlier results enter
+     * the planning prompt as data, never the system message).
+     */
+    val requests: MutableList<ChatCompletionRequest> = CopyOnWriteArrayList()
+
     val callCount: Int get() = prompts.size
 
     override suspend fun call(
@@ -47,6 +54,7 @@ class CountingUpstreamLlmClient(
     ): ChatCompletion {
         val prompt = request.messages.joinToString("\n") { it.content.orEmpty() }
         prompts += prompt
+        requests += request
         return ChatCompletion(
             id = generateUUID("fake-completion"),
             created = 0L,
@@ -136,6 +144,30 @@ fun recordingTool(
             executionStartTimestamp = now,
             executionEndTimestamp = now,
             message = result,
+        )
+    },
+)
+
+/** A tool that records what it was dispatched with and fails, with no parameter strategy. */
+fun failingTool(
+    id: String,
+    error: String,
+    dispatched: MutableList<ExecutionRequest<*>>,
+): FunctionTool<ExecutionContext.NoChanges> = FunctionTool(
+    id = id,
+    name = "Failing $id",
+    description = "records its request and fails",
+    requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
+    executionFunction = { request ->
+        dispatched += request
+        val now = Clock.System.now()
+        ExecutionOutcome.NoChanges.Failure(
+            executorId = request.context.executorId,
+            ticketId = request.context.ticket.id,
+            taskId = request.context.task.id,
+            executionStartTimestamp = now,
+            executionEndTimestamp = now,
+            message = error,
         )
     },
 )
