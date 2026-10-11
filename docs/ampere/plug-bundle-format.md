@@ -104,7 +104,7 @@ A bundle with no pin is not rejected: its canon names are still resolved against
 | --- | --- | --- |
 | `MapBundleSource` | commonMain | Tests and callers that already have entries materialised in memory. |
 | `PlugBundleSource.fromDirectory(path, fileSystem)` | commonMain | Bundle laid out as a directory tree under `path`, read via okio. |
-| `PlugBundleSource.fromZipFile(path, fileSystem)` | jvmMain | ZIP archive, opened read-only via `FileSystem.openZip`. JVM-only because okio's `openZip` is JVM-only in 3.11; iOS/Native ZIP support is a follow-up. |
+| `PlugBundleSource.fromZipFile(path, fileSystem)` | zipMain | ZIP archive, opened read-only via `FileSystem.openZip`. Available on JVM, Android and iOS/Native; `zipMain` rather than commonMain because okio's `openZip` does not reach Kotlin/JS or Wasm. |
 
 Both okio-backed factories yield identical entry keys for the same bundle whether shipped as a directory or a ZIP, so consumers can pick a layout without changing downstream code.
 
@@ -194,7 +194,7 @@ A v999 bundle today returns `UnknownVersion(999, 1)` rather than crashing. This 
 | `PlugBundle` | `commonMain/.../bundle/PlugBundle.kt` |
 | `PlugBundleSource`, `MapBundleSource` | `commonMain/.../bundle/PlugBundleSource.kt` |
 | `OkioPlugBundleSource`, `fromDirectory` | `commonMain/.../bundle/OkioPlugBundleSource.kt` |
-| `fromZipFile` | `jvmMain/.../bundle/PlugBundleSource.jvm.kt` |
+| `fromZipFile` | `zipMain/.../bundle/PlugBundleSource.zip.kt` |
 | `PlugBundleParser`, `BundleParseResult`, `BundleParseError` | `commonMain/.../bundle/PlugBundleParser.kt` |
 | `PlugBundleValidator`, `BundleValidation` | `commonMain/.../bundle/PlugBundleValidator.kt` |
 | `PlugBundleSignatureVerifier`, `PlugBundleSignatureVerification`, `NoOpPlugBundleSignatureVerifier` | `commonMain/.../bundle/PlugBundleSignatureVerifier.kt` |
