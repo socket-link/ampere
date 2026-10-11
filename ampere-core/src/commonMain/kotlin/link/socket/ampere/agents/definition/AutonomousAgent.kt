@@ -380,7 +380,17 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
     private var agentRuntimeScope: CoroutineScope? = null
     private var agentRuntimeLoopJob: Job? = null
 
-    private val phaseSparkManager: PhaseSparkManager<S> by lazy(LazyThreadSafetyMode.NONE) {
+    /**
+     * This agent's phase brackets: the one manager every phase it enters goes through.
+     *
+     * `internal` so a driver that ticks the agent from outside can bracket the phases it
+     * runs — the Arc's Flow tick enters PERCEIVE through EXECUTE with it, and Pulse enters
+     * LEARN (AMPR-441). One agent, one manager: a bracket the tick opens and a bracket
+     * [runtimeLoop] opens are the same stack, so a phase opened twice shows in the trace as
+     * the nested duplicate it is rather than as two unrelated phases. A second manager built
+     * over this agent would be a second stack, which is why a driver reaches for this one.
+     */
+    internal val phaseSparkManager: PhaseSparkManager<S> by lazy(LazyThreadSafetyMode.NONE) {
         createPhaseSparkManager()
     }
 
@@ -515,6 +525,20 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
     protected suspend fun recallRelevantKnowledgeForTask(task: Task): List<KnowledgeWithScore> =
         recallRelevantKnowledge(memoryContextForTask(task), limit = DEFAULT_RECALL_LIMIT)
             .getOrElse { emptyList<KnowledgeWithScore>() }
+
+    /**
+     * [recallRelevantKnowledgeForTask], for a driver that ticks this agent from outside it
+     * (AMPR-441).
+     *
+     * The Arc's Flow tick recalls through here, so the question it asks is
+     * [memoryContextForTask]'s. It used to build its own copy of that `MemoryContext`, which
+     * is how two definitions of one query drift apart. A pass-through rather than a wider
+     * [recallRelevantKnowledgeForTask], because Kotlin has no visibility that reaches both a
+     * subclass in another module and a driver in this one — the same reason a hosted run
+     * reaches the definition through `SparkBasedAgent.recallContextForRun`.
+     */
+    internal suspend fun recallForTask(task: Task): List<KnowledgeWithScore> =
+        recallRelevantKnowledgeForTask(task)
 
     /**
      * What Recall asks for, given [task]: one definition of a task's [MemoryContext].

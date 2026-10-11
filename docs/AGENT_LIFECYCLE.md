@@ -2,9 +2,11 @@
 
 This document explains how agents in Ampere autonomously work through tasks using the **PROPEL** cycle: **Perceive → Recall → Observe → Plan → Execute → Learn**.
 
-> **Status (verified against `main`, 2026-10-10).** This document describes the
-> cycle as designed. Two of the six phases do not run yet, and several steps in
-> the walkthrough below are the planned API rather than today's code. What is
+> **Status (verified against `main`, 2026-10-10; the drivers updated for
+> AMPR-441, 2026-10-11).** This document describes the cycle as designed. Two of
+> the three drivers now enter all six phases, but OBSERVE does what step 5
+> describes on none of them, and several steps in the walkthrough below are the
+> planned API rather than today's code. What is
 > and is not reachable from a consumer's hands is tracked per-phase in
 > [`docs/concepts/propel-loop.md`](concepts/propel-loop.md) under *"What a
 > consumer can and cannot drive today"*; the parent epic is
@@ -13,7 +15,7 @@ This document explains how agents in Ampere autonomously work through tasks usin
 ## The Core Loop
 
 Agents in Ampere follow a continuous cycle. Three drivers implement it, and
-only one runs all six phases:
+two of them bracket all six phases:
 
 - **A hosted run** — `RunHost.open(roster, seats, goal, tools, policy)` in
   `propel/`, the consumer-facing entry (AMPR-393). The roster's host seat runs
@@ -23,10 +25,13 @@ only one runs all six phases:
   one run id. See [HostedRun](concepts/hosted-run.md).
 - **`AutonomousAgent.runtimeLoop`** — brackets Perceive → Plan → Execute → Learn
   (Recall runs between them, unbracketed).
-- **The Arc path's `FlowPhase` tick** — runs Perceive → Recall → Plan → Execute
-  and brackets nothing.
+- **The Arc path** — each `FlowPhase` tick brackets Perceive → Recall → Observe →
+  Plan → Execute through every agent's own phase manager, and Pulse brackets
+  Learn once per run (AMPR-441). Observe is an empty bracket there: nothing on
+  the Arc path has anything for it to read yet.
 
-The phases marked below as gaps are the gaps on the second and third drivers.
+The one box marked below as not implemented is not implemented on any driver: a
+hosted run and the Arc both enter OBSERVE, and neither does what the box describes.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -130,12 +135,14 @@ A hosted run needs none of this: `RunHost` builds each seat with
 `phaseSparks.enabled = true`, because a run the consumer opened in order to watch
 is the case brackets exist for (AMPR-393).
 
-One gap left: an Arc run has no seam for it. `ChargePhase` builds the run's
-`SparkAgentFactory` itself and passes no `cognitiveConfig`
-(`domain/arc/ChargePhase.kt:130-143`), so a consumer driving the loop through
-`ArcSession` can only reach phase handling with the environment variable. It is
-moot while nothing in the Arc path calls `withPhase` — `FlowPhase` brackets no
-phases at all — but both are worth fixing together.
+An Arc run needs none of it either, for the same reason (AMPR-441): `ChargePhase`
+spawns the run's agents with `enabled = true, injectPhaseSparks = false`, so every
+Arc run is bracketed and its prompts are what they would be with phases off.
+`ChargePhase` takes a `cognitiveConfig` that replaces that default
+(`domain/arc/ChargePhase.kt:137-139`), but `AmpereRuntime` builds its
+`ChargePhase` without one. So a consumer driving the loop through `ArcSession`
+cannot turn the brackets off, and can turn the guidance on only with the
+environment variable.
 
 Trade-offs:
 - Pros: clearer phase focus, more consistent reasoning at each step
@@ -267,11 +274,15 @@ val observation = agent.observe(
 
 **Not implemented.** There is no `Agent.observe`, no `Observation` type and no
 OBSERVE service. `PlanGenerator.generate` takes a task, ideas, recalled
-knowledge and the available tools, and nothing else (`PlanGenerator.kt:62-106`).
+knowledge, the available tools, the roster's seats and — on a later cycle — the
+results so far, and nothing from OBSERVE (`PlanGenerator.kt:104-116`).
 `CognitivePhase.OBSERVE` exists in the enum and in `PhaseSpark.Observe`'s prompt
-(`PhaseSpark.kt:134-160`), but nothing enters the phase. This section describes
-the target shape; see [`docs/concepts/propel-loop.md`](concepts/propel-loop.md)
-for the invariant it is held against.
+(`PhaseSpark.kt:134-160`). Two drivers enter the phase — a hosted run, to run
+its verifier's Probes and record the judgments it asks for (AMPR-393,
+AMPR-421), and the Arc, as an empty bracket (AMPR-441) — and neither reads what
+this step describes. This section describes the target shape; see
+[`docs/concepts/propel-loop.md`](concepts/propel-loop.md) for the invariant it is
+held against.
 
 ---
 

@@ -2,6 +2,8 @@ package link.socket.ampere.domain.arc
 
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.Agent
+import link.socket.ampere.agents.definition.AutonomousAgent
+import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.MemoryTaskTypes
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
@@ -66,6 +68,11 @@ data class EvaluationReport(
  * [AmpereRuntime]. Cancellation that lands *while* Pulse is writing is not held off: the
  * remaining writes are abandoned, because a run that did not finish closing its loop should not
  * be credited with having closed it.
+ *
+ * Each agent's writes happen inside that agent's LEARN bracket, entered through its own phase
+ * manager (AMPR-441) — the Flow tick brackets the other five phases the same way. A bracket is
+ * closed however the writes inside it end: a cancellation that abandons them still leaves the
+ * phase's exit on the record, because the manager publishes it under `NonCancellable`.
  */
 class PulsePhase(
     private val arcConfig: ArcConfig,
@@ -192,44 +199,65 @@ class PulsePhase(
      * Capture and store are one pass on purpose: the outcome in hand is what decides the entry's
      * task type, and splitting the two invites a build step that returns cells nobody writes —
      * exactly the shape this phase had before.
+     *
+     * Every agent Flow recorded outcomes for enters LEARN, including one with no success to
+     * learn from: it executed, and a phase it entered and stored nothing in is a different fact
+     * from a phase it skipped.
      */
     private suspend fun captureLearnings(): List<Learning> {
         val agentsById = agents.associateBy { it.id }
         val learnings = mutableListOf<Learning>()
 
         flowResult.agentOutcomes.forEach { (agentId, outcomes) ->
-            outcomes.forEach { outcome ->
-                // Create knowledge from each successful outcome
-                if (outcome is Outcome.Success) {
-                    val knowledge = Knowledge.FromOutcome(
-                        outcomeId = outcome.id,
-                        approach = "Arc: ${arcConfig.name}",
-                        learnings = "Agent $agentId completed task successfully",
-                        timestamp = clock.now(),
-                    )
+            val agent = agentsById[agentId]
+            inLearnPhase(agent) {
+                outcomes.forEach { outcome ->
+                    // Create knowledge from each successful outcome
+                    if (outcome is Outcome.Success) {
+                        val knowledge = Knowledge.FromOutcome(
+                            outcomeId = outcome.id,
+                            approach = "Arc: ${arcConfig.name}",
+                            learnings = "Agent $agentId completed task successfully",
+                            timestamp = clock.now(),
+                        )
 
-                    // Through the agent, not through a repository held here: the agent owns the
-                    // door `KnowledgeStored` leaves by, so the event names the holder.
-                    val stored = agentsById[agentId]?.storeKnowledge(
-                        knowledge = knowledge,
-                        tags = listOf(ARC_TAG, arcConfig.name, SUCCESS_TAG),
-                        taskType = taskTypeFor(outcome),
-                        runId = runId,
-                    )?.isSuccess ?: false
-
-                    learnings.add(
-                        Learning(
-                            agentId = agentId,
+                        // Through the agent, not through a repository held here: the agent owns
+                        // the door `KnowledgeStored` leaves by, so the event names the holder.
+                        val stored = agent?.storeKnowledge(
                             knowledge = knowledge,
-                            context = "Arc: ${arcConfig.name}, Project: ${projectContext.projectId}",
-                            stored = stored,
-                        ),
-                    )
+                            tags = listOf(ARC_TAG, arcConfig.name, SUCCESS_TAG),
+                            taskType = taskTypeFor(outcome),
+                            runId = runId,
+                        )?.isSuccess ?: false
+
+                        learnings.add(
+                            Learning(
+                                agentId = agentId,
+                                knowledge = knowledge,
+                                context = "Arc: ${arcConfig.name}, Project: ${projectContext.projectId}",
+                                stored = stored,
+                            ),
+                        )
+                    }
                 }
             }
         }
 
         return learnings
+    }
+
+    /**
+     * Runs [block] inside [agent]'s LEARN bracket (AMPR-441), entered through the agent's own
+     * phase manager so the bracket leaves through the agent's door under its run, beside the
+     * `KnowledgeStored` events the block publishes.
+     *
+     * An agent that is not among the run's [agents] has no bracket to enter, and its learnings are
+     * built and left unstored, as they always were. One that is not an `AutonomousAgent`, the only
+     * kind with a manager, stores its learnings unbracketed.
+     */
+    private suspend fun inLearnPhase(agent: Agent<*>?, block: suspend () -> Unit) {
+        val phases = (agent as? AutonomousAgent<*>)?.phaseSparkManager ?: return block()
+        phases.withPhase(CognitivePhase.LEARN, block = block)
     }
 
     /**

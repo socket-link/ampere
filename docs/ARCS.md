@@ -23,7 +23,7 @@ Building potential. The system prepares by understanding the project context and
 
 - Analyze project structure (from `AGENTS.md`, `README.md`, etc.)
 - Decompose the user's goal into a `GoalTree`. This is a regex split on
-  `and then` / `then` / `and` / `;` / newline (`ChargePhase.kt:376-380`), not a
+  `and then` / `then` / `and` / `;` / newline (`ChargePhase.kt:388-392`), not a
   model call — one goal node per clause.
 - Persist that tree as the run's goals on the Field's Goal branch when the
   runtime has one ([AMPR-419](https://linear.app/miley/issue/AMPR-419)): one
@@ -33,11 +33,13 @@ Building potential. The system prepares by understanding the project context and
   wire a branch; the eval Bench does not.
 - Spawn the agents defined for this arc: one `SparkBasedAgent` per configured
   role, with the project spark, the role spark and any extra sparks stacked
-  (`ChargePhase.kt:387-413`). Each spawn gets a fresh id and is not entered
-  in the Subject registry, so there is no identity across runs.
+  (`ChargePhase.kt:399-425`). Each spawn gets a fresh id and is not entered
+  in the Subject registry, so there is no identity across runs. Every agent is
+  spawned with phase brackets on and phase guidance off (AMPR-441), so the run's
+  trace shows its phases while its prompts stay what they are with phases off.
 
 ### Flow
-Active work. Agents take turns, each turn running perceive → recall → plan → execute.
+Active work. Agents take turns, each turn running perceive → recall → observe → plan → execute.
 
 - Agents take turns in the order the orchestration declares. Only `sequential`
   is implemented — see *Orchestration Types* below.
@@ -45,17 +47,19 @@ Active work. Agents take turns, each turn running perceive → recall → plan �
 - Runs until the goal tree is marked complete or `maxFlowTicks` is reached
   (default 100). Each tick takes its task from the Arc's current goal since
   [AMPR-395](https://linear.app/miley/issue/AMPR-395)
-  (`FlowPhase.taskForCurrentGoal`, `:274-285`) — before that it read the agent's
+  (`FlowPhase.taskForCurrentGoal`, `:316-327`) — before that it read the agent's
   own memory cell, which nothing on this path writes, so the goal never arrived.
   One caveat remains: a goal is marked complete on *any* successful outcome,
-  with no check that it was met (`FlowPhase.kt:311-328`). With a Goal branch
+  with no check that it was met (`FlowPhase.kt:329-346`). With a Goal branch
   wired, each first completion also moves the stored goal to `COMPLETED`
   (`GoalEvent.GoalUpdated`) in the tick that made it; a goal the run never
   meets stays `OPEN` after the run settles.
-- A tick has no Observe step, and no Learn step of its own — the Arc's closing
-  phase is Pulse, once per run rather than once per tick. The comments calling
-  the tick's steps "remember" and "optimize" are pre-PROPEL naming
-  (`FlowPhase.kt:221, 224`).
+- Each step of a tick runs inside its PROPEL phase's bracket, entered through
+  the agent's own phase manager (AMPR-441), so a run's trace shows Perceive,
+  Recall, Observe, Plan and Execute under its run id. Observe is an empty
+  bracket: nothing on the Arc path has anything for it to read yet. A tick has
+  no Learn step of its own — the Arc's closing phase is Pulse, once per run
+  rather than once per tick.
 
 ### Pulse
 Convergence and delivery. The system evaluates completion and delivers results.
@@ -63,16 +67,18 @@ Convergence and delivery. The system evaluates completion and delivers results.
 - Check success criteria: goals completed vs. total, and zero failed outcomes.
   "Tests pass" is a heuristic — whether the Arc has an agent whose role is one
   of `qa` / `quality` / `validator` / `test`, and if so whether any outcome
-  failed (`PulsePhase.kt:127-132`).
+  failed (`PulsePhase.kt:134-139`).
 - Deliver artifacts (git commit, create PR) — **not implemented**.
   `PulseResult.commitSha` and `prUrl` are always null and marked "Populated
-  externally" (`PulsePhase.kt:101-102`); no caller populates them.
+  externally" (`PulsePhase.kt:108-109`); no caller populates them.
 - Capture learnings for future runs: one `Knowledge` entry per successful outcome, stored through
   the producing agent's memory service and tagged with the run id, so the next run's Recall finds
-  it (`PulsePhase.kt:196-233`, AMPR-402). The write needs a `KnowledgeRepository` on the runtime —
+  it (`PulsePhase.kt:207-247`, AMPR-402). Each agent's writes happen inside that agent's LEARN
+  bracket (AMPR-441). The write needs a `KnowledgeRepository` on the runtime —
   `ArcSession.create` supplies one when it has a `database`; without it the entries come back
   `Learning.stored = false`. A cancelled or failed run never reaches Pulse and owes a
-  `CompletionManifest` instead.
+  `CompletionManifest` instead; one cancelled while Pulse is writing abandons the rest of its
+  writes, though the LEARN bracket it was in still closes.
 
 ## Built-in Arcs
 
@@ -117,9 +123,9 @@ agents:
 
 `FlowPhase.execute` rejects anything but `SEQUENTIAL` up front —
 `require(arcConfig.orchestration.type == OrchestrationType.SEQUENTIAL)`
-(`FlowPhase.kt:111-113`) — so a `parallel` or `graph` arc config fails the run
+(`FlowPhase.kt:118-120`) — so a `parallel` or `graph` arc config fails the run
 rather than degrading to sequential. The per-tick barrier that parallel
-execution would need exists but is a deliberate no-op (`FlowPhase.kt:312-318`).
+execution would need exists but is a deliberate no-op (`FlowPhase.kt:348-354`).
 
 ## Configuration Reference
 
