@@ -37,7 +37,11 @@ sealed interface ExecutionOutcome : Outcome {
     /** When the execution ended */
     val executionEndTimestamp: Instant
 
-    /** Blank outcome, used for initialization */
+    /**
+     * Blank outcome: the initialization value, and what a tool that ran and had nothing to
+     * report comes back as (AMPR-420). Its ids are empty and both timestamps are
+     * [Instant.DISTANT_PAST], so it is not a result to time or to record.
+     */
     @Serializable
     data object Blank : ExecutionOutcome {
         override val id: OutcomeId = ""

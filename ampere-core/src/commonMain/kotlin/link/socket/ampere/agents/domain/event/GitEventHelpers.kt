@@ -15,7 +15,7 @@ import link.socket.ampere.agents.events.utils.generateUUID
  *
  * Example usage in agent code:
  * ```kotlin
- * val outcome = toolInvoker.invoke(gitRequest)
+ * val outcome = engine.execute(gitTool, gitRequest)
  * if (outcome is ExecutionOutcome.GitOperation.Success) {
  *     val gitEvents = createGitEventsFromOutcome(outcome, agentId)
  *     gitEvents.forEach { eventApi.publish(it) }

@@ -49,7 +49,8 @@ import link.socket.ampere.plug.permission.UserGrants
  * 3. Call LLM to generate parameters
  * 4. Enrich the execution request with generated parameters
  * 5. Execute via the executor
- * 6. Record the outcome in episodic memory, when a store is wired
+ * 6. Record the outcome in episodic memory, when a store is wired and the tool had
+ *    something to report
  * 7. Return the execution outcome
  *
  * Steps 2–4 are skipped when the call's parameters are already settled — see
@@ -94,9 +95,11 @@ import link.socket.ampere.plug.permission.UserGrants
  *   correct for tool calls made outside a run.
  * @property outcomeRepository Episodic memory for the outcomes this engine produces (AMPR-406,
  *   F20). This is the *persisting path*: when a store is wired, every [ExecutionOutcome]
- *   returned by [execute] is recorded against the request's ticket and run, which is what
- *   makes `OutcomeService` and the CLI `outcomes` command read a store something writes.
- *   Null records nothing — correct for tests and for engines built without a database.
+ *   returned by [execute] — a blank one excepted, since a tool that had nothing to report
+ *   left nothing to record (AMPR-420) — is recorded against the request's ticket and run,
+ *   which is what makes `OutcomeService` and the CLI `outcomes` command read a store
+ *   something writes. Null records nothing — correct for tests and for engines built
+ *   without a database.
  * @property mcpServerManager Where an [McpTool] dispatched by this engine is sent (AMPR-401):
  *   either a [PlugContext][link.socket.ampere.plug.PlugContext]'s
  *   [mcpServerManager][link.socket.ampere.plug.PlugContext.mcpServerManager] for plug-sourced
@@ -156,11 +159,13 @@ class ToolExecutionEngine(
      * `ToolExecutionCompleted` pair [publishToolStarted] writes one layer down (AMPR-389),
      * and the two are not meant to agree: a pair in the trace means a tool actually ran,
      * while an outcome row means an attempt was made. A permission-denied call has a row and
-     * no pair, and that asymmetry is the point of each.
+     * no pair, and that asymmetry is the point of each. A blank outcome is the mirror of it:
+     * the tool ran, so it has a pair, and it left nothing to remember, so it has no row.
      *
      * @param tool The tool to execute
      * @param request The execution request containing context and intent
-     * @return ExecutionOutcome indicating success or failure
+     * @return the tool's own outcome — a success or a failure — or [ExecutionOutcome.Blank]
+     *   for a tool that ran and had nothing to report, which is neither
      */
     suspend fun execute(
         tool: Tool<*>,
@@ -404,6 +409,9 @@ class ToolExecutionEngine(
                     when (finalStatus) {
                         is ExecutionStatus.Completed -> finalStatus.result
                         is ExecutionStatus.Failed -> finalStatus.result
+                        // The tool ran and had nothing to report. Returned as itself rather
+                        // than dressed as a success or a failure (AMPR-420).
+                        is ExecutionStatus.Blank -> ExecutionOutcome.Blank
                         else -> createFailure(
                             request = originalRequest,
                             startTime = startTime,
@@ -493,7 +501,10 @@ class ToolExecutionEngine(
     ) {
         val door = eventApi ?: return
         val completedAt = Clock.System.now()
-        val success = outcome is ExecutionOutcome.Success
+        // A blank outcome is a tool that ran and had nothing to report. That is not a failure,
+        // and a pair that read as one — unsuccessful, medium urgency, no message to say why —
+        // would send a reader looking for a fault that is not there (AMPR-420).
+        val success = outcome is ExecutionOutcome.Success || outcome is ExecutionOutcome.Blank
         withContext(NonCancellable) {
             door.publish(
                 ToolEvent.ToolExecutionCompleted(
@@ -533,6 +544,12 @@ class ToolExecutionEngine(
         outcome: ExecutionOutcome,
     ) {
         val repository = outcomeRepository ?: return
+        // A blank outcome is no outcome: the tool ran and left nothing to remember, and the
+        // value carries the placeholder timestamps of an initialisation value
+        // (`Instant.DISTANT_PAST`), which the write below would use as the row's time and file
+        // at the year -100001 (AMPR-420). The tool's pair is still published, so the call is
+        // on the trace.
+        if (outcome is ExecutionOutcome.Blank) return
         withContext(NonCancellable) {
             try {
                 repository.recordOutcome(

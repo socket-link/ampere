@@ -107,6 +107,25 @@ sealed interface ExecutionStatus : Status {
     }
 
     /**
+     * Execution ran to the end and had nothing to report.
+     *
+     * Neither [Completed] nor [Failed]: the tool did not fail, and it handed back no result
+     * to complete with. It is what a tool that returns a blank outcome leaves
+     * (`Outcome.blank` or `ExecutionOutcome.blank`), so a caller can tell a tool that had
+     * nothing to say from one that went wrong. The
+     * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine] returns
+     * it as an explicit [ExecutionOutcome.Blank]. Before AMPR-420 the executor protocol had
+     * no way to say this, so a blank was reported as a failed dispatch.
+     */
+    data class Blank(
+        override val executorId: ExecutorId,
+        override val timestamp: Instant,
+    ) : ExecutionStatus {
+
+        override val isClosed: Boolean = true
+    }
+
+    /**
      * Execution failed.
      */
     data class Failed(

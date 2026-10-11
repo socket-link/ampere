@@ -7,15 +7,19 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentActionAutonomy
+import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.reasoning.AgentLLMService
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.Task
@@ -26,22 +30,33 @@ import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.agents.execution.ToolExecutionEngine
+import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
-import link.socket.ampere.agents.execution.tools.invoke.ToolInvocationResult
-import link.socket.ampere.agents.execution.tools.invoke.ToolInvoker
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
+import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
+import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
+import link.socket.ampere.domain.ai.model.AIModel_Claude
+import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 
 /**
- * End-to-end validation tests for tool execution with event emission.
+ * End-to-end validation of the tool-event pair at the engine seam.
  *
- * Task 3.1: Validate ToolWriteCodeFile End-to-End
- * - Tool receives correct parameters
- * - Files are written to correct locations
+ * [ToolExecutionEngine] is the only producer of `ToolExecutionStarted` and
+ * `ToolExecutionCompleted` (AMPR-389, AMPR-420), so what a dispatch leaves in the event store
+ * is what these tests read back:
  * - Events are emitted for tool invocation and completion
- * - Errors are captured and surfaced appropriately
+ * - Errors are captured and surfaced on the Completed event
+ * - A tool with nothing to report completes its pair as a non-failure
+ * - Each dispatch's pair is joined on its own invocation id
+ * - An engine with no event API publishes nothing
+ *
+ * What the engine returns for each shape of tool result is `ToolExecutionEngineDispatchTest`
+ * (commonTest). The same pair read back through the trace projection is
+ * `ExecutePublishesItsStepsTest`.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ToolExecutionWithEventsTest {
@@ -94,44 +109,14 @@ class ToolExecutionWithEventsTest {
         description = "Test task",
     )
 
-    /**
-     * Test: ToolInvoker emits Started and Completed events
-     *
-     * Validates that when a tool is invoked through ToolInvoker with an
-     * AgentEventApi, the correct events are emitted.
-     */
-    @Test
-    fun testToolInvokerEmitsEvents() = runTest {
-        // Create a simple test tool
-        val tool = FunctionTool<ExecutionContext.NoChanges>(
-            id = "test-tool",
-            name = "Test Tool",
-            description = "A test tool",
-            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
-            executionFunction = { request ->
-                ExecutionOutcome.NoChanges.Success(
-                    executorId = request.context.executorId,
-                    ticketId = request.context.ticket.id,
-                    taskId = request.context.task.id,
-                    executionStartTimestamp = Clock.System.now(),
-                    executionEndTimestamp = Clock.System.now(),
-                    message = "Success",
-                )
-            },
-        )
-
-        // Create invoker WITH event API
-        val invoker = ToolInvoker(tool, agentEventApi)
-
-        val context = ExecutionContext.NoChanges(
-            executorId = "test-executor",
-            ticket = createTestTicket(),
-            task = createTestTask(),
-            instructions = "Test instructions",
-        )
-
-        val request = ExecutionRequest(
-            context = context,
+    private fun createTestRequest(runId: String? = null): ExecutionRequest<ExecutionContext.NoChanges> =
+        ExecutionRequest(
+            context = ExecutionContext.NoChanges(
+                executorId = "test-executor",
+                ticket = createTestTicket(),
+                task = createTestTask(),
+                instructions = "Test instructions",
+            ),
             constraints = ExecutionConstraints(
                 timeoutMinutes = 30,
                 maxFilesChanged = 100,
@@ -139,16 +124,85 @@ class ToolExecutionWithEventsTest {
                 requireLinting = false,
                 allowBreakingChanges = false,
             ),
+            runId = runId,
         )
 
-        // Invoke the tool
-        val result = invoker.invoke(request)
+    private fun createEngine(eventApi: AgentEventApi?): ToolExecutionEngine {
+        val executor = FunctionExecutor.create()
+        return ToolExecutionEngine(
+            llmService = AgentLLMService(
+                AgentConfiguration(
+                    agentDefinition = WriteCodeAgent,
+                    aiConfiguration = AIConfiguration_Default(
+                        provider = AIProvider_Anthropic,
+                        model = AIModel_Claude.Sonnet_5,
+                    ),
+                    llmProvider = { "{}" },
+                ),
+            ),
+            executor = executor,
+            executorId = executor.id,
+            eventApi = eventApi,
+        )
+    }
 
-        // Verify the result
-        assertIs<ToolInvocationResult.Success>(result)
+    private fun createSucceedingTool(id: String, name: String) = FunctionTool<ExecutionContext.NoChanges>(
+        id = id,
+        name = name,
+        description = "A test tool",
+        requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
+        executionFunction = { request ->
+            ExecutionOutcome.NoChanges.Success(
+                executorId = request.context.executorId,
+                ticketId = request.context.ticket.id,
+                taskId = request.context.task.id,
+                executionStartTimestamp = Clock.System.now(),
+                executionEndTimestamp = Clock.System.now(),
+                message = "Success",
+            )
+        },
+    )
 
-        // Allow events to be processed
-        delay(100)
+    private fun createFailingTool(id: String, name: String, message: String) = FunctionTool<ExecutionContext.NoChanges>(
+        id = id,
+        name = name,
+        description = "A tool that fails",
+        requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
+        executionFunction = { request ->
+            ExecutionOutcome.NoChanges.Failure(
+                executorId = request.context.executorId,
+                ticketId = request.context.ticket.id,
+                taskId = request.context.task.id,
+                executionStartTimestamp = Clock.System.now(),
+                executionEndTimestamp = Clock.System.now(),
+                message = message,
+            )
+        },
+    )
+
+    private fun createBlankTool(id: String, name: String) = FunctionTool<ExecutionContext.NoChanges>(
+        id = id,
+        name = name,
+        description = "A tool with nothing to report",
+        requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
+        executionFunction = { Outcome.blank },
+    )
+
+    /**
+     * Test: the engine emits Started and Completed events
+     *
+     * Validates that when a tool is dispatched through an engine holding an
+     * AgentEventApi, the correct events are emitted.
+     */
+    @Test
+    fun testEngineEmitsEvents() = runTest {
+        val tool = createSucceedingTool(id = "test-tool", name = "Test Tool")
+
+        // Dispatch the tool through an engine WITH event API
+        val outcome = createEngine(agentEventApi).execute(tool, createTestRequest(runId = "test-run"))
+
+        // Verify the outcome
+        assertIs<ExecutionOutcome.NoChanges.Success>(outcome)
 
         // Retrieve events from repository
         val events = eventRepository.getAllEvents().getOrNull()
@@ -161,6 +215,7 @@ class ToolExecutionWithEventsTest {
         val startedEvent = startedEvents.first()
         assertEquals("test-tool", startedEvent.toolId)
         assertEquals("Test Tool", startedEvent.toolName)
+        assertEquals("test-run", startedEvent.runId)
 
         // Find ToolEvent.ToolExecutionCompleted
         val completedEvents = events.filterIsInstance<ToolEvent.ToolExecutionCompleted>()
@@ -171,64 +226,27 @@ class ToolExecutionWithEventsTest {
         assertEquals("Test Tool", completedEvent.toolName)
         assertEquals(true, completedEvent.success)
         assertEquals(null, completedEvent.errorMessage)
+        assertTrue(completedEvent.durationMs >= 0, "Duration should be non-negative")
+        assertEquals("test-run", completedEvent.runId)
 
         // Verify invocation IDs match
         assertEquals(startedEvent.invocationId, completedEvent.invocationId)
     }
 
     /**
-     * Test: ToolInvoker emits Completed event with failure info on error
+     * Test: the engine emits Completed event with failure info on error
      *
      * Validates that when a tool fails, the Completed event contains
      * appropriate error information.
      */
     @Test
-    fun testToolInvokerEmitsFailureEvent() = runTest {
-        val tool = FunctionTool<ExecutionContext.NoChanges>(
-            id = "failing-tool",
-            name = "Failing Tool",
-            description = "A tool that fails",
-            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
-            executionFunction = { request ->
-                ExecutionOutcome.NoChanges.Failure(
-                    executorId = request.context.executorId,
-                    ticketId = request.context.ticket.id,
-                    taskId = request.context.task.id,
-                    executionStartTimestamp = Clock.System.now(),
-                    executionEndTimestamp = Clock.System.now(),
-                    message = "Intentional failure",
-                )
-            },
-        )
+    fun testEngineEmitsFailureEvent() = runTest {
+        val tool = createFailingTool(id = "failing-tool", name = "Failing Tool", message = "Intentional failure")
 
-        val invoker = ToolInvoker(tool, agentEventApi)
+        val outcome = createEngine(agentEventApi).execute(tool, createTestRequest())
 
-        val context = ExecutionContext.NoChanges(
-            executorId = "test-executor",
-            ticket = createTestTicket(),
-            task = createTestTask(),
-            instructions = "Test instructions",
-        )
-
-        val request = ExecutionRequest(
-            context = context,
-            constraints = ExecutionConstraints(
-                timeoutMinutes = 30,
-                maxFilesChanged = 100,
-                requireTests = false,
-                requireLinting = false,
-                allowBreakingChanges = false,
-            ),
-        )
-
-        // Invoke the tool
-        val result = invoker.invoke(request)
-
-        // Verify the result is a failure
-        assertIs<ToolInvocationResult.Failed>(result)
-
-        // Allow events to be processed
-        delay(100)
+        // Verify the outcome is a failure
+        assertIs<ExecutionOutcome.NoChanges.Failure>(outcome)
 
         // Retrieve events from repository
         val events = eventRepository.getAllEvents().getOrNull()
@@ -245,58 +263,95 @@ class ToolExecutionWithEventsTest {
     }
 
     /**
-     * Test: ToolInvoker works without event API (backward compatibility)
+     * Test: a blank outcome completes the pair as a non-failure
      *
-     * Validates that ToolInvoker still functions correctly when no
+     * Validates that a tool that ran and had nothing to report still leaves a Started and a
+     * Completed event, and that the Completed one does not read as a failure: no error
+     * message to go looking for, and not the medium urgency a failure gets.
+     */
+    @Test
+    fun testEngineCompletesThePairForABlankOutcome() = runTest {
+        val tool = createBlankTool(id = "blank-tool", name = "Blank Tool")
+
+        val outcome = createEngine(agentEventApi).execute(tool, createTestRequest())
+
+        assertIs<ExecutionOutcome.Blank>(outcome)
+
+        val events = eventRepository.getAllEvents().getOrNull()
+        assertNotNull(events)
+
+        val startedEvents = events.filterIsInstance<ToolEvent.ToolExecutionStarted>()
+        assertEquals(1, startedEvents.size, "A tool that ran has a Started event whatever it returned")
+
+        val completedEvents = events.filterIsInstance<ToolEvent.ToolExecutionCompleted>()
+        assertEquals(1, completedEvents.size, "and a Completed one, so the call is not left in flight")
+
+        val completedEvent = completedEvents.first()
+        assertEquals(startedEvents.first().invocationId, completedEvent.invocationId)
+        assertEquals(true, completedEvent.success)
+        assertEquals(null, completedEvent.errorMessage)
+        assertEquals(Urgency.LOW, completedEvent.urgency)
+    }
+
+    /**
+     * Test: each dispatch's pair is joined on its own invocation id
+     *
+     * Validates that two dispatches through one engine leave two pairs, each Completed event
+     * matching the Started event of the same tool and no other. `ArcTraceProjection` joins on
+     * the invocation id, so a pair that crossed would show one tool's duration and verdict
+     * against another's call.
+     */
+    @Test
+    fun testEngineJoinsEachDispatchOnItsOwnInvocationId() = runTest {
+        val engine = createEngine(agentEventApi)
+
+        engine.execute(createSucceedingTool(id = "tool-a", name = "Tool A"), createTestRequest())
+        engine.execute(createFailingTool(id = "tool-b", name = "Tool B", message = "boom"), createTestRequest())
+
+        val events = eventRepository.getAllEvents().getOrNull()
+        assertNotNull(events)
+
+        val startedEvents = events.filterIsInstance<ToolEvent.ToolExecutionStarted>()
+        val completedEvents = events.filterIsInstance<ToolEvent.ToolExecutionCompleted>()
+        assertEquals(2, startedEvents.size)
+        assertEquals(2, completedEvents.size)
+        assertEquals(
+            2,
+            startedEvents.map { it.invocationId }.toSet().size,
+            "Each dispatch should mint its own invocation id",
+        )
+
+        startedEvents.forEach { started ->
+            val completed = assertNotNull(
+                completedEvents.firstOrNull { it.invocationId == started.invocationId },
+                "Started event for ${started.toolId} has no Completed event on its invocation id",
+            )
+            assertEquals(started.toolId, completed.toolId, "A pair should never join two tools")
+        }
+
+        assertEquals(true, completedEvents.first { it.toolId == "tool-a" }.success)
+        assertEquals(false, completedEvents.first { it.toolId == "tool-b" }.success)
+    }
+
+    /**
+     * Test: the engine works without event API (backward compatibility)
+     *
+     * Validates that the engine still functions correctly when no
      * AgentEventApi is provided (events are simply not emitted).
      */
     @Test
-    fun testToolInvokerWithoutEventApi() = runTest {
-        val tool = FunctionTool<ExecutionContext.NoChanges>(
-            id = "test-tool",
-            name = "Test Tool",
-            description = "A test tool",
-            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
-            executionFunction = { request ->
-                ExecutionOutcome.NoChanges.Success(
-                    executorId = request.context.executorId,
-                    ticketId = request.context.ticket.id,
-                    taskId = request.context.task.id,
-                    executionStartTimestamp = Clock.System.now(),
-                    executionEndTimestamp = Clock.System.now(),
-                    message = "Success",
-                )
-            },
-        )
+    fun testEngineWithoutEventApi() = runTest {
+        val tool = createSucceedingTool(id = "test-tool", name = "Test Tool")
 
-        // Create invoker WITHOUT event API
-        val invoker = ToolInvoker(tool)
+        // Dispatch the tool through an engine WITHOUT event API - should work without errors
+        val outcome = createEngine(eventApi = null).execute(tool, createTestRequest())
 
-        val context = ExecutionContext.NoChanges(
-            executorId = "test-executor",
-            ticket = createTestTicket(),
-            task = createTestTask(),
-            instructions = "Test instructions",
-        )
+        // Verify the outcome
+        assertIs<ExecutionOutcome.NoChanges.Success>(outcome)
 
-        val request = ExecutionRequest(
-            context = context,
-            constraints = ExecutionConstraints(
-                timeoutMinutes = 30,
-                maxFilesChanged = 100,
-                requireTests = false,
-                requireLinting = false,
-                allowBreakingChanges = false,
-            ),
-        )
-
-        // Invoke the tool - should work without errors
-        val result = invoker.invoke(request)
-
-        // Verify the result
-        assertIs<ToolInvocationResult.Success>(result)
-
-        // No events should be emitted (event repository should be empty or only have setup events)
+        // No events should be emitted (event repository should be empty or only have setup events).
+        // The engine holds no reference to this repository, so this half is a tripwire for a
+        // default event API appearing later rather than a check on what the engine does today.
         val events = eventRepository.getAllEvents().getOrNull()
         assertNotNull(events)
 

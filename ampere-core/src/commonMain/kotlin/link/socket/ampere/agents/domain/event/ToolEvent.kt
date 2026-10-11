@@ -121,9 +121,8 @@ sealed interface ToolEvent : Event {
      * immediately before it dispatches the tool through its
      * [Executor][link.socket.ampere.agents.execution.executor.Executor] — the live path
      * `SparkBasedAgent.executePlanStep` → `AgentReasoning.executeTool` takes (AMPR-389).
-     * The standalone
-     * [ToolInvoker][link.socket.ampere.agents.execution.tools.invoke.ToolInvoker] emits
-     * the same pair around a single tool it wraps directly, and has no production caller.
+     * The engine is the only producer of this pair — the persisting path is the only path a
+     * tool call takes — so one dispatch writes one pair.
      *
      * A dispatch the [PlugPermissionGate][link.socket.ampere.plug.permission.PlugPermissionGate]
      * refused never reaches the engine's bracket and is reported by
@@ -172,7 +171,9 @@ sealed interface ToolEvent : Event {
      * @property invocationId Unique ID matching the Started event
      * @property toolId The ID of the tool that was executed
      * @property toolName The name of the tool that was executed
-     * @property success Whether the execution succeeded
+     * @property success Whether the execution succeeded. A tool that returned a blank outcome
+     *   ran and had nothing to report, which is not a failure, so it reports `true` with no
+     *   [errorMessage] (AMPR-420).
      * @property durationMs Execution duration in milliseconds
      * @property errorMessage Error message if failed, null if succeeded
      */
