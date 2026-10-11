@@ -117,6 +117,7 @@ class FtsSchemaTest {
             approach = approach,
             learnings = learnings,
             timestamp = 1_000L,
+            run_id = null,
             idea_id = null,
             outcome_id = null,
             perception_id = null,
@@ -124,6 +125,10 @@ class FtsSchemaTest {
             task_id = "task-$id",
             task_type = null,
             complexity_level = null,
+            holder = "system",
+            confidence = null,
+            sensitivity = "PUBLIC",
+            created_by_event = null,
         )
     }
 

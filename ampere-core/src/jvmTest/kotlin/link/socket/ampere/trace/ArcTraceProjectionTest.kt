@@ -613,7 +613,7 @@ class ArcTraceProjectionTest {
             ),
         ).getOrThrow()
 
-        database.knowledgeStoreQueries.insertKnowledgeWithRunId(
+        database.knowledgeStoreQueries.insertKnowledge(
             id = "knowledge-1",
             knowledge_type = KnowledgeType.FROM_OUTCOME.name,
             approach = "Use trace projections",
@@ -627,6 +627,10 @@ class ArcTraceProjectionTest {
             task_id = null,
             task_type = "trace",
             complexity_level = "MODERATE",
+            holder = "agent-1",
+            confidence = null,
+            sensitivity = "PUBLIC",
+            created_by_event = "knowledge-stored",
         )
         database.knowledgeStoreQueries.insertKnowledgeTag("knowledge-1", "trace")
 

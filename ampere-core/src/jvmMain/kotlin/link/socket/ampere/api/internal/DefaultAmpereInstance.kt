@@ -141,6 +141,8 @@ internal class DefaultAmpereInstance(
 
     override val knowledge: KnowledgeService = DefaultKnowledgeService(
         knowledgeRepository = KnowledgeRepositoryImpl(database, driver),
+        eventApi = sdkEventApi,
+        eventRepository = environmentService.eventRepository,
     )
 
     override val status: StatusService = DefaultStatusService(

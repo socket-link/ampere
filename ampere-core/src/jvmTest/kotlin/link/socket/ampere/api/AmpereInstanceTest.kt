@@ -109,6 +109,8 @@ class AmpereInstanceTest {
 
         knowledgeService = DefaultKnowledgeService(
             knowledgeRepository = KnowledgeRepositoryImpl(database),
+            eventApi = sdkEventApi,
+            eventRepository = environmentService.eventRepository,
         )
 
         statusService = DefaultStatusService(

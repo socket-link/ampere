@@ -141,7 +141,7 @@ class KnowledgeRepositoryTest {
         assertTrue(result.isSuccess)
         val stored = assertNotNull(result.getOrNull())
         val row = database.knowledgeStoreQueries
-            .getKnowledgeById(stored.id)
+            .getKnowledgeById(id = stored.id, viewer = null)
             .executeAsOne()
 
         assertEquals(runId, row.run_id)
@@ -160,7 +160,7 @@ class KnowledgeRepositoryTest {
         assertTrue(result.isSuccess)
         val stored = assertNotNull(result.getOrNull())
         val row = database.knowledgeStoreQueries
-            .getKnowledgeById(stored.id)
+            .getKnowledgeById(id = stored.id, viewer = null)
             .executeAsOne()
 
         assertNull(row.run_id)

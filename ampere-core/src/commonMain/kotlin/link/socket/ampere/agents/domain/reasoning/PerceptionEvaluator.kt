@@ -171,9 +171,10 @@ class PerceptionEvaluator(
             val obj = element.jsonObject
             val observation = obj["observation"]?.jsonPrimitive?.content ?: "No observation"
             val implication = obj["implication"]?.jsonPrimitive?.content ?: "No implication"
-            val confidence = Confidence.parseOrDefault(obj["confidence"]?.jsonPrimitive?.content)
 
-            "$observation → $implication (confidence: ${confidence.name.lowercase()})"
+            // The insight's self-reported confidence is no longer written into the prose
+            // (F10, C15). An Idea is not a stored belief, so it has no column to carry one.
+            "$observation → $implication"
         }
 
         return Idea(

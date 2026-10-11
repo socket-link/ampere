@@ -2,6 +2,11 @@ package link.socket.ampere.agents.domain.knowledge
 
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.RunId
+import link.socket.ampere.agents.domain.event.EventId
+import link.socket.ampere.field.Ref
+import link.socket.ampere.field.Sensitivity
+import link.socket.ampere.field.Subject
+import link.socket.ampere.subject.SubjectRegistry
 
 /**
  * Repository for storing and retrieving Knowledge entries to enable agent learning.
@@ -17,6 +22,16 @@ import link.socket.ampere.agents.domain.RunId
  * - Task types and complexity levels
  * - Tags for categorical organization
  * - Temporal ranges for recent vs historical learnings
+ *
+ * ## Holders and viewers (F9, F12)
+ *
+ * Every row has a holder — the Subject whose belief it is — and a [Sensitivity]. Ampere passes
+ * both through this interface rather than leaving scoping to the implementation: a write names
+ * its holder, and every read names the `viewer` it is made for. A viewer sees every
+ * [Sensitivity.PUBLIC] row plus the rows it holds itself; another Subject's
+ * [Sensitivity.PRIVATE] and [Sensitivity.PROTECTED] rows are never returned to it. A `null`
+ * viewer is nobody and sees [Sensitivity.PUBLIC] rows only, so a read that does not say whose it
+ * is fails closed. An implementation must apply the predicate before any `limit`.
  */
 interface KnowledgeRepository {
 
@@ -33,6 +48,14 @@ interface KnowledgeRepository {
      * @param taskType Optional task type for contextual filtering
      * @param complexityLevel Optional complexity indicator
      * @param runId Optional Arc run correlation ID for trace projection
+     * @param holder The Subject whose belief this is (F9). Defaults to the `system`
+     *   pseudo-Subject, which is also what every row older than the column belongs to; a write
+     *   on an agent's behalf names the agent — `AgentMemoryService` always does.
+     * @param confidence How confident the holder is (F10), or null when nothing reported one.
+     *   Defaults to what [knowledge] reported about itself.
+     * @param sensitivity Who may read the row (F12).
+     * @param createdByEvent The id of the `KnowledgeStored` event recording this write (F11);
+     *   null only for a write that publishes no event.
      * @return Result with the stored KnowledgeEntry or an error
      */
     suspend fun storeKnowledge(
@@ -41,6 +64,10 @@ interface KnowledgeRepository {
         taskType: String? = null,
         complexityLevel: String? = null,
         runId: RunId? = null,
+        holder: Ref<Subject> = SubjectRegistry.SYSTEM_REF,
+        confidence: BeliefConfidence? = knowledge.reportedConfidence,
+        sensitivity: Sensitivity = Sensitivity.PUBLIC,
+        createdByEvent: EventId? = null,
     ): Result<KnowledgeEntry>
 
     /**
@@ -61,6 +88,7 @@ interface KnowledgeRepository {
     suspend fun findSimilarKnowledge(
         description: String,
         limit: Int = 5,
+        viewer: Ref<Subject>? = null,
     ): Result<List<KnowledgeEntry>>
 
     /**
@@ -80,6 +108,7 @@ interface KnowledgeRepository {
     suspend fun findKnowledgeByType(
         knowledgeType: KnowledgeType,
         limit: Int = 10,
+        viewer: Ref<Subject>? = null,
     ): Result<List<KnowledgeEntry>>
 
     /**
@@ -95,6 +124,7 @@ interface KnowledgeRepository {
     suspend fun findKnowledgeByTaskType(
         taskType: String,
         limit: Int = 10,
+        viewer: Ref<Subject>? = null,
     ): Result<List<KnowledgeEntry>>
 
     /**
@@ -111,6 +141,7 @@ interface KnowledgeRepository {
     suspend fun findKnowledgeByTag(
         tag: String,
         limit: Int = 10,
+        viewer: Ref<Subject>? = null,
     ): Result<List<KnowledgeEntry>>
 
     /**
@@ -125,6 +156,7 @@ interface KnowledgeRepository {
     suspend fun findKnowledgeByTags(
         tags: List<String>,
         limit: Int = 10,
+        viewer: Ref<Subject>? = null,
     ): Result<List<KnowledgeEntry>>
 
     /**
@@ -140,6 +172,7 @@ interface KnowledgeRepository {
     suspend fun findKnowledgeByTimeRange(
         fromTimestamp: Instant,
         toTimestamp: Instant,
+        viewer: Ref<Subject>? = null,
     ): Result<List<KnowledgeEntry>>
 
     /**
@@ -169,15 +202,17 @@ interface KnowledgeRepository {
         fromTimestamp: Instant? = null,
         toTimestamp: Instant? = null,
         limit: Int = 10,
+        viewer: Ref<Subject>? = null,
     ): Result<List<KnowledgeEntry>>
 
     /**
      * Get a specific knowledge entry by ID.
      *
      * @param id The knowledge entry ID
+     * @param viewer Whose read this is; a row [viewer] may not see reads as not found
      * @return Result with the knowledge entry or null if not found
      */
-    suspend fun getKnowledgeById(id: String): Result<KnowledgeEntry?>
+    suspend fun getKnowledgeById(id: String, viewer: Ref<Subject>? = null): Result<KnowledgeEntry?>
 
     /**
      * Get all tags associated with a knowledge entry.
@@ -224,4 +259,17 @@ data class KnowledgeEntry(
     val taskType: String? = null,
     val complexityLevel: String? = null,
     val tags: List<String> = emptyList(),
+
+    // Belief columns (F9-F12, AMPR-417)
+    /** The Subject whose belief this is; `system` for every row older than the column. */
+    val holder: Ref<Subject> = SubjectRegistry.SYSTEM_REF,
+    /** The stored, already-mapped confidence (see [BeliefConfidence]); null when none was reported. */
+    val confidence: Double? = null,
+    /** Who may read this row. */
+    val sensitivity: Sensitivity = Sensitivity.PUBLIC,
+    /**
+     * The `KnowledgeStored` event that recorded this row; where a provenance walk starts. Null
+     * for rows older than the column and for writes that published no event.
+     */
+    val createdByEvent: EventId? = null,
 )

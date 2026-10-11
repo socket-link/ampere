@@ -24,6 +24,7 @@ import link.socket.ampere.db.Database
 import link.socket.ampere.db.events.EventStore
 import link.socket.ampere.db.memory.KnowledgeStore
 import link.socket.ampere.db.memory.OutcomeMemoryStore
+import link.socket.ampere.field.Sensitivity
 import link.socket.ampere.util.ioDispatcher
 
 /**
@@ -284,12 +285,16 @@ class ArcTraceProjection(
             writesById[row.id] = row.toMemoryWriteTrace()
         }
 
+        // A projection is a replay, and a PROTECTED belief leaves no trace in one (F12, AMPR-417):
+        // its row is filtered out of findKnowledgeByRunId and getReplayableKnowledgeById, and its
+        // KnowledgeStored is skipped here, so neither the row nor the event can put it back.
         events
             .map { it.event }
             .filterIsInstance<MemoryEvent.KnowledgeStored>()
+            .filterNot { it.sensitivity == Sensitivity.PROTECTED }
             .forEach { event ->
                 val stored = database.knowledgeStoreQueries
-                    .getKnowledgeById(event.knowledgeId)
+                    .getReplayableKnowledgeById(event.knowledgeId)
                     .executeAsOneOrNull()
 
                 writesById[event.knowledgeId] = stored?.toMemoryWriteTrace(

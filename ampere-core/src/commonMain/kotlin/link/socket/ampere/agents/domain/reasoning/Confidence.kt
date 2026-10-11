@@ -6,8 +6,9 @@ import kotlinx.serialization.Serializable
  * Shared confidence enum used across the cognition layer.
  *
  * Currently consumed by:
- *  - [PerceptionEvaluator] when parsing per-insight confidence from LLM JSON
- *  - [OutcomeEvaluator] when parsing per-learning confidence from LLM JSON
+ *  - [OutcomeEvaluator] when parsing per-learning confidence from LLM JSON, carried on
+ *    [link.socket.ampere.agents.domain.knowledge.Knowledge.confidence] and stored as its
+ *    F10 mapping (AMPR-417)
  *  - [link.socket.ampere.agents.domain.emission.Emission] for CHI Emissions
  *
  * Prompt strings remain lower-case (`"high" | "medium" | "low"`) for LLM

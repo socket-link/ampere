@@ -8,6 +8,7 @@ import kotlinx.serialization.Transient
 import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.domain.AgentError
 import link.socket.ampere.agents.domain.RunId
+import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
@@ -27,6 +28,7 @@ import link.socket.ampere.agents.domain.task.TaskId
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.domain.ai.model.AIModel
+import link.socket.ampere.field.Sensitivity
 import link.socket.ampere.util.logWith
 
 typealias AgentId = String
@@ -201,6 +203,8 @@ sealed interface Agent<S : AgentState> {
      * @param tags Optional tags for categorization
      * @param taskType Optional task type for context-based retrieval
      * @param runId Arc run correlation ID for trace projection; defaults to [currentRunId]
+     * @param sensitivity Who may read the stored row (F12)
+     * @param causedBy The event this write is reacting to, if any (F11)
      * @return Result containing the stored knowledge entry or an error
      */
     suspend fun storeKnowledge(
@@ -208,6 +212,8 @@ sealed interface Agent<S : AgentState> {
         tags: List<String> = emptyList(),
         taskType: String? = null,
         runId: RunId? = currentRunId,
+        sensitivity: Sensitivity = Sensitivity.PUBLIC,
+        causedBy: EventId? = null,
     ): Result<Unit> {
         val service = memoryService
         if (service == null) {
@@ -226,6 +232,8 @@ sealed interface Agent<S : AgentState> {
                 tags = tags,
                 taskType = taskType,
                 runId = runId,
+                sensitivity = sensitivity,
+                causedBy = causedBy,
             ).fold(
                 onSuccess = { entry ->
                     logger.i { "Stored knowledge entry ${entry.id} of type ${entry.knowledgeType}" }

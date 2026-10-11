@@ -1,10 +1,14 @@
 package link.socket.ampere.api.service
 
 import link.socket.ampere.agents.domain.RunId
+import link.socket.ampere.agents.domain.event.EventId
+import link.socket.ampere.agents.domain.knowledge.BeliefConfidence
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
+import link.socket.ampere.agents.domain.knowledge.reportedConfidence
 import link.socket.ampere.api.model.KnowledgeProvenance
+import link.socket.ampere.field.Sensitivity
 
 /**
  * SDK service for persistent knowledge and memory.
@@ -15,6 +19,10 @@ import link.socket.ampere.api.model.KnowledgeProvenance
  * val entries = ampere.knowledge.recall("how did we handle auth?")
  * entries.forEach { println("${it.approach} — ${it.learnings}") }
  * ```
+ *
+ * The service writes and reads as one Subject — the identity of the door it publishes through
+ * (F9, F12). What it stores is held by that Subject; what it reads is every PUBLIC entry plus
+ * the ones that Subject holds, never another Subject's PRIVATE or PROTECTED entry.
  */
 @link.socket.ampere.api.AmpereStableApi
 interface KnowledgeService {
@@ -34,6 +42,14 @@ interface KnowledgeService {
      * @param taskType Optional task type for context
      * @param complexityLevel Optional complexity annotation
      * @param runId Optional Arc run correlation ID for trace projection
+     * @param confidence How confident the holder is (F10); defaults to what [knowledge]
+     *   reported about itself. A measured probability is stored as given, a self-reported
+     *   level as its F10 mapping
+     * @param sensitivity Who may read the entry (F12). A belief about a real person is
+     *   [Sensitivity.PROTECTED]: no other Subject reads it, no replay or bake contains it, and
+     *   its `KnowledgeStored` event carries none of its content
+     * @param causedBy The event this write is reacting to, if any — the next step of the
+     *   entry's [provenance] after its own `KnowledgeStored`
      */
     suspend fun store(
         knowledge: Knowledge,
@@ -41,6 +57,9 @@ interface KnowledgeService {
         taskType: String? = null,
         complexityLevel: String? = null,
         runId: RunId? = null,
+        confidence: BeliefConfidence? = knowledge.reportedConfidence,
+        sensitivity: Sensitivity = Sensitivity.PUBLIC,
+        causedBy: EventId? = null,
     ): Result<KnowledgeEntry>
 
     /**
@@ -108,27 +127,23 @@ interface KnowledgeService {
     /**
      * Get the recorded origin of a specific knowledge entry.
      *
-     * Returns the entry together with the one cognitive element it was distilled
-     * from — the idea, outcome, perception, plan or task named by
-     * [KnowledgeProvenance.sourceType] and [KnowledgeProvenance.sourceId].
+     * Returns the entry, the one cognitive element it was distilled from
+     * ([KnowledgeProvenance.sourceType] and [KnowledgeProvenance.sourceId]), and the events
+     * that produced it ([KnowledgeProvenance.events]): the `KnowledgeStored` its row names in
+     * `created_by_event`, then that event's `caused_by`, and so on to an event with no cause.
      *
-     * This is a single hop, not a trail. A knowledge row records one source id and
-     * no parent entry, and the elements a source id addresses have no rows of their
-     * own, so there is nothing further to follow. Entries produced by the same Arc
-     * run are related through their `run_id` instead, which `ArcTraceProjection`
-     * reads to rebuild that run.
-     *
-     * Before AMPR-350 this returned a `List<KnowledgeEntry>` documented as an
-     * ordered trail. It never returned more than the one entry: it looked source ids
-     * up as knowledge ids, which cannot match.
+     * The walk is over events, never over knowledge rows (F11, AMPR-417). Before AMPR-350 this
+     * walked source ids as if they were knowledge ids, which cannot match; until AMPR-417 it
+     * returned the single source hop and nothing else, because no row recorded an event.
      *
      * ```
      * val origin = ampere.knowledge.provenance("knowledge-456").getOrThrow()
-     * println("${origin.entry.approach} came from ${origin.sourceType}: ${origin.sourceId}")
+     * origin.events.forEach { println("${it.event.eventType} ${it.event.eventId}") }
      * ```
      *
      * @param knowledgeId The ID of the knowledge entry to trace
-     * @return The entry and its source reference, or a failure if no entry has that ID
+     * @return The entry, its source reference and its event chain, or a failure if no entry
+     *   this service may read has that ID
      */
     suspend fun provenance(knowledgeId: String): Result<KnowledgeProvenance>
 }

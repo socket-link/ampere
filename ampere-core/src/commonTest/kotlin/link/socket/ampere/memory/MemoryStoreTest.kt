@@ -7,6 +7,8 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.RunId
+import link.socket.ampere.agents.domain.event.EventId
+import link.socket.ampere.agents.domain.knowledge.BeliefConfidence
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
@@ -16,6 +18,9 @@ import link.socket.ampere.agents.domain.outcome.OutcomeMemory
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.execution.executor.ExecutorId
+import link.socket.ampere.field.Ref
+import link.socket.ampere.field.Sensitivity
+import link.socket.ampere.field.Subject
 
 class MemoryStoreTest {
 
@@ -96,6 +101,10 @@ private class RecordingKnowledgeRepository : KnowledgeRepository {
         taskType: String?,
         complexityLevel: String?,
         runId: RunId?,
+        holder: Ref<Subject>,
+        confidence: BeliefConfidence?,
+        sensitivity: Sensitivity,
+        createdByEvent: EventId?,
     ): Result<KnowledgeEntry> {
         stored += knowledge
         return Result.success(
@@ -108,6 +117,10 @@ private class RecordingKnowledgeRepository : KnowledgeRepository {
                 tags = tags,
                 taskType = taskType,
                 complexityLevel = complexityLevel,
+                holder = holder,
+                confidence = confidence?.value,
+                sensitivity = sensitivity,
+                createdByEvent = createdByEvent,
             ),
         )
     }
@@ -115,31 +128,37 @@ private class RecordingKnowledgeRepository : KnowledgeRepository {
     override suspend fun findSimilarKnowledge(
         description: String,
         limit: Int,
+        viewer: Ref<Subject>?,
     ): Result<List<KnowledgeEntry>> = Result.success(emptyList())
 
     override suspend fun findKnowledgeByType(
         knowledgeType: KnowledgeType,
         limit: Int,
+        viewer: Ref<Subject>?,
     ): Result<List<KnowledgeEntry>> = Result.success(emptyList())
 
     override suspend fun findKnowledgeByTaskType(
         taskType: String,
         limit: Int,
+        viewer: Ref<Subject>?,
     ): Result<List<KnowledgeEntry>> = Result.success(emptyList())
 
     override suspend fun findKnowledgeByTag(
         tag: String,
         limit: Int,
+        viewer: Ref<Subject>?,
     ): Result<List<KnowledgeEntry>> = Result.success(emptyList())
 
     override suspend fun findKnowledgeByTags(
         tags: List<String>,
         limit: Int,
+        viewer: Ref<Subject>?,
     ): Result<List<KnowledgeEntry>> = Result.success(emptyList())
 
     override suspend fun findKnowledgeByTimeRange(
         fromTimestamp: kotlinx.datetime.Instant,
         toTimestamp: kotlinx.datetime.Instant,
+        viewer: Ref<Subject>?,
     ): Result<List<KnowledgeEntry>> = Result.success(emptyList())
 
     override suspend fun searchKnowledgeByContext(
@@ -150,9 +169,10 @@ private class RecordingKnowledgeRepository : KnowledgeRepository {
         fromTimestamp: kotlinx.datetime.Instant?,
         toTimestamp: kotlinx.datetime.Instant?,
         limit: Int,
+        viewer: Ref<Subject>?,
     ): Result<List<KnowledgeEntry>> = Result.success(emptyList())
 
-    override suspend fun getKnowledgeById(id: String): Result<KnowledgeEntry?> =
+    override suspend fun getKnowledgeById(id: String, viewer: Ref<Subject>?): Result<KnowledgeEntry?> =
         Result.success(null)
 
     override suspend fun getTagsForKnowledge(knowledgeId: String): Result<List<String>> =

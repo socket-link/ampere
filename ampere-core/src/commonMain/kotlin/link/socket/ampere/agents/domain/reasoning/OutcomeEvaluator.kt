@@ -293,6 +293,8 @@ class OutcomeEvaluator(
                 val outcomeId = outcomes.firstOrNull { it.id.isNotBlank() }?.id
                     ?: "composite-${outcomes.hashCode()}"
 
+                // The confidence rides on the Knowledge, not in its prose (F10, C15): the store
+                // writes it to its `confidence` column as the F10 mapping of this level.
                 Knowledge.FromOutcome(
                     outcomeId = outcomeId,
                     approach = pattern,
@@ -301,10 +303,10 @@ class OutcomeEvaluator(
                         appendLine()
                         appendLine("Actionable Advice: $actionableAdvice")
                         appendLine()
-                        appendLine("Confidence: ${confidence.name.lowercase()}")
                         appendLine("Evidence Count: $evidenceCount")
                     },
                     timestamp = now,
+                    confidence = confidence,
                 )
             } catch (e: Exception) {
                 null // Skip malformed entries

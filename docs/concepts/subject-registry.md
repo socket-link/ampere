@@ -75,7 +75,7 @@ where a goal id was expected and compile.
 - **Resolve an event's source** — `registry.resolve(event.eventSource)`.
 - **Resolve a responder** — `registry.resolveResponder(inputProvided.respondedBy)`; `null`
   is the Principal, a name must be a registered Human.
-- **Add a migration after 9** — the belief columns own `10.sqm`, the goal branch `11.sqm`.
+- **Add a migration after 9** — the belief columns took `10.sqm` (AMPR-417; `KnowledgeStore.holder` holds a Subject id, `system` for the backfill — a plain id, not a foreign key), and the goal branch owns `11.sqm`.
 
 ## Anti-patterns
 

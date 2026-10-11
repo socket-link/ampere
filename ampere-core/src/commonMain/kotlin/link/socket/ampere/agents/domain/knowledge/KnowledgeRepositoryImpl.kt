@@ -4,6 +4,7 @@ import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.domain.RunId
+import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.fts.FtsAvailability
@@ -11,6 +12,9 @@ import link.socket.ampere.db.fts.FtsSchema
 import link.socket.ampere.db.fts.searchKnowledgeByText
 import link.socket.ampere.db.memory.KnowledgeStore
 import link.socket.ampere.db.memory.KnowledgeStoreQueries
+import link.socket.ampere.field.Ref
+import link.socket.ampere.field.Sensitivity
+import link.socket.ampere.field.Subject
 import link.socket.ampere.util.ioDispatcher
 
 /**
@@ -51,6 +55,10 @@ class KnowledgeRepositoryImpl(
         taskType: String?,
         complexityLevel: String?,
         runId: RunId?,
+        holder: Ref<Subject>,
+        confidence: BeliefConfidence?,
+        sensitivity: Sensitivity,
+        createdByEvent: EventId?,
     ): Result<KnowledgeEntry> = withContext(ioDispatcher) {
         runCatching {
             // Generate ID based on knowledge type and source ID
@@ -79,39 +87,25 @@ class KnowledgeRepositoryImpl(
                 is Knowledge.FromTask -> Tuple5(null, null, null, null, knowledge.taskId)
             }
 
-            // Insert knowledge entry
-            if (runId != null) {
-                queries.insertKnowledgeWithRunId(
-                    id = id,
-                    knowledge_type = knowledgeType.name,
-                    approach = knowledge.approach,
-                    learnings = knowledge.learnings,
-                    timestamp = knowledge.timestamp.toEpochMilliseconds(),
-                    run_id = runId,
-                    idea_id = ideaId,
-                    outcome_id = outcomeId,
-                    perception_id = perceptionId,
-                    plan_id = planId,
-                    task_id = taskId,
-                    task_type = taskType,
-                    complexity_level = complexityLevel,
-                )
-            } else {
-                queries.insertKnowledge(
-                    id = id,
-                    knowledge_type = knowledgeType.name,
-                    approach = knowledge.approach,
-                    learnings = knowledge.learnings,
-                    timestamp = knowledge.timestamp.toEpochMilliseconds(),
-                    idea_id = ideaId,
-                    outcome_id = outcomeId,
-                    perception_id = perceptionId,
-                    plan_id = planId,
-                    task_id = taskId,
-                    task_type = taskType,
-                    complexity_level = complexityLevel,
-                )
-            }
+            queries.insertKnowledge(
+                id = id,
+                knowledge_type = knowledgeType.name,
+                approach = knowledge.approach,
+                learnings = knowledge.learnings,
+                timestamp = knowledge.timestamp.toEpochMilliseconds(),
+                run_id = runId,
+                idea_id = ideaId,
+                outcome_id = outcomeId,
+                perception_id = perceptionId,
+                plan_id = planId,
+                task_id = taskId,
+                task_type = taskType,
+                complexity_level = complexityLevel,
+                holder = holder.value,
+                confidence = confidence?.value,
+                sensitivity = sensitivity.name,
+                created_by_event = createdByEvent,
+            )
 
             // Insert tags
             tags.forEach { tag ->
@@ -135,6 +129,10 @@ class KnowledgeRepositoryImpl(
                 taskType = taskType,
                 complexityLevel = complexityLevel,
                 tags = tags,
+                holder = holder,
+                confidence = confidence?.value,
+                sensitivity = sensitivity,
+                createdByEvent = createdByEvent,
             )
         }
     }
@@ -142,6 +140,7 @@ class KnowledgeRepositoryImpl(
     override suspend fun findSimilarKnowledge(
         description: String,
         limit: Int,
+        viewer: Ref<Subject>?,
     ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
             // Convert description to FTS5 query format: split into keywords and join with OR
@@ -159,11 +158,15 @@ class KnowledgeRepositoryImpl(
                 // identically every time, so there's nothing to gain from retrying it.
                 when (ftsAvailability) {
                     is FtsAvailability.Available ->
-                        driver!!.searchKnowledgeByText(keywords, limit.toLong())
+                        driver!!.searchKnowledgeByText(keywords, limit.toLong(), viewer?.value)
                             .map { row -> mapRowToKnowledgeEntry(row) }
 
                     is FtsAvailability.Unavailable, null ->
-                        queries.searchKnowledgeByTextLike(description, description, limit.toLong())
+                        queries.searchKnowledgeByTextLike(
+                            text = description,
+                            viewer = viewer?.value,
+                            limit = limit.toLong(),
+                        )
                             .executeAsList()
                             .map { row -> mapRowToKnowledgeEntry(row) }
                 }
@@ -174,9 +177,14 @@ class KnowledgeRepositoryImpl(
     override suspend fun findKnowledgeByType(
         knowledgeType: KnowledgeType,
         limit: Int,
+        viewer: Ref<Subject>?,
     ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
-            queries.findKnowledgeByType(knowledgeType.name, limit.toLong())
+            queries.findKnowledgeByType(
+                knowledge_type = knowledgeType.name,
+                viewer = viewer?.value,
+                limit = limit.toLong(),
+            )
                 .executeAsList()
                 .map { row -> mapRowToKnowledgeEntry(row) }
         }
@@ -185,9 +193,10 @@ class KnowledgeRepositoryImpl(
     override suspend fun findKnowledgeByTaskType(
         taskType: String,
         limit: Int,
+        viewer: Ref<Subject>?,
     ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
-            queries.findKnowledgeByTaskType(taskType, limit.toLong())
+            queries.findKnowledgeByTaskType(task_type = taskType, viewer = viewer?.value, limit = limit.toLong())
                 .executeAsList()
                 .map { row -> mapRowToKnowledgeEntry(row) }
         }
@@ -196,9 +205,10 @@ class KnowledgeRepositoryImpl(
     override suspend fun findKnowledgeByTag(
         tag: String,
         limit: Int,
+        viewer: Ref<Subject>?,
     ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
-            queries.findKnowledgeByTag(tag, limit.toLong())
+            queries.findKnowledgeByTag(tag = tag, viewer = viewer?.value, limit = limit.toLong())
                 .executeAsList()
                 .map { row -> mapRowToKnowledgeEntry(row) }
         }
@@ -207,9 +217,10 @@ class KnowledgeRepositoryImpl(
     override suspend fun findKnowledgeByTags(
         tags: List<String>,
         limit: Int,
+        viewer: Ref<Subject>?,
     ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
-            queries.findKnowledgeByTags(tags, limit.toLong())
+            queries.findKnowledgeByTags(tags = tags, viewer = viewer?.value, limit = limit.toLong())
                 .executeAsList()
                 .map { row -> mapRowToKnowledgeEntry(row) }
         }
@@ -218,11 +229,13 @@ class KnowledgeRepositoryImpl(
     override suspend fun findKnowledgeByTimeRange(
         fromTimestamp: Instant,
         toTimestamp: Instant,
+        viewer: Ref<Subject>?,
     ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
             queries.findKnowledgeByTimeRange(
-                fromTimestamp.toEpochMilliseconds(),
-                toTimestamp.toEpochMilliseconds(),
+                from_timestamp = fromTimestamp.toEpochMilliseconds(),
+                to_timestamp = toTimestamp.toEpochMilliseconds(),
+                viewer = viewer?.value,
             )
                 .executeAsList()
                 .map { row -> mapRowToKnowledgeEntry(row) }
@@ -237,6 +250,7 @@ class KnowledgeRepositoryImpl(
         fromTimestamp: Instant?,
         toTimestamp: Instant?,
         limit: Int,
+        viewer: Ref<Subject>?,
     ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
         runCatching {
             // Use different query based on whether tags are provided
@@ -248,6 +262,7 @@ class KnowledgeRepositoryImpl(
                     from_timestamp = fromTimestamp?.toEpochMilliseconds(),
                     to_timestamp = toTimestamp?.toEpochMilliseconds(),
                     tags = tags,
+                    viewer = viewer?.value,
                     limit = limit.toLong(),
                 )
                     .executeAsList()
@@ -259,6 +274,7 @@ class KnowledgeRepositoryImpl(
                     complexity_level = complexityLevel,
                     from_timestamp = fromTimestamp?.toEpochMilliseconds(),
                     to_timestamp = toTimestamp?.toEpochMilliseconds(),
+                    viewer = viewer?.value,
                     limit = limit.toLong(),
                 )
                     .executeAsList()
@@ -267,9 +283,12 @@ class KnowledgeRepositoryImpl(
         }
     }
 
-    override suspend fun getKnowledgeById(id: String): Result<KnowledgeEntry?> = withContext(ioDispatcher) {
+    override suspend fun getKnowledgeById(
+        id: String,
+        viewer: Ref<Subject>?,
+    ): Result<KnowledgeEntry?> = withContext(ioDispatcher) {
         runCatching {
-            queries.getKnowledgeById(id)
+            queries.getKnowledgeById(id = id, viewer = viewer?.value)
                 .executeAsOneOrNull()
                 ?.let { row -> mapRowToKnowledgeEntry(row) }
         }
@@ -304,6 +323,10 @@ class KnowledgeRepositoryImpl(
             taskType = row.task_type,
             complexityLevel = row.complexity_level,
             tags = tags,
+            holder = Ref(row.holder),
+            confidence = row.confidence,
+            sensitivity = Sensitivity.valueOf(row.sensitivity),
+            createdByEvent = row.created_by_event,
         )
     }
 }

@@ -379,6 +379,23 @@ class EventRepository(
         }
 
     /**
+     * [getEventById] with the envelope the store recorded around the event, or null if no row
+     * has [eventId] — never stored, or pruned by the budget since (AMPR-301).
+     *
+     * This is a provenance walk's step: the envelope's [StoredEvent.causedBy] is the next id to
+     * follow (F11). An undecodable row is a failure, as it is for [getEventById].
+     */
+    suspend fun getStoredEventById(eventId: EventId): Result<StoredEvent?> =
+        withContext(ioDispatcher) {
+            runCatching {
+                queries
+                    .getEventById(eventId)
+                    .executeAsOneOrNull()
+                    ?.toStoredEvent()
+            }
+        }
+
+    /**
      * Retrieve events between [fromTime] and [toTime] (inclusive), in fold (`sequence`) order.
      *
      * Rows this build cannot decode are skipped and counted; see [DecodedRows].

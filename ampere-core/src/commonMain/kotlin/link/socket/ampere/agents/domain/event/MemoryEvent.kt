@@ -8,6 +8,7 @@ import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
 import link.socket.ampere.agents.domain.memory.MemoryContext
 import link.socket.ampere.agents.domain.task.TaskId
+import link.socket.ampere.field.Sensitivity
 
 /** Format a double to 2 decimal places (multiplatform compatible). */
 private fun Double.formatPercent(): String {
@@ -51,6 +52,16 @@ sealed interface MemoryEvent : Event {
      * This event signals that an agent has extracted learnings from
      * a cognitive element (Idea, Outcome, Perception, Plan, or Task)
      * and persisted it for future recall.
+     *
+     * It is the row's provenance (F11, AMPR-417): the row's `created_by_event` is this
+     * event's id, the envelope's `caused_by` is what the write was reacting to, and
+     * [eventSource] is the holder. For a [Sensitivity.PROTECTED] row the event records
+     * that the write happened and nothing of what it said — [approach], [learnings] and
+     * [tags] are left empty — because the event log is what a replay or bake reads, and
+     * a PROTECTED belief may reach neither (F12). The content lives on the row alone.
+     *
+     * @property sensitivity the stored row's sensitivity.
+     * @property confidence the stored row's already-mapped confidence, if it has one.
      */
     @Serializable
     data class KnowledgeStored(
@@ -66,6 +77,8 @@ sealed interface MemoryEvent : Event {
         val learnings: String? = null, // What was learned
         val sourceId: String? = null, // The outcome/idea/task ID this came from
         val runId: String? = null,
+        val sensitivity: Sensitivity = Sensitivity.PUBLIC,
+        val confidence: Double? = null,
     ) : MemoryEvent {
 
         override val eventType: EventType = EVENT_TYPE
