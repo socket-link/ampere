@@ -62,9 +62,11 @@ data class RecipePayload(
         }
     }
 
-    private companion object {
+    // Not private: the serialization plugin puts `serializer()` on the companion, and
+    // `RecipeKind` needs it.
+    companion object {
         /** `{ingredientId}` tokens a renderer substitutes with the scaled ingredient. */
-        val INGREDIENT_TOKEN = Regex("""\{([^{}]*)\}""")
+        private val INGREDIENT_TOKEN = Regex("""\{([^{}]*)\}""")
     }
 }
 
