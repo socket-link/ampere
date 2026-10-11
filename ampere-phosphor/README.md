@@ -47,8 +47,9 @@ strategy and any in-flight transition. Custom strategies must not return
 
 ## Glyph mapping
 
-Glyphs do NOT coalesce — every event with a non-null glyph is queued in
-arrival order on the renderer's `VoxelFrameBuilder`.
+Glyphs do NOT coalesce — every event with a non-null glyph is handed, in
+arrival order, to the bridge's `glyphSink`, which by default queues it on the
+renderer's `VoxelFrameBuilder`.
 
 | Event                                                   | Glyph    |
 | ------------------------------------------------------- | -------- |
@@ -78,6 +79,22 @@ val frame = voxelFrameBuilder.build(snapshot, deltaTimeSeconds)
 The bridge does not own a frame loop. It mutates the runtime in response to
 bus events. `onFrameTick` must be called once per frame so the bridge can
 apply a coalesced atmosphere target when the in-flight transition completes.
+
+### Redirecting glyphs
+
+The builder's glyph queue only drains inside `VoxelFrameBuilder.build()`. A
+consumer that never calls `build()` — one replaying a recorded trace rather
+than rendering live frames — passes a `glyphSink` and overlays the glyph on
+the replayed frame itself:
+
+```kotlin
+val bridge = AmperePhosphorBridge(
+    bus = eventSerialBus,
+    runtime = cognitiveSceneRuntime,
+    voxelFrameBuilder = voxelFrameBuilder,
+    glyphSink = { glyph, durationSeconds -> overlay.show(glyph, durationSeconds) },
+)
+```
 
 ## Coalescing semantics
 

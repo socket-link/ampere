@@ -88,7 +88,7 @@ kotlin {
                 // dead supervisor's claim is step 4 of the reconciliation pass, and the
                 // adapter is the only door onto the issue tracker (AMPR-310).
                 implementation(project(":ampere-work-linear"))
-                implementation("link.socket:phosphor-core:0.6.2")
+                implementation("link.socket:phosphor-core:0.8.0")
 
                 // CLI argument parsing
                 implementation("com.github.ajalt.clikt:clikt:4.4.0")

@@ -4,6 +4,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -149,6 +150,28 @@ class AmperePhosphorBridgeTest {
         val snapshot = runtime.update(0.001f)
         val frame = voxelFrameBuilder.build(snapshot, 0.001f)
         assertEquals(LumosGlyph.CHECK.name, frame.glyph?.glyphName)
+    }
+
+    @Test
+    fun `a glyph sink receives the glyph instead of the builder`() = runBlocking {
+        bridge.stop()
+        val received = mutableListOf<Pair<LumosGlyph, Float>>()
+        val sinkBridge = AmperePhosphorBridge(
+            bus = bus,
+            runtime = runtime,
+            voxelFrameBuilder = voxelFrameBuilder,
+            glyphSink = { glyph, duration -> received += glyph to duration },
+        ).also { it.start() }
+
+        publish(taskCompleted())
+
+        assertEquals(
+            listOf(LumosGlyph.CHECK to AmperePhosphorBridge.DEFAULT_GLYPH_DURATION_SECONDS),
+            received,
+        )
+        assertFalse(voxelFrameBuilder.hasActiveGlyph)
+
+        sinkBridge.stop()
     }
 
     @Test
