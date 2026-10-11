@@ -3,6 +3,7 @@ package link.socket.ampere.api
 import link.socket.ampere.agents.definition.AgentFactory
 import link.socket.ampere.api.service.AgentService
 import link.socket.ampere.api.service.EventService
+import link.socket.ampere.api.service.FieldService
 import link.socket.ampere.api.service.KnowledgeService
 import link.socket.ampere.api.service.OutcomeService
 import link.socket.ampere.api.service.PricingService
@@ -80,6 +81,22 @@ interface AmpereInstance : AutoCloseable {
      * tools are each run's own, declared when it is opened.
      */
     val runs: RunHost?
+        get() = null
+
+    /**
+     * The Field — Subjects, Relationships, Goals and Beliefs — read as one value for a viewer
+     * (AMPR-439).
+     *
+     * ```
+     * val field = ampere.field?.snapshot(viewer = Ref("agent-1"))?.getOrThrow()
+     * ```
+     *
+     * `null` on instances with no database to read the Field's stores from: the stub, and an
+     * [Ampere.fromEnvironment] instance composed without a `database`. [Ampere.create] always
+     * supplies one.
+     */
+    @AmpereExperimentalApi
+    val field: FieldService?
         get() = null
 
     /**

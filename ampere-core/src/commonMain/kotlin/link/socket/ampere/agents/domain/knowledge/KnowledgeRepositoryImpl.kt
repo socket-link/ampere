@@ -133,6 +133,7 @@ class KnowledgeRepositoryImpl(
                 confidence = confidence?.probability,
                 sensitivity = sensitivity,
                 createdByEvent = createdByEvent,
+                runId = runId,
             )
         }
     }
@@ -283,6 +284,17 @@ class KnowledgeRepositoryImpl(
         }
     }
 
+    override suspend fun findKnowledgeVisibleTo(
+        viewer: Ref<Subject>?,
+        limit: Int,
+    ): Result<List<KnowledgeEntry>> = withContext(ioDispatcher) {
+        runCatching {
+            queries.findKnowledgeVisibleTo(viewer = viewer?.value, limit = limit.toLong())
+                .executeAsList()
+                .map { row -> mapRowToKnowledgeEntry(row) }
+        }
+    }
+
     override suspend fun getKnowledgeById(
         id: String,
         viewer: Ref<Subject>?,
@@ -327,6 +339,7 @@ class KnowledgeRepositoryImpl(
             confidence = row.confidence,
             sensitivity = Sensitivity.valueOf(row.sensitivity),
             createdByEvent = row.created_by_event,
+            runId = row.run_id,
         )
     }
 }

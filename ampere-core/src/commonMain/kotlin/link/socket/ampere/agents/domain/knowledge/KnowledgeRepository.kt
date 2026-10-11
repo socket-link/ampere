@@ -206,6 +206,27 @@ interface KnowledgeRepository {
     ): Result<List<KnowledgeEntry>>
 
     /**
+     * Every entry [viewer] may see, newest first, at most [limit] of them — the belief half of a
+     * Field read (AMPR-439).
+     *
+     * The same F12 predicate as every other read, applied before [limit]: a viewer is never
+     * handed a short page because another Subject's rows took the slots.
+     *
+     * Has a default so an implementation written before this read still compiles; the default
+     * fails with [UnsupportedOperationException] rather than returning an empty list, which a
+     * caller could not tell from a store that holds nothing.
+     *
+     * @param viewer Whose read this is; `null` sees PUBLIC rows only
+     * @param limit Maximum number of entries to return
+     */
+    suspend fun findKnowledgeVisibleTo(
+        viewer: Ref<Subject>?,
+        limit: Int,
+    ): Result<List<KnowledgeEntry>> = Result.failure(
+        UnsupportedOperationException("${this::class.simpleName} does not implement findKnowledgeVisibleTo"),
+    )
+
+    /**
      * Get a specific knowledge entry by ID.
      *
      * @param id The knowledge entry ID
@@ -272,4 +293,11 @@ data class KnowledgeEntry(
      * for rows older than the column and for writes that published no event.
      */
     val createdByEvent: EventId? = null,
+
+    /**
+     * The Arc run the row was written under, or null for a write outside one. The column has
+     * always been there; the entry carries it so a Field read can find the goal a belief is
+     * about (AMPR-439).
+     */
+    val runId: RunId? = null,
 )

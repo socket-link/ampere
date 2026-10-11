@@ -18,12 +18,14 @@ import link.socket.ampere.agents.service.MessageActionService
 import link.socket.ampere.agents.service.TicketActionService
 import link.socket.ampere.api.internal.DefaultAgentService
 import link.socket.ampere.api.internal.DefaultEventService
+import link.socket.ampere.api.internal.DefaultFieldService
 import link.socket.ampere.api.internal.DefaultKnowledgeService
 import link.socket.ampere.api.internal.DefaultOutcomeService
 import link.socket.ampere.api.internal.DefaultPricingService
 import link.socket.ampere.api.internal.DefaultStatusService
 import link.socket.ampere.api.internal.DefaultThreadService
 import link.socket.ampere.api.internal.DefaultTicketService
+import link.socket.ampere.api.service.FieldService
 import link.socket.ampere.db.Database
 import link.socket.ampere.llm.BundledUpstreamLlmClient
 import link.socket.ampere.llm.UpstreamLlmClient
@@ -93,7 +95,13 @@ import link.socket.ampere.propel.rosterRunHost
  *   supplied, [boundAgentFactory] gates plug-tool dispatch against the
  *   caller's real grants instead of the deny-all default every
  *   `requiredPermissions` tool otherwise falls back to. Null preserves that
- *   default, which stays correct for callers with no persisted store.
+ *   default, which stays correct for callers with no persisted store. The same
+ *   database backs [AmpereInstance.field] (AMPR-439): its Subject, Relationship
+ *   and Goal stores are read from it, with the knowledge this instance reads
+ *   and [EnvironmentService.eventRepository]'s log. Without one, `field` is
+ *   `null` — there is nowhere to read the Field from. A [memoryStore] whose
+ *   knowledge repository predates `findKnowledgeVisibleTo` makes every snapshot
+ *   fail rather than report no beliefs.
  * @param executor What the agents built off [AmpereInstance.agentFactory] dispatch
  *   their tool calls through (AMPR-405). Defaults to [FunctionExecutor.create], so a
  *   composed instance's agents can actually run the in-process tools they are built
@@ -114,6 +122,7 @@ import link.socket.ampere.propel.rosterRunHost
  *   per-seat routing belongs.
  */
 @AmpereStableApi
+@OptIn(AmpereExperimentalApi::class)
 fun Ampere.fromEnvironment(
     environmentService: EnvironmentService,
     knowledgeRepository: KnowledgeRepository,
@@ -240,6 +249,16 @@ fun Ampere.fromEnvironment(
         outcomeRepository = effectiveOutcomeRepository,
     )
 
+    // AMPR-439: the Field read, over the caller's database when there is one. The knowledge half
+    // is the effective repository, so a memory-store override is what the Field's beliefs come from.
+    val fieldService: FieldService? = database?.let { db ->
+        DefaultFieldService.over(
+            database = db,
+            knowledge = effectiveKnowledgeRepository,
+            events = environmentService.eventRepository,
+        )
+    }
+
     return object : AmpereInstance {
         override val agents = agentService
         override val tickets = ticketService
@@ -253,6 +272,10 @@ fun Ampere.fromEnvironment(
         override val upstreamDecisionClient: UpstreamDecisionClient? = upstreamDecisionClient
         override val agentFactory: AgentFactory = boundAgentFactory
         override val runs: RunHost = runHost
+
+        @AmpereExperimentalApi
+        override val field: FieldService? = fieldService
+
         override fun close() {
             // No-op: caller owns the lifecycle of shared resources
         }
