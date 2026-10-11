@@ -8,10 +8,12 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/emission/Affordance.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/emission/EmissionProvenance.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/emission/EmissionScope.kt
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/emission/kinds/DomainEmissionKind.kt
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/emission/kinds/recipe/Recipe.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/Principal.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/EmissionEvent.kt
 related: [ChiProtocol, EventSerialBus, AgentSurface, PropelLoop, EmissionDedup]
-last_verified: 2026-09-21
+last_verified: 2026-10-11
 ---
 
 # Emission
@@ -20,7 +22,9 @@ last_verified: 2026-09-21
 
 An `Emission` is one moment of computer-initiated human contact — the
 typed unit of CHI (see [ChiProtocol](chi.md)). Each Emission carries a
-`kind` (`Prose`, `Decision`, `Confirmation`, `Sensor`), a typed `payload`,
+`kind` — one of the four core kinds (`Prose`, `Decision`, `Confirmation`,
+`Sensor`) or `Domain(id)`, the one variant that carries any consumer-defined
+kind as data (see [Domain kinds](#domain-kinds)) — a typed `payload`,
 optional `affordances`, an optional `Confidence`, full `provenance`, an
 optional content-deterministic `dedupKey`, and a `producedAt` timestamp.
 Provenance answers two questions as data: *what caused this*
@@ -66,12 +70,14 @@ Three design pressures shape the Wave 0 cut:
 
 ## Where it lives
 
-- `agents/domain/emission/Emission.kt` — the data class and `computeDedupKey` extension.
-- `agents/domain/emission/EmissionKind.kt` — the four core kinds as sealed `data object`s.
-- `agents/domain/emission/EmissionPayload.kt` — sealed payload variants (one per kind).
+- `agents/domain/emission/Emission.kt` — the data class (with the `Domain` pairing check in `init`) and `computeDedupKey` extension.
+- `agents/domain/emission/EmissionKind.kt` — the four core kinds as sealed `data object`s, plus `Domain(id)`, the data-class variant every domain kind rides.
+- `agents/domain/emission/EmissionPayload.kt` — sealed payload variants (one per core kind, plus `Domain(kindId, schemaVersion, body, fallbackText)`).
+- `agents/domain/emission/kinds/DomainEmissionKind.kt` — the descriptor a domain kind is defined through (`kind`, `encode`, `decodeOrNull`).
+- `agents/domain/emission/kinds/recipe/Recipe.kt` — `RecipeKind`, the first domain kind, and its payload types.
 - `agents/domain/emission/Affordance.kt` — response options attached to an Emission.
 - `agents/domain/emission/EmissionProvenance.kt` — the provenance schema, plus the surrogate serializer that reads pre-edge payloads.
-- `agents/domain/emission/EmissionScope.kt` — the authoring DSL (`emission { }`, `ask`, `confirm`, `emit`, `sense`, `askHuman`, `inServiceOf`).
+- `agents/domain/emission/EmissionScope.kt` — the authoring DSL (`emission { }`, `ask`, `confirm`, `emit`, `sense`, `present`, `askHuman`, `inServiceOf`).
 - `agents/domain/Principal.kt` — the principal carrier. `Principal.Ambient` is its only variant until D5.
 - `agents/domain/emission/EmissionDigest.kt` — `inputDigest(payload)` helper.
 - `agents/domain/emission/EmissionIds.kt` — `EmissionId` and `AffordanceId` typealiases.
@@ -87,7 +93,10 @@ Three design pressures shape the Wave 0 cut:
 - **The principal is a carrier, not a policy.** What a principal means is D5's to decide. Until then `Principal.Ambient`, meaning "no identity was resolved; ran under process authority", is the only honest value, and every site that stamps it is a site D5 must revisit. Both production `emission { }` call sites (`ToolAskHuman`, `AgentMessageApi.escalateToHuman`) open root scopes under `Principal.Ambient`.
 - **The edge is always written, and old payloads still read.** `EmissionProvenanceSerializer` goes through a surrogate that `@EncodeDefault`s both fields, so every new payload carries `parentEmissionId` (explicit `null` for a root) and `principal` whatever the consumer's `encodeDefaults`. Payloads from before AMPR-283 carry neither key and decode as a root under `Principal.Ambient`. That is accurate: nothing recorded a parent then, and nothing ran under anything but ambient authority. `Principal` variants follow the `Principal.<Name>` `@SerialName` rule below.
 - **`EmissionEvent.Resolved` references the originating Emission by id and the chosen affordance by id.** Both ids are stable for the lifetime of the Emission.
-- **`@SerialName`s are wire format.** Every sealed variant carries a stable `@SerialName`. Renames are a wire-format change that must be co-ordinated with consumers.
+- **`@SerialName`s are wire format.** Every sealed variant carries a stable `@SerialName`. Renames are a wire-format change that must be co-ordinated with consumers. Adding a *core* kind is likewise a wire-format change (a new variant on two sealed hierarchies, a minor release); adding a *domain* kind is not, because it rides `Domain`.
+- **A `Domain` kind and a `Domain` payload always travel together, with one id.** `Emission.init` rejects `EmissionKind.Domain` paired with a core payload, a core kind paired with `EmissionPayload.Domain`, and two `Domain`s whose ids differ. Core-kind pairing is *not* checked (AMPR-427 outcome 4): enforcing it could reject existing producers, and that is a separate decision.
+- **Every domain payload carries prose a consumer can show without knowing the kind.** `EmissionPayload.Domain.fallbackText` is required and never blank. Console, voice and digest surfaces print it; a consumer whose build predates the kind shows it instead of a JSON blob.
+- **A domain body is encoded once, canonically.** `DomainEmissionKind.encode` writes `body` with one private `Json` (defaults on, no pretty print), so equal values give byte-equal bodies and `inputDigest` is stable. Hand-built `EmissionPayload.Domain`s skip that guarantee.
 - **No platform types in this package.** Emissions live in `commonMain`; rendering, surface arbitration, and push delivery are Socket-side concerns.
 
 ## Common operations
@@ -98,6 +107,71 @@ Three design pressures shape the Wave 0 cut:
 - **Render or log on the consumer side** — subscribe to `EmissionEvent.Produced.EVENT_TYPE` on the `EventSerialBus`.
 - **Resolve an affordance** — when a human selects an affordance, publish `EmissionEvent.Resolved(emissionId, affordanceId, replyContext)`. The `replyContext` carries the affordance's `signalPayload` opaquely back to the originator.
 - **Compute the content digest manually** — `inputDigest(payload)` returns the 16-char hex SHA-256 used by both `EmissionProvenance.inputDigest` and `dedupKey`.
+- **Define a domain kind** — declare a `@Serializable` payload type with stable `@SerialName`s in your own package, then `val MyKind = DomainEmissionKind("my-kind", 1, MyPayload.serializer()) { it.title }`. See [Domain kinds](#domain-kinds).
+- **Publish a domain kind** — inside an `emission { }` block, `present(MyKind, value)`. Fire-and-forget, like `emit` and `sense`.
+- **Read a domain kind** — `MyKind.decodeOrNull(event.emission.payload)`; `null` means "not mine, or newer than I can read", so show `fallbackText` or skip.
+
+## Domain kinds
+
+The four core kinds are substrate-free, and `EmissionKind` / `EmissionPayload`
+are `sealed`, so a consumer cannot add a variant from its own module. Before
+AMPR-427 that left two bad options: add a product-specific kind to core (a
+recipe is not substrate), or smuggle one through `Prose` and have every
+text surface print JSON. Socket's Blueprint work matched on prompt text
+instead, which is the shape of the problem.
+
+The fix is **one** core variant that carries any domain kind as data:
+
+- `EmissionKind.Domain(id)` — the tag. `id` is a lowercase slug (`recipe`, `meal-plan`), validated in `init`.
+- `EmissionPayload.Domain(kindId, schemaVersion, body: JsonElement, fallbackText)` — the body, encoded with the kind's own serializer, plus the prose every text-only surface shows.
+- `DomainEmissionKind<T>(id, schemaVersion, serializer, fallbackText)` — the descriptor a kind is *defined* through. It is an ordinary class in any package or module: `kind` gives the tag, `encode(value)` builds the payload, `decodeOrNull(payload)` reads it back.
+
+Because the body is plain `JsonElement` to everything in between, the kind
+travels through the bus, the `EventStore` and `inputDigest` unchanged, and
+**no `Json` anywhere needs a `SerializersModule` for it** — `DEFAULT_JSON`,
+Socket's derived `Json`s and the private `DigestJson` all decode a kind they
+have never heard of. That is the property the un-seal alternative could not
+give: there, one unregistered kind would fail decoding of the whole event.
+
+**Versioning.** `decodeOrNull` returns `null` for a `schemaVersion` newer
+than the descriptor's, and reads same-or-older bodies leniently (unknown keys
+ignored, missing defaulted fields take their defaults). So bump
+`schemaVersion` only for a change an older reader genuinely cannot survive —
+a removed or retyped field. An additive field with a default is not such a
+change.
+
+**When to add a core kind instead.** A core kind is for a *shape of
+contact* every consumer must understand — narration, a question, a gate on
+an effect, a reading. If the thing is a domain object a product renders
+(a recipe, a meal plan, a shopping list), it is a domain kind, however
+central it is to that product. If in doubt, it is a domain kind: promoting
+one later is additive; demoting a core kind is a wire-format break.
+
+**Worked example — `Recipe`** (`agents/domain/emission/kinds/recipe/Recipe.kt`,
+the first domain kind, for Socket's Personal Chef Arc, SCKT-346):
+
+```kotlin
+val RecipeKind = DomainEmissionKind(
+    id = "recipe",
+    schemaVersion = 1,
+    serializer = RecipePayload.serializer(),
+    fallbackText = { "${it.title} (${it.ingredients.size} ingredients, ${it.steps.size} steps)" },
+)
+
+// producer, inside emission { }
+present(RecipeKind, carbonara)
+
+// consumer
+RecipeKind.decodeOrNull(event.emission.payload)?.let { render(it) }
+    ?: showText((event.emission.payload as EmissionPayload.Domain).fallbackText)
+```
+
+`RecipePayload(title, description?, baseServings = 4, ingredients, steps,
+notes?)` carries amounts for `baseServings`; a renderer scales them for the
+servings the person picks and runs a timer from `RecipeStep.timerSeconds`.
+Step `content` may contain `{ingredientId}` tokens the renderer substitutes.
+AMPERE validates the data in `init` (unique ids, declared tokens,
+`baseServings >= 1`, `amount >= 0`, `timerSeconds > 0`) and never renders.
 
 ## Anti-patterns
 
@@ -109,3 +183,6 @@ Three design pressures shape the Wave 0 cut:
 - **Giving `parentEmissionId` or `principal` a default to save call sites.** A default turns "root" back into "nobody passed it", which is the failure the required parameters exist to prevent. The legacy-read default lives only on the private wire surrogate.
 - **Opening a fresh root `emission { }` while handling another Emission's reply.** The follow-up was produced in service of that Emission. Pass its id as `parentEmissionId`, or use `inServiceOf`, or the causal chain breaks silently at exactly the hop D4 needs.
 - **Reading `Principal.Ambient` as "the device owner" or "a human approved this".** It means that no identity was resolved. Pinning it to a meaning ahead of D5 would decide D5 by accident.
+- **Putting domain logic in the core types.** A recipe, a meal plan or an invoice does not belong beside `Prose` and `Sensor`, however central it is to one product. Core kinds are shapes of contact; everything else is a `DomainEmissionKind` in the owning package or module.
+- **A domain kind without a meaningful `fallbackText`.** `"recipe"`, the kind id, or a JSON dump is not a fallback. It is what the console, voice, the digest and every consumer that predates the kind will show — write the sentence a person would want to read there.
+- **Bumping `schemaVersion` for an additive, defaulted field.** `decodeOrNull` applies defaults and ignores unknown keys, so an older reader already copes. A needless bump makes every older consumer drop to `fallbackText` for no reason; reserve it for a change an older reader cannot survive.

@@ -17,6 +17,10 @@ import link.socket.ampere.agents.domain.reasoning.Confidence
  * fixed at construction. Callers compute `dedupKey` via
  * [computeDedupKey] for effect-bearing kinds (Confirmation today, Action
  * tomorrow) and leave it `null` for kinds that should always render.
+ *
+ * Construction also checks the kind/payload pairing for domain kinds: an
+ * [EmissionKind.Domain] must carry an [EmissionPayload.Domain] with the same
+ * id, and vice versa. Core kinds are not checked (see [EmissionPayload]).
  */
 @Serializable
 data class Emission(
@@ -41,7 +45,29 @@ data class Emission(
      * [link.socket.ampere.pause.AgentPause.fallbackUrl].
      */
     val fallbackUrl: String? = null,
-)
+) {
+    init {
+        val domainKind = kind as? EmissionKind.Domain
+        val domainPayload = payload as? EmissionPayload.Domain
+        when {
+            domainKind != null && domainPayload == null ->
+                throw IllegalArgumentException(
+                    "EmissionKind.Domain('${domainKind.id}') must carry an EmissionPayload.Domain, " +
+                        "got ${payload::class.simpleName}",
+                )
+            domainKind == null && domainPayload != null ->
+                throw IllegalArgumentException(
+                    "EmissionPayload.Domain('${domainPayload.kindId}') must be paired with EmissionKind.Domain, " +
+                        "got ${kind::class.simpleName}",
+                )
+            domainKind != null && domainPayload != null ->
+                require(domainKind.id == domainPayload.kindId) {
+                    "EmissionKind.Domain('${domainKind.id}') paired with " +
+                        "EmissionPayload.Domain('${domainPayload.kindId}')"
+                }
+        }
+    }
+}
 
 /**
  * Convenience helper for the dedup contract: returns a content digest for

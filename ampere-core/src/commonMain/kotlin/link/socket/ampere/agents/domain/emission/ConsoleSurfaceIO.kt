@@ -23,12 +23,14 @@ object ConsoleSurfaceIO {
         return readlnOrNull().orEmpty()
     }
 
-    private fun promptText(emission: Emission): String {
+    /** The text [printPrompt] writes: the payload's prose, then one line per affordance. */
+    internal fun promptText(emission: Emission): String {
         val body = when (val payload = emission.payload) {
             is EmissionPayload.Prose -> payload.text
             is EmissionPayload.Decision -> listOfNotNull(payload.prompt, payload.context).joinToString("\n")
             is EmissionPayload.Confirmation -> listOfNotNull(payload.action, payload.preview).joinToString("\n")
             is EmissionPayload.Sensor -> "${payload.label}: ${payload.value}${payload.unit?.let { " $it" }.orEmpty()}"
+            is EmissionPayload.Domain -> payload.fallbackText
         }
         if (emission.affordances.isEmpty()) {
             return body
