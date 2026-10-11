@@ -6,8 +6,8 @@ import kotlinx.serialization.Serializable
 /**
  * Outcome of executing a single step in a plan.
  *
- * Tracks whether the step succeeded, partially succeeded, failed, or was skipped,
- * along with relevant details and timestamps.
+ * Tracks whether the step succeeded, partially succeeded, failed, is held waiting on a
+ * person, or was skipped, along with relevant details and timestamps.
  */
 @Serializable
 sealed interface StepOutcome : Outcome {
@@ -76,6 +76,27 @@ sealed interface StepOutcome : Outcome {
         override val endTimestamp: Instant,
         val error: String,
         val isCritical: Boolean = true,
+    ) : StepOutcome
+
+    /**
+     * Step is waiting on a person (AMPR-425): its tool reported
+     * [ExecutionOutcome.Held][link.socket.ampere.agents.domain.outcome.ExecutionOutcome.Held].
+     *
+     * Neither a success nor a failure. It stops the plan walk the way a critical failure
+     * does — every later step is [Skipped] — because the steps after it would need an
+     * output the held one has not produced.
+     *
+     * @property reason What is being waited on, for a person to read
+     * @property reference The tool's opaque handle for the hold, carried and never read
+     */
+    @Serializable
+    data class Held(
+        override val id: OutcomeId,
+        override val stepDescription: String,
+        override val startTimestamp: Instant,
+        override val endTimestamp: Instant,
+        val reason: String,
+        val reference: String? = null,
     ) : StepOutcome
 
     /**

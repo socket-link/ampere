@@ -28,6 +28,7 @@ import link.socket.ampere.agents.execution.executor.ExecutorId
  * Features:
  * - Sequential step execution with dependency tracking
  * - Critical failure detection and early termination
+ * - A held step — one waiting on a person — ends the walk too (AMPR-425)
  * - Step outcome collection for analysis
  * - Context passing between steps: the running chain of
  *   [StepContext.priorResults] (AMPR-408), plus whatever a step names in
@@ -149,8 +150,18 @@ class PlanExecutor(
                 context.set(key, value)
             }
 
-            // Stop on critical failure
-            if (stepOutcome is StepOutcome.Failure && stepOutcome.isCritical) {
+            // Stop on a critical failure, or on a hold. A held step is waiting on a person,
+            // so the steps after it would be handed an output that does not exist yet
+            // (AMPR-425). The stop is here rather than in any one caller so that every
+            // walk of a plan obeys it.
+            val skipReason = when {
+                stepOutcome is StepOutcome.Failure && stepOutcome.isCritical ->
+                    "Skipped due to critical failure in step ${index + 1}"
+                stepOutcome is StepOutcome.Held ->
+                    "Skipped: step ${index + 1} is held (${stepOutcome.reason})"
+                else -> null
+            }
+            if (skipReason != null) {
                 // Mark remaining steps as skipped
                 for (remainingIndex in (index + 1) until plan.tasks.size) {
                     val remainingStep = plan.tasks[remainingIndex]
@@ -159,7 +170,7 @@ class PlanExecutor(
                             id = remainingStep.id,
                             stepDescription = "Execute step ${remainingStep.id}",
                             timestamp = Clock.System.now(),
-                            reason = "Skipped due to critical failure in step ${index + 1}",
+                            reason = skipReason,
                         ),
                     )
                 }
@@ -171,9 +182,20 @@ class PlanExecutor(
         val endTime = Clock.System.now()
         val summary = buildSummary(stepOutcomes, context)
         val hasFailures = stepOutcomes.any { it is StepOutcome.Failure }
+        val heldStep = stepOutcomes.firstNotNullOfOrNull { it as? StepOutcome.Held }
 
-        val overallOutcome = if (hasFailures) {
-            ExecutionOutcome.NoChanges.Failure(
+        // A hold outranks an earlier non-critical failure: it is why the walk ended.
+        val overallOutcome = when {
+            heldStep != null -> ExecutionOutcome.Held(
+                executorId = executorId,
+                ticketId = "",
+                taskId = plan.task.id,
+                executionStartTimestamp = startTime,
+                executionEndTimestamp = endTime,
+                reason = heldStep.reason,
+                reference = heldStep.reference,
+            )
+            hasFailures -> ExecutionOutcome.NoChanges.Failure(
                 executorId = executorId,
                 ticketId = "",
                 taskId = plan.task.id,
@@ -181,8 +203,7 @@ class PlanExecutor(
                 executionEndTimestamp = endTime,
                 message = summary,
             )
-        } else {
-            ExecutionOutcome.NoChanges.Success(
+            else -> ExecutionOutcome.NoChanges.Success(
                 executorId = executorId,
                 ticketId = "",
                 taskId = plan.task.id,
@@ -287,6 +308,7 @@ class PlanExecutor(
         val successCount = stepOutcomes.count { it is StepOutcome.Success }
         val partialCount = stepOutcomes.count { it is StepOutcome.PartialSuccess }
         val failures = stepOutcomes.filterIsInstance<StepOutcome.Failure>()
+        val held = stepOutcomes.filterIsInstance<StepOutcome.Held>()
         val skippedCount = stepOutcomes.count { it is StepOutcome.Skipped }
 
         appendLine("Plan execution complete:")
@@ -299,6 +321,9 @@ class PlanExecutor(
             failures.forEach { failure ->
                 appendLine("      ${failure.stepDescription}: ${failure.error}")
             }
+        }
+        held.forEach { step ->
+            appendLine("  ⏸ Held: ${step.stepDescription}: ${step.reason}")
         }
         if (skippedCount > 0) {
             appendLine("  ⊘ Skipped: $skippedCount")
@@ -359,6 +384,20 @@ sealed class StepResult {
     ) : StepResult()
 
     /**
+     * The step's tool is waiting on a person (AMPR-425). Neither a success nor a failure;
+     * [PlanExecutor] stops the walk on it.
+     *
+     * @property reason What is being waited on, for a person to read
+     * @property reference The tool's opaque handle for the hold, carried and never read
+     */
+    data class Held(
+        override val description: String,
+        val reason: String,
+        val reference: String? = null,
+        override val contextUpdates: Map<String, Any> = emptyMap(),
+    ) : StepResult()
+
+    /**
      * Converts this result to a StepOutcome with timestamps.
      */
     fun toStepOutcome(
@@ -397,6 +436,14 @@ sealed class StepResult {
                 timestamp = startTimestamp,
                 reason = reason,
             )
+            is Held -> StepOutcome.Held(
+                id = stepId,
+                stepDescription = description,
+                startTimestamp = startTimestamp,
+                endTimestamp = endTimestamp,
+                reason = reason,
+                reference = reference,
+            )
         }
     }
 
@@ -422,6 +469,9 @@ sealed class StepResult {
 
         fun skip(description: String, reason: String) =
             Skipped(description, reason)
+
+        fun held(description: String, reason: String, reference: String? = null) =
+            Held(description, reason, reference)
     }
 }
 

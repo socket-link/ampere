@@ -73,6 +73,10 @@ interface HostedRun : CoroutineContext.Element {
      * own model call with the earlier steps' results in context. A step's
      * `PlanStepStarted`/`PlanStepCompleted` pair leaves through the seat that ran it.
      *
+     * A step whose tool reports it is waiting on a person ends the run: the rest of
+     * that cycle is skipped, no further cycle is planned, and the result is
+     * [RunStatus.Held] (AMPR-425).
+     *
      * Idempotent: calling it again returns the result of the first call rather than
      * running the plan twice.
      *
@@ -92,6 +96,10 @@ interface HostedRun : CoroutineContext.Element {
      *
      * Idempotent. A run closed without [execute] — because the gate stopped it, or
      * because the caller changed its mind — records its outcome all the same.
+     *
+     * A [RunStatus.Held] run is the exception (AMPR-425): LEARN is entered and records
+     * nothing, and the run's task is left blocked rather than ended, because the run is
+     * waiting, not finished.
      */
     suspend fun close()
 
@@ -115,7 +123,7 @@ data class RunResult(
      * [PlanGate] trimmed a plan to nothing. That final PLAN *counts* — it was a model
      * call the run made, and the cycle it opened is the one that executed nothing — so
      * a two-cycle run whose second planner said "done" reports `2`, with the first
-     * cycle's steps in [stepOutcomes].
+     * cycle's steps in [stepOutcomes]. A held run reports the cycle it held in.
      */
     val cyclesUsed: Int,
     /** Every step of every cycle, oldest first. */
@@ -124,7 +132,10 @@ data class RunResult(
      * The run's own outcome, as LEARN records it.
      *
      * The last cycle's plan outcome for a run that executed, and a stated
-     * success or failure for one that did not.
+     * success or failure for one that did not. For a [RunStatus.Held] run it is the
+     * [ExecutionOutcome.Held][link.socket.ampere.agents.domain.outcome.ExecutionOutcome.Held]
+     * of the step that held, with that step's reason and reference — and LEARN records
+     * nothing.
      */
     val outcome: Outcome = Outcome.blank,
 )
@@ -132,10 +143,15 @@ data class RunResult(
 /**
  * How a run ended.
  *
- * Three values, not the four of AMPR-385 row H20 (`Succeeded`, `Partial`, `Failed`,
- * `Cancelled`): that row has no verdict, so neither the partial status nor the
- * dependent-skipping that would produce it is implemented here. A run with some steps
- * failed is [Failed], as `PlanExecutor` already reports it.
+ * Four values. AMPR-385 row H20 proposed a different four (`Succeeded`, `Partial`,
+ * `Failed`, `Cancelled`); what was ruled, on 2026-10-11, is only that a step waiting on
+ * a person is a full stop, which is [Held] (AMPR-425). Neither the partial status nor
+ * the dependent-skipping that would produce it is implemented here. A run with some
+ * steps failed is [Failed], as `PlanExecutor` already reports it.
+ *
+ * When more than one applies, the first of these wins: cancelled ([Failed]), stopped by
+ * the gate ([Stopped]), any step held ([Held]), any step failed ([Failed]), otherwise
+ * [Succeeded].
  */
 @AmpereStableApi
 enum class RunStatus {
@@ -155,6 +171,17 @@ enum class RunStatus {
      * happened — the gate's, rather than the cap's or a failure's.
      */
     Stopped,
+
+    /**
+     * A step's tool is waiting on a person, so the run stopped there (AMPR-425).
+     *
+     * Every later step of that cycle is skipped and no further cycle is planned, whatever
+     * [RunPolicy.cycles] allows: the steps after a hold would need an output it has not
+     * produced. A hold outranks an earlier cycle's failure, because it is why the run
+     * ended. Nothing is learned from a held run, and its task is left blocked rather than
+     * ended — the run is waiting, not finished. Resuming one is not built here.
+     */
+    Held,
 }
 
 /** The seats of a run a [RunHost] has open (AMPR-385 row H9). */

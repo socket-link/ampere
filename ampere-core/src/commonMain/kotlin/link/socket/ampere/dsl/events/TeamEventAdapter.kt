@@ -173,6 +173,7 @@ class TeamEventAdapter {
         is StepOutcome.Failure -> "Failed: ${outcome.error}"
         is StepOutcome.PartialSuccess ->
             "Partial: ${outcome.successCount}/${outcome.successCount + outcome.failureCount} succeeded"
+        is StepOutcome.Held -> "Held: ${outcome.reason}"
         is StepOutcome.Skipped -> "Skipped: ${outcome.reason}"
     }
 }

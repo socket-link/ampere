@@ -21,7 +21,8 @@ PERCEIVE → RECALL → OBSERVE → PLAN on the roster's **host seat** and retur
 `HostedRun` whose plan has already passed the consumer's `PlanGate`;
 `HostedRun.execute()` is EXECUTE plus a re-entry into OBSERVE → PLAN while cycles
 remain — each later PLAN shown the step results so far, and free to answer with no
-steps, which ends the run (AMPR-424); `HostedRun.close()` is LEARN.
+steps, which ends the run (AMPR-424); `HostedRun.close()` is LEARN. A step whose tool
+reports it is waiting on a person ends the run where it stands (AMPR-425).
 
 The vocabulary:
 
@@ -125,6 +126,22 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     prompt, its ids and its fallback are byte-for-byte what they were — pinned by
     `PlanningPromptGoldenTest`. PERCEIVE and RECALL still run once per run; what a
     later cycle gains is the work, not a fresh perception.
+16. **A held step ends the run; nothing is learned from it** (AMPR-425, row H20 as
+    ruled on 2026-10-11). A tool that returns `ExecutionOutcome.Held(reason, reference)`
+    — its action is waiting on a person — ends its step `StepOutcome.Held`, and
+    `PlanExecutor` skips every later step of the cycle (`Skipped: step N is held
+    (<reason>)`). The run then plans nothing more: no OBSERVE, no PLAN, whatever
+    `RunPolicy.cycles` says, and no after-cycle question. `RunResult.status` is
+    `RunStatus.Held` and `RunResult.outcome` is the held outcome, reason and reference
+    intact. The run's task is marked `TaskBlocked` on the held step when it holds, and
+    `close()` publishes no `TaskCompleted` or `TaskFailed` — the run is waiting, not
+    finished. LEARN is entered and bracketed and writes nothing: no outcome row (the
+    store can only say succeeded or failed), no Knowledge for any seat, no
+    `ModelBacked` call. Status precedence is cancelled (`Failed`) → stopped by the gate
+    (`Stopped`) → any step held (`Held`) → any step failed (`Failed`) → `Succeeded`; a
+    hold outranks an earlier cycle's failure because it is why the run ended. The stop
+    lives in `PlanExecutor`, so every walk of a plan obeys it; the run only declines to
+    plan again. A run where no tool holds is unchanged, event for event.
 
 ## How it composes
 
@@ -231,7 +248,7 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | `RecallPolicy` | `sources`, `perSourceLimit`, `memoryLimit`, `titleClip`, `textClip` |
 | `RecallSource` / `Recalled` | The consumer-implemented corpus SPI (`memory/`, beside `MemoryStore`) and one item of it |
 | `PlanGate` / `PlanDecision` | `review(plan)` → `Approved(plan)` (possibly trimmed) or `Stopped(reason)` |
-| `RunResult` / `RunStatus` | `cyclesUsed`, `stepOutcomes`, `outcome`; `Succeeded` / `Failed` / `Stopped` |
+| `RunResult` / `RunStatus` | `cyclesUsed`, `stepOutcomes`, `outcome`; `Succeeded` / `Failed` / `Stopped` / `Held` |
 | `RunObservation` | What OBSERVE hands the verifier's Probes: run id, goal, cycle, prior results |
 | `rosterRunHost(...)` | The shipped implementation, for composing without an `AmpereInstance` |
 
@@ -325,6 +342,16 @@ strings.
   Subject's — so two seats sharing a `MemoryStore` still recall each other's knowledge.
   Only PRIVATE and PROTECTED rows stay with the seat that wrote them (row H22, no verdict).
 
+- **Making a tool that waits on a person answer success or failure.** Success walks the
+  plan on with a result that does not exist; failure records a fault that did not
+  happen, in the trace, the outcome store and the run's status. Return
+  `ExecutionOutcome.Held` instead (AMPR-425). The same goes for every `when` over an
+  outcome: a held branch that falls into an `else` reading it as done — as
+  `executePlanStep`'s did — is the same lie one layer down.
+- **Treating `held` as a kind of failure in a tool record.** `ToolExecutionCompleted`
+  for a held call has `success = false` *and* `held = true` and no `errorMessage`; a
+  reader that keys on `success` alone will count holds as faults.
+
 ## Not implemented here
 
 Row H28 (a later cycle plans with the results so far) was recorded ✅ on 2026-10-11 and
@@ -332,8 +359,20 @@ is built (AMPR-424). What it deliberately does *not* come with: re-running PERCE
 RECALL per cycle (both stay once per run); a model judging whether the goal was met
 (AMPR-421 records that judgment, AMPR-422 measures it, and nothing reads it — the
 planner's empty answer is the planner's, not a verdict over one); a per-cycle step cap
-in Ampere (a consumer trims in its `PlanGate`); a step that ends *held* (row H20); and
-handing prior results to a `customPromptBuilder`, whose signature is unchanged.
+in Ampere (a consumer trims in its `PlanGate`); and handing prior results to a
+`customPromptBuilder`, whose signature is unchanged.
+
+Row H20 was ruled ✏️ on 2026-10-11: waiting on approval is a full stop of the run. That
+much is built (AMPR-425, invariant 16) — `ExecutionOutcome.Held`, `StepOutcome.Held`,
+`RunStatus.Held`, `ToolExecutionCompleted.held`. The rest of the original proposal
+carries no ruling and is **not** adopted: no `Partial` run status, no skipping of only a
+held step's dependents (there is no dependency graph — everything after the hold is
+skipped), and no step cap enforced by Ampere. Also not here: *resuming* a held run
+(row H29, Wave 5 — until it ships, whatever was waiting is completed by the consumer
+outside the run and nothing after it runs; this wave leaves it the `reference` and a
+blocked task to resume from), deciding *when* an action must be held (the tool's and
+its consumer's), and telling a held run from a failed one in `OutcomeMemoryStore`
+(held outcomes are simply not written, because that would need a migration).
 
 Rows H26 (a seat's consent grants) and H27 (a caller-chosen run id) were recorded ✅ on
 2026-10-11 and are built (AMPR-423); granting, revoking and storing grants stay the
@@ -341,10 +380,9 @@ consumer's `UserGrantStore`, and run-id uniqueness is never durable or cross-pro
 
 AMPR-385 rows H19–H25 were proposed on 2026-10-09. H21 was recorded ✅ on 2026-10-11
 and is built — `HostedAgent.upstreamDecisionClient`, with `HostedAgent.questions`,
-`RunPolicy.goalCheck` and `RunQuestions` beside it (AMPR-421). The rest carry **no
-verdict**, so none of them is built: the shared tick functions and judgment seams
-(H19), four-valued step and run results with dependent-skipping and `maxStepsPerCycle`
-(H20), per-seat memory (H22 — AMPR-417 added the `holder` column, but seats still write
+`RunPolicy.goalCheck` and `RunQuestions` beside it (AMPR-421), and H20 was ruled the
+same day (above). The rest carry **no verdict**, so none of them is built: the shared tick functions and judgment seams
+(H19), per-seat memory (H22 — AMPR-417 added the `holder` column, but seats still write
 PUBLIC), the F19–F21 reconciliation (H23),
 `External` provenance on a step result (H24), and re-gating a step whose arguments
 changed after approval (H25).

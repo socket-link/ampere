@@ -102,6 +102,12 @@ class OutcomeMemoryRepositoryImpl(
                 is ExecutionOutcome.Blank -> {
                     0 to null
                 }
+                // The `success` column can only say succeeded or failed, and a held action
+                // is neither: it is waiting on a person (AMPR-425). Refused here, as a
+                // failed `Result`, rather than written as a failure; both producers skip it.
+                is ExecutionOutcome.Held -> throw IllegalArgumentException(
+                    "a held outcome is not recorded: it neither succeeded nor failed (${outcome.reason})",
+                )
             }
 
             if (runId != null) {

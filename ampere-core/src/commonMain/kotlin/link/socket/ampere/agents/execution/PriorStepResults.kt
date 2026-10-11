@@ -59,6 +59,9 @@ private const val TRUNCATION_MARKER = "… (truncated)"
  */
 fun ExecutionOutcome.describeResult(): String = when (this) {
     is ExecutionOutcome.Blank -> ""
+    // What is being waited on. The reference is the tool's and is not rendered: Ampere
+    // carries it and never reads it (AMPR-425).
+    is ExecutionOutcome.Held -> reason
     is ExecutionOutcome.NoChanges.Success -> message
     is ExecutionOutcome.NoChanges.Failure -> message
     is ExecutionOutcome.CodeReading.Success -> readFiles.renderFiles()
@@ -159,12 +162,13 @@ private fun StepOutcome.verdict(): String = when (this) {
     is StepOutcome.Success -> "[succeeded]"
     is StepOutcome.PartialSuccess -> "[partially succeeded: $successCount ok, $failureCount failed]"
     is StepOutcome.Failure -> "[failed]"
+    is StepOutcome.Held -> "[held]"
     is StepOutcome.Skipped -> "[skipped]"
 }
 
 /**
  * What the step reported, independent of which variant carries it: the details of a
- * success, the error of a failure, the reason of a skip.
+ * success, the error of a failure, what a held step waits on, the reason of a skip.
  *
  * Public because the step's own report is also what a one-step plan's aggregate
  * outcome has to carry — see `SparkBasedAgent.dispatchStepAsPlan` (AMPR-408).
@@ -173,6 +177,7 @@ fun StepOutcome.detailText(): String = when (this) {
     is StepOutcome.Success -> details
     is StepOutcome.PartialSuccess -> details
     is StepOutcome.Failure -> error
+    is StepOutcome.Held -> reason
     is StepOutcome.Skipped -> reason
 }
 

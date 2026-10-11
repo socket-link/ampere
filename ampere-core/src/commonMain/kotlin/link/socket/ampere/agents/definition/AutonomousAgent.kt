@@ -581,6 +581,8 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
             when (outcome) {
                 is Outcome.Success -> tags.add("success")
                 is Outcome.Failure -> tags.add("failure")
+                // Waiting on a person is neither, and not partial either (AMPR-425).
+                is ExecutionOutcome.Held -> tags.add("held")
                 else -> tags.add("partial")
             }
 
@@ -680,9 +682,15 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
      * then summarise what you found" generates the summary step's parameters with
      * no idea what the search returned.
      *
+     * A held step ends the walk (AMPR-425): it is waiting on a person, so the steps
+     * after it would be dispatched without the output they need. Its
+     * [ExecutionOutcome.Held] is the plan's outcome, whatever came before it, because it
+     * is why the walk ended — the same rule `PlanExecutor` applies to the steps of one
+     * plan, which this path hands it one at a time.
+     *
      * @param plan The plan containing tasks to execute
-     * @return The combined outcome of all tasks in the plan — the first step that
-     *   did not succeed, else the last step's outcome, as before.
+     * @return The combined outcome of all tasks in the plan — a hold if a step held,
+     *   else the first step that did not succeed, else the last step's outcome.
      */
     override suspend fun executePlan(
         plan: Plan,
@@ -699,6 +707,7 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
             val startedAt = Clock.System.now()
             val outcome = executeTaskWithSpark(task, priorResults.toList())
             priorResults += outcome.asPriorResult(task, startedAt)
+            if (outcome is ExecutionOutcome.Held) return outcome
             runningOutcome = when {
                 runningOutcome == null -> outcome
                 runningOutcome is Outcome.Success -> outcome
@@ -747,6 +756,15 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
                 endTimestamp = endedAt,
                 error = detail,
                 isCritical = false,
+            )
+            // Ahead of the `else`, which would record a step waiting on a person as done.
+            is ExecutionOutcome.Held -> StepOutcome.Held(
+                id = task.id,
+                stepDescription = description,
+                startTimestamp = startedAt,
+                endTimestamp = endedAt,
+                reason = reason,
+                reference = reference,
             )
             else -> StepOutcome.Success(
                 id = task.id,

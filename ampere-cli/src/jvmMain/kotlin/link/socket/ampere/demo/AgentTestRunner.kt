@@ -405,6 +405,8 @@ private suspend fun handleTicketAssignment(
     val phaseSparkManager = PhaseSparkManager(agent, enabled = true, eventApi = eventApi)
     // Closed by the `finally` below if any of the early returns beats us to the end.
     var lifecycle: TaskLifecycle? = null
+    // A held task is left blocked rather than ended, so the backstop must not fail it.
+    var held = false
 
     try {
 
@@ -538,6 +540,13 @@ private suspend fun handleTicketAssignment(
                 println("      ❌ Failure: ${outcome.error}")
                 lifecycle.failed(outcome.error.message)
             }
+            // AMPR-425: waiting on a person — neither done nor failed, and nothing to learn.
+            is ExecutionOutcome.Held -> {
+                println("      ⏸  Held: ${outcome.reason}")
+                lifecycle.blocked(blockedByTaskId = outcome.taskId, reason = outcome.reason)
+                held = true
+                return
+            }
             else -> {
                 println("      ℹ️  Outcome: ${outcome::class.simpleName}")
             }
@@ -575,7 +584,7 @@ private suspend fun handleTicketAssignment(
         lifecycle?.failed(e)
     } finally {
         // The backstop for a path that returned without reporting at all. A no-op above.
-        lifecycle?.failed("Abandoned before the cognitive cycle reported an outcome")
+        if (!held) lifecycle?.failed("Abandoned before the cognitive cycle reported an outcome")
         phaseSparkManager.cleanup()
     }
 }
