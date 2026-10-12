@@ -23,6 +23,7 @@ import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.api.model.TokenUsage
+import link.socket.ampere.domain.ai.model.AIModel
 import link.socket.ampere.domain.ai.pricing.ProviderPricingCalculator
 import link.socket.ampere.domain.ai.provider.ProviderId
 import link.socket.ampere.domain.llm.LlmProvider
@@ -46,13 +47,17 @@ import link.socket.ampere.util.logWith
  * pair of its own.
  *
  * @property text The model's response — what [AgentLLMService.call] returns.
- * @property providerId The `AIProvider.id` of the provider that served the call.
+ * @property providerId The maker of the model that served the call
+ *   (`AIModel.makerId`), never a gateway it travelled through (AMPR-436).
  * @property modelId The `AIModel.name` of the model that served the call.
  * @property routingReason Why that model: the transport's own reason when it
  *   reported one, else the matched relay rule, else `"agent_configuration"`
  *   when no relay resolved the call.
  * @property latencyMs How long the provider call took — the serving side's own
  *   measurement when it reported one, else Ampere's wall clock.
+ * @property via The route the call travelled when that was not the maker's own
+ *   endpoint — a gateway such as `openrouter` (AMPR-436). Null means direct or
+ *   not stated.
  */
 data class LlmCallResult(
     val text: String,
@@ -60,6 +65,7 @@ data class LlmCallResult(
     val modelId: String,
     val routingReason: String,
     val latencyMs: Long,
+    val via: ProviderId? = null,
 )
 
 /**
@@ -203,13 +209,16 @@ class AgentLLMService(
         agentConfiguration.llmProvider?.let { provider ->
             logger.d { "[LLM] Using custom provider" }
             val combinedPrompt = buildCombinedPrompt(effectiveSystemMessage, prompt)
-            val providerId = resolveCustomProviderId()
+            val custom = resolveCustomAttribution()
+            val providerId = custom.providerId
+            val via = custom.via
             val modelId = resolveCustomModelId()
             val startedEventId = emitStartedTelemetry(
                 routingContext = routingContext,
                 providerId = providerId,
                 modelId = modelId,
                 routingReason = CUSTOM_PROVIDER_ROUTING_REASON,
+                via = via,
             )
 
             val startedAt = Clock.System.now()
@@ -226,6 +235,7 @@ class AgentLLMService(
                     success = true,
                     startedAt = startedAt,
                     causedBy = startedEventId,
+                    via = via,
                 )
                 LlmCallResult(
                     text = response,
@@ -233,6 +243,7 @@ class AgentLLMService(
                     modelId = modelId,
                     routingReason = CUSTOM_PROVIDER_ROUTING_REASON,
                     latencyMs = latencyMs,
+                    via = via,
                 )
             } catch (cancellation: CancellationException) {
                 // A custom provider is a prompt-in/text-out test seam that reports no
@@ -247,6 +258,7 @@ class AgentLLMService(
                     startedAt = startedAt,
                     errorType = CANCELLED_ERROR_TYPE,
                     causedBy = startedEventId,
+                    via = via,
                 )
                 throw cancellation
             } catch (t: Throwable) {
@@ -259,6 +271,7 @@ class AgentLLMService(
                     startedAt = startedAt,
                     errorType = t::class.simpleName ?: "UnknownError",
                     causedBy = startedEventId,
+                    via = via,
                 )
                 throw t
             }
@@ -334,7 +347,16 @@ class AgentLLMService(
             )
         }
 
+        // The route is read before the model: a configuration with backups settles which of
+        // its configurations answers on the provider read, and the model, the wire id and the
+        // record must all be that one's.
+        val route = effectiveConfig.provider.id
         val model = effectiveConfig.model
+        // The record names the maker and the route apart (AMPR-436): a Claude call through
+        // a gateway is Anthropic's model via that gateway, priced under Anthropic, and the
+        // gateway's id never lands in `providerId`. Direct, the two are the same id and
+        // `via` stays null, which leaves a direct call's record exactly as it was.
+        val resolved = attribution(route = route, model = model)
 
         val messages = listOf(
             ChatMessage(
@@ -348,7 +370,8 @@ class AgentLLMService(
         )
 
         val request = ChatCompletionRequest(
-            model = model.toClientModelId(),
+            // The route's own id for the model, which a gateway spells differently (AMPR-434).
+            model = effectiveConfig.toClientModelId(),
             messages = messages,
             // Omitted, not defaulted, for models that 400 on any sampling parameter.
             temperature = temperature.takeIf { model.features.supportsSamplingParameters },
@@ -362,9 +385,10 @@ class AgentLLMService(
         // by provider+model equality.
         val startedEventId = emitStartedTelemetry(
             routingContext = routingContext,
-            providerId = effectiveConfig.provider.id,
+            providerId = resolved.providerId,
             modelId = model.name,
             routingReason = routingResolution.reason,
+            via = resolved.via,
         )
 
         val startedAt = Clock.System.now()
@@ -386,10 +410,10 @@ class AgentLLMService(
                 val served = upstreamCompletion?.served
                 emitCompletedTelemetry(
                     routingContext = routingContext,
-                    providerId = served.providerIdOr(effectiveConfig.provider.id),
+                    providerId = served.providerIdOr(resolved.providerId),
                     modelId = served.modelIdOr(model.name),
                     usage = cancelledUsage(
-                        providerId = served.providerIdOr(effectiveConfig.provider.id),
+                        providerId = served.providerIdOr(resolved.providerId),
                         modelId = served.modelIdOr(model.name),
                         messages = messages,
                         completion = upstreamCompletion,
@@ -400,6 +424,7 @@ class AgentLLMService(
                     causedBy = startedEventId,
                     servedLatencyMs = served?.latencyMs,
                     servedRoutingReason = served?.routingReason,
+                    via = served.viaOr(resolved.via),
                 )
             }
             throw cancellation
@@ -407,20 +432,22 @@ class AgentLLMService(
             // Nothing served the call, so the only ids there are belong to the request.
             emitCompletedTelemetry(
                 routingContext = routingContext,
-                providerId = effectiveConfig.provider.id,
+                providerId = resolved.providerId,
                 modelId = model.name,
                 usage = TokenUsage(),
                 success = false,
                 startedAt = startedAt,
                 errorType = t::class.simpleName ?: "UnknownError",
                 causedBy = startedEventId,
+                via = resolved.via,
             )
             throw t
         }
         val completion = upstream.completion
         val served = upstream.served
-        val servedProviderId = served.providerIdOr(effectiveConfig.provider.id)
+        val servedProviderId = served.providerIdOr(resolved.providerId)
         val servedModelId = served.modelIdOr(model.name)
+        val servedVia = served.viaOr(resolved.via)
         val latencyMs = served?.latencyMs ?: elapsedMillisSince(startedAt)
 
         // Log token usage for monitoring
@@ -449,6 +476,7 @@ class AgentLLMService(
             causedBy = startedEventId,
             servedLatencyMs = served?.latencyMs,
             servedRoutingReason = served?.routingReason,
+            via = servedVia,
         )
 
         val text = completion.choices.firstOrNull()?.message?.content
@@ -460,6 +488,7 @@ class AgentLLMService(
             modelId = servedModelId,
             routingReason = served?.routingReason ?: routingResolution.reason,
             latencyMs = latencyMs,
+            via = servedVia,
         )
     }
 
@@ -621,6 +650,7 @@ class AgentLLMService(
         providerId: String,
         modelId: String,
         routingReason: String,
+        via: ProviderId?,
     ): EventId? {
         val publishingAgentId = eventApi?.agentId ?: return null
         val eventId = generateUUID("llm-start", publishingAgentId)
@@ -636,6 +666,7 @@ class AgentLLMService(
                     providerId = providerId,
                     modelId = modelId,
                     routingReason = routingReason,
+                    via = via,
                 ),
                 runId = routingContext?.workflowId,
             )
@@ -662,6 +693,7 @@ class AgentLLMService(
         causedBy: EventId? = null,
         servedLatencyMs: Long? = null,
         servedRoutingReason: String? = null,
+        via: ProviderId?,
     ) {
         val publishingAgentId = eventApi?.agentId ?: return
         val completedAt = Clock.System.now()
@@ -681,6 +713,7 @@ class AgentLLMService(
                     success = success,
                     errorType = errorType,
                     servedRoutingReason = servedRoutingReason,
+                    via = via,
                 ),
                 causedBy = causedBy,
                 runId = routingContext?.workflowId,
@@ -696,6 +729,22 @@ class AgentLLMService(
 
     /** The model that served the call, or the one the request named. */
     private fun ServedBy?.modelIdOr(requested: String): String = this?.modelId ?: requested
+
+    /**
+     * The route the transport said the call travelled, or the resolved configuration's
+     * when it did not say — field by field, like every other [ServedBy] field (AMPR-436).
+     */
+    private fun ServedBy?.viaOr(requested: ProviderId?): ProviderId? = this?.via ?: requested
+
+    /**
+     * The maker and route a call to [model] over [route] is recorded under (AMPR-436): the
+     * maker always, and the route only when it is not the maker's own endpoint.
+     */
+    private fun attribution(route: ProviderId, model: AIModel): Attribution =
+        Attribution(
+            providerId = model.makerId,
+            via = route.takeIf { it != model.makerId },
+        )
 
     /**
      * Token accounting and cost for a settled call, preferring what the
@@ -782,9 +831,21 @@ class AgentLLMService(
         runCatching { agentConfiguration.aiConfiguration.model.name }
             .getOrDefault("custom")
 
-    private fun resolveCustomProviderId(): String =
-        runCatching { agentConfiguration.aiConfiguration.provider.id }
-            .getOrDefault("custom")
+    /**
+     * The configured maker and route, for a call a custom [LlmProvider] served. A
+     * configuration that cannot name its provider records `"custom"`, as it always has.
+     */
+    private fun resolveCustomAttribution(): Attribution =
+        runCatching {
+            val configuration = agentConfiguration.aiConfiguration
+            attribution(route = configuration.provider.id, model = configuration.model)
+        }.getOrDefault(Attribution(providerId = "custom", via = null))
+
+    /** A call's recorded maker and, when it was not the maker's own endpoint, its route. */
+    private data class Attribution(
+        val providerId: ProviderId,
+        val via: ProviderId?,
+    )
 
     internal suspend fun enrichUsageWithEstimatedCost(
         providerId: String,

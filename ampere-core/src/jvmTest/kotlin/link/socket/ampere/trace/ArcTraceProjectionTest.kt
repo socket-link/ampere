@@ -318,6 +318,58 @@ class ArcTraceProjectionTest {
     }
 
     @Test
+    fun `a direct and a routed call to one model project as rows that differ only in the route`() = runTest {
+        // AMPR-436: the maker stays in providerId either way, so the route is the only
+        // thing that tells the two calls apart.
+        val runId = "run-routed"
+
+        for (via in listOf(null, "openrouter")) {
+            val suffix = via ?: "direct"
+            eventRepository.saveEvent(
+                ProviderCallStartedEvent(
+                    eventId = "start-$suffix",
+                    timestamp = Instant.fromEpochMilliseconds(1_000),
+                    eventSource = EventSource.Agent("planner-agent"),
+                    workflowId = runId,
+                    agentId = "planner-agent",
+                    cognitivePhase = CognitivePhase.PLAN,
+                    providerId = "anthropic",
+                    modelId = "claude-sonnet-5",
+                    routingReason = "phase=PLAN",
+                    via = via,
+                ),
+                envelope = EventEnvelope(runId = runId),
+            ).getOrThrow()
+            eventRepository.saveEvent(
+                ProviderCallCompletedEvent(
+                    eventId = "complete-$suffix",
+                    timestamp = Instant.fromEpochMilliseconds(2_000),
+                    eventSource = EventSource.Agent("planner-agent"),
+                    workflowId = runId,
+                    agentId = "planner-agent",
+                    cognitivePhase = CognitivePhase.PLAN,
+                    providerId = "anthropic",
+                    modelId = "claude-sonnet-5",
+                    usage = TokenUsage(inputTokens = 1_000, outputTokens = 500, estimatedCost = 0.007),
+                    latencyMs = 1_000,
+                    success = true,
+                    via = via,
+                ),
+                envelope = EventEnvelope(runId = runId, causedBy = "start-$suffix"),
+            ).getOrThrow()
+        }
+
+        val trace = projection.project(runId).getOrThrow()
+        val invocations = assertNotNull(trace.phases.firstOrNull { it.name == "PLAN" }).modelInvocations
+
+        val direct = invocations.single { it.eventId == "complete-direct" }
+        val routed = invocations.single { it.eventId == "complete-openrouter" }
+        assertNull(direct.via)
+        assertEquals("openrouter", routed.via)
+        assertEquals(direct, routed.copy(eventId = direct.eventId, via = null))
+    }
+
+    @Test
     fun `projects one hundred event run within target budget`() = runTest {
         val runId = "run-trace-benchmark"
         repeat(100) { index ->

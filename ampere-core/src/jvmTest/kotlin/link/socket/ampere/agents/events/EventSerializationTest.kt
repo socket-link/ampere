@@ -2,6 +2,7 @@ package link.socket.ampere.agents.events
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
@@ -17,6 +18,8 @@ import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.MilestoneCategory
 import link.socket.ampere.agents.domain.event.PermissionDeniedEvent
 import link.socket.ampere.agents.domain.event.PermissionDeniedReason
+import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
+import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.reasoning.ConfidenceSource
 import link.socket.ampere.agents.domain.routing.local.InferenceLocality
 import link.socket.ampere.api.model.TokenUsage
@@ -275,5 +278,72 @@ class EventSerializationTest {
         assertIs<CognitiveEvent.JudgmentRecorded>(decoded)
         assertEquals(original, decoded)
         assertEquals(null, decoded.modelSnapshot.via)
+    }
+
+    private fun providerCallStarted(via: String? = null) = ProviderCallStartedEvent(
+        eventId = "99999999-9999-9999-9999-999999999991",
+        timestamp = stubTimestamp,
+        eventSource = stubEventSource,
+        workflowId = "wf-1",
+        agentId = "agent-X",
+        cognitivePhase = CognitivePhase.PLAN,
+        providerId = "anthropic",
+        modelId = "claude-sonnet-5",
+        routingReason = "agent_configuration",
+        via = via,
+    )
+
+    private fun providerCallCompleted(via: String? = null) = ProviderCallCompletedEvent(
+        eventId = "99999999-9999-9999-9999-999999999992",
+        timestamp = stubTimestamp,
+        eventSource = stubEventSource,
+        workflowId = "wf-1",
+        agentId = "agent-X",
+        cognitivePhase = CognitivePhase.PLAN,
+        providerId = "anthropic",
+        modelId = "claude-sonnet-5",
+        usage = TokenUsage(inputTokens = 1_000, outputTokens = 500, estimatedCost = 0.007),
+        latencyMs = 640,
+        success = true,
+        via = via,
+    )
+
+    @Test
+    fun `a provider call pair round-trips the route its call travelled`() {
+        listOf<Event>(providerCallStarted(via = "openrouter"), providerCallCompleted(via = "openrouter"))
+            .forEach { original ->
+                val text = json.encodeToString(Event.serializer(), original)
+                val decoded = json.decodeFromString(Event.serializer(), text)
+
+                assertEquals(original, decoded)
+                val via = when (decoded) {
+                    is ProviderCallStartedEvent -> decoded.via
+                    is ProviderCallCompletedEvent -> decoded.via
+                    else -> null
+                }
+                assertEquals("openrouter", via)
+            }
+    }
+
+    @Test
+    fun `a direct provider call pair encodes without a route key`() {
+        // encodeDefaults is on here and in DEFAULT_JSON, so without EncodeDefault.NEVER a direct
+        // call's stored row would grow a "via":null key it never had before AMPR-436.
+        listOf<Event>(providerCallStarted(), providerCallCompleted()).forEach { event ->
+            val encoded = json.encodeToJsonElement(Event.serializer(), event).jsonObject
+
+            assertFalse("via" in encoded.keys, "a direct ${event.eventType} changed its wire shape")
+        }
+    }
+
+    @Test
+    fun `a provider call pair stored before the route existed still decodes`() {
+        listOf<Event>(providerCallStarted(), providerCallCompleted()).forEach { original ->
+            val stored = json.encodeToJsonElement(Event.serializer(), original).jsonObject - "via"
+
+            val decoded = json.decodeFromJsonElement(Event.serializer(), JsonObject(stored))
+
+            assertEquals(original, decoded)
+        }
     }
 }

@@ -2,6 +2,8 @@ package link.socket.ampere.agents.domain.event
 
 import kotlin.math.roundToLong
 import kotlinx.datetime.Instant
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
@@ -23,10 +25,13 @@ sealed interface TelemetryEvent : Event {
     val workflowId: String?
     val agentId: AgentId
     val cognitivePhase: CognitivePhase?
+
+    /** The maker of the model — `anthropic` for Claude — never a gateway the call travelled through (AMPR-436). */
     val providerId: ProviderId
     val modelId: String
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 @SerialName("ProviderCallStartedEvent")
 data class ProviderCallStartedEvent(
@@ -40,6 +45,16 @@ data class ProviderCallStartedEvent(
     override val providerId: ProviderId,
     override val modelId: String,
     val routingReason: String,
+    /**
+     * The route the call travelled when that was not its maker's own endpoint — a
+     * gateway such as `openrouter` (AMPR-436). [providerId] names the maker and is
+     * never a gateway. Null means direct or not stated.
+     *
+     * Never encoded while null, so a direct call's stored row is byte-identical to one
+     * written before this field existed.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val via: ProviderId? = null,
 ) : TelemetryEvent {
 
     override val eventType: EventType = EVENT_TYPE
@@ -49,6 +64,7 @@ data class ProviderCallStartedEvent(
         formatSource: (EventSource) -> String,
     ): String = buildString {
         append("LLM call started: $providerId/$modelId")
+        via?.let { append(" via $it") }
         cognitivePhase?.let { append(" [${it.name}]") }
         append(" (route: $routingReason)")
         workflowId?.let { append(" workflow=$it") }
@@ -61,6 +77,7 @@ data class ProviderCallStartedEvent(
     }
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 @SerialName("ProviderCallCompletedEvent")
 data class ProviderCallCompletedEvent(
@@ -88,6 +105,16 @@ data class ProviderCallCompletedEvent(
      * was *routed* this way, and why it was *served* that way.
      */
     val servedRoutingReason: String? = null,
+    /**
+     * The route the call travelled when that was not its maker's own endpoint — a
+     * gateway such as `openrouter` (AMPR-436). [providerId] names the maker and is
+     * never a gateway. Null means direct or not stated.
+     *
+     * Never encoded while null, so a direct call's stored row is byte-identical to one
+     * written before this field existed.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val via: ProviderId? = null,
 ) : TelemetryEvent {
 
     override val eventType: EventType = EVENT_TYPE
@@ -97,6 +124,7 @@ data class ProviderCallCompletedEvent(
         formatSource: (EventSource) -> String,
     ): String = buildString {
         append("LLM call ${if (success) "completed" else "failed"}: $providerId/$modelId")
+        via?.let { append(" via $it") }
         cognitivePhase?.let { append(" [${it.name}]") }
         append(" (")
         var wroteDetail = false

@@ -132,8 +132,9 @@ interface UpstreamLlmClient {
  * what it knows: a proxy that can name the model but not meter it supplies
  * [providerId] and [modelId] and leaves the rest null.
  *
- * @property providerId The `AIProvider.id` of the provider that served the
- *   call. May differ from the resolved configuration's.
+ * @property providerId The id of the provider that *makes* the model that
+ *   served the call — `anthropic` for Claude — never a gateway it travelled
+ *   through; that is [via]. May differ from the resolved configuration's.
  * @property modelId The model that answered. May differ from the one
  *   [UpstreamLlmClient.callDetailed]'s request named.
  * @property usage Tokens as the serving side counted them, or null to keep the
@@ -147,6 +148,9 @@ interface UpstreamLlmClient {
  * @property latencyMs How long the serving side measured the model call to
  *   take, excluding the hops in front of it. Null leaves Ampere's own wall
  *   clock standing.
+ * @property via The route the call travelled when that was not the maker's own
+ *   endpoint — a gateway such as `openrouter` (AMPR-436). Null means direct or
+ *   not stated, and leaves the route of the resolved configuration standing.
  */
 @AmpereStableApi
 data class ServedBy(
@@ -156,6 +160,7 @@ data class ServedBy(
     val estimatedCostUsd: Double? = null,
     val routingReason: String? = null,
     val latencyMs: Long? = null,
+    val via: ProviderId? = null,
 )
 
 /**
