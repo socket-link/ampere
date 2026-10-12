@@ -319,10 +319,17 @@ class PhaseSparkManagerTest {
         val library = DefaultPhaseSparkLibrary.fromSources(sources)
         val agent = TestAgent()
         val manager = PhaseSparkManager.internalCreate(agent, enabled = true, library = library)
-        // Flag defaults to off.
-        manager.enterPhase(CognitivePhase.PLAN)
-        assertEquals(1, agent.sparkDepth)
-        manager.cleanup()
+        // The flag is process-wide and AgentFactory.create flips it on without ever
+        // resetting it, so another test class may have run first. Pin it off.
+        val previousFlag = AmpereSpikeFlags.declarativeSparksEnabled
+        try {
+            AmpereSpikeFlags.declarativeSparksEnabled = false
+            manager.enterPhase(CognitivePhase.PLAN)
+            assertEquals(1, agent.sparkDepth)
+            manager.cleanup()
+        } finally {
+            AmpereSpikeFlags.declarativeSparksEnabled = previousFlag
+        }
     }
 
     @Test
