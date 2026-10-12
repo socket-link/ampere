@@ -1,0 +1,73 @@
+-- AMPR-430 (H30): the durable record of a held run. A hosted run whose tool reported its action
+-- is waiting on a person ends `RunStatus.Held` (AMPR-425), and it resumes by carrying on with the
+-- plan that was already approved (AMPR-385 row H29). What the run *has done* was already durable —
+-- every `PlanStepCompleted` is persisted — but what it *was going to do* lived only in fields of
+-- `RosterHostedRun`. This table is where that state outlives the process that made it.
+--
+-- `held_run_json` is the source of truth for the record. The scalar columns beside it are not
+-- denormalizations for speed — each one has to be readable *without* decoding `held_run_json`,
+-- because the operations that keep the table honest must not be blocked by a payload a later or
+-- earlier build cannot read (the AMPR-364 rule `PauseStore` follows):
+--
+--   * `run_id` — a record is claimed and deleted by run id alone.
+--   * `held_step_id`, `reason`, `reference`, `held_at` — what `list` reports, so a person can be
+--     shown every held run, including one this build cannot resume.
+--   * `claimed_at` — "has someone already taken this run up" is the claim's whole question, and
+--     answering it must not require decoding the row.
+--
+-- A NULL `claimed_at` means held and not yet taken up. A claimed row stays until its owner
+-- deletes it: a resume that was interrupted is still listed, with when it was claimed.
+CREATE TABLE HeldRunStore (
+  run_id TEXT NOT NULL PRIMARY KEY,
+  held_run_json TEXT NOT NULL,
+  held_step_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  reference TEXT,
+  held_at INTEGER NOT NULL,
+  claimed_at INTEGER
+);
+
+-- `claimed_at` leads so a resumer can seek straight to the unclaimed group and walk it oldest
+-- first; a claimed row is only ever read by id.
+CREATE INDEX idx_held_run_store_claimed_at_held_at ON HeldRunStore(claimed_at, held_at);
+
+-- `OR IGNORE` so two first writers racing on one run id cannot both insert: the loser sees zero
+-- affected rows and re-reads the row the winner wrote.
+insertHeldRun:
+INSERT OR IGNORE INTO HeldRunStore(run_id, held_run_json, held_step_id, reason, reference, held_at, claimed_at)
+VALUES (?, ?, ?, ?, ?, ?, NULL);
+
+selectHeldRun:
+SELECT run_id, held_run_json, held_step_id, reason, reference, held_at, claimed_at
+FROM HeldRunStore
+WHERE run_id = ?;
+
+-- Every record, claimed or not, oldest hold first. Scalar columns only, and deliberately so: a
+-- record this build cannot decode is still listed.
+selectHeldRunSummaries:
+SELECT run_id, held_step_id, reason, reference, held_at, claimed_at
+FROM HeldRunStore
+ORDER BY held_at ASC, run_id ASC;
+
+-- `claimed_at IS NULL` makes claiming first-writer-wins. JDBC SQLite gives no transaction
+-- isolation to lean on (AMPR-336), so the guard lives in the statement and the caller reads the
+-- affected-row count to learn whether its claim landed. The payload is matched too: between a
+-- claimer's read and its update, another claimer can take the record up, resume, and hold again,
+-- which leaves a *different* unclaimed record under the same run id. Matching the payload keeps
+-- the first claimer from taking up a record it never decoded.
+claimHeldRun:
+UPDATE HeldRunStore
+SET claimed_at = ?
+WHERE run_id = ? AND claimed_at IS NULL AND held_run_json = ?;
+
+-- A run that was claimed, resumed and has held again: its new record replaces the old one and the
+-- claim is cleared. Guarded on `claimed_at IS NOT NULL` so it can never overwrite an unclaimed
+-- record, which only an identical re-hold may touch.
+replaceClaimedHeldRun:
+UPDATE HeldRunStore
+SET held_run_json = ?, held_step_id = ?, reason = ?, reference = ?, held_at = ?, claimed_at = NULL
+WHERE run_id = ? AND claimed_at IS NOT NULL;
+
+deleteHeldRun:
+DELETE FROM HeldRunStore
+WHERE run_id = ?;

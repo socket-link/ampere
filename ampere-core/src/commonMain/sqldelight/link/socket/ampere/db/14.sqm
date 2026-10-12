@@ -1,0 +1,19 @@
+-- AMPR-430 (H30): the durable record of a held run, so a run that stopped waiting on a person can
+-- resume where it stopped after the process that ran it is gone. Definition copied from
+-- propel/HeldRunStore.sq; a new table with no backfill, since no run has been recorded before.
+-- IF NOT EXISTS keeps this a no-op on a database that already has it.
+--
+-- This ticket owns 14.sqm and only 14.sqm: the observation store (AMPR-447) is 12.sqm and
+-- commitments (AMPR-449) are 13.sqm, which landed first. The contents are independent; the order
+-- matters only because SQLDelight runs a migration solely for a database below its number.
+CREATE TABLE IF NOT EXISTS HeldRunStore (
+  run_id TEXT NOT NULL PRIMARY KEY,
+  held_run_json TEXT NOT NULL,
+  held_step_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  reference TEXT,
+  held_at INTEGER NOT NULL,
+  claimed_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_held_run_store_claimed_at_held_at ON HeldRunStore(claimed_at, held_at);

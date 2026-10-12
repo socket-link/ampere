@@ -206,6 +206,18 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     carry the run past its limit. A record that cannot be read, or holds a row this build
     cannot decode, fails the step closed. A run with no quotas reads nothing and is
     unchanged, event for event.
+20. **A held run's record is kept beside its events, and bookkeeping never decodes it**
+    (AMPR-430, row H30). `HeldRunStore` keeps one `HeldRun` per run id — what the run
+    *was going to do*, which no event carries — in the `HeldRunStore` table (`14.sqm`).
+    Three rules, the pause store's carried over: `list`, the claim's guard and `delete`
+    work from the scalar columns beside `held_run_json`, so a record another build cannot
+    read is still listed and deletable; claiming is first-writer-wins *in the statement*
+    (`UPDATE … WHERE claimed_at IS NULL`, landing read from the affected-row count, since
+    JDBC SQLite gives no isolation — AMPR-336), and `claim` decodes before it claims so an
+    unreadable row is left for a build that can read it; a row `get` or `claim` cannot
+    decode is announced once as `StoreRowUndecodableEvent` (`HELD_RUN_STORE`), never
+    silently dropped. **Nothing writes or reads the store yet** — the run that records
+    itself on holding and the resume that claims it are the next Wave 5 ticket.
 
 ## How it composes
 
@@ -321,6 +333,7 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | `RunResult` / `RunStatus` | `cyclesUsed`, `stepOutcomes` (each with its `origin`), `outcome`, `readExternalContent`; `Succeeded` / `Failed` / `Stopped` / `Held` / `Partial` |
 | `RunObservation` | What OBSERVE hands the verifier's Probes: run id, goal, cycle, prior results |
 | `rosterRunHost(...)` | The shipped implementation, for composing without an `AmpereInstance` |
+| `HeldRun` / `HeldRunStore` | The durable record of a held run and its store: `hold`, `get`, `list` (→ `HeldRunSummary`), `claim` (→ `HeldRunClaim`: `Claimed`, `NotHeld`, `AlreadyClaimed`), `delete`. `SqlDelightHeldRunStore` and `InMemoryHeldRunStore`. Nothing in the run uses it yet |
 
 `Ampere.fromEnvironment` exposes one as `AmpereInstance.runs`, and `agentScope` is
 documented as the caller's to own. `AgentService.team {}` declares the roster and
@@ -330,6 +343,36 @@ registry (AMPR-416, `SubjectRegistry`): the first `pursue`, `inspect` or `listAl
 `team {}` registers the team as a `Subject.Group` under `AgentTeam.id` with one `MemberOf`
 edge per role, and `listAll` then lists every registered agent — not the team's role
 strings.
+
+## The held-run record
+
+A held run resumes by carrying on with the plan that was already approved, not by
+planning again (row H29, ruled 2026-10-11), and the person it is waiting on may answer
+after the process that ran it is gone. What the run *has done* is already durable — each
+`PlanStepCompleted` carries its `StepOutcome` and run id. What it *was going to do* lived
+only in fields of `RosterHostedRun`. `HeldRun` (`propel/HeldRun.kt`) is that state as a
+value:
+
+| Field | What it is |
+|-------|-----------|
+| `runId`, `hostRole`, `hostAgentId` | The run and the seat that plans it |
+| `goal`, `cycle` | What the run is for, and the cycle that held (from 1) |
+| `plan` | The held cycle's plan as it passed the `PlanGate` |
+| `results` | Every step outcome so far, oldest first: earlier cycles, this cycle's finished steps, the held step, the skipped ones after it |
+| `heldStepId`, `reason`, `reference` | The step that held, why, and the tool's opaque handle (the link to whoever owns the decision) |
+| `ideas`, `seatsThatRan` | PERCEIVE's ideas, and the roles that executed a step (LEARN's seats) |
+| `heldAt` | When the run held |
+
+`hold` inserts a record for a new run id; over an *unclaimed* record it succeeds only for
+an identical one (a writer's retry) and otherwise fails with `HeldRunInUseException`;
+over a *claimed* record it replaces it and clears the claim (a resumed run that held
+again). `claim` gives exactly one caller `Claimed(run)`; the rest get
+`AlreadyClaimed(at)`. A claimed record stays until its owner deletes it — an interrupted
+resume is still listed, with its `claimedAt`.
+
+The record holds step results, which can contain a person's content. It sits beside the
+event store, which already holds the same results, and is not copied anywhere else,
+logged, or put on an event.
 
 ## Anti-patterns
 
@@ -453,6 +496,14 @@ strings.
   minor version; a `when` written against four no longer compiles, and an `else` that
   read every non-`Succeeded` value as failure now reads a run that did most of its work
   as one that did none.
+- **Decoding a held-run row to list, claim or delete it.** A record written by a later
+  build would then be unlistable and undeletable, and one bad row would fail the whole
+  `list`. The scalar columns exist so that these never need the payload; only `get` and
+  `claim` decode, and `claim` decodes *before* its `UPDATE` (AMPR-430).
+- **Guarding a claim on `claimed_at IS NULL` alone.** Between a claimer's read and its
+  update another claimer can take the run up, resume, and hold again, leaving a
+  different unclaimed record under the same id; `claimHeldRun` also matches the payload
+  it decoded, so nobody claims a record they never read.
 - **Treating `held` as a kind of failure in a tool record.** `ToolExecutionCompleted`
   for a held call has `success = false` *and* `held = true` and no `errorMessage`; a
   reader that keys on `success` alone will count holds as faults.
@@ -482,7 +533,9 @@ of scope, because `FlowPhase` runs one step per tick; and `dependsOn` is only ev
 previous step, because that is all `requiresPreviousStep` can say. Also not here: *resuming* a held run
 (row H29, Wave 5 — until it ships, whatever was waiting is completed by the consumer
 outside the run and nothing after it runs; this wave leaves it the `reference` and a
-blocked task to resume from), deciding *when* an action must be held (the tool's and
+blocked task to resume from — `HeldRunStore` (row H30, AMPR-430) is where a held run's
+state will be kept for that, but nothing writes it yet, it has no expiry of its own, and
+it does not recover a claimed record whose resume was interrupted), deciding *when* an action must be held (the tool's and
 its consumer's), and telling a held run from a failed one in `OutcomeMemoryStore`
 (held outcomes are simply not written, because that would need a migration).
 
