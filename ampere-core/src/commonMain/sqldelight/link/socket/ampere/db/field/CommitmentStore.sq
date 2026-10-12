@@ -1,0 +1,72 @@
+-- AMPR-449 (F31): Commitments, the fold of the ticket events. A `TicketAssigned` on a ticket with a
+-- due date forms one row, held by the assignee (`link.socket.ampere.field.Commitment`). A
+-- `TicketStatusChanged` to Done, or a `TicketAssigned` handing the ticket to someone else, resolves
+-- it. No event type of its own: the row points at the events it folds.
+--
+-- `created_by_event` is the forming `TicketAssigned` and the row's identity — one assignment forms
+-- at most one commitment, so folding the same event twice is the same row. `created_at` is that
+-- event's envelope `recorded_at`. `resolved_by_event` / `resolved_at` name the resolving event and
+-- are NULL while the row is OPEN.
+--
+-- `committer_ref` is the assignee's Subject ref (the agent id, F30); `goal_ref` the Goal the
+-- ticket's work is toward, NULL when none is linked — which today is every row. No foreign keys:
+-- the fold resolves refs, not the database. `status` is the name of a `Commitment.Status` and is
+-- deliberately not CHECKed, as GoalStore's is not.
+CREATE TABLE CommitmentStore (
+  created_by_event TEXT NOT NULL PRIMARY KEY,
+  ticket_id TEXT NOT NULL,
+  committer_ref TEXT NOT NULL,
+  goal_ref TEXT,
+  due_at INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  resolved_by_event TEXT,
+  resolved_at INTEGER
+);
+
+-- A ticket's commitments are read to resolve them; the Field reads every open one by due date.
+CREATE INDEX idx_commitment_store_ticket_status ON CommitmentStore(ticket_id, status);
+CREATE INDEX idx_commitment_store_status_due ON CommitmentStore(status, due_at);
+
+-- OR IGNORE: folding the same TicketAssigned again is the same commitment, and the first write
+-- keeps its provenance. The store reads back to learn which row won.
+insertCommitment:
+INSERT OR IGNORE INTO CommitmentStore(
+  created_by_event, ticket_id, committer_ref, goal_ref, due_at, status, created_at,
+  resolved_by_event, resolved_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectCommitment:
+SELECT created_by_event, ticket_id, committer_ref, goal_ref, due_at, status, created_at,
+  resolved_by_event, resolved_at
+FROM CommitmentStore
+WHERE created_by_event = ?;
+
+selectCommitmentsByTicket:
+SELECT created_by_event, ticket_id, committer_ref, goal_ref, due_at, status, created_at,
+  resolved_by_event, resolved_at
+FROM CommitmentStore
+WHERE ticket_id = ?
+ORDER BY created_at ASC, created_by_event ASC;
+
+selectCommitmentsByTicketAndStatus:
+SELECT created_by_event, ticket_id, committer_ref, goal_ref, due_at, status, created_at,
+  resolved_by_event, resolved_at
+FROM CommitmentStore
+WHERE ticket_id = ? AND status = ?
+ORDER BY created_at ASC, created_by_event ASC;
+
+-- Soonest due first; the forming event's time breaks ties.
+selectCommitmentsByStatus:
+SELECT created_by_event, ticket_id, committer_ref, goal_ref, due_at, status, created_at,
+  resolved_by_event, resolved_at
+FROM CommitmentStore
+WHERE status = ?
+ORDER BY due_at ASC, created_at ASC, created_by_event ASC;
+
+-- Resolves an OPEN row only, so a second resolution never overwrites the first one's event.
+resolveCommitment:
+UPDATE CommitmentStore
+SET status = 'RESOLVED', resolved_by_event = ?, resolved_at = ?
+WHERE created_by_event = ? AND status = 'OPEN';

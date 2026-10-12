@@ -20,6 +20,7 @@ import link.socket.ampere.agents.events.tickets.TicketOrchestrator
 import link.socket.ampere.agents.events.tickets.TicketRepository
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
+import link.socket.ampere.commitment.CommitmentLedger
 
 /**
  * Top-level orchestrator that coordinates all domain orchestrators.
@@ -47,6 +48,12 @@ class EnvironmentOrchestrator(
     val eventSerialBus: EventSerialBus,
     val workspaceStateStore: WorkspaceStateStore,
     private val logger: EventLogger = ConsoleEventLogger(),
+    /**
+     * Where every ticket publisher in this environment folds its assignment and status events
+     * (AMPR-449): [ticketOrchestrator] here, and each `TicketActionService` built off
+     * `EnvironmentService.commitmentLedger`. `null` folds nothing.
+     */
+    val commitmentLedger: CommitmentLedger? = null,
 ) {
     companion object {
         /**
@@ -94,6 +101,7 @@ class EnvironmentOrchestrator(
         messageApi = systemMessageApi,
         meetingSchedulingService = createMeetingSchedulingService(),
         logger = logger,
+        commitmentLedger = commitmentLedger,
     )
 
     /**

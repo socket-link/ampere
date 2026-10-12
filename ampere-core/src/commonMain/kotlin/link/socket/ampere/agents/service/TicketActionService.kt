@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.service
 
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.EventSource
@@ -13,25 +14,35 @@ import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketRepository
 import link.socket.ampere.agents.events.tickets.TicketType
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.commitment.CommitmentLedger
 
 /**
  * Service for executing ticket-related actions that affect the substrate.
  *
  * All operations emit events through the event bus to notify
  * agents and update the observable state.
+ *
+ * A recorded `TicketAssigned` or `TicketStatusChanged` is folded into [commitmentLedger] next
+ * (AMPR-449, F31), the same ledger `TicketOrchestrator` folds its events into. A fold failure is
+ * the method's failure. `null` folds nothing, for a caller with no database behind it.
  */
 class TicketActionService(
     private val ticketRepository: TicketRepository,
     private val eventApi: AgentEventApi,
+    private val commitmentLedger: CommitmentLedger? = null,
 ) {
     /**
      * Create a new ticket and emit TicketCreated event.
+     *
+     * @param dueDate When the work is due, or `null` for no date. Assigning a ticket that has one
+     *   forms the assignee's Commitment (AMPR-449).
      */
     suspend fun createTicket(
         title: String,
         description: String,
         priority: TicketPriority,
         type: TicketType = TicketType.TASK,
+        dueDate: Instant? = null,
     ): Result<Ticket> {
         return try {
             val now = Clock.System.now()
@@ -48,7 +59,7 @@ class TicketActionService(
                 createdByAgentId = "human-cli",
                 createdAt = now,
                 updatedAt = now,
-                dueDate = null,
+                dueDate = dueDate,
             )
 
             ticketRepository.createTicket(ticket)
@@ -98,7 +109,14 @@ class TicketActionService(
                         timestamp = Clock.System.now(),
                         urgency = Urgency.MEDIUM,
                     )
-                    eventApi.publish(event)
+                    eventApi.publish(event).onSuccess { recorded ->
+                        if (commitmentLedger != null) {
+                            val ticket = ticketRepository.getTicket(ticketId).getOrElse { return Result.failure(it) }
+                                ?: return Result.failure(IllegalArgumentException("Ticket not found: $ticketId"))
+                            commitmentLedger.assigned(event, recorded.recordedAt, ticket)
+                                .onFailure { return Result.failure(it) }
+                        }
+                    }
                 }
         } catch (e: Exception) {
             Result.failure(e)
@@ -132,7 +150,11 @@ class TicketActionService(
                         timestamp = Clock.System.now(),
                         urgency = Urgency.MEDIUM,
                     )
-                    eventApi.publish(event)
+                    eventApi.publish(event).onSuccess { recorded ->
+                        commitmentLedger
+                            ?.statusChanged(event, recorded.recordedAt)
+                            ?.onFailure { return Result.failure(it) }
+                    }
                 }
         } catch (e: Exception) {
             Result.failure(e)

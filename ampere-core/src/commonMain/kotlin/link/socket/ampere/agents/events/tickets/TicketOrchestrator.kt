@@ -27,6 +27,7 @@ import link.socket.ampere.agents.events.messages.MessageThread
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.commitment.CommitmentLedger
 import link.socket.ampere.util.randomUUID
 
 /**
@@ -38,6 +39,11 @@ import link.socket.ampere.util.randomUUID
  * subscriber sees it. The repository write commits first; a persist failure of the event that
  * follows is folded into the method's [Result] and not retried (C49 — merging the two ticket
  * write paths is W3's job).
+ *
+ * A recorded `TicketAssigned` or `TicketStatusChanged` is folded into [commitmentLedger] next
+ * (AMPR-449, F31), the same ledger `TicketActionService` folds its events into. A fold failure is
+ * the method's failure, like a persist failure. `null` folds nothing, for a caller with no
+ * database behind it.
  */
 class TicketOrchestrator(
     private val ticketRepository: TicketRepository,
@@ -45,6 +51,7 @@ class TicketOrchestrator(
     private val messageApi: AgentMessageApi,
     private val meetingSchedulingService: MeetingSchedulingService,
     private val logger: EventLogger = ConsoleEventLogger(),
+    private val commitmentLedger: CommitmentLedger? = null,
 ) {
 
     /**
@@ -205,9 +212,12 @@ class TicketOrchestrator(
             timestamp = now,
             urgency = priorityToUrgency(updatedTicket.priority),
         )
-        eventApi
+        val statusRecorded = eventApi
             .publish(statusChanged)
-            .onFailure { throwable -> return Result.failure(throwable) }
+            .getOrElse { throwable -> return Result.failure(throwable) }
+        commitmentLedger
+            ?.statusChanged(statusChanged, statusRecorded.recordedAt)
+            ?.onFailure { throwable -> return Result.failure(throwable) }
 
         // Post status update message to ticket thread
         getOrCreateTicketThread(updatedTicket)?.let { thread ->
@@ -292,9 +302,12 @@ class TicketOrchestrator(
             timestamp = now,
             urgency = priorityToUrgency(updatedTicket.priority),
         )
-        eventApi
+        val assignedRecorded = eventApi
             .publish(assigned)
-            .onFailure { throwable -> return Result.failure(throwable) }
+            .getOrElse { throwable -> return Result.failure(throwable) }
+        commitmentLedger
+            ?.assigned(assigned, assignedRecorded.recordedAt, updatedTicket)
+            ?.onFailure { throwable -> return Result.failure(throwable) }
 
         // Post assignment notification to ticket thread
         getOrCreateTicketThread(updatedTicket)?.let { thread ->
@@ -311,6 +324,10 @@ class TicketOrchestrator(
     /**
      * Block a ticket with a reason. Transitions to BLOCKED status, publishes a TicketBlocked event,
      * and creates an escalation message in the ticket thread requesting human intervention.
+     *
+     * When [assignedToAgentId] hands the ticket to someone new, that is a reassignment like any
+     * other: a `TicketAssigned` caused by the `TicketBlocked`, folded into [commitmentLedger], so
+     * the previous holder's commitment is resolved and the new holder's forms (AMPR-449).
      *
      * @param ticketId The ID of the ticket to block.
      * @param blockingReason The reason the ticket is blocked.
@@ -336,6 +353,7 @@ class TicketOrchestrator(
 
         val currentTicket = ticketResult.getOrNull()
             ?: return Result.failure(TicketError.TicketNotFound(ticketId))
+        val reassigning = assignedToAgentId != null && assignedToAgentId != currentTicket.assignedAgentId
 
         // Validate ticket can transition to BLOCKED
         if (!currentTicket.canTransitionTo(TicketStatus.Blocked)) {
@@ -397,6 +415,24 @@ class TicketOrchestrator(
         eventApi
             .publish(blocked)
             .onFailure { throwable -> return Result.failure(throwable) }
+
+        // A blocker that hands the ticket to someone else announces it, caused by the block.
+        if (reassigning) {
+            val reassigned = TicketEvent.TicketAssigned(
+                eventId = randomUUID(),
+                ticketId = ticketId,
+                assignedTo = assignedToAgentId,
+                eventSource = EventSource.Agent(reportedByAgentId),
+                timestamp = now,
+                urgency = priorityToUrgency(updatedTicket.priority),
+            )
+            val reassignedRecorded = eventApi
+                .publish(reassigned, causedBy = blocked.eventId)
+                .getOrElse { throwable -> return Result.failure(throwable) }
+            commitmentLedger
+                ?.assigned(reassigned, reassignedRecorded.recordedAt, updatedTicket)
+                ?.onFailure { throwable -> return Result.failure(throwable) }
+        }
 
         // Automatically schedule a meeting based on escalation type
         // This must happen BEFORE escalation so the meeting message can be posted in the thread before it becomes blocked
