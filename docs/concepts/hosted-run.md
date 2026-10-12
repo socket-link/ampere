@@ -86,6 +86,11 @@ that loop, moved into Ampere, so the consumer can delete its copy.
 8. **A seat runs only the tools its role declares**, intersected with the run's
    `tools`. Each reaches the seat under the seat-namespaced id `<seat>/<tool>`
    (`SeatTool`), which is the id the planner is offered and the id dispatch resolves.
+   The host seat's planner is handed *every* seat's tools, not its own
+   (`AgentReasoning.generatePlan(availableTools = …)`, AMPR-454): it reads each tool's
+   description and argument schema off those objects, and keeps a step's inline
+   arguments only for a tool among them. Planning moves no tool between seats — a
+   step still runs only on the seat that owns its tool.
 9. **One loop: the run's step and completion paths are the Arc's** (AMPR-442, row H19).
    EXECUTE dispatches every step through `dispatchPlanStep` (`propel/StepDispatch.kt`),
    the function the Arc path reaches through `SparkBasedAgent.executePlanStep`. Tool
@@ -435,6 +440,12 @@ logged, or put on an event.
   `availableTools` by id and lists anything unmatched under "Unassigned tools"; the two
   must come off the same objects, which is why the run namespaces the tool objects
   rather than only the declared ids.
+- **Planning a roster with the host seat's own tool set.** `generatePlan` defaults to the
+  planning agent's tools, which for a host seat is its own role's. Until AMPR-454 a hosted
+  run did exactly that: every other seat's tool reached the prompt as a bare id, with no
+  description and no schema, and `PlanGenerator` dropped the inline arguments of any step
+  that named one — so a gate reviewing a write on another seat saw none of its fields
+  until the strategy had generated them. Pass the union of every seat's tools.
 - **Expecting a *first* cycle's plan to have no steps.** With nothing in `priorResults`
   nothing invited an empty `steps` array, so `PlanGenerator` still turns one into the
   one-step *fallback* plan. On the first cycle a plan with no steps is what a gate left,

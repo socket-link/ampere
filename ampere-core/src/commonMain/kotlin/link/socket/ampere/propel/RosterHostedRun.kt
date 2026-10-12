@@ -34,6 +34,7 @@ import link.socket.ampere.agents.events.api.openTaskLifecycle
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.describeResult
 import link.socket.ampere.agents.execution.executor.ExecutorId
+import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.field.Admission
 import link.socket.ampere.llm.DispatchingUpstreamLlmClient
 import link.socket.ampere.plug.permission.UserGrants
@@ -105,8 +106,28 @@ internal class RosterHostedRun(
      * A role nobody filled is left out rather than offered with no agent behind it:
      * the planner would assign steps to it and every one of them would fall back to
      * the host.
+     *
+     * Read on every PLAN, like [planTools], so the ids and the tool objects come off the
+     * same live tool sets.
      */
-    private val planSeats: List<PlanSeat> = roster.all().mapNotNull { seats[it.id]?.asPlanSeat() }
+    private val planSeats: List<PlanSeat>
+        get() = roster.all().mapNotNull { seats[it.id]?.asPlanSeat() }
+
+    /**
+     * Every seat's tools, as the planner is shown them (AMPR-454).
+     *
+     * The host seat plans for the whole roster, so its planner is handed the tools of
+     * every seat rather than the host's own: `PlanGenerator` reads a tool's description
+     * and argument schema off the tool objects, and keeps a step's inline arguments only
+     * for a tool among them. Handed the host's alone, every other seat's tool was listed
+     * bare, offered no schema, and had its arguments dropped — so a gate reviewing a write
+     * on another seat saw none of its fields. Each seat's set is already namespaced
+     * (`<seat>/<tool>`) and narrowed by its spark stack, so the union holds no collisions
+     * and nothing a seat could not run. Dispatch is unchanged: a step still runs only on
+     * the seat that owns its tool.
+     */
+    private val planTools: Set<Tool<*>>
+        get() = roster.all().flatMapTo(linkedSetOf()) { role -> seats[role.id]?.agent?.effectiveTools.orEmpty() }
 
     private var gatedPlan: Plan = Plan.blank
     private var stoppedAt: PlanDecision.Stopped? = null
@@ -362,6 +383,7 @@ internal class RosterHostedRun(
                 seats = planSeats,
                 priorResults = results.toList(),
                 cycle = cyclesUsed + 1,
+                availableTools = planTools,
             )
             host.agent.rememberNewPlan(generated)
 

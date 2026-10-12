@@ -5,6 +5,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
@@ -135,7 +136,7 @@ class HostedRunArgumentRegateTest {
             // Keys in another order than the schema validates them into: the same arguments.
             val inline = """{"body": "The deploy is done", "to": "ops@example.com"}"""
             val host = seat(HOST_ID, HOST_ROLE) { planJson(sendStep(inline)) }
-            val doer = seat(DOER_ID, DOER_ROLE) { "unused" }
+            val doer = seat(DOER_ID, DOER_ROLE, parameters = GENERATED) { "unused" }
 
             val run = openRun(host, doer, gate)
             val gated = assertIs<Task.Step>(run.plan.tasks.single())
@@ -149,26 +150,50 @@ class HostedRunArgumentRegateTest {
             assertTrue(gate.changed.isEmpty(), "unchanged arguments are not reviewed again")
             assertEquals(1, gate.reviewed.size)
             assertEquals(json(inline), sent.single().arguments, "the tool ran with the approved arguments")
-            assertEquals(0, host.parameterCalls(), "and no parameter call was made")
+            assertEquals(0, doer.parameterCalls(), "and no parameter call was made")
             assertEquals(RunStatus.Succeeded, result.status)
+        }
+
+    @Test
+    fun `the host plans with every seat's tools so another seat's step keeps its arguments`() =
+        runBlocking<Unit> {
+            val inline = """{"to": "ops@example.com", "body": "The deploy is done"}"""
+            val host = seat(HOST_ID, HOST_ROLE) { planJson(sendStep(inline)) }
+            val doer = seat(DOER_ID, DOER_ROLE) { "unused" }
+
+            val run = openRun(host, doer, RecordingGate())
+            run.close()
+
+            val planPrompt = host.transport.prompts.single { it.contains("\"steps\"") }
+            val sendId = SeatTool(DOER_ROLE, SEND_TOOL).id
+            assertTrue(
+                planPrompt.contains("$sendId: sends a message on the person's behalf"),
+                "the doer's tool is listed with its description\n$planPrompt",
+            )
+            val schemas = planPrompt.substringAfter("Argument schemas.").substringBefore("Create a step-by-step")
+            assertTrue(schemas.contains("$sendId:"), "and its schema is offered\n$planPrompt")
+            assertFalse(planPrompt.contains("Unassigned tools"), "every tool belongs to a seat\n$planPrompt")
+
+            val step = assertIs<Task.Step>(run.plan.tasks.single())
+            assertEquals(json(inline), step.arguments, "so the step it was planned for keeps its arguments")
         }
 
     @Test
     fun `a strategy that changes an argument sends the step back to the gate once`() = runBlocking<Unit> {
         val gate = RecordingGate()
-        val host = seat(HOST_ID, HOST_ROLE, parameters = GENERATED) { planJson(sendStep(PARTIAL)) }
-        val doer = seat(DOER_ID, DOER_ROLE) { "unused" }
+        val host = seat(HOST_ID, HOST_ROLE) { planJson(sendStep(PARTIAL)) }
+        val doer = seat(DOER_ID, DOER_ROLE, parameters = GENERATED) { "unused" }
 
         val run = openRun(host, doer, gate)
         val result = run.execute()
         run.close()
 
         val (step, approved, actual) = gate.changed.single()
-        assertEquals(SeatTool(HOST_ROLE, SEND_TOOL).id, step.toolId)
+        assertEquals(SeatTool(DOER_ROLE, SEND_TOOL).id, step.toolId)
         assertEquals(json(PARTIAL), approved, "the arguments the gate approved")
         assertEquals(json(GENERATED), actual, "the arguments the tool would receive")
 
-        assertEquals(1, host.parameterCalls(), "the schema strategy's one parameter call")
+        assertEquals(1, doer.parameterCalls(), "the schema strategy's one parameter call")
         assertEquals(json(GENERATED), sent.single().arguments, "the step ran with the approved values")
         assertEquals(RunStatus.Succeeded, result.status)
         assertEquals(
@@ -182,8 +207,8 @@ class HostedRunArgumentRegateTest {
     fun `a gate that stops on the changed step ends the run Stopped and nothing after it runs`() =
         runBlocking<Unit> {
             val gate = RecordingGate { _, _, _ -> PlanDecision.Stopped("not with that body") }
-            val host = seat(HOST_ID, HOST_ROLE, parameters = GENERATED) { planJson(sendStep(PARTIAL), searchStep()) }
-            val doer = seat(DOER_ID, DOER_ROLE) { "unused" }
+            val host = seat(HOST_ID, HOST_ROLE) { planJson(sendStep(PARTIAL), searchStep()) }
+            val doer = seat(DOER_ID, DOER_ROLE, parameters = GENERATED) { "unused" }
 
             val run = openRun(host, doer, gate, policy = RunPolicy(cycles = 3, planGate = gate))
             val result = run.execute()
@@ -210,8 +235,8 @@ class HostedRunArgumentRegateTest {
     @Test
     fun `a gate that removes the changed step skips it and the run goes on`() = runBlocking<Unit> {
         val gate = RecordingGate { _, _, _ -> PlanDecision.Approved(Plan.blank) }
-        val host = seat(HOST_ID, HOST_ROLE, parameters = GENERATED) { planJson(sendStep(PARTIAL), searchStep()) }
-        val doer = seat(DOER_ID, DOER_ROLE) { "unused" }
+        val host = seat(HOST_ID, HOST_ROLE) { planJson(sendStep(PARTIAL), searchStep()) }
+        val doer = seat(DOER_ID, DOER_ROLE, parameters = GENERATED) { "unused" }
 
         val run = openRun(host, doer, gate)
         val result = run.execute()
@@ -235,8 +260,8 @@ class HostedRunArgumentRegateTest {
                     return PlanDecision.Approved(plan)
                 }
             }
-            val host = seat(HOST_ID, HOST_ROLE, parameters = GENERATED) { planJson(sendStep(PARTIAL), searchStep()) }
-            val doer = seat(DOER_ID, DOER_ROLE) { "unused" }
+            val host = seat(HOST_ID, HOST_ROLE) { planJson(sendStep(PARTIAL), searchStep()) }
+            val doer = seat(DOER_ID, DOER_ROLE, parameters = GENERATED) { "unused" }
 
             val run = openRun(host, doer, gate)
             val result = run.execute()
@@ -256,8 +281,8 @@ class HostedRunArgumentRegateTest {
             val swapped = step.copy(arguments = rewritten)
             PlanDecision.Approved(Plan.ForTask(task = swapped, tasks = listOf(swapped)))
         }
-        val host = seat(HOST_ID, HOST_ROLE, parameters = GENERATED) { planJson(sendStep(PARTIAL)) }
-        val doer = seat(DOER_ID, DOER_ROLE) { "unused" }
+        val host = seat(HOST_ID, HOST_ROLE) { planJson(sendStep(PARTIAL)) }
+        val doer = seat(DOER_ID, DOER_ROLE, parameters = GENERATED) { "unused" }
 
         val run = openRun(host, doer, gate)
         val result = run.execute()
@@ -306,8 +331,8 @@ class HostedRunArgumentRegateTest {
 
     /**
      * A seat whose transport answers PERCEIVE, PLAN with [answering], and the schema
-     * strategy's parameter call with [parameters]. The send tool is the host seat's, so
-     * the host's transport is the one its parameter call reaches.
+     * strategy's parameter call with [parameters]. The send tool is the doer seat's, so
+     * the doer's transport is the one its parameter call reaches.
      */
     private fun seat(
         id: String,
@@ -344,10 +369,15 @@ class HostedRunArgumentRegateTest {
         roster = RosterConfig(
             host = HOST_ROLE,
             roles = listOf(
-                // The gated tool is the host's: the planner is shown the argument schemas
-                // of the host seat's own tools, so only those keep inline arguments.
-                RoleConfig(id = HOST_ROLE, title = "Host", instructions = PROMPT, tools = setOf(SEND_TOOL)),
-                RoleConfig(id = DOER_ROLE, title = "Doer", instructions = PROMPT, tools = setOf(SEARCH_TOOL)),
+                // Both tools are the doer's, not the host's: the host plans with every
+                // seat's tools, so a step on another seat keeps its inline arguments.
+                RoleConfig(id = HOST_ROLE, title = "Host", instructions = PROMPT),
+                RoleConfig(
+                    id = DOER_ROLE,
+                    title = "Doer",
+                    instructions = PROMPT,
+                    tools = setOf(SEND_TOOL, SEARCH_TOOL),
+                ),
             ),
         ),
         seats = mapOf(HOST_ROLE to host.descriptor, DOER_ROLE to doer.descriptor),
@@ -392,8 +422,8 @@ class HostedRunArgumentRegateTest {
 
     /** One plan step for the send tool, with its arguments inline as the planner wrote them. */
     private fun sendStep(arguments: String): String =
-        """{"description": "Send the update", "toolToUse": "${SeatTool(HOST_ROLE, SEND_TOOL).id}", """ +
-            """"seat": "${HOST_ROLE.value}", "requiresPreviousStep": false, "arguments": $arguments}"""
+        """{"description": "Send the update", "toolToUse": "${SeatTool(DOER_ROLE, SEND_TOOL).id}", """ +
+            """"seat": "${DOER_ROLE.value}", "requiresPreviousStep": false, "arguments": $arguments}"""
 
     private fun searchStep(): String =
         planStep("Search the archive", SeatTool(DOER_ROLE, SEARCH_TOOL).id, DOER_ROLE.value)
