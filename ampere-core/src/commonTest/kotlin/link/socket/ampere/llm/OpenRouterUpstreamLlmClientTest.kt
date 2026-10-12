@@ -107,7 +107,7 @@ class OpenRouterUpstreamLlmClientTest {
     // Task 2: the gap the bundled transport cannot cross.
 
     @Test
-    fun `the bundled request and response types carry no routing preference, serving host or cost`() {
+    fun `the bundled request and response types carry no routing preference or serving host or cost`() {
         val json = Json { ignoreUnknownKeys = true }
 
         // ChatCompletionRequest has no `provider` parameter, and its serializer writes none.
@@ -124,7 +124,7 @@ class OpenRouterUpstreamLlmClientTest {
     // Task 3: the policy.
 
     @Test
-    fun `the default policy pins to the maker, forbids fallback and denies data collection`() {
+    fun `the default policy pins to the maker and forbids fallback and denies data collection`() {
         val provider = OpenRouterRoutingPolicy().providerObject("anthropic")
 
         assertEquals(JsonArray(listOf(JsonPrimitive("anthropic"))), provider["order"])
@@ -158,7 +158,7 @@ class OpenRouterUpstreamLlmClientTest {
     }
 
     @Test
-    fun `pinning a maker with no known host is refused, naming the maker`() {
+    fun `pinning a maker with no known host is refused and names the maker`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             OpenRouterRoutingPolicy().providerObject("mistral")
         }
@@ -186,7 +186,7 @@ class OpenRouterUpstreamLlmClientTest {
     }
 
     @Test
-    fun `the returned ServedBy names the maker, the route and the reported cost`() = runTest {
+    fun `the returned ServedBy names the maker and the route and the reported cost`() = runTest {
         val result = client().callDetailed(request, routed)
 
         assertEquals("Hi there", result.completion.choices.single().message.content)
