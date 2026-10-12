@@ -15,6 +15,7 @@ import link.socket.ampere.agents.events.messages.MessageRepository
 import link.socket.ampere.agents.events.tickets.TicketRepository
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
+import link.socket.ampere.commitment.CommitmentLedger
 import link.socket.ampere.db.Database
 
 /**
@@ -132,6 +133,7 @@ class EnvironmentOrchestratorFactory(
             eventSerialBus = eventSerialBus,
             workspaceStateStore = workspaceStateStore,
             logger = logger,
+            commitmentLedger = CommitmentLedger.over(database),
         )
     }
 

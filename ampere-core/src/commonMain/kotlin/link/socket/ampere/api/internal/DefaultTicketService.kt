@@ -29,6 +29,7 @@ internal class DefaultTicketService(
             description = builder.description,
             priority = builder.priority,
             type = builder.type,
+            dueDate = builder.dueDate,
         )
     }
 

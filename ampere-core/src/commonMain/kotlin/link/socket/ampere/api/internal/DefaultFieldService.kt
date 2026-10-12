@@ -6,8 +6,11 @@ import link.socket.ampere.agents.domain.knowledge.toBelief
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.api.AmpereExperimentalApi
 import link.socket.ampere.api.service.FieldService
+import link.socket.ampere.commitment.CommitmentStore
+import link.socket.ampere.commitment.SqlDelightCommitmentStore
 import link.socket.ampere.db.Database
 import link.socket.ampere.field.Belief
+import link.socket.ampere.field.Commitment
 import link.socket.ampere.field.Field
 import link.socket.ampere.field.Primitive
 import link.socket.ampere.field.Ref
@@ -28,10 +31,11 @@ import link.socket.ampere.subject.SubjectStore
  *
  * The log's newest sequence is read first, so the snapshot names where in the log it was taken;
  * then the Subjects, every edge touching one of them (from either end, gathered with the store's
- * own `from` / `to` reads), each Subject's goals, the beliefs the viewer may see, and the
- * Observations it may see (the Environment branch, AMPR-447). Each viewer predicate is its own
- * store's query, ahead of its limit; `beliefLimit` bounds the beliefs and the Observations
- * separately, since an Observation is a belief that lives in another table.
+ * own `from` / `to` reads), each Subject's goals, the beliefs the viewer may see, the
+ * Observations it may see (the Environment branch, AMPR-447), and every open commitment
+ * (AMPR-449). Each viewer predicate is its own store's query, ahead of its limit; `beliefLimit`
+ * bounds the beliefs and the Observations separately, since an Observation is a belief that lives
+ * in another table. Commitments carry no sensitivity and are the same in every view.
  *
  * A belief is about the root goal of the run its row was written under, when that run formed a
  * goal tree, and about its holder otherwise — a lesson with no goal is self-knowledge. A row
@@ -48,6 +52,7 @@ internal class DefaultFieldService(
     private val knowledge: KnowledgeRepository,
     private val observations: ObservationStore,
     private val events: EventRepository,
+    private val commitments: CommitmentStore,
 ) : FieldService {
 
     override suspend fun snapshot(viewer: Ref<Subject>?, beliefLimit: Int): Result<Field> {
@@ -84,6 +89,7 @@ internal class DefaultFieldService(
         }
 
         val observed = observations.visibleTo(viewer, beliefLimit).getOrElse { return Result.failure(it) }
+        val open = commitments.withStatus(Commitment.Status.OPEN).getOrElse { return Result.failure(it) }
 
         return Result.success(
             Field(
@@ -95,6 +101,7 @@ internal class DefaultFieldService(
                 beliefs = beliefs,
                 observations = observed,
                 unmappedBeliefs = unmapped,
+                commitments = open,
             ),
         )
     }
@@ -130,6 +137,7 @@ internal class DefaultFieldService(
             knowledge = knowledge,
             observations = SqlDelightObservationStore(database),
             events = events,
+            commitments = SqlDelightCommitmentStore(database),
         )
     }
 }

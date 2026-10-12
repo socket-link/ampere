@@ -26,6 +26,7 @@ import link.socket.ampere.agents.events.tickets.TicketOrchestrator
 import link.socket.ampere.agents.events.tickets.TicketRepository
 import link.socket.ampere.agents.events.utils.ConsoleEventLogger
 import link.socket.ampere.agents.events.utils.EventLogger
+import link.socket.ampere.commitment.CommitmentLedger
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 
@@ -85,6 +86,14 @@ class EnvironmentService(
 
     val ticketOrchestrator: TicketOrchestrator
         get() = orchestrator.ticketOrchestrator
+
+    /**
+     * The Commitment ledger [ticketOrchestrator] folds its ticket events into (AMPR-449). Hand it
+     * to every `TicketActionService` built off this environment, so both ticket publishers form
+     * and resolve the same commitments.
+     */
+    val commitmentLedger: CommitmentLedger?
+        get() = orchestrator.commitmentLedger
 
     /**
      * Access to the workspace state store for task checklist UI.

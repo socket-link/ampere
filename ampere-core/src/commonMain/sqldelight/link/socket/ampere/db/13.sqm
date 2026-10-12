@@ -1,0 +1,22 @@
+-- AMPR-449 (F31): Commitments. A ticket's due date was stored and never read; this adds the table
+-- that records who undertook to meet it, formed on `TicketAssigned` and resolved on Done or
+-- reassignment. Definition copied from CommitmentStore.sq; IF NOT EXISTS keeps this a no-op on a
+-- database that already has it.
+--
+-- This ticket owns 13.sqm and only 13.sqm; 12.sqm is the ObservationStore (AMPR-447), which landed
+-- first. The contents are independent of every earlier step; the number matters only because
+-- SQLDelight runs a migration solely for a database below it.
+CREATE TABLE IF NOT EXISTS CommitmentStore (
+  created_by_event TEXT NOT NULL PRIMARY KEY,
+  ticket_id TEXT NOT NULL,
+  committer_ref TEXT NOT NULL,
+  goal_ref TEXT,
+  due_at INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  resolved_by_event TEXT,
+  resolved_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_commitment_store_ticket_status ON CommitmentStore(ticket_id, status);
+CREATE INDEX IF NOT EXISTS idx_commitment_store_status_due ON CommitmentStore(status, due_at);

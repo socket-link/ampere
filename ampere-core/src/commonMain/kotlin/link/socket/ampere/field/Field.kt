@@ -14,8 +14,8 @@ package link.socket.ampere.field
  * **Always a view for someone (F12).** [beliefs] holds what [viewer] may see: every
  * [Sensitivity.PUBLIC] belief plus the ones [viewer] holds. Another Subject's
  * [Sensitivity.PRIVATE] and [Sensitivity.PROTECTED] beliefs are not here, and a `null` viewer
- * — nobody — sees public beliefs only. Subjects, relationships and goals carry no sensitivity
- * and are the same in every view.
+ * — nobody — sees public beliefs only. Subjects, relationships, goals and commitments carry no
+ * sensitivity and are the same in every view.
  *
  * **The Environment branch is [observations] (AMPR-447, F7).** A perceived canon entity enters
  * the Field only as an Observation its perceiver holds, stored apart from knowledge so it never
@@ -41,6 +41,9 @@ package link.socket.ampere.field
  * @property unmappedBeliefs Visible rows that could not be read as a [Belief] — a knowledge row
  *   older than its provenance column names no event, and a belief with an invented provenance
  *   would be a lie about where it came from. Counted rather than dropped silently.
+ * @property commitments Every [Commitment.Status.OPEN] commitment, soonest due first (AMPR-449).
+ *   Open ones only: a resolved commitment is history, which F32 reads from the store, not from a
+ *   snapshot. Whether one is overdue is not judged here.
  */
 data class Field(
     val viewer: Ref<Subject>?,
@@ -51,6 +54,7 @@ data class Field(
     val beliefs: List<Belief>,
     val observations: List<Belief.Settled>,
     val unmappedBeliefs: Int = 0,
+    val commitments: List<Commitment> = emptyList(),
 ) {
 
     /**

@@ -1,5 +1,6 @@
 package link.socket.ampere.api.service
 
+import kotlinx.datetime.Instant
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.events.tickets.Ticket
@@ -36,8 +37,12 @@ interface TicketService {
      *     description("Transient failures cause immediate failure")
      *     priority(TicketPriority.HIGH)
      *     type(TicketType.BUG)
+     *     dueDate(Clock.System.now() + 3.days)
      * }
      * ```
+     *
+     * A ticket with a [due date][TicketBuilder.dueDate] forms its assignee's Commitment when it
+     * is assigned, and moving it to done resolves that commitment (AMPR-449).
      *
      * @param title Brief summary of the work item
      * @param configure Optional builder for additional ticket properties
@@ -106,6 +111,7 @@ class TicketBuilder {
     var description: String = ""
     var priority: TicketPriority = TicketPriority.MEDIUM
     var type: TicketType = TicketType.TASK
+    var dueDate: Instant? = null
 
     /** Set the ticket description. */
     fun description(value: String) { description = value }
@@ -115,4 +121,7 @@ class TicketBuilder {
 
     /** Set the ticket type. */
     fun type(value: TicketType) { type = value }
+
+    /** Set when the work is due; `null` for no date. */
+    fun dueDate(value: Instant?) { dueDate = value }
 }

@@ -232,6 +232,7 @@ class AmpereContext(
         TicketActionService(
             ticketRepository = environmentService.ticketRepository,
             eventApi = eventApi,
+            commitmentLedger = environmentService.commitmentLedger,
         )
     }
 

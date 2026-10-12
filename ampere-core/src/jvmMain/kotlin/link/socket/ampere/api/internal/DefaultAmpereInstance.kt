@@ -110,6 +110,7 @@ internal class DefaultAmpereInstance(
         actionService = TicketActionService(
             ticketRepository = environmentService.ticketRepository,
             eventApi = sdkEventApi,
+            commitmentLedger = environmentService.commitmentLedger,
         ),
         viewService = DefaultTicketViewService(
             ticketRepository = environmentService.ticketRepository,

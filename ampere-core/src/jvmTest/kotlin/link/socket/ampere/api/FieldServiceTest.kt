@@ -8,6 +8,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,18 +22,24 @@ import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
+import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.events.InMemoryEventApi
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.tickets.TicketPriority
+import link.socket.ampere.agents.events.tickets.TicketRepository
+import link.socket.ampere.agents.service.TicketActionService
 import link.socket.ampere.api.internal.DefaultFieldService
 import link.socket.ampere.canon.CanonId
 import link.socket.ampere.canon.CanonPlace
 import link.socket.ampere.canon.CanonProvenance
 import link.socket.ampere.canon.CanonType
 import link.socket.ampere.canon.SourceHandle
+import link.socket.ampere.commitment.CommitmentLedger
 import link.socket.ampere.domain.arc.GoalNode
 import link.socket.ampere.domain.arc.GoalTree
 import link.socket.ampere.dsl.config.AnthropicConfig
+import link.socket.ampere.field.Commitment
 import link.socket.ampere.field.Field
 import link.socket.ampere.field.Ref
 import link.socket.ampere.field.RelationshipKind
@@ -292,6 +299,31 @@ class FieldServiceTest {
 
         assertEquals(1, field.unmappedBeliefs)
         assertEquals(setOf(content("public-a")), field.beliefContents())
+    }
+
+    @Test
+    fun `a snapshot lists the open commitments and not the resolved ones`() = runBlocking<Unit> {
+        val tickets = TicketActionService(
+            ticketRepository = TicketRepository(handle.database),
+            eventApi = handle.api,
+            commitmentLedger = CommitmentLedger.over(handle.database),
+        )
+        val due = now + 3.days
+        val open = tickets.createTicket("Ship login", "", TicketPriority.HIGH, dueDate = due).getOrThrow()
+        val done = tickets.createTicket("Add tests", "", TicketPriority.MEDIUM, dueDate = due + 1.days).getOrThrow()
+        tickets.assignTicket(open.id, AGENT_A).getOrThrow()
+        tickets.assignTicket(done.id, AGENT_B).getOrThrow()
+        tickets.updateStatus(done.id, TicketStatus.Done).getOrThrow()
+
+        // B's view: a commitment carries no sensitivity, so A's is in every view.
+        val field = service.snapshot(viewer = Ref(AGENT_B)).getOrThrow()
+
+        val commitment = field.commitments.single()
+        assertEquals(open.id, commitment.ticketId)
+        assertEquals(Ref<Subject>(AGENT_A), commitment.committer)
+        assertEquals(due, commitment.due)
+        assertEquals(Commitment.Status.OPEN, commitment.status)
+        assertNull(commitment.goal)
     }
 
     @Test

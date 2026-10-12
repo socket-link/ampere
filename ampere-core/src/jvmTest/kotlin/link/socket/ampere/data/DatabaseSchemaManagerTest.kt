@@ -103,6 +103,7 @@ class DatabaseSchemaManagerTest {
             assertTrue(tableExists(driver, "LinkGrants"))
             assertTrue(tableExists(driver, "PauseStore"))
             assertTrue(tableExists(driver, "GoalStore"))
+            assertTrue(tableExists(driver, "CommitmentStore"))
             assertEquals(
                 listOf("evt-1"),
                 query(driver, "SELECT event_id FROM EventStore WHERE run_id IS NULL") { it.getString(0)!! },
@@ -138,6 +139,7 @@ class DatabaseSchemaManagerTest {
             "SubjectStore",
             "RelationshipStore",
             "GoalStore",
+            "CommitmentStore",
         ) + UNMIGRATED_SQ_TABLES
         val fresh = inMemoryDriver().use { driver ->
             DatabaseSchemaManager.ensure(driver).getOrThrow()
