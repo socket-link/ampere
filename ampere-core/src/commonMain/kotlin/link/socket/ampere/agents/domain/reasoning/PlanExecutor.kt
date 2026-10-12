@@ -8,9 +8,11 @@ import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.PlanEvent
+import link.socket.ampere.agents.domain.outcome.ContentOrigin
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.outcome.StepOutcome
+import link.socket.ampere.agents.domain.outcome.originOfAll
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.domain.task.planStepDescription
 import link.socket.ampere.agents.domain.task.planStepSeat
@@ -111,6 +113,7 @@ class PlanExecutor(
                     message = "Plan has no steps to execute",
                     executionStartTimestamp = startTime,
                     executionEndTimestamp = Clock.System.now(),
+                    origin = ContentOrigin.Own,
                 ),
                 stepOutcomes = emptyList(),
                 context = context.toImmutable(),
@@ -162,7 +165,9 @@ class PlanExecutor(
                 else -> null
             }
             if (skipReason != null) {
-                // Mark remaining steps as skipped
+                // Mark remaining steps as skipped. A skip inherits the origin of the step
+                // that caused it: a held reason is the tool's own text and is quoted into
+                // the skip's (AMPR-453).
                 for (remainingIndex in (index + 1) until plan.tasks.size) {
                     val remainingStep = plan.tasks[remainingIndex]
                     stepOutcomes.add(
@@ -171,6 +176,7 @@ class PlanExecutor(
                             stepDescription = "Execute step ${remainingStep.id}",
                             timestamp = Clock.System.now(),
                             reason = skipReason,
+                            origin = stepOutcome.origin,
                         ),
                     )
                 }
@@ -183,6 +189,10 @@ class PlanExecutor(
         val summary = buildSummary(stepOutcomes, context)
         val hasFailures = stepOutcomes.any { it is StepOutcome.Failure }
         val heldStep = stepOutcomes.firstNotNullOfOrNull { it as? StepOutcome.Held }
+        // AMPR-453: the fold's text quotes its steps — the summary lists their errors and
+        // held reasons, and a one-step plan's message becomes the step's own report — so it
+        // is the run's own only when every step was.
+        val origin = originOfAll(stepOutcomes.map { it.origin })
 
         // A hold outranks an earlier non-critical failure: it is why the walk ended.
         val overallOutcome = when {
@@ -194,6 +204,7 @@ class PlanExecutor(
                 executionEndTimestamp = endTime,
                 reason = heldStep.reason,
                 reference = heldStep.reference,
+                origin = origin,
             )
             hasFailures -> ExecutionOutcome.NoChanges.Failure(
                 executorId = executorId,
@@ -202,6 +213,7 @@ class PlanExecutor(
                 executionStartTimestamp = startTime,
                 executionEndTimestamp = endTime,
                 message = summary,
+                origin = origin,
             )
             else -> ExecutionOutcome.NoChanges.Success(
                 executorId = executorId,
@@ -210,6 +222,7 @@ class PlanExecutor(
                 executionStartTimestamp = startTime,
                 executionEndTimestamp = endTime,
                 message = summary,
+                origin = origin,
             )
         }
 
@@ -351,15 +364,24 @@ private fun Task.describe(): String = planStepDescription ?: "Execute step $id"
 
 /**
  * Result of executing a single step.
+ *
+ * Every variant carries the [origin] of its text (AMPR-453), [ContentOrigin.External]
+ * unless the step executor knows better — `SparkBasedAgent.executePlanStep` sets it from
+ * the tool it ran, or from a reasoning step's inputs — and [toStepOutcome] carries it
+ * onto the [StepOutcome] every later prompt labels.
  */
 sealed class StepResult {
     abstract val description: String
     abstract val contextUpdates: Map<String, Any>
 
+    /** Where this step's text came from. See [ContentOrigin]. */
+    abstract val origin: ContentOrigin
+
     data class Success(
         override val description: String,
         val details: String? = null,
         override val contextUpdates: Map<String, Any> = emptyMap(),
+        override val origin: ContentOrigin = ContentOrigin.External,
     ) : StepResult()
 
     data class PartialSuccess(
@@ -368,6 +390,7 @@ sealed class StepResult {
         val failureCount: Int,
         val details: String? = null,
         override val contextUpdates: Map<String, Any> = emptyMap(),
+        override val origin: ContentOrigin = ContentOrigin.External,
     ) : StepResult()
 
     data class Failure(
@@ -375,12 +398,14 @@ sealed class StepResult {
         val error: String,
         val isCritical: Boolean = false,
         override val contextUpdates: Map<String, Any> = emptyMap(),
+        override val origin: ContentOrigin = ContentOrigin.External,
     ) : StepResult()
 
     data class Skipped(
         override val description: String,
         val reason: String,
         override val contextUpdates: Map<String, Any> = emptyMap(),
+        override val origin: ContentOrigin = ContentOrigin.External,
     ) : StepResult()
 
     /**
@@ -395,7 +420,17 @@ sealed class StepResult {
         val reason: String,
         val reference: String? = null,
         override val contextUpdates: Map<String, Any> = emptyMap(),
+        override val origin: ContentOrigin = ContentOrigin.External,
     ) : StepResult()
+
+    /** This result, with its text attributed to [origin] (AMPR-453). */
+    fun withOrigin(origin: ContentOrigin): StepResult = when (this) {
+        is Success -> copy(origin = origin)
+        is PartialSuccess -> copy(origin = origin)
+        is Failure -> copy(origin = origin)
+        is Skipped -> copy(origin = origin)
+        is Held -> copy(origin = origin)
+    }
 
     /**
      * Converts this result to a StepOutcome with timestamps.
@@ -412,6 +447,7 @@ sealed class StepResult {
                 startTimestamp = startTimestamp,
                 endTimestamp = endTimestamp,
                 details = details ?: "",
+                origin = origin,
             )
             is PartialSuccess -> StepOutcome.PartialSuccess(
                 id = stepId,
@@ -421,6 +457,7 @@ sealed class StepResult {
                 successCount = successCount,
                 failureCount = failureCount,
                 details = details ?: "",
+                origin = origin,
             )
             is Failure -> StepOutcome.Failure(
                 id = stepId,
@@ -429,12 +466,14 @@ sealed class StepResult {
                 endTimestamp = endTimestamp,
                 error = error,
                 isCritical = isCritical,
+                origin = origin,
             )
             is Skipped -> StepOutcome.Skipped(
                 id = stepId,
                 stepDescription = description,
                 timestamp = startTimestamp,
                 reason = reason,
+                origin = origin,
             )
             is Held -> StepOutcome.Held(
                 id = stepId,
@@ -443,6 +482,7 @@ sealed class StepResult {
                 endTimestamp = endTimestamp,
                 reason = reason,
                 reference = reference,
+                origin = origin,
             )
         }
     }

@@ -5,6 +5,7 @@ import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.execution.recalledBlock
 
 /**
  * Parameter strategies for Product Manager Agent tools.
@@ -69,31 +70,35 @@ object ProductPrompts {
             appendLine()
         }
 
-        // Include knowledge-derived insights
+        // Include knowledge-derived insights. AMPR-453: they are read out of stored learnings,
+        // which can quote what a past run's tools read, so they reach the prompt inside the
+        // data block, labelled `[external]`.
         if (insights.hasData()) {
             appendLine("## Learned Patterns from Past Experience")
-
-            if (insights.testFirstSuccessRate > 0.5) {
-                appendLine("- Test-first approach success rate: ${(insights.testFirstSuccessRate * 100).toInt()}%")
-                if (insights.testFirstLearnings.isNotBlank()) {
-                    appendLine("  Learnings: ${insights.testFirstLearnings.take(100)}")
+            val entries = buildList {
+                if (insights.testFirstSuccessRate > 0.5) {
+                    add(
+                        buildString {
+                            val rate = (insights.testFirstSuccessRate * 100).toInt()
+                            append("Test-first approach success rate: $rate%")
+                            if (insights.testFirstLearnings.isNotBlank()) {
+                                append("\nLearnings: ${insights.testFirstLearnings.take(100)}")
+                            }
+                        },
+                    )
+                }
+                insights.optimalTaskCount?.let { count ->
+                    add("Optimal task count for similar features: $count tasks")
+                }
+                if (insights.commonFailures.isNotEmpty()) {
+                    val patterns = insights.commonFailures.keys.take(3).joinToString("\n") { pattern -> "* $pattern" }
+                    add("Common failure patterns to avoid:\n$patterns")
+                }
+                if (insights.decompositionLearnings.isNotBlank()) {
+                    add("Decomposition learnings: ${insights.decompositionLearnings.take(100)}")
                 }
             }
-
-            insights.optimalTaskCount?.let { count ->
-                appendLine("- Optimal task count for similar features: $count tasks")
-            }
-
-            if (insights.commonFailures.isNotEmpty()) {
-                appendLine("- Common failure patterns to avoid:")
-                insights.commonFailures.entries.take(3).forEach { (pattern, _) ->
-                    appendLine("  * $pattern")
-                }
-            }
-
-            if (insights.decompositionLearnings.isNotBlank()) {
-                appendLine("- Decomposition learnings: ${insights.decompositionLearnings.take(100)}")
-            }
+            if (entries.isNotEmpty()) append(recalledBlock(entries))
             appendLine()
         }
 

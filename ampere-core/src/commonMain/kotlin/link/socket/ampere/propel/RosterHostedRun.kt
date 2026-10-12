@@ -12,6 +12,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.memory.MemoryTaskTypes
+import link.socket.ampere.agents.domain.outcome.ContentOrigin
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.outcome.StepOutcome
@@ -118,9 +119,22 @@ internal class RosterHostedRun(
     private var cancellation: CancellationException? = null
     private var settled: RunResult? = null
     private var closed: Boolean = false
+    private var shownExternal: Boolean = false
 
     override val plan: Plan
         get() = gatedPlan
+
+    override val readExternalContent: Boolean
+        get() = shownExternal
+
+    /**
+     * Notes that [shown] is about to be handed to a call that renders it into a prompt
+     * (AMPR-453). Called before the call, so the flag is already up while it runs; it
+     * never comes down again. RECALL raises it on its own, in [recall].
+     */
+    private fun aboutToShow(shown: List<StepOutcome>) {
+        if (shown.any { it.origin == ContentOrigin.External }) shownExternal = true
+    }
 
     // ========================================================================
     // Charge: PERCEIVE -> RECALL -> OBSERVE -> PLAN
@@ -218,7 +232,12 @@ internal class RosterHostedRun(
                 ),
                 runId = runId,
             )
-            tellSeats(found.promptSection(recallPolicy.titleClip, recallPolicy.textClip))
+            val section = found.promptSection(recallPolicy.titleClip, recallPolicy.textClip)
+            // AMPR-453: everything recalled is `External`, and the section is on every seat's
+            // prompt from here on — so a run that recalled anything has shown a model outside
+            // content by its first PLAN.
+            if (section != null) shownExternal = true
+            tellSeats(section)
         }
     }
 
@@ -303,6 +322,7 @@ internal class RosterHostedRun(
      */
     private suspend fun planCycle(): Unit =
         host.phases.withPhase(CognitivePhase.PLAN, runId) {
+            aboutToShow(results)
             val generated = host.agent.reasoningUnit.generatePlan(
                 task = goal,
                 ideas = ideas,
@@ -375,6 +395,7 @@ internal class RosterHostedRun(
             cyclesUsed = cyclesUsed,
             stepOutcomes = results.toList(),
             outcome = executionOutcome(cancelled = cancellation != null),
+            readExternalContent = shownExternal,
         )
         settled = result
         cancellation?.let { throw it }
@@ -484,6 +505,7 @@ internal class RosterHostedRun(
                 cycle = cyclesUsed,
                 priorResults = results.toList(),
             ).asDecisionState(policy.judgmentResultClip)
+            aboutToShow(results)
 
             if (asksGoal) {
                 recordOnly(host) {
@@ -580,6 +602,7 @@ internal class RosterHostedRun(
 
         val seat = seatFor(step)
         seatsThatRan += seat.role
+        aboutToShow(priorResults)
         val result = try {
             seat.phases.withPhase(CognitivePhase.EXECUTE, runId) {
                 seat.agent.executePlanStep(

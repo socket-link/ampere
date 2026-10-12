@@ -767,9 +767,9 @@ class HostedRunJudgmentTest {
         const val GOLDEN_STATE: String =
             "{\"goal\":\"Add a retry to the uploader\",\"cycle\":2,\"results\":[" +
                 "{\"step\":\"Search for the retry policy\",\"status\":\"succeeded\"," +
-                "\"result\":\"found the retry policy in Uploader.kt\"}," +
+                "\"origin\":\"external\",\"result\":\"found the retry policy in Uploader.kt\"}," +
                 "{\"step\":\"Change the uploader\",\"status\":\"failed\"," +
-                "\"result\":\"the file was read-only\"}]}"
+                "\"origin\":\"external\",\"result\":\"the file was read-only\"}]}"
 
         /** Two steps, one of each outcome the question is meant to tell apart. */
         fun twoStepObservation(): RunObservation = RunObservation(

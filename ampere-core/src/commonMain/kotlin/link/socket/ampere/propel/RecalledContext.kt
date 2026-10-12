@@ -11,6 +11,7 @@ import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.memory.MemoryContext
 import link.socket.ampere.agents.domain.memory.retrievedSummaries
 import link.socket.ampere.agents.events.utils.generateUUID
+import link.socket.ampere.agents.execution.recalledBlock
 import link.socket.ampere.memory.Recalled
 
 /**
@@ -52,6 +53,12 @@ internal data class RecalledContext(
  * Returns null — not an empty section — when there is nothing to say. A heading over
  * no items reads as "the agent remembered nothing relevant", which is a claim this
  * has no standing to make: a seat with no memory and no sources did not look.
+ *
+ * The items sit inside the delimited data block, each labelled `[external]` (AMPR-453):
+ * a consumer's corpus is outside the run, and a stored learning can quote what an earlier
+ * run's tools read. Because the section reaches every seat's prompt, a run that renders
+ * one has shown a model outside content — [RosterHostedRun] raises
+ * [HostedRun.readExternalContent] when it does.
  */
 internal fun RecalledContext.promptSection(titleClip: Int, textClip: Int): String? {
     if (isEmpty) return null
@@ -67,9 +74,11 @@ internal fun RecalledContext.promptSection(titleClip: Int, textClip: Int): Strin
                 "task at hand, and never repeat it back.",
         )
         appendLine()
-        lines.forEach { line ->
-            appendLine("- ${line.title.clipTo(titleClip)} — ${line.text.clipTo(textClip)}")
-        }
+        append(
+            recalledBlock(
+                lines.map { line -> "${line.title.clipTo(titleClip)} — ${line.text.clipTo(textClip)}" },
+            ),
+        )
     }.trimEnd()
 }
 
