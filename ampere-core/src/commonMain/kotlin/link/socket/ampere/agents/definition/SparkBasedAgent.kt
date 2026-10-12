@@ -44,7 +44,6 @@ import link.socket.ampere.agents.domain.task.planStepDescription
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
-import link.socket.ampere.agents.execution.describeResult
 import link.socket.ampere.agents.execution.detailText
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.priorResultsSection
@@ -56,7 +55,6 @@ import link.socket.ampere.domain.agent.bundled.AgentDefinition
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.llm.LlmProvider
-import link.socket.ampere.field.Admission
 import link.socket.ampere.field.Hardness
 import link.socket.ampere.field.Rule
 import link.socket.ampere.llm.UpstreamLlmClient
@@ -64,6 +62,7 @@ import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.plug.PlugManifest
 import link.socket.ampere.plug.permission.UserGrants
 import link.socket.ampere.propel.Breaker
+import link.socket.ampere.propel.dispatchPlanStep
 import link.socket.ampere.util.ioDispatcher
 import link.socket.ampere.util.runBlockingCompat
 
@@ -321,8 +320,10 @@ open class SparkBasedAgent<S : AgentState>(
      * the Breaker and the engine's own gate always answer a step the same way. It reads a
      * run's quotas through this agent's own door under [_runId] (AMPR-445), so an agent
      * built for no run can be handed no quota it could evaluate.
+     *
+     * `internal` because [dispatchPlanStep] admits through it from `propel/` (AMPR-442).
      */
-    private val breaker: Breaker by lazy {
+    internal val breaker: Breaker by lazy {
         Breaker(
             userGrants = _userGrantProvider ?: { UserGrants() },
             eventApi = _eventApi,
@@ -545,166 +546,23 @@ open class SparkBasedAgent<S : AgentState>(
     }
 
     /**
-     * Routes a plan step to its nominated tool. Strict tool-id dispatch with no
-     * keyword fallback — if the step's `toolId` is missing or doesn't match a
-     * tool in [effectiveTools], the step fails fast with a clear error.
+     * Admits [step] and dispatches it on this agent: a one-line delegate to
+     * [dispatchPlanStep], where the body lives (AMPR-442, H19).
      *
-     * [Task.CodeChange] and [Task.Step] dispatch identically (AMPR-410): both
-     * carry a description and a nominated tool, and nothing about routing a step
-     * to a tool depends on whether the step changes code. The planner picks
-     * which type a step is (`DefaultTaskFactory`), and this reads the pair off
-     * either.
-     *
-     * Dispatch is against [effectiveTools], the same narrowed set the planner
-     * was offered, so a tool the spark stack withdrew is as unreachable as one
-     * the agent was never built with — one set, one error, no second path
-     * (AMPR-400).
-     *
-     * A step with `toolId == null` nominates no tool because the work is
-     * thinking, not acting — the plan_steps schema asks the planner to mark
-     * those with `toolToUse = null`. It is carried out by
-     * [executeReasoningStep]: one model call, not a success returned on its
-     * behalf (AMPR-407).
-     *
-     * `internal` rather than private because a roster-hosted run dispatches each
-     * of its plan's steps through the seat it was assigned to, and this is what
-     * running a step on a seat means (AMPR-393). One definition, two drivers: the
-     * Arc path's `executePlan` and
-     * [RunHost][link.socket.ampere.propel.RunHost]'s EXECUTE. Re-implementing it
-     * in the hosted run would have given the consumer-facing path its own
-     * tool-narrowing, its own reasoning-step handling and its own notion of what a
-     * step's request carries — three places to keep in step instead of one.
-     *
-     * [runRules] are the rules the *run* puts on every step, beside the ones the tool
-     * brings (AMPR-445): a hosted run passes its [RunQuotas][link.socket.ampere.propel.RunQuotas]
-     * here as Hard quota rules, and the Arc path, which has no per-run policy, passes none.
-     * They are admitted before a reasoning step's model call as well as before a tool's,
-     * because a reasoning step spends against a run like any other.
+     * The step function is shared by both drivers, so it lives in `propel/` beside the
+     * run that calls it directly. This member stays so the Arc path's callers —
+     * [dispatchStepAsPlan] and [runSubPlanForTask] — and the tests written against it
+     * reach the same function by the name they always have. See [dispatchPlanStep] for
+     * strict tool-id routing, the Breaker's admission (AMPR-440), reasoning steps
+     * (AMPR-407), held tools (AMPR-425) and [runRules], the run's own quota rules
+     * (AMPR-445).
      */
     internal suspend fun executePlanStep(
         step: Task,
         parentTask: Task,
         priorResults: List<StepOutcome>,
         runRules: List<Pair<Rule, Hardness>> = emptyList(),
-    ): StepResult {
-        if (step is Task.Blank) {
-            return StepResult.success(
-                description = "blank step",
-                details = "no-op",
-            ).withOrigin(ContentOrigin.Own)
-        }
-        val (description, toolId) = when (step) {
-            is Task.CodeChange -> step.description to step.toolId
-            is Task.Step -> step.description to step.toolId
-            else -> return StepResult.failure(
-                description = step.id,
-                error = "Plan step ${step.id} is of unsupported type " +
-                    "${step::class.simpleName}; spark-based execution only " +
-                    "handles the Task.CodeChange and Task.Step steps a planner " +
-                    "emits.",
-                isCritical = true,
-            )
-        }
-
-        if (toolId == null) {
-            admit(step, description, tool = null, rules = runRules)?.let { return it }
-            return executeReasoningStep(step, description, parentTask, priorResults)
-        }
-
-        val dispatchable = effectiveTools
-        val tool = dispatchable.firstOrNull { it.id == toolId }
-            ?: return StepResult.failure(
-                description = description,
-                error = "Plan step ${step.id} nominated toolToUse=\"$toolId\", " +
-                    "which is not in the agent's effective tool set " +
-                    "(${dispatchable.joinToString { it.id }}) — the tools it was " +
-                    "built with, narrowed by its spark stack. The executor " +
-                    "routes strictly by tool id — no keyword fallback.",
-                isCritical = true,
-            )
-
-        // AMPR-440: the Breaker admits the step before anything is spent on it. A trip
-        // returns here, before the parameter-strategy call and before the engine, with the
-        // reason on the step; an admission that could not be decided fails closed.
-        admit(step, description, tool, Breaker.rulesFor(tool) + runRules)?.let { return it }
-
-        // AMPR-453: what the tool returned is attributed to the tool's declared origin —
-        // `External` unless it proved otherwise — success, failure and hold alike, since a
-        // failure's error quotes what the tool said.
-        val request = buildPlanStepRequest(step, description, parentTask, priorResults)
-        val result = when (val outcome = reasoning.executeTool(tool, request)) {
-            is ExecutionOutcome.Success -> StepResult.success(
-                description = description,
-                details = outcome.stepDetails(toolId),
-            )
-            is ExecutionOutcome.Failure -> StepResult.failure(
-                description = description,
-                error = "tool=$toolId failed: ${outcome::class.simpleName}; " +
-                    outcome.describeResult(),
-                isCritical = true,
-            )
-            // Waiting on a person: not done, and not a fault (AMPR-425).
-            is ExecutionOutcome.Held -> StepResult.held(
-                description = description,
-                reason = outcome.reason,
-                reference = outcome.reference,
-            )
-            // The tool ran and had nothing to do: a skipped step, not a done one
-            // (AMPR-446). Until then an `else` reported it as a success, so a plan said
-            // a step was done that did nothing. No `else` now: an outcome variant added
-            // later has to be given a meaning here before this compiles.
-            ExecutionOutcome.Blank -> StepResult.skip(
-                description = description,
-                reason = "tool=$toolId returned nothing to execute",
-            )
-        }
-        return result.withOrigin(tool.resultOrigin)
-    }
-
-    /**
-     * The Breaker's answer for [step], as the failure the step ends with, or null when the
-     * step may run (AMPR-440, AMPR-445).
-     *
-     * A trip is the step's failure with the tripped rule's reason; an admission that could
-     * not be decided — a grant store that threw, a run record that could not be read — fails
-     * closed. Both are critical, so the plan walk stops on them.
-     */
-    private suspend fun admit(
-        step: Task,
-        description: String,
-        tool: Tool<*>?,
-        rules: List<Pair<Rule, Hardness>>,
-    ): StepResult? {
-        val admission = breaker.admit(tool, rules).getOrElse { e ->
-            return StepResult.failure(
-                description = description,
-                error = "Plan step ${step.id} was not admitted: ${e.message}",
-                isCritical = true,
-            )
-        }
-        return (admission as? Admission.Trip)?.let { trip ->
-            StepResult.failure(
-                description = description,
-                error = trip.reason,
-                isCritical = true,
-            )
-        }
-    }
-
-    /**
-     * What the step reports having done: the tool it ran, the outcome variant, and
-     * what that outcome actually said.
-     *
-     * The last part is the AMPR-408 half. This read `"tool=$toolId
-     * outcome=Success"` and nothing more, so even once the results were threaded
-     * forward the next step would have been handed a type name — true, and of no
-     * use to a model asked to summarise what the previous step found.
-     */
-    private fun ExecutionOutcome.stepDetails(toolId: String): String {
-        val result = describeResult()
-        val head = "tool=$toolId outcome=${this::class.simpleName}"
-        return if (result.isBlank()) head else "$head; $result"
-    }
+    ): StepResult = dispatchPlanStep(this, step, parentTask, priorResults, runRules)
 
     /**
      * Carries out a step that nominated no tool (AMPR-407).
@@ -728,8 +586,12 @@ open class SparkBasedAgent<S : AgentState>(
      * a bench or a test agent is in. A host that wants tool-less steps to stay
      * free says so with [ReasoningStepConfig.execute]`= false`, and then gets
      * the old behaviour by declaration rather than by accident.
+     *
+     * `internal` because [dispatchPlanStep] hands a tool-less step here (AMPR-442).
+     * The call is this seat's own, made with its configuration and its prompt, so it
+     * stays with the seat.
      */
-    private suspend fun executeReasoningStep(
+    internal suspend fun executeReasoningStep(
         step: Task,
         description: String,
         parentTask: Task,
@@ -837,8 +699,12 @@ open class SparkBasedAgent<S : AgentState>(
      * [step] is whichever of the two plan-step types the planner emitted, and
      * [description] is passed beside it because only those two carry one
      * (AMPR-410).
+     *
+     * `internal` because [dispatchPlanStep] builds each tool step's request through it
+     * (AMPR-442). It reads the seat's pinned workspace and live file-access scope, which
+     * are the agent's to know.
      */
-    private fun buildPlanStepRequest(
+    internal fun buildPlanStepRequest(
         step: Task,
         description: String,
         parentTask: Task,
