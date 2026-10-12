@@ -712,9 +712,15 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
      * is why the walk ended — the same rule `PlanExecutor` applies to the steps of one
      * plan, which this path hands it one at a time.
      *
+     * A skipped step — a tool that ran and had nothing to do — is handed on to the steps
+     * after it as skipped, and counts for nothing in the walk's outcome (AMPR-446). That is
+     * `PlanExecutor`'s rule too, and so is what a walk of nothing but skips settles to: a
+     * success that did nothing.
+     *
      * @param plan The plan containing tasks to execute
      * @return The combined outcome of all tasks in the plan — a hold if a step held,
-     *   else the first step that did not succeed, else the last step's outcome.
+     *   else the first step that did not succeed, else the last step's outcome, skipped
+     *   steps aside; a success that did nothing if every step was skipped.
      */
     override suspend fun executePlan(
         plan: Plan,
@@ -723,7 +729,9 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
             return Outcome.blank
         }
 
+        val walkStartedAt = Clock.System.now()
         val priorResults = mutableListOf<StepOutcome>()
+        val skipped = mutableListOf<StepOutcome.Skipped>()
         var runningOutcome: Outcome? = null
 
         for (task in plan.tasks) {
@@ -732,6 +740,12 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
             val outcome = executeTaskWithSpark(task, priorResults.toList())
             priorResults += outcome.asPriorResult(task, startedAt)
             if (outcome is ExecutionOutcome.Held) return outcome
+            // A skipped step did nothing, so it neither succeeds nor fails the walk
+            // (AMPR-446): the same as in `PlanExecutor`'s fold.
+            if (outcome is StepOutcome.Skipped) {
+                skipped += outcome
+                continue
+            }
             runningOutcome = when {
                 runningOutcome == null -> outcome
                 runningOutcome is Outcome.Success -> outcome
@@ -739,8 +753,34 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
             }
         }
 
-        return runningOutcome ?: Outcome.blank
+        return runningOutcome
+            ?: skipped.takeIf { it.isNotEmpty() }?.settled(
+                // The id `PlanExecutor` puts on its fold; a plan for anything but a task has none.
+                taskId = (plan as? Plan.ForTask)?.task?.id ?: "",
+                startedAt = walkStartedAt,
+            )
+            ?: Outcome.blank
     }
+
+    /**
+     * What a walk whose every step was skipped settles to: the success that did nothing which
+     * `PlanExecutor` folds an all-skipped plan to (AMPR-446), carrying the skips' reasons as
+     * its message.
+     *
+     * A step executor hands a skip up as the [StepOutcome.Skipped] itself so that
+     * [asPriorResult] can pass it on as one, but a skip is not a verdict: a caller reading
+     * this walk's outcome, or [runTask]'s, asks whether the work succeeded, and what
+     * `PlanExecutor` answers for the same steps is yes.
+     */
+    private fun List<StepOutcome.Skipped>.settled(taskId: TaskId, startedAt: Instant): Outcome =
+        ExecutionOutcome.NoChanges.Success(
+            executorId = id,
+            ticketId = "",
+            taskId = taskId,
+            executionStartTimestamp = startedAt,
+            executionEndTimestamp = Clock.System.now(),
+            message = joinToString("\n") { it.reason },
+        )
 
     /**
      * This step's [Outcome], as the [StepOutcome] the next step is told about
@@ -862,8 +902,10 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         }
 
         rememberNewTask(task)
+        val startedAt = Clock.System.now()
         // A task run on its own has no plan around it, so there is nothing before it.
-        return executeTaskWithSpark(task, emptyList())
+        val outcome = executeTaskWithSpark(task, emptyList())
+        return if (outcome is StepOutcome.Skipped) listOf(outcome).settled(task.id, startedAt) else outcome
     }
 
     /** Executes a tool with the given parameters */
