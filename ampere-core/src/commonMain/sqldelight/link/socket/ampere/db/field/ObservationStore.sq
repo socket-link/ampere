@@ -1,0 +1,74 @@
+-- AMPR-447 (F7): the Field's Environment branch, stored. One row per Observation — a
+-- `Belief.Settled` a Subject holds about a perceived canon entity because it perceived it
+-- (`field.observe.toObservation`). Observations live here and not in KnowledgeStore so that a
+-- perceived entity never surfaces in knowledge recall (AMPR-328 Q7); and they are stored at all
+-- because `CanonPerceivedEvent` carries ids only, so the log cannot give their content back.
+--
+-- `holder` is the perceiving Subject; `subject` is the entity's Link-qualified
+-- `canon/<link>/<id>` ref (`field.observe.environmentRef`), stored as the string it wraps.
+-- `created_by_event` / `created_at` are the row's `Provenance`: the `CanonPerceivedEvent` and its
+-- envelope's `recorded_at`. No new event announces a row — the row is the fold of that perceive.
+--
+-- `sensitivity` is a `field.Sensitivity` name and `decay` a `field.Decay` encoded by
+-- `ObservationStore.kt` (`NONE`, `HALF_LIFE:<ISO-8601 duration>`, `EXPIRES_AT:<epoch ms>`).
+-- Neither is CHECKed, as in KnowledgeStore: the only writer is the Kotlin side, and a value this
+-- build cannot decode is reported by row, not read as another. Decay is data only; the strength it
+-- implies is derived at read time, never stored.
+--
+-- The key is (created_by_event, subject, holder): one perceive observes one entity once for one
+-- holder, so storing the same perceive again writes nothing.
+CREATE TABLE ObservationStore (
+  holder TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  content TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  sensitivity TEXT NOT NULL,
+  decay TEXT NOT NULL,
+  created_by_event TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (created_by_event, subject, holder)
+);
+
+-- A holder's own rows are the bulk of every viewer read; a subject's rows answer "what is known
+-- about this entity".
+CREATE INDEX idx_observation_store_holder ON ObservationStore(holder, created_at);
+CREATE INDEX idx_observation_store_subject ON ObservationStore(subject);
+
+-- OR IGNORE: the same perceive stored twice is the same observation, and the first write stands.
+insertObservation:
+INSERT OR IGNORE INTO ObservationStore(
+  holder, subject, content, confidence, sensitivity, decay, created_by_event, created_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+-- The writer's existence check, so a re-store can report how many rows it actually added.
+observationExists:
+SELECT COUNT(*) FROM ObservationStore
+WHERE created_by_event = ? AND subject = ? AND holder = ?;
+
+-- -----------------------------------------------------------------------------
+-- Reads.
+--
+-- A read on behalf of a Subject names it as :viewer and sees every PUBLIC row plus the rows that
+-- viewer holds itself — the F12 predicate of KnowledgeStore.sq, written into the query ahead of
+-- the LIMIT so a viewer is never handed a short page because someone else's rows took the slots.
+-- A NULL viewer is nobody, and sees PUBLIC rows only.
+--
+-- The replay read takes no viewer: a replay or bake is nobody's view, so it gets PRIVATE rows of
+-- the perceive it replays but never a PROTECTED one.
+-- -----------------------------------------------------------------------------
+
+-- Everything one viewer may see, newest first: the Environment branch of a Field read.
+selectObservationsVisibleTo:
+SELECT holder, subject, content, confidence, sensitivity, decay, created_by_event, created_at
+FROM ObservationStore
+WHERE (sensitivity = 'PUBLIC' OR (:viewer IS NOT NULL AND holder = :viewer))
+ORDER BY created_at DESC, subject ASC, holder ASC
+LIMIT :limit;
+
+-- The replay read of one perceive: what folding that CanonPerceivedEvent produced.
+selectReplayableObservationsByEvent:
+SELECT holder, subject, content, confidence, sensitivity, decay, created_by_event, created_at
+FROM ObservationStore
+WHERE created_by_event = ? AND sensitivity != 'PROTECTED'
+ORDER BY subject ASC, holder ASC;

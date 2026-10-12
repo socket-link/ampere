@@ -13,6 +13,7 @@ import link.socket.ampere.field.Belief
 import link.socket.ampere.field.Ref
 import link.socket.ampere.field.Subject
 import link.socket.ampere.field.observe.toObservation
+import link.socket.ampere.observe.ObservationStore
 
 /**
  * One page of a recorded perceive: the entities, and the [CanonPerceivedEvent] the door stored
@@ -38,6 +39,18 @@ data class RecordedPerception<out E : CanonEntity>(
      */
     fun observations(holder: Ref<Subject>): List<Belief.Settled> =
         page.entities.map { it.toObservation(holder, recordedAt).getOrThrow() }
+
+    /**
+     * Store [observations] held by [holder] in [store], in one transaction, and return how many
+     * rows that added. This is the fold of the perceive: no further event is published, and each
+     * row's provenance is [perceiveEventId]. Storing the same perception again adds nothing and
+     * returns `0`.
+     *
+     * Nothing in Ampere calls this: the perceive path is driven by whoever calls
+     * [recordedPerceive], and that caller decides whose Observations these are.
+     */
+    suspend fun store(holder: Ref<Subject>, store: ObservationStore): Result<Int> =
+        store.insert(observations(holder))
 }
 
 /**

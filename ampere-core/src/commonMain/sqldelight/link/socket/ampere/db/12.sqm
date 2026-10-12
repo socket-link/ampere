@@ -1,0 +1,22 @@
+-- AMPR-447 (F7): the Environment branch. Until now an Observation — a perceived canon entity as a
+-- Belief its perceiver holds — was mapped and dropped: `CanonPerceivedEvent` carries ids only, so
+-- nothing could give its content back. This adds the holder-scoped table that keeps them, apart
+-- from KnowledgeStore so that perceived entities stay out of knowledge recall (AMPR-328 Q7).
+-- Definition copied from ObservationStore.sq; nothing to backfill, since no Observation was ever
+-- stored before this.
+--
+-- This ticket owns 12.sqm and only 12.sqm. Sibling stores that land after it renumber.
+CREATE TABLE IF NOT EXISTS ObservationStore (
+  holder TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  content TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  sensitivity TEXT NOT NULL,
+  decay TEXT NOT NULL,
+  created_by_event TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (created_by_event, subject, holder)
+);
+
+CREATE INDEX IF NOT EXISTS idx_observation_store_holder ON ObservationStore(holder, created_at);
+CREATE INDEX IF NOT EXISTS idx_observation_store_subject ON ObservationStore(subject);

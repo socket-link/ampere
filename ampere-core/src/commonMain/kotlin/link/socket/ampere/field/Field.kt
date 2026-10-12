@@ -17,9 +17,13 @@ package link.socket.ampere.field
  * — nobody — sees public beliefs only. Subjects, relationships and goals carry no sensitivity
  * and are the same in every view.
  *
- * Not here yet: Observations (the Environment branch's content — nothing stores them), Actions
- * and Constraints. Each has an open question on AMPR-328, and a Field without them is the Field
- * the stores can answer for today.
+ * **The Environment branch is [observations] (AMPR-447, F7).** A perceived canon entity enters
+ * the Field only as an Observation its perceiver holds, stored apart from knowledge so it never
+ * surfaces in recall; it is scoped exactly as [beliefs] are. By default an Observation is
+ * [Sensitivity.PRIVATE], or [Sensitivity.PROTECTED] for a person, so a viewer sees its own.
+ *
+ * Not here yet: Actions and Constraints. Each has an open question on AMPR-328, and a Field
+ * without them is the Field the stores can answer for today.
  *
  * @property viewer Whose view this is; `null` for nobody's.
  * @property asOfSequence The newest event `sequence` in the log when the read began, `0` for an
@@ -31,6 +35,9 @@ package link.socket.ampere.field
  * @property relationships Every edge touching a listed Subject, from either end, once each.
  * @property goals Every listed Subject's goals, open and completed.
  * @property beliefs What [viewer] may see, newest first, up to the limit the read asked for.
+ * @property observations The Observations [viewer] may see — each a [Belief.Settled] about an
+ *   Environment entity, whose provenance is the perceive that observed it — newest first, up to
+ *   the same limit, applied to this branch on its own.
  * @property unmappedBeliefs Visible rows that could not be read as a [Belief] — a knowledge row
  *   older than its provenance column names no event, and a belief with an invented provenance
  *   would be a lie about where it came from. Counted rather than dropped silently.
@@ -42,6 +49,7 @@ data class Field(
     val relationships: List<Relationship<Primitive, Primitive>>,
     val goals: List<HeldGoal>,
     val beliefs: List<Belief>,
+    val observations: List<Belief.Settled>,
     val unmappedBeliefs: Int = 0,
 ) {
 
