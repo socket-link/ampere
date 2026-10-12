@@ -113,7 +113,8 @@ that loop, moved into Ampere, so the consumer can delete its copy.
 13. **A seat without grants is denied** (AMPR-423, row H26). A tool that declares a
     `plugManifest` is checked against the `UserGrants` its seat's
     `HostedAgent.userGrants` returns, asked on every dispatch — on a plan step by the
-    seat's Breaker in `dispatchPlanStep` and again by its engine (AMPR-440). A seat whose provider is
+    seat's Breaker in `dispatchPlanStep` and again by its engine (AMPR-440), and a third
+    time by the engine when the step went back to the gate (AMPR-454). A seat whose provider is
     null runs on the engine's own, which grants nothing — so every permission its
     Plug-backed tools require is refused. Nothing in `propel/` defaults a seat to
     allowed, lends one seat another's provider, or caches what a provider answered.
@@ -235,6 +236,33 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     asked beside the record-only goal question of invariant 11, not instead of it. That
     question is a decision call and is opt-in; this one is deterministic and always
     asked.
+22. **A step runs with the arguments the gate approved, or not at all** (AMPR-454,
+    row H25). The gate sees each step's `Task.Step.arguments`, and `argumentsHash`
+    (`StepArguments.hash`, SHA-256 over canonical JSON — keys sorted at every depth)
+    lets it keep what it approved. During EXECUTE each step is dispatched under a
+    `StepArgumentGate` in the coroutine context; the seat's `ToolExecutionEngine`
+    consults it at `executeViaExecutor`, the funnel every tool call passes after its
+    parameters are final and before the tool-event pair opens. Arguments the same as
+    the approved ones (`StepArguments.same`) go through without a second review.
+    Different ones — a strategy filled in what the planner left out, a schema added a
+    default — go to `PlanGate.reviewChangedStep(step, approved, actual)` first:
+    approved with the step still there and carrying `actual`, the step runs and
+    `HostedRun.plan` carries the new arguments; approved without the step, it is
+    `Skipped`, the run goes on, and — like a step the gate trimmed — it is no reason
+    to skip its dependents; `Stopped`, the step and every later one are
+    `Skipped`, no further cycle is planned, `plan` goes `Plan.blank`, and the run ends
+    `RunStatus.Stopped`. A gate that hands the step back with *other* arguments has not
+    approved the call about to be made, and the step fails without running (its
+    dependents are skipped, as for any failed step). The
+    comparison fails closed: a tool with a hand-written `ParameterStrategy` (whose
+    parameters may live in a typed context no argument value shows) is re-gated on
+    every dispatch, an MCP tool is compared on the `tools/call` envelope it actually
+    receives, a tool other than the step's nominated one is refused, and a check that
+    throws refuses. A re-gated call has its plug permissions read once more before it
+    goes, since the gate may have waited on a person. Nothing outside a hosted run
+    installs a check, so every other path through the engine is unchanged; and with
+    the default `PlanGate.Pass`, whose `reviewChangedStep` falls through to `review`, a
+    hosted run is unchanged event for event.
 
 ## How it composes
 
@@ -346,7 +374,8 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | `RunQuestions` | The run's own question (`goalMet`, `GOAL_MET_ID`) and `RunObservation.asDecisionState(clip)`, the fixed-key-order JSON a decision call is given |
 | `RecallPolicy` | `sources`, `perSourceLimit`, `memoryLimit`, `titleClip`, `textClip` |
 | `RecallSource` / `Recalled` | The consumer-implemented corpus SPI (`memory/`, beside `MemoryStore`) and one item of it |
-| `PlanGate` / `PlanDecision` | `review(plan)` → `Approved(plan)` (possibly trimmed) or `Stopped(reason)` |
+| `PlanGate` / `PlanDecision` | `review(plan)` → `Approved(plan)` (possibly trimmed) or `Stopped(reason)`; `reviewChangedStep(step, approved, actual)` when a step is about to run with arguments the gate did not approve, defaulting to `review` of a one-step plan carrying `actual` |
+| `StepArguments` / `Task.Step.argumentsHash` | `canonical`, `hash` (SHA-256 hex) and `same` over a step's arguments: key order never matters, a value always does, and none / `null` / `{}` are one value |
 | `RunResult` / `RunStatus` | `cyclesUsed`, `stepOutcomes` (each with its `origin`), `outcome`, `readExternalContent`; `Succeeded` / `Failed` / `Stopped` / `Held` / `Partial` |
 | `RunObservation` | What OBSERVE hands the verifier's Probes: run id, goal, cycle, prior results |
 | `rosterRunHost(...)` | The shipped implementation, for composing without an `AmpereInstance` |
@@ -521,6 +550,24 @@ logged, or put on an event.
   update another claimer can take the run up, resume, and hold again, leaving a
   different unclaimed record under the same id; `claimHeldRun` also matches the payload
   it decoded, so nobody claims a record they never read.
+- **Comparing a step's arguments as text to decide whether to show the gate again.**
+  The planner and the schema validator write the same arguments in different key
+  orders, and a byte comparison re-asks a person about a call that did not change.
+  Compare with `StepArguments.same` (or keep `argumentsHash`), which is what the run
+  itself does.
+- **Approving a changed step by returning it with the arguments the gate would prefer.**
+  `reviewChangedStep` approves or declines the call that is about to be made; it does not
+  substitute one. A step handed back with other arguments fails without running —
+  running it with the gate's arguments would skip the schema and the strategy, and
+  running it with the generated ones would run what the gate just rewrote.
+- **Recording a step the gate removed or stopped as a failure.** Nothing went wrong: a
+  person declined. The engine returns a failure for the refused call (so a step that
+  somehow escaped the run's reading of the decision still does not pass), and the run
+  records it `Skipped`.
+- **Expecting schema-valid inline arguments never to re-gate.** `ToolArgumentSchema.validate`
+  fills an omitted optional argument from its `default` and drops names the schema does
+  not declare, so a step whose planner left one out — or added one — reaches the tool
+  with different arguments, and the gate is asked. That is the rule working, not noise.
 - **Treating `held` as a kind of failure in a tool record.** `ToolExecutionCompleted`
   for a held call has `success = false` *and* `held = true` and no `errorMessage`; a
   reader that keys on `success` alone will count holds as faults.
@@ -571,9 +618,15 @@ between `charge` and `execute` and carry seats, a gate and `RecallSource`s that 
 Arc's tick does not have. What H19 deliberately does *not* come with: a run ending on
 its completion answer, and any judgment behind `GoalCompletion` (AMPR-381 J9). The rest
 carry **no verdict**, so none of them is built: per-seat memory (H22 — AMPR-417 added
-the `holder` column, but seats still write PUBLIC), the F19–F21 reconciliation (H23),
-and re-gating a step whose arguments
-changed after approval (H25).
+the `holder` column, but seats still write PUBLIC), and the F19–F21 reconciliation (H23).
+
+Row H25 was recorded ✅ on 2026-10-11 and is built (AMPR-454, invariant 22). What it does
+*not* come with: the Arc path, which has no plan gate; any display of arguments, which is
+the consumer's; an event recording that a step went back to the gate (the decision shows
+up as the step's outcome, and the gate is the consumer's own record of what it was
+asked); and a typed view of an MCP tool's or a typed-context strategy's parameters — the
+first is compared on the envelope it is sent, the second is re-gated on every dispatch
+because nothing can show what it reads.
 
 What H24 deliberately does *not* come with: a write gate that tightens on
 `readExternalContent` (that is the consumer's, which reads the flag); any sanitising or

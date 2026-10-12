@@ -1,6 +1,8 @@
 package link.socket.ampere.propel
 
+import kotlinx.serialization.json.JsonElement
 import link.socket.ampere.agents.domain.reasoning.Plan
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.api.AmpereStableApi
 import link.socket.ampere.memory.RecallSource
 
@@ -175,14 +177,61 @@ enum class LearnPolicy {
  *
  * `review` is called once per cycle, after the plan's `TaskCreated`/`TaskStarted` are
  * on the record and before any step runs, so a stopped plan is still a plan the trace
- * holds. H25 (re-gating a step whose arguments changed after approval) has no verdict
- * and is not implemented: the plan the gate approves is the plan that runs.
+ * holds.
+ *
+ * The gate sees each step's arguments. A step carries them as
+ * [Task.Step.arguments][Task.Step.arguments], and [argumentsHash] is their hash over
+ * canonical JSON, for a gate that keeps what it approved (AMPR-454, row H25). The plan the
+ * gate approves is the plan that runs *with the arguments the gate approved*: a step
+ * whose tool is about to receive different ones — because a parameter strategy filled in
+ * what the planner left out, or a schema filled in a default — does not run until
+ * [reviewChangedStep] has approved them.
  */
 @AmpereStableApi
 interface PlanGate {
 
     /** Approve [plan] — as written or trimmed — or stop the run. */
     suspend fun review(plan: Plan): PlanDecision
+
+    /**
+     * Approve [step] running with [actual] rather than [approved], skip it, or stop the run.
+     *
+     * Called during EXECUTE, after any parameter strategy has run and immediately before
+     * the step's tool would be dispatched, when the arguments it would receive differ from
+     * [approved] — the arguments [step] carried when [review] approved it — by
+     * [StepArguments.same]. Called as well, failing closed, when the run cannot see the
+     * arguments the tool reads: a tool whose hand-written strategy promotes its parameters
+     * into a typed context is asked about on every dispatch. Never called for a step whose
+     * arguments did not change, and called once per dispatch of the step's tool — which
+     * `executePlanStep` makes once.
+     *
+     * [actual] is what the tool would receive: the arguments as validated against its
+     * schema for a function tool, and the `tools/call` envelope for an MCP tool. It is
+     * [kotlinx.serialization.json.JsonNull] when the tool would receive none.
+     *
+     * What the decision does:
+     * - [PlanDecision.Approved] with a plan that still holds [step] — by id, carrying
+     *   [actual] — runs it with [actual]. A step returned with any *other* arguments is not
+     *   run and fails: a gate may approve or decline the call that is about to be made, and
+     *   cannot substitute one nothing produced.
+     * - [PlanDecision.Approved] with a plan that no longer holds [step] skips it, recorded
+     *   as Skipped, and the run goes on to the next step.
+     * - [PlanDecision.Stopped] ends the run `Stopped`, exactly as a stopped plan does: the
+     *   step does not run, every later step of the plan is skipped, and no further cycle
+     *   is planned.
+     *
+     * The default asks [review] about a one-step plan carrying [step] with [actual], so a
+     * gate written before this method existed reviews the changed step as it would any
+     * plan — and [Pass] approves it.
+     */
+    suspend fun reviewChangedStep(
+        step: Task.Step,
+        approved: JsonElement?,
+        actual: JsonElement,
+    ): PlanDecision {
+        val changed = step.copy(arguments = actual)
+        return review(Plan.ForTask(task = changed, tasks = listOf(changed), estimatedComplexity = 1))
+    }
 
     /**
      * The gate that approves every plan unchanged.
@@ -212,7 +261,9 @@ sealed interface PlanDecision {
     /**
      * Run nothing more.
      *
-     * No step of *this* plan executes, and the run still closes: LEARN records the
+     * No step of *this* plan executes — or, when the gate answers
+     * [PlanGate.reviewChangedStep] with it, no step from the one whose arguments changed
+     * onward, the steps before it having already run. The run still closes: LEARN records the
      * outcome, the task ends `TaskCompleted` — the run did what it was told, which
      * was to stop — and only the seats that executed something store Knowledge.
      * Stopping the first plan therefore stores none; stopping a later cycle's leaves

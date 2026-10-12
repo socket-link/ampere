@@ -62,6 +62,12 @@ interface HostedRun : CoroutineContext.Element {
      * The host seat produced it and the [PlanGate] approved it. Before [execute] it
      * is what is about to run; after a cycle with `cycles > 1` it is the plan the
      * *latest* PLAN produced. [Plan.Blank] when the gate stopped the run.
+     *
+     * Each step carries its arguments
+     * ([Task.Step.arguments][link.socket.ampere.agents.domain.task.Task.Step.arguments])
+     * and their hash ([argumentsHash], over canonical JSON), which is what the gate was
+     * shown and what it approved (AMPR-454). A step that went back to the gate because its
+     * arguments changed, and was approved, carries the arguments it ran with from then on.
      */
     val plan: Plan
 
@@ -220,8 +226,10 @@ enum class RunStatus {
      *
      * Not the same as "nothing ran": a multi-cycle run whose second plan was stopped
      * has the first cycle's steps in [RunResult.stepOutcomes] and that cycle's outcome
-     * in [RunResult.outcome]. What this says is which of the three ways a run can end
-     * happened — the gate's, rather than the cap's or a failure's.
+     * in [RunResult.outcome]. The same holds within a cycle when the gate stops a step
+     * whose arguments changed after approval (AMPR-454): the steps before it ran, it and
+     * every step after it are Skipped. What this says is which of the three ways a run can
+     * end happened — the gate's, rather than the cap's or a failure's.
      */
     Stopped,
 

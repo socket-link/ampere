@@ -1,5 +1,6 @@
 package link.socket.ampere.propel
 
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -57,6 +58,11 @@ import link.socket.ampere.util.logWith
  * directly or through another, is skipped with the failed step's id as its reason, and
  * every other step still runs. A run where some steps succeeded and some failed ends
  * [RunStatus.Partial].
+ *
+ * Each step runs with the arguments the gate approved or not at all (AMPR-454, row H25):
+ * a step whose tool is about to receive different ones — a parameter strategy filled them
+ * in, a schema added a default — goes back to [PlanGate.reviewChangedStep] first, and a
+ * stop there ends the run [RunStatus.Stopped] exactly as a stopped plan does.
  *
  * A cycle that executed something may also be *asked* about itself before the loop
  * decides whether to continue ([assess], AMPR-421). Every answer is recorded and none
@@ -402,8 +408,10 @@ internal class RosterHostedRun(
                 // recorded. Nothing below reads the answer.
                 completions += goalCompletion.isComplete(lastPlanOutcome)
                 // A held cycle is not asked whether the goal is met: it is waiting, and
-                // the run has already decided that nothing follows it.
-                if (heldAt == null) assess()
+                // the run has already decided that nothing follows it. Nor is a cycle the
+                // gate stopped part-way, once a step's arguments changed (AMPR-454): the
+                // gate has said nothing more runs.
+                if (heldAt == null && stoppedAt == null) assess()
             }
             captureCancellation()
             // A hold is a full stop, whatever `cycles` says: the next PLAN would be planning
@@ -460,6 +468,9 @@ internal class RosterHostedRun(
      * the walk on it and skipped the rest (AMPR-425). What the run adds is the record —
      * its task is marked blocked on the held step, which is the state a resumed run would
      * pick up — and [execute]'s decision not to plan again.
+     *
+     * A cycle the gate stopped part-way (AMPR-454) leaves [plan] [Plan.blank], as a
+     * stopped plan does: nothing more is about to run.
      */
     private suspend fun runCycle(toRun: Plan) {
         val execution = host.phases.withPhase(CognitivePhase.EXECUTE, runId) {
@@ -486,6 +497,7 @@ internal class RosterHostedRun(
             heldAt = held
             lifecycle?.blocked(blockedByTaskId = held.id, reason = held.reason)
         }
+        if (stoppedAt != null) gatedPlan = Plan.blank
     }
 
     /**
@@ -628,7 +640,8 @@ internal class RosterHostedRun(
     }
 
     /**
-     * Runs [step] on its seat, or skips it because a step it depends on failed.
+     * Runs [step] on its seat, or skips it because the run was stopped or a step it
+     * depends on failed.
      *
      * A failure that comes back is handed on as *non-critical*, so `PlanExecutor` walks
      * on to the next step instead of skipping every one after it (AMPR-450). Every
@@ -644,9 +657,28 @@ internal class RosterHostedRun(
      * reached (AMPR-445). Walking on from the first two would dispatch the next step on a
      * dead run; walking on from the third would trip every remaining step one at a time,
      * because a spend never goes back down.
+     *
+     * The step runs under the check that holds it to the arguments the gate approved
+     * (AMPR-454, row H25). The check rides in the coroutine context into the seat's
+     * `ToolExecutionEngine`, which consults it at its dispatch funnel — the one point
+     * every tool call passes after its parameters are final and before the tool runs.
+     * Nothing below this function needs to know about it, and no path outside a hosted
+     * run carries one. What the gate said when it was asked again is read back here: a
+     * step it removed is recorded Skipped rather than as the failure the engine returned
+     * for it, and — like a step the [PlanGate] trimmed — is no reason to skip its
+     * dependents; a step it stopped is recorded Skipped too, the run is marked stopped,
+     * and every later step of the plan is skipped without being dispatched. Neither is a
+     * fault, and recording one as a failure would put a fault in the trace that did not
+     * happen. Anything else the check refused stays the failure the engine reported.
      */
     private suspend fun dispatch(step: Task, priorResults: List<StepOutcome>): StepResult {
         val description = step.planStepDescription ?: step.id
+        stoppedAt?.let { stopped ->
+            return StepResult.Skipped(
+                description = description,
+                reason = "Skipped: the plan gate stopped the run (${stopped.reason})",
+            )
+        }
         failedDependencyOf(step)?.let { failed ->
             failedRoots[step.id] = failed
             return StepResult.skip(description = description, reason = "depends on failed step $failed")
@@ -655,15 +687,18 @@ internal class RosterHostedRun(
         val seat = seatFor(step)
         seatsThatRan += seat.role
         aboutToShow(priorResults)
+        val argumentGate = StepArgumentGate.forStep(step, policy.planGate)
         val result = try {
             seat.phases.withPhase(CognitivePhase.EXECUTE, runId) {
-                dispatchPlanStep(
-                    agent = seat.agent,
-                    step = step,
-                    parentTask = goal,
-                    priorResults = priorResults,
-                    runRules = runRules,
-                )
+                withContext(argumentGate ?: EmptyCoroutineContext) {
+                    dispatchPlanStep(
+                        agent = seat.agent,
+                        step = step,
+                        parentTask = goal,
+                        priorResults = priorResults,
+                        runRules = runRules,
+                    )
+                }
             }
         } catch (e: CancellationException) {
             // Held, not rethrown here: `PlanExecutor` publishes this step's completed
@@ -680,6 +715,23 @@ internal class RosterHostedRun(
                 description = description,
                 error = "Exception during step execution: ${e.message}",
             )
+        }
+
+        when (val regated = argumentGate?.decision) {
+            null -> Unit
+            is Regated.Approved -> gatedPlan = gatedPlan.withStepArguments(step.id, regated.arguments)
+            Regated.Removed -> return StepResult.Skipped(
+                description = description,
+                reason = "Skipped: ${StepArgumentGate.REMOVED}",
+            )
+            is Regated.Stopped -> {
+                stoppedAt = regated.decision
+                return StepResult.Skipped(
+                    description = description,
+                    reason = "Skipped: the plan gate stopped the run once this step's " +
+                        "arguments changed (${regated.decision.reason})",
+                )
+            }
         }
 
         if (result !is StepResult.Failure) return result
