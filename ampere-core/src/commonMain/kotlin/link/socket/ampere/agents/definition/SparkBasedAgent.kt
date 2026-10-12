@@ -481,6 +481,11 @@ open class SparkBasedAgent<S : AgentState>(
      *
      * [priorResults] is what ran before this step in the plan it came from, seeded
      * into the wrapper plan's step context (AMPR-408).
+     *
+     * A skipped step is the one exception: it comes back as its own
+     * [StepOutcome.Skipped], not folded (AMPR-446). The fold of a plan that only
+     * skipped is a success, and handed to [AutonomousAgent.executePlan] that would
+     * reach the next step as a done one.
      */
     private suspend fun dispatchStepAsPlan(step: Task, priorResults: List<StepOutcome>): Outcome {
         val result = reasoning.executePlan(
@@ -497,7 +502,12 @@ open class SparkBasedAgent<S : AgentState>(
         ) { planStep, context ->
             executePlanStep(planStep, parentTask = step, priorResults = context.priorResults)
         }
-        return result.outcome.reportingStep(result.stepOutcomes.singleOrNull())
+        val stepOutcome = result.stepOutcomes.singleOrNull()
+        // A skip is handed up as itself (AMPR-446). Folded, it is the success that did
+        // nothing `PlanExecutor` makes of an all-skipped plan, and the walk would pass it on
+        // to the next step as done; `AutonomousAgent` settles the verdict itself.
+        if (stepOutcome is StepOutcome.Skipped) return stepOutcome
+        return result.outcome.reportingStep(stepOutcome)
     }
 
     /**
@@ -624,16 +634,19 @@ open class SparkBasedAgent<S : AgentState>(
                     outcome.describeResult(),
                 isCritical = true,
             )
-            // Waiting on a person: not done, and not a fault (AMPR-425). Ahead of the
-            // `else`, which would otherwise report the step succeeded.
+            // Waiting on a person: not done, and not a fault (AMPR-425).
             is ExecutionOutcome.Held -> StepResult.held(
                 description = description,
                 reason = outcome.reason,
                 reference = outcome.reference,
             )
-            else -> StepResult.success(
+            // The tool ran and had nothing to do: a skipped step, not a done one
+            // (AMPR-446). Until then an `else` reported it as a success, so a plan said
+            // a step was done that did nothing. No `else` now: an outcome variant added
+            // later has to be given a meaning here before this compiles.
+            ExecutionOutcome.Blank -> StepResult.skip(
                 description = description,
-                details = outcome.stepDetails(toolId),
+                reason = "tool=$toolId returned nothing to execute",
             )
         }
     }
