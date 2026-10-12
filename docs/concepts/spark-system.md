@@ -168,8 +168,8 @@ time, dispatching each parse result by variant: `Phase` becomes a
 by eligibility, tag intersection, and keyword match against `whenToUse`;
 `SparkRegistry.roleSparkById(id)`, `languageSparkById(id)`, and
 `projectSparkById(id)` resolve capability-bearing sparks by canonical id.
-`PhaseSparkManager` consults the phase surface when
-`AmpereSpikeFlags.declarativeSparksEnabled` is on; the `SparkBasedAgent`
+`PhaseSparkManager` consults the phase surface when it was constructed with
+`declarativeSparks = true` (and holds a library); the `SparkBasedAgent`
 role factories consult the role surface at construction time and fail fast
 if the bundled role fixture is missing.
 When an `AgentEventApi` door is provided, `PhaseSparkManager` also emits
@@ -177,7 +177,7 @@ When an `AgentEventApi` door is provided, `PhaseSparkManager` also emits
 phase changes are observable even when consumers do not inspect Spark stack
 events. `enabled` is the master gate — `enterPhaseInternal` and
 `withPhaseInternal` both return early on `if (!enabled)`
-(`PhaseSparkManager.kt:110, 161`), so with phase handling off a run emits no
+(`PhaseSparkManager.kt:118, 169`), so with phase handling off a run emits no
 phase events at all. Under it, `publishBrackets` and `injectPhaseSparks` are
 independent (AMPR-387), so a run can be bracketed without its prompt changing.
 The door is the agent's own, so the events name the holder; with no door wired,
@@ -209,7 +209,7 @@ re-deriving them. It returns a `MarkdownSpark`:
 
 The frontmatter map is flat `Map<String, String>` on purpose: it is not the
 typed `SparkFrontmatter` schema, and the public entry deliberately says less
-than a bundled `.spark.md` can. `AmpereSpikeFlags` does not gate it.
+than a bundled `.spark.md` can. The manager's `declarativeSparks` gate does not apply to it.
 
 `SparkStack.buildSystemPrompt(currentPhase, preamble)` renders a trimmed
 `preamble` plus a `---` separator ahead of the cognitive-context header, so a
@@ -259,7 +259,6 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - `agents/domain/cognition/sparks/SparkRegistry.kt` — public role/language/project lookup consumed by factories and default spark helpers.
 - `agents/domain/cognition/sparks/DefaultSparkCatalog.kt`, `DeclarativeSparkIds.kt` — synchronous bundled registry access for legacy non-suspend factory paths plus canonical ids.
 - `agents/domain/cognition/sparks/PhaseSparkLibrary.kt`, `DefaultPhaseSparkLibrary.kt` — read-only catalog with deterministic `selectFor` ordering; extends `SparkRegistry`.
-- `agents/domain/cognition/sparks/AmpereSpikeFlags.kt` — `declarativeSparksEnabled: Boolean = false`; gates declarative spark application.
 - `composeResources/files/sparks/*.spark.md` — bundled declarative spark fixtures.
 - `agents/definition/AutonomousAgent.kt` — `availableTools` (the permitted *ids*, null when unconstrained) and `effectiveTools` (`requiredTools` ∩ permitted ids: the tools the agent may actually act with).
 - `agents/definition/SparkBasedAgent.kt` — the tool-enforcement sites (the reasoning unit is built with `availableTools = { effectiveTools }`, and `executePlanStep` resolves a step's `toolId` against `effectiveTools`, for a `Task.CodeChange` and a `Task.Step` alike) plus `buildPlanStepRequest`, which stamps `effectiveFileAccess` onto the request (alongside the workspace pin and, since AMPR-408, the earlier steps' results — none of which the spark stack narrows). A step that nominates *no* tool skips that lookup entirely and goes to `executeReasoningStep` — one `EXECUTE`-tagged model call by this agent, gated on `cognitiveConfig.reasoningSteps.execute` (AMPR-407) and handed the same earlier results (AMPR-412). See [PropelLoop](propel-loop.md).
@@ -309,7 +308,7 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - **Inspect the active stack** — subscribe to `SparkAppliedEvent` / `SparkRemovedEvent` on the bus, or read `SparkStack.current`.
 - **Enable phase sparks** — set `AgentConfiguration.cognitiveConfig.phaseSparks.enabled = true` (optionally per-phase via `phases`), and hand that `CognitiveConfig` to whichever factory builds the agent (`AgentFactory`, `SparkAgentFactory`, or a `SparkBasedAgent.<Role>(...)` factory — all take `cognitiveConfig`). `AMPERE_PHASE_SPARKS=true` forces it on process-wide as a developer switch.
 - **Bracket a run's phases without changing its prompt** — `PhaseSparkConfig(enabled = true, injectPhaseSparks = false)`. The agent publishes `PhaseEntered` / `PhaseExited` for every `withPhase` and its system prompt is unchanged. The mirror, `publishBrackets = false`, injects the guidance and publishes nothing.
-- **Enable declarative phase sparks** — set `AmpereSpikeFlags.declarativeSparksEnabled = true` and inject a `PhaseSparkLibrary` into the agent (via `SparkBasedAgent.setPhaseSparkLibrary` or `PhaseSparkManager.createWithLibrary`). Default is off; flip in `try { ... } finally { ... = false }` blocks in tests.
+- **Enable declarative phase sparks** — attach a `PhaseSparkLibrary` with `SparkBasedAgent.setPhaseSparkLibrary` (`AgentFactory.create` does this for every agent it builds); the agent then builds its manager with `declarativeSparks = true`. For a hand-built manager, pass `library` and `declarativeSparks = true` to `PhaseSparkManager.internalCreate` / `createWithLibrary`. The gate defaults to off and is a value on one manager, so a test needs no `try` / `finally` and no cleanup.
 
 ## Anti-patterns
 
@@ -325,6 +324,7 @@ exceed parent permissions, so adding a Spark is monotone safe.
 - **Using `java.nio.file.PathMatcher` for the glob matcher.** It is JVM-only, and `ampere-core` also targets Android, iOS, JS and wasmJs. `FileAccessScope.matches` is pure `commonMain` for that reason, and the pattern syntax is deliberately small enough not to need an `expect`/`actual` per platform.
 - **Re-implementing the `## When <Phase>` split in a consumer.** That is what AMPR-392 closed: the rules are small enough to re-derive and subtle enough to re-derive *wrongly* (four headings instead of six, a section that swallows the appendix behind it, a `## When nothing matches` silently eaten). Call `Spark.fromMarkdown`.
 - **Concatenating around `buildSystemPrompt` to get a charter in first.** The prompt's separator structure is the stack's; a caller gluing text to the front of the returned string owns a `---` it cannot see. Pass `preamble`.
+- **A process-wide flag written from a factory.** Declarative sparks used to be gated by `AmpereSpikeFlags.declarativeSparksEnabled`, which `AgentFactory.create` set to `true` and never reset, so building one agent changed what every other agent's `PhaseSparkManager` did, and which test class ran first in the JVM decided whether an unrelated "flag off" test passed (AMPR-455; it failed the `v0.19.0` publish job). The gate is now `PhaseSparkManager`'s own constructor value; keep any new switch of this kind per-instance.
 - **Using `PhaseSpark` to narrow tools.** Phase sparks are advisory prompt content, not gates. Capability narrowing belongs in role, language, project, or task sparks.
 - **Building an `AgentConfiguration` without the `cognitiveConfig` you were handed.** This was the AMPR-387 bug exactly: `SparkBasedAgent.agentConfiguration` constructed `AgentConfiguration(...)` without one, so the default (`phaseSparks.enabled = false`) won and the documented config path did nothing for two releases while `AgentFactory(cognitiveConfig = …)` fed a private getter nothing read. A config parameter that is accepted and dropped reads as supported.
 - **Treating `currentCognitivePhase` as observability.** It is prompt state — `buildSystemPrompt` is its only reader. Subscribe to `CognitivePhaseEvent` to know what phase an agent is in; `getCurrentPhase()` on the manager is the in-process equivalent.

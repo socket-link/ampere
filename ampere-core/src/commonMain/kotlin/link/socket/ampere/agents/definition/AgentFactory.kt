@@ -5,7 +5,6 @@ import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.config.CognitiveConfig
 import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.agents.domain.cognition.sparks.AmpereProjectSpark
-import link.socket.ampere.agents.domain.cognition.sparks.AmpereSpikeFlags
 import link.socket.ampere.agents.domain.cognition.sparks.DefaultPhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.LanguageSparkIds
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
@@ -371,15 +370,14 @@ class AgentFactory(
      * Wires the bundled declarative spark library into the agent so its
      * `.spark.md` per-phase contributions activate during the cognitive
      * loop. Only spark-based agents have the setter (the legacy typed
-     * agents are gone after Waves 1–2). Also flips on the runtime gate
-     * for the declarative-spark path; the flag defaults to off for
-     * backward-compat callers that wire agents by hand without a
-     * library.
+     * agents are gone after Waves 1–2). Attaching the library is also what
+     * turns the declarative-spark path on, for this agent only: the agent
+     * hands its own [PhaseSparkManager] the gate. Agents wired by hand
+     * without a library keep it off, and nothing here writes process state.
      */
     private fun attachPhaseSparkLibrary(agent: AutonomousAgent<*>) {
         if (agent !is SparkBasedAgent<*>) return
         agent.setPhaseSparkLibrary(phaseSparkLibrary)
-        AmpereSpikeFlags.declarativeSparksEnabled = true
     }
 
     /**

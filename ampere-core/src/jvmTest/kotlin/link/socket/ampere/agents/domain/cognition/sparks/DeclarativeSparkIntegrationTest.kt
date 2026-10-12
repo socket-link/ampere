@@ -72,22 +72,17 @@ class DeclarativeSparkIntegrationTest {
             agent = agent,
             enabled = true,
             library = library,
+            declarativeSparks = true,
         )
 
-        try {
-            AmpereSpikeFlags.declarativeSparksEnabled = true
-
-            manager.withPhase(
+        manager.withPhase(
+            phase = CognitivePhase.PLAN,
+            selectionContext = SparkSelectionContext(
                 phase = CognitivePhase.PLAN,
-                selectionContext = SparkSelectionContext(
-                    phase = CognitivePhase.PLAN,
-                    text = "draft a recipe for risotto",
-                ),
-            ) {
-                agent.callLLM("plan the work")
-            }
-        } finally {
-            AmpereSpikeFlags.declarativeSparksEnabled = false
+                text = "draft a recipe for risotto",
+            ),
+        ) {
+            agent.callLLM("plan the work")
         }
 
         val cookingMarker = "Domain Context: Cooking"

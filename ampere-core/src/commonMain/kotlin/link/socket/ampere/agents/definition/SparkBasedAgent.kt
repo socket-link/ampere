@@ -208,10 +208,12 @@ open class SparkBasedAgent<S : AgentState>(
     private var _phaseSparkLibrary: PhaseSparkLibrary? = null
 
     /**
-     * Sets the [PhaseSparkLibrary] consulted by the agent's [PhaseSparkManager]
-     * when [link.socket.ampere.agents.domain.cognition.sparks.AmpereSpikeFlags.declarativeSparksEnabled]
-     * is on. Must be called before the agent enters its first cognitive phase
-     * (the manager is constructed lazily on first phase entry).
+     * Sets the [PhaseSparkLibrary] consulted by the agent's [PhaseSparkManager].
+     * Attaching a library is what turns declarative sparks on for this agent
+     * alone: [createPhaseSparkManager] hands its manager the gate as a value,
+     * `true` exactly when a library is set. Must be called before the agent
+     * enters its first cognitive phase (the manager is constructed lazily on
+     * first phase entry).
      */
     internal fun setPhaseSparkLibrary(library: PhaseSparkLibrary?) {
         _phaseSparkLibrary = library
@@ -222,6 +224,7 @@ open class SparkBasedAgent<S : AgentState>(
             agent = this,
             phaseConfig = agentConfiguration.cognitiveConfig.phaseSparks,
             library = _phaseSparkLibrary,
+            declarativeSparks = _phaseSparkLibrary != null,
             eventApi = _eventApi,
         )
 

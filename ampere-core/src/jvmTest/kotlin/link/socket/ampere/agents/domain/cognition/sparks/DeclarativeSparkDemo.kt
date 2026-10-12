@@ -126,21 +126,17 @@ class DeclarativeSparkDemo {
             agent = flagOnAgent,
             enabled = true,
             library = library,
+            declarativeSparks = true,
         )
 
-        try {
-            AmpereSpikeFlags.declarativeSparksEnabled = true
-            flagOnManager.withPhase(
+        flagOnManager.withPhase(
+            phase = CognitivePhase.PLAN,
+            selectionContext = SparkSelectionContext(
                 phase = CognitivePhase.PLAN,
-                selectionContext = SparkSelectionContext(
-                    phase = CognitivePhase.PLAN,
-                    text = selectionText,
-                ),
-            ) {
-                flagOnAgent.callLLM("plan the work")
-            }
-        } finally {
-            AmpereSpikeFlags.declarativeSparksEnabled = false
+                text = selectionText,
+            ),
+        ) {
+            flagOnAgent.callLLM("plan the work")
         }
 
         out.appendLine()

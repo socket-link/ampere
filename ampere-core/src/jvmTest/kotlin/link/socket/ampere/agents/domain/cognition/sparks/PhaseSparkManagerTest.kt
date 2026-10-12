@@ -305,7 +305,7 @@ class PhaseSparkManagerTest {
     }
 
     @Test
-    fun `library is ignored when spike flag is off`() = runBlocking {
+    fun `library is ignored when the declarative gate is off`() = runBlocking {
         val sources = listOf(
             DeclarativePhaseSparkSource(
                 id = "cooking-domain",
@@ -318,22 +318,19 @@ class PhaseSparkManagerTest {
         )
         val library = DefaultPhaseSparkLibrary.fromSources(sources)
         val agent = TestAgent()
-        val manager = PhaseSparkManager.internalCreate(agent, enabled = true, library = library)
-        // The flag is process-wide and AgentFactory.create flips it on without ever
-        // resetting it, so another test class may have run first. Pin it off.
-        val previousFlag = AmpereSpikeFlags.declarativeSparksEnabled
-        try {
-            AmpereSpikeFlags.declarativeSparksEnabled = false
-            manager.enterPhase(CognitivePhase.PLAN)
-            assertEquals(1, agent.sparkDepth)
-            manager.cleanup()
-        } finally {
-            AmpereSpikeFlags.declarativeSparksEnabled = previousFlag
-        }
+        val manager = PhaseSparkManager.internalCreate(
+            agent,
+            enabled = true,
+            library = library,
+            declarativeSparks = false,
+        )
+        manager.enterPhase(CognitivePhase.PLAN)
+        assertEquals(1, agent.sparkDepth)
+        manager.cleanup()
     }
 
     @Test
-    fun `library augments built-in phase spark when spike flag is on and selection matches`() = runBlocking {
+    fun `library augments built-in phase spark when the gate is on and selection matches`() = runBlocking {
         val sources = listOf(
             DeclarativePhaseSparkSource(
                 id = "cooking-domain",
@@ -346,22 +343,22 @@ class PhaseSparkManagerTest {
         )
         val library = DefaultPhaseSparkLibrary.fromSources(sources)
         val agent = TestAgent()
-        val manager = PhaseSparkManager.internalCreate(agent, enabled = true, library = library)
-        try {
-            AmpereSpikeFlags.declarativeSparksEnabled = true
-            manager.enterPhase(
-                CognitivePhase.PLAN,
-                SparkSelectionContext(phase = CognitivePhase.PLAN, text = "draft a recipe"),
-            )
-            assertEquals(2, agent.sparkDepth)
-            assertTrue(agent.cognitiveState.contains("[Phase:Plan]"))
-            assertTrue(agent.cognitiveState.contains("[PhaseSpark:cooking-domain]"))
+        val manager = PhaseSparkManager.internalCreate(
+            agent,
+            enabled = true,
+            library = library,
+            declarativeSparks = true,
+        )
+        manager.enterPhase(
+            CognitivePhase.PLAN,
+            SparkSelectionContext(phase = CognitivePhase.PLAN, text = "draft a recipe"),
+        )
+        assertEquals(2, agent.sparkDepth)
+        assertTrue(agent.cognitiveState.contains("[Phase:Plan]"))
+        assertTrue(agent.cognitiveState.contains("[PhaseSpark:cooking-domain]"))
 
-            manager.cleanup()
-            assertEquals(0, agent.sparkDepth)
-        } finally {
-            AmpereSpikeFlags.declarativeSparksEnabled = false
-        }
+        manager.cleanup()
+        assertEquals(0, agent.sparkDepth)
     }
 
     @Test
@@ -384,20 +381,20 @@ class PhaseSparkManagerTest {
         )
         val library = DefaultPhaseSparkLibrary.fromSources(extraSources)
         val agent = TestAgent()
-        val manager = PhaseSparkManager.internalCreate(agent, enabled = true, library = library)
-        try {
-            AmpereSpikeFlags.declarativeSparksEnabled = true
-            manager.enterPhase(CognitivePhase.PLAN)
-            // Built-in Phase:Plan + 2 declarative sparks
-            assertEquals(3, agent.sparkDepth)
-            assertTrue(agent.cognitiveState.contains("[Phase:Plan]"))
-            assertTrue(agent.cognitiveState.contains("[PhaseSpark:extra-a]"))
-            assertTrue(agent.cognitiveState.contains("[PhaseSpark:extra-b]"))
+        val manager = PhaseSparkManager.internalCreate(
+            agent,
+            enabled = true,
+            library = library,
+            declarativeSparks = true,
+        )
+        manager.enterPhase(CognitivePhase.PLAN)
+        // Built-in Phase:Plan + 2 declarative sparks
+        assertEquals(3, agent.sparkDepth)
+        assertTrue(agent.cognitiveState.contains("[Phase:Plan]"))
+        assertTrue(agent.cognitiveState.contains("[PhaseSpark:extra-a]"))
+        assertTrue(agent.cognitiveState.contains("[PhaseSpark:extra-b]"))
 
-            manager.cleanup()
-            assertEquals(0, agent.sparkDepth)
-        } finally {
-            AmpereSpikeFlags.declarativeSparksEnabled = false
-        }
+        manager.cleanup()
+        assertEquals(0, agent.sparkDepth)
     }
 }
