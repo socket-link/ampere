@@ -30,6 +30,8 @@ import kotlinx.datetime.Instant
  *   entity. Never another Belief, by the bound on [Ref].
  * @property content The belief itself, as prose. Structure beyond prose is a later
  *   decision; today's `Knowledge.content` is prose and this does not widen it.
+ * @property kind What formed the belief; see [BeliefKind]. Required on every
+ *   construction, with no default, so no caller states a kind by omission.
  * @property sensitivity Who may see it; see [Sensitivity].
  * @property decay How the belief ages; see [Decay].
  * @property provenance The event whose fold step formed the belief (F11).
@@ -39,6 +41,7 @@ sealed interface Belief {
     val holder: Ref<Subject>
     val subject: Ref<Primitive>
     val content: String
+    val kind: BeliefKind
     val sensitivity: Sensitivity
     val decay: Decay
     val provenance: Provenance
@@ -54,6 +57,7 @@ sealed interface Belief {
         override val holder: Ref<Subject>,
         override val subject: Ref<Primitive>,
         override val content: String,
+        override val kind: BeliefKind,
         override val confidence: Double,
         override val sensitivity: Sensitivity,
         override val decay: Decay = Decay.None,
@@ -68,6 +72,7 @@ sealed interface Belief {
         override val holder: Ref<Subject>,
         override val subject: Ref<Primitive>,
         override val content: String,
+        override val kind: BeliefKind,
         override val sensitivity: Sensitivity,
         override val decay: Decay = Decay.None,
         override val provenance: Provenance,
@@ -75,6 +80,35 @@ sealed interface Belief {
         override val confidence: Double?
             get() = null
     }
+}
+
+/**
+ * What formed a [Belief] (AMPR-448, F21).
+ *
+ * A discriminator on the belief, not a new event: the retype is fold-side (AMPR-328 Q5), so a
+ * `KnowledgeStored` of an outcome's knowledge *reads* as a [LESSON] and no event class carries
+ * the kind. The knowledge-backed kinds name the source the row was learned from, one for one;
+ * [OBSERVATION] is the Environment branch's, which never lives in knowledge (F7).
+ */
+enum class BeliefKind {
+
+    /** Learned from an outcome: what an attempt taught. Pulse's learnings are these (F21). */
+    LESSON,
+
+    /** Learned from an idea. */
+    IDEA,
+
+    /** Learned from a perception the agent recorded as knowledge. */
+    PERCEPTION,
+
+    /** Learned from a plan. */
+    PLAN,
+
+    /** Learned from a task. */
+    TASK,
+
+    /** A canon entity the holder perceived: the Environment branch (F7). Never a knowledge row. */
+    OBSERVATION,
 }
 
 /**

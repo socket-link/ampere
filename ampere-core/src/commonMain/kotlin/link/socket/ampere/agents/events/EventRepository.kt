@@ -393,6 +393,35 @@ class EventRepository(
         }
 
     /**
+     * The newest [limit] events of [eventType] at or before [upToSequence], newest first, each
+     * with the envelope the store recorded around it (AMPR-448).
+     *
+     * Bounded on purpose: this is the read a fold of *recent* history makes — the Field's taken
+     * Actions, from the latest tool events — and the log is otherwise read whole. The type filter
+     * and the bound are both in SQL, so the limit counts rows of [eventType] only. Rows this build
+     * cannot decode are skipped and counted, and count against [limit]; see [DecodedRows].
+     */
+    suspend fun getLatestEventsByType(
+        eventType: EventType,
+        limit: Long,
+        upToSequence: Long = Long.MAX_VALUE,
+    ): Result<DecodedRows<StoredEvent>> =
+        withContext(ioDispatcher) {
+            runCatching {
+                require(limit >= 0) { "limit must not be negative, was $limit" }
+                queries
+                    .getLatestEventsByType(
+                        eventType = eventType,
+                        upToSequence = upToSequence,
+                        limit = limit,
+                    )
+                    .executeAsList()
+            }.map { rows ->
+                rows.decodeSkippingUndecodable { row -> row.toStoredEvent() }
+            }
+        }
+
+    /**
      * Retrieve an event by its [eventId], or null if not present.
      *
      * A row that will not decode is a [Result.failure] carrying [EventSerializationException],

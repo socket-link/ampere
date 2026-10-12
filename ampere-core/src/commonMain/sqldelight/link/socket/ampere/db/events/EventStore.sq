@@ -49,6 +49,17 @@ FROM EventStore
 WHERE event_type = ?
 ORDER BY sequence DESC;
 
+-- The newest :limit events of one type at or before :upToSequence, newest first (AMPR-448). The
+-- bound is what makes it a read of recent history rather than of the whole log: the Field folds
+-- its taken Actions from the latest tool events, and has no use for the rest.
+getLatestEventsByType:
+SELECT *
+FROM EventStore
+WHERE event_type = :eventType
+  AND sequence <= :upToSequence
+ORDER BY sequence DESC
+LIMIT :limit;
+
 getEventsSince:
 SELECT *
 FROM EventStore

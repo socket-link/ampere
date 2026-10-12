@@ -22,18 +22,26 @@ value class ActionId(val value: String)
  * @property actor The Subject that *decided* — proposed — the Action.
  * @property executor The `Executor.id` that performs it, or `null` while unassigned.
  *   Deliberately a separate member from [actor] (F17): decider and performer sharing one
- *   string is what made "who did this" unanswerable. The *wiring* that fills it from
- *   the live path is W3; the type carries both fields now so nothing in W2 has to be
- *   migrated when it lands. Typed as `String` because `Executor` lives in
+ *   string is what made "who did this" unanswerable. An Action folded from the tool
+ *   events takes it from their `executorId` (AMPR-443), and `null` for a pair stored
+ *   before that field existed. Typed as `String` because `Executor` lives in
  *   `agents.execution`, outside this leaf.
  * @property goal The Goal the Action serves, when known.
  * @property description What the Action does, as prose.
  * @property state Where in `Proposed → Admitted → Taken` it is; see [ActionState].
  * @property reversibility How hard it is to undo; see [Reversibility]. Reversibility
  *   sets the confidence floor below which an Action escalates instead of running.
- * @property cost What taking it is expected to spend; see [Cost].
+ *   `null` means unknown: nothing supplies it yet (AMPR-448), and a fold does not guess.
+ *   Nothing may read `null` as [Reversibility.REVERSIBLE].
+ * @property cost What taking it is expected to spend; see [Cost]. `null` means unknown,
+ *   for the same reason. Nothing may read `null` as free.
  * @property prediction What the actor expects to happen, if it said; see [Prediction].
- * @property provenance The event that proposed the Action.
+ * @property result What happened when it was taken; see [ActionResult]. Only a
+ *   [ActionState.TAKEN] Action has one, and construction refuses any other. This is how
+ *   a failure is recorded (F20): a taken Action whose result failed, not a state after
+ *   [ActionState.TAKEN]. `null` on a taken Action means the outcome is not known.
+ * @property provenance The event that proposed the Action — for one folded from the tool
+ *   events, the `ToolExecutionStarted` that announced it.
  */
 data class Action(
     val id: ActionId,
@@ -42,11 +50,39 @@ data class Action(
     val goal: Ref<Goal>? = null,
     val description: String,
     val state: ActionState,
-    val reversibility: Reversibility,
-    val cost: Cost,
+    val reversibility: Reversibility?,
+    val cost: Cost?,
     val prediction: Prediction? = null,
+    val result: ActionResult? = null,
     val provenance: Provenance,
-)
+) {
+    init {
+        require(result == null || state == ActionState.TAKEN) {
+            "Only a taken Action has a result; ${id.value} is $state"
+        }
+    }
+}
+
+/**
+ * What a [ActionState.TAKEN] [Action] came to (AMPR-448, F20).
+ *
+ * Two outcomes, and no third for "waiting on a person": a held call has not been taken, so
+ * the fold leaves it out rather than give it a result it does not have.
+ */
+sealed interface ActionResult {
+
+    /** The executor performed it and reported success. A blank result is a success. */
+    data object Succeeded : ActionResult
+
+    /**
+     * The executor performed it and it failed.
+     *
+     * @property reason What the executor said went wrong, or `null` when it said nothing.
+     *   Never filled in with a guess: a made-up reason sends a reader after a fault that is
+     *   not the one that happened.
+     */
+    data class Failed(val reason: String?) : ActionResult
+}
 
 /**
  * The three states an [Action] passes through, in order. The order is the only
@@ -61,7 +97,10 @@ enum class ActionState {
     /** Passed the Breaker; eligible to be taken. */
     ADMITTED,
 
-    /** Performed by the executor. */
+    /**
+     * Performed by the executor. Whether it worked is the Action's [Action.result]: a failed
+     * Action is still taken, so there is no state after this one to move back from.
+     */
     TAKEN,
 }
 

@@ -5,7 +5,9 @@ package link.socket.ampere.field
  *
  * A snapshot, not a fold: every W2 door publishes its event and writes its row in one step, so
  * the stores already *are* the fold of the log, and a Field is a read over them. Nothing here is
- * rebuilt from events, and nothing here is stored — a Field is computed on request and dropped.
+ * stored — a Field is computed on request and dropped. One branch is the exception to "read from
+ * a store": [actions] are folded at read time from the tool events still in the log, because the
+ * retype of those events is fold-side (AMPR-328 Q5) and no store holds an Action.
  *
  * **Signals are derived from it, never stored on it.** Priority, urgency, trust, Potential and
  * Resistance are computed from a Field by whoever reads one; none is a member here, and how they
@@ -14,16 +16,21 @@ package link.socket.ampere.field
  * **Always a view for someone (F12).** [beliefs] holds what [viewer] may see: every
  * [Sensitivity.PUBLIC] belief plus the ones [viewer] holds. Another Subject's
  * [Sensitivity.PRIVATE] and [Sensitivity.PROTECTED] beliefs are not here, and a `null` viewer
- * — nobody — sees public beliefs only. Subjects, relationships, goals and commitments carry no
- * sensitivity and are the same in every view.
+ * — nobody — sees public beliefs only. Subjects, relationships, goals, commitments and actions
+ * carry no sensitivity and are the same in every view.
  *
  * **The Environment branch is [observations] (AMPR-447, F7).** A perceived canon entity enters
  * the Field only as an Observation its perceiver holds, stored apart from knowledge so it never
  * surfaces in recall; it is scoped exactly as [beliefs] are. By default an Observation is
  * [Sensitivity.PRIVATE], or [Sensitivity.PROTECTED] for a person, so a viewer sees its own.
  *
- * Not here yet: Actions and Constraints. Each has an open question on AMPR-328, and a Field
- * without them is the Field the stores can answer for today.
+ * **Actions are the ones taken (AMPR-448, F20).** Each `ToolExecutionStarted` /
+ * `ToolExecutionCompleted` pair reads as an [Action] in [ActionState.TAKEN] whose [Action.result]
+ * says whether it worked. No event class was added or changed to say so. Proposed and admitted
+ * Actions are not here: they need a reversibility and a cost that nothing supplies yet.
+ *
+ * Not here yet: Constraints. They have an open question on AMPR-328, and a Field without them is
+ * the Field the stores can answer for today.
  *
  * @property viewer Whose view this is; `null` for nobody's.
  * @property asOfSequence The newest event `sequence` in the log when the read began, `0` for an
@@ -34,7 +41,8 @@ package link.socket.ampere.field
  *   pseudo-Subject included.
  * @property relationships Every edge touching a listed Subject, from either end, once each.
  * @property goals Every listed Subject's goals, open and completed.
- * @property beliefs What [viewer] may see, newest first, up to the limit the read asked for.
+ * @property beliefs What [viewer] may see, newest first, up to the limit the read asked for. Each
+ *   carries its [BeliefKind]; outcome knowledge is a [BeliefKind.LESSON].
  * @property observations The Observations [viewer] may see — each a [Belief.Settled] about an
  *   Environment entity, whose provenance is the perceive that observed it — newest first, up to
  *   the same limit, applied to this branch on its own.
@@ -44,6 +52,10 @@ package link.socket.ampere.field
  * @property commitments Every [Commitment.Status.OPEN] commitment, soonest due first (AMPR-449).
  *   Open ones only: a resolved commitment is history, which F32 reads from the store, not from a
  *   snapshot. Whether one is overdue is not judged here.
+ * @property actions The newest taken Actions, newest first, up to a bound the read sets: one per
+ *   completed tool call still in the log whose start is there too. A call waiting on a person
+ *   has not been taken and is not here. The log is pruned under its size budget, so this is
+ *   recent history, not all of it.
  */
 data class Field(
     val viewer: Ref<Subject>?,
@@ -55,6 +67,7 @@ data class Field(
     val observations: List<Belief.Settled>,
     val unmappedBeliefs: Int = 0,
     val commitments: List<Commitment> = emptyList(),
+    val actions: List<Action> = emptyList(),
 ) {
 
     /**

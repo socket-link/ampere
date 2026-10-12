@@ -5,6 +5,7 @@ import link.socket.ampere.canon.CanonEntity
 import link.socket.ampere.canon.CanonId
 import link.socket.ampere.canon.CanonType
 import link.socket.ampere.field.Belief
+import link.socket.ampere.field.BeliefKind
 import link.socket.ampere.field.Decay
 import link.socket.ampere.field.Environment
 import link.socket.ampere.field.Provenance
@@ -65,8 +66,9 @@ val CanonEntity.environmentRef: Ref<Environment>
     get() = canonEnvironmentRef(provenance.sourceHandle.linkId, canonId)
 
 /**
- * This entity as an Observation held by [holder]: a [Belief.Settled] about [environmentRef],
- * whose [Provenance.createdBy] is the entity's `CanonProvenance.perceiveEventId`.
+ * This entity as an Observation held by [holder]: a [Belief.Settled] of kind
+ * [BeliefKind.OBSERVATION] about [environmentRef], whose [Provenance.createdBy] is the entity's
+ * `CanonProvenance.perceiveEventId`.
  *
  * Fails with [UnrecordedObservationException] when the entity carries no perceive event id —
  * projected outside a recorded perceive, or recorded before F7. Every Belief points at the event
@@ -95,6 +97,7 @@ fun CanonEntity.toObservation(
             subject = environmentRef,
             content = "Observed ${canonType.wireName} ${canonId.value} via " +
                 "${provenance.sourceHandle.sourceSystem} at ${provenance.observedAt}",
+            kind = BeliefKind.OBSERVATION,
             confidence = confidence,
             sensitivity = sensitivity,
             decay = decay,
