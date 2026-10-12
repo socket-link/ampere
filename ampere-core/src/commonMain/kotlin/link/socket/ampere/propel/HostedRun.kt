@@ -217,7 +217,9 @@ enum class RunStatus {
 
     /**
      * At least one step failed and none succeeded — every step was a failure or was
-     * skipped because one it depended on failed — or the run was cancelled.
+     * skipped because one it depended on failed — or the run was cancelled. A run whose
+     * plan was cut to nothing under [RunPolicy.maxStepsPerCycle] (every step named a tool
+     * no seat has, AMPR-452) is failed too, unless an earlier cycle's step succeeded.
      */
     Failed,
 
@@ -251,7 +253,8 @@ enum class RunStatus {
      * A failed step skips only the steps that depend on it, so the steps that did not
      * need it still ran; this is the run that did part of its work. Across cycles it is
      * the whole run that counts: a first cycle that failed and a second that succeeded
-     * is partial. Its outcome is recorded and no Knowledge is stored — what was learned
+     * is partial, and so is a run with earlier successes whose later plan was cut to
+     * nothing (AMPR-452). Its outcome is recorded and no Knowledge is stored — what was learned
      * is a claim about work that finished — and its task ends failed.
      */
     Partial,

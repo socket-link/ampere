@@ -11,6 +11,7 @@ import kotlinx.datetime.Clock
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.memory.MemoryTaskTypes
 import link.socket.ampere.agents.domain.outcome.ContentOrigin
@@ -64,6 +65,11 @@ import link.socket.ampere.util.logWith
  * a step whose tool is about to receive different ones — a parameter strategy filled them
  * in, a schema added a default — goes back to [PlanGate.reviewChangedStep] first, and a
  * stop there ends the run [RunStatus.Stopped] exactly as a stopped plan does.
+ *
+ * Under a step cap ([RunPolicy.maxStepsPerCycle], AMPR-452) every plan is bounded before
+ * the gate sees it: one that is too long, or that names a tool no seat has, goes back to
+ * the planner once, and a second plan that still breaks a rule is cut, with a
+ * `PlanTruncated` on the record ahead of the gate ([withinBounds]).
  *
  * A cycle that executed something may also be *asked* about itself before the loop
  * decides whether to continue ([assess], AMPR-421). Every answer is recorded and none
@@ -132,6 +138,13 @@ internal class RosterHostedRun(
     private var gatedPlan: Plan = Plan.blank
     private var stoppedAt: PlanDecision.Stopped? = null
     private var heldAt: StepOutcome.Held? = null
+
+    /**
+     * The cut that left a cycle's plan with no steps at all, or null (AMPR-452). Only an
+     * unknown-tool drop can do that — the cap is at least 1 — and it ends the run as a
+     * failure of the cycle: the planner asked for work this run could not attempt.
+     */
+    private var cutToNothing: PlanEvent.PlanTruncated? = null
     private var lifecycle: TaskLifecycle? = null
     private var ideas: List<Idea> = emptyList()
     private var recalled: List<KnowledgeWithScore> = emptyList()
@@ -372,19 +385,19 @@ internal class RosterHostedRun(
      * failure. Only a *later* cycle reads an empty plan that way: on the first, with
      * nothing in [results], an empty plan is what a missing transport leaves
      * (`Plan.blank`) and goes to the gate as before.
+     *
+     * Under a step cap the plan is bounded first ([withinBounds], AMPR-452): the gate
+     * sees a plan within the cap that names only the run's tools, and a cut plan's
+     * `PlanTruncated` goes out after the task lifecycle opens and before the gate. A plan
+     * cut to nothing skips the gate, as an empty later plan does, but ends the run as a
+     * failure rather than as the planner's "done".
      */
     private suspend fun planCycle(): Unit =
         host.phases.withPhase(CognitivePhase.PLAN, runId) {
             aboutToShow(results)
-            val generated = host.agent.reasoningUnit.generatePlan(
-                task = goal,
-                ideas = ideas,
-                relevantKnowledge = recalled,
-                seats = planSeats,
-                priorResults = results.toList(),
-                cycle = cyclesUsed + 1,
-                availableTools = planTools,
-            )
+            val cycle = cyclesUsed + 1
+            val bounded = withinBounds(generatePlan(cycle, ideas), cycle)
+            val generated = bounded.plan
             host.agent.rememberNewPlan(generated)
 
             if (lifecycle == null) {
@@ -395,6 +408,15 @@ internal class RosterHostedRun(
                     assignedTo = host.id,
                     taskType = MemoryTaskTypes.GENERIC,
                 )
+            }
+
+            bounded.truncation?.let { truncation ->
+                host.door.publish(truncation, runId = runId)
+                if (generated.tasks.isEmpty()) {
+                    gatedPlan = generated
+                    cutToNothing = truncation
+                    return@withPhase
+                }
             }
 
             if (generated.tasks.isEmpty() && results.isNotEmpty()) {
@@ -415,6 +437,91 @@ internal class RosterHostedRun(
                 }
             }
         }
+
+    private suspend fun generatePlan(cycle: Int, ideas: List<Idea>): Plan =
+        host.agent.reasoningUnit.generatePlan(
+            task = goal,
+            ideas = ideas,
+            relevantKnowledge = recalled,
+            seats = planSeats,
+            priorResults = results.toList(),
+            cycle = cycle,
+            availableTools = planTools,
+        )
+
+    /**
+     * [generated], held to [RunPolicy.maxStepsPerCycle] and to the run's tools (AMPR-452,
+     * row H20 (c)).
+     *
+     * With no cap this is [generated] untouched: no check, no re-plan, no event, so a run
+     * without a cap is what it was before the cap existed. With one, a plan that is
+     * longer than the cap or names a tool no seat owns goes back to the planner
+     * **once**, with what was wrong added to its ideas — rendered with the perception
+     * insights, because that is the slot `PlanGenerator` gives a caller to tell it
+     * something without a second prompt. That is a second PLAN call on the host seat,
+     * and it bills.
+     *
+     * A second plan that still breaks a rule is cut, in a fixed order: drop every step
+     * naming an unknown tool, then keep the first `cap` of what is left. The cut is the
+     * returned [BoundedPlan.truncation], published by [planCycle] before the gate. A
+     * kept step may depend on a dropped one; [failedDependencyOf] reads a dependency
+     * that is not in the run as no reason to skip, as it does one the gate trimmed.
+     *
+     * "Unknown" is the dispatch rule applied early: a tool id no seat of this run owns
+     * would fail `executePlanStep` as "not in the agent's effective tool set". A step
+     * naming no tool is a reasoning step and is never unknown.
+     */
+    private suspend fun withinBounds(generated: Plan, cycle: Int): BoundedPlan {
+        val cap = policy.maxStepsPerCycle ?: return BoundedPlan(generated)
+        val first = boundsBrokenBy(generated, cap) ?: return BoundedPlan(generated)
+
+        val replanned = generatePlan(cycle, ideas + first.asCorrection())
+        val second = boundsBrokenBy(replanned, cap) ?: return BoundedPlan(replanned)
+
+        val known = replanned.tasks.filter(::namesKnownTool)
+        val kept = known.take(cap)
+        val cut = replanned.withTasks(kept)
+        val reasons = buildList {
+            val dropped = replanned.tasks.size - known.size
+            if (dropped > 0) {
+                add(
+                    "dropped $dropped step(s) naming tools this run does not have: " +
+                        second.unknownToolIds.joinToString(", "),
+                )
+            }
+            if (known.size > cap) add("cut ${known.size - cap} step(s) over the cap of $cap per cycle")
+        }
+        return BoundedPlan(
+            plan = cut,
+            truncation = PlanEvent.PlanTruncated(
+                eventId = generateUUID(runId, "plan-truncated"),
+                runId = runId,
+                planId = cut.id,
+                cycle = cycle,
+                originalStepCount = replanned.tasks.size,
+                keptStepCount = kept.size,
+                reasons = reasons,
+                maxStepsPerCycle = cap,
+                droppedToolIds = second.unknownToolIds,
+                eventSource = EventSource.Agent(host.id),
+                timestamp = Clock.System.now(),
+            ),
+        )
+    }
+
+    /** The rules [plan] breaks under [cap], or null when it breaks none. */
+    private fun boundsBrokenBy(plan: Plan, cap: Int): BrokenBounds? {
+        val unknown = plan.tasks
+            .filterNot(::namesKnownTool)
+            .mapNotNull { it.planStepToolId }
+            .distinct()
+        return BrokenBounds(stepCount = plan.tasks.size, cap = cap, unknownToolIds = unknown)
+            .takeIf { it.overCap || unknown.isNotEmpty() }
+    }
+
+    /** Whether some seat of this run can dispatch the tool [step] names; true for no tool. */
+    private fun namesKnownTool(step: Task): Boolean =
+        step.planStepToolId?.let { toolId -> seats.values.any { it.owns(toolId) } } ?: true
 
     // ========================================================================
     // EXECUTE, and the cycles
@@ -943,13 +1050,16 @@ internal class RosterHostedRun(
      * How the run ended, in precedence order (AMPR-425, AMPR-450): cancelled, stopped by
      * the gate, held, then by its steps — none failed is succeeded, some failed beside
      * some that succeeded is partial, and failures with no success is failed. A hold
-     * outranks an earlier cycle's failure because it is why the run ended.
+     * outranks an earlier cycle's failure because it is why the run ended. A plan cut to
+     * nothing (AMPR-452) counts as a failure beside the steps: the run could not attempt
+     * what its planner asked for, so it did not succeed, and did part of its work only if
+     * an earlier cycle's step succeeded.
      */
     private fun currentStatus(): RunStatus = when {
         cancellation != null -> RunStatus.Failed
         stoppedAt != null -> RunStatus.Stopped
         heldAt != null -> RunStatus.Held
-        results.none { it is StepOutcome.Failure } -> RunStatus.Succeeded
+        results.none { it is StepOutcome.Failure } && cutToNothing == null -> RunStatus.Succeeded
         results.any { it is StepOutcome.Success || it is StepOutcome.PartialSuccess } -> RunStatus.Partial
         else -> RunStatus.Failed
     }
@@ -965,18 +1075,25 @@ internal class RosterHostedRun(
      * For a held run that is the held cycle's outcome — the run stops on the cycle that
      * held, so the last plan outcome *is* the [ExecutionOutcome.Held], carrying the held
      * step's reason and reference. [RunResult.outcome] reports it; LEARN records nothing.
+     *
+     * A run whose last plan was cut to nothing (AMPR-452) is a stated failure naming the
+     * cut, even after earlier cycles ran: that cut is why the run ended.
      */
     private fun executionOutcome(cancelled: Boolean): ExecutionOutcome {
-        (lastPlanOutcome as? ExecutionOutcome)?.takeIf { results.isNotEmpty() && !cancelled }?.let { return it }
+        val cut = cutToNothing
+        (lastPlanOutcome as? ExecutionOutcome)
+            ?.takeIf { results.isNotEmpty() && !cancelled && cut == null }
+            ?.let { return it }
 
         val now = Clock.System.now()
         val stopped = stoppedAt
         val reason = when {
             cancelled -> "Run cancelled after ${results.size} step(s)"
             stopped != null -> stopped.reason
+            cut != null -> "Cycle ${cut.cycle}'s plan was cut to nothing: ${cut.reasons.joinToString("; ")}"
             else -> "The planner returned no steps"
         }
-        return if (cancelled) {
+        return if (cancelled || cut != null) {
             ExecutionOutcome.NoChanges.Failure(
                 executorId = HOSTED_RUN_EXECUTOR_ID,
                 ticketId = runId,
@@ -1020,3 +1137,48 @@ internal class RosterHostedRun(
 /** What an outcome says it did, for a summary a person reads. */
 private fun ExecutionOutcome.describeForRecord(): String =
     describeResult().ifBlank { this::class.simpleName ?: "outcome" }
+
+/** A plan held to a run's bounds, and the cut that got it there, if one did (AMPR-452). */
+private class BoundedPlan(
+    val plan: Plan,
+    val truncation: PlanEvent.PlanTruncated? = null,
+)
+
+/** The bounds a plan broke: too many steps for [cap], tools no seat has, or both. */
+private class BrokenBounds(
+    val stepCount: Int,
+    val cap: Int,
+    val unknownToolIds: List<String>,
+) {
+
+    val overCap: Boolean get() = stepCount > cap
+
+    /**
+     * What the planner is told on its one re-plan: the rule, the number or the ids that
+     * broke it, and what an acceptable plan looks like. The ids are the planner's own
+     * output read back to it, not content from outside the run.
+     */
+    fun asCorrection(): Idea = Idea(
+        name = "Correction to the previous plan",
+        description = buildString {
+            append("The previous plan for this cycle cannot be run as written.")
+            if (overCap) {
+                append(" It had $stepCount steps, and this run allows at most $cap steps per cycle:")
+                append(" plan at most $cap steps.")
+            }
+            if (unknownToolIds.isNotEmpty()) {
+                append(" It named tools this run does not have: ${unknownToolIds.joinToString(", ")}.")
+                append(" Name only the tools listed below, or no tool for a step that is reasoning.")
+            }
+        },
+    )
+}
+
+/** This plan with [kept] as its steps. A blank plan has none to keep and stays blank. */
+private fun Plan.withTasks(kept: List<Task>): Plan = when (this) {
+    is Plan.ForTask -> copy(tasks = kept)
+    is Plan.ForIdea -> copy(tasks = kept)
+    is Plan.ForMeeting -> copy(tasks = kept)
+    is Plan.ForTicket -> copy(tasks = kept)
+    Plan.Blank -> this
+}

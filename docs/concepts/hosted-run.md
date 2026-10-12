@@ -24,7 +24,9 @@ remain — each later PLAN shown the step results so far, and free to answer wit
 steps, which ends the run (AMPR-424); `HostedRun.close()` is LEARN. A step whose tool
 reports it is waiting on a person ends the run where it stands (AMPR-425); a step that
 fails skips only the steps that depend on it, and a run that did some of its work ends
-`Partial` (AMPR-450).
+`Partial` (AMPR-450). Under an optional step cap, a plan that is too long or names a tool
+no seat has goes back to the planner once and is then cut, on the record, before the gate
+sees it (AMPR-452).
 
 The vocabulary:
 
@@ -268,6 +270,22 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     installs a check, so every other path through the engine is unchanged; and with
     the default `PlanGate.Pass`, whose `reviewChangedStep` falls through to `review`, a
     hosted run is unchanged event for event.
+23. **Under a step cap, the gate only ever sees a plan within bounds** (AMPR-452, row H20
+    (c) as ruled on 2026-10-11, off by default). `RunPolicy.maxStepsPerCycle` is null by
+    default, and null checks nothing: no re-plan, no event, the same prompts. Set (≥ 1), it
+    bounds every plan inside PLAN, before `PlanGate.review`: at most that many steps, and
+    no step naming a tool id no seat of the run owns — the test `executePlanStep` would
+    fail it on at dispatch, applied early. A plan that breaks either goes back to the host
+    seat's planner **once**, told what was wrong (the cap and the count, or the unknown
+    ids) through an extra `Idea` on the same `generatePlan` call — a second, billed PLAN
+    call. A second plan that still breaks a rule is cut, in a fixed order — drop every
+    step naming an unknown tool, then keep the first `cap` of the rest — and
+    `PlanEvent.PlanTruncated(runId, planId, cycle, originalStepCount, keptStepCount,
+    reasons, maxStepsPerCycle, droppedToolIds)` leaves through the host's door after the
+    run's `TaskCreated` and before the gate is asked. `planId` is the kept plan's, the id
+    its steps' pairs carry. A plan cut to *nothing* is not sent to the gate and ends the
+    run; it counts as a failure, so the run is `Failed`, or `Partial` when an earlier
+    cycle's step succeeded, and its task ends `TaskFailed`.
 
 ## How it composes
 
@@ -373,7 +391,7 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | `RunHost` | `open(…, runId: RunId? = null)`, `openSeats(roster, seats: List<HostedAgent>, …, runId)` (the Swift-friendly overload), `openRunSeats(): List<OpenSeat>`. A supplied `runId` is `HostedRun.runId`, `RunResult.runId`, the envelope run id of every event, the task lifecycle's id and LEARN's outcome `ticketId`/`runId`; null mints one |
 | `HostedAgent` | Who fills a seat: id, role, sparks, charter, `AIConfiguration`, `CognitiveRelay?`, **required** `UpstreamLlmClient`, `MemoryStore?`, `recallScopes`, affinity, `probes`, `questions`, `UpstreamDecisionClient?`, `userGrants: (suspend (PlugManifest) -> UserGrants)?` (null denies) |
 | `HostedRun` | `runId`, `plan`, `readExternalContent`, `execute()`, `close()`. `readExternalContent` defaults to `true` on the interface, so an implementation that does not track it is assumed to have read something |
-| `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip`, `quotas` |
+| `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip`, `quotas`, `maxStepsPerCycle` (null = no cap) |
 | `RunQuotas` | `tokens: Long?`, `wallClock: Duration?`, `steps: Int?` — the run's Hard ceilings, each checked by the Breaker before every step; `RunQuotas.None` (the default) sets none |
 | `GoalCheck` | `Off` / `Record`: whether the run asks itself, after each executed cycle, whether the goal is met. `Record` is one decision call per executed cycle on the host seat's transport |
 | `RunQuestions` | The run's own question (`goalMet`, `GOAL_MET_ID`) and `RunObservation.asDecisionState(clip)`, the fixed-key-order JSON a decision call is given |
@@ -579,6 +597,15 @@ logged, or put on an event.
   fills an omitted optional argument from its `default` and drops names the schema does
   not declare, so a step whose planner left one out — or added one — reaches the tool
   with different arguments, and the gate is asked. That is the rule working, not noise.
+- **Expecting a run with no cap to catch an unknown tool at plan time.** The tool check
+  rides on `maxStepsPerCycle` with the cap, because its re-plan bills and the defaults
+  bill nothing new: with no cap, a step naming a tool no seat has still reaches the gate
+  and fails at dispatch, exactly as before AMPR-452. A consumer that wants only the tool
+  check sets a cap it never expects to hit.
+- **Reading a plan cut to nothing as the planner's "done".** An empty *later* plan the
+  planner wrote ends the run on the earlier steps' status; an empty plan the *cut* left
+  is a run that could not attempt what it was asked, and fails. Tell them apart by the
+  `PlanTruncated` with `keptStepCount == 0`.
 - **Treating `held` as a kind of failure in a tool record.** `ToolExecutionCompleted`
   for a held call has `success = false` *and* `held = true` and no `errorMessage`; a
   reader that keys on `success` alone will count holds as faults.
@@ -589,10 +616,8 @@ Row H28 (a later cycle plans with the results so far) was recorded ✅ on 2026-1
 is built (AMPR-424). What it deliberately does *not* come with: re-running PERCEIVE or
 RECALL per cycle (both stay once per run); a model judging whether the goal was met
 (AMPR-421 records that judgment, AMPR-422 measures it, and nothing reads it — the
-planner's empty answer is the planner's, not a verdict over one); a per-cycle step cap
-in Ampere (a consumer trims in its `PlanGate`; `RunQuotas.steps` caps the whole run,
-not a cycle); and handing prior results to a
-`customPromptBuilder`, whose signature is unchanged.
+planner's empty answer is the planner's, not a verdict over one); and handing prior
+results to a `customPromptBuilder`, whose signature is unchanged.
 
 Row H20 was ruled on 2026-10-11. Waiting on approval is a full stop of the run (✏️),
 built by AMPR-425 (invariant 16) — `ExecutionOutcome.Held`, `StepOutcome.Held`,
@@ -600,9 +625,7 @@ built by AMPR-425 (invariant 16) — `ExecutionOutcome.Held`, `StepOutcome.Held`
 dependents and the `Partial` status were approved the same day and are built by AMPR-450
 (invariant 17). What H20 does *not* come with here: a held step still skips everything
 after it, not only its dependents; a cancelled run is still `Failed`, with no separate
-`Cancelled` status (the row's text named one, and it was not asked about); the per-cycle
-step cap `maxStepsPerCycle` is a separate ticket, H20 (c) (the run-level
-`RunQuotas.steps`, AMPR-445, caps the whole run, not a cycle); the per-tool idempotency key
+`Cancelled` status (the row's text named one, and it was not asked about); the per-tool idempotency key
 (run id + step id) received no ruling and is not built; dependents on the Arc path are out
 of scope, because `FlowPhase` runs one step per tick; and `dependsOn` is only ever the
 previous step, because that is all `requiresPreviousStep` can say. Also not here: *resuming* a held run
@@ -613,6 +636,13 @@ state will be kept for that, but nothing writes it yet, it has no expiry of its 
 it does not recover a claimed record whose resume was interrupted), deciding *when* an action must be held (the tool's and
 its consumer's), and telling a held run from a failed one in `OutcomeMemoryStore`
 (held outcomes are simply not written, because that would need a migration).
+
+H20 (c), the per-cycle step cap, was approved the same day with the cap off by default and
+is built by AMPR-452 (invariant 23). It is a per-cycle bound checked at PLAN, and is not
+`RunQuotas.steps` (invariant 19), which caps the whole run and is checked by the Breaker
+before each step. What it does *not* come with: a cap on the Arc path; a second re-plan, or a re-plan that keeps going until the plan fits; and any
+change to `PlanGenerator`'s prompt, which is told what was wrong only through the
+insights it already renders.
 
 Rows H26 (a seat's consent grants) and H27 (a caller-chosen run id) were recorded ✅ on
 2026-10-11 and are built (AMPR-423); granting, revoking and storing grants stay the

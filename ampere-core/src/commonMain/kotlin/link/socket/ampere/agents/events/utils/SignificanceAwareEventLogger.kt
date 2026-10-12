@@ -150,6 +150,7 @@ class SignificanceAwareEventLogger(
         is FileSystemEvent -> EventSignificance.SIGNIFICANT
         is PlanEvent.PlanStepStarted -> EventSignificance.SIGNIFICANT
         is PlanEvent.PlanStepCompleted -> EventSignificance.SIGNIFICANT
+        is PlanEvent.PlanTruncated -> EventSignificance.SIGNIFICANT
         is PlanEvent.TaskAssigned -> EventSignificance.SIGNIFICANT
         is PlanEvent.MonitoringStarted -> EventSignificance.SIGNIFICANT
         is MemoryEvent.MilestoneReached -> EventSignificance.SIGNIFICANT
