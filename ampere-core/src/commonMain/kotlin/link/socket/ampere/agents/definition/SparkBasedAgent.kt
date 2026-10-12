@@ -57,6 +57,8 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.field.Admission
+import link.socket.ampere.field.Hardness
+import link.socket.ampere.field.Rule
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.plug.PlugManifest
@@ -316,13 +318,16 @@ open class SparkBasedAgent<S : AgentState>(
      *
      * Built over the same grant provider [reasoning]'s engine was handed, and over the
      * same deny-all `UserGrants()` the engine falls back to when this agent has none, so
-     * the Breaker and the engine's own gate always answer a step the same way.
+     * the Breaker and the engine's own gate always answer a step the same way. It reads a
+     * run's quotas through this agent's own door under [_runId] (AMPR-445), so an agent
+     * built for no run can be handed no quota it could evaluate.
      */
     private val breaker: Breaker by lazy {
         Breaker(
             userGrants = _userGrantProvider ?: { UserGrants() },
             eventApi = _eventApi,
             executorId = id,
+            runId = _runId,
         )
     }
 
@@ -569,11 +574,18 @@ open class SparkBasedAgent<S : AgentState>(
      * in the hosted run would have given the consumer-facing path its own
      * tool-narrowing, its own reasoning-step handling and its own notion of what a
      * step's request carries — three places to keep in step instead of one.
+     *
+     * [runRules] are the rules the *run* puts on every step, beside the ones the tool
+     * brings (AMPR-445): a hosted run passes its [RunQuotas][link.socket.ampere.propel.RunQuotas]
+     * here as Hard quota rules, and the Arc path, which has no per-run policy, passes none.
+     * They are admitted before a reasoning step's model call as well as before a tool's,
+     * because a reasoning step spends against a run like any other.
      */
     internal suspend fun executePlanStep(
         step: Task,
         parentTask: Task,
         priorResults: List<StepOutcome>,
+        runRules: List<Pair<Rule, Hardness>> = emptyList(),
     ): StepResult {
         if (step is Task.Blank) {
             return StepResult.success(
@@ -595,6 +607,7 @@ open class SparkBasedAgent<S : AgentState>(
         }
 
         if (toolId == null) {
+            admit(step, description, tool = null, rules = runRules)?.let { return it }
             return executeReasoningStep(step, description, parentTask, priorResults)
         }
 
@@ -613,20 +626,7 @@ open class SparkBasedAgent<S : AgentState>(
         // AMPR-440: the Breaker admits the step before anything is spent on it. A trip
         // returns here, before the parameter-strategy call and before the engine, with the
         // reason on the step; an admission that could not be decided fails closed.
-        val admission = breaker.admit(tool, Breaker.rulesFor(tool)).getOrElse { e ->
-            return StepResult.failure(
-                description = description,
-                error = "Plan step ${step.id} was not admitted: ${e.message}",
-                isCritical = true,
-            )
-        }
-        if (admission is Admission.Trip) {
-            return StepResult.failure(
-                description = description,
-                error = admission.reason,
-                isCritical = true,
-            )
-        }
+        admit(step, description, tool, Breaker.rulesFor(tool) + runRules)?.let { return it }
 
         // AMPR-453: what the tool returned is attributed to the tool's declared origin —
         // `External` unless it proved otherwise — success, failure and hold alike, since a
@@ -659,6 +659,36 @@ open class SparkBasedAgent<S : AgentState>(
             )
         }
         return result.withOrigin(tool.resultOrigin)
+    }
+
+    /**
+     * The Breaker's answer for [step], as the failure the step ends with, or null when the
+     * step may run (AMPR-440, AMPR-445).
+     *
+     * A trip is the step's failure with the tripped rule's reason; an admission that could
+     * not be decided — a grant store that threw, a run record that could not be read — fails
+     * closed. Both are critical, so the plan walk stops on them.
+     */
+    private suspend fun admit(
+        step: Task,
+        description: String,
+        tool: Tool<*>?,
+        rules: List<Pair<Rule, Hardness>>,
+    ): StepResult? {
+        val admission = breaker.admit(tool, rules).getOrElse { e ->
+            return StepResult.failure(
+                description = description,
+                error = "Plan step ${step.id} was not admitted: ${e.message}",
+                isCritical = true,
+            )
+        }
+        return (admission as? Admission.Trip)?.let { trip ->
+            StepResult.failure(
+                description = description,
+                error = trip.reason,
+                isCritical = true,
+            )
+        }
     }
 
     /**
@@ -833,7 +863,6 @@ open class SparkBasedAgent<S : AgentState>(
                 task = step,
                 instructions = description,
             ),
-            constraints = link.socket.ampere.agents.execution.request.ExecutionConstraints(),
             // AMPR-300: the pin a code tool's strategy roots its Code context in.
             workspace = _workspace,
             // AMPR-414: what the spark stack permits this agent to touch, read

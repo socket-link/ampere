@@ -158,9 +158,10 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     in its own `dispatch`: `executePlanStep` reports every failure as critical, so the run
     hands `PlanExecutor` the failure as non-critical and skips the dependents itself — the
     critical-failure stop and the hold stop in `PlanExecutor` are untouched, and so is the
-    Arc path. A thrown step is a failed step like any other. Two failures stay critical:
-    a cancellation, and any failure on a scope that is no longer active, so a cancelled
-    run still stops where it stood. A skipped dependent's `PlanStepStarted` /
+    Arc path. A thrown step is a failed step like any other. Three failures stay
+    critical: a cancellation, any failure on a scope that is no longer active, so a
+    cancelled run still stops where it stood, and any failure once a run quota is reached
+    (AMPR-445, invariant 19). A skipped dependent's `PlanStepStarted` /
     `PlanStepCompleted` pair leaves through the **host's** door, because the skip is the
     run's decision, not the assigned seat's work. `RunStatus.Partial` is at least one step
     succeeded and at least one failed, across every cycle, on a run that was not
@@ -186,6 +187,25 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     `[external]`, and reaches every seat's prompt, so a run that recalled anything has it
     up before its first PLAN. An `External` step that is the last thing a run does, in a
     run that recalled nothing, leaves it down — no model was shown what it read.
+19. **A quota is a Hard rule, read from the record** (AMPR-445, F14). `RunPolicy.quotas`
+    (`RunQuotas`: `tokens`, `wallClock`, `steps`, each optional, none by default) becomes
+    one Hard `Rule.Quota` per quota set, which `dispatch` hands `executePlanStep` as the
+    run's rules; the seat's Breaker admits every step against them — a reasoning step
+    before its model call as well as a tool step before its tool. The spend is read from
+    the events persisted under the run id, through the seat's door, at each admission:
+    tokens are `inputTokens + outputTokens` over the run's `ProviderCallCompletedEvent`s
+    (a count the transport did not report adds nothing), time runs from the run's first
+    `recorded_at` to the door's clock, and steps are the run's `PlanStepCompleted`s. A
+    quota trips once the spend **reaches** its limit, and the tripped step fails with the
+    quota, the limit and the spend as its reason. Unlike an ordinary failure (invariant
+    17), a failure once a quota is reached stays **critical**: `dispatch` asks the quotas
+    again at the run's level, and when one is reached `PlanExecutor` skips the rest of the
+    cycle rather than walking on to trip each remaining step in turn — a spend never goes
+    back down. The run then ends `Partial` if an earlier step succeeded, else `Failed`. A
+    quota is checked **before** a step and never during one, so the last admitted step can
+    carry the run past its limit. A record that cannot be read, or holds a row this build
+    cannot decode, fails the step closed. A run with no quotas reads nothing and is
+    unchanged, event for event.
 
 ## How it composes
 
@@ -223,6 +243,7 @@ val run = ampere.runs!!.open(
         cycles = 2,
         planGate = myReviewSheet,
         recall = RecallPolicy(sources = listOf(myDocumentCorpus)),
+        quotas = RunQuotas(tokens = 200_000, wallClock = 15.minutes),
     ),
 )
 
@@ -290,7 +311,8 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | `RunHost` | `open(…, runId: RunId? = null)`, `openSeats(roster, seats: List<HostedAgent>, …, runId)` (the Swift-friendly overload), `openRunSeats(): List<OpenSeat>`. A supplied `runId` is `HostedRun.runId`, `RunResult.runId`, the envelope run id of every event, the task lifecycle's id and LEARN's outcome `ticketId`/`runId`; null mints one |
 | `HostedAgent` | Who fills a seat: id, role, sparks, charter, `AIConfiguration`, `CognitiveRelay?`, **required** `UpstreamLlmClient`, `MemoryStore?`, `recallScopes`, affinity, `probes`, `questions`, `UpstreamDecisionClient?`, `userGrants: (suspend (PlugManifest) -> UserGrants)?` (null denies) |
 | `HostedRun` | `runId`, `plan`, `readExternalContent`, `execute()`, `close()`. `readExternalContent` defaults to `true` on the interface, so an implementation that does not track it is assumed to have read something |
-| `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip` |
+| `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip`, `quotas` |
+| `RunQuotas` | `tokens: Long?`, `wallClock: Duration?`, `steps: Int?` — the run's Hard ceilings, each checked by the Breaker before every step; `RunQuotas.None` (the default) sets none |
 | `GoalCheck` | `Off` / `Record`: whether the run asks itself, after each executed cycle, whether the goal is met. `Record` is one decision call per executed cycle on the host seat's transport |
 | `RunQuestions` | The run's own question (`goalMet`, `GOAL_MET_ID`) and `RunObservation.asDecisionState(clip)`, the fixed-key-order JSON a decision call is given |
 | `RecallPolicy` | `sources`, `perSourceLimit`, `memoryLimit`, `titleClip`, `textClip` |
@@ -401,7 +423,15 @@ strings.
   says no model was *shown* outside content. A run whose only `External` step is its
   last has read the content and reports false, because nothing it did was steered by it.
   A gate that wants "touched outside content at all" reads the step outcomes' origins.
-
+- **Keeping a run's spend in a counter.** A quota is read from the events filed under
+  the run id, at each admission, because a counter beside the record is a second
+  account that can disagree with it — and a quota that disagrees with the trace is one
+  nobody can audit. It also counts every seat: the seats' doors write to one store, so
+  the host's PERCEIVE and PLAN spend counts against a quota a doer seat's step trips.
+- **Expecting a quota to stop a step mid-flight.** The Breaker admits; it does not
+  interrupt. A step admitted one token under the limit runs to the end, and the run's
+  final spend can exceed the quota by that step. A quota is "no step starts at or past
+  this", never "the run never spends more than this".
 - **Making a tool that waits on a person answer success or failure.** Success walks the
   plan on with a result that does not exist; failure records a fault that did not
   happen, in the trace, the outcome store and the run's status. Return
@@ -434,7 +464,8 @@ is built (AMPR-424). What it deliberately does *not* come with: re-running PERCE
 RECALL per cycle (both stay once per run); a model judging whether the goal was met
 (AMPR-421 records that judgment, AMPR-422 measures it, and nothing reads it — the
 planner's empty answer is the planner's, not a verdict over one); a per-cycle step cap
-in Ampere (a consumer trims in its `PlanGate`); and handing prior results to a
+in Ampere (a consumer trims in its `PlanGate`; `RunQuotas.steps` caps the whole run,
+not a cycle); and handing prior results to a
 `customPromptBuilder`, whose signature is unchanged.
 
 Row H20 was ruled on 2026-10-11. Waiting on approval is a full stop of the run (✏️),
@@ -444,7 +475,8 @@ dependents and the `Partial` status were approved the same day and are built by 
 (invariant 17). What H20 does *not* come with here: a held step still skips everything
 after it, not only its dependents; a cancelled run is still `Failed`, with no separate
 `Cancelled` status (the row's text named one, and it was not asked about); the per-cycle
-step cap `maxStepsPerCycle` is a separate ticket, H20 (c); the per-tool idempotency key
+step cap `maxStepsPerCycle` is a separate ticket, H20 (c) (the run-level
+`RunQuotas.steps`, AMPR-445, caps the whole run, not a cycle); the per-tool idempotency key
 (run id + step id) received no ruling and is not built; dependents on the Arc path are out
 of scope, because `FlowPhase` runs one step per tick; and `dependsOn` is only ever the
 previous step, because that is all `requiresPreviousStep` can say. Also not here: *resuming* a held run
@@ -483,6 +515,12 @@ What H21 deliberately does *not* come with: a way to name the seat's own generat
 model as its decision transport (`ModelBackedDecisionClient` needs an `AgentLLMService`
 the run builds internally), threshold bands (row J10), replay (row J14), and anything
 that reads an answer.
+
+Quotas (AMPR-445) deliberately come without: a Soft quota or any `Resist` from one
+(every quota is Hard), a quota on the Arc path (it has no per-run policy object; give it
+one when an Arc consumer needs a cap), a cost ceiling in currency (only tokens), counts
+of anything but steps (`Rule.Quota.Count` over another label is a rule the Breaker cannot
+evaluate), and decision calls in the token total (they leave no `ProviderCallCompleted`).
 
 Within RECALL, two things are deliberately absent. There is no embedding or search
 inside Ampere — a `RecallSource` does its own retrieval — and there is no ranking

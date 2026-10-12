@@ -55,8 +55,14 @@ sealed interface Rule {
 
     /**
      * What an execution must satisfy to count as successful — the three Boolean
-     * members of today's `ExecutionConstraints`, which are declared on every request
-     * and read by nothing (F14).
+     * members of the retired `ExecutionConstraints`, which were declared on every
+     * request and read by nothing (F14).
+     *
+     * **Checked by verification, not by the Breaker.** These are post-conditions: whether
+     * the tests pass or the change breaks an API is a fact about work that has finished,
+     * and the Breaker admits a step before it starts. A Breaker handed one reports it as a
+     * rule it cannot evaluate, which fails the admission (AMPR-445). The repository's
+     * verification manifest is where a requirement is run.
      */
     data class Requirements(
         val requireTests: Boolean = true,
@@ -67,23 +73,32 @@ sealed interface Rule {
     /**
      * A ceiling on a consumed resource. Three resources, each its own case, because a
      * duration, a count and a token total are not interchangeable numbers.
+     *
+     * A quota is breached once the spend *reaches* its limit, and the spend is read from
+     * the persisted record, never from a counter (AMPR-445). A hosted run's `RunQuotas`
+     * are the first source of these rules.
      */
     sealed interface Quota : Rule {
 
-        /** Wall-clock budget; `ExecutionConstraints.timeoutMinutes` (F14). */
+        /**
+         * Wall-clock budget; was `ExecutionConstraints.timeoutMinutes` (F14). Measured
+         * from the run's first recorded event to the Field's clock (F29).
+         */
         data class Time(val limit: Duration) : Quota
 
         /**
-         * A count of things; `ExecutionConstraints.maxFilesChanged` (F14).
+         * A count of things; was `ExecutionConstraints.maxFilesChanged` (F14).
          *
-         * @property of What is counted, as a label (`files`, `retries`); the Breaker
-         *   matches it against what an Action reports.
+         * @property of What is counted, as a label. The Breaker counts `steps` — a run's
+         *   `PlanStepCompleted` events — and nothing else yet; any other label is a rule
+         *   it cannot evaluate.
          */
         data class Count(val limit: Int, val of: String) : Quota
 
         /**
          * A token budget. The first quota with a data source: `ProviderCallCompleted.usage`
          * is on the persisted path, keyed by agent, workflow and phase (F14 amendment).
+         * The spend is `inputTokens + outputTokens` summed over the run's calls.
          */
         data class Tokens(val limit: Long) : Quota
     }
@@ -91,7 +106,8 @@ sealed interface Rule {
     /**
      * Which state changes are allowed. Wraps `TicketStatus.validTransitions()` as a Hard
      * sequencing rule (F14 amendment); states are labels because this package cannot
-     * name `TicketStatus`.
+     * name `TicketStatus`. `TicketStatus.asTransitionRule()` builds it, and
+     * `Breaker.admitTransition` is its one evaluation (AMPR-445).
      *
      * @property allowed For each source state, the set of states it may move to. A
      *   state absent from the map has no allowed transitions.

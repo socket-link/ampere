@@ -32,7 +32,9 @@ import link.socket.ampere.agents.events.api.TaskLifecycle
 import link.socket.ampere.agents.events.api.openTaskLifecycle
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.describeResult
+import link.socket.ampere.field.Admission
 import link.socket.ampere.llm.DispatchingUpstreamLlmClient
+import link.socket.ampere.plug.permission.UserGrants
 import link.socket.ampere.probe.ProbeSuite
 import link.socket.ampere.roster.RoleId
 import link.socket.ampere.roster.Roster
@@ -578,6 +580,25 @@ internal class RosterHostedRun(
     }
 
     /**
+     * The rules this run puts on every step, whichever seat runs it: the policy's quotas,
+     * each a Hard `Rule.Quota` (AMPR-445). The seat's Breaker reads the run's spend from the
+     * events filed under [runId] — every seat's door writes to the one store — so a quota
+     * counts what all the seats spent, not only the seat that is about to spend more.
+     */
+    private val runRules = policy.quotas.asRules()
+
+    /**
+     * The same quotas, asked at the run's level when a step fails, so [dispatch] can tell a
+     * reached quota from one step's fault (AMPR-445). Null when the run set no quota, which
+     * is the default and reads nothing.
+     */
+    private val quotaCheck: Breaker? = if (runRules.isEmpty()) {
+        null
+    } else {
+        Breaker(userGrants = { UserGrants() }, eventApi = host.door, executorId = host.id, runId = runId)
+    }
+
+    /**
      * Runs [step] on its seat, or skips it because a step it depends on failed.
      *
      * A failure that comes back is handed on as *non-critical*, so `PlanExecutor` walks
@@ -587,11 +608,13 @@ internal class RosterHostedRun(
      * [Task.Step.dependsOn], read by [failedDependencyOf]. A step that throws is a
      * failed step like any other, for the same reason.
      *
-     * Two failures stay critical, because they are not one step's fault: a cancellation
-     * caught here, and any failure on a scope that is no longer active — which is how a
+     * Three failures stay critical, because they are not one step's fault: a cancellation
+     * caught here; any failure on a scope that is no longer active — which is how a
      * tool's own cancellation arrives, swallowed into a failed outcome by
-     * `FunctionExecutor` (see [captureCancellation]). Walking on from either would
-     * dispatch the next step on a dead run.
+     * `FunctionExecutor` (see [captureCancellation]); and any failure once a run quota is
+     * reached (AMPR-445). Walking on from the first two would dispatch the next step on a
+     * dead run; walking on from the third would trip every remaining step one at a time,
+     * because a spend never goes back down.
      */
     private suspend fun dispatch(step: Task, priorResults: List<StepOutcome>): StepResult {
         val description = step.planStepDescription ?: step.id
@@ -609,6 +632,7 @@ internal class RosterHostedRun(
                     step = step,
                     parentTask = goal,
                     priorResults = priorResults,
+                    runRules = runRules,
                 )
             }
         } catch (e: CancellationException) {
@@ -630,8 +654,16 @@ internal class RosterHostedRun(
 
         if (result !is StepResult.Failure) return result
         failedRoots[step.id] = step.id
-        return if (coroutineContext.isActive) result.copy(isCritical = false) else result
+        return if (coroutineContext.isActive && !quotaReached()) result.copy(isCritical = false) else result
     }
+
+    /**
+     * Whether a run quota is reached now, read from the record as the seat's Breaker reads
+     * it. A record that cannot be read answers no: the next step's own admission fails
+     * closed on the same read, so nothing is let through on it.
+     */
+    private suspend fun quotaReached(): Boolean =
+        quotaCheck?.admit(tool = null, rules = runRules)?.getOrNull() is Admission.Trip
 
     /**
      * The failed step [step] cannot run without, or null when it can run (AMPR-450).

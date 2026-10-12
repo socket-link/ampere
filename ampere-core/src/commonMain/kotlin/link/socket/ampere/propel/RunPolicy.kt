@@ -30,6 +30,9 @@ import link.socket.ampere.memory.RecallSource
  *   state a decision call is given ([asDecisionState]). Only read when something is
  *   asked. Longer text is cut there and an ellipsis appended, so a decision model sees
  *   that a result was a fragment.
+ * @property quotas The run's token, wall-clock and step ceilings (AMPR-445). Each one set
+ *   is a Hard rule the Breaker admits every step against, read from the run's persisted
+ *   events. The default sets none. See [RunQuotas].
  */
 @AmpereStableApi
 data class RunPolicy(
@@ -39,6 +42,7 @@ data class RunPolicy(
     val recall: RecallPolicy = RecallPolicy(),
     val goalCheck: GoalCheck = GoalCheck.Off,
     val judgmentResultClip: Int = 400,
+    val quotas: RunQuotas = RunQuotas.None,
 ) {
 
     init {

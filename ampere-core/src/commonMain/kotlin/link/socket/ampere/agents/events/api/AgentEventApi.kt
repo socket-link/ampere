@@ -426,6 +426,20 @@ class AgentEventApi(
     }
 
     /**
+     * Every event filed under [runId], in the order the store sequenced them (AMPR-445).
+     *
+     * What a hosted run's quotas are read from: the record, not a counter beside it. Unlike
+     * the reads above, a failure is returned rather than logged into an empty list, because
+     * the Breaker must be able to tell "this run has spent nothing" from "the store could not
+     * say". Rows the store could not decode are reported here as for every read, and stay
+     * counted on the returned [DecodedRows].
+     */
+    suspend fun getRunEvents(runId: RunId): Result<DecodedRows<StoredEvent>> =
+        eventRepository.getEventsByRunId(runId).onSuccess { rows ->
+            reportUndecodableRows(rows)
+        }
+
+    /**
      * Say on the bus that a read skipped a row it could not decode (AMPR-364).
      *
      * The store cannot do this itself: it sits *below* this door, and an `Event` published from

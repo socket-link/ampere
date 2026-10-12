@@ -12,8 +12,12 @@ import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 data class ExecutionRequest<Context : ExecutionContext>(
     /** Additional context to help the executor understand how to execute the task */
     val context: Context,
-    /** Constraints that bound the execution */
-    val constraints: ExecutionConstraints,
+    /**
+     * Retired (AMPR-445): read by nothing, and deleted one release after it. Omit it; a
+     * run's limits are `RunPolicy.quotas`, which the Breaker enforces before each step.
+     */
+    @Suppress("DEPRECATION")
+    val constraints: ExecutionConstraints = ExecutionConstraints(),
     /**
      * Ambient Arc-run identity (AMPR-351) for the run this tool call belongs to.
      *
