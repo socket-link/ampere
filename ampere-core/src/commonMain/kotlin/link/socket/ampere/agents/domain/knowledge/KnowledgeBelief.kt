@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.domain.knowledge
 
 import link.socket.ampere.field.Belief
+import link.socket.ampere.field.BeliefKind
 import link.socket.ampere.field.Decay
 import link.socket.ampere.field.Primitive
 import link.socket.ampere.field.Provenance
@@ -13,7 +14,10 @@ import link.socket.ampere.field.Ref
  * reported a confidence, so nothing ranks it. Holder and sensitivity come from the row as
  * stored, `system` for a backfilled one. The provenance is the row's `created_by_event` and its
  * timestamp. The content is the approach and what was learned from it, as prose, in that
- * order: a lesson read without the attempt it came from loses what it is a lesson about.
+ * order: a lesson read without the attempt it came from loses what it is a lesson about. The
+ * kind comes from [knowledgeType] through [beliefKind], so an outcome's knowledge is a
+ * [BeliefKind.LESSON] (AMPR-448, F21). The kind is decided here, at read time; no event
+ * carries it.
  *
  * **Why [subject] is a parameter.** The knowledge table has no subject column: what a belief is
  * *about* is the caller's to say. The Field read passes the root goal of the row's run when the
@@ -30,11 +34,13 @@ fun KnowledgeEntry.toBelief(subject: Ref<Primitive>): Result<Belief> {
         ?: return Result.failure(UnprovenancedKnowledgeException(id))
     val provenance = Provenance(createdBy = createdBy, createdAt = timestamp)
     val content = listOf(approach, learnings).filter { it.isNotBlank() }.joinToString("\n\n")
+    val kind = knowledgeType.beliefKind()
     val belief = if (confidence != null) {
         Belief.Settled(
             holder = holder,
             subject = subject,
             content = content,
+            kind = kind,
             confidence = confidence,
             sensitivity = sensitivity,
             decay = Decay.None,
@@ -45,12 +51,27 @@ fun KnowledgeEntry.toBelief(subject: Ref<Primitive>): Result<Belief> {
             holder = holder,
             subject = subject,
             content = content,
+            kind = kind,
             sensitivity = sensitivity,
             decay = Decay.None,
             provenance = provenance,
         )
     }
     return Result.success(belief)
+}
+
+/**
+ * The [BeliefKind] a row of this source type reads as (AMPR-448). An outcome's knowledge is what
+ * an attempt taught, so it is a [BeliefKind.LESSON]; every other source is its namesake.
+ * Exhaustive, so a new [KnowledgeType] cannot reach the Field without a kind being chosen for it.
+ * Never [BeliefKind.OBSERVATION]: an Observation is not a knowledge row (F7).
+ */
+fun KnowledgeType.beliefKind(): BeliefKind = when (this) {
+    KnowledgeType.FROM_OUTCOME -> BeliefKind.LESSON
+    KnowledgeType.FROM_IDEA -> BeliefKind.IDEA
+    KnowledgeType.FROM_PERCEPTION -> BeliefKind.PERCEPTION
+    KnowledgeType.FROM_PLAN -> BeliefKind.PLAN
+    KnowledgeType.FROM_TASK -> BeliefKind.TASK
 }
 
 /**

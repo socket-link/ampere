@@ -51,12 +51,30 @@ branch, not once per role an agent might play.
 
 | Record | Shape | Rule |
 |--------|-------|------|
-| `Belief` | holder `Ref<Subject>`, subject `Ref<Primitive>`, content, `confidence: Double?`, `sensitivity {PUBLIC, PRIVATE, PROTECTED}`, `decay`, provenance | `Settled` carries a number; `Unsettled` carries `null` by construction. Every belief has a holder (F9). Confidence is a stored, already-mapped number (F10); `PROTECTED` rows leave no Subject's view but the holder's and are never judged off-device (F12). |
+| `Belief` | holder `Ref<Subject>`, subject `Ref<Primitive>`, content, `kind {LESSON, IDEA, PERCEPTION, PLAN, TASK, OBSERVATION}`, `confidence: Double?`, `sensitivity {PUBLIC, PRIVATE, PROTECTED}`, `decay`, provenance | `Settled` carries a number; `Unsettled` carries `null` by construction. Every belief has a holder (F9). Confidence is a stored, already-mapped number (F10); `PROTECTED` rows leave no Subject's view but the holder's and are never judged off-device (F12). `kind` is required, with no default (AMPR-448); outcome knowledge is a `LESSON` (F21). |
 | `Constraint` | subject, `rule: Rule`, `hardness {HARD, SOFT}`, origin `Ref<Subject>`, provenance | The predicate is derived from the `Rule` at probe time by the Breaker and is **never stored** — not as a lambda, not as an expression. Hard rules are never model-evaluated (F15, J7). |
 | `Rule` | sealed: `Requirements`, `Quota.{Time, Count, Tokens}`, `Transition`, `AccessPolicy`, `Dependency`, `Deadline`, `Cadence` | Each case is the data form of a rule the codebase already enforces or declares unread (F14, F15). |
-| `Action` | id, `actor: Ref<Subject>`, `executor: String?`, goal, `state {PROPOSED → ADMITTED → TAKEN}`, `reversibility`, `cost`, `prediction?`, provenance | Plan steps are the model's proposed Actions; no separate candidate type (F16). Actor and executor are separate members (F17); the live-path wiring is W3. |
+| `Action` | id, `actor: Ref<Subject>`, `executor: String?`, goal, `state {PROPOSED → ADMITTED → TAKEN}`, `reversibility?`, `cost?`, `prediction?`, `result?: ActionResult {Succeeded, Failed(reason?)}`, provenance | Plan steps are the model's proposed Actions; no separate candidate type (F16). Actor and executor are separate members (F17), filled from the live path since AMPR-443. `null` reversibility or cost means unknown, never reversible or free (AMPR-448). Only a `TAKEN` Action has a result, so a failure is a taken Action whose result failed (F20), not a state after `TAKEN`. |
 | `Relationship<From, To>` | from, to, `kind {Mirrors, MemberOf}`, provenance | Structure is edges, not nested members: a tracker's work item `Mirrors` a Goal (F8); an agent is `MemberOf` a Group (F30). |
 | `Provenance` | `createdBy` (the producing event's id), `createdAt` | Lives on the event envelope (F2); every record points at one event id and the causal chain is a walk over `caused_by`. |
+
+### The retypes are fold-side (Q5, 2026-10-11)
+
+F20 and F21 each named a retype for after W2: the tool events "are `ActionTaken` /
+`ActionFailed`", and Pulse's learnings become `BeliefFormed(Lesson)`. The ruling on AMPR-328
+question Q5 is that **both retypes happen in the fold, and no event class carries them**, which
+keeps F2's "zero changes to the concrete event classes" (AMPR-448):
+
+- A `ToolExecutionStarted` / `ToolExecutionCompleted` pair *reads as* an `Action` in `TAKEN`
+  state. The actor is the pair's event source, the executor its `executorId`, the provenance the
+  `Started` event, and the result `Succeeded` or `Failed(errorMessage)`. A held completion is not
+  a taken Action.
+- A `KnowledgeStored` of a `Knowledge.FromOutcome` row *reads as* a `Belief` of kind `LESSON`.
+  Every other knowledge source reads as its namesake kind.
+
+No `ActionTaken`, `ActionFailed` or `BeliefFormed` event exists, and none is planned. A reader
+who wants Actions or Lessons asks the Field (`FieldService.snapshot`), never the event log by
+those names.
 
 ### Signals are derived, never stored
 

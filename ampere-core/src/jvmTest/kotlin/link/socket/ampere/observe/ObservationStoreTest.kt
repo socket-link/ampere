@@ -19,6 +19,7 @@ import link.socket.ampere.canon.SourceHandle
 import link.socket.ampere.data.DatabaseSchemaManager
 import link.socket.ampere.db.Database
 import link.socket.ampere.field.Belief
+import link.socket.ampere.field.BeliefKind
 import link.socket.ampere.field.Decay
 import link.socket.ampere.field.Provenance
 import link.socket.ampere.field.Ref
@@ -158,6 +159,7 @@ class ObservationStoreTest {
                 holder = holder,
                 subject = Ref("canon/people-link/entity-$index"),
                 content = "Observed entity-$index",
+                kind = BeliefKind.OBSERVATION,
                 confidence = 1.0,
                 sensitivity = Sensitivity.PUBLIC,
                 decay = decay,

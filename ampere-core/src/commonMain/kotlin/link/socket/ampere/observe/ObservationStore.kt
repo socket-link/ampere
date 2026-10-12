@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 import link.socket.ampere.db.Database
 import link.socket.ampere.field.Belief
+import link.socket.ampere.field.BeliefKind
 import link.socket.ampere.field.Decay
 import link.socket.ampere.field.Provenance
 import link.socket.ampere.field.Ref
@@ -168,6 +169,8 @@ internal data class StoredObservationRow(
             holder = Ref(holder),
             subject = Ref(subject),
             content = content,
+            // The table holds Observations only (F7), so the kind is the table's, not a column.
+            kind = BeliefKind.OBSERVATION,
             confidence = confidence,
             sensitivity = sensitivity,
             decay = decay,

@@ -18,6 +18,11 @@
 //   - `Environment` is an open marker interface, not sealed: its implementations are
 //     the canon entities (F7), which live in another package.
 //   - No `@Serializable` anywhere: wire shape is each store's decision.
+//
+// Changed after AMPR-415, toward the package:
+//   - `Belief` carries a required `kind: BeliefKind` (AMPR-448, F21).
+//   - `Action.reversibility` and `Action.cost` are nullable (`null` = unknown), and `Action`
+//     carries `result: ActionResult?`, set only on a `TAKEN` Action (AMPR-448, F20).
 
 package link.socket.ampere.field
 

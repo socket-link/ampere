@@ -2,6 +2,7 @@ package link.socket.ampere.field
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -11,7 +12,9 @@ import kotlinx.datetime.Instant
 /**
  * Pins the shape of the Field primitives (AMPR-415): the three branches, the
  * covariance of [Ref], the Settled/Unsettled split, the three-state Action, and the
- * fact that nothing here stores a signal or a predicate.
+ * fact that nothing here stores a signal or a predicate. AMPR-448 adds a belief's kind and
+ * an Action whose reversibility and cost may be unknown and whose result only a taken
+ * Action has.
  *
  * Shape tests only — the package has no behaviour to test.
  */
@@ -46,6 +49,7 @@ class FieldPrimitivesTest {
             holder = agent.id,
             subject = goal.id,
             content = "The tests cover the change",
+            kind = BeliefKind.LESSON,
             confidence = 0.75,
             sensitivity = Sensitivity.PUBLIC,
             provenance = provenance,
@@ -54,6 +58,7 @@ class FieldPrimitivesTest {
             holder = agent.id,
             subject = goal.id,
             content = "Whether the iOS target compiles",
+            kind = BeliefKind.TASK,
             sensitivity = Sensitivity.PRIVATE,
             decay = Decay.HalfLife(2.hours),
             provenance = provenance,
@@ -64,6 +69,22 @@ class FieldPrimitivesTest {
         assertNull(unsettled.confidence)
         assertEquals(listOf(0.75, null), beliefs.map { it.confidence })
         assertEquals(Decay.None, settled.decay)
+        assertEquals(listOf(BeliefKind.LESSON, BeliefKind.TASK), beliefs.map { it.kind })
+    }
+
+    @Test
+    fun `the belief kinds are the knowledge sources with outcome read as lesson and the observation`() {
+        assertEquals(
+            listOf(
+                BeliefKind.LESSON,
+                BeliefKind.IDEA,
+                BeliefKind.PERCEPTION,
+                BeliefKind.PLAN,
+                BeliefKind.TASK,
+                BeliefKind.OBSERVATION,
+            ),
+            BeliefKind.entries.toList(),
+        )
     }
 
     @Test
@@ -72,6 +93,7 @@ class FieldPrimitivesTest {
             holder = human.id,
             subject = subject,
             content = "about",
+            kind = BeliefKind.IDEA,
             sensitivity = Sensitivity.PROTECTED,
             provenance = provenance,
         )
@@ -123,6 +145,62 @@ class FieldPrimitivesTest {
             ActionState.entries.toList(),
         )
         assertEquals(ActionState.ADMITTED, action.copy(state = ActionState.ADMITTED).state)
+        assertNull(action.result)
+    }
+
+    @Test
+    fun `an action may leave reversibility and cost unknown`() {
+        val action = Action(
+            id = ActionId("act-2"),
+            actor = agent.id,
+            description = "read_codebase",
+            state = ActionState.TAKEN,
+            reversibility = null,
+            cost = null,
+            provenance = provenance,
+        )
+
+        assertNull(action.reversibility)
+        assertNull(action.cost)
+        assertNull(action.result, "a taken action whose outcome is unknown has no result")
+    }
+
+    @Test
+    fun `a failed action is a taken one whose result failed`() {
+        val taken = Action(
+            id = ActionId("act-3"),
+            actor = agent.id,
+            executor = "function-executor",
+            description = "run_tests",
+            state = ActionState.TAKEN,
+            reversibility = null,
+            cost = null,
+            result = ActionResult.Failed(reason = "two tests failed"),
+            provenance = provenance,
+        )
+
+        assertEquals(ActionState.TAKEN, taken.state)
+        assertEquals("two tests failed", assertIs<ActionResult.Failed>(taken.result).reason)
+        assertEquals(ActionResult.Succeeded, taken.copy(result = ActionResult.Succeeded).result)
+        assertNull(ActionResult.Failed(reason = null).reason, "no reason is stated rather than invented")
+    }
+
+    @Test
+    fun `only a taken action has a result`() {
+        for (state in listOf(ActionState.PROPOSED, ActionState.ADMITTED)) {
+            assertFailsWith<IllegalArgumentException> {
+                Action(
+                    id = ActionId("act-4"),
+                    actor = agent.id,
+                    description = "deploy",
+                    state = state,
+                    reversibility = Reversibility.IRREVERSIBLE,
+                    cost = null,
+                    result = ActionResult.Succeeded,
+                    provenance = provenance,
+                )
+            }
+        }
     }
 
     @Test

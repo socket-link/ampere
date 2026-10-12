@@ -3,6 +3,8 @@ concept: Field
 status: experimental
 tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/field/Field.kt
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/field/Action.kt
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/field/Belief.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/service/FieldService.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/internal/DefaultFieldService.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/knowledge/KnowledgeBelief.kt
@@ -13,7 +15,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/commitment/CommitmentLedger.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/field/CommitmentStore.sq
 related: [SubjectRegistry, GoalBranch, MemoryProvenance, DomainCanon, EventSerialBus]
-last_verified: 2026-10-11
+last_verified: 2026-10-12
 ---
 
 # Field
@@ -22,10 +24,12 @@ last_verified: 2026-10-11
 
 Ampere's world state read as one value (AMPR-439, F-register row F6): `FieldService.snapshot(viewer)`
 returns a `field.Field` — every registered Subject, every Relationship touching one, each
-Subject's Goals with their state, the Beliefs the viewer may see, the Observations the viewer
-may see (the Environment branch, AMPR-447), and every open Commitment (AMPR-449) — read from the
-stores the W2 doors and the ticket publishers write, with the log's newest sequence
-(`asOfSequence`) as its anchor. It is exposed on the
+Subject's Goals with their state, the Beliefs the viewer may see (each with its `BeliefKind`),
+the Observations the viewer may see (the Environment branch, AMPR-447), every open Commitment
+(AMPR-449), and the newest taken Actions (AMPR-448) — read from the stores the W2 doors and the
+ticket publishers write, with the log's newest sequence (`asOfSequence`) as its anchor. The
+Actions are the one branch folded from the log instead: each persisted
+`ToolExecutionStarted` / `ToolExecutionCompleted` pair reads as an `Action` in `TAKEN` state. It is exposed on the
 instance as `AmpereInstance.field`, which is `@AmpereExperimentalApi`.
 
 ## Why it exists
@@ -47,9 +51,22 @@ meet it. A `TicketAssigned` on a ticket with a due date now forms `Commitment(co
 assignee, ticket, due)`; a `TicketStatusChanged` to Done, or a reassignment, resolves it. That
 history is what F32 (coordination state, Trust) will read; F32 is deferred to W5.
 
+Actions and Lessons (AMPR-448, F20 and F21) are retypes, and the ruling on AMPR-328 question Q5
+(2026-10-11) is that **the retypes are fold-side: no event class carries them**. F20 said the tool
+events "are `ActionTaken` / `ActionFailed`" and F21 that Pulse's learnings become
+`BeliefFormed(Lesson)`. Neither event exists. The tool-event pair already names the deciding
+agent (its source), the performer (`executorId`, AMPR-443), the run and the verdict, so the Field
+reads the pair as a taken Action. A `KnowledgeStored` of a `Knowledge.FromOutcome` row already is
+a lesson, so the Field reads it as a Belief of kind `LESSON`. This keeps F2's "zero changes to the
+concrete event classes".
+
 ## Where it lives
 
 - `field/Field.kt` — `Field`, `Field.HeldGoal`, `Field.GoalState`. Data only, inside the leaf.
+- `field/Belief.kt` — `Belief` and `BeliefKind { LESSON, IDEA, PERCEPTION, PLAN, TASK,
+  OBSERVATION }`; `kind` is required, with no default.
+- `field/Action.kt` — `Action` with nullable `reversibility` / `cost` (`null` = unknown) and
+  `result: ActionResult?` (`Succeeded` | `Failed(reason?)`), which only a `TAKEN` Action may have.
 - `field/Commitment.kt` — `Commitment` and `Commitment.Status { OPEN, RESOLVED }`. Data only, inside
   the leaf; `ticketId` is a `String` because `TicketId` lives outside it.
 - `commitment/CommitmentStore.kt` — `CommitmentStore` and `SqlDelightCommitmentStore` over
@@ -61,14 +78,17 @@ history is what F32 (coordination state, Trust) will read; F32 is deferred to W5
 - `api/internal/DefaultFieldService.kt` — the read over `SubjectStore`, `RelationshipStore`,
   `GoalStore`, `KnowledgeRepository`, `ObservationStore`, `EventRepository` and `CommitmentStore`;
   `DefaultFieldService.over(database, …)` builds every SQLDelight store from the one database.
+  `takenActions` is the tool-event fold; `actionLimit` (default 100) bounds it.
 - `observe/ObservationStore.kt` — `ObservationStore` / `SqlDelightObservationStore`: the
   Environment branch's rows. A non-leaf package, because it imports the database.
   `db/field/ObservationStore.sq`, created by `12.sqm`. Written by
   `RecordedPerception.store(holder, store)` (`plug/spi/RecordedPerceive.kt`).
-- `agents/domain/knowledge/KnowledgeBelief.kt` — `KnowledgeEntry.toBelief(subject)` and
-  `UnprovenancedKnowledgeException`.
+- `agents/domain/knowledge/KnowledgeBelief.kt` — `KnowledgeEntry.toBelief(subject)`,
+  `KnowledgeType.beliefKind()` and `UnprovenancedKnowledgeException`.
 - `KnowledgeStore.sq` `findKnowledgeVisibleTo` / `KnowledgeRepository.findKnowledgeVisibleTo` — the
-  viewer-scoped list read; `EventStore.sq` `latestSequence` / `EventRepository.latestSequence`.
+  viewer-scoped list read; `EventStore.sq` `latestSequence` / `EventRepository.latestSequence`;
+  `EventStore.sq` `getLatestEventsByType` / `EventRepository.getLatestEventsByType` — the
+  bounded, newest-first, typed read the Action fold makes.
 - Wiring: `DefaultAmpereInstance` (always), `Ampere.fromEnvironment` (only with a `database`).
 - `jvmTest/.../api/FieldServiceTest.kt`, `jvmTest/.../observe/ObservationStoreTest.kt`,
   `jvmTest/.../commitment/CommitmentLedgerTest.kt`,
@@ -76,8 +96,27 @@ history is what F32 (coordination state, Trust) will read; F32 is deferred to W5
 
 ## Invariants
 
-- **The stores are the fold.** Every W2 door publishes its event and writes its row in one step,
-  so a Field is a read over the stores at an instant, never a replay of the log.
+- **The stores are the fold, except for Actions.** Every W2 door publishes its event and writes its
+  row in one step, so a Field is a read over the stores at an instant, never a replay of the log.
+  Taken Actions are the exception: they are folded at read time from a *bounded* window of the
+  newest tool events, never the whole log, and never stored.
+- **The retypes are fold-side (Q5).** No event class carries an Action or a Lesson. A
+  `ToolExecutionStarted` / `ToolExecutionCompleted` pair reads as one `TAKEN` Action: the actor
+  is the start's event source, the executor its `executorId`, the goal the root goal of the
+  start's envelope run (`GoalStore.forRun`) or `null`, the description the tool name, the
+  provenance the start, and the result `Succeeded` or `Failed(errorMessage)`. Outcome knowledge
+  reads as a `LESSON`. No Event subtype was added or changed to say either.
+- **Unknown is `null`, never guessed.** No source records an Action's reversibility or cost, so
+  both are `null`, and nothing may read `null` as reversible or as free. A failure is a taken
+  Action whose result failed; `ActionState` has no state after `TAKEN`, and only a `TAKEN`
+  Action may have a result.
+- **A held call is not taken.** A completion with `held = true` is waiting on a person, so the
+  fold leaves it out rather than give it a result. A completion whose start is outside the
+  window (rotated out, or outlasting `2 × actionLimit` other starts) is left out too: without the
+  start there is no provenance.
+- **Every Belief states its kind.** `BeliefKind` has no default. A knowledge row's kind is its
+  `knowledge_type` through an exhaustive `when` (`FROM_OUTCOME` → `LESSON`, the rest their
+  namesakes); an Observation is always `OBSERVATION`.
 - **A view is per viewer (F12).** Beliefs come from `findKnowledgeVisibleTo`, whose predicate —
   the same one every Subject's knowledge read uses — sits in SQL ahead of the `LIMIT`. Another
   Subject's `PRIVATE` and `PROTECTED` beliefs are never in a snapshot; a `null` viewer sees `PUBLIC`
@@ -128,8 +167,14 @@ history is what F32 (coordination state, Trust) will read; F32 is deferred to W5
 - **Put a perceive in the Field** — `source.recordedPerceive(query, eventApi)`, then
   `perception.store(holder, SqlDelightObservationStore(database))`. Nothing in Ampere does this
   on a production path; the consumer that perceives chooses the holder.
-- **Add a branch to the snapshot** (Actions, Constraints) — give it a store first; the snapshot
-  reads stores, so a branch with no store has nothing to contribute.
+- **Add a branch to the snapshot** (Constraints) — give it a store first; the snapshot reads
+  stores, so a branch with no store has nothing to contribute. Actions are the one exception,
+  because Q5 put their retype in the fold and the tool events already carry everything a taken
+  Action needs.
+- **Read what an agent did** — `snapshot(viewer).actions`, newest first: one `TAKEN` Action per
+  completed tool call, with `result` saying whether it worked. Never read the log for an
+  `ActionTaken`; there is none.
+- **Read an agent's lessons** — `snapshot(viewer).beliefs.filter { it.kind == BeliefKind.LESSON }`.
 - **Create a ticket that forms a Commitment** — `ampere.tickets.create("…") { dueDate(instant) }`,
   then `assign`. `TicketActionService.createTicket(…, dueDate)` underneath.
 - **Add a ticket publisher** — take a `CommitmentLedger?`, wire it from
@@ -160,6 +205,17 @@ history is what F32 (coordination state, Trust) will read; F32 is deferred to W5
   did this until AMPR-449; a blocker that hands the ticket to someone new now publishes a
   `TicketAssigned` caused by its `TicketBlocked` and folds it. Its move to Blocked is announced by
   `TicketBlocked` alone, which is safe here only because Blocked resolves nothing.
+- *Publishing an `ActionTaken`, `ActionFailed` or `BeliefFormed` event.* Q5 ruled the retypes
+  fold-side. A second event for a tool call or a lesson is a second source of truth for the same
+  fact.
+- *Filling an Action's `reversibility` or `cost` with a plausible default.* Nothing records either
+  yet. `REVERSIBLE` or `Cost(0.0)` as a default would let a later gate admit an Action because of a
+  value that nobody measured.
+- *Adding a `FAILED` `ActionState`.* States only move forward. A failure is a `TAKEN` Action whose
+  `result` is `Failed`.
+- *Pairing each completion with a per-invocation `payload LIKE` lookup.* `invocationId` lives only
+  in the payload, so each lookup scans every start row in the store. The fold reads one bounded,
+  newest-first window of starts and pairs them in memory.
 - *Treating `findKnowledgeVisibleTo`'s interface default as a working read.* It fails with
   `UnsupportedOperationException` so a repository that predates it — a consumer's `MemoryStore`
   override — makes the snapshot fail loudly rather than report a world with no beliefs.

@@ -17,17 +17,32 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.config.AgentActionAutonomy
+import link.socket.ampere.agents.config.AgentConfiguration
 import link.socket.ampere.agents.domain.event.MemoryEvent
+import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.reasoning.AgentLLMService
+import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.events.InMemoryEventApi
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.events.tickets.Ticket
 import link.socket.ampere.agents.events.tickets.TicketPriority
 import link.socket.ampere.agents.events.tickets.TicketRepository
+import link.socket.ampere.agents.events.tickets.TicketType
+import link.socket.ampere.agents.execution.ToolExecutionEngine
+import link.socket.ampere.agents.execution.executor.FunctionExecutor
+import link.socket.ampere.agents.execution.request.ExecutionConstraints
+import link.socket.ampere.agents.execution.request.ExecutionContext
+import link.socket.ampere.agents.execution.request.ExecutionRequest
+import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.service.TicketActionService
 import link.socket.ampere.api.internal.DefaultFieldService
 import link.socket.ampere.canon.CanonId
@@ -36,9 +51,16 @@ import link.socket.ampere.canon.CanonProvenance
 import link.socket.ampere.canon.CanonType
 import link.socket.ampere.canon.SourceHandle
 import link.socket.ampere.commitment.CommitmentLedger
+import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
+import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
+import link.socket.ampere.domain.ai.model.AIModel_Claude
+import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.domain.arc.GoalNode
 import link.socket.ampere.domain.arc.GoalTree
 import link.socket.ampere.dsl.config.AnthropicConfig
+import link.socket.ampere.field.ActionResult
+import link.socket.ampere.field.ActionState
+import link.socket.ampere.field.BeliefKind
 import link.socket.ampere.field.Commitment
 import link.socket.ampere.field.Field
 import link.socket.ampere.field.Ref
@@ -64,7 +86,8 @@ import link.socket.ampere.subject.SubjectRegistry
  * edges through [SubjectRegistry], goals through [GoalBranch], knowledge through
  * [AgentMemoryService], Observations through a recorded perceive — so what the snapshot is
  * checked against is what production writes, events and provenance included. F12 is checked twice: at the knowledge store's own read, where
- * the predicate must sit ahead of the limit, and end to end through the snapshot.
+ * the predicate must sit ahead of the limit, and end to end through the snapshot. Taken Actions
+ * (AMPR-448) are the tool-event pairs the real [ToolExecutionEngine] publishes through the door.
  */
 @OptIn(AmpereExperimentalApi::class)
 class FieldServiceTest {
@@ -333,6 +356,86 @@ class FieldServiceTest {
         assertIs<IllegalArgumentException>(failure)
     }
 
+    // ==================== Belief kinds (AMPR-448) ====================
+
+    @Test
+    fun `outcome knowledge reads as a lesson and every other source as its namesake`() = runBlocking<Unit> {
+        memoryA.storeKnowledge(knowledge("task-row", minutesAgo = 2)).getOrThrow()
+        memoryA.storeKnowledge(
+            Knowledge.FromOutcome(
+                outcomeId = "outcome-1",
+                approach = "approach lesson",
+                learnings = "learned lesson",
+                timestamp = now - 1.minutes,
+            ),
+        ).getOrThrow()
+
+        val field = service.snapshot(viewer = null).getOrThrow()
+
+        assertEquals(
+            mapOf(content("task-row") to BeliefKind.TASK, content("lesson") to BeliefKind.LESSON),
+            field.beliefs.associate { it.content to it.kind },
+        )
+    }
+
+    // ==================== Taken Actions (AMPR-448) ====================
+
+    @Test
+    fun `a successful and a failing tool step read as two taken actions`() = runBlocking<Unit> {
+        branch.form(tree, runId).getOrThrow()
+        val engine = toolEngine()
+        engine.execute(tool("read_codebase", "Read codebase", failure = null), toolRequest(runId))
+        engine.execute(tool("run_tests", "Run tests", failure = "two tests failed"), toolRequest(runId))
+
+        val field = service.snapshot(viewer = null).getOrThrow()
+
+        assertEquals(listOf("Run tests", "Read codebase"), field.actions.map { it.description }, "newest first")
+        val (failed, succeeded) = field.actions
+        assertEquals(ActionResult.Failed(reason = "two tests failed"), failed.result)
+        assertEquals(ActionResult.Succeeded, succeeded.result)
+        for (action in field.actions) {
+            assertEquals(ActionState.TAKEN, action.state)
+            assertEquals(Ref<Subject>(AGENT_A), action.actor, "the deciding agent is the event's source")
+            assertEquals(FunctionExecutor.DEFAULT_ID, action.executor, "the performer is the pair's executorId")
+            assertEquals(GoalBranch.goalRef(runId, "goal-0"), action.goal)
+            assertNull(action.reversibility, "nothing records reversibility, so it is not guessed")
+            assertNull(action.cost, "nothing records cost, so it is not guessed")
+        }
+
+        val starts = handle.repository.getEventsByType(ToolEvent.ToolExecutionStarted.EVENT_TYPE).getOrThrow()
+            .filterIsInstance<ToolEvent.ToolExecutionStarted>()
+        assertEquals(
+            starts.associate { it.invocationId to it.eventId },
+            field.actions.associate { it.id.value to it.provenance.createdBy },
+            "each action is one invocation, and its provenance is the start that announced it",
+        )
+    }
+
+    @Test
+    fun `a tool call waiting on a person is not a taken action`() = runBlocking<Unit> {
+        val engine = toolEngine()
+        engine.execute(holdingTool(), toolRequest(runId = null))
+        engine.execute(tool("read_codebase", "Read codebase", failure = null), toolRequest(runId = null))
+
+        val field = service.snapshot(viewer = null).getOrThrow()
+
+        assertEquals(listOf("Read codebase"), field.actions.map { it.description })
+        assertNull(field.actions.single().goal, "a call outside a run serves no goal")
+    }
+
+    @Test
+    fun `the action limit keeps the newest completed calls`() = runBlocking<Unit> {
+        val engine = toolEngine()
+        for (name in listOf("first", "second", "third")) {
+            engine.execute(tool(name, name, failure = null), toolRequest(runId = null))
+        }
+
+        val bounded = DefaultFieldService.over(handle.database, repository, handle.repository, actionLimit = 2)
+        val field = bounded.snapshot(viewer = null).getOrThrow()
+
+        assertEquals(listOf("third", "second"), field.actions.map { it.description })
+    }
+
     // ==================== The Environment branch ====================
 
     @Test
@@ -394,6 +497,97 @@ class FieldServiceTest {
     }
 
     private fun content(id: String) = "approach $id\n\nlearned $id"
+
+    /** The production engine over A's door, with no strategy registered, so no model is asked anything. */
+    private fun toolEngine(): ToolExecutionEngine = ToolExecutionEngine(
+        llmService = AgentLLMService(
+            AgentConfiguration(
+                agentDefinition = WriteCodeAgent,
+                aiConfiguration = AIConfiguration_Default(
+                    provider = AIProvider_Anthropic,
+                    model = AIModel_Claude.Sonnet_5,
+                ),
+                llmProvider = { "{}" },
+            ),
+        ),
+        executor = FunctionExecutor.create(),
+        actorId = AGENT_A,
+        eventApi = handle.api,
+    )
+
+    /** A tool that succeeds, or fails with [failure] when one is given. */
+    private fun tool(id: String, name: String, failure: String?) = FunctionTool<ExecutionContext.NoChanges>(
+        id = id,
+        name = name,
+        description = name,
+        requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
+        executionFunction = { request ->
+            val at = Clock.System.now()
+            if (failure == null) {
+                ExecutionOutcome.NoChanges.Success(
+                    executorId = request.context.executorId,
+                    ticketId = request.context.ticket.id,
+                    taskId = request.context.task.id,
+                    executionStartTimestamp = at,
+                    executionEndTimestamp = at,
+                    message = "done",
+                )
+            } else {
+                ExecutionOutcome.NoChanges.Failure(
+                    executorId = request.context.executorId,
+                    ticketId = request.context.ticket.id,
+                    taskId = request.context.task.id,
+                    executionStartTimestamp = at,
+                    executionEndTimestamp = at,
+                    message = failure,
+                )
+            }
+        },
+    )
+
+    private fun holdingTool() = FunctionTool<ExecutionContext.NoChanges>(
+        id = "send_reply",
+        name = "Send reply",
+        description = "Sends once a person approves",
+        requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
+        executionFunction = { request ->
+            val at = Clock.System.now()
+            ExecutionOutcome.Held(
+                executorId = request.context.executorId,
+                ticketId = request.context.ticket.id,
+                taskId = request.context.task.id,
+                executionStartTimestamp = at,
+                executionEndTimestamp = at,
+                reason = "waiting for approval",
+            )
+        },
+    )
+
+    private fun toolRequest(runId: String?): ExecutionRequest<ExecutionContext.NoChanges> {
+        val at = Clock.System.now()
+        return ExecutionRequest(
+            context = ExecutionContext.NoChanges(
+                actorId = AGENT_A,
+                executorId = FunctionExecutor.DEFAULT_ID,
+                ticket = Ticket(
+                    id = "ticket-1",
+                    title = "Ship login",
+                    description = "Ship login",
+                    type = TicketType.TASK,
+                    priority = TicketPriority.MEDIUM,
+                    status = TicketStatus.InProgress,
+                    assignedAgentId = AGENT_A,
+                    createdByAgentId = AGENT_A,
+                    createdAt = at,
+                    updatedAt = at,
+                ),
+                task = Task.CodeChange(id = "task-1", status = TaskStatus.Pending, description = "Ship login"),
+                instructions = "Ship login",
+            ),
+            constraints = ExecutionConstraints(requireTests = false, requireLinting = false),
+            runId = runId,
+        )
+    }
 
     /** Projects a place per name, stamped with the query's perceive event id as a recording source must. */
     private inner class PlaceSource(private val names: List<String>) : PerceiveSource<CanonPlace> {
