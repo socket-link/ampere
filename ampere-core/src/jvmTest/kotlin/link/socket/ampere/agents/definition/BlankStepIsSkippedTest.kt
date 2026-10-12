@@ -346,7 +346,7 @@ class BlankStepIsSkippedTest {
      */
     private fun agentWith(vararg tools: RecordingTool): SparkBasedAgent<CodeState> {
         val engine = engine()
-        val reasoning = AgentReasoning.createForTesting(executorId = "blank-step-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "blank-step-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { tool, request -> runBlocking { engine.execute(tool, request) } }
         }
@@ -372,7 +372,7 @@ class BlankStepIsSkippedTest {
                 ),
             ),
             executor = executor,
-            executorId = executor.id,
+            actorId = "blank-step-agent",
             eventApi = eventApi,
         )
     }

@@ -1,5 +1,6 @@
 package link.socket.ampere.api.service.stub
 
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.outcome.OutcomeMemory
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.execution.executor.ExecutorId
@@ -31,5 +32,8 @@ class StubOutcomeService : OutcomeService {
         )
 
     override suspend fun byExecutor(executorId: ExecutorId, limit: Int): Result<List<OutcomeMemory>> =
+        Result.success(emptyList())
+
+    override suspend fun byActor(actorId: AgentId, limit: Int): Result<List<OutcomeMemory>> =
         Result.success(emptyList())
 }

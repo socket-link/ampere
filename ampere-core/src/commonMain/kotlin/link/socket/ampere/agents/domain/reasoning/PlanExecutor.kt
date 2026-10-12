@@ -38,7 +38,7 @@ import link.socket.ampere.agents.execution.executor.ExecutorId
  *
  * Usage:
  * ```kotlin
- * val executor = PlanExecutor(executorId)
+ * val executor = PlanExecutor()
  * val result = executor.execute(plan, priorResults = emptyList()) { step, context ->
  *     when (step) {
  *         is PMTask.CreateIssues -> executeCreateIssues(step, context)
@@ -48,7 +48,10 @@ import link.socket.ampere.agents.execution.executor.ExecutorId
  * }
  * ```
  *
- * @property executorId ID of the agent executing the plan
+ * @property executorId What the plan's own summary outcome is attributed to: [PLAN_EXECUTOR_ID]
+ *   unless a caller names something else. Not the agent (AMPR-443, F17) — a plan's summary
+ *   was produced by the walk, not by any one executor, and each step's own outcome already
+ *   names the executor that ran it. Callers used to pass the agent's id here.
  * @property eventApi The agent's event door (AMPR-389). With one, each executed step
  *   leaves a [PlanEvent.PlanStepStarted] / [PlanEvent.PlanStepCompleted] pair under
  *   [runId], so an Arc run's trace shows the steps Execute actually ran. Null keeps the
@@ -58,7 +61,7 @@ import link.socket.ampere.agents.execution.executor.ExecutorId
  *   envelope, which is what `ArcTraceProjection` joins on.
  */
 class PlanExecutor(
-    private val executorId: ExecutorId,
+    private val executorId: ExecutorId = PLAN_EXECUTOR_ID,
     private val eventApi: AgentEventApi? = null,
     private val runId: RunId? = null,
     private val stepEventApi: ((Task) -> AgentEventApi?)? = null,
@@ -351,6 +354,14 @@ class PlanExecutor(
                 }
             }
         }
+    }
+
+    companion object {
+        /**
+         * The executor a plan's summary outcome names (AMPR-443): the walk itself. The same
+         * shape as an Arc run's own outcome, which names the Arc rather than any one agent.
+         */
+        const val PLAN_EXECUTOR_ID: ExecutorId = "plan"
     }
 }
 

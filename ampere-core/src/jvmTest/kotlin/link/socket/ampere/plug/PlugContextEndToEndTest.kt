@@ -224,7 +224,7 @@ class PlugContextEndToEndTest {
             ),
         ),
         executor = executor,
-        executorId = executor.id,
+        actorId = "agent-1",
         userGrantProvider = { grants },
         mcpServerManager = serverManager,
     )
@@ -252,6 +252,7 @@ class PlugContextEndToEndTest {
 
         return ExecutionRequest(
             context = ExecutionContext.NoChanges(
+                actorId = "test-agent",
                 executorId = executor.id,
                 ticket = ticket,
                 task = task,

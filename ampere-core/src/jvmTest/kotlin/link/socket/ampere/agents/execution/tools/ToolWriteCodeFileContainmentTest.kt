@@ -47,6 +47,7 @@ class ToolWriteCodeFileContainmentTest {
     }
 
     private fun writeContext(path: String, content: String) = ExecutionContext.Code.WriteCode(
+        actorId = "test-agent",
         executorId = "test-executor",
         ticket = Ticket(
             id = generateUUID(),

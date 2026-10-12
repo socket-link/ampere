@@ -1,0 +1,20 @@
+-- AMPR-443 (F17): actor ≠ executor. An outcome row names the agent that decided the call
+-- (`actor_id`) apart from the Executor.id that performed it (`executor_id`). Until now the
+-- live path wrote the agent's id into `executor_id`, so "who did this" had no answer.
+--
+-- This ticket owns 15.sqm and only 15.sqm; 12.sqm is the ObservationStore (AMPR-447), 13.sqm the
+-- CommitmentStore (AMPR-449) and 14.sqm the HeldRunStore (AMPR-430), which landed first. The column
+-- is last, matching OutcomeMemoryStore.sq, because ADD COLUMN appends.
+ALTER TABLE OutcomeMemoryStore ADD COLUMN actor_id TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_outcome_actor_id ON OutcomeMemoryStore(actor_id);
+
+-- Backfill: every existing row was written with the agent's id in `executor_id`, so that id is
+-- its actor. The one exception is an Arc run's own row, which `AmpereRuntime` has always
+-- attributed to the Arc (`arc:<name>`) rather than to an agent; no single agent decided it, so
+-- its actor stays NULL, as a new one's does. Its `executor_id` is left as it was. So is every
+-- other row's: the executor that performed a legacy call was never recorded, and copying the
+-- agent's id out of `executor_id` would be inventing one.
+UPDATE OutcomeMemoryStore
+SET actor_id = executor_id
+WHERE actor_id IS NULL AND executor_id NOT LIKE 'arc:%';

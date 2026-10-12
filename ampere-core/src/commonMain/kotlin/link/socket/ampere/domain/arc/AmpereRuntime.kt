@@ -458,6 +458,9 @@ class AmpereRuntime(
             try {
                 repository.recordOutcome(
                     ticketId = outcome.runId,
+                    // No single agent decided the run, so its row has no actor (AMPR-443);
+                    // the agents' own rows under this run id each name theirs.
+                    actorId = null,
                     executorId = runExecutorId,
                     approach = userGoal,
                     outcome = executionOutcome,

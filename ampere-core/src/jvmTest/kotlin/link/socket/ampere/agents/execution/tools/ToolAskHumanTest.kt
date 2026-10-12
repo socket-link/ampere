@@ -52,6 +52,7 @@ class ToolAskHumanTest {
         InMemoryEventApi.create(agentId = "test-agent", scope = doorScope)
 
     private fun makeContext(instructions: String) = ExecutionContext.NoChanges(
+        actorId = "test-agent",
         executorId = "test-executor",
         ticket = Ticket(
             id = generateUUID(),

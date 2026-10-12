@@ -135,7 +135,13 @@ sealed interface ToolEvent : Event {
      * @property toolName The name of the tool being executed
      * @property runId The Arc run the dispatch belongs to; also set on the envelope, which
      *   is what `ArcTraceProjection` joins on. Null for a tool call made outside a run.
+     * @property executorId The `Executor.id` that performed the call (AMPR-443, F17) — not
+     *   the agent, which is the event's [eventSource]. The two used to be one string; the
+     *   pair now names both, the decider on the envelope and the performer here. Never
+     *   written when null, so a pair stored before the field existed decodes unchanged and
+     *   re-encodes byte-identically.
      */
+    @OptIn(ExperimentalSerializationApi::class)
     @Serializable
     data class ToolExecutionStarted(
         override val eventId: EventId,
@@ -146,6 +152,8 @@ sealed interface ToolEvent : Event {
         val toolId: ToolId,
         val toolName: String,
         val runId: String? = null,
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        val executorId: String? = null,
     ) : ToolEvent {
 
         override val eventType: EventType = EVENT_TYPE
@@ -182,6 +190,8 @@ sealed interface ToolEvent : Event {
      *   reports `success = false` with no [errorMessage]: it did not succeed, and it did not
      *   fail. Never written when false, so every other completion encodes exactly as it did
      *   before the field existed, and a stored one without the key decodes as not held.
+     * @property executorId The `Executor.id` that performed the call (AMPR-443, F17); the
+     *   agent is the event's [eventSource]. Never written when null, like [held].
      */
     @OptIn(ExperimentalSerializationApi::class)
     @Serializable
@@ -199,6 +209,8 @@ sealed interface ToolEvent : Event {
         val runId: String? = null,
         @EncodeDefault(EncodeDefault.Mode.NEVER)
         val held: Boolean = false,
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        val executorId: String? = null,
     ) : ToolEvent {
 
         override val eventType: EventType = EVENT_TYPE

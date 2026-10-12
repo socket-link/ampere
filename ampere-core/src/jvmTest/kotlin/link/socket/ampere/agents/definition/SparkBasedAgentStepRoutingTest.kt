@@ -84,7 +84,7 @@ class SparkBasedAgentStepRoutingTest {
     @Test
     fun `a step nominating an available tool invokes that tool exactly once`() {
         val recorder = RecordingTool(id = "git_commit")
-        val reasoning = AgentReasoning.createForTesting(executorId = "routing-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "routing-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, request ->
                 @Suppress("UNCHECKED_CAST")
@@ -114,7 +114,7 @@ class SparkBasedAgentStepRoutingTest {
     @Test
     fun `a step nominating an unknown toolId fails fast with a clear error`() {
         val recorder = RecordingTool(id = "git_commit")
-        val reasoning = AgentReasoning.createForTesting(executorId = "routing-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "routing-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, _ -> error("must not be reached when toolId is unknown") }
         }
@@ -147,7 +147,7 @@ class SparkBasedAgentStepRoutingTest {
     fun `a step with null toolId is carried out by a model call instead of a tool`() {
         val recorder = RecordingTool(id = "git_commit")
         val reasoningPrompts = mutableListOf<String>()
-        val reasoning = AgentReasoning.createForTesting(executorId = "routing-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "routing-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, _ -> error("must not be reached when toolId is null") }
             onLLMCall { prompt ->
@@ -183,7 +183,7 @@ class SparkBasedAgentStepRoutingTest {
 
     @Test
     fun `a reasoning step with no model to call fails rather than reporting success`() {
-        val reasoning = AgentReasoning.createForTesting(executorId = "routing-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "routing-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, _ -> error("must not be reached when toolId is null") }
         }
@@ -218,7 +218,7 @@ class SparkBasedAgentStepRoutingTest {
             estimatedComplexity = 2,
             expectations = Expectations.blank,
         )
-        val reasoning = AgentReasoning.createForTesting(executorId = "routing-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "routing-test") {
             onPlanning { _, _ -> error("executePlan must not re-plan its own steps (AMPR-396)") }
             onToolExecution { tool, request ->
                 val recorder = when (tool.id) {
@@ -259,7 +259,7 @@ class SparkBasedAgentStepRoutingTest {
             expectations = Expectations.blank,
         )
         var planningCalls = 0
-        val reasoning = AgentReasoning.createForTesting(executorId = "routing-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "routing-test") {
             onPlanning { _, _ ->
                 planningCalls++
                 subPlan

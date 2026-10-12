@@ -147,7 +147,7 @@ class PinnedWorkspaceContainmentTest {
         return ToolExecutionEngine(
             llmService = llmService,
             executor = executor,
-            executorId = executor.id,
+            actorId = "agent-1",
         )
     }
 
@@ -156,7 +156,8 @@ class PinnedWorkspaceContainmentTest {
         val now = Clock.System.now()
         return ExecutionRequest(
             context = ExecutionContext.NoChanges(
-                executorId = "agent-1",
+                actorId = "agent-1",
+                executorId = "test-executor",
                 ticket = Ticket(
                     id = "ticket-1",
                     title = "Test ticket",

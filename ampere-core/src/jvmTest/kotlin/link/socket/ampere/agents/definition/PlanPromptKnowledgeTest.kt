@@ -185,7 +185,7 @@ class PlanPromptKnowledgeTest {
                 aiConfiguration = FakeAIConfiguration(),
                 llmProvider = capturingProvider,
             ),
-            executorId = "ampr388-bare",
+            actorId = "ampr388-bare",
         ) {
             agentRole = "Test Planner"
             availableTools = { emptySet() }

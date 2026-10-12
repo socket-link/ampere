@@ -181,7 +181,7 @@ class BreakerQuotaTest {
     fun `a quota for a Breaker with no run is a failure`() = runTest {
         val breaker = Breaker(
             userGrants = { UserGrants() },
-            executorId = EXECUTOR_ID,
+            actorId = AGENT_ID,
             runId = null,
             runEvents = record(calls(10)),
         )
@@ -359,7 +359,7 @@ class BreakerQuotaTest {
         clock: MutableClock = clockAt(START),
     ): Breaker = Breaker(
         userGrants = { UserGrants() },
-        executorId = EXECUTOR_ID,
+        actorId = AGENT_ID,
         runId = RUN_ID,
         runEvents = runEvents,
         clock = clock,
@@ -399,7 +399,7 @@ class BreakerQuotaTest {
                     endTimestamp = START,
                     details = "done",
                 ),
-                eventSource = EventSource.Agent(EXECUTOR_ID),
+                eventSource = EventSource.Agent(AGENT_ID),
                 timestamp = START,
                 runId = RUN_ID,
             ),
@@ -409,9 +409,9 @@ class BreakerQuotaTest {
     private fun providerCall(usage: TokenUsage) = ProviderCallCompletedEvent(
         eventId = "call-${usage.hashCode()}",
         timestamp = START,
-        eventSource = EventSource.Agent(EXECUTOR_ID),
+        eventSource = EventSource.Agent(AGENT_ID),
         workflowId = RUN_ID,
-        agentId = EXECUTOR_ID,
+        agentId = AGENT_ID,
         providerId = "anthropic",
         modelId = "test-model",
         usage = usage,
@@ -438,7 +438,7 @@ class BreakerQuotaTest {
     private fun stepQuota(limit: Int) = Rule.Quota.Count(limit = limit, of = RunQuotas.STEPS) to Hardness.HARD
 
     private companion object {
-        const val EXECUTOR_ID = "breaker-quota-test-agent"
+        const val AGENT_ID = "breaker-quota-test-agent"
         const val RUN_ID = "run-under-quota"
 
         val START: Instant = Instant.parse("2026-10-11T12:00:00Z")

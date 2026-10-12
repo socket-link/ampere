@@ -82,6 +82,7 @@ sealed class ProjectParams {
 
             val context = originalRequest.context
             val enrichedContext = ExecutionContext.IssueManagement(
+                actorId = context.actorId,
                 executorId = context.executorId,
                 ticket = context.ticket,
                 task = context.task,
@@ -159,6 +160,7 @@ sealed class ProjectParams {
 
             val originalContext = originalRequest.context
             val enrichedContext = ExecutionContext.NoChanges(
+                actorId = originalContext.actorId,
                 executorId = originalContext.executorId,
                 ticket = originalContext.ticket,
                 task = originalContext.task,
@@ -220,6 +222,7 @@ sealed class ProjectParams {
 
             val originalContext = originalRequest.context
             val enrichedContext = ExecutionContext.NoChanges(
+                actorId = originalContext.actorId,
                 executorId = originalContext.executorId,
                 ticket = originalContext.ticket,
                 task = originalContext.task,

@@ -151,6 +151,8 @@ fun SqlDriver.findSimilarOutcomesByText(query: String, limit: Long): List<Outcom
                             error_message = cursor.getString(7),
                             timestamp = cursor.getLong(8)!!,
                             run_id = cursor.getString(9),
+                            // 15.sqm appends it, so it is last on a migrated table as on a fresh one.
+                            actor_id = cursor.getString(10),
                         ),
                     )
                 }

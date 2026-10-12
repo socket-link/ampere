@@ -92,7 +92,7 @@ class BreakerTest {
 
     @Test
     fun `a grant provider that throws is a failure and not a pass`() = runTest {
-        val breaker = Breaker(userGrants = { error("grant store unavailable") }, executorId = EXECUTOR_ID)
+        val breaker = Breaker(userGrants = { error("grant store unavailable") }, actorId = AGENT_ID)
 
         val admission = breaker.admit(PLUG_TOOL, Breaker.rulesFor(PLUG_TOOL))
 
@@ -119,10 +119,10 @@ class BreakerTest {
     }
 
     private fun breaker(grants: UserGrants): Breaker =
-        Breaker(userGrants = { grants }, executorId = EXECUTOR_ID)
+        Breaker(userGrants = { grants }, actorId = AGENT_ID)
 
     private companion object {
-        const val EXECUTOR_ID = "breaker-test-agent"
+        const val AGENT_ID = "breaker-test-agent"
 
         val PERMISSION: PlugPermission = PlugPermission.NativeAction("send-notification")
         val MANIFEST = PlugManifest(

@@ -92,6 +92,36 @@ class OutcomesCommandTest {
     }
 
     @Test
+    fun `outcomes executor help says it filters by the executor and not the agent`() {
+        val result = OutcomesCommand(MockOutcomeService()).test("executor --help")
+        val help = result.output.replace(Regex("\\s+"), " ")
+
+        // AMPR-443 (F17): `executor` used to be read as the agent, because the agent's id was
+        // what the column held.
+        assertContains(help, "Filters by the executor that performed the work")
+        assertContains(help, "not the agent that decided it")
+        assertContains(help, "outcomes actor")
+    }
+
+    @Test
+    fun `outcomes actor command help text shows usage`() {
+        val result = OutcomesCommand(MockOutcomeService()).test("actor --help")
+        val help = result.output.replace(Regex("\\s+"), " ")
+
+        assertContains(help, "Show outcomes for a specific agent")
+        assertContains(help, "actor-id")
+        assertContains(help, "--limit")
+    }
+
+    @Test
+    fun `outcomes lists the actor subcommand`() {
+        val result = OutcomesCommand(MockOutcomeService()).test("--help")
+
+        assertContains(result.output, "actor")
+        assertContains(result.output, "executor")
+    }
+
+    @Test
     fun `outcomes stats command help text shows usage`() {
         val mockService = MockOutcomeService()
         val command = OutcomesCommand(mockService)

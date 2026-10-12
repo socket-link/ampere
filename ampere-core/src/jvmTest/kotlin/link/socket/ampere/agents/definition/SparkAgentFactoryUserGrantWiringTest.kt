@@ -127,7 +127,8 @@ class SparkAgentFactoryUserGrantWiringTest {
 
         return ExecutionRequest(
             context = ExecutionContext.NoChanges(
-                executorId = "test-agent",
+                actorId = "test-agent",
+                executorId = "test-executor",
                 ticket = ticket,
                 task = task,
                 instructions = "Send a notification",

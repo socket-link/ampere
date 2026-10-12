@@ -124,6 +124,7 @@ sealed class GitParams {
 
             return ExecutionRequest(
                 context = ExecutionContext.GitOperation(
+                    actorId = originalContext.actorId,
                     executorId = originalContext.executorId,
                     ticket = originalContext.ticket,
                     task = originalContext.task,

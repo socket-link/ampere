@@ -68,6 +68,7 @@ class ToolInitializerTest {
 
     private fun createTestExecutionRequest(
         context: ExecutionContext = ExecutionContext.NoChanges(
+            actorId = "test-agent",
             executorId = "test-executor",
             ticket = createTestTicket(),
             task = Task.blank,
@@ -336,6 +337,7 @@ class ToolInitializerTest {
         val writeCodeTool = tools.requireFunctionTool<ExecutionContext.Code.WriteCode>("write_code")
 
         val context = ExecutionContext.Code.WriteCode(
+            actorId = "test-agent",
             executorId = "test-executor",
             ticket = createTestTicket(),
             task = Task.blank,
@@ -366,6 +368,7 @@ class ToolInitializerTest {
         val readCodeTool = tools.requireFunctionTool<ExecutionContext.Code.ReadCode>("read_code")
 
         val context = ExecutionContext.Code.ReadCode(
+            actorId = "test-agent",
             executorId = "test-executor",
             ticket = createTestTicket(),
             task = Task.blank,

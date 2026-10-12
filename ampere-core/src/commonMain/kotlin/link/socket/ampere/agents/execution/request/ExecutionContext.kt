@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.execution.request
 
 import kotlinx.serialization.Serializable
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.task.Task
@@ -11,11 +12,31 @@ import link.socket.ampere.agents.execution.tools.ToolId
 import link.socket.ampere.agents.execution.tools.git.GitOperationRequest
 import link.socket.ampere.agents.execution.tools.issue.BatchIssueCreateRequest
 
-/** Additional context used to help the executor perform a task */
+/**
+ * Additional context used to help the executor perform a task.
+ *
+ * Names two parties, and they are never the same string (AMPR-443, F17): [actorId] is the
+ * agent that decided the work should happen, and [executorId] is the
+ * [Executor][link.socket.ampere.agents.execution.executor.Executor] that performs it. Until
+ * F17 the agent's id rode in [executorId], so "who did this" had no answer — a reader that
+ * wanted the agent and a reader that wanted the executor read the same field.
+ */
 @Serializable
 sealed interface ExecutionContext {
 
-    /** The executor that will use this context */
+    /**
+     * The agent that decided this work should happen — the Subject a tool acts on behalf of.
+     * Read this, not [executorId], wherever "who" means the agent: an event's source, a
+     * routing decision, an escalation to a person.
+     */
+    val actorId: AgentId
+
+    /**
+     * The [Executor][link.socket.ampere.agents.execution.executor.Executor] that performs this
+     * work — its `id`, e.g. `FunctionExecutor.DEFAULT_ID`. [NO_EXECUTOR_ID] when the agent has
+     * none bound; never the agent's own id. `ToolExecutionEngine` re-stamps it at dispatch with
+     * the executor that actually runs the tool.
+     */
     val executorId: ExecutorId
 
     /** The ticket describing the overall work to be done */
@@ -32,6 +53,7 @@ sealed interface ExecutionContext {
 
     @Serializable
     data class NoChanges(
+        override val actorId: AgentId,
         override val executorId: ExecutorId,
         override val ticket: Ticket,
         override val task: Task,
@@ -46,6 +68,7 @@ sealed interface ExecutionContext {
 
         @Serializable
         data class ReadCode(
+            override val actorId: AgentId,
             override val executorId: ExecutorId,
             override val ticket: Ticket,
             override val task: Task,
@@ -57,6 +80,7 @@ sealed interface ExecutionContext {
 
         @Serializable
         data class WriteCode(
+            override val actorId: AgentId,
             override val executorId: ExecutorId,
             override val ticket: Ticket,
             override val task: Task,
@@ -69,6 +93,7 @@ sealed interface ExecutionContext {
 
     @Serializable
     data class IssueManagement(
+        override val actorId: AgentId,
         override val executorId: ExecutorId,
         override val ticket: Ticket,
         override val task: Task,
@@ -84,6 +109,7 @@ sealed interface ExecutionContext {
      */
     @Serializable
     data class GitOperation(
+        override val actorId: AgentId,
         override val executorId: ExecutorId,
         override val ticket: Ticket,
         override val task: Task,
@@ -105,6 +131,7 @@ sealed interface ExecutionContext {
      */
     @Serializable
     data class Planning(
+        override val actorId: AgentId,
         override val executorId: ExecutorId,
         override val ticket: Ticket,
         override val task: Task,
@@ -116,6 +143,16 @@ sealed interface ExecutionContext {
         val parsedPlan: Plan? = null,
         override val knowledgeFromPastMemory: List<Knowledge> = emptyList(),
     ) : ExecutionContext
+
+    companion object {
+        /**
+         * The [executorId] of a context whose agent has no
+         * [Executor][link.socket.ampere.agents.execution.executor.Executor] bound (AMPR-405).
+         * Names that fact rather than falling back to the agent's id, which would put the
+         * decider back in the performer's field.
+         */
+        const val NO_EXECUTOR_ID: ExecutorId = "none"
+    }
 
     /**
      * Serializable summary of a tool surfaced to the planning LLM.
@@ -130,4 +167,22 @@ sealed interface ExecutionContext {
         val name: String,
         val description: String,
     )
+}
+
+/**
+ * This context with [executorId] as its performer, every other field unchanged — the same
+ * subtype back. `ToolExecutionEngine` stamps the executor that actually runs a tool through
+ * this, so a tool reading [ExecutionContext.executorId] and the tool-event pair agree.
+ */
+fun <C : ExecutionContext> C.withExecutorId(executorId: ExecutorId): C {
+    val stamped: ExecutionContext = when (val context: ExecutionContext = this) {
+        is ExecutionContext.NoChanges -> context.copy(executorId = executorId)
+        is ExecutionContext.Code.ReadCode -> context.copy(executorId = executorId)
+        is ExecutionContext.Code.WriteCode -> context.copy(executorId = executorId)
+        is ExecutionContext.IssueManagement -> context.copy(executorId = executorId)
+        is ExecutionContext.GitOperation -> context.copy(executorId = executorId)
+        is ExecutionContext.Planning -> context.copy(executorId = executorId)
+    }
+    @Suppress("UNCHECKED_CAST")
+    return stamped as C
 }

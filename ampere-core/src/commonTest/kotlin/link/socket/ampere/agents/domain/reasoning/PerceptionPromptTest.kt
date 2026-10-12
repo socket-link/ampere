@@ -176,7 +176,7 @@ class PerceptionPromptTest {
                     INSIGHTS_JSON
                 },
             ),
-            executorId = "ampr-403-perception",
+            actorId = "ampr-403-perception",
         ) {
             agentRole = "Test Agent"
             configure()

@@ -13,6 +13,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
@@ -55,6 +56,8 @@ class OutcomeMemoryRepositoryTest {
     private val now = Clock.System.now()
     private val ticketId1: TicketId = "ticket-1"
     private val ticketId2: TicketId = "ticket-2"
+    private val agentId1: AgentId = "agent-1"
+    private val agentId2: AgentId = "agent-2"
     private val executorId1: ExecutorId = "executor-1"
     private val executorId2: ExecutorId = "executor-2"
     private val taskId: TaskId = "task-1"
@@ -110,6 +113,7 @@ class OutcomeMemoryRepositoryTest {
 
         val result = repo.recordOutcome(
             ticketId = ticketId1,
+            actorId = agentId1,
             executorId = executorId1,
             approach = "Traceable execution",
             outcome = outcome,
@@ -132,6 +136,7 @@ class OutcomeMemoryRepositoryTest {
 
         val result = repo.recordOutcome(
             ticketId = ticketId1,
+            actorId = agentId1,
             executorId = executorId1,
             approach = "Unattributed execution",
             outcome = outcome,
@@ -154,6 +159,7 @@ class OutcomeMemoryRepositoryTest {
 
         val result = repo.recordOutcome(
             ticketId = ticketId1,
+            actorId = agentId1,
             executorId = executorId1,
             approach = approach,
             outcome = outcome,
@@ -180,6 +186,7 @@ class OutcomeMemoryRepositoryTest {
 
         val result = repo.recordOutcome(
             ticketId = ticketId1,
+            actorId = agentId1,
             executorId = executorId1,
             approach = approach,
             outcome = outcome,
@@ -214,6 +221,7 @@ class OutcomeMemoryRepositoryTest {
 
         val result = repo.recordOutcome(
             ticketId = ticketId1,
+            actorId = agentId1,
             executorId = executorId1,
             approach = "Test approach",
             outcome = outcome,
@@ -237,9 +245,9 @@ class OutcomeMemoryRepositoryTest {
         val outcome2 = createFailedOutcome()
         val outcome3 = createSuccessfulOutcome()
 
-        repo.recordOutcome(ticketId1, executorId1, "First attempt", outcome1, now)
-        repo.recordOutcome(ticketId1, executorId1, "Second attempt", outcome2, now.plus(1.seconds))
-        repo.recordOutcome(ticketId1, executorId1, "Third attempt", outcome3, now.plus(2.seconds))
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "First attempt", outcome1, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Second attempt", outcome2, now.plus(1.seconds))
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Third attempt", outcome3, now.plus(2.seconds))
 
         val result = repo.getOutcomesByTicket(ticketId1)
 
@@ -271,8 +279,8 @@ class OutcomeMemoryRepositoryTest {
         val outcome1 = createSuccessfulOutcome(ticketId = ticketId1)
         val outcome2 = createSuccessfulOutcome(ticketId = ticketId2)
 
-        repo.recordOutcome(ticketId1, executorId1, "Ticket 1 approach", outcome1, now)
-        repo.recordOutcome(ticketId2, executorId1, "Ticket 2 approach", outcome2, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Ticket 1 approach", outcome1, now)
+        repo.recordOutcome(ticketId2, agentId1, executorId1, "Ticket 2 approach", outcome2, now)
 
         val result = repo.getOutcomesByTicket(ticketId1)
 
@@ -285,6 +293,85 @@ class OutcomeMemoryRepositoryTest {
     }
 
     // =============================================================================
+    // ACTOR ≠ EXECUTOR (AMPR-443, F17)
+    // =============================================================================
+
+    @Test
+    fun `recordOutcome stores the actor apart from the executor`() = runBlocking {
+        val outcome = createSuccessfulOutcome()
+
+        val stored = repo.recordOutcome(
+            ticketId = ticketId1,
+            actorId = agentId1,
+            executorId = executorId1,
+            approach = "Split the parties",
+            outcome = outcome,
+            timestamp = outcome.executionEndTimestamp,
+        ).getOrThrow()
+
+        assertEquals(agentId1, stored.actorId)
+        assertEquals(executorId1, stored.executorId)
+
+        val row = database.outcomeMemoryStoreQueries.getOutcomeById(stored.id).executeAsOne()
+        assertEquals(agentId1, row.actor_id)
+        assertEquals(executorId1, row.executor_id)
+
+        val readBack = repo.getOutcomesByTicket(ticketId1).getOrThrow().single()
+        assertEquals(agentId1, readBack.actorId)
+        assertEquals(executorId1, readBack.executorId)
+    }
+
+    @Test
+    fun `getOutcomesByActor returns what one agent decided whichever executor performed it`() = runBlocking {
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Agent 1 on executor 1", createSuccessfulOutcome(), now)
+        repo.recordOutcome(ticketId1, agentId1, executorId2, "Agent 1 on executor 2", createSuccessfulOutcome(), now)
+        repo.recordOutcome(ticketId1, agentId2, executorId1, "Agent 2 on executor 1", createSuccessfulOutcome(), now)
+
+        val agent1 = repo.getOutcomesByActor(agentId1, limit = 20).getOrThrow()
+        val agent2 = repo.getOutcomesByActor(agentId2, limit = 20).getOrThrow()
+
+        assertEquals(setOf(executorId1, executorId2), agent1.map { it.executorId }.toSet())
+        assertTrue(agent1.all { it.actorId == agentId1 })
+        assertEquals(listOf(executorId1), agent2.map { it.executorId })
+
+        // The executor read is the other axis: both agents' calls on executor 1.
+        val onExecutor1 = repo.getOutcomesByExecutor(executorId1, limit = 20).getOrThrow()
+        assertEquals(setOf(agentId1, agentId2), onExecutor1.map { it.actorId }.toSet())
+    }
+
+    @Test
+    fun `a row no single agent decided has no actor and is found by its executor`() = runBlocking {
+        val stored = repo.recordOutcome(
+            ticketId = "run-1",
+            actorId = null,
+            executorId = "arc:demo",
+            approach = "An Arc run's own outcome",
+            outcome = createSuccessfulOutcome(),
+            timestamp = now,
+        ).getOrThrow()
+
+        assertNull(stored.actorId)
+        assertEquals(listOf(stored.id), repo.getOutcomesByExecutor("arc:demo", limit = 20).getOrThrow().map { it.id })
+        assertTrue(repo.getOutcomesByActor("arc:demo", limit = 20).getOrThrow().isEmpty())
+    }
+
+    @Test
+    fun `getOutcomesByActor respects limit parameter`() = runBlocking {
+        repeat(5) { i ->
+            repo.recordOutcome(
+                ticketId1,
+                agentId1,
+                executorId1,
+                "Attempt $i",
+                createSuccessfulOutcome(),
+                now.plus((i * 1000).milliseconds),
+            )
+        }
+
+        assertEquals(3, repo.getOutcomesByActor(agentId1, limit = 3).getOrThrow().size)
+    }
+
+    // =============================================================================
     // GET OUTCOMES BY EXECUTOR TESTS
     // =============================================================================
 
@@ -293,8 +380,8 @@ class OutcomeMemoryRepositoryTest {
         val outcome1 = createSuccessfulOutcome(executorId = executorId1)
         val outcome2 = createSuccessfulOutcome(executorId = executorId2)
 
-        repo.recordOutcome(ticketId1, executorId1, "Executor 1 work", outcome1, now)
-        repo.recordOutcome(ticketId1, executorId2, "Executor 2 work", outcome2, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Executor 1 work", outcome1, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId2, "Executor 2 work", outcome2, now)
 
         val result = repo.getOutcomesByExecutor(executorId1, limit = 20)
 
@@ -310,7 +397,14 @@ class OutcomeMemoryRepositoryTest {
         // Create 5 outcomes for the same executor
         repeat(5) { i ->
             val outcome = createSuccessfulOutcome(executorId = executorId1)
-            repo.recordOutcome(ticketId1, executorId1, "Attempt $i", outcome, now.plus((i * 1000).milliseconds))
+            repo.recordOutcome(
+                ticketId1,
+                agentId1,
+                executorId1,
+                "Attempt $i",
+                outcome,
+                now.plus((i * 1000).milliseconds),
+            )
         }
 
         val result = repo.getOutcomesByExecutor(executorId1, limit = 3)
@@ -342,9 +436,9 @@ class OutcomeMemoryRepositoryTest {
         val outcome2 = createSuccessfulOutcome()
         val outcome3 = createSuccessfulOutcome()
 
-        repo.recordOutcome(ticketId1, executorId1, "Add input validation to UserRepository", outcome1, now)
-        repo.recordOutcome(ticketId1, executorId1, "Add validation to OrderRepository", outcome2, now)
-        repo.recordOutcome(ticketId1, executorId1, "Fix database connection error", outcome3, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Add input validation to UserRepository", outcome1, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Add validation to OrderRepository", outcome2, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Fix database connection error", outcome3, now)
 
         // Search for "validation" should find first two
         val result = repo.findSimilarOutcomes("validation", limit = 5)
@@ -365,9 +459,9 @@ class OutcomeMemoryRepositoryTest {
         val outcome2 = createSuccessfulOutcome()
         val outcome3 = createSuccessfulOutcome()
 
-        repo.recordOutcome(ticketId1, executorId1, "Add authentication to UserService", outcome1, now)
-        repo.recordOutcome(ticketId1, executorId1, "Implement user registration flow", outcome2, now)
-        repo.recordOutcome(ticketId1, executorId1, "Fix payment processing bug", outcome3, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Add authentication to UserService", outcome1, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Implement user registration flow", outcome2, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Fix payment processing bug", outcome3, now)
 
         // Search for "user authentication" should find related outcomes
         val result = repo.findSimilarOutcomes("user authentication", limit = 5)
@@ -385,6 +479,7 @@ class OutcomeMemoryRepositoryTest {
             val outcome = createSuccessfulOutcome()
             repo.recordOutcome(
                 ticketId1,
+                agentId1,
                 executorId1,
                 "Add validation logic $i",
                 outcome,
@@ -403,7 +498,7 @@ class OutcomeMemoryRepositoryTest {
     @Test
     fun `findSimilarOutcomes returns empty list for no matches`() = runBlocking {
         val outcome = createSuccessfulOutcome()
-        repo.recordOutcome(ticketId1, executorId1, "Add authentication", outcome, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Add authentication", outcome, now)
 
         val result = repo.findSimilarOutcomes("nonexistent keyword xyz", limit = 5)
 
@@ -416,7 +511,7 @@ class OutcomeMemoryRepositoryTest {
     @Test
     fun `findSimilarOutcomes handles empty search string`() = runBlocking {
         val outcome = createSuccessfulOutcome()
-        repo.recordOutcome(ticketId1, executorId1, "Some approach", outcome, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Some approach", outcome, now)
 
         val result = repo.findSimilarOutcomes("", limit = 5)
 
@@ -430,7 +525,7 @@ class OutcomeMemoryRepositoryTest {
     @Test
     fun `findSimilarOutcomes is case-insensitive`() = runBlocking {
         val outcome = createSuccessfulOutcome()
-        repo.recordOutcome(ticketId1, executorId1, "Add VALIDATION to UserRepository", outcome, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Add VALIDATION to UserRepository", outcome, now)
 
         val result = repo.findSimilarOutcomes("validation", limit = 5)
 
@@ -459,7 +554,7 @@ class OutcomeMemoryRepositoryTest {
 
         // Record all attempts
         attempts.forEach { (approach, outcome, timestamp) ->
-            repo.recordOutcome(ticketId1, executorId1, approach, outcome, timestamp)
+            repo.recordOutcome(ticketId1, agentId1, executorId1, approach, outcome, timestamp)
         }
 
         // Query by ticket to see progression
@@ -483,8 +578,8 @@ class OutcomeMemoryRepositoryTest {
         val outcome1 = createSuccessfulOutcome(executorId = executorId1)
         val outcome2 = createSuccessfulOutcome(executorId = executorId2)
 
-        repo.recordOutcome(ticketId1, executorId1, "Executor 1 approach", outcome1, now)
-        repo.recordOutcome(ticketId1, executorId2, "Executor 2 approach", outcome2, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Executor 1 approach", outcome1, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId2, "Executor 2 approach", outcome2, now)
 
         val executor1Results = repo.getOutcomesByExecutor(executorId1, limit = 20).getOrNull()
         val executor2Results = repo.getOutcomesByExecutor(executorId2, limit = 20).getOrNull()
@@ -505,9 +600,9 @@ class OutcomeMemoryRepositoryTest {
             changedFiles = listOf("file1.kt", "file2.kt", "file3.kt", "file4.kt", "file5.kt"),
         )
 
-        repo.recordOutcome(ticketId1, executorId1, "No files", outcomeNoFiles, now)
-        repo.recordOutcome(ticketId1, executorId1, "One file", outcomeOneFile, now)
-        repo.recordOutcome(ticketId1, executorId1, "Many files", outcomeManyFiles, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "No files", outcomeNoFiles, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "One file", outcomeOneFile, now)
+        repo.recordOutcome(ticketId1, agentId1, executorId1, "Many files", outcomeManyFiles, now)
 
         val outcomes = repo.getOutcomesByTicket(ticketId1).getOrNull()
         assertNotNull(outcomes)

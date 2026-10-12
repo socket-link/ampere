@@ -383,6 +383,7 @@ class KnowledgeQueryToolTest {
             description = "Run knowledge query",
         )
         val context = ExecutionContext.NoChanges(
+            actorId = "test-agent",
             executorId = "executor-1",
             ticket = ticket,
             task = task,

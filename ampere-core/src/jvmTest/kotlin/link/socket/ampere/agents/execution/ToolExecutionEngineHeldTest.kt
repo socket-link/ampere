@@ -138,6 +138,7 @@ class ToolExecutionEngineHeldTest {
 
         val result = store.recordOutcome(
             ticketId = "ticket-held",
+            actorId = "agent-1",
             executorId = "test-executor",
             approach = "send_reply: send it",
             outcome = ExecutionOutcome.Held(
@@ -170,7 +171,7 @@ class ToolExecutionEngineHeldTest {
                 ),
             ),
             executor = executor,
-            executorId = executor.id,
+            actorId = "agent-1",
             eventApi = eventApi,
             outcomeRepository = store,
         )
@@ -199,6 +200,7 @@ class ToolExecutionEngineHeldTest {
         val now = Clock.System.now()
         return ExecutionRequest(
             context = ExecutionContext.NoChanges(
+                actorId = "test-agent",
                 executorId = "test-executor",
                 ticket = Ticket(
                     id = "ticket-1",

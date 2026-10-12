@@ -151,7 +151,7 @@ class SparkBasedAgentFileAccessTest {
             requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
             executionFunction = { request -> succeed(request) },
         )
-        val reasoning = AgentReasoning.createForTesting(executorId = "file-access-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "file-access-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, request ->
                 dispatched += request

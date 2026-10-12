@@ -265,6 +265,7 @@ class PlanStepPriorResultsTest {
 
             return ExecutionRequest(
                 context = ExecutionContext.NoChanges(
+                    actorId = originalRequest.context.actorId,
                     executorId = originalRequest.context.executorId,
                     ticket = originalRequest.context.ticket,
                     task = originalRequest.context.task,

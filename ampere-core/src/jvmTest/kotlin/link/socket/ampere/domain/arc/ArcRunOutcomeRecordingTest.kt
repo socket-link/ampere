@@ -13,6 +13,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -84,6 +85,7 @@ class ArcRunOutcomeRecordingTest {
             recorded.executorId,
             "no single agent performed the run; the Arc did",
         )
+        assertNull(recorded.actorId, "and no single agent decided it, so the row names no actor (AMPR-443)")
         assertEquals(
             arcOutcome is ArcOutcome.Completed && arcOutcome.success,
             recorded.success,

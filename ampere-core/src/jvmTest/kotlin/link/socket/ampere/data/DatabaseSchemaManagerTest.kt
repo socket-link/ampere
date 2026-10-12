@@ -14,6 +14,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepositoryImpl
 import link.socket.ampere.data.DatabaseSchemaManager.SchemaState
 import link.socket.ampere.db.Database
 import link.socket.ampere.db.fts.FtsAvailability
@@ -163,6 +165,10 @@ class DatabaseSchemaManagerTest {
         fileDriver(path).use { driver ->
             DatabaseSchemaManager.ensure(driver).getOrThrow()
             driver.execute(null, "DROP TABLE GoalStore", 0)
+            // 12.sqm to 15.sqm run too, from 11. 12.sqm to 14.sqm only CREATE ... IF NOT EXISTS;
+            // take back what 15.sqm adds so its ADD COLUMN has nothing to collide with — the same
+            // reason this is stamped 11 and not 10.
+            dropActorColumn(driver)
             driver.execute(
                 null,
                 "INSERT INTO RelationshipStore VALUES ('wi-1', 'run-1/goal-0', 'Mirrors', 'evt-1', 1000)",
@@ -187,6 +193,54 @@ class DatabaseSchemaManagerTest {
                     "${it.getString(0)} ${it.getString(1)} ${it.getString(2)}"
                 },
             )
+        }
+    }
+
+    @Test
+    fun `a database one migration behind gains actor_id with its outcome rows readable by actor`() {
+        // Stamped just below 15.sqm, with the outcome table as it was before AMPR-443: the
+        // agent's id in `executor_id` and no actor column. An Arc run's own row names the Arc.
+        val path = tempDir / "pre-actor.db"
+        fileDriver(path).use { driver ->
+            DatabaseSchemaManager.ensure(driver).getOrThrow()
+            dropActorColumn(driver)
+            driver.execute(
+                null,
+                """
+                INSERT INTO OutcomeMemoryStore (
+                    id, ticket_id, executor_id, approach, success,
+                    execution_duration_ms, files_changed, error_message, timestamp, run_id
+                ) VALUES
+                    ('o-agent', 't-1', 'agent-A', 'write_code_file: do it', 1, 10, 1, NULL, 1000, 'run-1'),
+                    ('o-arc', 'run-1', 'arc:demo', 'the goal', 1, 20, 0, NULL, 2000, 'run-1')
+                """.trimIndent(),
+                0,
+            )
+            DatabaseSchemaManager.writeUserVersion(driver, ACTOR_MIGRATION)
+        }
+
+        fileDriver(path).use { driver ->
+            assertEquals(
+                SchemaState.Migrated(from = ACTOR_MIGRATION, to = schemaVersion),
+                DatabaseSchemaManager.ensure(driver).getOrThrow(),
+            )
+            assertTrue("idx_outcome_actor_id" in indexes(driver, "OutcomeMemoryStore"))
+            // The agent's id the legacy row held is its actor; its executor is left as written,
+            // since the executor that performed a legacy call was never recorded. The Arc's row
+            // was no agent's decision and stays without an actor.
+            assertEquals(
+                listOf("o-agent agent-A agent-A", "o-arc null arc:demo"),
+                query(driver, "SELECT id, actor_id, executor_id FROM OutcomeMemoryStore ORDER BY id") {
+                    "${it.getString(0)} ${it.getString(1)} ${it.getString(2)}"
+                },
+            )
+
+            val repository = OutcomeMemoryRepositoryImpl(Database(driver))
+            val byActor = runBlocking { repository.getOutcomesByActor("agent-A", limit = 20) }.getOrThrow()
+            assertEquals(listOf("o-agent"), byActor.map { it.id })
+            assertEquals("agent-A", byActor.single().actorId)
+            val arcRow = runBlocking { repository.getOutcomesByExecutor("arc:demo", limit = 20) }.getOrThrow()
+            assertNull(arcRow.single().actorId)
         }
     }
 
@@ -477,6 +531,12 @@ class DatabaseSchemaManagerTest {
         return path
     }
 
+    /** The outcome table as it was before 15.sqm added the actor column (AMPR-443). */
+    private fun dropActorColumn(driver: SqlDriver) {
+        driver.execute(null, "DROP INDEX idx_outcome_actor_id", 0)
+        driver.execute(null, "ALTER TABLE OutcomeMemoryStore DROP COLUMN actor_id", 0)
+    }
+
     private fun tableExists(driver: SqlDriver, table: String): Boolean =
         query(driver, "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '$table'") { true }
             .isNotEmpty()
@@ -520,6 +580,9 @@ class DatabaseSchemaManagerTest {
     private companion object {
         /** `11.sqm`: a database below this version gets the goal branch (AMPR-419). */
         const val GOAL_BRANCH_MIGRATION = 11L
+
+        /** `15.sqm`: a database below this version gains the outcome actor column (AMPR-443). */
+        const val ACTOR_MIGRATION = 15L
 
         /** 1.sqm as first shipped (AMPR-152), before AMPR-333 rewrote it to rebuild KnowledgeStore. */
         val ORIGINAL_1_SQM = listOf(

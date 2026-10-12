@@ -179,7 +179,12 @@ class HostedRunTest {
             )
             val outcomes = store.outcomes.getOutcomesByTicket(run.runId).getOrThrow()
             assertEquals(1, outcomes.size, "one recordOutcome for the run, keyed by the run id")
-            assertEquals(HOST_ID, outcomes.single().executorId, "attributed to the host seat")
+            assertEquals(HOST_ID, outcomes.single().actorId, "decided by the host seat")
+            assertEquals(
+                RosterHostedRun.HOSTED_RUN_EXECUTOR_ID,
+                outcomes.single().executorId,
+                "and performed by the run, not filed under the seat's id as an executor (AMPR-443)",
+            )
 
             val completed = rows.mapNotNull { decode(it) as? TaskEvent.TaskCompleted }
             assertEquals(1, completed.size, "the run's task ends exactly once")

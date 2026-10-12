@@ -444,6 +444,7 @@ class ArcTraceProjectionTest {
 
         val storedOutcome = outcomeRepository.recordOutcome(
             ticketId = executionOutcome.ticketId,
+            actorId = "agent-1",
             executorId = executionOutcome.executorId,
             approach = "Run tests after writing trace code",
             outcome = executionOutcome,
