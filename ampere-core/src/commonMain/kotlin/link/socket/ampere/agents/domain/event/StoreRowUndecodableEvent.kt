@@ -30,6 +30,12 @@ enum class PersistedStore(val tableName: String) {
      * readers (AMPR-370).
      */
     PAUSE_STORE("PauseStore"),
+
+    /**
+     * `HeldRunStore.held_run_json` holds a `HeldRun`, whose goal, plan and step outcomes are all
+     * sealed families a later build may extend (AMPR-430).
+     */
+    HELD_RUN_STORE("HeldRunStore"),
 }
 
 /**
