@@ -5,6 +5,8 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.status.TicketStatus
+import link.socket.ampere.field.Admission
+import link.socket.ampere.propel.Breaker
 
 /** Type alias for ticket identifier. */
 typealias TicketId = String
@@ -44,13 +46,22 @@ data class Ticket(
     /**
      * Creates a copy of this ticket with an updated status, validating the transition.
      *
+     * The transition is admitted by the Breaker's `Rule.Transition` evaluation over
+     * [TicketStatus.asTransitionRule] (F14, AMPR-445), so a ticket and the Breaker decide a
+     * status change by one implementation of the rule.
+     *
      * @param newStatus The target status to transition to.
      * @param updatedAt The timestamp of the status change.
      * @return A new Ticket with the updated status.
-     * @throws IllegalStateException if the transition is not valid.
+     * @throws IllegalArgumentException if the transition is not valid.
      */
     fun transitionTo(newStatus: TicketStatus, updatedAt: Instant): Ticket {
-        require(status.canTransitionTo(newStatus)) {
+        val admission = Breaker.admitTransition(
+            rule = TicketStatus.asTransitionRule(),
+            from = status.name,
+            to = newStatus.name,
+        )
+        require(admission == Admission.Pass) {
             "Invalid state transition: cannot transition from $status to $newStatus. " +
                 "Valid transitions from $status are: ${status.validTransitions()}"
         }

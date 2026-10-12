@@ -1,7 +1,14 @@
 package link.socket.ampere.propel
 
+import kotlin.time.Duration
 import kotlinx.coroutines.CancellationException
+import kotlinx.datetime.Clock
+import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.event.PermissionDeniedReason
+import link.socket.ampere.agents.domain.event.PlanEvent
+import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
+import link.socket.ampere.agents.events.DecodedRows
+import link.socket.ampere.agents.events.StoredEvent
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.permissionDeniedMessage
@@ -43,6 +50,21 @@ import link.socket.ampere.plug.permission.UserGrants
  * from a manifest has no binding event to name as its provenance. Whoever adds the store
  * maps a `Constraint` to `rule to hardness` and calls [admit] unchanged.
  *
+ * The rule set (F14, AMPR-445):
+ *
+ * - `Rule.AccessPolicy` — `PlugPermissionGate`, unchanged (F15). See [rulesFor].
+ * - `Rule.Quota` — a run's token, wall-clock and step spend, read from the events persisted
+ *   under [runId] and never from a counter. A quota is breached once the spend *reaches* its
+ *   limit. See [RunQuotas].
+ * - `Rule.Transition` — a status change, checked by [admitTransition]. A plan step proposes
+ *   no status change, so one handed to [admit] cannot be evaluated.
+ * - `Rule.Requirements` is not the Breaker's. It states what a finished execution must
+ *   satisfy — tests, lint, compatibility — and nothing that has not run yet can be checked
+ *   against it. Verification checks it; handed here, it cannot be evaluated.
+ *
+ * Every other rule (`Dependency`, `Deadline`, `Cadence`) has no evaluation yet. A rule this
+ * Breaker cannot evaluate fails the admission, which is never read as a pass.
+ *
  * @param userGrants The consent a plug tool is checked against — the same provider the
  *   agent's `ToolExecutionEngine` was built with, so the Breaker and the engine can never
  *   disagree about a step.
@@ -50,35 +72,53 @@ import link.socket.ampere.plug.permission.UserGrants
  *   step the Breaker stops is as visible as one the engine used to stop. Null publishes
  *   nothing.
  * @param executorId The agent the steps are admitted for; names the denial event.
+ * @param runId The run whose spend a `Rule.Quota` is read against. Null — an agent outside
+ *   any run — makes a quota unevaluable.
+ * @param runEvents Reads the events persisted under a run, in sequence order. Defaults to
+ *   [eventApi]'s [AgentEventApi.getRunEvents]: the door is the record.
+ * @param clock What "now" is for a `Rule.Quota.Time` — by default [eventApi]'s own clock,
+ *   the one that stamped the `recorded_at` the run's elapsed time is measured from (F29).
  */
 class Breaker(
     private val userGrants: suspend (PlugManifest) -> UserGrants,
     private val eventApi: AgentEventApi? = null,
     private val executorId: ExecutorId,
+    private val runId: RunId? = null,
+    private val runEvents: (suspend (RunId) -> Result<DecodedRows<StoredEvent>>)? =
+        eventApi?.let { api -> api::getRunEvents },
+    private val clock: Clock = eventApi?.clock ?: Clock.System,
 ) {
 
     /**
      * Folds [rules] over the step that proposes to run [tool].
      *
+     * [tool] is null for a step that nominates none — a reasoning step, which is one model
+     * call and so spends against a run's quotas like any other step. Such a step has no
+     * manifest, so a `Rule.AccessPolicy` cannot be evaluated against it.
+     *
      * A Hard trip from a `Rule.AccessPolicy` also publishes the `PermissionDeniedEvent`
      * the engine would have published, once, before the step is reported failed. A Soft
      * access breach publishes nothing: the step goes on to the engine, whose own gate will
      * report it if it still stands.
+     *
+     * The run's record is read at most once per admission, however many quotas are in
+     * [rules], so every quota in one admission is measured against the same spend.
      */
     suspend fun admit(
-        tool: Tool<*>,
+        tool: Tool<*>?,
         rules: List<Pair<Rule, Hardness>>,
     ): Result<Admission> {
+        val record = RunRecordRead()
         var resistance = 0.0
         for ((rule, hardness) in rules) {
             val evaluated = try {
-                evaluate(tool, rule)
+                evaluate(tool, rule, record)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 return Result.failure(
                     IllegalStateException(
-                        "Could not evaluate $rule for tool '${tool.id}': ${e::class.simpleName}: ${e.message}",
+                        "Could not evaluate $rule for ${tool.describe()}: ${e::class.simpleName}: ${e.message}",
                         e,
                     ),
                 )
@@ -92,7 +132,7 @@ class Breaker(
                             eventApi = eventApi,
                             executorId = executorId,
                             manifest = denial.manifest,
-                            tool = tool,
+                            tool = denial.tool,
                             permission = denial.permission,
                             reason = denial.reason,
                         )
@@ -108,11 +148,108 @@ class Breaker(
     }
 
     /** The breach [rule] finds in running [tool], or null when it holds. Throws when it cannot say. */
-    private suspend fun evaluate(tool: Tool<*>, rule: Rule): Breach? = when (rule) {
-        is Rule.AccessPolicy -> evaluateAccess(tool, rule)
+    private suspend fun evaluate(tool: Tool<*>?, rule: Rule, record: RunRecordRead): Breach? = when (rule) {
+        is Rule.AccessPolicy -> evaluateAccess(
+            tool = tool ?: error(
+                "an access policy is checked against a tool's plug manifest, and this step nominates no tool",
+            ),
+            rule = rule,
+        )
+        is Rule.Quota -> evaluateQuota(rule, record.events())
+        is Rule.Transition -> throw UnsupportedOperationException(
+            "a plan step proposes no status change for a Transition to check; " +
+                "a status change is admitted with Breaker.admitTransition",
+        )
+        is Rule.Requirements -> throw UnsupportedOperationException(
+            "Requirements are post-conditions on a finished execution and are checked by verification, " +
+                "not before a step runs",
+        )
         else -> throw UnsupportedOperationException(
             "the Breaker has no evaluation for ${rule::class.simpleName} yet",
         )
+    }
+
+    /**
+     * A run's spend against [rule], read from [events] — the run's persisted record — and
+     * breached once the spend reaches the limit.
+     *
+     * - Tokens: `inputTokens + outputTokens` over every `ProviderCallCompletedEvent`; a count
+     *   the transport did not report adds nothing.
+     * - Time: from the first event's `recorded_at` to [clock]. A run with nothing on the
+     *   record yet has spent no time.
+     * - Count: every `PlanStepCompleted`, when the label is [RunQuotas.STEPS]. No other
+     *   label has anything on the record to count.
+     */
+    private fun evaluateQuota(rule: Rule.Quota, events: List<StoredEvent>): Breach? = when (rule) {
+        is Rule.Quota.Tokens -> {
+            val spent = events
+                .mapNotNull { stored -> (stored.event as? ProviderCallCompletedEvent)?.usage }
+                .sumOf { usage -> (usage.inputTokens ?: 0).toLong() + (usage.outputTokens ?: 0).toLong() }
+            if (spent >= rule.limit) {
+                Breach(
+                    "token quota reached: run '${requireRunId()}' has spent $spent tokens " +
+                        "against a limit of ${rule.limit}",
+                )
+            } else {
+                null
+            }
+        }
+        is Rule.Quota.Time -> {
+            val elapsed = events.minByOrNull { it.sequence }
+                ?.let { first -> clock.now() - first.recordedAt }
+                ?: Duration.ZERO
+            if (elapsed >= rule.limit) {
+                Breach(
+                    "wall-clock quota reached: run '${requireRunId()}' has run for $elapsed " +
+                        "against a limit of ${rule.limit}",
+                )
+            } else {
+                null
+            }
+        }
+        is Rule.Quota.Count -> {
+            require(rule.of == RunQuotas.STEPS) {
+                "a count quota can only count '${RunQuotas.STEPS}'; nothing on a run's record counts '${rule.of}'"
+            }
+            val executed = events.count { it.event is PlanEvent.PlanStepCompleted }
+            if (executed >= rule.limit) {
+                Breach(
+                    "step quota reached: run '${requireRunId()}' has executed $executed steps " +
+                        "against a limit of ${rule.limit}",
+                )
+            } else {
+                null
+            }
+        }
+    }
+
+    private fun requireRunId(): RunId =
+        runId ?: error("a quota is read from a run's record, and this Breaker admits steps for no run")
+
+    /**
+     * One admission's read of the run's record: made on the first quota that needs it and
+     * reused by the rest, so nothing is read for an admission with no quota in it.
+     *
+     * A read that failed, or that skipped a row it could not decode, cannot say what the
+     * run has spent, and throws — which [admit] reports as a failure, never a pass.
+     */
+    private inner class RunRecordRead {
+        private var read: List<StoredEvent>? = null
+
+        suspend fun events(): List<StoredEvent> {
+            read?.let { return it }
+            val id = requireRunId()
+            val reader = runEvents
+                ?: error("a quota is read from a run's record, and this Breaker has no door to read it through")
+            val rows = reader(id).getOrElse { e ->
+                throw IllegalStateException("the record of run '$id' could not be read: ${e.message}", e)
+            }
+            check(rows.undecodable.isEmpty()) {
+                "the record of run '$id' has ${rows.undecodableCount} row(s) this build cannot decode, " +
+                    "so its spend is unknown"
+            }
+            return rows.toList().also { read = it }
+        }
     }
 
     /**
@@ -152,7 +289,7 @@ class Breaker(
     }
 
     /** A breached rule: why, and — for an access policy — what to report it as. */
-    private class Breach(val reason: String, val denial: Denial?) {
+    private class Breach(val reason: String, val denial: Denial? = null) {
         companion object {
             fun denied(
                 manifest: PlugManifest,
@@ -161,13 +298,14 @@ class Breaker(
                 reason: PermissionDeniedReason,
             ) = Breach(
                 reason = permissionDeniedMessage(manifest, tool, permission, reason),
-                denial = Denial(manifest, permission, reason),
+                denial = Denial(manifest, tool, permission, reason),
             )
         }
     }
 
     private class Denial(
         val manifest: PlugManifest,
+        val tool: Tool<*>,
         val permission: PlugPermission,
         val reason: PermissionDeniedReason,
     )
@@ -182,10 +320,11 @@ class Breaker(
         val SOFT_BREACH: Resistance = Resistance(1.0)
 
         /**
-         * The rules a step that runs [tool] is admitted against today: one Hard
-         * `Rule.AccessPolicy` over the tool's plug manifest, or none for a tool with no
-         * manifest. The rest of F14 (quotas, transitions, requirements) joins this list
-         * when it is decided.
+         * The rules a step that runs [tool] is admitted against on the tool's account: one
+         * Hard `Rule.AccessPolicy` over the tool's plug manifest, or none for a tool with no
+         * manifest. A run's quotas are the run's, not the tool's, and are added by whoever
+         * drives the run (`RunQuotas`); a transition is admitted by [admitTransition]; and
+         * `Rule.Requirements` belongs to verification (F14).
          */
         fun rulesFor(tool: Tool<*>): List<Pair<Rule, Hardness>> {
             val manifest = tool.plugManifest ?: return emptyList()
@@ -200,5 +339,27 @@ class Breaker(
          * Breaker resolves them back against the manifest, never the other way round.
          */
         fun accessLabel(permission: PlugPermission): String = permission.toString()
+
+        /**
+         * Admits a move from state [from] to state [to] under [rule] (F14).
+         *
+         * The one evaluation of a `Rule.Transition`: a move is allowed when [to] is among the
+         * states [rule] lists for [from], and a state the rule does not list may move nowhere.
+         * Deterministic, and decided from the rule alone, which is why it needs no instance.
+         * `Ticket.transitionTo` goes through here with `TicketStatus.asTransitionRule()`, so a
+         * ticket's lifecycle and the Breaker share one implementation of the rule.
+         *
+         * @return [Admission.Pass], or a [Admission.Trip] naming the move and what [from] may
+         *   move to instead. A transition rule is always Hard, so there is no `Resist`.
+         */
+        fun admitTransition(rule: Rule.Transition, from: String, to: String): Admission {
+            val allowed = rule.allowed[from].orEmpty()
+            if (to in allowed) return Admission.Pass
+            val instead = if (allowed.isEmpty()) "nothing" else allowed.joinToString()
+            return Admission.Trip("transition not allowed: '$from' may not move to '$to'; it may move to $instead")
+        }
+
+        private fun Tool<*>?.describe(): String =
+            if (this == null) "a step that nominates no tool" else "tool '$id'"
     }
 }

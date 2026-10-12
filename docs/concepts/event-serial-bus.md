@@ -89,6 +89,7 @@ properties for free:
 ## Common operations
 
 - **Publish an event** — `agentEventApi.publish(SomeEvent(...))`. The api wraps the bus and is the agent-facing entry point.
+- **Read one run's record** — `agentEventApi.getRunEvents(runId)`: every event whose envelope names the run, in `sequence` order, as `Result<DecodedRows<StoredEvent>>` over `EventRepository.getEventsByRunId` (AMPR-445). Unlike `getRecentEvents`/`getEventHistory` a failed read is returned rather than logged into an empty list, so a caller that must not mistake "nothing" for "could not say" — the Breaker reading a hosted run's quota spend — can tell them apart. It matches the envelope column only, not the payload fallback legacy rows need.
 - **Publish from a synchronous boundary hook** — use `EventSerialBus.publishAsync(event)` only when the caller cannot suspend, such as phase boundary hooks. Prefer `AgentEventApi.publish` elsewhere.
 - **Subscribe** — `bus.subscribe(eventType, scope) { event, subscription -> ... }`. Hold onto the returned `EventSubscription` and pass *that instance* to `unsubscribe` on shutdown.
 - **Subscribe from a coroutine** — `bus.subscribeSuspending(...)` / `unsubscribeSuspending(...)`. The non-suspending overloads take the bus mutex under `runBlockingCompat`, which blocks the calling thread and throws outright on JS/WasmJS. Anything that can suspend — every Flow builder, every Swift-facing bridge — uses the suspending pair.

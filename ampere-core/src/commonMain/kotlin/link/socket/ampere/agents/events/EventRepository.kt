@@ -323,6 +323,26 @@ class EventRepository(
         }
 
     /**
+     * Retrieve every event whose envelope names [runId], in fold order (AMPR-445).
+     *
+     * The envelope column only — not the payload match `getEventsByRunIdOrPayload` adds for
+     * legacy rows — because this is what a run's quotas are read from, and an event counts
+     * against a run only when its publisher said it belongs to that run (F4).
+     *
+     * Rows this build cannot decode are skipped and counted; see [DecodedRows].
+     */
+    suspend fun getEventsByRunId(runId: String): Result<DecodedRows<StoredEvent>> =
+        withContext(ioDispatcher) {
+            runCatching {
+                queries
+                    .getEventsByRunId(runId)
+                    .executeAsList()
+            }.map { rows ->
+                rows.decodeSkippingUndecodable { row -> row.toStoredEvent() }
+            }
+        }
+
+    /**
      * Retrieve all events newest first, by `sequence`.
      *
      * Rows this build cannot decode are skipped and counted; see [DecodedRows].

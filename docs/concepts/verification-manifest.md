@@ -4,8 +4,8 @@ status: experimental
 tracked_sources:
   - .ampere/verify.yml
   - docs/verify-manifest.md
-related: [Probe, CancellationAddress, LifecycleTypes]
-last_verified: 2026-10-04
+related: [Probe, CancellationAddress, LifecycleTypes, PropelLoop]
+last_verified: 2026-10-11
 ---
 
 # VerificationManifest
@@ -122,9 +122,36 @@ for something that execution broke.
   deliberately *not* a gate, and the provenance of every committed gate.
 - Repo B's own `.ampere/verify.yml` — 11 gates, exactly its five required status
   checks split one-per-task plus its two architectural-isolation tasks.
-- No runner. The production interpreter is the Breaker's (Wave 2). The v1
-  structural check is a throwaway Python interpreter in the AMPR-304 workspace
-  under `.context/ampr-304/`, deliberately uncommitted.
+- No runner. The v1 structural check is a throwaway Python interpreter in the
+  AMPR-304 workspace under `.context/ampr-304/`, deliberately uncommitted. When
+  a production runner is built it is verification's, run on finished work — not
+  the Breaker's: F14 (locked 2026-10-11) keeps post-conditions out of admission.
+  See "Where `Rule.Requirements` lands" below.
+
+## Where `Rule.Requirements` lands
+
+`Rule.Requirements` (`field/Constraint.kt`) is the data form of the three Boolean
+fields of the retired `ExecutionConstraints` — `requireTests`, `requireLinting`,
+`allowBreakingChanges`. Each is a **post-condition**: whether the tests pass, the
+lint is clean, or an API broke is a fact about work that has finished. The
+Breaker admits a step *before* it runs, so it cannot check any of them, and
+F14 routes the rule here, to verification, rather than to admission (AMPR-445).
+A Breaker that is handed one anyway reports it as a rule it cannot evaluate,
+which fails the step closed; it never passes it.
+
+| `Rule.Requirements` field | What verifies it | In this repository |
+|---------------------------|------------------|--------------------|
+| `requireTests` | the manifest's test gates — the ones whose value is the act of running, so `fresh: true` | `jvm-test-*`, `android-unit-test-*`, `ios-kotlin-test-ampere-core`, `eval-replay` |
+| `requireLinting` | the manifest's lint gates | `ktlint` |
+| `allowBreakingChanges = false` | a gate that diffs the public API against a baseline | none — no API-compatibility task exists to name, so this field has no gate yet |
+
+What this does not do yet: nothing reads a `Rule.Requirements` and selects gates
+from it. The mapping above is the routing F14 decided; evaluating a requirement
+against a manifest — and a requirement naming a gate the manifest lacks, as
+`allowBreakingChanges` would today — belongs to the runner, which does not exist.
+Admission and verification stay separate questions: admission asks whether a
+step may start, verification whether finished work is done, and a rule answers
+only one of them.
 
 ## Common operations
 
@@ -154,6 +181,11 @@ for something that execution broke.
 - **Bundling tasks "because CI does".** CI bundles to save runners. A manifest
   that copies the bundling inherits the partial-coverage failure and gains
   nothing — the runner is not paying per leg.
+- **Checking a requirement before the work exists.** `Rule.Requirements` reads
+  like a gate on a step, and a runner that checked it at admission would be
+  grading work that has not been done — every requirement passes vacuously
+  against an empty change. It is a post-condition and runs here, against
+  finished work (F14, AMPR-445).
 - **A static per-gate "this fails locally, ignore it" annotation.** Tempting for
   `:ampere-core:assemble`, and it would permanently misclassify a real regression
   in that gate as the host's fault. `baseline` says where to look for an
