@@ -458,6 +458,7 @@ class PlanGenerator(
                     arguments = stepObj.argumentsFor(toolToUse, availableTools),
                     execution = seat?.execution,
                     originalTask = originalTask,
+                    dependsOn = stepObj.dependsOn(index = index, taskId = originalTask.id, cycle = cycle),
                 ),
             )
         }
@@ -469,6 +470,27 @@ class PlanGenerator(
             expectations = Expectations.blank,
             requiresHumanInput = requiresHumanInput,
         )
+    }
+
+    /**
+     * The steps this one depends on, read from its `requiresPreviousStep` (AMPR-450).
+     *
+     * `true` is a dependency on the step immediately before — by that step's id, built
+     * the same way, so the id it names is one the plan holds. `false`, a missing key,
+     * or anything that is not a boolean is no dependency, and so is `true` on the first
+     * step, which has nothing before it. The prompt asked for this key on every plan
+     * since there were plans and nothing read it; reading it back is what makes a
+     * failed step's dependents knowable without a second question.
+     *
+     * [index] counts from 0, as the steps array does.
+     */
+    private fun JsonObject.dependsOn(index: Int, taskId: String, cycle: Int): List<String> {
+        val requiresPrevious = LLMResponseParser.getBoolean(this, "requiresPreviousStep", false)
+        return if (requiresPrevious && index > 0) {
+            listOf(stepId(index = index, taskId = taskId, cycle = cycle))
+        } else {
+            emptyList()
+        }
     }
 
     /**
@@ -633,6 +655,9 @@ class PlanGenerator(
  *   [Task.Step.arguments][link.socket.ampere.agents.domain.task.Task.Step.arguments].
  * @property execution The assigned seat's model and effort, or null.
  * @property originalTask The task being planned for.
+ * @property dependsOn The ids of the earlier steps this one needs the output of;
+ *   see [Task.Step.dependsOn][link.socket.ampere.agents.domain.task.Task.Step.dependsOn].
+ *   Empty means independent.
  */
 data class PlanStepDraft(
     val id: String,
@@ -642,6 +667,7 @@ data class PlanStepDraft(
     val arguments: JsonElement? = null,
     val execution: ExecutionAssignment? = null,
     val originalTask: Task,
+    val dependsOn: List<String> = emptyList(),
 )
 
 /**
@@ -736,6 +762,7 @@ object DefaultTaskFactory : TaskFactory {
             assignedTo = draft.assignedTo,
             arguments = draft.arguments,
             execution = draft.execution,
+            dependsOn = draft.dependsOn,
         )
     }
 }

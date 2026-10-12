@@ -78,6 +78,13 @@ sealed interface Task {
      * @property execution How the step should be run — model and effort (AMPR-369).
      *   Taken from the seat the step was assigned to, not asked of the planner: a
      *   model does not get to choose which model answers it.
+     * @property dependsOn The ids of the steps of the same plan this one needs the
+     *   output of (AMPR-450, AMPR-385 row H20). Taken from the planner's
+     *   `requiresPreviousStep`: true makes the step depend on the one immediately
+     *   before it, and false or missing makes it depend on nothing. A hosted run
+     *   reads it when a step fails — every step that depends on the failed one,
+     *   directly or through another, is skipped and the independent steps still
+     *   run. Empty means independent, which is what every step was before.
      */
     @Serializable
     data class Step(
@@ -88,6 +95,7 @@ sealed interface Task {
         val assignedTo: AssignedTo? = null,
         val arguments: JsonElement? = null,
         val execution: ExecutionAssignment? = null,
+        val dependsOn: List<TaskId> = emptyList(),
     ) : Task
 
     companion object {

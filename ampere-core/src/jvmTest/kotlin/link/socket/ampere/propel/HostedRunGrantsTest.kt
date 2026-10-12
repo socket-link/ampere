@@ -155,7 +155,7 @@ class HostedRunGrantsTest {
         assertEquals(2, result.stepOutcomes.size)
         assertIs<StepOutcome.Success>(result.stepOutcomes[0])
         assertIs<StepOutcome.Failure>(result.stepOutcomes[1])
-        assertEquals(RunStatus.Failed, result.status)
+        assertEquals(RunStatus.Partial, result.status, "one step ran and one was denied (AMPR-450)")
 
         val denied = permissionDenials()
         assertEquals(1, denied.size)
