@@ -16,6 +16,8 @@ import link.socket.ampere.field.Subject
 import link.socket.ampere.goal.GoalStatus
 import link.socket.ampere.goal.GoalStore
 import link.socket.ampere.goal.SqlDelightGoalStore
+import link.socket.ampere.observe.ObservationStore
+import link.socket.ampere.observe.SqlDelightObservationStore
 import link.socket.ampere.subject.RelationshipStore
 import link.socket.ampere.subject.SqlDelightRelationshipStore
 import link.socket.ampere.subject.SqlDelightSubjectStore
@@ -26,8 +28,10 @@ import link.socket.ampere.subject.SubjectStore
  *
  * The log's newest sequence is read first, so the snapshot names where in the log it was taken;
  * then the Subjects, every edge touching one of them (from either end, gathered with the store's
- * own `from` / `to` reads), each Subject's goals, and the beliefs the viewer may see. The viewer
- * predicate is the knowledge store's own query, ahead of its limit.
+ * own `from` / `to` reads), each Subject's goals, the beliefs the viewer may see, and the
+ * Observations it may see (the Environment branch, AMPR-447). Each viewer predicate is its own
+ * store's query, ahead of its limit; `beliefLimit` bounds the beliefs and the Observations
+ * separately, since an Observation is a belief that lives in another table.
  *
  * A belief is about the root goal of the run its row was written under, when that run formed a
  * goal tree, and about its holder otherwise — a lesson with no goal is self-knowledge. A row
@@ -42,6 +46,7 @@ internal class DefaultFieldService(
     private val relationships: RelationshipStore,
     private val goals: GoalStore,
     private val knowledge: KnowledgeRepository,
+    private val observations: ObservationStore,
     private val events: EventRepository,
 ) : FieldService {
 
@@ -78,6 +83,8 @@ internal class DefaultFieldService(
             if (belief != null) beliefs += belief else unmapped++
         }
 
+        val observed = observations.visibleTo(viewer, beliefLimit).getOrElse { return Result.failure(it) }
+
         return Result.success(
             Field(
                 viewer = viewer,
@@ -86,6 +93,7 @@ internal class DefaultFieldService(
                 relationships = edges.toList(),
                 goals = held,
                 beliefs = beliefs,
+                observations = observed,
                 unmappedBeliefs = unmapped,
             ),
         )
@@ -120,6 +128,7 @@ internal class DefaultFieldService(
             relationships = SqlDelightRelationshipStore(database),
             goals = SqlDelightGoalStore(database),
             knowledge = knowledge,
+            observations = SqlDelightObservationStore(database),
             events = events,
         )
     }

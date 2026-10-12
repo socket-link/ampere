@@ -25,6 +25,11 @@ import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.events.InMemoryEventApi
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.api.internal.DefaultFieldService
+import link.socket.ampere.canon.CanonId
+import link.socket.ampere.canon.CanonPlace
+import link.socket.ampere.canon.CanonProvenance
+import link.socket.ampere.canon.CanonType
+import link.socket.ampere.canon.SourceHandle
 import link.socket.ampere.domain.arc.GoalNode
 import link.socket.ampere.domain.arc.GoalTree
 import link.socket.ampere.dsl.config.AnthropicConfig
@@ -33,7 +38,14 @@ import link.socket.ampere.field.Ref
 import link.socket.ampere.field.RelationshipKind
 import link.socket.ampere.field.Sensitivity
 import link.socket.ampere.field.Subject
+import link.socket.ampere.field.observe.environmentRef
 import link.socket.ampere.goal.GoalBranch
+import link.socket.ampere.link.LinkId
+import link.socket.ampere.observe.SqlDelightObservationStore
+import link.socket.ampere.plug.spi.PerceivePage
+import link.socket.ampere.plug.spi.PerceiveQuery
+import link.socket.ampere.plug.spi.PerceiveSource
+import link.socket.ampere.plug.spi.recordedPerceive
 import link.socket.ampere.subject.SqlDelightRelationshipStore
 import link.socket.ampere.subject.SqlDelightSubjectStore
 import link.socket.ampere.subject.SubjectRegistry
@@ -43,8 +55,8 @@ import link.socket.ampere.subject.SubjectRegistry
  *
  * Every row here is written through its real door on one in-memory database — Subjects and
  * edges through [SubjectRegistry], goals through [GoalBranch], knowledge through
- * [AgentMemoryService] — so what the snapshot is checked against is what production writes,
- * events and provenance included. F12 is checked twice: at the knowledge store's own read, where
+ * [AgentMemoryService], Observations through a recorded perceive — so what the snapshot is
+ * checked against is what production writes, events and provenance included. F12 is checked twice: at the knowledge store's own read, where
  * the predicate must sit ahead of the limit, and end to end through the snapshot.
  */
 @OptIn(AmpereExperimentalApi::class)
@@ -289,6 +301,32 @@ class FieldServiceTest {
         assertIs<IllegalArgumentException>(failure)
     }
 
+    // ==================== The Environment branch ====================
+
+    @Test
+    fun `a stored perceive appears in its holder's snapshot and in no other subject's`() = runBlocking<Unit> {
+        populate()
+        val perception = PlaceSource(listOf("harbor", "lighthouse"))
+            .recordedPerceive(PerceiveQuery(linkId = LinkId("places-link")), handle.api)
+            .getOrThrow()
+        assertEquals(2, perception.store(Ref(AGENT_A), SqlDelightObservationStore(handle.database)).getOrThrow())
+
+        val seenByA = service.snapshot(viewer = Ref(AGENT_A)).getOrThrow()
+        val seenByB = service.snapshot(viewer = Ref(AGENT_B)).getOrThrow()
+        val seenByNobody = service.snapshot(viewer = null).getOrThrow()
+
+        assertEquals(
+            perception.page.entities.map { it.environmentRef }.toSet(),
+            seenByA.observations.map { it.subject }.toSet(),
+        )
+        assertTrue(seenByA.observations.all { it.holder == Ref<Subject>(AGENT_A) })
+        assertTrue(seenByA.observations.all { it.provenance.createdBy == perception.perceiveEventId })
+        assertTrue(seenByB.observations.isEmpty())
+        assertTrue(seenByNobody.observations.isEmpty())
+        // Kept out of knowledge: the belief branch is exactly what it was before the perceive.
+        assertEquals(setOf(content("public-a"), content("private-a")), seenByA.beliefContents())
+    }
+
     // ==================== On the instance ====================
 
     @Test
@@ -324,6 +362,33 @@ class FieldServiceTest {
     }
 
     private fun content(id: String) = "approach $id\n\nlearned $id"
+
+    /** Projects a place per name, stamped with the query's perceive event id as a recording source must. */
+    private inner class PlaceSource(private val names: List<String>) : PerceiveSource<CanonPlace> {
+        override val emits: Set<CanonType> = setOf(CanonType.PLACE)
+
+        override suspend fun perceive(query: PerceiveQuery): Result<PerceivePage<CanonPlace>> =
+            Result.success(
+                PerceivePage.unfiltered(
+                    query,
+                    names.map { name ->
+                        CanonPlace(
+                            canonId = CanonId(name),
+                            provenance = CanonProvenance(
+                                sourceHandle = SourceHandle(
+                                    linkId = query.linkId,
+                                    sourceSystem = "test.places",
+                                    nativeId = name,
+                                ),
+                                observedAt = now,
+                                perceiveEventId = query.perceiveEventId,
+                            ),
+                            name = name,
+                        )
+                    },
+                ),
+            )
+    }
 
     private companion object {
         const val AGENT_A = "agent-a"
