@@ -1,6 +1,8 @@
 package link.socket.ampere.trace
 
 import kotlinx.datetime.Instant
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.domain.arc.CompletionRecord
@@ -59,6 +61,7 @@ data class TraceEvent(
     val payload: String? = null,
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class ModelInvocationTrace(
     val eventId: String,
@@ -76,6 +79,13 @@ data class ModelInvocationTrace(
     val success: Boolean? = null,
     val errorType: String? = null,
     val wattCost: WattCost = WattCost(),
+    /**
+     * The route the call travelled when that was not its maker's own endpoint — a
+     * gateway such as `openrouter` (AMPR-436); [providerId] is the maker. Null means
+     * direct or not stated, and is not encoded, so a direct call's row is unchanged.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val via: String? = null,
 )
 
 @Serializable

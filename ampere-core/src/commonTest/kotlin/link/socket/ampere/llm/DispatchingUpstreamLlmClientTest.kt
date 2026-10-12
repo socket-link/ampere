@@ -27,6 +27,7 @@ import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.domain.ai.provider.AIProvider_Google
 import link.socket.ampere.domain.ai.provider.AIProvider_OnDevice
 import link.socket.ampere.domain.ai.provider.AIProvider_OpenAI
+import link.socket.ampere.domain.ai.provider.AIProvider_OpenRouter
 import link.socket.ampere.domain.ai.provider.OnDeviceProviderHasNoClientException
 
 class DispatchingUpstreamLlmClientTest {
@@ -225,6 +226,29 @@ class DispatchingUpstreamLlmClientTest {
                 "locality reported for ${configuration.model.name} disagrees with where it ran",
             )
         }
+    }
+
+    @Test
+    fun `a routed cloud model goes to the bundled client and the device model to the engine`() = runTest {
+        // AMPR-436: dispatch keys on the model's own name, which a gateway leaves unchanged —
+        // only the id on the wire differs, and that is the request's business, not dispatch's.
+        val engine = FakeLocalInferenceEngine(respond = { Result.success("local-answer") })
+        val bundled = RecordingClient("cloud-answer")
+        val client = DispatchingUpstreamLlmClient(InMemoryModelDescriptorRegistry(), engine, bundled)
+        val routed = AIConfiguration_Default(AIProvider_OpenRouter, AIModel_Claude.Sonnet_5)
+        val onDevice = AIConfiguration_Default(AIProvider_OnDevice, AIModel_OnDevice.AppleFoundationModels)
+
+        val cloudResponse = client.call(request(), routed)
+
+        assertEquals("cloud-answer", cloudResponse.choices.single().message.content)
+        assertEquals(1, bundled.callCount)
+        assertEquals(0, engine.generateCount, "a routed cloud model must not reach the engine")
+
+        val localResponse = client.call(request(), onDevice)
+
+        assertEquals("local-answer", localResponse.choices.single().message.content)
+        assertEquals(1, engine.generateCount)
+        assertEquals(1, bundled.callCount, "the device model must not reach the cloud transport")
     }
 
     private fun descriptor(

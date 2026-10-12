@@ -8,6 +8,7 @@ import com.aallam.openai.api.chat.ChatRole
 import com.aallam.openai.api.model.ModelId
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.config.AgentConfiguration
@@ -25,10 +26,13 @@ import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs
+import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OnDevice
+import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.domain.ai.provider.AIProvider_Google
 import link.socket.ampere.domain.ai.provider.AIProvider_OnDevice
+import link.socket.ampere.domain.ai.provider.AIProvider_OpenRouter
 
 /**
  * [AgentLLMService.callDetailed] (AMPR-327): the text [AgentLLMService.call]
@@ -38,6 +42,8 @@ class AgentLlmCallDetailedTest {
 
     private val cloudConfig = AIConfiguration_Default(AIProvider_Google, AIModel_Gemini.Flash_2_5)
     private val onDeviceConfig = AIConfiguration_Default(AIProvider_OnDevice, AIModel_OnDevice.AppleFoundationModels)
+    private val directConfig = AIConfiguration_Default(AIProvider_Anthropic, AIModel_Claude.Sonnet_5)
+    private val routedConfig = AIConfiguration_Default(AIProvider_OpenRouter, AIModel_Claude.Sonnet_5)
 
     @Test
     fun `names the model of the agent when no relay resolves the call`() = runTest {
@@ -119,7 +125,65 @@ class AgentLlmCallDetailedTest {
         assertEquals(service.callDetailed(prompt = "Hello").text, service.call(prompt = "Hello"))
     }
 
+    @Test
+    fun `sends the route's id for a routed configuration and the model's own name for a direct one`() = runTest {
+        // AMPR-436: the request is built from the configuration, which a gateway addresses
+        // the same model under its own slug.
+        val routedClient = CannedClient("routed")
+        val directClient = CannedClient("direct")
+
+        serviceFor(routedConfig, routedClient).callDetailed(prompt = "Hello")
+        serviceFor(directConfig, directClient).callDetailed(prompt = "Hello")
+
+        assertEquals(listOf("anthropic/claude-sonnet-5"), routedClient.requestedModels)
+        assertEquals(listOf(AIModel_Claude.Sonnet_5.name), directClient.requestedModels)
+    }
+
+    @Test
+    fun `names the maker of a routed call and the gateway it travelled apart`() = runTest {
+        val result = serviceFor(routedConfig, CannedClient("routed")).callDetailed(prompt = "Hello")
+
+        assertEquals(AIProvider_Anthropic.id, result.providerId)
+        assertEquals(AIModel_Claude.Sonnet_5.name, result.modelId)
+        assertEquals(AIProvider_OpenRouter.id, result.via)
+    }
+
+    @Test
+    fun `a direct call names no route`() = runTest {
+        val result = serviceFor(directConfig, CannedClient("direct")).callDetailed(prompt = "Hello")
+
+        assertEquals(AIProvider_Anthropic.id, result.providerId)
+        assertEquals(AIModel_Claude.Sonnet_5.name, result.modelId)
+        assertNull(result.via)
+    }
+
+    @Test
+    fun `a custom provider records the maker and route of the configuration it stands in for`() = runTest {
+        val service = AgentLLMService(
+            agentConfiguration = AgentConfiguration(
+                agentDefinition = WriteCodeAgent,
+                aiConfiguration = routedConfig,
+                llmProvider = { "from the custom provider" },
+            ),
+        )
+
+        val result = service.callDetailed(prompt = "Hello")
+
+        assertEquals(AIProvider_Anthropic.id, result.providerId)
+        assertEquals(AIProvider_OpenRouter.id, result.via)
+    }
+
+    private fun serviceFor(configuration: AIConfiguration, client: UpstreamLlmClient) = AgentLLMService(
+        agentConfiguration = AgentConfiguration(
+            agentDefinition = WriteCodeAgent,
+            aiConfiguration = configuration,
+            upstreamLlmClient = client,
+        ),
+    )
+
     private class CannedClient(private val response: String) : UpstreamLlmClient {
+        val requestedModels = mutableListOf<String>()
+
         override suspend fun call(
             request: ChatCompletionRequest,
             configuration: AIConfiguration,
@@ -133,6 +197,6 @@ class AgentLlmCallDetailedTest {
                     message = ChatMessage(role = ChatRole.Assistant, content = response),
                 ),
             ),
-        )
+        ).also { requestedModels += request.model.id }
     }
 }

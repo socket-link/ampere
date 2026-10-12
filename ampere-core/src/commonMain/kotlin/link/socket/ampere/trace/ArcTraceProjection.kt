@@ -223,6 +223,7 @@ class ArcTraceProjection(
                     latencyMs = completed.latencyMs,
                     success = completed.success,
                     errorType = completed.errorType,
+                    via = completed.via,
                 )
 
                 val cost = costByModel[completed.modelId] ?: CostPolicy.Metered

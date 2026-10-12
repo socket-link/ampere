@@ -30,10 +30,13 @@ import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs
+import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OnDevice
+import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.domain.ai.provider.AIProvider_Google
 import link.socket.ampere.domain.ai.provider.AIProvider_OnDevice
+import link.socket.ampere.domain.ai.provider.AIProvider_OpenRouter
 
 /**
  * The served-provider seam (AMPR-391): an [UpstreamLlmClient] can report what
@@ -129,6 +132,65 @@ class ServedByTest {
         assertEquals("claude-sonnet-5", result.modelId)
         assertEquals("agent_configuration", result.routingReason)
         assertTrue(result.latencyMs >= 0)
+    }
+
+    @Test
+    fun `a transport that names the maker but not the route leaves the configured route standing`() = runTest {
+        // AMPR-436: ServedBy wins field by field, and a null via means "not stated".
+        val routed = AIConfiguration_Default(AIProvider_OpenRouter, AIModel_Claude.Sonnet_5)
+        val service = AgentLLMService(
+            agentConfiguration = AgentConfiguration(
+                agentDefinition = WriteCodeAgent,
+                aiConfiguration = routed,
+                upstreamLlmClient = ReroutingProxy(
+                    response = "answer",
+                    served = ServedBy(providerId = AIProvider_Anthropic.id, modelId = AIModel_Claude.Opus_4_5.name),
+                ),
+            ),
+        )
+
+        val result = service.callDetailed(prompt = "Hello")
+
+        assertEquals(AIProvider_Anthropic.id, result.providerId)
+        assertEquals(AIModel_Claude.Opus_4_5.name, result.modelId)
+        assertEquals(AIProvider_OpenRouter.id, result.via)
+    }
+
+    @Test
+    fun `a transport that names the route outranks the configured one`() = runTest {
+        val routed = AIConfiguration_Default(AIProvider_OpenRouter, AIModel_Claude.Sonnet_5)
+        val service = AgentLLMService(
+            agentConfiguration = AgentConfiguration(
+                agentDefinition = WriteCodeAgent,
+                aiConfiguration = routed,
+                upstreamLlmClient = ReroutingProxy(
+                    response = "answer",
+                    served = ServedBy(
+                        providerId = AIProvider_Anthropic.id,
+                        modelId = AIModel_Claude.Sonnet_5.name,
+                        via = "another-gateway",
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals("another-gateway", service.callDetailed(prompt = "Hello").via)
+    }
+
+    @Test
+    fun `a direct call reported without a route names none`() = runTest {
+        val service = AgentLLMService(
+            agentConfiguration = AgentConfiguration(
+                agentDefinition = WriteCodeAgent,
+                aiConfiguration = cloudConfig,
+                upstreamLlmClient = ReroutingProxy(
+                    response = "answer",
+                    served = ServedBy(providerId = "anthropic", modelId = "claude-sonnet-5"),
+                ),
+            ),
+        )
+
+        assertNull(service.callDetailed(prompt = "Hello").via)
     }
 
     @Test
