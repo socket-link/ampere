@@ -28,9 +28,12 @@ import link.socket.ampere.agents.domain.cognition.sparks.TaskSpark
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.memory.MemoryContext
 import link.socket.ampere.agents.domain.memory.MemoryTaskTypes
+import link.socket.ampere.agents.domain.outcome.ContentOrigin
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.outcome.StepOutcome
+import link.socket.ampere.agents.domain.outcome.contentOrigin
+import link.socket.ampere.agents.domain.outcome.originOfAll
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
@@ -771,6 +774,9 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
      * [asPriorResult] can pass it on as one, but a skip is not a verdict: a caller reading
      * this walk's outcome, or [runTask]'s, asks whether the work succeeded, and what
      * `PlanExecutor` answers for the same steps is yes.
+     *
+     * Its message quotes the skips, so it carries their origin the way `PlanExecutor`'s
+     * fold does: `Own` only when every skip was (AMPR-453).
      */
     private fun List<StepOutcome.Skipped>.settled(taskId: TaskId, startedAt: Instant): Outcome =
         ExecutionOutcome.NoChanges.Success(
@@ -780,6 +786,7 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
             executionStartTimestamp = startedAt,
             executionEndTimestamp = Clock.System.now(),
             message = joinToString("\n") { it.reason },
+            origin = originOfAll(map { it.origin }),
         )
 
     /**
@@ -795,11 +802,17 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
      * A failure is recorded as non-critical because this walk does not stop at one —
      * it runs every step and reports the first that did not succeed. Marking it
      * critical would claim the plan was cut short when it was not.
+     *
+     * The origin is the outcome's own ([contentOrigin], AMPR-453): a spark-based agent's
+     * step comes back as a one-step plan's fold, which carries the step's origin with its
+     * report, and anything else reads `External`. A blank step's skip is `Own` — its text
+     * is this walk's, not anything a step returned.
      */
     private fun Outcome.asPriorResult(task: Task, startedAt: Instant): StepOutcome {
         val endedAt = (this as? ExecutionOutcome)?.executionEndTimestamp ?: Clock.System.now()
         val description = taskTextFor(task).ifBlank { "Execute step ${task.id}" }
         val detail = (this as? ExecutionOutcome)?.describeResult() ?: ""
+        val origin = contentOrigin()
 
         return when (this) {
             is StepOutcome -> this
@@ -812,6 +825,7 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
                 stepDescription = description,
                 timestamp = startedAt,
                 reason = "nothing to execute",
+                origin = ContentOrigin.Own,
             )
             is Outcome.Failure -> StepOutcome.Failure(
                 id = task.id,
@@ -820,6 +834,7 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
                 endTimestamp = endedAt,
                 error = detail,
                 isCritical = false,
+                origin = origin,
             )
             // Ahead of the `else`, which would record a step waiting on a person as done.
             is ExecutionOutcome.Held -> StepOutcome.Held(
@@ -829,6 +844,7 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
                 endTimestamp = endedAt,
                 reason = reason,
                 reference = reference,
+                origin = origin,
             )
             else -> StepOutcome.Success(
                 id = task.id,
@@ -836,6 +852,7 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
                 startTimestamp = startedAt,
                 endTimestamp = endedAt,
                 details = detail,
+                origin = origin,
             )
         }
     }

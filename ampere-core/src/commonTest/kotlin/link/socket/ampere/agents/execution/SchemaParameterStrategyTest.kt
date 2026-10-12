@@ -111,6 +111,10 @@ class SchemaParameterStrategyTest {
 
         assertTrue("## Recalled context" in prompt)
         assertTrue("listed the mailboxes — the archive mailbox is empty" in prompt)
+        assertTrue(
+            "- [external] listed the mailboxes" in prompt,
+            "AMPR-453: recalled memory is labelled external, inside the data block",
+        )
     }
 
     @Test

@@ -1,6 +1,10 @@
+@file:OptIn(ExperimentalSerializationApi::class)
+
 package link.socket.ampere.agents.domain.outcome
 
 import kotlinx.datetime.Instant
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.reasoning.Plan
@@ -65,6 +69,9 @@ sealed interface ExecutionOutcome : Outcome {
      * @property reason What is being waited on, for a person to read.
      * @property reference An opaque handle the tool chooses — the id of the record a
      *   person will answer, say. Ampere carries it and never reads it.
+     * @property origin Where [reason] came from (AMPR-453). `PlanExecutor` sets it when it
+     *   folds a held step into the plan's outcome; a tool returning its own hold leaves it
+     *   `External` and declares its origin on the tool instead. See [ContentOrigin].
      */
     @Serializable
     data class Held(
@@ -75,6 +82,8 @@ sealed interface ExecutionOutcome : Outcome {
         override val executionEndTimestamp: Instant,
         val reason: String,
         val reference: String? = null,
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        val origin: ContentOrigin = ContentOrigin.External,
     ) : ExecutionOutcome {
 
         override val id: OutcomeId =
@@ -89,6 +98,17 @@ sealed interface ExecutionOutcome : Outcome {
     @Serializable
     sealed interface Failure : ExecutionOutcome, Outcome.Failure
 
+    /**
+     * An outcome that reports in words and changed nothing — and the shape `PlanExecutor`
+     * folds a plan into, whatever its steps did.
+     *
+     * Both variants carry an `origin` (AMPR-453): where [Success.message] / [Failure.message]
+     * came from. A plan's fold is `Own` only when every step it folds was, because the
+     * message quotes them — on the Arc path, where each step is dispatched as its own
+     * one-step plan, the message *is* the step's report. A tool returning one of these
+     * itself leaves it `External`; a tool's origin is declared on the tool. Never written
+     * when it is the default, so these encode as they did before the field existed.
+     */
     @Serializable
     sealed interface NoChanges : ExecutionOutcome {
 
@@ -100,6 +120,8 @@ sealed interface ExecutionOutcome : Outcome {
             override val executionStartTimestamp: Instant,
             override val executionEndTimestamp: Instant,
             val message: String,
+            @EncodeDefault(EncodeDefault.Mode.NEVER)
+            val origin: ContentOrigin = ContentOrigin.External,
         ) : NoChanges, ExecutionOutcome.Success {
 
             override val id: OutcomeId =
@@ -114,6 +136,8 @@ sealed interface ExecutionOutcome : Outcome {
             override val executionStartTimestamp: Instant,
             override val executionEndTimestamp: Instant,
             val message: String,
+            @EncodeDefault(EncodeDefault.Mode.NEVER)
+            val origin: ContentOrigin = ContentOrigin.External,
         ) : NoChanges, ExecutionOutcome.Failure {
 
             override val id: OutcomeId =

@@ -14,6 +14,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.definition.code.CodeState
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
+import link.socket.ampere.agents.domain.outcome.ContentOrigin
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.status.TaskStatus
@@ -120,6 +121,28 @@ class PlanStepPriorResultsTest {
         )
     }
 
+    @Test
+    fun `the walk carries a step's origin to the next step`() {
+        val agent = agent(search = searchTool().copy(resultOrigin = ContentOrigin.Own))
+
+        runBlocking { agent.executePlan(twoStepPlan()) }
+
+        // AMPR-453: the walk only ever holds the one-step plan's folded outcome, so the
+        // step's origin has to ride on that outcome or every result reads External here.
+        assertEquals(ContentOrigin.Own, dispatchedToSummarise.single().priorResults.single().origin)
+        assertContains(prompts.last(), "[own] [succeeded] search the notes for the launch date")
+    }
+
+    @Test
+    fun `a tool that declares no origin reaches the next step as external`() {
+        val agent = agent()
+
+        runBlocking { agent.executePlan(twoStepPlan()) }
+
+        assertEquals(ContentOrigin.External, dispatchedToSummarise.single().priorResults.single().origin)
+        assertContains(prompts.last(), "[external] [succeeded] search the notes for the launch date")
+    }
+
     private fun twoStepPlan(): Plan.ForTask = Plan.ForTask(
         task = Task.CodeChange(
             id = "parent-task",
@@ -143,11 +166,13 @@ class PlanStepPriorResultsTest {
         estimatedComplexity = 2,
     )
 
-    private fun agent(): SparkBasedAgent<CodeState> = SparkBasedAgent(
+    private fun agent(
+        search: FunctionTool<ExecutionContext.NoChanges> = searchTool(),
+    ): SparkBasedAgent<CodeState> = SparkBasedAgent(
         agentId = "prior-results-agent",
         cognitiveAffinity = CognitiveAffinity.ANALYTICAL,
         initialState = CodeState.blank,
-        _additionalTools = setOf(searchTool(), summariseTool()),
+        _additionalTools = setOf(search, summariseTool()),
         _aiConfiguration = AIConfiguration_Default(
             provider = AIProvider_Anthropic,
             model = AIModel_Claude.Sonnet_5,

@@ -66,6 +66,36 @@ interface HostedRun : CoroutineContext.Element {
     val plan: Plan
 
     /**
+     * Whether this run has put content from outside itself in front of a model
+     * (AMPR-453, AMPR-385 row H24) — so a consumer's write gate can tighten once it has.
+     *
+     * Becomes true, and stays true, the moment `External` content is handed to a call that
+     * renders it into a prompt. Two things raise it:
+     *
+     * - **RECALL that found anything.** Its "# Recalled context" section reaches every
+     *   seat's prompt from then on, and everything recalled is `External` — a consumer's
+     *   corpus is outside the run, and a stored learning can quote what an earlier run's
+     *   tools read. So a run that recalled something has it up before its first PLAN.
+     * - **An `External` step result handed on.** A step result whose
+     *   [origin][StepOutcome.origin] is `External`, given to a later step's dispatch (its
+     *   parameter prompt, or a reasoning step's own call), a later cycle's PLAN, or the
+     *   decision call OBSERVE asks after a cycle.
+     *
+     * It is set *before* the call, so a tool reading `coroutineContext[HostedRun]` while its
+     * step runs already sees it. It is read off the hand-over, not off the prompt bytes, so
+     * it can be true when the call happened not to render the content — a step whose
+     * arguments came inline from the plan makes no parameter call. That errs toward a
+     * tighter gate, which is the safe direction. An `External` step that is the last thing
+     * the run does, in a run that recalled nothing, leaves it false: no model was shown what
+     * it read.
+     *
+     * The default answers true: an implementation that does not track this has to be
+     * assumed to have read something.
+     */
+    val readExternalContent: Boolean
+        get() = true
+
+    /**
      * EXECUTE, plus a re-entry into OBSERVE → PLAN while cycles remain.
      *
      * Each step is dispatched to the seat the plan assigned it to: a step naming a
@@ -145,6 +175,13 @@ data class RunResult(
      * nothing.
      */
     val outcome: Outcome = Outcome.blank,
+    /**
+     * Whether the run put content from outside itself in front of a model before it
+     * ended — [HostedRun.readExternalContent] as it stood when [HostedRun.execute]
+     * returned (AMPR-453). Defaults to true for the same reason the run's own property
+     * does: a result that does not say has to be assumed to have read something.
+     */
+    val readExternalContent: Boolean = true,
 )
 
 /**

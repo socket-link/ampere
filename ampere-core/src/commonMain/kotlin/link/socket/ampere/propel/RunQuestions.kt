@@ -4,6 +4,7 @@ import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import link.socket.ampere.agents.domain.outcome.ContentOrigin
 import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.task.planStepDescription
 import link.socket.ampere.api.AmpereStableApi
@@ -59,11 +60,13 @@ object RunQuestions {
  * (AMPR-421).
  *
  * ```json
- * {"goal":"Add a retry","cycle":1,"results":[{"step":"Search","status":"succeeded","result":"found it"}]}
+ * {"goal":"Add a retry","cycle":1,"results":[
+ *   {"step":"Search","status":"succeeded","origin":"external","result":"found it"}]}
  * ```
  *
  * The key order is fixed, and the only things rendered are the goal's description, the
- * cycle, and per step its description, a status word and what it reported. A step's id
+ * cycle, and per step its description, a status word, where its text came from
+ * (`own` or `external`, AMPR-453) and what it reported. A step's id
  * and its timestamps are left out on purpose: the record's
  * [stateDigest][link.socket.ampere.llm.decide.stateDigest] is the only join key back to
  * the state — the state itself is never recorded — so two reads of the same run at the
@@ -90,6 +93,7 @@ fun RunObservation.asDecisionState(clip: Int): String {
                 addJsonObject {
                     put("step", outcome.stepDescription)
                     put("status", outcome.statusWord())
+                    put("origin", outcome.originWord())
                     put("result", outcome.reportedText().clipTo(clip))
                 }
             }
@@ -118,6 +122,16 @@ private fun StepOutcome.statusWord(): String = when (this) {
     is StepOutcome.Failure -> "failed"
     is StepOutcome.Held -> "held"
     is StepOutcome.Skipped -> "skipped"
+}
+
+/**
+ * Where the step's text came from, in the words the step-results block labels it with
+ * (AMPR-453). The decision model reads the result next to it, so it is told whether that
+ * result is the run's own or outside text before it reads it.
+ */
+private fun StepOutcome.originWord(): String = when (origin) {
+    ContentOrigin.Own -> "own"
+    ContentOrigin.External -> "external"
 }
 
 /** What this step says about itself: its details, its error, what it waits on, or why it was skipped. */

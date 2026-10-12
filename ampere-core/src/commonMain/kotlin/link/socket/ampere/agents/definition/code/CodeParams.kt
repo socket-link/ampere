@@ -11,6 +11,7 @@ import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.execution.ParameterStrategy
 import link.socket.ampere.agents.execution.priorResultsSection
+import link.socket.ampere.agents.execution.recalledBlock
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.READ_CODE_FILE_TOOL_ID
@@ -349,13 +350,18 @@ object CodePrompts {
             }
         }
 
+        // AMPR-453: a stored learning can quote what a past run's tools read, so it reaches
+        // the prompt inside the data block, labelled `[external]`.
         if (pastMemory.knowledgeFromOutcomes.isNotEmpty()) {
             appendLine()
             appendLine("## Learned Knowledge")
-            pastMemory.knowledgeFromOutcomes.takeLast(3).forEach { knowledge ->
-                appendLine("- Approach: ${knowledge.approach}")
-                appendLine("  Learnings: ${knowledge.learnings}")
-            }
+            append(
+                recalledBlock(
+                    pastMemory.knowledgeFromOutcomes.takeLast(3).map { knowledge ->
+                        "Approach: ${knowledge.approach}\nLearnings: ${knowledge.learnings}"
+                    },
+                ),
+            )
         }
 
         appendLine()

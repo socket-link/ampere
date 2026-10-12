@@ -10,6 +10,7 @@ import link.socket.ampere.agents.domain.reasoning.LLMResponseParser
 import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.routing.local.InferenceLocality
 import link.socket.ampere.agents.domain.routing.local.InferenceLocalityClassifier
+import link.socket.ampere.agents.execution.dataBlock
 import link.socket.ampere.api.AmpereStableApi
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 
@@ -99,7 +100,9 @@ class ModelBackedDecisionClient(
         appendLine("The answer must be exactly one of the allowed keys.")
         appendLine()
         appendLine("State:")
-        appendLine(state)
+        // AMPR-453: a state is data — a hosted run's carries its step results, which are
+        // tool output — so it reaches the model inside the one delimited data block.
+        append(dataBlock(state))
         appendLine()
         appendLine("Question (${question.typeName}): ${question.instructions}")
         appendLine("Allowed answers:")

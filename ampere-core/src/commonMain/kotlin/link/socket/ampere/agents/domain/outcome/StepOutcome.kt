@@ -1,6 +1,10 @@
+@file:OptIn(ExperimentalSerializationApi::class)
+
 package link.socket.ampere.agents.domain.outcome
 
 import kotlinx.datetime.Instant
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 /**
@@ -8,12 +12,24 @@ import kotlinx.serialization.Serializable
  *
  * Tracks whether the step succeeded, partially succeeded, failed, is held waiting on a
  * person, or was skipped, along with relevant details and timestamps.
+ *
+ * Every variant also says where its text came from ([origin], AMPR-453). The field is
+ * additive on the wire: it is never written when it is [ContentOrigin.External], so an
+ * outcome that is not `Own` encodes exactly as it did before the field existed, and one
+ * stored before then decodes as `External` — the safe reading of a result nobody marked.
  */
 @Serializable
 sealed interface StepOutcome : Outcome {
     val stepDescription: String
     val startTimestamp: Instant
     val endTimestamp: Instant
+
+    /**
+     * Whether this step's text — its details, its error, what it waits on, why it was
+     * skipped — was produced by the run itself or came from outside it (AMPR-453).
+     * `External` unless something proved otherwise; see [ContentOrigin].
+     */
+    val origin: ContentOrigin
 
     /**
      * Step completed successfully with all objectives met.
@@ -31,6 +47,8 @@ sealed interface StepOutcome : Outcome {
         override val startTimestamp: Instant,
         override val endTimestamp: Instant,
         val details: String,
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        override val origin: ContentOrigin = ContentOrigin.External,
     ) : StepOutcome
 
     /**
@@ -56,6 +74,8 @@ sealed interface StepOutcome : Outcome {
         val successCount: Int,
         val failureCount: Int,
         val details: String,
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        override val origin: ContentOrigin = ContentOrigin.External,
     ) : StepOutcome
 
     /**
@@ -76,6 +96,8 @@ sealed interface StepOutcome : Outcome {
         override val endTimestamp: Instant,
         val error: String,
         val isCritical: Boolean = true,
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        override val origin: ContentOrigin = ContentOrigin.External,
     ) : StepOutcome
 
     /**
@@ -97,6 +119,8 @@ sealed interface StepOutcome : Outcome {
         override val endTimestamp: Instant,
         val reason: String,
         val reference: String? = null,
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        override val origin: ContentOrigin = ContentOrigin.External,
     ) : StepOutcome
 
     /**
@@ -113,6 +137,8 @@ sealed interface StepOutcome : Outcome {
         override val stepDescription: String,
         val timestamp: Instant,
         val reason: String,
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        override val origin: ContentOrigin = ContentOrigin.External,
     ) : StepOutcome {
         override val startTimestamp: Instant get() = timestamp
         override val endTimestamp: Instant get() = timestamp

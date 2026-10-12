@@ -19,6 +19,7 @@ import link.socket.ampere.agents.domain.task.ExecutionAssignment
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.execution.ToolArgumentSchema
 import link.socket.ampere.agents.execution.completedWorkSection
+import link.socket.ampere.agents.execution.recalledBlock
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.llm.MissingUpstreamLlmClientException
@@ -203,14 +204,19 @@ class PlanGenerator(
             return "No relevant past knowledge available."
         }
 
+        // AMPR-453: recalled knowledge reaches the prompt inside the data block, every entry
+        // labelled `[external]` — a stored learning can quote what a past run's tools read.
         return buildString {
             appendLine("Relevant past experiences (${knowledge.size} entries):")
-            knowledge.take(5).forEach { scored ->
-                appendLine("- Approach: ${scored.knowledge.approach}")
-                appendLine("  Learnings: ${scored.knowledge.learnings.take(200)}...")
-                appendLine("  Relevance: ${(scored.relevanceScore * 100).toInt()}%")
-                appendLine()
-            }
+            append(
+                recalledBlock(
+                    knowledge.take(5).map { scored ->
+                        "Approach: ${scored.knowledge.approach}\n" +
+                            "Learnings: ${scored.knowledge.learnings.take(200)}...\n" +
+                            "Relevance: ${(scored.relevanceScore * 100).toInt()}%"
+                    },
+                ),
+            )
         }
     }
 

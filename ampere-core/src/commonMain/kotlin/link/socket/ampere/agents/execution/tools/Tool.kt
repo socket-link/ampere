@@ -1,10 +1,15 @@
+@file:OptIn(ExperimentalSerializationApi::class)
+
 package link.socket.ampere.agents.execution.tools
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.agents.config.AgentActionAutonomy
+import link.socket.ampere.agents.domain.outcome.ContentOrigin
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.execution.ParameterStrategy
 import link.socket.ampere.agents.execution.request.ExecutionContext
@@ -74,6 +79,20 @@ sealed interface Tool<Context : ExecutionContext> {
         get() = null
 
     /**
+     * Where the text this tool returns comes from (AMPR-453, AMPR-385 row H24).
+     *
+     * Carried onto the step's `StepOutcome.origin`, and from there into the label every
+     * later prompt gives the result. [ContentOrigin.External] unless the tool overrides it,
+     * and an [McpTool] never does: what a server answers is outside the run by definition.
+     * A [FunctionTool] declares [ContentOrigin.Own] only when it can prove its result holds
+     * nothing it read from outside the run — a tool that formats the run's own state, say.
+     * A tool that reads a file, a page, a message or a store is `External`, however
+     * trusted the source.
+     */
+    val resultOrigin: ContentOrigin
+        get() = ContentOrigin.External
+
+    /**
      * Executes the tool with the given request parameters.
      *
      * @param executionRequest parameters, context, and instructions for the execution.
@@ -98,6 +117,8 @@ sealed interface Tool<Context : ExecutionContext> {
  * @property argumentSchema Optional declaration of this tool's arguments, which
  * stands in for a hand-written [parameterStrategy]. See the property's own KDoc
  * for the schema subset AMPERE reads.
+ * @property resultOrigin Where this tool's results come from (AMPR-453). Leave it
+ * [ContentOrigin.External] unless the tool provably returns only run-internal content.
  */
 @Serializable
 data class FunctionTool<Context : ExecutionContext>(
@@ -169,6 +190,13 @@ data class FunctionTool<Context : ExecutionContext>(
      * registered strategy for its id, or generic execution with no parameter call.
      */
     val argumentSchema: JsonObject? = null,
+
+    /**
+     * Where this tool's results come from (AMPR-453). Never written when it is the
+     * default, so a tool that does not declare one serializes as it did before.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    override val resultOrigin: ContentOrigin = ContentOrigin.External,
 ) : Tool<Context> {
 
     override suspend fun execute(executionRequest: ExecutionRequest<Context>): Outcome {

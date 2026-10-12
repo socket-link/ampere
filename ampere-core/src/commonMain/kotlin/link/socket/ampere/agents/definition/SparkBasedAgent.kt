@@ -24,10 +24,12 @@ import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.memory.MemoryContext
+import link.socket.ampere.agents.domain.outcome.ContentOrigin
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.outcome.StepOutcome
+import link.socket.ampere.agents.domain.outcome.originOfAll
 import link.socket.ampere.agents.domain.reasoning.AgentReasoning
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
@@ -523,12 +525,16 @@ open class SparkBasedAgent<S : AgentState>(
      *
      * A multi-step plan ([runSubPlanForTask]) keeps the summary: its steps read each other
      * through `StepContext.priorResults` and never through this message.
+     *
+     * The message carries the step's origin with it (AMPR-453), so the walk in
+     * [AutonomousAgent.executePlan] — which only ever holds this outcome — labels the step's
+     * text the way the step itself was labelled.
      */
     private fun Outcome.reportingStep(stepOutcome: StepOutcome?): Outcome {
         val report = stepOutcome?.detailText()?.takeIf { it.isNotBlank() } ?: return this
         return when (this) {
-            is ExecutionOutcome.NoChanges.Success -> copy(message = report)
-            is ExecutionOutcome.NoChanges.Failure -> copy(message = report)
+            is ExecutionOutcome.NoChanges.Success -> copy(message = report, origin = stepOutcome.origin)
+            is ExecutionOutcome.NoChanges.Failure -> copy(message = report, origin = stepOutcome.origin)
             else -> this
         }
     }
@@ -573,7 +579,7 @@ open class SparkBasedAgent<S : AgentState>(
             return StepResult.success(
                 description = "blank step",
                 details = "no-op",
-            )
+            ).withOrigin(ContentOrigin.Own)
         }
         val (description, toolId) = when (step) {
             is Task.CodeChange -> step.description to step.toolId
@@ -622,8 +628,11 @@ open class SparkBasedAgent<S : AgentState>(
             )
         }
 
+        // AMPR-453: what the tool returned is attributed to the tool's declared origin —
+        // `External` unless it proved otherwise — success, failure and hold alike, since a
+        // failure's error quotes what the tool said.
         val request = buildPlanStepRequest(step, description, parentTask, priorResults)
-        return when (val outcome = reasoning.executeTool(tool, request)) {
+        val result = when (val outcome = reasoning.executeTool(tool, request)) {
             is ExecutionOutcome.Success -> StepResult.success(
                 description = description,
                 details = outcome.stepDetails(toolId),
@@ -649,6 +658,7 @@ open class SparkBasedAgent<S : AgentState>(
                 reason = "tool=$toolId returned nothing to execute",
             )
         }
+        return result.withOrigin(tool.resultOrigin)
     }
 
     /**
@@ -700,7 +710,7 @@ open class SparkBasedAgent<S : AgentState>(
             return StepResult.success(
                 description = description,
                 details = "reasoning step not executed: cognitiveConfig.reasoningSteps.execute is off",
-            )
+            ).withOrigin(ContentOrigin.Own)
         }
 
         val text = try {
@@ -731,10 +741,14 @@ open class SparkBasedAgent<S : AgentState>(
             )
         }
 
+        // AMPR-453: the conclusion is the run's own only if everything it was reasoned
+        // from was. A model shown an `External` result can repeat it, instructions
+        // included, so the conclusion inherits that origin rather than laundering it.
+        val origin = originOfAll(priorResults.map { it.origin })
         return StepResult.success(
             description = description,
             details = text,
-        )
+        ).withOrigin(origin)
     }
 
     /**

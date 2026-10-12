@@ -85,10 +85,11 @@ class SchemaParameterStrategy(
             appendLine(earlierSteps)
         }
 
+        // AMPR-453: recalled memory is data, inside the same block, every entry `[external]`.
         val recalled = recalledContext(request)
         if (recalled.isNotEmpty()) {
             appendLine("## Recalled context")
-            recalled.forEach { appendLine("- $it") }
+            append(recalledBlock(recalled))
             appendLine()
         }
 
