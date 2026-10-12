@@ -257,3 +257,32 @@ suspend fun AgentEventApi.openTaskLifecycle(
         execution = execution,
     )
 }
+
+/**
+ * The [TaskLifecycle] of a task whose `TaskCreated` and `TaskStarted` are already on the record,
+ * picked up again by a caller that did not open it — publishing nothing (AMPR-431).
+ *
+ * A hosted run that held may be resumed by another process, long after the one that opened its
+ * task is gone. Its task is still the same task — blocked, not ended — so the resumed run carries
+ * it on rather than creating it twice: the task's events stay one `TaskCreated`, one `TaskStarted`,
+ * and whatever came after, under one run id.
+ *
+ * Internal because only a caller that can vouch the task was opened, and not yet ended, should
+ * ever re-attach to it; terminal-exactly-once holds per [TaskLifecycle] instance, not per task.
+ *
+ * @param taskType as [openTaskLifecycle]'s, which the terminal `TaskCompleted` carries.
+ */
+internal fun AgentEventApi.reattachTaskLifecycle(
+    taskId: TaskId,
+    runId: RunId,
+    taskType: String? = null,
+    workspace: ExecutionWorkspace? = null,
+    execution: ExecutionAssignment? = null,
+): TaskLifecycle = TaskLifecycle(
+    eventApi = this,
+    taskId = taskId,
+    runId = runId,
+    taskType = taskType,
+    workspace = workspace,
+    execution = execution,
+)

@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/service/AgentService.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/internal/DefaultAgentService.kt
 related: [PropelLoop, TeamLayer, SparkSystem, MemoryProvenance, CognitionTrace, Probe, SubjectRegistry, PlugPermissions]
-last_verified: 2026-10-11
+last_verified: 2026-10-12
 ---
 
 # Hosted Run
@@ -22,9 +22,10 @@ PERCEIVE → RECALL → OBSERVE → PLAN on the roster's **host seat** and retur
 `HostedRun.execute()` is EXECUTE plus a re-entry into OBSERVE → PLAN while cycles
 remain — each later PLAN shown the step results so far, and free to answer with no
 steps, which ends the run (AMPR-424); `HostedRun.close()` is LEARN. A step whose tool
-reports it is waiting on a person ends the run where it stands (AMPR-425); a step that
-fails skips only the steps that depend on it, and a run that did some of its work ends
-`Partial` (AMPR-450). Under an optional step cap, a plan that is too long or names a tool
+reports it is waiting on a person ends the run where it stands (AMPR-425), and
+`RunHost.resume(runId, …, resolution)` carries it on from its record once the person has
+decided (AMPR-431); a step that fails skips only the steps that depend on it, and a run
+that did some of its work ends `Partial` (AMPR-450). Under an optional step cap, a plan that is too long or names a tool
 no seat has goes back to the planner once and is then cut, on the record, before the gate
 sees it (AMPR-452).
 
@@ -157,7 +158,8 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     `close()` publishes no `TaskCompleted` or `TaskFailed` — the run is waiting, not
     finished. LEARN is entered and bracketed and writes nothing: no outcome row (the
     store can only say succeeded or failed), no Knowledge for any seat, no
-    `ModelBacked` call. Status precedence is cancelled (`Failed`) → stopped by the gate
+    `ModelBacked` call. Status precedence is cancelled (`Failed`) → declined at a hold
+    (`Failed`, AMPR-431) → stopped by the gate
     (`Stopped`) → any step held (`Held`) → no step failed (`Succeeded`) → some step
     succeeded beside the failures (`Partial`) → `Failed`; a hold outranks an earlier
     cycle's failure because it is why the run ended. The stop lives in `PlanExecutor`,
@@ -231,8 +233,8 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     JDBC SQLite gives no isolation — AMPR-336), and `claim` decodes before it claims so an
     unreadable row is left for a build that can read it; a row `get` or `claim` cannot
     decode is announced once as `StoreRowUndecodableEvent` (`HELD_RUN_STORE`), never
-    silently dropped. **Nothing writes or reads the store yet** — the run that records
-    itself on holding and the resume that claims it are the next Wave 5 ticket.
+    silently dropped. A run that holds writes it (AMPR-431, invariant 24) and
+    `RunHost.resume` claims it; nothing else in Ampere writes or reads it.
 21. **The run's completion answer is recorded and never read** (AMPR-442, row H19). One
     `GoalCompletion` answer per executed cycle, in cycle order, held on the run
     (`RosterHostedRun.goalCompletionAnswers`). The default is `AnySuccess`, so a cycle
@@ -286,6 +288,53 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     its steps' pairs carry. A plan cut to *nothing* is not sent to the gate and ends the
     run; it counts as a failure, so the run is `Failed`, or `Partial` when an earlier
     cycle's step succeeded, and its task ends `TaskFailed`.
+
+24. **A held run is recorded before `execute()` returns, and resumed at most once**
+    (AMPR-431, rows H29 and H30 as ruled on 2026-10-11). On a host built with a
+    `HeldRunStore` — `Ampere.fromEnvironment` with a `database`, and `Ampere.create` —
+    a run that ends `Held` writes its `HeldRun` under `NonCancellable` and reports
+    `RunResult.resumable = true`. A write that fails is logged (naming the run, never its
+    content) and leaves the run `Held` with `resumable = false`; it is not thrown. A host
+    with no store records nothing, and `resume` throws `NoStore`. `resume` claims the
+    record before any seat is built, any event is published or any model is called;
+    every refusal — `NoStore`, `StillOpen` (this host has the id open: close the held
+    run first), `NotHeld`, `AlreadyClaimed`, a roster whose host is not the record's —
+    happens before that point, and the roster check reads the record before claiming
+    it, so a refused resume leaves the record unclaimed. A claim, once landed, is never
+    undone: a resume interrupted after it leaves the record claimed and listed by
+    `heldRuns()`, because some remaining steps may have run, and its owner deletes it.
+    The record is deleted when the run that took it up closes in any status but `Held`;
+    a run that never resumed leaves the store alone, since a record under its id
+    belongs to an earlier run that used the same id. A resumed run that holds again
+    replaces its claimed record with a new, unclaimed one carrying the whole approved
+    plan, so a second resume indexes and folds against the plan the person approved.
+25. **Ampere never re-fires a held tool** (AMPR-431, row H31). The held step's result
+    is `HoldResolution`'s and nothing else: `Completed(details)` makes it a
+    `StepOutcome.Success` with those details (origin `External` — the consumer's report
+    of an action taken outside the run), `Declined(reason)` a critical
+    `StepOutcome.Failure` whose error begins `Declined:`. No code path dispatches the
+    held step on resume. Its `PlanStepCompleted` is published once more, now with the
+    settled outcome, through the door of the seat that owns it; its `PlanStepStarted`
+    is the one from before the hold. Nothing about the hold suspends: no coroutine
+    waits across it, and nothing in `HeldRunStore` starts or notifies a run.
+26. **A resumed run is the same run, carrying on with the approved plan** (AMPR-431,
+    rows H30 and H32; the AMPR-274 D4 amendment). It keeps its run id — every event,
+    the task lifecycle, the tool requests and LEARN's outcome are under the id it held
+    under — and its task is re-attached (`reattachTaskLifecycle`, which publishes
+    nothing), so across a hold and a resume the task has one `TaskCreated`, one
+    `TaskStarted`, one `TaskBlocked`, one `TaskProgressed` (the resume) and one terminal
+    event. There is no PERCEIVE and no PLAN for the held cycle, and the remaining steps
+    are not sent to `PlanGate.review` again; RECALL and OBSERVE run again, and neither
+    calls a model. A step whose arguments change at dispatch still goes to
+    `reviewChangedStep` (invariant 22), and consent is checked at every tool call, as on
+    any dispatch. `plan` is the steps after the held one; `execute()` walks them with
+    the approved plan's indices (`PlanExecutor`'s partial walk) and folds the held cycle
+    whole, then continues exactly as after any cycle — more cycles while the cap allows,
+    each later PLAN shown every result before the hold and after, or another hold.
+    `close()` is LEARN for the whole run: one outcome row, Knowledge for every seat that
+    ran on either side of the hold, one terminal task event. A declined hold leaves the
+    skips after the held step in place, runs and plans nothing whatever the cap, and
+    ends `Failed` — outcome recorded, `TaskFailed` published, record deleted.
 
 ## How it composes
 
@@ -388,7 +437,7 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 
 | Type | Role |
 |------|------|
-| `RunHost` | `open(…, runId: RunId? = null)`, `openSeats(roster, seats: List<HostedAgent>, …, runId)` (the Swift-friendly overload), `openRunSeats(): List<OpenSeat>`. A supplied `runId` is `HostedRun.runId`, `RunResult.runId`, the envelope run id of every event, the task lifecycle's id and LEARN's outcome `ticketId`/`runId`; null mints one |
+| `RunHost` | `open(…, runId: RunId? = null)`, `openSeats(roster, seats: List<HostedAgent>, …, runId)` (the Swift-friendly overload), `openRunSeats(): List<OpenSeat>`; `resume(runId, roster, seats, resolution, tools, policy)`, `resumeSeats(…)` and `heldRuns(): List<HeldRunSummary>` (AMPR-431), each with a default body — `resume` throws `NoStore`, `heldRuns` is empty. A supplied `runId` is `HostedRun.runId`, `RunResult.runId`, the envelope run id of every event, the task lifecycle's id and LEARN's outcome `ticketId`/`runId`; null mints one |
 | `HostedAgent` | Who fills a seat: id, role, sparks, charter, `AIConfiguration`, `CognitiveRelay?`, **required** `UpstreamLlmClient`, `MemoryStore?`, `recallScopes`, affinity, `probes`, `questions`, `UpstreamDecisionClient?`, `userGrants: (suspend (PlugManifest) -> UserGrants)?` (null denies) |
 | `HostedRun` | `runId`, `plan`, `readExternalContent`, `execute()`, `close()`. `readExternalContent` defaults to `true` on the interface, so an implementation that does not track it is assumed to have read something |
 | `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip`, `quotas`, `maxStepsPerCycle` (null = no cap) |
@@ -399,10 +448,12 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | `RecallSource` / `Recalled` | The consumer-implemented corpus SPI (`memory/`, beside `MemoryStore`) and one item of it |
 | `PlanGate` / `PlanDecision` | `review(plan)` → `Approved(plan)` (possibly trimmed) or `Stopped(reason)`; `reviewChangedStep(step, approved, actual)` when a step is about to run with arguments the gate did not approve, defaulting to `review` of a one-step plan carrying `actual` |
 | `StepArguments` / `Task.Step.argumentsHash` | `canonical`, `hash` (SHA-256 hex) and `same` over a step's arguments: key order never matters, a value always does, and none / `null` / `{}` are one value |
-| `RunResult` / `RunStatus` | `cyclesUsed`, `stepOutcomes` (each with its `origin`), `outcome`, `readExternalContent`; `Succeeded` / `Failed` / `Stopped` / `Held` / `Partial` |
+| `RunResult` / `RunStatus` | `cyclesUsed`, `stepOutcomes` (each with its `origin`), `outcome`, `readExternalContent`, `resumable` (true only for a `Held` run whose record was committed); `Succeeded` / `Failed` / `Stopped` / `Held` / `Partial` |
+| `HoldResolution` | How a person settled a hold: `Completed(details)` — the consumer performed the action, and `details` becomes the held step's result — or `Declined(reason)`, also used for an expired hold |
+| `HeldRunUnavailableException` | `resume` could not take the run up: `why` is `NoStore`, `NotHeld`, `StillOpen` or `AlreadyClaimed`. Thrown before anything is built or published |
 | `RunObservation` | What OBSERVE hands the verifier's Probes: run id, goal, cycle, prior results |
-| `rosterRunHost(...)` | The shipped implementation, for composing without an `AmpereInstance` |
-| `HeldRun` / `HeldRunStore` | The durable record of a held run and its store: `hold`, `get`, `list` (→ `HeldRunSummary`), `claim` (→ `HeldRunClaim`: `Claimed`, `NotHeld`, `AlreadyClaimed`), `delete`. `SqlDelightHeldRunStore` and `InMemoryHeldRunStore`. Nothing in the run uses it yet |
+| `rosterRunHost(...)` | The shipped implementation, for composing without an `AmpereInstance`. `heldRuns: HeldRunStore? = null` is where a held run is recorded; null records nothing |
+| `HeldRun` / `HeldRunStore` | The durable record of a held run and its store: `hold`, `get`, `list` (→ `HeldRunSummary`), `claim` (→ `HeldRunClaim`: `Claimed`, `NotHeld`, `AlreadyClaimed`), `delete`. `SqlDelightHeldRunStore` and `InMemoryHeldRunStore`. A run that holds writes it; `RunHost.resume` claims it |
 
 `Ampere.fromEnvironment` exposes one as `AmpereInstance.runs`, and `agentScope` is
 documented as the caller's to own. `AgentService.team {}` declares the roster and
@@ -442,6 +493,36 @@ resume is still listed, with its `claimedAt`.
 The record holds step results, which can contain a person's content. It sits beside the
 event store, which already holds the same results, and is not copied anywhere else,
 logged, or put on an event.
+
+## Hold and resume
+
+```kotlin
+val run = ampere.runs.open(roster, seats, goal, tools)
+val result = try { run.execute() } finally { run.close() }      // a held run's close keeps its record
+
+if (result.status == RunStatus.Held && result.resumable) {
+    // Later — possibly in another process — once the person has decided, and the
+    // consumer has performed the approved action through its own gate:
+    val resumed = ampere.runs.resume(result.runId, roster, seats, HoldResolution.Completed(details), tools)
+    try { resumed.execute() } finally { resumed.close() }      // LEARN for the whole run
+}
+```
+
+What happens at each point:
+
+| When | What Ampere does |
+|------|------------------|
+| A tool holds | The step ends `Held`, later steps `Skipped`, task `TaskBlocked`, run `Held`. With a store, the `HeldRun` is written before `execute()` returns and `resumable` is true |
+| `close()` of the held run | LEARN writes nothing; the record stays, unclaimed. The id is free on this host again |
+| `resume(…)` | Validate as `open` does; refuse `NoStore` / `StillOpen`; read the record, refuse `NotHeld` or a host mismatch; claim it (`AlreadyClaimed` to every caller but one). Only then build the seats, restore goal, ideas, results, cycle count and seats-that-ran, and re-attach the task |
+| `Completed(details)` | RECALL, OBSERVE (no model call). Held step → `Success(details)`, its skips dropped, its `PlanStepCompleted` published, one `TaskProgressed`. `plan` = the steps after it |
+| `Declined(reason)` | Held step → critical `Failure("Declined: …")`, skips kept, its `PlanStepCompleted` published. `plan` is empty |
+| `execute()` | The remaining steps, the first handed the held action's result; then as after any cycle. Or nothing, after a decline |
+| `close()` | LEARN over the whole run; the record is deleted unless the run held again |
+
+Who owns what is not Ampere's: performing the held action, deciding when a hold expires
+(report it as `Declined`), telling the person, and cleaning up a record whose resume was
+interrupted (`heldRuns()` lists it with its `claimedAt`).
 
 ## Anti-patterns
 
@@ -609,6 +690,15 @@ logged, or put on an event.
 - **Treating `held` as a kind of failure in a tool record.** `ToolExecutionCompleted`
   for a held call has `success = false` *and* `held = true` and no `errorMessage`; a
   reader that keys on `success` alone will count holds as faults.
+- **Validating a resume after claiming the record.** A claim is never undone (a resume
+  interrupted after it may have run steps), so anything that can refuse a resume — the
+  roster's host, the seats, the id still open — has to refuse before `claim`, or a typo in
+  a roster strands a hold no one can carry on. `RosterRunHost.resume` reads the record
+  with `get` to check it, then claims (AMPR-431).
+- **Treating a resumed run as a new one.** Opening a fresh run for "the rest" re-perceives,
+  re-plans and re-gates work the person already approved, mints a second task, and splits
+  one run's trace and LEARN in two. A resume keeps the run id, re-attaches the task, and
+  walks the approved plan from the step after the held one (AMPR-431).
 
 ## Not implemented here
 
@@ -628,13 +718,13 @@ after it, not only its dependents; a cancelled run is still `Failed`, with no se
 `Cancelled` status (the row's text named one, and it was not asked about); the per-tool idempotency key
 (run id + step id) received no ruling and is not built; dependents on the Arc path are out
 of scope, because `FlowPhase` runs one step per tick; and `dependsOn` is only ever the
-previous step, because that is all `requiresPreviousStep` can say. Also not here: *resuming* a held run
-(row H29, Wave 5 — until it ships, whatever was waiting is completed by the consumer
-outside the run and nothing after it runs; this wave leaves it the `reference` and a
-blocked task to resume from — `HeldRunStore` (row H30, AMPR-430) is where a held run's
-state will be kept for that, but nothing writes it yet, it has no expiry of its own, and
-it does not recover a claimed record whose resume was interrupted), deciding *when* an action must be held (the tool's and
-its consumer's), and telling a held run from a failed one in `OutcomeMemoryStore`
+previous step, because that is all `requiresPreviousStep` can say. Resuming a held run
+(rows H29–H32) is built by AMPR-431 (invariants 24–26). What it does *not* come with:
+performing the held action, deciding when a hold expires, and telling the person — all
+the consumer's; raising an `AgentPause` for a held step, or unifying `HeldRunStore` with
+`PauseStore`; planning afresh on resume (the option H30 did not take); recovering an
+interrupted resume automatically; deciding *when* an action must be held (the tool's and
+its consumer's); and telling a held run from a failed one in `OutcomeMemoryStore`
 (held outcomes are simply not written, because that would need a migration).
 
 H20 (c), the per-cycle step cap, was approved the same day with the cap off by default and

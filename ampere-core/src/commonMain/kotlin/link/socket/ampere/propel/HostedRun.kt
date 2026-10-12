@@ -111,7 +111,8 @@ interface HostedRun : CoroutineContext.Element {
      *
      * A step whose tool reports it is waiting on a person ends the run: the rest of
      * that cycle is skipped, no further cycle is planned, and the result is
-     * [RunStatus.Held] (AMPR-425).
+     * [RunStatus.Held] (AMPR-425). On a host with a [HeldRunStore] the run is recorded
+     * before this returns, and [RunResult.resumable] is true once it has been (AMPR-431).
      *
      * A step that fails does not: only the steps that depend on it
      * ([Task.Step.dependsOn][link.socket.ampere.agents.domain.task.Task.Step.dependsOn]),
@@ -142,7 +143,8 @@ interface HostedRun : CoroutineContext.Element {
      *
      * A [RunStatus.Held] run is the exception (AMPR-425): LEARN is entered and records
      * nothing, and the run's task is left blocked rather than ended, because the run is
-     * waiting, not finished.
+     * waiting, not finished. Its held record is kept for [RunHost.resume]; a resumed run
+     * that closes in any other status deletes it (AMPR-431).
      */
     suspend fun close()
 
@@ -188,6 +190,13 @@ data class RunResult(
      * does: a result that does not say has to be assumed to have read something.
      */
     val readExternalContent: Boolean = true,
+    /**
+     * Whether [RunHost.resume] can carry this run on (AMPR-431): true only when it ended
+     * [RunStatus.Held] and its record was committed to the host's [HeldRunStore]. False
+     * for every other status, for a host with no store, and for a hold whose record could
+     * not be written — that run is held all the same, and the failure is logged.
+     */
+    val resumable: Boolean = false,
 )
 
 /**
@@ -242,7 +251,8 @@ enum class RunStatus {
      * [RunPolicy.cycles] allows: the steps after a hold would need an output it has not
      * produced. A hold outranks an earlier cycle's failure, because it is why the run
      * ended. Nothing is learned from a held run, and its task is left blocked rather than
-     * ended — the run is waiting, not finished. Resuming one is not built here.
+     * ended — the run is waiting, not finished. With a [HeldRunStore] it is recorded, and
+     * [RunHost.resume] carries it on where it stopped (AMPR-431).
      */
     Held,
 

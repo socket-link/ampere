@@ -12,7 +12,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/**
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/events/**
 related: [PropelLoop, AgentSurface, CognitionTrace, MemoryProvenance, LinkLayer]
-last_verified: 2026-10-11
+last_verified: 2026-10-12
 ---
 
 # EventSerialBus
@@ -56,7 +56,7 @@ properties for free:
 - `agents/events/relay/EmissionStream.kt` — `EventSerialBus.emissions(runId)`, the per-run Emission Flow the Swift Arc bridge streams progress through.
 - `agents/events/bus/EventSerialBusFactory.kt` — wiring the bus into the application graph.
 - `agents/events/api/AgentEventApi.kt` — the agent-facing facade for emitting events without touching the bus directly.
-- `agents/events/api/TaskLifecycle.kt` — `AgentEventApi.openTaskLifecycle(...)` and the handle it returns: one unit of work's `TaskCreated` → `TaskStarted` → `TaskProgressed`/`SubtaskCreated`/`TaskBlocked` → `TaskCompleted`/`TaskFailed`, all under one `runId`, terminal exactly once.
+- `agents/events/api/TaskLifecycle.kt` — `AgentEventApi.openTaskLifecycle(...)` and the handle it returns: one unit of work's `TaskCreated` → `TaskStarted` → `TaskProgressed`/`SubtaskCreated`/`TaskBlocked` → `TaskCompleted`/`TaskFailed`, all under one `runId`, terminal exactly once. `reattachTaskLifecycle(taskId, runId, …)` (internal, AMPR-431) is the same handle for a task already created and started — a hosted run resumed after a hold, possibly in another process — and publishes nothing on creation, so the task still has one `TaskCreated` and one `TaskStarted`; terminal-exactly-once holds per handle, so only a caller that knows the task has not ended may re-attach.
 - `agents/events/EventRouter.kt` — fans `TaskCreated`, `QuestionRaised` and `CodeSubmitted` out to registered agents as `NotificationEvent.ToAgent`s. Registration is `EnvironmentService.routeEventsToAgent(agentId, eventType)`; `EnvironmentOrchestrator.start()` calls `startRouting()`.
 - `agents/events/relay/EventRelayService.kt` — out-of-process bridging (e.g., CLI streaming).
 - `agents/events/utils/EventLogger.kt`, `SignificanceAwareEventLogger.kt` — pluggable logging implementations. `Console`, significance-filtered.

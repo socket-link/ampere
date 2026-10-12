@@ -33,6 +33,7 @@ import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.memory.MemoryStore
 import link.socket.ampere.memory.memoryStoreOf
 import link.socket.ampere.propel.RunHost
+import link.socket.ampere.propel.SqlDelightHeldRunStore
 import link.socket.ampere.propel.rosterRunHost
 
 /**
@@ -101,7 +102,10 @@ import link.socket.ampere.propel.rosterRunHost
  *   and [EnvironmentService.eventRepository]'s log. Without one, `field` is
  *   `null` — there is nowhere to read the Field from. A [memoryStore] whose
  *   knowledge repository predates `findKnowledgeVisibleTo` makes every snapshot
- *   fail rather than report no beliefs.
+ *   fail rather than report no beliefs. It is also where [AmpereInstance.runs]
+ *   records a run that holds (AMPR-431), so
+ *   [RunHost.resume][link.socket.ampere.propel.RunHost.resume] can carry it on from
+ *   another process; without it a held run cannot be resumed.
  * @param executor What the agents built off [AmpereInstance.agentFactory] dispatch
  *   their tool calls through (AMPR-405). Defaults to [FunctionExecutor.create], so a
  *   composed instance's agents can actually run the in-process tools they are built
@@ -149,6 +153,10 @@ fun Ampere.fromEnvironment(
         createEventApi = environmentService::createEventApi,
         agentScope = agentScope,
         executor = executor,
+        // AMPR-431: a run that holds is recorded in the caller's database, so it can be
+        // resumed after this process is gone. Without one nothing is recorded, and a held
+        // run cannot be resumed.
+        heldRuns = database?.let { db -> SqlDelightHeldRunStore(db, eventApi = sdkEventApi) },
     )
 
     val agentService = DefaultAgentService(

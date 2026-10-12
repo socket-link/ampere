@@ -32,6 +32,7 @@ import link.socket.ampere.agents.domain.task.planStepSeat
 import link.socket.ampere.agents.domain.task.planStepToolId
 import link.socket.ampere.agents.events.api.TaskLifecycle
 import link.socket.ampere.agents.events.api.openTaskLifecycle
+import link.socket.ampere.agents.events.api.reattachTaskLifecycle
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.describeResult
 import link.socket.ampere.agents.execution.executor.ExecutorId
@@ -55,6 +56,10 @@ import link.socket.ampere.util.logWith
  * A step whose tool is waiting on a person ends the run there (AMPR-425): `PlanExecutor`
  * skips the rest of that cycle, and the run plans no further cycle, asks nothing about
  * the one that held, and learns nothing from it. Its task is left blocked, not ended.
+ * With a [HeldRunStore] the run is recorded before [execute] returns, and a later
+ * [resume] — on a new instance, possibly in a new process — rebuilds it from that record
+ * and carries on with the approved plan (AMPR-431). Nothing of a held run stays alive in
+ * memory between the two.
  *
  * A step that *fails* does not stop the walk (AMPR-450): every step that depends on it,
  * directly or through another, is skipped with the failed step's id as its reason, and
@@ -99,6 +104,7 @@ internal class RosterHostedRun(
     private val goal: Task,
     private val policy: RunPolicy,
     private val onClosed: (RosterHostedRun) -> Unit,
+    private val heldRuns: HeldRunStore? = null,
 ) : HostedRun {
 
     /** The seat that plans. Validated to exist before the run was constructed. */
@@ -165,6 +171,32 @@ internal class RosterHostedRun(
     private var settled: RunResult? = null
     private var closed: Boolean = false
     private var shownExternal: Boolean = false
+
+    /**
+     * Where the first EXECUTE of a resumed run picks up the held cycle (AMPR-431): the
+     * remaining steps' place in the approved plan, and the outcomes of the steps before
+     * them, so the cycle folds to the outcome it would have had unbroken. Null for a run
+     * that was opened, and consumed by the first cycle of one that was resumed.
+     */
+    private var resumePoint: ResumePoint? = null
+
+    /**
+     * The approved plan's steps up to and including the held one, while [plan] is the rest
+     * of a resumed cycle (AMPR-431). Empty otherwise. A second hold in the same cycle is
+     * recorded with these put back in front, so its resume indexes and folds against the
+     * plan the person approved, not against the part of it left after the first hold.
+     */
+    private var heldCycleHead: List<Task> = emptyList()
+
+    /** The reason a person declined the hold this run was resumed from, if they did. */
+    private var declined: String? = null
+
+    /**
+     * Whether this run took up a held record, so closing it is what retires the record.
+     * A run that never resumed leaves the store alone: a record under its id belongs to
+     * an earlier run that used the same id.
+     */
+    private var ownsRecord: Boolean = false
 
     /**
      * What decides that the goal is complete. It is the same function, with the same
@@ -399,6 +431,7 @@ internal class RosterHostedRun(
             val bounded = withinBounds(generatePlan(cycle, ideas), cycle)
             val generated = bounded.plan
             host.agent.rememberNewPlan(generated)
+            heldCycleHead = emptyList()
 
             if (lifecycle == null) {
                 lifecycle = host.door.openTaskLifecycle(
@@ -531,7 +564,11 @@ internal class RosterHostedRun(
         settled?.let { return it }
 
         while (true) {
-            if (stoppedAt == null && gatedPlan.tasks.isNotEmpty()) {
+            // A resumed run's first cycle is the held one, finishing: it runs even when the
+            // held step was the plan's last, so the cycle is folded and asked about, and it
+            // is not read as a planner with nothing left to ask for.
+            val finishingHeldCycle = resumePoint != null
+            if (stoppedAt == null && (gatedPlan.tasks.isNotEmpty() || finishingHeldCycle)) {
                 runCycle(gatedPlan)
                 // The Arc's completion question, asked of this cycle's outcome and
                 // recorded. Nothing below reads the answer.
@@ -545,23 +582,27 @@ internal class RosterHostedRun(
             captureCancellation()
             // A hold is a full stop, whatever `cycles` says: the next PLAN would be planning
             // past a step whose output does not exist yet (AMPR-425).
-            if (cancellation != null || stoppedAt != null || heldAt != null) break
+            // A declined hold ends the run as it stands (AMPR-431): nothing after the held
+            // step runs, and no further cycle is planned whatever the cap.
+            if (cancellation != null || stoppedAt != null || heldAt != null || declined != null) break
             // The cap and the planner are the two ways a run ends: whichever comes
             // first. An empty plan means the host had nothing left to ask for.
-            if (cyclesUsed >= policy.cycles || gatedPlan.tasks.isEmpty()) break
+            if (cyclesUsed >= policy.cycles || (gatedPlan.tasks.isEmpty() && !finishingHeldCycle)) break
 
             observe(cycle = cyclesUsed + 1)
             planCycle()
             cyclesUsed++
         }
 
+        val status = currentStatus()
         val result = RunResult(
             runId = runId,
-            status = currentStatus(),
+            status = status,
             cyclesUsed = cyclesUsed,
             stepOutcomes = results.toList(),
             outcome = executionOutcome(cancelled = cancellation != null),
             readExternalContent = shownExternal,
+            resumable = status == RunStatus.Held && record(),
         )
         settled = result
         cancellation?.let { throw it }
@@ -602,18 +643,19 @@ internal class RosterHostedRun(
      * stopped plan does: nothing more is about to run.
      */
     private suspend fun runCycle(toRun: Plan) {
+        // The held cycle of a resumed run is walked from the step after the held one, with
+        // the approved plan's indices, and folded with the steps that ran before the hold.
+        val resuming = resumePoint
+        resumePoint = null
         val execution = host.phases.withPhase(CognitivePhase.EXECUTE, runId) {
             // The summary is the walk's (PlanExecutor's default), not the host seat's: the
             // seat is the door's identity on every pair, not an executor (AMPR-443).
-            PlanExecutor(
-                eventApi = host.door,
-                runId = runId,
-                stepEventApi = { step ->
-                    if (failedDependencyOf(step) != null) host.door else seatFor(step).door
-                },
-            ).execute(
+            stepWalker().execute(
                 plan = toRun,
                 priorResults = results.toList(),
+                firstStepIndex = resuming?.firstStepIndex ?: 0,
+                totalSteps = resuming?.totalSteps ?: toRun.tasks.size,
+                earlierStepOutcomes = resuming?.earlierStepOutcomes.orEmpty(),
             ) { step, context ->
                 dispatch(step, context.priorResults)
             }
@@ -628,6 +670,18 @@ internal class RosterHostedRun(
         }
         if (stoppedAt != null) gatedPlan = Plan.blank
     }
+
+    /**
+     * The walk a cycle's steps take: each pair through the door of the seat that ran it,
+     * and through the host's for a step skipped because one it depends on failed.
+     */
+    private fun stepWalker(): PlanExecutor = PlanExecutor(
+        eventApi = host.door,
+        runId = runId,
+        stepEventApi = { step ->
+            if (failedDependencyOf(step) != null) host.door else seatFor(step).door
+        },
+    )
 
     /**
      * The questions a cycle that executed is asked, recorded and never read (AMPR-421).
@@ -920,6 +974,222 @@ internal class RosterHostedRun(
     }
 
     // ========================================================================
+    // Hold and resume
+    // ========================================================================
+
+    /**
+     * Writes the held run to [heldRuns] and answers whether it is now resumable (AMPR-431).
+     *
+     * Everything [resume] needs to carry on is in the record: the goal, the cycle, the
+     * plan as the gate approved it — with any arguments the gate approved again since —
+     * every result so far, the held step and what it waits on, the host seat's ideas and
+     * the seats that ran. Written under [NonCancellable], like the rest of a run's record
+     * of itself: a hold that happened and was not recorded cannot be carried on.
+     *
+     * A failed write does not fail the run. It is still held — that is what happened — and
+     * merely not resumable; the failure is logged, and is not thrown, because the caller
+     * of [execute] has a held run to report either way. The record holds a person's
+     * content, so the log names the run and the failure and nothing in it.
+     */
+    private suspend fun record(): Boolean {
+        val store = heldRuns ?: return false
+        val held = heldAt ?: return false
+        val record = HeldRun(
+            runId = runId,
+            hostRole = roster.host.value,
+            hostAgentId = host.id,
+            goal = goal,
+            cycle = cyclesUsed,
+            plan = gatedPlan.let { remaining ->
+                if (heldCycleHead.isNotEmpty() && remaining is Plan.ForTask) {
+                    remaining.copy(tasks = heldCycleHead + remaining.tasks)
+                } else {
+                    remaining
+                }
+            },
+            results = results.toList(),
+            heldStepId = held.id,
+            reason = held.reason,
+            reference = held.reference,
+            ideas = ideas,
+            seatsThatRan = seatsThatRan.mapTo(mutableSetOf()) { it.value },
+            heldAt = Clock.System.now(),
+        )
+        val written = try {
+            withContext(NonCancellable) { store.hold(record) }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+        written.onFailure { throwable ->
+            logWith("RosterHostedRun").w(throwable) {
+                "Run $runId held, and its record could not be written; it is held and cannot be resumed"
+            }
+        }
+        return written.isSuccess
+    }
+
+    /**
+     * Forgets the held record this run took up, once the run has ended in any status but
+     * held (AMPR-431). A failed delete is logged and left: the record stays listed by
+     * `RunHost.heldRuns`, claimed, for its owner to remove.
+     */
+    private suspend fun retireRecord() {
+        if (!ownsRecord) return
+        val store = heldRuns ?: return
+        ownsRecord = false
+        store.delete(runId).onFailure { throwable ->
+            logWith("RosterHostedRun").w(throwable) {
+                "Run $runId finished and its held record could not be deleted"
+            }
+        }
+    }
+
+    /**
+     * Rebuilds this run from [record] and settles the held step with [resolution]
+     * (AMPR-431, AMPR-385 rows H29–H32). `RosterRunHost.resume` has already claimed the
+     * record, so this instance is the only one that will ever carry it on.
+     *
+     * What is restored: the goal (it reached this instance's constructor), the host
+     * seat's ideas, the cycle count, the seats that ran, every result before the held
+     * step, which failures later steps must not run without, and the run's task —
+     * re-attached, so it is not created or started a second time. What is not: anything a
+     * model said for the held cycle. No PERCEIVE, no PLAN, and no gate.
+     *
+     * [HoldResolution.Completed]: RECALL runs again, since the corpus may have moved while
+     * the person decided, and then OBSERVE; neither calls a model. The held step becomes a
+     * success carrying the consumer's report, the skips `PlanExecutor` wrote after it are
+     * dropped — those steps are about to run — and [plan] becomes the steps after it,
+     * which [execute] walks as the rest of the held cycle. The held step's
+     * `PlanStepCompleted` goes out through the door of its seat, as it would have had the
+     * step finished then, and the run's task records one `TaskProgressed`.
+     *
+     * [HoldResolution.Declined]: the held step becomes a critical failure whose error
+     * begins `Declined:`, the skips after it stay, its `PlanStepCompleted` goes out, and
+     * [plan] is empty — [execute] runs and plans nothing, and the run ends failed.
+     *
+     * Ampere never re-runs the held tool: the step's result is [resolution]'s, and nothing
+     * here dispatches.
+     */
+    suspend fun resume(record: HeldRun, resolution: HoldResolution) {
+        ownsRecord = true
+        val approved = requireNotNull(record.plan as? Plan.ForTask) {
+            "run $runId held on a plan that is not a task's plan; nothing walked it"
+        }
+        val heldIndex = approved.tasks.indexOfFirst { it.id == record.heldStepId }
+        require(heldIndex >= 0) { "run $runId's held step ${record.heldStepId} is not in its plan" }
+        val heldStep = approved.tasks[heldIndex]
+        val heldResult = record.results.indexOfLast { it.id == record.heldStepId && it is StepOutcome.Held }
+        require(heldResult >= 0) { "run $runId's record has no held outcome for ${record.heldStepId}" }
+        val held = record.results[heldResult] as StepOutcome.Held
+
+        host.agent.rememberNewTask(goal)
+        ideas = record.ideas
+        cyclesUsed = record.cycle
+        record.seatsThatRan.mapTo(seatsThatRan) { RoleId(it) }
+        results += record.results.take(heldResult)
+        // Whether those results were put in front of a model before the hold is not on the
+        // record, so a run with any outside content behind it is taken to have shown it:
+        // the error is toward a tighter write gate (AMPR-453).
+        if (results.any { it.origin == ContentOrigin.External }) shownExternal = true
+        restoreFailedRoots(approved.tasks.take(heldIndex))
+        lifecycle = host.door.reattachTaskLifecycle(
+            taskId = runId,
+            runId = runId,
+            taskType = MemoryTaskTypes.GENERIC,
+        )
+
+        if (resolution is HoldResolution.Completed) {
+            recall()
+            observe(cycle = record.cycle)
+        }
+
+        val settledAt = Clock.System.now()
+        val settledStep: StepOutcome = when (resolution) {
+            // The consumer's report of an action performed outside the run: `External`.
+            is HoldResolution.Completed -> StepOutcome.Success(
+                id = held.id,
+                stepDescription = held.stepDescription,
+                startTimestamp = held.startTimestamp,
+                endTimestamp = settledAt,
+                details = resolution.details,
+                origin = ContentOrigin.External,
+            )
+            is HoldResolution.Declined -> StepOutcome.Failure(
+                id = held.id,
+                stepDescription = held.stepDescription,
+                startTimestamp = held.startTimestamp,
+                endTimestamp = settledAt,
+                error = "Declined: ${resolution.reason}",
+                isCritical = true,
+                origin = ContentOrigin.External,
+            )
+        }
+        results += settledStep
+        stepWalker().publishStepCompleted(
+            plan = approved,
+            step = heldStep,
+            index = heldIndex,
+            totalSteps = approved.tasks.size,
+            outcome = settledStep,
+        )
+
+        val cycleBefore = approved.tasks.take(heldIndex).mapTo(mutableSetOf()) { it.id }
+        val earlier = record.results.filter { it.id in cycleBefore } + settledStep
+        val remaining = approved.copy(tasks = approved.tasks.drop(heldIndex + 1))
+
+        when (resolution) {
+            is HoldResolution.Completed -> {
+                gatedPlan = remaining
+                heldCycleHead = approved.tasks.take(heldIndex + 1)
+                resumePoint = ResumePoint(
+                    firstStepIndex = heldIndex + 1,
+                    totalSteps = approved.tasks.size,
+                    earlierStepOutcomes = earlier,
+                )
+                lastPlanOutcome = foldHeldCycle(approved, heldIndex + 1, earlier)
+                lifecycle?.progressed("Resumed: the held step ${held.id} was completed")
+            }
+            is HoldResolution.Declined -> {
+                failedRoots[held.id] = held.id
+                val skippedAfter = record.results.drop(heldResult + 1)
+                results += skippedAfter
+                declined = resolution.reason
+                gatedPlan = Plan.blank
+                lastPlanOutcome = foldHeldCycle(approved, approved.tasks.size, earlier + skippedAfter)
+            }
+        }
+    }
+
+    /**
+     * Puts back which failure each step of the held cycle cannot run without (AMPR-450),
+     * from the outcomes before the held step: a failure roots itself, and a step skipped
+     * for a failed dependency roots where that dependency does. Read off the plan's own
+     * `dependsOn`, as [dispatch] reads it, rather than off a skip's text.
+     */
+    private fun restoreFailedRoots(before: List<Task>) {
+        results.forEach { if (it is StepOutcome.Failure) failedRoots[it.id] = it.id }
+        before.forEach { step ->
+            if (step.id in failedRoots) return@forEach
+            val skipped = results.any { it.id == step.id && it is StepOutcome.Skipped }
+            if (skipped) failedDependencyOf(step)?.let { failedRoots[step.id] = it }
+        }
+    }
+
+    /**
+     * The held cycle's outcome as it stands, with [walked] in place of its steps up to
+     * [walkedUpTo] and nothing walked beyond. `PlanExecutor` folds it so it reads exactly as
+     * an unbroken cycle's would; nothing is dispatched or published.
+     */
+    private suspend fun foldHeldCycle(approved: Plan.ForTask, walkedUpTo: Int, walked: List<StepOutcome>): Outcome =
+        PlanExecutor(runId = runId).execute(
+            plan = approved.copy(tasks = emptyList()),
+            priorResults = results.toList(),
+            firstStepIndex = walkedUpTo,
+            totalSteps = approved.tasks.size,
+            earlierStepOutcomes = walked,
+        ) { _, _ -> error("a fold walks no step") }.outcome
+
+    // ========================================================================
     // LEARN
     // ========================================================================
 
@@ -965,7 +1235,12 @@ internal class RosterHostedRun(
      * and no terminal task event, because the run is waiting, not finished. Its task was
      * marked blocked when the step held, and stays that way. That is decided by the run's
      * own status, so a caller that cancels its scope after a held [execute] and closes
-     * the run in a `finally` does not turn the hold into a failure.
+     * the run in a `finally` does not turn the hold into a failure. Its held record stays.
+     *
+     * A resumed run is one run (AMPR-431): its LEARN is for the whole of it, so the outcome
+     * folds every result before the hold and after, Knowledge comes from every seat that
+     * ran on either side, and the terminal task event closes the task the run opened
+     * before it held. Closing it in any status but held deletes the record it took up.
      */
     private suspend fun learn(cancelled: Boolean) {
         host.phases.withPhase(CognitivePhase.LEARN, runId) {
@@ -976,6 +1251,7 @@ internal class RosterHostedRun(
     private suspend fun learnWithin(cancelled: Boolean) {
         val status = currentStatus()
         if (status == RunStatus.Held) return
+        retireRecord()
 
         val outcome = executionOutcome(cancelled)
 
@@ -1047,8 +1323,8 @@ internal class RosterHostedRun(
     }
 
     /**
-     * How the run ended, in precedence order (AMPR-425, AMPR-450): cancelled, stopped by
-     * the gate, held, then by its steps — none failed is succeeded, some failed beside
+     * How the run ended, in precedence order (AMPR-425, AMPR-450): cancelled, declined at a
+     * hold (AMPR-431), stopped by the gate, held, then by its steps — none failed is succeeded, some failed beside
      * some that succeeded is partial, and failures with no success is failed. A hold
      * outranks an earlier cycle's failure because it is why the run ended. A plan cut to
      * nothing (AMPR-452) counts as a failure beside the steps: the run could not attempt
@@ -1057,6 +1333,8 @@ internal class RosterHostedRun(
      */
     private fun currentStatus(): RunStatus = when {
         cancellation != null -> RunStatus.Failed
+        // A declined hold is the run not doing what it was asked, whatever ran before it.
+        declined != null -> RunStatus.Failed
         stoppedAt != null -> RunStatus.Stopped
         heldAt != null -> RunStatus.Held
         results.none { it is StepOutcome.Failure } && cutToNothing == null -> RunStatus.Succeeded
@@ -1182,3 +1460,17 @@ private fun Plan.withTasks(kept: List<Task>): Plan = when (this) {
     is Plan.ForTicket -> copy(tasks = kept)
     Plan.Blank -> this
 }
+
+/**
+ * Where a resumed run's first EXECUTE picks the held cycle up (AMPR-431).
+ *
+ * @property firstStepIndex The first remaining step's index in the approved plan.
+ * @property totalSteps The approved plan's step count.
+ * @property earlierStepOutcomes The held cycle's outcomes up to and including the settled
+ *   held step, which the walk folds with the remaining steps'.
+ */
+private class ResumePoint(
+    val firstStepIndex: Int,
+    val totalSteps: Int,
+    val earlierStepOutcomes: List<StepOutcome>,
+)

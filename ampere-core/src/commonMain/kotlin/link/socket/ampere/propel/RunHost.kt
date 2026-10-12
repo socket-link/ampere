@@ -109,20 +109,114 @@ interface RunHost {
         policy: RunPolicy = RunPolicy(),
         runId: RunId? = null,
     ): HostedRun {
-        val byRole = seats.groupBy { it.role }
-        val duplicated = byRole.filterValues { it.size > 1 }.keys
-        require(duplicated.isEmpty()) {
-            "one agent fills one seat; duplicated: ${duplicated.joinToString { it.value }}"
-        }
         return open(
             roster = roster,
-            seats = byRole.mapValues { (_, filling) -> filling.single() },
+            seats = seatsByRole(seats),
             goal = goal,
             tools = tools,
             policy = policy,
             runId = runId,
         )
     }
+
+    /**
+     * Carry on a run that held, from its record (AMPR-431, AMPR-385 rows H29–H32).
+     *
+     * A run whose tool reported its action is waiting on a person ends
+     * [RunStatus.Held]; with a [HeldRunStore] its state is recorded before
+     * [HostedRun.execute] returns, and [RunResult.resumable] says so. Once the person has
+     * decided, the consumer calls this — in the same process or another, minutes or days
+     * later — with the same roster, seats filling it, and how the hold was settled:
+     *
+     * - [HoldResolution.Completed]: the consumer performed the approved action and reports
+     *   its result. The held step becomes a success with that result, and the returned
+     *   run's [HostedRun.plan] is the approved plan's steps after the held one.
+     *   [HostedRun.execute] runs them in order — the first handed the held action's
+     *   result — and then carries on exactly as after any cycle: more cycles while
+     *   [RunPolicy.cycles] allows, or another hold, which is recorded and resumable again.
+     * - [HoldResolution.Declined]: the held step becomes a critical failure whose error
+     *   begins `Declined:`, the returned run's plan is empty, [HostedRun.execute] runs and
+     *   plans nothing whatever the cap, and the run ends [RunStatus.Failed].
+     *
+     * Ampere never runs the held tool again: its result comes from [resolution] only.
+     * Nothing is perceived or planned again for the held cycle, and the remaining steps are
+     * not sent back to [RunPolicy.planGate] — the plan is the one the person approved. A
+     * step whose arguments change at dispatch still goes to [PlanGate.reviewChangedStep],
+     * as on every dispatch, and consent is still checked at every tool call. RECALL and
+     * OBSERVE run again before the remaining steps, and neither calls a model.
+     *
+     * The run keeps its run id: every event it publishes from here carries the id the run
+     * held under, its task is the same task — re-attached, not created again — and
+     * [HostedRun.close] is LEARN for the whole run, before the hold and after it. The
+     * record is deleted when the resumed run closes in any status but [RunStatus.Held].
+     *
+     * A hold is resumed at most once. The record is claimed before any seat is built, any
+     * event is published or any model is called; a call that loses the claim leaves no
+     * trace. If the process dies after the claim, the record stays claimed and listed by
+     * [heldRuns], and cannot be resumed again, because some of its remaining steps may
+     * have run — its owner decides what to tell the person, and deletes it.
+     *
+     * The default body throws [HeldRunUnavailableException] with
+     * [HeldRunUnavailableException.Why.NoStore]: a host that records nothing has nothing to
+     * resume.
+     *
+     * @param runId The run that held — [RunResult.runId], or [HeldRunSummary.runId].
+     * @param roster As for [open]. Its host must be the role that hosted the held run.
+     * @param seats As for [open], and validated the same way. They need not be the same
+     *   agents, but a seat a remaining step was assigned to should be filled, and a step
+     *   whose tool its seat no longer has fails as it would in any run.
+     * @param resolution How the hold was settled.
+     * @param tools As for [open]: what the remaining steps may dispatch.
+     * @param policy As for [open]. Its gate is not asked about the remaining steps; its
+     *   cycle cap counts the cycles the run used before it held.
+     * @throws HeldRunUnavailableException if this host keeps no store
+     *   ([NoStore][HeldRunUnavailableException.Why.NoStore]), a run with this id is still
+     *   open on it ([StillOpen][HeldRunUnavailableException.Why.StillOpen]), no record is
+     *   held under [runId] ([NotHeld][HeldRunUnavailableException.Why.NotHeld]), or the
+     *   record was already taken up ([AlreadyClaimed][HeldRunUnavailableException.Why.AlreadyClaimed]).
+     * @throws IllegalArgumentException for what [open] refuses, or a roster whose host is
+     *   not the held run's — before the record is claimed.
+     */
+    suspend fun resume(
+        runId: RunId,
+        roster: Roster,
+        seats: Map<RoleId, HostedAgent>,
+        resolution: HoldResolution,
+        tools: Set<Tool<*>> = emptySet(),
+        policy: RunPolicy = RunPolicy(),
+    ): HostedRun = throw HeldRunUnavailableException(runId, HeldRunUnavailableException.Why.NoStore)
+
+    /**
+     * [resume], keyed by each seat's own [HostedAgent.role] — for a caller that cannot
+     * build a `Map<RoleId, …>`, as [openSeats] is for [open].
+     */
+    suspend fun resumeSeats(
+        runId: RunId,
+        roster: Roster,
+        seats: List<HostedAgent>,
+        resolution: HoldResolution,
+        tools: Set<Tool<*>> = emptySet(),
+        policy: RunPolicy = RunPolicy(),
+    ): HostedRun = resume(
+        runId = runId,
+        roster = roster,
+        seats = seatsByRole(seats),
+        resolution = resolution,
+        tools = tools,
+        policy = policy,
+    )
+
+    /**
+     * Every held run this host's store records, claimed or not, oldest hold first
+     * (AMPR-431).
+     *
+     * A record with [HeldRunSummary.claimedAt] set was taken up by a resume that has not
+     * finished — or never will, because its process died. It cannot be resumed again; its
+     * owner decides what to tell the person, and deletes it.
+     *
+     * Empty for a host that keeps no store, which is the default body.
+     */
+    suspend fun heldRuns(): List<HeldRunSummary> = emptyList()
 
     /**
      * Every seat of every run this host currently has open, oldest run first.
@@ -133,6 +227,16 @@ interface RunHost {
      * with no open run answers empty.
      */
     fun openRunSeats(): List<OpenSeat>
+}
+
+/** [seats] keyed by each one's own role, refusing two that declare the same one. */
+private fun seatsByRole(seats: List<HostedAgent>): Map<RoleId, HostedAgent> {
+    val byRole = seats.groupBy { it.role }
+    val duplicated = byRole.filterValues { it.size > 1 }.keys
+    require(duplicated.isEmpty()) {
+        "one agent fills one seat; duplicated: ${duplicated.joinToString { it.value }}"
+    }
+    return byRole.mapValues { (_, filling) -> filling.single() }
 }
 
 /**
@@ -155,14 +259,20 @@ interface RunHost {
  *   [FunctionExecutor.create], which runs the in-process `FunctionTool`s a consumer's
  *   actions are. Null builds seats that plan and cannot act — a declaration, and one
  *   worth making on purpose.
+ * @param heldRuns Where a run that holds is recorded, so [RunHost.resume] can carry it on
+ *   (AMPR-431) — `SqlDelightHeldRunStore` over the caller's database, for a hold that has to
+ *   outlive the process. Null, the default, records nothing: a held run ends
+ *   [RunStatus.Held] all the same, and cannot be resumed.
  */
 @AmpereStableApi
 fun rosterRunHost(
     createEventApi: (AgentId) -> AgentEventApi,
     agentScope: CoroutineScope,
     executor: Executor? = FunctionExecutor.create(),
+    heldRuns: HeldRunStore? = null,
 ): RunHost = RosterRunHost(
     createEventApi = createEventApi,
     agentScope = agentScope,
     executor = executor,
+    heldRuns = heldRuns,
 )
