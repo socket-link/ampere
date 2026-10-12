@@ -59,6 +59,7 @@ class CodeParamsWorkspacePinningTest {
         val original = request(workspace = pinned)
         val codeRequest = ExecutionRequest(
             context = ExecutionContext.Code.WriteCode(
+                actorId = original.context.actorId,
                 executorId = original.context.executorId,
                 ticket = original.context.ticket,
                 task = original.context.task,
@@ -127,7 +128,8 @@ class CodeParamsWorkspacePinningTest {
         val now = Clock.System.now()
         return ExecutionRequest(
             context = ExecutionContext.NoChanges(
-                executorId = "agent-1",
+                actorId = "agent-1",
+                executorId = "test-executor",
                 ticket = Ticket(
                     id = "ticket-1",
                     title = "Test ticket",

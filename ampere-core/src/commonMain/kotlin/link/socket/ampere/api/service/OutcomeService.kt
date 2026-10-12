@@ -1,5 +1,6 @@
 package link.socket.ampere.api.service
 
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.outcome.OutcomeMemory
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.execution.executor.ExecutorId
@@ -8,7 +9,8 @@ import link.socket.ampere.api.model.OutcomeStats
 /**
  * SDK service for execution history and outcome tracking.
  *
- * Maps to CLI commands: `outcomes ticket`, `outcomes search`, `outcomes stats`
+ * Maps to CLI commands: `outcomes ticket`, `outcomes search`, `outcomes stats`,
+ * `outcomes executor`, `outcomes actor`
  *
  * ```
  * val results = ampere.outcomes.search("authentication retry")
@@ -55,14 +57,37 @@ interface OutcomeService {
     suspend fun stats(): Result<OutcomeStats>
 
     /**
-     * Get outcomes by a specific executor (agent).
+     * Get outcomes performed by a specific executor — an `Executor.id` such as `function`, or
+     * an Arc's `arc:<name>`.
+     *
+     * Not an agent (AMPR-443, F17): since 15.sqm an outcome names the agent that decided it
+     * apart from the executor that performed it, and this filters by the second. Rows recorded
+     * before then hold the agent's id here, because that is what was written; [byActor]
+     * finds an agent's outcomes across both.
      *
      * ```
-     * val agentOutcomes = ampere.outcomes.byExecutor("engineer-agent")
+     * val functionOutcomes = ampere.outcomes.byExecutor("function")
      * ```
      *
-     * @param executorId The executor (agent) to get outcomes for
+     * @param executorId The executor to get outcomes for
      * @param limit Maximum number of results to return
      */
     suspend fun byExecutor(executorId: ExecutorId, limit: Int = 20): Result<List<OutcomeMemory>>
+
+    /**
+     * Get outcomes of the calls a specific agent decided (AMPR-443, F17), whichever executor
+     * performed them — including rows recorded before the two were told apart.
+     *
+     * ```
+     * val agentOutcomes = ampere.outcomes.byActor("engineer-agent")
+     * ```
+     *
+     * Has a default that fails, so an implementation written before it existed still
+     * compiles; the shipped service overrides it.
+     *
+     * @param actorId The agent to get outcomes for
+     * @param limit Maximum number of results to return
+     */
+    suspend fun byActor(actorId: AgentId, limit: Int = 20): Result<List<OutcomeMemory>> =
+        Result.failure(UnsupportedOperationException("${this::class.simpleName} does not implement byActor"))
 }

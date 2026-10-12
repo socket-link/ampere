@@ -9,6 +9,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/MemoryEvent.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/memory/**
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/10.sqm
+  - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/15.sqm
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/internal/DefaultKnowledgeService.kt
 related: [PropelLoop, CognitionTrace, EventSerialBus, DreamCycle, SubjectRegistry, DecideSeam]
 last_verified: 2026-10-11
@@ -21,7 +22,9 @@ last_verified: 2026-10-11
 AMPERE keeps two complementary, append-only memory stores:
 
 - **`OutcomeMemoryRepository`** — *episodic memory*. Each `ExecutionOutcome`
-  records what was attempted, by whom (`ExecutorId`), against which
+  records what was attempted, by whom — the agent that decided it (`actor_id`)
+  and the `Executor` that performed it (`executor_id`), two values since
+  AMPR-443 (F17) — against which
   ticket and task, when it started/ended, and what the typed result was
   (`Success`, `Failure`, with structured payload variants:
   `CodeChanged`, `CodeReading`, `IssueManagement`, `GitOperation`,
@@ -94,11 +97,12 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 - `propel/RecalledContext.kt` — how a hosted run merges the two halves into one prompt section and one `KnowledgeRecalled`.
 - `agents/domain/memory/MemoryTaskTypes.kt` — the `task_type` vocabulary shared by the write side and Recall (AMPR-402).
 - `agents/domain/event/MemoryEvent.kt` — `KnowledgeStored` (`:67`), `KnowledgeRecalled` (`:128`), `MilestoneReached` (`:209`). There is no `OutcomeRecorded` event: an outcome write produces a row and no event, so the trace reads `OutcomeMemoryStore` by `run_id` rather than folding an event (`trace/ArcTraceProjection.kt:316-326`).
-- `commonMain/sqldelight/link/socket/ampere/db/memory/OutcomeMemoryStore.sq`, `KnowledgeStore.sq` — schemas (each carries `run_id`). `KnowledgeStore.sq` declares the four belief columns last, where `10.sqm`'s ADD COLUMN puts them, and writes the viewer predicate into every Subject's read.
+- `commonMain/sqldelight/link/socket/ampere/db/memory/OutcomeMemoryStore.sq`, `KnowledgeStore.sq` — schemas (each carries `run_id`). `OutcomeMemoryStore.sq` declares `actor_id` last, where `15.sqm`'s ADD COLUMN puts it. `KnowledgeStore.sq` declares the four belief columns last, where `10.sqm`'s ADD COLUMN puts them, and writes the viewer predicate into every Subject's read.
 
 ## Invariants
 
 - **Append-only.** Outcomes and knowledge entries are never updated in place. Corrections happen by inserting a new entry; the original stays for audit. A query that mutates a stored row is a violation.
+- **An outcome row names its actor and its executor apart.** `recordOutcome` takes both, and `actorId` is required (nullable, never defaulted) so every writer says which agent decided the work: `ToolExecutionEngine` writes the agent it dispatches for and the executor that ran the tool, a hosted run writes its host seat and `hosted-run`, and an Arc run's own row writes no actor and `arc:<name>`. Nothing writes an agent's id as an executor (AMPR-443, F17). `getOutcomesByActor` / `OutcomeService.byActor` / `ampere outcomes actor` read by the first; `getOutcomesByExecutor` / `byExecutor` / `outcomes executor` by the second. Rows older than `15.sqm` held the agent in `executor_id`; the migration copied it into `actor_id` (all but `arc:%` rows, which no agent decided) and left `executor_id` as written, since the executor that performed a legacy call was never recorded. That copy is a schema migration's one-time backfill, not a query — the append-only invariant below is about the store's own reads and writes.
 - **Every entry carries `run_id`.** Outcomes and knowledge entries are written with the `run_id` of the Arc that produced them. An entry without a `run_id` is invisible to `ArcTraceProjection` and thus orphaned from the trace. **One production writer still passes the wrong id:** `AutonomousAgent.extractAndStoreKnowledge` stores with `runId = task.id.takeUnless { it.isBlank() }` (`agents/definition/AutonomousAgent.kt:496-527`, the id at `:522`) — a task id, not an Arc run id — so those entries are filed under a run that does not exist. `PulsePhase` passes the real one (AMPR-402). The column is correct; one of the two values is not.
 - **Knowledge is distilled by a closing phase, not by tools.** Tool implementations write `ExecutionOutcome`s; `KnowledgeExtractor` (an agent's Learn phase) and `PulsePhase` (the Arc's close) produce `Knowledge`. Tools that write directly into `KnowledgeRepository` skip the cognitive distillation step and pollute the semantic store with raw observations.
 - **The write side and Recall share one `task_type` vocabulary.** `recallRelevantKnowledge` finds candidates by matching `MemoryContext.taskType` against the stored `task_type` exactly, so a writer that invents its own string files an entry no reader asks for. The vocabulary is `MemoryTaskTypes`; both sides take their value from there.
@@ -151,5 +155,6 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 - **Filing a learning under a task type nothing recalls with.** `storeKnowledge(knowledge, taskType = "arc-pulse")` persists a row, returns success, and is invisible forever: `FlowPhase` and `AutonomousAgent` recall with `code_change` or `generic`, and the match is exact. A store that succeeds is not the same as a store that can be read, which is why `MemoryTaskTypes` exists rather than three literals.
 - **Reaching for `scoreRecall` because the event is noise.** It is `internal` and it is not the quiet version of recall: a recall that leaves no `KnowledgeRecalled` behind is a recall `ArcTraceProjection` cannot show, and "Recall precedes Plan" then has no evidence either way. The only legitimate caller is one that publishes an event covering strictly more than the memory half.
 - **Reading a recall of nothing as proof that nothing is stored.** Each of `scoreCandidates`' four strategies drops its own failure — the full-text strategy throws on punctuation it does not escape (AMPR-280) — so an empty recall can mean an empty store, a mismatched `task_type`, or a query the index refused. Check the store directly before concluding the write side is broken.
+- **Passing the agent's id as `executorId`.** `ExecutorId` and `AgentId` are both `String` typealiases, so nothing complains — and until AMPR-443 the live path did exactly this, which left `executor_id` meaning the agent on every row and `outcomes executor` answering a question about agents. The agent is the `actorId`; the executor is an `Executor.id`, or `ExecutionContext.NO_EXECUTOR_ID` when none is bound.
 - **Stripping `run_id` when persisting.** A common refactoring trap: a helper drops the `run_id` parameter "because it's not used downstream". `ArcTraceProjection` is downstream. Keep it.
 - **Passing a task id as the `runId`.** `AutonomousAgent.runtimeLoop` stamped `task.id` onto `storeKnowledge` until AMPR-386. `RunId` is a `String` typealias, so nothing complained; the entry simply filed itself under a run that never existed. Read the run from `Agent.currentRunId`.

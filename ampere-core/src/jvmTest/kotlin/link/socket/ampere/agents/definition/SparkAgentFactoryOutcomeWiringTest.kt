@@ -121,7 +121,8 @@ class SparkAgentFactoryOutcomeWiringTest {
         val now = Clock.System.now()
         return ExecutionRequest(
             context = ExecutionContext.NoChanges(
-                executorId = "test-agent",
+                actorId = "test-agent",
+                executorId = "test-executor",
                 ticket = Ticket(
                     id = "ticket-1",
                     title = "Test ticket",

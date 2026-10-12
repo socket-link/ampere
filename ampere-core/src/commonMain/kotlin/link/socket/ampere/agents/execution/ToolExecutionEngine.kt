@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.JsonObject
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.Urgency
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
@@ -22,8 +23,10 @@ import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.ExecutorId
+import link.socket.ampere.agents.execution.executor.McpExecutor
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
+import link.socket.ampere.agents.execution.request.withExecutorId
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.agents.execution.tools.Tool
@@ -73,7 +76,7 @@ import link.socket.ampere.plug.permission.UserGrants
  *
  * Usage:
  * ```kotlin
- * val engine = ToolExecutionEngine(llmService, executor, executorId)
+ * val engine = ToolExecutionEngine(llmService, executor, actorId)
  *
  * // Register parameter strategies for tools whose parameters are a typed domain object
  * engine.registerStrategy("create_issues", ProjectParams.IssueCreation(...))
@@ -85,9 +88,16 @@ import link.socket.ampere.plug.permission.UserGrants
  * val outcome = engine.execute(tool, request)
  * ```
  *
+ * Every call names two parties, and never with one string (AMPR-443, F17): [actorId] is the
+ * agent that decided the call, and the performer is the `Executor.id` that runs it — [executor]'s
+ * for a [FunctionTool], [MCP_EXECUTOR_ID] for an [McpTool] (see [performerOf]). The engine
+ * stamps the performer onto the dispatched context, the tool-event pair and the outcome row,
+ * and reads [actorId] wherever "who" means the agent: the parameter call's routing, the
+ * permission-denied event, the outcome row's actor.
+ *
  * @property llmService The LLM service for generating parameters
  * @property executor The executor for running tools
- * @property executorId ID of the executor/agent running tools
+ * @property actorId The agent this engine dispatches for — the decider, never the performer
  * @property runId Ambient Arc-run identity (AMPR-351), stamped onto every request this
  *   engine dispatches so run-attributable tools — today
  *   [ToolAskHuman][link.socket.ampere.agents.execution.tools.ToolAskHuman] — can carry it
@@ -114,7 +124,7 @@ import link.socket.ampere.plug.permission.UserGrants
 class ToolExecutionEngine(
     private val llmService: AgentLLMService,
     private val executor: Executor,
-    private val executorId: ExecutorId,
+    private val actorId: AgentId,
     private val eventApi: AgentEventApi? = null,
     private val userGrantProvider: suspend (PlugManifest) -> UserGrants = { UserGrants() },
     private val runId: RunId? = null,
@@ -194,6 +204,7 @@ class ToolExecutionEngine(
         val intent = request.context.instructions
         if (intent.isBlank()) {
             return createFailure(
+                tool = tool,
                 request = request,
                 startTime = startTime,
                 message = "Cannot execute tool: no intent found in request",
@@ -278,6 +289,7 @@ class ToolExecutionEngine(
             strategy.buildPrompt(tool, request, intent)
         } catch (e: Exception) {
             return createFailure(
+                tool = tool,
                 request = request,
                 startTime = startTime,
                 message = "Cannot execute tool '${tool.id}': ${e.message}",
@@ -293,7 +305,7 @@ class ToolExecutionEngine(
                 // `ArcTraceProjection` bucketed it under UNKNOWN.
                 routingContext = RoutingContext(
                     phase = CognitivePhase.EXECUTE,
-                    agentId = executorId,
+                    agentId = actorId,
                     workflowId = request.effectiveRunId(),
                 ),
             )
@@ -303,6 +315,7 @@ class ToolExecutionEngine(
             strategy.parseAndEnrichRequest(jsonResponse.rawJson, request)
         } catch (e: Exception) {
             return createFailure(
+                tool = tool,
                 request = request,
                 startTime = startTime,
                 message = "Failed to generate parameters: ${e.message}",
@@ -326,6 +339,7 @@ class ToolExecutionEngine(
             executeViaExecutor(tool, request, startTime, request)
         } catch (e: Exception) {
             createFailure(
+                tool = tool,
                 request = request,
                 startTime = startTime,
                 message = "Generic tool execution failed: ${e.message}",
@@ -341,7 +355,10 @@ class ToolExecutionEngine(
      * the earlier steps' results restored (AMPR-408): a [ParameterStrategy] builds a
      * fresh [ExecutionRequest] to carry its generated parameters, dropping whatever
      * [originalRequest] stated, so re-stamping here — rather than before enrichment —
-     * is what actually reaches the tool.
+     * is what actually reaches the tool. The performer is stamped here for the same reason
+     * (AMPR-443): only the engine knows which executor a call actually goes to, so the
+     * context's [ExecutionContext.executorId] is overwritten with [performerOf] the tool, and a
+     * tool that stamps its outcome from the context names the executor the pair names.
      *
      * [ExecutionRequest.arguments] is deliberately *not* re-stamped the same way. The run,
      * the scope and the prior results belong to the dispatcher, so the original's copy is
@@ -357,7 +374,9 @@ class ToolExecutionEngine(
     ): ExecutionOutcome {
         // The caller's own run wins over this engine's: a request that already names a run
         // was dispatched by something closer to it than the reasoning unit that built us.
+        val performer = performerOf(tool)
         val runScopedRequest = enrichedRequest
+            .performedBy(performer)
             .withRunId(originalRequest.runId ?: runId)
             // AMPR-414: the scope the agent stamped is the only one in play; a
             // strategy has no business widening it and no way to state one of
@@ -368,11 +387,11 @@ class ToolExecutionEngine(
             // that wants to see what came before it gets them back here.
             .withPriorResults(originalRequest.priorResults)
         val dispatchRunId = runScopedRequest.runId
-        val invocationId = generateUUID("tool-invocation", tool.id, executorId)
+        val invocationId = generateUUID("tool-invocation", tool.id, actorId)
         val dispatchedAt = Clock.System.now()
-        publishToolStarted(tool, invocationId, dispatchedAt, dispatchRunId)
+        publishToolStarted(tool, invocationId, dispatchedAt, dispatchRunId, performer)
         val outcome = dispatch(tool, runScopedRequest, startTime, originalRequest)
-        publishToolCompleted(tool, invocationId, dispatchedAt, outcome, dispatchRunId)
+        publishToolCompleted(tool, invocationId, dispatchedAt, outcome, dispatchRunId, performer)
         return outcome
     }
 
@@ -418,6 +437,7 @@ class ToolExecutionEngine(
                         // Waiting on a person: the tool's own hold, unchanged (AMPR-425).
                         is ExecutionStatus.Held -> finalStatus.result
                         else -> createFailure(
+                            tool = tool,
                             request = originalRequest,
                             startTime = startTime,
                             message = "Unexpected execution status: ${finalStatus::class.simpleName}",
@@ -428,6 +448,7 @@ class ToolExecutionEngine(
                     val mcpExecutor = mcpToolExecutor
                     if (mcpExecutor == null) {
                         createFailure(
+                            tool = tool,
                             request = originalRequest,
                             startTime = startTime,
                             message = "Cannot execute MCP tool '${tool.id}': this engine was " +
@@ -440,6 +461,7 @@ class ToolExecutionEngine(
                         when (val outcome = mcpExecutor.execute(tool, typedRequest)) {
                             is ExecutionOutcome -> outcome
                             else -> createFailure(
+                                tool = tool,
                                 request = originalRequest,
                                 startTime = startTime,
                                 message = "MCP tool '${tool.id}' returned an unexpected " +
@@ -451,6 +473,7 @@ class ToolExecutionEngine(
             }
         } catch (e: Exception) {
             createFailure(
+                tool = tool,
                 request = originalRequest,
                 startTime = startTime,
                 message = "Tool execution failed: ${e.message}",
@@ -466,12 +489,16 @@ class ToolExecutionEngine(
      * call and nothing else: a dispatch refused by [PlugPermissionGate] never reaches here and
      * is reported by [PermissionDeniedEvent] instead, so a pair in the trace means a tool
      * actually ran.
+     *
+     * The pair names both parties (AMPR-443): the agent as the event's source — the door's
+     * identity — and [performer] as its `executorId`.
      */
     private suspend fun publishToolStarted(
         tool: Tool<*>,
         invocationId: String,
         dispatchedAt: Instant,
         dispatchRunId: RunId?,
+        performer: ExecutorId,
     ) {
         val door = eventApi ?: return
         withContext(NonCancellable) {
@@ -485,6 +512,7 @@ class ToolExecutionEngine(
                     toolId = tool.id,
                     toolName = tool.name,
                     runId = dispatchRunId,
+                    executorId = performer,
                 ),
                 runId = dispatchRunId,
             )
@@ -503,6 +531,7 @@ class ToolExecutionEngine(
         dispatchedAt: Instant,
         outcome: ExecutionOutcome,
         dispatchRunId: RunId?,
+        performer: ExecutorId,
     ) {
         val door = eventApi ?: return
         val completedAt = Clock.System.now()
@@ -528,6 +557,7 @@ class ToolExecutionEngine(
                     errorMessage = outcome.failureMessageOrNull(),
                     runId = dispatchRunId,
                     held = held,
+                    executorId = performer,
                 ),
                 runId = dispatchRunId,
             )
@@ -567,7 +597,10 @@ class ToolExecutionEngine(
             try {
                 repository.recordOutcome(
                     ticketId = request.context.ticket.id,
-                    executorId = executorId,
+                    // AMPR-443: the agent that decided the call, and the executor that ran it
+                    // — two columns, where the agent's id used to be written as the executor.
+                    actorId = actorId,
+                    executorId = performerOf(tool),
                     approach = approachOf(tool, request),
                     outcome = outcome,
                     // The outcome's own end time, not "now": the repository derives the
@@ -606,15 +639,39 @@ class ToolExecutionEngine(
     }
 
     /**
-     * Creates a failure outcome.
+     * The `Executor.id` that performs [tool] when this engine dispatches it (AMPR-443).
+     *
+     * A [FunctionTool] runs through the injected [executor]. An [McpTool] runs through the MCP
+     * arm, which is not an [Executor] but does the same job, and is named by
+     * [MCP_EXECUTOR_ID]. Never [actorId]: the performer and the decider are two parties.
+     */
+    private fun performerOf(tool: Tool<*>): ExecutorId = when (tool) {
+        is FunctionTool<*> -> executor.id
+        is McpTool -> MCP_EXECUTOR_ID
+    }
+
+    /**
+     * This request with [performer] stamped as its context's executor. The cast is the
+     * dispatch's own: [withExecutorId] returns the subtype it was given.
+     */
+    private fun ExecutionRequest<*>.performedBy(performer: ExecutorId): ExecutionRequest<*> {
+        @Suppress("UNCHECKED_CAST")
+        val typed = this as ExecutionRequest<ExecutionContext>
+        return typed.copy(context = typed.context.withExecutorId(performer))
+    }
+
+    /**
+     * Creates a failure outcome, attributed to the executor [tool] was bound for — a refusal
+     * before dispatch included, since that executor is still who the call was headed to.
      */
     private fun createFailure(
+        tool: Tool<*>,
         request: ExecutionRequest<*>,
         startTime: Instant,
         message: String,
     ): ExecutionOutcome {
         return ExecutionOutcome.NoChanges.Failure(
-            executorId = executorId,
+            executorId = performerOf(tool),
             ticketId = request.context.ticket.id,
             taskId = request.context.task.id,
             executionStartTimestamp = startTime,
@@ -674,13 +731,23 @@ class ToolExecutionEngine(
         permission: PlugPermission,
         reason: PermissionDeniedReason,
     ): ExecutionOutcome {
-        publishPermissionDenied(eventApi, executorId, manifest, tool, permission, reason)
+        publishPermissionDenied(eventApi, actorId, manifest, tool, permission, reason)
 
         return createFailure(
+            tool = tool,
             request = request,
             startTime = startTime,
             message = permissionDeniedMessage(manifest, tool, permission, reason),
         )
+    }
+
+    companion object {
+        /**
+         * The performer an [McpTool] dispatch is attributed to (AMPR-443): the MCP arm, under
+         * the id [McpExecutor] would carry, since it does the same job and is not itself an
+         * [Executor].
+         */
+        const val MCP_EXECUTOR_ID: ExecutorId = McpExecutor.DEFAULT_ID
     }
 }
 
@@ -692,10 +759,13 @@ class ToolExecutionEngine(
  * that admits each plan step before the step reaches the engine. One construction, so a
  * step the Breaker trips is on the record in exactly the shape the engine always put it
  * there. Null [eventApi] publishes nothing.
+ *
+ * [actorId] is the agent the refused call was made for (AMPR-443) — it keys the event id, as
+ * the agent's id always did when it travelled under the name `executorId`.
  */
 internal suspend fun publishPermissionDenied(
     eventApi: AgentEventApi?,
-    executorId: ExecutorId,
+    actorId: AgentId,
     manifest: PlugManifest,
     tool: Tool<*>,
     permission: PlugPermission,
@@ -703,7 +773,7 @@ internal suspend fun publishPermissionDenied(
 ) {
     eventApi?.publish(
         PermissionDeniedEvent(
-            eventId = generateUUID("permission-denied", manifest.id.value, tool.id, executorId),
+            eventId = generateUUID("permission-denied", manifest.id.value, tool.id, actorId),
             timestamp = Clock.System.now(),
             eventSource = EventSource.Agent(eventApi.agentId),
             urgency = Urgency.HIGH,

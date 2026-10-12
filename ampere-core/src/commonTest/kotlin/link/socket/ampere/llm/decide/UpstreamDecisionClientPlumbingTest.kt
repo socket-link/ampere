@@ -27,7 +27,7 @@ class UpstreamDecisionClientPlumbingTest {
     private val question = Question.Noul.of("Is it done?", whenTrue = "Done", whenFalse = "Not done")
 
     private fun reasoningWith(config: AgentConfiguration): AgentReasoning =
-        AgentReasoning.create(config = config, executorId = "plumbing-test") { agentRole = "Test Agent" }
+        AgentReasoning.create(config = config, actorId = "plumbing-test") { agentRole = "Test Agent" }
 
     @Test
     fun `default config carries no decision client and decide throws`() = runTest {

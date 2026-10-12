@@ -180,6 +180,7 @@ class FileAccessScopeGateTest {
         )
         val request = ExecutionRequest(
             context = ExecutionContext.Code.WriteCode(
+                actorId = "test-agent",
                 executorId = EXECUTOR_ID,
                 ticket = ticket(),
                 task = task(),
@@ -197,6 +198,7 @@ class FileAccessScopeGateTest {
         val tool = ToolReadCodeFile(parameterStrategy = null)
         val request = ExecutionRequest(
             context = ExecutionContext.Code.ReadCode(
+                actorId = "test-agent",
                 executorId = EXECUTOR_ID,
                 ticket = ticket(),
                 task = task(),

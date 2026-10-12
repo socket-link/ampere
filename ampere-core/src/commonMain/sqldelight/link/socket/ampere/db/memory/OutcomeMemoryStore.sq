@@ -1,5 +1,10 @@
 -- Outcome Memory table
 -- Stores execution outcomes for learning and debugging
+--
+-- Two parties per row (AMPR-443, F17): `actor_id` is the agent that decided the call, and
+-- `executor_id` the Executor.id that performed it. Before 15.sqm `executor_id` held the agent's
+-- id; 15.sqm copies it into `actor_id` for those rows. `actor_id` is last because that is where
+-- 15.sqm's ADD COLUMN puts it, and NULL on a row no single agent decided (an Arc run's own).
 CREATE TABLE IF NOT EXISTS OutcomeMemoryStore (
     id TEXT PRIMARY KEY NOT NULL,
     ticket_id TEXT NOT NULL,
@@ -10,7 +15,8 @@ CREATE TABLE IF NOT EXISTS OutcomeMemoryStore (
     files_changed INTEGER NOT NULL,
     error_message TEXT,
     timestamp INTEGER NOT NULL,
-    run_id TEXT
+    run_id TEXT,
+    actor_id TEXT
 );
 
 -- Indexes for common queries
@@ -19,6 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_outcome_executor_id ON OutcomeMemoryStore(executo
 CREATE INDEX IF NOT EXISTS idx_outcome_timestamp ON OutcomeMemoryStore(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_outcome_success ON OutcomeMemoryStore(success);
 CREATE INDEX IF NOT EXISTS idx_outcome_run_id ON OutcomeMemoryStore(run_id);
+CREATE INDEX IF NOT EXISTS idx_outcome_actor_id ON OutcomeMemoryStore(actor_id);
 
 -- Full-text search index for similarity matching on approach.
 --
@@ -34,17 +41,17 @@ CREATE INDEX IF NOT EXISTS idx_outcome_run_id ON OutcomeMemoryStore(run_id);
 
 insertOutcome:
 INSERT INTO OutcomeMemoryStore(
-    id, ticket_id, executor_id, approach, success,
+    id, ticket_id, actor_id, executor_id, approach, success,
     execution_duration_ms, files_changed, error_message, timestamp
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 insertOutcomeWithRunId:
 INSERT INTO OutcomeMemoryStore(
-    id, ticket_id, executor_id, approach, success,
+    id, ticket_id, actor_id, executor_id, approach, success,
     execution_duration_ms, files_changed, error_message, timestamp, run_id
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 getOutcomeById:
 SELECT * FROM OutcomeMemoryStore WHERE id = ?;
@@ -62,6 +69,12 @@ ORDER BY timestamp ASC;
 getOutcomesByExecutor:
 SELECT * FROM OutcomeMemoryStore
 WHERE executor_id = ?
+ORDER BY timestamp DESC
+LIMIT ?;
+
+getOutcomesByActor:
+SELECT * FROM OutcomeMemoryStore
+WHERE actor_id = ?
 ORDER BY timestamp DESC
 LIMIT ?;
 

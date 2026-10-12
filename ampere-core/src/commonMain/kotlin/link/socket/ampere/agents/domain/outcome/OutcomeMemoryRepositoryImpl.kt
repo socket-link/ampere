@@ -3,6 +3,7 @@ package link.socket.ampere.agents.domain.outcome
 import app.cash.sqldelight.db.SqlDriver
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.events.utils.generateUUID
@@ -42,6 +43,7 @@ class OutcomeMemoryRepositoryImpl(
 
     override suspend fun recordOutcome(
         ticketId: TicketId,
+        actorId: AgentId?,
         executorId: ExecutorId,
         approach: String,
         outcome: ExecutionOutcome,
@@ -114,6 +116,7 @@ class OutcomeMemoryRepositoryImpl(
                 queries.insertOutcomeWithRunId(
                     id = id,
                     ticket_id = ticketId,
+                    actor_id = actorId,
                     executor_id = executorId,
                     approach = approach,
                     success = if (success) 1L else 0L,
@@ -127,6 +130,7 @@ class OutcomeMemoryRepositoryImpl(
                 queries.insertOutcome(
                     id = id,
                     ticket_id = ticketId,
+                    actor_id = actorId,
                     executor_id = executorId,
                     approach = approach,
                     success = if (success) 1L else 0L,
@@ -147,6 +151,7 @@ class OutcomeMemoryRepositoryImpl(
                 filesChanged = filesChanged,
                 errorMessage = errorMessage,
                 timestamp = timestamp,
+                actorId = actorId,
             )
         }
     }
@@ -204,6 +209,17 @@ class OutcomeMemoryRepositoryImpl(
         }
     }
 
+    override suspend fun getOutcomesByActor(
+        actorId: AgentId,
+        limit: Int,
+    ): Result<List<OutcomeMemory>> = withContext(ioDispatcher) {
+        runCatching {
+            queries.getOutcomesByActor(actorId, limit.toLong())
+                .executeAsList()
+                .map { row -> mapRowToOutcomeMemory(row) }
+        }
+    }
+
     /**
      * Map a database row to an OutcomeMemory domain object.
      */
@@ -218,6 +234,7 @@ class OutcomeMemoryRepositoryImpl(
             filesChanged = row.files_changed.toInt(),
             errorMessage = row.error_message,
             timestamp = Instant.fromEpochMilliseconds(row.timestamp),
+            actorId = row.actor_id,
         )
     }
 }

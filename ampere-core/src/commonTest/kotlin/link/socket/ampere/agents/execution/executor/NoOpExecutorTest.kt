@@ -75,6 +75,7 @@ class NoOpExecutorTest {
             assignedTo = null,
         )
         val context = ExecutionContext.NoChanges(
+            actorId = "test-agent",
             executorId = "test-executor",
             ticket = ticket,
             task = task,

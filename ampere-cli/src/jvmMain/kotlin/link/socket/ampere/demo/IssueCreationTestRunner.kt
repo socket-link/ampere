@@ -103,6 +103,8 @@ fun runIssueCreationTest() {
 
         // Step 4: Create execution context
         val context = ExecutionContext.IssueManagement(
+            // The person running this demo decides; the demo's executor performs (AMPR-443).
+            actorId = "human-issue-test",
             executorId = "issue-test-executor",
             ticket = Ticket(
                 id = "ticket-issue-test",

@@ -8,6 +8,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
@@ -75,6 +76,20 @@ class ToolExecutionEngineOutcomeRecordingTest {
         engine.execute(succeedingTool(endedAt = toolEndedAt), request())
 
         assertEquals(toolEndedAt, store.calls.single().timestamp)
+    }
+
+    @Test
+    fun `the row names the deciding agent and the performing executor apart`() = runTest {
+        val store = RecordingOutcomeRepository()
+        val engine = engineWith(runId = null, store = store)
+
+        engine.execute(succeedingTool(), request())
+
+        // AMPR-443 (F17): the agent the engine dispatches for, and the executor it dispatched
+        // through — never the agent's id in the executor's column.
+        val recorded = store.calls.single()
+        assertEquals("agent-1", recorded.actorId)
+        assertEquals(FunctionExecutor.DEFAULT_ID, recorded.executorId)
     }
 
     @Test
@@ -182,7 +197,7 @@ class ToolExecutionEngineOutcomeRecordingTest {
         return ToolExecutionEngine(
             llmService = llmService,
             executor = executor,
-            executorId = executor.id,
+            actorId = "agent-1",
             runId = runId,
             outcomeRepository = store,
         )
@@ -195,7 +210,8 @@ class ToolExecutionEngineOutcomeRecordingTest {
         val now = Clock.System.now()
         return ExecutionRequest(
             context = ExecutionContext.NoChanges(
-                executorId = "agent-1",
+                actorId = "agent-1",
+                executorId = "test-executor",
                 ticket = Ticket(
                     id = "ticket-1",
                     title = "Test ticket",
@@ -228,6 +244,7 @@ class ToolExecutionEngineOutcomeRecordingTest {
 /** One [OutcomeMemoryRepository.recordOutcome] call, kept whole so every argument is assertable. */
 private data class RecordedCall(
     val ticketId: TicketId,
+    val actorId: AgentId?,
     val executorId: ExecutorId,
     val approach: String,
     val outcome: ExecutionOutcome,
@@ -241,13 +258,14 @@ private class RecordingOutcomeRepository : OutcomeMemoryRepository {
 
     override suspend fun recordOutcome(
         ticketId: TicketId,
+        actorId: AgentId?,
         executorId: ExecutorId,
         approach: String,
         outcome: ExecutionOutcome,
         timestamp: Instant,
         runId: RunId?,
     ): Result<OutcomeMemory> {
-        calls += RecordedCall(ticketId, executorId, approach, outcome, timestamp, runId)
+        calls += RecordedCall(ticketId, actorId, executorId, approach, outcome, timestamp, runId)
         return Result.success(
             OutcomeMemory(
                 id = "memory-${calls.size}",
@@ -259,6 +277,7 @@ private class RecordingOutcomeRepository : OutcomeMemoryRepository {
                 filesChanged = 0,
                 errorMessage = null,
                 timestamp = timestamp,
+                actorId = actorId,
             ),
         )
     }
@@ -278,6 +297,7 @@ private object ThrowingOutcomeRepository : OutcomeMemoryRepository {
 
     override suspend fun recordOutcome(
         ticketId: TicketId,
+        actorId: AgentId?,
         executorId: ExecutorId,
         approach: String,
         outcome: ExecutionOutcome,

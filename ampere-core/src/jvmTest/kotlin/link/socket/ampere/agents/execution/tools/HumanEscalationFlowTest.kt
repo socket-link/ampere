@@ -70,6 +70,7 @@ class HumanEscalationFlowTest {
 
     private fun createTestContext(instructions: String): ExecutionContext.NoChanges {
         return ExecutionContext.NoChanges(
+            actorId = "test-agent",
             executorId = "test-executor",
             ticket = Ticket(
                 id = generateUUID(),

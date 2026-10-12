@@ -6,6 +6,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.event.EventId
 import link.socket.ampere.agents.domain.knowledge.BeliefConfidence
@@ -55,6 +56,7 @@ class MemoryStoreTest {
 
         store.outcomes.recordOutcome(
             ticketId = "ticket-1",
+            actorId = "agent-1",
             executorId = "executor-1",
             approach = "TDD",
             outcome = ExecutionOutcome.NoChanges.Success(
@@ -185,6 +187,7 @@ private class RecordingOutcomeRepository : OutcomeMemoryRepository {
 
     override suspend fun recordOutcome(
         ticketId: TicketId,
+        actorId: AgentId?,
         executorId: ExecutorId,
         approach: String,
         outcome: ExecutionOutcome,
@@ -201,6 +204,7 @@ private class RecordingOutcomeRepository : OutcomeMemoryRepository {
             filesChanged = 0,
             errorMessage = null,
             timestamp = timestamp,
+            actorId = actorId,
         )
         recorded += memory
         return Result.success(memory)

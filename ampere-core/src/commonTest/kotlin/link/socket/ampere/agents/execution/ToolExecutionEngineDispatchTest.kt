@@ -186,7 +186,8 @@ class ToolExecutionEngineDispatchTest {
             },
         )
         val context = ExecutionContext.Code.WriteCode(
-            executorId = "agent-1",
+            actorId = "agent-1",
+            executorId = "test-executor",
             ticket = ticket(),
             task = task(),
             instructions = "Write some code",
@@ -217,7 +218,7 @@ class ToolExecutionEngineDispatchTest {
                 ),
             ),
             executor = executor,
-            executorId = executor.id,
+            actorId = "agent-1",
         )
     }
 
@@ -259,7 +260,8 @@ class ToolExecutionEngineDispatchTest {
     private fun request(): ExecutionRequest<ExecutionContext.NoChanges> =
         requestFor(
             ExecutionContext.NoChanges(
-                executorId = "agent-1",
+                actorId = "agent-1",
+                executorId = "test-executor",
                 ticket = ticket(),
                 task = task(),
                 instructions = "Do the thing",

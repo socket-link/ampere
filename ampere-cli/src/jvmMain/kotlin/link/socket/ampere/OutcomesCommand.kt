@@ -14,8 +14,10 @@ import com.github.ajalt.mordant.rendering.TextColors.red
 import com.github.ajalt.mordant.rendering.TextColors.yellow
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.table.table
+import com.github.ajalt.mordant.terminal.Terminal
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.domain.outcome.OutcomeMemory
 import link.socket.ampere.api.service.OutcomeService
 import link.socket.ampere.terminal.TerminalFactory
 
@@ -35,6 +37,7 @@ class OutcomesCommand(
             OutcomesTicketCommand(outcomeService),
             OutcomesSearchCommand(outcomeService),
             OutcomesExecutorCommand(outcomeService),
+            OutcomesActorCommand(outcomeService),
             OutcomesStatsCommand(outcomeService),
         )
     }
@@ -75,7 +78,7 @@ class OutcomesTicketCommand(
                 terminal.println(
                     table {
                         header {
-                            row("Time", "Executor", "Result", "Duration", "Files", "Error")
+                            row("Time", "Actor", "Executor", "Result", "Duration", "Files", "Error")
                         }
                         body {
                             outcomes.forEach { outcome ->
@@ -95,7 +98,8 @@ class OutcomesTicketCommand(
 
                                 row(
                                     formatTimestamp(outcome.timestamp),
-                                    blue(outcome.executorId),
+                                    blue(outcome.actorId ?: "-"),
+                                    outcome.executorId,
                                     result,
                                     duration,
                                     outcome.filesChanged.toString(),
@@ -171,7 +175,7 @@ class OutcomesSearchCommand(
                         red("✗")
                     }
 
-                    terminal.println("$result ${blue(outcome.ticketId)} - ${outcome.executorId}")
+                    terminal.println("$result ${blue(outcome.ticketId)} - ${outcomeParties(outcome)}")
                     terminal.println("   ${gray(outcome.approach.take(100))}")
                     if (!outcome.success) {
                         terminal.println("   ${red("Error:")} ${outcome.errorMessage}")
@@ -187,19 +191,24 @@ class OutcomesSearchCommand(
 }
 
 /**
- * Show outcomes for a specific executor.
+ * Show outcomes performed by a specific executor.
  *
- * Useful for analyzing executor performance.
+ * Useful for analyzing executor performance. An executor is an `Executor.id` — `function`,
+ * `mcp`, an Arc's `arc:<name>` — not an agent: since AMPR-443 (F17) an outcome names the agent
+ * that decided it apart from the executor that performed it, and `outcomes actor` is the
+ * by-agent view. Rows recorded before that hold the agent's id as their executor.
  */
 class OutcomesExecutorCommand(
     private val outcomeService: OutcomeService,
 ) : CliktCommand(
     name = "executor",
-    help = "Show outcomes for a specific executor",
+    help = "Show outcomes for a specific executor. Filters by the executor that performed " +
+        "the work (e.g. 'function'), not the agent that decided it; use 'outcomes actor' " +
+        "for an agent.",
 ) {
     private val executorId by argument(
         "executor-id",
-        help = "ID of the executor to analyze",
+        help = "ID of the executor to analyze (an Executor.id such as 'function', not an agent id)",
     )
 
     private val limit by option("--limit", "-n")
@@ -215,43 +224,10 @@ class OutcomesExecutorCommand(
                     terminal.println("No outcomes found for executor: $executorId")
                     return@fold
                 }
-
-                // Calculate statistics
-                val successCount = outcomes.count { it.success }
-                val failureCount = outcomes.size - successCount
-                val successRate = (successCount.toDouble() / outcomes.size * 100).toInt()
-                val avgDuration = outcomes.map { it.executionDurationMs }.average().toLong()
-
-                terminal.println(cyan("📊 EXECUTOR PERFORMANCE: $executorId"))
-                terminal.println()
-                terminal.println("Success rate: ${green("$successRate%")} ($successCount/${outcomes.size})")
-                terminal.println("Average duration: ${formatDuration(avgDuration)}")
-                terminal.println()
-
-                terminal.println("Recent outcomes:")
-                terminal.println(
-                    table {
-                        header {
-                            row("Time", "Ticket", "Result", "Duration", "Files")
-                        }
-                        body {
-                            outcomes.take(limit).forEach { outcome ->
-                                val result = if (outcome.success) {
-                                    green("✓")
-                                } else {
-                                    red("✗")
-                                }
-
-                                row(
-                                    formatTimestamp(outcome.timestamp),
-                                    blue(outcome.ticketId),
-                                    result,
-                                    formatDuration(outcome.executionDurationMs),
-                                    outcome.filesChanged.toString(),
-                                )
-                            }
-                        }
-                    },
+                terminal.printPerformance(
+                    title = "EXECUTOR PERFORMANCE: $executorId",
+                    outcomes = outcomes.take(limit),
+                    otherParty = "Actor" to { it.actorId ?: "-" },
                 )
             },
             onFailure = { error ->
@@ -259,16 +235,108 @@ class OutcomesExecutorCommand(
             },
         )
     }
+}
 
-    private fun formatDuration(ms: Long): String {
-        val seconds = ms / 1000
-        return if (seconds < 60) "${seconds}s" else "${seconds / 60}m"
-    }
+/**
+ * Show outcomes of the calls a specific agent decided, whichever executor performed them
+ * (AMPR-443, F17). Rows recorded before the two were told apart are included: the migration
+ * copied the agent's id they held into the actor column.
+ */
+class OutcomesActorCommand(
+    private val outcomeService: OutcomeService,
+) : CliktCommand(
+    name = "actor",
+    help = "Show outcomes for a specific agent: the calls it decided, whichever executor " +
+        "performed them",
+) {
+    private val actorId by argument(
+        "actor-id",
+        help = "ID of the agent to analyze",
+    )
 
-    private fun formatTimestamp(instant: Instant): String {
-        return instant.toString().take(19)
+    private val limit by option("--limit", "-n")
+        .int()
+        .default(20)
+
+    override fun run() = runBlocking {
+        val terminal = TerminalFactory.createTerminal()
+
+        outcomeService.byActor(actorId, limit).fold(
+            onSuccess = { outcomes ->
+                if (outcomes.isEmpty()) {
+                    terminal.println("No outcomes found for actor: $actorId")
+                    return@fold
+                }
+                terminal.printPerformance(
+                    title = "ACTOR PERFORMANCE: $actorId",
+                    outcomes = outcomes.take(limit),
+                    otherParty = "Executor" to { it.executorId },
+                )
+            },
+            onFailure = { error ->
+                terminal.println(red("Error: ${error.message}"))
+            },
+        )
     }
 }
+
+/**
+ * The success rate, average duration and recent rows of one party's outcomes — shared by
+ * `outcomes executor` and `outcomes actor`, which differ only in which party they filter by
+ * and so which one each row still has to name.
+ */
+private fun Terminal.printPerformance(
+    title: String,
+    outcomes: List<OutcomeMemory>,
+    otherParty: Pair<String, (OutcomeMemory) -> String>,
+) {
+    val successCount = outcomes.count { it.success }
+    val successRate = (successCount.toDouble() / outcomes.size * 100).toInt()
+    val avgDuration = outcomes.map { it.executionDurationMs }.average().toLong()
+    val (otherHeader, otherValue) = otherParty
+
+    println(cyan("📊 $title"))
+    println()
+    println("Success rate: ${green("$successRate%")} ($successCount/${outcomes.size})")
+    println("Average duration: ${formatShortDuration(avgDuration)}")
+    println()
+
+    println("Recent outcomes:")
+    println(
+        table {
+            header {
+                row("Time", "Ticket", otherHeader, "Result", "Duration", "Files")
+            }
+            body {
+                outcomes.forEach { outcome ->
+                    val result = if (outcome.success) {
+                        green("✓")
+                    } else {
+                        red("✗")
+                    }
+
+                    row(
+                        outcome.timestamp.toString().take(19),
+                        blue(outcome.ticketId),
+                        otherValue(outcome),
+                        result,
+                        formatShortDuration(outcome.executionDurationMs),
+                        outcome.filesChanged.toString(),
+                    )
+                }
+            }
+        },
+    )
+}
+
+private fun formatShortDuration(ms: Long): String {
+    val seconds = ms / 1000
+    return if (seconds < 60) "${seconds}s" else "${seconds / 60}m"
+}
+
+/** `actor → executor` for a row that names both, the executor alone for one with no actor. */
+private fun outcomeParties(outcome: OutcomeMemory): String =
+    outcome.actorId?.let { "$it → ${outcome.executorId}" } ?: outcome.executorId
 
 /**
  * Show aggregate statistics about outcomes.

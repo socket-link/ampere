@@ -70,7 +70,7 @@ class ToolExecutionPermissionGateTest {
         val engine = ToolExecutionEngine(
             llmService = llmService,
             executor = executor,
-            executorId = executor.id,
+            actorId = "agent-1",
         ).also { engine ->
             engine.registerStrategy(tool.id, passthroughStrategy)
         }
@@ -118,6 +118,7 @@ class ToolExecutionPermissionGateTest {
 
         return ExecutionRequest(
             context = ExecutionContext.NoChanges(
+                actorId = "agent-1",
                 executorId = executorId,
                 ticket = ticket,
                 task = task,

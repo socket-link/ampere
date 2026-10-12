@@ -226,7 +226,7 @@ class SparkBasedAgentGenericStepDispatchTest {
             estimatedComplexity = 2,
             expectations = Expectations.blank,
         )
-        val reasoning = AgentReasoning.createForTesting(executorId = "generic-step-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "generic-step-test") {
             onPlanning { _, _ -> error("executePlan must not re-plan its own steps (AMPR-396)") }
             onToolExecution { tool, request ->
                 val recorder = when (tool.id) {
@@ -302,7 +302,7 @@ class SparkBasedAgentGenericStepDispatchTest {
         toolExecutionAllowed: Boolean = true,
         onReasoningCall: ((String) -> String)? = null,
     ): SparkBasedAgent<CodeState> {
-        val reasoning = AgentReasoning.createForTesting(executorId = "generic-step-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "generic-step-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, request ->
                 check(toolExecutionAllowed) { "no tool should have been dispatched" }

@@ -145,7 +145,7 @@ class SparkBasedAgentWorkspacePinTest {
      * step, so nothing on this path should reach the Plan phase.
      */
     private fun recordingReasoning(seen: MutableList<ExecutionRequest<*>>): AgentReasoning =
-        AgentReasoning.createForTesting(executorId = "pin-test") {
+        AgentReasoning.createForTesting(actorId = "pin-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, request ->
                 seen += request

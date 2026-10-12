@@ -32,6 +32,7 @@ import link.socket.ampere.agents.events.api.TaskLifecycle
 import link.socket.ampere.agents.events.api.openTaskLifecycle
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.describeResult
+import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.field.Admission
 import link.socket.ampere.llm.DispatchingUpstreamLlmClient
 import link.socket.ampere.plug.permission.UserGrants
@@ -435,8 +436,9 @@ internal class RosterHostedRun(
      */
     private suspend fun runCycle(toRun: Plan) {
         val execution = host.phases.withPhase(CognitivePhase.EXECUTE, runId) {
+            // The summary is the walk's (PlanExecutor's default), not the host seat's: the
+            // seat is the door's identity on every pair, not an executor (AMPR-443).
             PlanExecutor(
-                executorId = host.id,
                 eventApi = host.door,
                 runId = runId,
                 stepEventApi = { step ->
@@ -595,7 +597,7 @@ internal class RosterHostedRun(
     private val quotaCheck: Breaker? = if (runRules.isEmpty()) {
         null
     } else {
-        Breaker(userGrants = { UserGrants() }, eventApi = host.door, executorId = host.id, runId = runId)
+        Breaker(userGrants = { UserGrants() }, eventApi = host.door, actorId = host.id, runId = runId)
     }
 
     /**
@@ -770,7 +772,10 @@ internal class RosterHostedRun(
 
         host.descriptor.memory?.outcomes?.recordOutcome(
             ticketId = runId,
-            executorId = host.id,
+            // The host seat planned the run; the run as a whole is what performed it
+            // (AMPR-443). The seat's id used to be written as the executor.
+            actorId = host.id,
+            executorId = HOSTED_RUN_EXECUTOR_ID,
             approach = approachText(),
             outcome = outcome,
             timestamp = Clock.System.now(),
@@ -871,7 +876,7 @@ internal class RosterHostedRun(
         }
         return if (cancelled) {
             ExecutionOutcome.NoChanges.Failure(
-                executorId = host.id,
+                executorId = HOSTED_RUN_EXECUTOR_ID,
                 ticketId = runId,
                 taskId = goal.id,
                 executionStartTimestamp = now,
@@ -880,7 +885,7 @@ internal class RosterHostedRun(
             )
         } else {
             ExecutionOutcome.NoChanges.Success(
-                executorId = host.id,
+                executorId = HOSTED_RUN_EXECUTOR_ID,
                 ticketId = runId,
                 taskId = goal.id,
                 executionStartTimestamp = now,
@@ -898,6 +903,16 @@ internal class RosterHostedRun(
 
     private fun goalDescription(): String =
         goal.planStepDescription ?: goal.id.ifBlank { "unnamed goal" }
+
+    companion object {
+        /**
+         * The executor a hosted run's own outcome is attributed to (AMPR-443): the run, not
+         * any one seat, since several seats may have performed its steps — the shape an Arc
+         * run's `arc:<name>` has. The host seat is the row's actor. `outcomes executor
+         * hosted-run` lists every hosted run's own row.
+         */
+        const val HOSTED_RUN_EXECUTOR_ID: ExecutorId = "hosted-run"
+    }
 }
 
 /** What an outcome says it did, for a summary a person reads. */

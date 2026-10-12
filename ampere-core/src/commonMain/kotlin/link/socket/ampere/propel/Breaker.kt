@@ -3,6 +3,7 @@ package link.socket.ampere.propel
 import kotlin.time.Duration
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.event.PermissionDeniedReason
 import link.socket.ampere.agents.domain.event.PlanEvent
@@ -10,7 +11,6 @@ import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.events.DecodedRows
 import link.socket.ampere.agents.events.StoredEvent
 import link.socket.ampere.agents.events.api.AgentEventApi
-import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.permissionDeniedMessage
 import link.socket.ampere.agents.execution.publishPermissionDenied
 import link.socket.ampere.agents.execution.tools.Tool
@@ -71,7 +71,8 @@ import link.socket.ampere.plug.permission.UserGrants
  * @param eventApi Where a Hard access trip is reported as a `PermissionDeniedEvent`, so a
  *   step the Breaker stops is as visible as one the engine used to stop. Null publishes
  *   nothing.
- * @param executorId The agent the steps are admitted for; names the denial event.
+ * @param actorId The agent the steps are admitted for; names the denial event. Called
+ *   `executorId` until AMPR-443 (F17), though it always held the agent's id.
  * @param runId The run whose spend a `Rule.Quota` is read against. Null — an agent outside
  *   any run — makes a quota unevaluable.
  * @param runEvents Reads the events persisted under a run, in sequence order. Defaults to
@@ -82,7 +83,7 @@ import link.socket.ampere.plug.permission.UserGrants
 class Breaker(
     private val userGrants: suspend (PlugManifest) -> UserGrants,
     private val eventApi: AgentEventApi? = null,
-    private val executorId: ExecutorId,
+    private val actorId: AgentId,
     private val runId: RunId? = null,
     private val runEvents: (suspend (RunId) -> Result<DecodedRows<StoredEvent>>)? =
         eventApi?.let { api -> api::getRunEvents },
@@ -130,7 +131,7 @@ class Breaker(
                     breach.denial?.let { denial ->
                         publishPermissionDenied(
                             eventApi = eventApi,
-                            executorId = executorId,
+                            actorId = actorId,
                             manifest = denial.manifest,
                             tool = denial.tool,
                             permission = denial.permission,

@@ -169,6 +169,7 @@ sealed class CodeParams {
             val workspace = pinnedWorkspace(originalRequest, WRITE_CODE_FILE_TOOL_ID)
 
             val enrichedContext = ExecutionContext.Code.WriteCode(
+                actorId = originalContext.actorId,
                 executorId = originalContext.executorId,
                 ticket = originalContext.ticket,
                 task = originalContext.task,
@@ -260,6 +261,7 @@ sealed class CodeParams {
             val workspace = pinnedWorkspace(originalRequest, READ_CODE_FILE_TOOL_ID)
 
             val enrichedContext = ExecutionContext.Code.ReadCode(
+                actorId = originalContext.actorId,
                 executorId = originalContext.executorId,
                 ticket = originalContext.ticket,
                 task = originalContext.task,

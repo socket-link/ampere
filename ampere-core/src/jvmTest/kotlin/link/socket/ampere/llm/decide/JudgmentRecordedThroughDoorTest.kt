@@ -68,7 +68,7 @@ class JudgmentRecordedThroughDoorTest {
                 aiConfiguration = aiConfiguration,
                 upstreamDecisionClient = client,
             ),
-            executorId = AGENT_ID,
+            actorId = AGENT_ID,
             eventApi = door.api,
             runId = runId,
         ) {

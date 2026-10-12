@@ -112,6 +112,7 @@ class ToolExecutionWithEventsTest {
     private fun createTestRequest(runId: String? = null): ExecutionRequest<ExecutionContext.NoChanges> =
         ExecutionRequest(
             context = ExecutionContext.NoChanges(
+                actorId = "test-agent",
                 executorId = "test-executor",
                 ticket = createTestTicket(),
                 task = createTestTask(),
@@ -141,7 +142,7 @@ class ToolExecutionWithEventsTest {
                 ),
             ),
             executor = executor,
-            executorId = executor.id,
+            actorId = "agent-1",
             eventApi = eventApi,
         )
     }

@@ -125,6 +125,7 @@ class FtsSchemaAndroidTest {
 
         repo.recordOutcome(
             ticketId = "ticket-1",
+            actorId = "agent-1",
             executorId = "executor-1",
             approach = "Add validation to OrderRepository",
             outcome = outcome,

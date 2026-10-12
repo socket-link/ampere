@@ -8,7 +8,11 @@
 //   - `Provenance.createdBy` is a `String` (an `Event.eventId`), not the `EventId`
 //     alias: the alias lives in `agents.domain.event`, which the leaf cannot import.
 //   - `Action.executor` is a `String?` (an `Executor.id`): `Executor` lives in
-//     `agents.execution`; F17 renames it `ExecutorRef` in W3.
+//     `agents.execution`, which the leaf cannot import, and stays the sealed type it is —
+//     F17 as locked dropped the `ExecutorRef` rename. Since AMPR-443 the live path carries
+//     that id apart from the deciding agent (`ExecutionContext.actorId` / `executorId`, the
+//     tool-event pair's `executorId`, the outcome row's `actor_id`), which is what a fold
+//     filling this field will read.
 //   - `Action` has its own `ActionId`; it is a record about primitives, not a
 //     `Primitive`, so it cannot be a `Ref` target.
 //   - `Environment` is an open marker interface, not sealed: its implementations are

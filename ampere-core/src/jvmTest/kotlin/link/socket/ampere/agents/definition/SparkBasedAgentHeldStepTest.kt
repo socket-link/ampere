@@ -128,7 +128,7 @@ class SparkBasedAgentHeldStepTest {
 
     private fun agentWith(vararg tools: HoldingTool): SparkBasedAgent<CodeState> {
         val byId = tools.associateBy { it.id }
-        val reasoning = AgentReasoning.createForTesting(executorId = "held-step-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "held-step-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { tool, request ->
                 val holding = byId.getValue(tool.id)

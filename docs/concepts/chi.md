@@ -13,7 +13,7 @@ tracked_sources:
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/pause/PauseStore.sq
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/HumanInteractionEvent.kt
 related: [Emission, AgentPause, MessageEvent, EventSerialBus, CancellationAddress]
-last_verified: 2026-09-28
+last_verified: 2026-10-11
 ---
 
 # CHI (Computer-Human Interface)
@@ -92,7 +92,9 @@ The three remaining uncoordinated CHI paths:
     `HumanInteractionEvent.InputRequested` through the `AgentEventApi` door and suspends on
     `GlobalEmissionReplyRegistry` for the paired reply, with a 30-minute default timeout;
     `EmissionTimeout` becomes `ExecutionOutcome.NoChanges.Failure`. The run comes off
-    `ExecutionRequest.runId` (AMPR-351).
+    `ExecutionRequest.runId` (AMPR-351). The ask is the agent's: its `eventSource` and `agentId`
+    are `ExecutionContext.actorId`, not `executorId`, which names the executor performing the call
+    and is what the returned outcome carries (AMPR-443, F17).
   - `ampere-core/.../execution/tools/ToolAskHuman.jvm.kt` — `ToolAskHumanJvm`, the console floor
     surface: the same factory with an `onInputRequested` callback that prints the banner naming the
     emission id for `ampere respond`. Not an `actual` — a JVM-only wrapper.

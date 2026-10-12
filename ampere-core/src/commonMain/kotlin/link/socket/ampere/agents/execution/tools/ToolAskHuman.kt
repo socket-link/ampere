@@ -55,7 +55,9 @@ fun ToolAskHuman(
     executionFunction = { executionRequest ->
         val context = executionRequest.context
         val startTimestamp = eventApi.clock.now()
-        val eventSource = EventSource.Agent(context.executorId)
+        // The agent is asking, not its executor (AMPR-443, F17): the escalation's source and
+        // the ask's `agentId` name the decider, and the outcome below names the performer.
+        val eventSource = EventSource.Agent(context.actorId)
 
         try {
             // A root: the tool asks on behalf of a task, not of another Emission. No principal
@@ -73,7 +75,7 @@ fun ToolAskHuman(
             ) {
                 askHuman(
                     prompt = context.instructions,
-                    agentId = context.executorId,
+                    agentId = context.actorId,
                     ticketId = context.ticket.id,
                     taskId = context.task.id,
                     timeout = 30.minutes,

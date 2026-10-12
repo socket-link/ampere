@@ -75,7 +75,10 @@ that loop, moved into Ampere, so the consumer can delete its copy.
    completed pair before the run rethrows. A run that happened always records that it
    happened.
 7. **LEARN runs once per run, not once per cycle**, and the default bills nothing:
-   one `OutcomeMemoryRepository.recordOutcome` for the run keyed by the run id, plus —
+   one `OutcomeMemoryRepository.recordOutcome` for the run keyed by the run id — its
+   actor the host seat, its executor `RosterHostedRun.HOSTED_RUN_EXECUTOR_ID`
+   (`hosted-run`) rather than the seat's id, since several seats may have performed the
+   run's steps and each step's own row names its executor (AMPR-443, F17) — plus —
    for a `Succeeded` run only — `KnowledgeExtractor.extractDefault` per seat that
    executed a step. `LearnPolicy.ModelBacked` adds `OutcomeEvaluator` for the host seat,
    is opt-in because it bills, and is Knowledge too, so it also runs only for

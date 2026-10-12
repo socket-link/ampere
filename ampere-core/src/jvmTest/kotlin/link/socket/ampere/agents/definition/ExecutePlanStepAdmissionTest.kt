@@ -233,7 +233,8 @@ class ExecutePlanStepAdmissionTest {
         )
         return ExecutionRequest(
             context = ExecutionContext.NoChanges(
-                executorId = AGENT_ID,
+                actorId = AGENT_ID,
+                executorId = "test-executor",
                 ticket = ticket,
                 task = STEP,
                 instructions = STEP.description,

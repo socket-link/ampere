@@ -47,6 +47,7 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.describeResult
 import link.socket.ampere.agents.execution.detailText
 import link.socket.ampere.agents.execution.executor.Executor
+import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.priorResultsSection
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
@@ -296,7 +297,7 @@ open class SparkBasedAgent<S : AgentState>(
     private val reasoning: AgentReasoning by lazy {
         _reasoningOverride ?: AgentReasoning.create(
             config = agentConfiguration,
-            executorId = id,
+            actorId = id,
             eventApi = _eventApi,
             activePromptProvider = { currentSystemPrompt },
             runId = _runId,
@@ -326,7 +327,7 @@ open class SparkBasedAgent<S : AgentState>(
         Breaker(
             userGrants = _userGrantProvider ?: { UserGrants() },
             eventApi = _eventApi,
-            executorId = id,
+            actorId = id,
             runId = _runId,
         )
     }
@@ -347,6 +348,14 @@ open class SparkBasedAgent<S : AgentState>(
      */
     val canExecuteTools: Boolean
         get() = reasoning.canExecuteTools
+
+    /**
+     * The `Executor.id` this agent's tool calls are performed by (AMPR-443, F17), or
+     * [ExecutionContext.NO_EXECUTOR_ID] for an agent built with none — never [id]: the agent
+     * decides a step, and the executor performs it.
+     */
+    private val boundExecutorId: ExecutorId
+        get() = _executor?.id ?: ExecutionContext.NO_EXECUTOR_ID
 
     /**
      * This agent's reasoning unit — the phase services, reached as the suspending
@@ -858,7 +867,10 @@ open class SparkBasedAgent<S : AgentState>(
         )
         return ExecutionRequest(
             context = ExecutionContext.NoChanges(
-                executorId = id,
+                // AMPR-443 (F17): this agent decides the step; the executor bound to it
+                // performs it. Two values, and the agent's id is never the executor's.
+                actorId = id,
+                executorId = boundExecutorId,
                 ticket = ticket,
                 task = step,
                 instructions = description,

@@ -57,7 +57,7 @@ class PerCallCognitivePhaseTest {
         )
         return AgentReasoning.create(
             config = config,
-            executorId = "phase-tagging-test",
+            actorId = "phase-tagging-test",
         ) {
             agentRole = "Test Agent"
         }

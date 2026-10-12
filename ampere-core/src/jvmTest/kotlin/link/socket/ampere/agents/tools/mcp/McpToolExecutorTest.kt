@@ -73,6 +73,7 @@ class McpToolExecutorTest {
 
     private fun createTestRequest(): ExecutionRequest<ExecutionContext> {
         val context = ExecutionContext.NoChanges(
+            actorId = "test-agent",
             executorId = "test-executor",
             ticket = createTestTicket(),
             task = createTestTask(),

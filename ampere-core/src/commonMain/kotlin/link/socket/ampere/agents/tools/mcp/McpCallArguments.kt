@@ -58,6 +58,9 @@ internal object McpCallArguments {
         put("ticketId", context.ticket.id)
         put("ticketDescription", context.ticket.description)
 
+        // Both parties (AMPR-443, F17): the agent the call is made for, and the executor
+        // performing it. `executorId` used to carry the agent's id.
+        put("actorId", context.actorId)
         put("executorId", context.executorId)
 
         if (context.knowledgeFromPastMemory.isNotEmpty()) {

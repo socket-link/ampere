@@ -125,7 +125,12 @@ class HostedRunIdTest {
                 "LEARN records one outcome for the run, under the supplied id as both its " +
                     "run id and its ticket id; under the run: ${underRun.map { it.ticket_id }}",
             )
-            assertEquals(HOST_ID, learned.single().executor_id, "attributed to the host seat")
+            assertEquals(HOST_ID, learned.single().actor_id, "decided by the host seat")
+            assertEquals(
+                RosterHostedRun.HOSTED_RUN_EXECUTOR_ID,
+                learned.single().executor_id,
+                "and performed by the run, not filed under the seat's id as an executor (AMPR-443)",
+            )
         }
 
     @Test

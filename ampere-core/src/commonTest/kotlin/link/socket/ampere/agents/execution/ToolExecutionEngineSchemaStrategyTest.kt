@@ -241,7 +241,7 @@ class ToolExecutionEngineSchemaStrategyTest {
             engine = ToolExecutionEngine(
                 llmService = llmService,
                 executor = executor,
-                executorId = executor.id,
+                actorId = "agent-1",
             ),
             tool = recordingTool(dispatchedArguments),
             prompts = prompts,
@@ -286,6 +286,7 @@ class ToolExecutionEngineSchemaStrategyTest {
             originalRequest: ExecutionRequest<*>,
         ): ExecutionRequest<*> = ExecutionRequest(
             context = ExecutionContext.NoChanges(
+                actorId = originalRequest.context.actorId,
                 executorId = originalRequest.context.executorId,
                 ticket = originalRequest.context.ticket,
                 task = originalRequest.context.task,
@@ -302,7 +303,8 @@ class ToolExecutionEngineSchemaStrategyTest {
         val now = Clock.System.now()
         return ExecutionRequest(
             context = ExecutionContext.NoChanges(
-                executorId = "agent-1",
+                actorId = "agent-1",
+                executorId = "test-executor",
                 ticket = Ticket(
                     id = "ticket-1",
                     title = "Test ticket",

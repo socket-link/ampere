@@ -1,5 +1,6 @@
 package link.socket.ampere.api.internal
 
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.outcome.OutcomeMemory
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.events.tickets.TicketId
@@ -49,4 +50,7 @@ internal class DefaultOutcomeService(
 
     override suspend fun byExecutor(executorId: ExecutorId, limit: Int): Result<List<OutcomeMemory>> =
         outcomeRepository.getOutcomesByExecutor(executorId, limit)
+
+    override suspend fun byActor(actorId: AgentId, limit: Int): Result<List<OutcomeMemory>> =
+        outcomeRepository.getOutcomesByActor(actorId, limit)
 }

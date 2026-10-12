@@ -274,7 +274,7 @@ class ExecutePublishesItsStepsTest {
     fun `a doorless reasoning unit stays silent`() {
         val reasoning = AgentReasoning.create(
             config = configuration(),
-            executorId = AGENT_ID,
+            actorId = AGENT_ID,
             eventApi = null,
             runId = "run-execute-4",
         ) {
@@ -331,7 +331,7 @@ class ExecutePublishesItsStepsTest {
     private fun reasoningWith(runId: String): AgentReasoning =
         AgentReasoning.create(
             config = configuration(),
-            executorId = AGENT_ID,
+            actorId = AGENT_ID,
             eventApi = door.api,
             runId = runId,
         ) {
@@ -410,7 +410,8 @@ class ExecutePublishesItsStepsTest {
         val now = Clock.System.now()
         return ExecutionRequest(
             context = ExecutionContext.NoChanges(
-                executorId = AGENT_ID,
+                actorId = AGENT_ID,
+                executorId = "test-executor",
                 ticket = Ticket(
                     id = "ticket-1",
                     title = "Test ticket",

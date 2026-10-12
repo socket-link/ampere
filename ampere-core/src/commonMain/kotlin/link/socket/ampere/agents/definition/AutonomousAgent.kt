@@ -37,6 +37,7 @@ import link.socket.ampere.agents.domain.outcome.originOfAll
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
+import link.socket.ampere.agents.domain.reasoning.PlanExecutor
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.domain.task.TaskId
@@ -780,7 +781,9 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
      */
     private fun List<StepOutcome.Skipped>.settled(taskId: TaskId, startedAt: Instant): Outcome =
         ExecutionOutcome.NoChanges.Success(
-            executorId = id,
+            // The walk's, as `PlanExecutor`'s fold is — not this agent's id, which is no
+            // executor (AMPR-443, F17).
+            executorId = PlanExecutor.PLAN_EXECUTOR_ID,
             ticketId = "",
             taskId = taskId,
             executionStartTimestamp = startedAt,

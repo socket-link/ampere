@@ -245,7 +245,7 @@ class SparkBasedAgentToolNarrowingTest {
     fun `a plan step nominating a narrowed-out tool fails fast without invoking it`() {
         val alpha = RecordingTool(ALPHA)
         val beta = RecordingTool(BETA)
-        val reasoning = AgentReasoning.createForTesting(executorId = "narrowing-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "narrowing-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, _ -> error("no tool should be reached once a step is denied") }
         }
@@ -281,7 +281,7 @@ class SparkBasedAgentToolNarrowingTest {
     fun `a denied step fails the plan without stopping its later steps`() {
         val alpha = RecordingTool(ALPHA)
         val beta = RecordingTool(BETA)
-        val reasoning = AgentReasoning.createForTesting(executorId = "narrowing-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "narrowing-test") {
             onPlanning { _, _ -> error("executePlan must not re-plan its own steps (AMPR-396)") }
             onToolExecution { _, request ->
                 @Suppress("UNCHECKED_CAST")
@@ -308,7 +308,7 @@ class SparkBasedAgentToolNarrowingTest {
     @Test
     fun `the same plan succeeds when no spark withdraws the tool`() {
         val beta = RecordingTool(BETA)
-        val reasoning = AgentReasoning.createForTesting(executorId = "narrowing-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "narrowing-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, request ->
                 @Suppress("UNCHECKED_CAST")
@@ -367,7 +367,7 @@ class SparkBasedAgentToolNarrowingTest {
     @Test
     fun `a step nominating a tool the agent never had still fails the same way`() {
         val alpha = RecordingTool(ALPHA)
-        val reasoning = AgentReasoning.createForTesting(executorId = "narrowing-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "narrowing-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, _ -> error("an unknown tool id must not reach dispatch") }
         }
@@ -388,7 +388,7 @@ class SparkBasedAgentToolNarrowingTest {
     @Test
     fun `a narrowing spark does not disturb a tool-less reasoning step`() {
         val alpha = RecordingTool(ALPHA)
-        val reasoning = AgentReasoning.createForTesting(executorId = "narrowing-test") {
+        val reasoning = AgentReasoning.createForTesting(actorId = "narrowing-test") {
             onPlanning { _, _ -> error("executing a step must not re-plan it (AMPR-396)") }
             onToolExecution { _, _ -> error("a null toolId invokes no tool") }
             // AMPR-407: a tool-less step is one model call by the executing seat.

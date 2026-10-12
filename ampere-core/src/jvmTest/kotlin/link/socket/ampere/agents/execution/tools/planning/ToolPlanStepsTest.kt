@@ -58,7 +58,8 @@ class ToolPlanStepsTest {
             description = intent,
         )
         return ExecutionContext.Planning(
-            executorId = "test-agent",
+            actorId = "test-agent",
+            executorId = "test-executor",
             ticket = ticket,
             task = task,
             instructions = intent,

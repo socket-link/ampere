@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.domain.outcome
 
 import kotlinx.datetime.Instant
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.events.tickets.TicketId
 import link.socket.ampere.agents.execution.executor.ExecutorId
@@ -25,7 +26,10 @@ interface OutcomeMemoryRepository {
      * what doesn't work, which is just as important as knowing what does.
      *
      * @param ticketId Which ticket was being worked on
-     * @param executorId Which executor performed the work
+     * @param actorId Which agent decided the work (AMPR-443, F17) — null when no single agent
+     *   did, as for an Arc run's own row. Required rather than defaulted, so a writer says
+     *   which it means.
+     * @param executorId Which `Executor.id` performed the work — never the agent's id
      * @param approach Description of what was tried (from ticket + context)
      * @param outcome The execution outcome (success or failure). A held outcome is
      *   neither, and is refused with a failed [Result] rather than recorded (AMPR-425).
@@ -35,6 +39,7 @@ interface OutcomeMemoryRepository {
      */
     suspend fun recordOutcome(
         ticketId: TicketId,
+        actorId: AgentId?,
         executorId: ExecutorId,
         approach: String,
         outcome: ExecutionOutcome,
@@ -82,6 +87,10 @@ interface OutcomeMemoryRepository {
      * which kinds of tasks?" Over time, this data can inform executor
      * selection strategy.
      *
+     * Rows recorded before 15.sqm (AMPR-443) hold the agent's id here, because that is what
+     * was written; a row recorded since holds the real executor. To ask what one agent did
+     * across both, use [getOutcomesByActor].
+     *
      * @param executorId The executor to analyze
      * @param limit Maximum number of results
      * @return Result with recent outcomes from this executor
@@ -90,6 +99,26 @@ interface OutcomeMemoryRepository {
         executorId: ExecutorId,
         limit: Int = 20,
     ): Result<List<OutcomeMemory>>
+
+    /**
+     * Get the outcomes of the calls one agent decided (AMPR-443, F17), whichever executor
+     * performed them. Rows older than 15.sqm are found too: the migration copied the agent's
+     * id they held into the actor column.
+     *
+     * Has an interface default that fails, the way `KnowledgeRepository.findKnowledgeVisibleTo`
+     * does, so a repository written before the read existed still compiles and a read through
+     * it is never mistaken for an agent with no outcomes.
+     *
+     * @param actorId The agent to query
+     * @param limit Maximum number of results
+     * @return Result with that agent's recent outcomes, most recent first
+     */
+    suspend fun getOutcomesByActor(
+        actorId: AgentId,
+        limit: Int = 20,
+    ): Result<List<OutcomeMemory>> = Result.failure(
+        UnsupportedOperationException("${this::class.simpleName} does not implement getOutcomesByActor"),
+    )
 }
 
 /**
@@ -102,6 +131,8 @@ interface OutcomeMemoryRepository {
 data class OutcomeMemory(
     val id: String,
     val ticketId: TicketId,
+
+    /** The `Executor.id` that performed the work (the agent's id on a row older than 15.sqm). */
     val executorId: ExecutorId,
 
     /**
@@ -124,4 +155,11 @@ data class OutcomeMemory(
 
     /** When did this happen? */
     val timestamp: Instant,
+
+    /**
+     * The agent that decided the work (AMPR-443, F17); null on a row no single agent decided,
+     * such as an Arc run's own. Last, and defaulted, so a positional construction written
+     * before the field existed still compiles.
+     */
+    val actorId: AgentId? = null,
 )

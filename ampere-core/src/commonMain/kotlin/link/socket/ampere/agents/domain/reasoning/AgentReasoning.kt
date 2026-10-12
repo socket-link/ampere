@@ -4,6 +4,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.config.AgentConfiguration
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.event.CognitiveEvent
@@ -25,7 +26,7 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.ParameterStrategy
 import link.socket.ampere.agents.execution.ToolExecutionEngine
 import link.socket.ampere.agents.execution.executor.Executor
-import link.socket.ampere.agents.execution.executor.ExecutorId
+import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.tools.mcp.ServerManager
@@ -57,7 +58,7 @@ import link.socket.ampere.plug.permission.UserGrants
  *
  * Usage:
  * ```kotlin
- * val reasoning = AgentReasoning.create(config, executorId, eventApi, activePromptProvider) {
+ * val reasoning = AgentReasoning.create(config, actorId, eventApi, activePromptProvider) {
  *     agentRole = "Spark-Based Agent (ANALYTICAL)"
  *     availableTools = { effectiveTools }
  *
@@ -92,8 +93,9 @@ class AgentReasoning private constructor(
 
     // AMPR-389: Execute publishes its own steps. The door and the run are the two things
     // the executor needs to do that; without a door it stays silent, as before.
+    // AMPR-443: the plan's summary is attributed to the walk (PlanExecutor's default), not to
+    // this unit's agent — the agent is the door's identity on the pair, not an executor.
     private val planExecutor = PlanExecutor(
-        executorId = settings.executorId,
         eventApi = eventApi,
         runId = runId,
     )
@@ -102,7 +104,9 @@ class AgentReasoning private constructor(
         ToolExecutionEngine(
             llmService = llmService,
             executor = settings.executor,
-            executorId = settings.executorId,
+            // AMPR-443: the agent, by its own name. The engine reads the performer off
+            // `executor` itself, so the agent's id is never handed in as an executor's.
+            actorId = settings.actorId,
             eventApi = eventApi,
             userGrantProvider = settings.userGrantProvider,
             // AMPR-351: the run reaches tools on the request the engine dispatches, which
@@ -261,7 +265,9 @@ class AgentReasoning private constructor(
 
         return toolExecutionEngine?.execute(tool, request)
             ?: ExecutionOutcome.NoChanges.Failure(
-                executorId = settings.executorId,
+                // No executor is bound, and the outcome says so rather than naming the agent
+                // as one (AMPR-443).
+                executorId = ExecutionContext.NO_EXECUTOR_ID,
                 ticketId = request.context.ticket.id,
                 taskId = request.context.task.id,
                 executionStartTimestamp = Clock.System.now(),
@@ -478,7 +484,7 @@ class AgentReasoning private constructor(
         phase: CognitivePhase? = null,
     ): RoutingContext =
         RoutingContext(
-            agentId = settings.executorId,
+            agentId = settings.actorId,
             agentRole = settings.agentRole,
             requirements = requirements,
             workflowId = runId,
@@ -505,13 +511,13 @@ class AgentReasoning private constructor(
          */
         fun create(
             config: AgentConfiguration,
-            executorId: ExecutorId,
+            actorId: AgentId,
             eventApi: AgentEventApi? = null,
             activePromptProvider: (() -> String?)? = null,
             runId: RunId? = null,
             configure: ReasoningSettingsBuilder.() -> Unit,
         ): AgentReasoning {
-            val builder = ReasoningSettingsBuilder(executorId)
+            val builder = ReasoningSettingsBuilder(actorId)
             builder.configure()
             return AgentReasoning(
                 config = config,
@@ -530,7 +536,7 @@ class AgentReasoning private constructor(
          *
          * Usage:
          * ```kotlin
-         * val mockReasoning = AgentReasoning.createForTesting(executorId) {
+         * val mockReasoning = AgentReasoning.createForTesting(actorId) {
          *     onPerception { perception -> Idea("Mock insight", "Analysis") }
          *     onPlanning { task, ideas -> Plan.ForTask(task, listOf(task), 1) }
          *     onToolExecution { tool, request -> ExecutionOutcome.Success(...) }
@@ -539,13 +545,13 @@ class AgentReasoning private constructor(
          * ```
          */
         fun createForTesting(
-            executorId: ExecutorId,
+            actorId: AgentId,
             configure: MockReasoningBuilder.() -> Unit,
         ): AgentReasoning {
             val builder = MockReasoningBuilder()
             builder.configure()
             val settings = ReasoningSettings(
-                executorId = executorId,
+                actorId = actorId,
                 agentRole = "Test Agent",
                 availableTools = { emptySet() },
                 executor = null,
@@ -645,7 +651,12 @@ class MockReasoningBuilder {
  * whole of what the Perceive phase asks about.
  */
 data class ReasoningSettings(
-    val executorId: ExecutorId,
+    /**
+     * The agent this unit reasons for (AMPR-443, F17) — the decider of every tool call it
+     * makes. The performer is [executor]'s own id; until F17 this field was named
+     * `executorId` and carried the agent's id into the executor's slot.
+     */
+    val actorId: AgentId,
     val agentRole: String,
     /**
      * The tools to offer the planner and the perception evaluator, evaluated at
@@ -702,7 +713,7 @@ data class ReasoningSettings(
  * (AMPR-403). The rest of the per-phase prompt customisation stays in the
  * `.spark.md` artifacts the agent stacks at construction time.
  */
-class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
+class ReasoningSettingsBuilder(private val actorId: AgentId) {
     var agentRole: String = "Agent"
 
     /**
@@ -745,7 +756,7 @@ class ReasoningSettingsBuilder(private val executorId: ExecutorId) {
     }
 
     fun build(): ReasoningSettings = ReasoningSettings(
-        executorId = executorId,
+        actorId = actorId,
         agentRole = agentRole,
         availableTools = availableTools,
         executor = executor,

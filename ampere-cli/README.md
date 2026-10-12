@@ -193,9 +193,15 @@ View execution outcomes and accumulated experience:
 ```bash
 ampere outcomes ticket <ticket-id>        # Show execution history for a ticket
 ampere outcomes search <query>            # Find outcomes similar to a query
-ampere outcomes executor <executor-id>    # Show outcomes for a specific executor
+ampere outcomes executor <executor-id>    # Outcomes an executor performed (e.g. `function`)
+ampere outcomes actor <agent-id>          # Outcomes of the calls an agent decided
 ampere outcomes stats                     # Show aggregate outcome statistics
 ```
+
+An outcome names two parties: the agent that decided the call (its *actor*) and the
+`Executor` that performed it. `executor` filters by the second, so it takes an executor id
+such as `function`, not an agent id. Rows recorded before the two were told apart hold the
+agent's id as their executor; `actor` finds an agent's outcomes across both.
 
 ### Issues Command
 

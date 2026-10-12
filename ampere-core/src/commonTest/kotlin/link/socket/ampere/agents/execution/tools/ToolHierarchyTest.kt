@@ -54,6 +54,7 @@ class ToolHierarchyTest {
 
     private fun createTestExecutionRequest(
         context: ExecutionContext = ExecutionContext.NoChanges(
+            actorId = "test-agent",
             executorId = "test-executor",
             ticket = createTestTicket(),
             task = Task.blank,

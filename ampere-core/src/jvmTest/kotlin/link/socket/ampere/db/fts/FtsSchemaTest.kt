@@ -136,6 +136,7 @@ class FtsSchemaTest {
         database.outcomeMemoryStoreQueries.insertOutcome(
             id = id,
             ticket_id = "ticket-$id",
+            actor_id = "agent-1",
             executor_id = "executor-1",
             approach = approach,
             success = 1L,
