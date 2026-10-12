@@ -22,7 +22,9 @@ PERCEIVE → RECALL → OBSERVE → PLAN on the roster's **host seat** and retur
 `HostedRun.execute()` is EXECUTE plus a re-entry into OBSERVE → PLAN while cycles
 remain — each later PLAN shown the step results so far, and free to answer with no
 steps, which ends the run (AMPR-424); `HostedRun.close()` is LEARN. A step whose tool
-reports it is waiting on a person ends the run where it stands (AMPR-425).
+reports it is waiting on a person ends the run where it stands (AMPR-425); a step that
+fails skips only the steps that depend on it, and a run that did some of its work ends
+`Partial` (AMPR-450).
 
 The vocabulary:
 
@@ -73,10 +75,11 @@ that loop, moved into Ampere, so the consumer can delete its copy.
    completed pair before the run rethrows. A run that happened always records that it
    happened.
 7. **LEARN runs once per run, not once per cycle**, and the default bills nothing:
-   `KnowledgeExtractor.extractDefault` per seat that executed a step, plus one
-   `OutcomeMemoryRepository.recordOutcome` for the run keyed by the run id.
-   `LearnPolicy.ModelBacked` adds `OutcomeEvaluator` for the host seat and is opt-in
-   because it bills.
+   one `OutcomeMemoryRepository.recordOutcome` for the run keyed by the run id, plus —
+   for a `Succeeded` run only — `KnowledgeExtractor.extractDefault` per seat that
+   executed a step. `LearnPolicy.ModelBacked` adds `OutcomeEvaluator` for the host seat,
+   is opt-in because it bills, and is Knowledge too, so it also runs only for
+   `Succeeded` (invariant 17).
 8. **A seat runs only the tools its role declares**, intersected with the run's
    `tools`. Each reaches the seat under the seat-namespaced id `<seat>/<tool>`
    (`SeatTool`), which is the id the planner is offered and the id dispatch resolves.
@@ -139,10 +142,31 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     finished. LEARN is entered and bracketed and writes nothing: no outcome row (the
     store can only say succeeded or failed), no Knowledge for any seat, no
     `ModelBacked` call. Status precedence is cancelled (`Failed`) → stopped by the gate
-    (`Stopped`) → any step held (`Held`) → any step failed (`Failed`) → `Succeeded`; a
-    hold outranks an earlier cycle's failure because it is why the run ended. The stop
-    lives in `PlanExecutor`, so every walk of a plan obeys it; the run only declines to
-    plan again. A run where no tool holds is unchanged, event for event.
+    (`Stopped`) → any step held (`Held`) → no step failed (`Succeeded`) → some step
+    succeeded beside the failures (`Partial`) → `Failed`; a hold outranks an earlier
+    cycle's failure because it is why the run ended. The stop lives in `PlanExecutor`,
+    so every walk of a plan obeys it; the run only declines to plan again. A run where
+    no tool holds is unchanged, event for event.
+17. **A failed step skips only its dependents; a run that did part of its work is
+    `Partial`** (AMPR-450, row H20 (a) and (b) as ruled on 2026-10-11). The planner's
+    `requiresPreviousStep` is parsed into `Task.Step.dependsOn`: `true` is a dependency on
+    the step immediately before, `false` or missing is none (the prompt is unchanged).
+    When a step fails, every step that depends on it, directly or through another
+    skipped step, ends `StepOutcome.Skipped("depends on failed step <id>")` naming the
+    step that actually failed, and every independent step still runs. The run does this
+    in its own `dispatch`: `executePlanStep` reports every failure as critical, so the run
+    hands `PlanExecutor` the failure as non-critical and skips the dependents itself — the
+    critical-failure stop and the hold stop in `PlanExecutor` are untouched, and so is the
+    Arc path. A thrown step is a failed step like any other. Two failures stay critical:
+    a cancellation, and any failure on a scope that is no longer active, so a cancelled
+    run still stops where it stood. A skipped dependent's `PlanStepStarted` /
+    `PlanStepCompleted` pair leaves through the **host's** door, because the skip is the
+    run's decision, not the assigned seat's work. `RunStatus.Partial` is at least one step
+    succeeded and at least one failed, across every cycle, on a run that was not
+    cancelled, stopped or held; failures and skips with no success is still `Failed`.
+    LEARN records the outcome for every status but `Held` and stores Knowledge — the
+    extracted learnings and the `ModelBacked` evaluation — only for `Succeeded`; a
+    `Partial` run's task ends `TaskFailed`, as it did when such a run was `Failed`.
 
 ## How it composes
 
@@ -249,7 +273,7 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | `RecallPolicy` | `sources`, `perSourceLimit`, `memoryLimit`, `titleClip`, `textClip` |
 | `RecallSource` / `Recalled` | The consumer-implemented corpus SPI (`memory/`, beside `MemoryStore`) and one item of it |
 | `PlanGate` / `PlanDecision` | `review(plan)` → `Approved(plan)` (possibly trimmed) or `Stopped(reason)` |
-| `RunResult` / `RunStatus` | `cyclesUsed`, `stepOutcomes`, `outcome`; `Succeeded` / `Failed` / `Stopped` / `Held` |
+| `RunResult` / `RunStatus` | `cyclesUsed`, `stepOutcomes`, `outcome`; `Succeeded` / `Failed` / `Stopped` / `Held` / `Partial` |
 | `RunObservation` | What OBSERVE hands the verifier's Probes: run id, goal, cycle, prior results |
 | `rosterRunHost(...)` | The shipped implementation, for composing without an `AmpereInstance` |
 
@@ -350,6 +374,21 @@ strings.
   `ExecutionOutcome.Held` instead (AMPR-425). The same goes for every `when` over an
   outcome: a held branch that falls into an `else` reading it as done — as
   `executePlanStep`'s did — is the same lie one layer down.
+- **Reading a failed step as the end of its cycle.** Since AMPR-450 it is not: only its
+  dependents are skipped, and the steps after it that did not need it still run. A
+  consumer that counts "steps after the first failure" as skipped, or a test that
+  expects one, is reading the pre-H20 walk.
+- **Moving the dependent skip into `PlanExecutor`.** It would apply to every walk of a
+  plan, the Arc path's included, where `FlowPhase` runs one step per tick and no step
+  can see another's dependency; the hosted run is the one walk the ruling covers.
+- **Downgrading a failure on a dead scope.** A tool's cancellation reaches `dispatch` as
+  a plain failed outcome (`FunctionExecutor` swallows it); handed on as non-critical, the
+  walk would dispatch the next independent step on a cancelled run. `dispatch` keeps it
+  critical whenever the scope is no longer active.
+- **Matching `RunStatus` exhaustively without `Partial`.** It is a fifth value, added in a
+  minor version; a `when` written against four no longer compiles, and an `else` that
+  read every non-`Succeeded` value as failure now reads a run that did most of its work
+  as one that did none.
 - **Treating `held` as a kind of failure in a tool record.** `ToolExecutionCompleted`
   for a held call has `success = false` *and* `held = true` and no `errorMessage`; a
   reader that keys on `success` alone will count holds as faults.
@@ -364,12 +403,17 @@ planner's empty answer is the planner's, not a verdict over one); a per-cycle st
 in Ampere (a consumer trims in its `PlanGate`); and handing prior results to a
 `customPromptBuilder`, whose signature is unchanged.
 
-Row H20 was ruled ✏️ on 2026-10-11: waiting on approval is a full stop of the run. That
-much is built (AMPR-425, invariant 16) — `ExecutionOutcome.Held`, `StepOutcome.Held`,
-`RunStatus.Held`, `ToolExecutionCompleted.held`. The rest of the original proposal
-carries no ruling and is **not** adopted: no `Partial` run status, no skipping of only a
-held step's dependents (there is no dependency graph — everything after the hold is
-skipped), and no step cap enforced by Ampere. Also not here: *resuming* a held run
+Row H20 was ruled on 2026-10-11. Waiting on approval is a full stop of the run (✏️),
+built by AMPR-425 (invariant 16) — `ExecutionOutcome.Held`, `StepOutcome.Held`,
+`RunStatus.Held`, `ToolExecutionCompleted.held`. A failed step skipping only its
+dependents and the `Partial` status were approved the same day and are built by AMPR-450
+(invariant 17). What H20 does *not* come with here: a held step still skips everything
+after it, not only its dependents; a cancelled run is still `Failed`, with no separate
+`Cancelled` status (the row's text named one, and it was not asked about); the per-cycle
+step cap `maxStepsPerCycle` is a separate ticket, H20 (c); the per-tool idempotency key
+(run id + step id) received no ruling and is not built; dependents on the Arc path are out
+of scope, because `FlowPhase` runs one step per tick; and `dependsOn` is only ever the
+previous step, because that is all `requiresPreviousStep` can say. Also not here: *resuming* a held run
 (row H29, Wave 5 — until it ships, whatever was waiting is completed by the consumer
 outside the run and nothing after it runs; this wave leaves it the `reference` and a
 blocked task to resume from), deciding *when* an action must be held (the tool's and

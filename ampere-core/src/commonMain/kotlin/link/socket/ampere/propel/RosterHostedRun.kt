@@ -23,6 +23,7 @@ import link.socket.ampere.agents.domain.reasoning.PlanSeat
 import link.socket.ampere.agents.domain.reasoning.StepResult
 import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.domain.task.TaskId
 import link.socket.ampere.agents.domain.task.planStepDescription
 import link.socket.ampere.agents.domain.task.planStepSeat
 import link.socket.ampere.agents.domain.task.planStepToolId
@@ -47,6 +48,11 @@ import link.socket.ampere.util.logWith
  * A step whose tool is waiting on a person ends the run there (AMPR-425): `PlanExecutor`
  * skips the rest of that cycle, and the run plans no further cycle, asks nothing about
  * the one that held, and learns nothing from it. Its task is left blocked, not ended.
+ *
+ * A step that *fails* does not stop the walk (AMPR-450): every step that depends on it,
+ * directly or through another, is skipped with the failed step's id as its reason, and
+ * every other step still runs. A run where some steps succeeded and some failed ends
+ * [RunStatus.Partial].
  *
  * A cycle that executed something may also be *asked* about itself before the loop
  * decides whether to continue ([assess], AMPR-421). Every answer is recorded and none
@@ -97,6 +103,15 @@ internal class RosterHostedRun(
     private var ideas: List<Idea> = emptyList()
     private var recalled: List<KnowledgeWithScore> = emptyList()
     private val results = mutableListOf<StepOutcome>()
+
+    /**
+     * Every step of the run that failed or was skipped for a failure, mapped to the
+     * failed step at the root of it (AMPR-450). A failed step maps to itself; its
+     * dependents map to it, and so do theirs, which is what makes the skip transitive
+     * without walking a graph. Step ids are unique across cycles (AMPR-424), so one map
+     * serves the whole run.
+     */
+    private val failedRoots = mutableMapOf<TaskId, TaskId>()
     private val seatsThatRan = mutableSetOf<RoleId>()
     private var cyclesUsed: Int = 0
     private var lastPlanOutcome: Outcome = Outcome.blank
@@ -370,11 +385,17 @@ internal class RosterHostedRun(
      * One EXECUTE: every step of [plan], each on the seat it was assigned to.
      *
      * [PlanExecutor] does the walking — the sequential order, the running chain of
-     * results, the stop on a critical failure and the skipping of what came after it,
-     * and the `PlanStepStarted` / `PlanStepCompleted` pair per step (row H5). It is
-     * handed a door per step rather than one door, so each pair leaves through the
+     * results, the stop on a critical failure or a hold and the skipping of what came
+     * after it, and the `PlanStepStarted` / `PlanStepCompleted` pair per step (row H5).
+     * It is handed a door per step rather than one door, so each pair leaves through the
      * seat that ran the step; the run-level door is the fallback for a step no seat
-     * claimed.
+     * claimed. A step skipped because a step it depends on failed ran on no seat, so its
+     * pair leaves through the host's door: the skip is the run's decision, not the
+     * assigned seat's work.
+     *
+     * A failed step does not stop the walk here (AMPR-450). [dispatch] hands
+     * `PlanExecutor` the failure as non-critical, and skips each later step that
+     * depends on it — so a failure costs exactly the steps that needed its output.
      *
      * Dispatch itself goes through `SparkBasedAgent.executePlanStep`, the same entry
      * the Arc path's Execute uses. That is what keeps one definition of what executing
@@ -395,7 +416,9 @@ internal class RosterHostedRun(
                 executorId = host.id,
                 eventApi = host.door,
                 runId = runId,
-                stepEventApi = { step -> seatFor(step).door },
+                stepEventApi = { step ->
+                    if (failedDependencyOf(step) != null) host.door else seatFor(step).door
+                },
             ).execute(
                 plan = toRun,
                 priorResults = results.toList(),
@@ -532,10 +555,32 @@ internal class RosterHostedRun(
         }
     }
 
+    /**
+     * Runs [step] on its seat, or skips it because a step it depends on failed.
+     *
+     * A failure that comes back is handed on as *non-critical*, so `PlanExecutor` walks
+     * on to the next step instead of skipping every one after it (AMPR-450). Every
+     * failure `executePlanStep` reports is critical, which before row H20's ruling meant
+     * one failed step ended the cycle; what decides what a failure costs is now
+     * [Task.Step.dependsOn], read by [failedDependencyOf]. A step that throws is a
+     * failed step like any other, for the same reason.
+     *
+     * Two failures stay critical, because they are not one step's fault: a cancellation
+     * caught here, and any failure on a scope that is no longer active — which is how a
+     * tool's own cancellation arrives, swallowed into a failed outcome by
+     * `FunctionExecutor` (see [captureCancellation]). Walking on from either would
+     * dispatch the next step on a dead run.
+     */
     private suspend fun dispatch(step: Task, priorResults: List<StepOutcome>): StepResult {
+        val description = step.planStepDescription ?: step.id
+        failedDependencyOf(step)?.let { failed ->
+            failedRoots[step.id] = failed
+            return StepResult.skip(description = description, reason = "depends on failed step $failed")
+        }
+
         val seat = seatFor(step)
         seatsThatRan += seat.role
-        return try {
+        val result = try {
             seat.phases.withPhase(CognitivePhase.EXECUTE, runId) {
                 seat.agent.executePlanStep(
                     step = step,
@@ -548,13 +593,35 @@ internal class RosterHostedRun(
             // pair under `NonCancellable` on the way out, so the trace says where the
             // run stopped. `execute` rethrows once the walk has unwound.
             cancellation = e
-            StepResult.failure(
-                description = step.planStepDescription ?: step.id,
+            return StepResult.failure(
+                description = description,
                 error = "cancelled before completing",
                 isCritical = true,
             )
+        } catch (e: Exception) {
+            StepResult.failure(
+                description = description,
+                error = "Exception during step execution: ${e.message}",
+            )
         }
+
+        if (result !is StepResult.Failure) return result
+        failedRoots[step.id] = step.id
+        return if (coroutineContext.isActive) result.copy(isCritical = false) else result
     }
+
+    /**
+     * The failed step [step] cannot run without, or null when it can run (AMPR-450).
+     *
+     * The first of its [dependencies][Task.Step.dependsOn] that failed, or was itself
+     * skipped for a failure — in which case the answer is the failure at the root, so a
+     * step two links from a failed one names the step that actually failed. A
+     * dependency that succeeded, or that is not in the run at all because the
+     * [PlanGate] trimmed it, is no reason to skip. Only a [Task.Step] declares
+     * dependencies; any other task depends on nothing.
+     */
+    private fun failedDependencyOf(step: Task): TaskId? =
+        (step as? Task.Step)?.dependsOn?.firstNotNullOfOrNull { failedRoots[it] }
 
     /**
      * The seat that runs [step].
@@ -619,9 +686,11 @@ internal class RosterHostedRun(
      * No model call in any of that. [LearnPolicy.ModelBacked] adds one — the host
      * seat's `OutcomeEvaluator` — and is opt-in because it bills.
      *
-     * A cancelled run records its outcome and stores no Knowledge: the outcome is what
-     * happened, and Knowledge is a claim about what was learned from work that
-     * finished.
+     * The outcome is recorded for every run that is not held; Knowledge — the extracted
+     * learnings and the model-backed evaluation alike — only for a [RunStatus.Succeeded]
+     * one (AMPR-450, row H20). The outcome is what happened, and Knowledge is a claim
+     * about what was learned from work that finished: a failed, partial, stopped or
+     * cancelled run did not finish its work, so it has nothing to claim.
      *
      * A held run writes nothing at all (AMPR-425). The phase is still entered and
      * bracketed — a LEARN that found nothing to learn is still a LEARN — but there is no
@@ -639,7 +708,8 @@ internal class RosterHostedRun(
     }
 
     private suspend fun learnWithin(cancelled: Boolean) {
-        if (currentStatus() == RunStatus.Held) return
+        val status = currentStatus()
+        if (status == RunStatus.Held) return
 
         val outcome = executionOutcome(cancelled)
 
@@ -652,7 +722,7 @@ internal class RosterHostedRun(
             runId = runId,
         )
 
-        if (!cancelled) {
+        if (!cancelled && status == RunStatus.Succeeded) {
             seatsThatRan.mapNotNull { seats[it] }.forEach { seat ->
                 seat.memory?.storeKnowledge(
                     knowledge = seat.agent.extractKnowledgeFromOutcome(outcome, goal, gatedPlan),
@@ -675,8 +745,10 @@ internal class RosterHostedRun(
             lifecycle?.failed("Cancelled before completing")
         } else {
             when (val stopped = stoppedAt) {
+                // A partial run did not do what it was asked: some of its work failed, so
+                // its task did too, as it did before a partial run had a status of its own.
                 null ->
-                    if (currentStatus() == RunStatus.Failed) {
+                    if (status == RunStatus.Failed || status == RunStatus.Partial) {
                         lifecycle?.failed(outcome.describeForRecord())
                     } else {
                         lifecycle?.completed(outcome.describeForRecord())
@@ -706,16 +778,18 @@ internal class RosterHostedRun(
     }
 
     /**
-     * How the run ended, in precedence order (AMPR-425): cancelled, stopped by the gate,
-     * held, failed, succeeded. A hold outranks an earlier cycle's failure because it is
-     * why the run ended.
+     * How the run ended, in precedence order (AMPR-425, AMPR-450): cancelled, stopped by
+     * the gate, held, then by its steps — none failed is succeeded, some failed beside
+     * some that succeeded is partial, and failures with no success is failed. A hold
+     * outranks an earlier cycle's failure because it is why the run ended.
      */
     private fun currentStatus(): RunStatus = when {
         cancellation != null -> RunStatus.Failed
         stoppedAt != null -> RunStatus.Stopped
         heldAt != null -> RunStatus.Held
-        results.any { it is StepOutcome.Failure } -> RunStatus.Failed
-        else -> RunStatus.Succeeded
+        results.none { it is StepOutcome.Failure } -> RunStatus.Succeeded
+        results.any { it is StepOutcome.Success || it is StepOutcome.PartialSuccess } -> RunStatus.Partial
+        else -> RunStatus.Failed
     }
 
     /**

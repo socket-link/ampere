@@ -77,6 +77,12 @@ interface HostedRun : CoroutineContext.Element {
      * that cycle is skipped, no further cycle is planned, and the result is
      * [RunStatus.Held] (AMPR-425).
      *
+     * A step that fails does not: only the steps that depend on it
+     * ([Task.Step.dependsOn][link.socket.ampere.agents.domain.task.Task.Step.dependsOn]),
+     * directly or transitively, are skipped — each with the reason
+     * `depends on failed step <id>` — and the independent steps still run. A run where
+     * some steps succeeded and some failed is [RunStatus.Partial] (AMPR-450).
+     *
      * Idempotent: calling it again returns the result of the first call rather than
      * running the plan twice.
      *
@@ -90,7 +96,8 @@ interface HostedRun : CoroutineContext.Element {
      * LEARN, and the end of the run.
      *
      * Records one outcome for the run, stores what each seat that executed a step
-     * learned, and ends the run's task. Runs under `NonCancellable`, so it completes
+     * learned — only when the run [succeeded][RunStatus.Succeeded] — and ends the
+     * run's task. Runs under `NonCancellable`, so it completes
      * from a `finally` after the scope was cancelled — which is the case it exists
      * for (AMPR-385 row H6; AMPR-282 is the Arc-path bug of the same shape).
      *
@@ -143,23 +150,32 @@ data class RunResult(
 /**
  * How a run ended.
  *
- * Four values. AMPR-385 row H20 proposed a different four (`Succeeded`, `Partial`,
- * `Failed`, `Cancelled`); what was ruled, on 2026-10-11, is only that a step waiting on
- * a person is a full stop, which is [Held] (AMPR-425). Neither the partial status nor
- * the dependent-skipping that would produce it is implemented here. A run with some
- * steps failed is [Failed], as `PlanExecutor` already reports it.
+ * Five values, all from AMPR-385 row H20 as ruled on 2026-10-11: a step waiting on a
+ * person is a full stop, which is [Held] (AMPR-425); a failed step skips only the steps
+ * that depend on it, so a run can finish with some steps done and some not, which is
+ * [Partial] (AMPR-450). A cancelled run is [Failed]; there is no separate cancelled
+ * status.
  *
  * When more than one applies, the first of these wins: cancelled ([Failed]), stopped by
- * the gate ([Stopped]), any step held ([Held]), any step failed ([Failed]), otherwise
- * [Succeeded].
+ * the gate ([Stopped]), any step held ([Held]), no step failed ([Succeeded]), some step
+ * succeeded beside the failures ([Partial]), otherwise [Failed].
+ *
+ * LEARN reads this. The run's outcome is recorded for every status but [Held]; Knowledge
+ * is stored only for [Succeeded].
+ *
+ * Adding a value breaks a consumer's exhaustive `when`, so a new one ships only in a
+ * minor version, named in its release notes.
  */
 @AmpereStableApi
 enum class RunStatus {
 
-    /** Every step that ran succeeded. */
+    /** No step failed. Includes a run whose planner had nothing for it to do. */
     Succeeded,
 
-    /** At least one step failed, or the run could not be driven at all. */
+    /**
+     * At least one step failed and none succeeded — every step was a failure or was
+     * skipped because one it depended on failed — or the run was cancelled.
+     */
     Failed,
 
     /**
@@ -182,6 +198,18 @@ enum class RunStatus {
      * ended — the run is waiting, not finished. Resuming one is not built here.
      */
     Held,
+
+    /**
+     * Some steps succeeded and some failed, and the run was neither stopped, held nor
+     * cancelled (AMPR-450).
+     *
+     * A failed step skips only the steps that depend on it, so the steps that did not
+     * need it still ran; this is the run that did part of its work. Across cycles it is
+     * the whole run that counts: a first cycle that failed and a second that succeeded
+     * is partial. Its outcome is recorded and no Knowledge is stored — what was learned
+     * is a claim about work that finished — and its task ends failed.
+     */
+    Partial,
 }
 
 /** The seats of a run a [RunHost] has open (AMPR-385 row H9). */
