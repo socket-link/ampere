@@ -9,12 +9,16 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import link.socket.ampere.agents.definition.Agent
 import link.socket.ampere.agents.definition.AutonomousAgent
-import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
-import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
+import link.socket.ampere.agents.domain.memory.KnowledgeWithScore
 import link.socket.ampere.agents.domain.outcome.Outcome
+import link.socket.ampere.agents.domain.reasoning.Idea
+import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.propel.GoalCompletion
+import link.socket.ampere.propel.TickPhases
+import link.socket.ampere.propel.runAgentTick
 
 data class FlowResult(
     val completedGoals: List<GoalNode>,
@@ -103,6 +107,13 @@ class FlowPhase(
         clock = clock,
     )
     private val barrierMutex = Mutex()
+
+    /**
+     * What decides that an outcome completes the current goal: the deterministic default a
+     * hosted run asks too (AMPR-442). Not a constructor parameter, because no judgment is
+     * wired yet (AMPR-381 J9).
+     */
+    private val goalCompletion: GoalCompletion = GoalCompletion.AnySuccess
 
     @Volatile
     private var isComplete = false
@@ -196,117 +207,65 @@ class FlowPhase(
         executeAgentTickTyped(agent as AutonomousAgent<*>)
     }
 
-    @Suppress("UNCHECKED_CAST")
+    /**
+     * One agent's turn: the tick itself is [runAgentTick]'s, in `propel/` (AMPR-442, H19).
+     *
+     * What stays here is what makes it the Arc's tick. The task is derived from the Arc's
+     * current goal ([taskForCurrentGoal], AMPR-395). The three calls that block are made
+     * here: the agent's `perceiveState`, `determinePlanForTask` and `executePlan` each
+     * reach a phase service through a `runLLMTo*` lambda wrapped in `runBlockingCompat`,
+     * which `propel/` must not call. What the outcome means for the goal tree is decided
+     * here as well.
+     */
     private suspend fun <S : AgentState> executeAgentTickTyped(agent: AutonomousAgent<S>) {
-        // 0. Take the tick's task from the Arc's current goal (AMPR-395).
-        //
-        // The tick is what connects Charge's goal tree to an agent. Reading the task back out
-        // of the agent's own memory cell instead only ever saw `Task.Blank`: the sole writers
-        // of that cell are the agent's `executePlan`/`runTask`, and nothing on the Arc path
-        // calls either — so the goal the person typed never reached an agent, every tick
-        // planned `Plan.blank`, and no run could complete a goal.
-        //
-        // Derived fresh every tick rather than assigned once in Charge, because the tick is
-        // canonical and `evaluateGoalCompletion` moves [SharedContext.currentGoal] on as goals
-        // complete.
-        val currentTask = taskForCurrentGoal()
+        val outcome = runAgentTick(
+            agent = agent,
+            task = taskForCurrentGoal(),
+            phases = object : TickPhases {
+                override suspend fun perceive(): List<Idea> {
+                    val currentState = agent.getCurrentState()
+                    val previousIdea = currentState.getCurrentMemory().idea
+                    return agent.perceiveState(
+                        currentState = currentState,
+                        previousIdea,
+                    ).ideas
+                }
 
-        // Nothing to work: end the tick here rather than spending a Perceive call on a state
-        // no later phase can act on. A blank task plans `Plan.blank`, which executes to
-        // `Outcome.blank` — not a success — so such a tick can only burn budget.
-        if (currentTask is Task.Blank) {
-            return
-        }
-
-        // Assign it, so the phases that read the agent's state rather than their arguments see
-        // what it is working on: `defaultPerceptionContext` renders the current memory cell's
-        // task, and an unassigned cell asks Perceive to reason about "(none assigned yet)".
-        agent.rememberNewTask(currentTask)
-
-        // Every phase of the tick is entered through the agent's own phase manager (AMPR-441),
-        // so each bracket leaves through the agent's door stamped with its `currentRunId`. The
-        // agent methods wrapped below open no phase of their own; one that did would nest inside
-        // the bracket here, on the same manager, and show in the trace as a duplicate.
-        val phases = agent.phaseSparkManager
-
-        val plan = try {
-            // 1. Perceive - read the agent's current state
-            val perception = phases.withPhase(CognitivePhase.PERCEIVE) {
-                val currentState = agent.getCurrentState()
-                val previousIdea = currentState.getCurrentMemory().idea
-
-                agent.perceiveState(
-                    currentState = currentState,
-                    previousIdea,
-                )
-            }
-
-            // 2. Recall - what the agent's memory holds for this task, asked the agent's way
-            val relevantKnowledge = phases.withPhase(CognitivePhase.RECALL) {
-                agent.recallForTask(currentTask)
-            }
-
-            // 3. Observe - nothing to read yet; see `observe`
-            observe(phases)
-
-            // 4. Plan - construct execution plan
-            phases.withPhase(CognitivePhase.PLAN) {
-                agent.determinePlanForTask(
-                    task = currentTask,
+                override suspend fun plan(
+                    task: Task,
+                    ideas: List<Idea>,
+                    relevantKnowledge: List<KnowledgeWithScore>,
+                ): Plan = agent.determinePlanForTask(
+                    task = task,
                     relevantKnowledge = relevantKnowledge,
-                    ideas = perception.ideas.toTypedArray(),
+                    ideas = ideas.toTypedArray(),
                 )
-            }
-        } finally {
-            // Close the assignment out while the cell still holds it, which is the only moment
-            // `finishCurrentTask` can release the `TaskSpark` that `rememberNewTask` pushed:
-            // `executePlan` records each plan step as the current task, so by the time it
-            // returns the cell names a step and the goal's spark would be stranded in the
-            // system prompt for the rest of the run. Execute does not need the assignment in
-            // the cell — `executeTaskWithSpark` pushes and pops a spark per step.
-            agent.finishCurrentTask()
-        }
 
-        // 5. Execute - run the plan
-        val outcome = phases.withPhase(CognitivePhase.EXECUTE) {
-            agent.executePlan(plan)
-        }
+                override suspend fun execute(plan: Plan): Outcome = agent.executePlan(plan)
+            },
+        ) ?: return
 
         // Record outcome in shared context
         sharedContext.recordOutcome(agent.id, outcome)
 
         // Check if this outcome completes the current goal
-        if (outcome is Outcome.Success) {
-            evaluateGoalCompletion()
-        }
+        evaluateGoalCompletion(outcome)
 
-        // 6. Learn is not a step of the tick: `PulsePhase` enters it once per run, not once per
-        // tick. Sync happens after this method via syncAtBarrier().
-    }
-
-    /**
-     * OBSERVE, entered and left with nothing in it (AMPR-441).
-     *
-     * The bracket is here so the trace says the tick passed through the phase: a phase entered
-     * and found empty is a different fact from a phase skipped, and only the first is true of
-     * this tick. What OBSERVE would read has no source on this path yet. F18's OBSERVE runs
-     * Probes over perceived canon, and nothing on the Arc path perceives canon. Nor does an Arc
-     * agent declare Probes of its own: `ArcAgentConfig` carries a role, sparks and a rung floor,
-     * and nothing else. The one driver that runs declared Probes today is a hosted run
-     * (`RosterHostedRun.observe`, over the run's own progress). This bracket is where that work
-     * lands once the Arc path has an input for it. Until then PLAN is given nothing from
-     * OBSERVE, as on every other driver.
-     */
-    private suspend fun observe(phases: PhaseSparkManager<*>) {
-        phases.withPhase(CognitivePhase.OBSERVE) {}
+        // Sync happens after this method via syncAtBarrier().
     }
 
     /**
      * The task this tick hands to each agent: the Arc's current goal node (AMPR-395).
      *
-     * [Task.Blank] for a node with no description, which [executeAgentTickTyped] treats as "end
-     * the tick". A goal already marked complete is deliberately *not* blank: every agent in a
-     * tick gets a turn at the current goal, and completion is evaluated once the tick is over.
+     * [Task.Blank] for a node with no description, which [runAgentTick] treats as "end the
+     * tick". A goal already marked complete is deliberately *not* blank: every agent in a tick
+     * gets a turn at the current goal, and completion is evaluated once the tick is over.
+     *
+     * Derived fresh every tick rather than assigned once in Charge, because the tick is
+     * canonical and [evaluateGoalCompletion] moves [SharedContext.currentGoal] on as goals
+     * complete. Reading the task back out of the agent's own memory cell instead only ever saw
+     * `Task.Blank`: nothing on the Arc path writes that cell, so the goal the person typed
+     * never reached an agent.
      *
      * Handed to the agent two ways, because the phases read it two ways: as the argument
      * `determinePlanForTask` plans from, and through `rememberNewTask` so the Perceive phase's
@@ -326,9 +285,20 @@ class FlowPhase(
         )
     }
 
-    private suspend fun evaluateGoalCompletion() {
-        // Simple heuristic: mark current goal as complete on any success
-        // In a real implementation, this would use more sophisticated criteria
+    /**
+     * Asks [goalCompletion] whether [outcome] completes the current goal. A yes marks the
+     * goal complete and moves on to the next incomplete one.
+     *
+     * The question is the one a roster-hosted run asks after each executed cycle, and it
+     * is answered by the same function (AMPR-442, H19). Its default is the rule this
+     * method used to inline, "complete on any success". AMPR-381 J9 replaces that default
+     * with a measured judgment.
+     */
+    private suspend fun evaluateGoalCompletion(outcome: Outcome) {
+        if (!goalCompletion.isComplete(outcome)) {
+            return
+        }
+
         val goal = sharedContext.currentGoal
         val newlyCompleted = goal !in sharedContext.completedGoals
         sharedContext.markGoalComplete(goal)

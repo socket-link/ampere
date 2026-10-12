@@ -62,6 +62,8 @@ import link.socket.ampere.util.logWith
  * decides whether to continue ([assess], AMPR-421). Every answer is recorded and none
  * is read: the loop, [currentStatus] and LEARN are the same with a judgment as without
  * one, which is the whole of what makes the question affordable to ask this early.
+ * The same goes for the deterministic completion answer each executed cycle is given
+ * by [GoalCompletion], the function the Arc's tick asks (AMPR-442).
  *
  * Every phase is bracketed on the host seat's door, and a step's work is bracketed
  * again on the seat that did it — so a run's EXECUTE is one span in the trace with the
@@ -123,6 +125,27 @@ internal class RosterHostedRun(
     private var settled: RunResult? = null
     private var closed: Boolean = false
     private var shownExternal: Boolean = false
+
+    /**
+     * What decides that the goal is complete. It is the same function, with the same
+     * default, that `FlowPhase` asks after each agent's tick (AMPR-442, H19).
+     */
+    private val goalCompletion: GoalCompletion = GoalCompletion.AnySuccess
+    private val completions = mutableListOf<Boolean>()
+
+    /**
+     * [goalCompletion]'s answer for each cycle that executed something, in cycle order
+     * (AMPR-442).
+     *
+     * Recorded and never read. Nothing in the run consults it: not the loop, not
+     * [currentStatus], not LEARN, and not [RunResult]. A run ending on its own judgment
+     * of completion is behaviour H19 does not decide. It is not published either, so the
+     * run's event stream is what it was. It exists so both drivers can be shown giving
+     * the same answer to the same outcome, and so the seam AMPR-381 J9 replaces is on the
+     * path a hosted run runs.
+     */
+    internal val goalCompletionAnswers: List<Boolean>
+        get() = completions.toList()
 
     override val plan: Plan
         get() = gatedPlan
@@ -375,6 +398,9 @@ internal class RosterHostedRun(
         while (true) {
             if (stoppedAt == null && gatedPlan.tasks.isNotEmpty()) {
                 runCycle(gatedPlan)
+                // The Arc's completion question, asked of this cycle's outcome and
+                // recorded. Nothing below reads the answer.
+                completions += goalCompletion.isComplete(lastPlanOutcome)
                 // A held cycle is not asked whether the goal is met: it is waiting, and
                 // the run has already decided that nothing follows it.
                 if (heldAt == null) assess()
@@ -421,9 +447,10 @@ internal class RosterHostedRun(
      * `PlanExecutor` the failure as non-critical, and skips each later step that
      * depends on it — so a failure costs exactly the steps that needed its output.
      *
-     * Dispatch itself goes through `SparkBasedAgent.executePlanStep`, the same entry
-     * the Arc path's Execute uses. That is what keeps one definition of what executing
-     * a step means: strict tool-id routing against the seat's spark-narrowed tool set
+     * Dispatch itself goes through [dispatchPlanStep], the same function the Arc path's
+     * Execute reaches through `SparkBasedAgent.executePlanStep` (AMPR-442). That is what
+     * keeps one definition of what executing a step means: the Breaker's admission
+     * (AMPR-440), strict tool-id routing against the seat's spark-narrowed tool set
      * (AMPR-400), a tool-less step carried out as that seat's own model call
      * (AMPR-407), the earlier steps' results on the request (AMPR-408, AMPR-412), and
      * a step's inline arguments settling the call without a parameter model call
@@ -630,7 +657,8 @@ internal class RosterHostedRun(
         aboutToShow(priorResults)
         val result = try {
             seat.phases.withPhase(CognitivePhase.EXECUTE, runId) {
-                seat.agent.executePlanStep(
+                dispatchPlanStep(
+                    agent = seat.agent,
                     step = step,
                     parentTask = goal,
                     priorResults = priorResults,

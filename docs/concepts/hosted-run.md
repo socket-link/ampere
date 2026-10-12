@@ -86,10 +86,14 @@ that loop, moved into Ampere, so the consumer can delete its copy.
 8. **A seat runs only the tools its role declares**, intersected with the run's
    `tools`. Each reaches the seat under the seat-namespaced id `<seat>/<tool>`
    (`SeatTool`), which is the id the planner is offered and the id dispatch resolves.
-9. **One loop.** EXECUTE dispatches every step through
-   `SparkBasedAgent.executePlanStep` — the same entry the Arc path uses — so tool
-   narrowing, reasoning steps, prior results and inline arguments have one definition.
-   There is no second planner.
+9. **One loop: the run's step and completion paths are the Arc's** (AMPR-442, row H19).
+   EXECUTE dispatches every step through `dispatchPlanStep` (`propel/StepDispatch.kt`),
+   the function the Arc path reaches through `SparkBasedAgent.executePlanStep`. Tool
+   narrowing, the Breaker's admission, reasoning steps, prior results and inline
+   arguments therefore have one definition. After each cycle that executed something,
+   the run asks `GoalCompletion` (`propel/GoalCompletion.kt`) whether that cycle's
+   outcome completes the goal. That is the same function, with the same deterministic
+   default, that `FlowPhase` asks after each agent's tick. There is no second planner.
 10. **A non-code agent is first class.** No `CodeState`, no project directory, no
     workspace required.
 11. **A judgment asked by the run is recorded and never read** (AMPR-421). A cycle
@@ -109,7 +113,7 @@ that loop, moved into Ampere, so the consumer can delete its copy.
 13. **A seat without grants is denied** (AMPR-423, row H26). A tool that declares a
     `plugManifest` is checked against the `UserGrants` its seat's
     `HostedAgent.userGrants` returns, asked on every dispatch — on a plan step by the
-    seat's Breaker at `executePlanStep` and again by its engine (AMPR-440). A seat whose provider is
+    seat's Breaker in `dispatchPlanStep` and again by its engine (AMPR-440). A seat whose provider is
     null runs on the engine's own, which grants nothing — so every permission its
     Plug-backed tools require is refused. Nothing in `propel/` defaults a seat to
     allowed, lends one seat another's provider, or caches what a provider answered.
@@ -158,7 +162,7 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     When a step fails, every step that depends on it, directly or through another
     skipped step, ends `StepOutcome.Skipped("depends on failed step <id>")` naming the
     step that actually failed, and every independent step still runs. The run does this
-    in its own `dispatch`: `executePlanStep` reports every failure as critical, so the run
+    in its own `dispatch`: `dispatchPlanStep` reports every failure as critical, so the run
     hands `PlanExecutor` the failure as non-critical and skips the dependents itself — the
     critical-failure stop and the hold stop in `PlanExecutor` are untouched, and so is the
     Arc path. A thrown step is a failed step like any other. Three failures stay
@@ -192,7 +196,7 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     run that recalled nothing, leaves it down — no model was shown what it read.
 19. **A quota is a Hard rule, read from the record** (AMPR-445, F14). `RunPolicy.quotas`
     (`RunQuotas`: `tokens`, `wallClock`, `steps`, each optional, none by default) becomes
-    one Hard `Rule.Quota` per quota set, which `dispatch` hands `executePlanStep` as the
+    one Hard `Rule.Quota` per quota set, which `dispatch` hands `dispatchPlanStep` as the
     run's rules; the seat's Breaker admits every step against them — a reasoning step
     before its model call as well as a tool step before its tool. The spend is read from
     the events persisted under the run id, through the seat's door, at each admission:
@@ -221,6 +225,16 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     decode is announced once as `StoreRowUndecodableEvent` (`HELD_RUN_STORE`), never
     silently dropped. **Nothing writes or reads the store yet** — the run that records
     itself on holding and the resume that claims it are the next Wave 5 ticket.
+21. **The run's completion answer is recorded and never read** (AMPR-442, row H19). One
+    `GoalCompletion` answer per executed cycle, in cycle order, held on the run
+    (`RosterHostedRun.goalCompletionAnswers`). The default is `AnySuccess`, so a cycle
+    whose plan walk settled to a success answers yes. Nothing consults the answer: not
+    the loop, not `RunResult`, not LEARN. It is not published, so the event stream is
+    what it was. A run ending because it judged its goal complete is behaviour H19 did
+    not decide, so a yes on the first of two cycles still runs the second. The answer is
+    asked beside the record-only goal question of invariant 11, not instead of it. That
+    question is a decision call and is opt-in; this one is deterministic and always
+    asked.
 
 ## How it composes
 
@@ -383,8 +397,8 @@ logged, or put on an event.
   the same services wrapped in `runBlockingCompat` and a 60 s timeout. A hosted run
   uses `SparkBasedAgent.reasoningUnit`, which is `internal` for exactly this reason:
   the un-bracketed, un-recorded call must not be the easy one.
-- **Re-implementing step dispatch in the run.** `executePlanStep` already enforces
-  strict tool-id routing against the seat's narrowed tool set, carries out a tool-less
+- **Re-implementing step dispatch in the run.** `dispatchPlanStep` already admits the
+  step, enforces strict tool-id routing against the seat's narrowed tool set, carries out a tool-less
   step as that seat's model call, and puts the prior results and inline arguments on
   the request. A second copy is three behaviours to keep in step.
 - **Deriving a seat's planner tool ids from `RoleConfig.tools` instead of from the
@@ -550,9 +564,15 @@ AMPR-385 rows H19–H25 were proposed on 2026-10-09. H21 was recorded ✅ on 202
 and is built — `HostedAgent.upstreamDecisionClient`, with `HostedAgent.questions`,
 `RunPolicy.goalCheck` and `RunQuestions` beside it (AMPR-421), and H20 was ruled the
 same day (above). H24 was recorded ✅ on 2026-10-11 and is built (AMPR-453, invariant
-18). The rest carry **no verdict**, so none of them is built: the shared tick functions and judgment seams
-(H19), per-seat memory (H22 — AMPR-417 added the `holder` column, but seats still write
-PUBLIC), the F19–F21 reconciliation (H23), and re-gating a step whose arguments
+18). H19 was recorded ✅ on 2026-10-11 and is built (AMPR-442, invariants 9 and 21):
+step dispatch, goal completion and one agent's tick are shared `propel/` functions. The
+run calls the first two. It does not call `runAgentTick`, because its phases are split
+between `charge` and `execute` and carry seats, a gate and `RecallSource`s that the
+Arc's tick does not have. What H19 deliberately does *not* come with: a run ending on
+its completion answer, and any judgment behind `GoalCompletion` (AMPR-381 J9). The rest
+carry **no verdict**, so none of them is built: per-seat memory (H22 — AMPR-417 added
+the `holder` column, but seats still write PUBLIC), the F19–F21 reconciliation (H23),
+and re-gating a step whose arguments
 changed after approval (H25).
 
 What H24 deliberately does *not* come with: a write gate that tightens on
