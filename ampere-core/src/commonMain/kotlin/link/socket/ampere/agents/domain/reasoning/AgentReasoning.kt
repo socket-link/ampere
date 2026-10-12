@@ -202,6 +202,13 @@ class AgentReasoning private constructor(
      *   before this parameter existed.
      * @param cycle which cycle of [task] this plan is for, counting from 1 (AMPR-424). Cycle 2
      *   and later prefix every step id with `c<cycle>-` so no two steps of one run share one.
+     * @param availableTools the tools the planner is shown — their descriptions, their
+     *   argument schemas, and so which steps may carry arguments inline. Null, the default,
+     *   is this unit's own tool set, which is right for an agent planning its own work. A
+     *   caller planning over [seats] whose tools are other agents' passes every seat's tools
+     *   here: the planner reads a tool's description and schema off these objects, and a
+     *   seat's tool missing from them is listed with no description, offered no schema, and
+     *   has its inline arguments dropped (AMPR-454).
      */
     suspend fun generatePlan(
         task: Task,
@@ -210,6 +217,7 @@ class AgentReasoning private constructor(
         seats: List<PlanSeat> = emptyList(),
         priorResults: List<StepOutcome> = emptyList(),
         cycle: Int = 1,
+        availableTools: Set<Tool<*>>? = null,
     ): Plan {
         // Use mock response if available
         mockResponses?.planGenerator?.let { generator ->
@@ -220,7 +228,7 @@ class AgentReasoning private constructor(
             task = task,
             ideas = ideas,
             agentRole = settings.agentRole,
-            availableTools = settings.availableTools(),
+            availableTools = availableTools ?: settings.availableTools(),
             seats = seats,
             relevantKnowledge = relevantKnowledge,
             taskFactory = settings.taskFactory,

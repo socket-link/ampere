@@ -1,10 +1,16 @@
 package link.socket.ampere.agents.execution
 
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
@@ -30,6 +36,7 @@ import link.socket.ampere.agents.execution.request.withExecutorId
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.McpTool
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.agents.tools.mcp.McpCallArguments
 import link.socket.ampere.agents.tools.mcp.McpToolExecutor
 import link.socket.ampere.agents.tools.mcp.ServerManager
 import link.socket.ampere.plug.PlugManifest
@@ -51,7 +58,8 @@ import link.socket.ampere.plug.permission.UserGrants
  * 2. Use a ParameterStrategy to build tool-specific prompts
  * 3. Call LLM to generate parameters
  * 4. Enrich the execution request with generated parameters
- * 5. Execute via the executor
+ * 5. Execute via the executor — once a [PreDispatchCheck] in the caller's coroutine
+ *    context, if there is one, has let the final parameters through (AMPR-454)
  * 6. Record the outcome in episodic memory, when a store is wired and the tool had
  *    something to report
  * 7. Return the execution outcome
@@ -365,6 +373,11 @@ class ToolExecutionEngine(
      * authoritative; the arguments are what enrichment produced, so [enrichedRequest]'s copy
      * is. Re-applying the original's would overwrite a [SchemaParameterStrategy]'s generated
      * arguments with the null the agent dispatched with (AMPR-411).
+     *
+     * Being the single funnel also makes this the one place a call's parameters are final
+     * and the tool has not yet run, so it is where a [PreDispatchCheck] is consulted
+     * (AMPR-454): after the re-stamping, before the tool-event pair opens. A refused call
+     * therefore has no pair, like a permission-denied one.
      */
     private suspend fun executeViaExecutor(
         tool: Tool<*>,
@@ -386,6 +399,7 @@ class ToolExecutionEngine(
             // prompt and then drops them when it rebuilds the request, so a tool
             // that wants to see what came before it gets them back here.
             .withPriorResults(originalRequest.priorResults)
+        preDispatchRefusal(tool, runScopedRequest, startTime, originalRequest)?.let { return it }
         val dispatchRunId = runScopedRequest.runId
         val invocationId = generateUUID("tool-invocation", tool.id, actorId)
         val dispatchedAt = Clock.System.now()
@@ -394,6 +408,71 @@ class ToolExecutionEngine(
         publishToolCompleted(tool, invocationId, dispatchedAt, outcome, dispatchRunId, performer)
         return outcome
     }
+
+    /**
+     * The refusal of the [PreDispatchCheck] this call runs under, or null to dispatch it.
+     *
+     * Null with no check in the coroutine context, which is every caller except a hosted
+     * run's step: nothing else installs one, so nothing else changes. A check that throws
+     * refuses — a gate that could not answer has not approved anything. A check that had
+     * to ask its gate again may have waited on a person for a long time, so the plug
+     * permissions are read once more before the call goes: consent withdrawn while the
+     * gate was deciding still refuses it.
+     */
+    private suspend fun preDispatchRefusal(
+        tool: Tool<*>,
+        runScopedRequest: ExecutionRequest<*>,
+        startTime: Instant,
+        originalRequest: ExecutionRequest<*>,
+    ): ExecutionOutcome? {
+        val check = currentCoroutineContext()[PreDispatchCheck] ?: return null
+        val verdict = try {
+            check.review(tool, dispatchArgumentsOf(tool, runScopedRequest))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            PreDispatchVerdict.Refuse(
+                "the call could not be reviewed before dispatch: ${e::class.simpleName}: ${e.message}",
+            )
+        }
+        return when (verdict) {
+            is PreDispatchVerdict.Refuse -> createFailure(
+                tool = tool,
+                request = originalRequest,
+                startTime = startTime,
+                message = "Tool '${tool.id}' was not dispatched: ${verdict.reason}",
+            )
+            is PreDispatchVerdict.Proceed ->
+                if (verdict.reviewed) checkPlugPermissions(tool, originalRequest, startTime) else null
+        }
+    }
+
+    /**
+     * What [tool] is about to receive, as a [PreDispatchCheck] is shown it.
+     *
+     * - An [McpTool] receives the `tools/call` envelope [McpCallArguments] derives from the
+     *   request — not [ExecutionRequest.arguments], which the MCP path does not read — so
+     *   that envelope is what it is shown.
+     * - A [FunctionTool] with no hand-written strategy receives [ExecutionRequest.arguments]
+     *   as the request now carries them: inline, settled against its schema, generated by a
+     *   [SchemaParameterStrategy], or as dispatched.
+     * - A [FunctionTool] with a hand-written [ParameterStrategy] may read its parameters off
+     *   the [ExecutionContext] subtype the strategy promoted the request into, which no
+     *   argument value describes. It is shown what [ExecutionRequest.arguments] holds and
+     *   marked not [visible][DispatchArguments.visible], so a check cannot mistake it for an
+     *   unchanged call.
+     */
+    private fun dispatchArgumentsOf(tool: Tool<*>, request: ExecutionRequest<*>): DispatchArguments =
+        when (tool) {
+            is McpTool -> DispatchArguments(arguments = McpCallArguments.forRequest(request), visible = true)
+            is FunctionTool<*> -> {
+                val strategy = tool.parameterStrategy ?: strategies[tool.id]
+                DispatchArguments(
+                    arguments = request.arguments ?: JsonNull,
+                    visible = strategy == null || strategy is SchemaParameterStrategy,
+                )
+            }
+        }
 
     /**
      * The executor call itself, with every failure mode turned into an [ExecutionOutcome]
@@ -749,6 +828,56 @@ class ToolExecutionEngine(
          */
         const val MCP_EXECUTOR_ID: ExecutorId = McpExecutor.DEFAULT_ID
     }
+}
+
+/**
+ * A last look at a tool call before [ToolExecutionEngine] dispatches it (AMPR-454).
+ *
+ * Carried in the coroutine context rather than on the engine or the request, because the
+ * caller that owns the decision — a hosted run, holding what its plan gate approved for one
+ * step — is several layers above both: the engine is built once per agent, and the request
+ * is built and rebuilt below the run. The engine reads it at its dispatch funnel, where the
+ * parameters are final, and nowhere else.
+ *
+ * Absent on every path that does not install one, and nothing but a hosted run's step does,
+ * so the engine dispatches exactly as before everywhere else. Internal: a check is a gate's
+ * enforcement, and only the run that holds the gate's approval may install one.
+ */
+internal abstract class PreDispatchCheck : AbstractCoroutineContextElement(PreDispatchCheck) {
+
+    /** Whether [tool] may be dispatched with [call]. Suspends for as long as deciding takes. */
+    abstract suspend fun review(tool: Tool<*>, call: DispatchArguments): PreDispatchVerdict
+
+    /** The context key a check is read back under. */
+    companion object Key : CoroutineContext.Key<PreDispatchCheck>
+}
+
+/**
+ * The arguments a tool is about to receive, as the engine can show them.
+ *
+ * @property arguments The value the tool will read, or [JsonNull] when it carries none.
+ * @property visible False when the tool's parameters may live somewhere [arguments] does
+ *   not show — a hand-written strategy's typed context. A check must treat such a call as
+ *   changed: it cannot tell that it is not.
+ */
+internal data class DispatchArguments(
+    val arguments: JsonElement,
+    val visible: Boolean,
+)
+
+/** What a [PreDispatchCheck] decided about one call. */
+internal sealed interface PreDispatchVerdict {
+
+    /**
+     * Dispatch it.
+     *
+     * @property reviewed Whether the check had to ask someone first. A reviewed call has its
+     *   plug permissions read again, since the asking may have taken a long time.
+     */
+    data class Proceed(val reviewed: Boolean) : PreDispatchVerdict
+
+    /** Do not dispatch it; the call fails with [reason] and the tool never runs. */
+    data class Refuse(val reason: String) : PreDispatchVerdict
 }
 
 /**
