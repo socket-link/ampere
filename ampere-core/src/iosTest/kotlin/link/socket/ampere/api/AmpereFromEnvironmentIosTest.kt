@@ -17,14 +17,18 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepository
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
+import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepositoryImpl
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.environment.EnvironmentService
+import link.socket.ampere.agents.execution.request.ExecutionContext
+import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.data.createIosDriver
 import link.socket.ampere.db.Database
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
@@ -34,8 +38,10 @@ import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.memory.memoryStoreOf
 import link.socket.ampere.plug.permission.UserGrants
+import link.socket.ampere.propel.HoldResolution
 import link.socket.ampere.propel.HostedAgent
 import link.socket.ampere.propel.RunPolicy
+import link.socket.ampere.propel.RunStatus
 import link.socket.ampere.roster.PromptRef
 import link.socket.ampere.roster.RoleConfig
 import link.socket.ampere.roster.RosterConfig
@@ -58,7 +64,8 @@ import link.socket.ampere.roster.RosterConfig
  * plain-id factory (`RoleConfig.of`, `RosterConfig.of`, `HostedAgent.of`,
  * `RunHost.openSeats`). This test builds a run *only* through those, so a parameter that
  * loses its factory fails here rather than in the consumer's Xcode build. The seat's
- * consent grants and the caller-chosen run id (AMPR-423) go through the same two calls.
+ * consent grants and the caller-chosen run id (AMPR-423) go through the same two calls, and
+ * so does a held run's resume (AMPR-431): `RunHost.resumeSeats` and `HoldResolution`.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AmpereFromEnvironmentIosTest {
@@ -182,7 +189,105 @@ class AmpereFromEnvironmentIosTest {
         instance.close()
     }
 
+    @Test
+    fun `a run held on iOS is recorded and resumed through resumeSeats`() = runBlocking {
+        environmentService.start()
+
+        val store = memoryStoreOf(
+            knowledge = KnowledgeRepositoryImpl(database),
+            outcomes = OutcomeMemoryRepositoryImpl(database),
+        )
+        // The database is what the instance's run host records held runs in (AMPR-431).
+        val instance = Ampere.fromEnvironment(
+            environmentService = environmentService,
+            knowledgeRepository = knowledgeRepository,
+            workspace = "/tmp/ampr300-test-workspace",
+            memoryStore = store,
+            database = database,
+        )
+        val runs = assertNotNull(instance.runs)
+
+        var holds = 0
+        val holdingTool = FunctionTool<ExecutionContext.NoChanges>(
+            id = HOLDING_TOOL,
+            name = "Send the reply",
+            description = "acts once a person approves",
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
+            executionFunction = { request ->
+                holds++
+                val now = kotlinx.datetime.Clock.System.now()
+                ExecutionOutcome.Held(
+                    executorId = request.context.executorId,
+                    ticketId = request.context.ticket.id,
+                    taskId = request.context.task.id,
+                    executionStartTimestamp = now,
+                    executionEndTimestamp = now,
+                    reason = "waiting for the owner to approve",
+                )
+            },
+        )
+
+        // Everything below goes through a plain-id factory, as in the run above.
+        val roster = RosterConfig.of(
+            host = HOST_ROLE,
+            roles = listOf(
+                RoleConfig.of(
+                    id = HOST_ROLE,
+                    title = "Host",
+                    instructions = PromptRef(id = "ios-host-prompt", version = 1),
+                    tools = setOf(HOLDING_TOOL),
+                ),
+            ),
+        )
+        val seat = HostedAgent.of(
+            id = "ios-seat-host",
+            role = HOST_ROLE,
+            aiConfiguration = AIConfiguration_Default(
+                provider = AIProvider_Anthropic,
+                model = AIModel_Claude.Sonnet_5,
+            ),
+            upstreamLlmClient = FixedUpstream(HOLDING_PLAN_JSON),
+            charter = "You are the host of this run.",
+            memory = store,
+        )
+        val goal = Task.Step(id = "ios-held-goal", status = TaskStatus.Pending, description = "answer the thread")
+        // The database outlives a test run on the simulator, so the id is fresh each time.
+        val runId = "ios-held-run-${kotlinx.datetime.Clock.System.now().toEpochMilliseconds()}"
+
+        val held = runs.openSeats(
+            roster = roster,
+            seats = listOf(seat),
+            goal = goal,
+            tools = setOf(holdingTool),
+            runId = runId,
+        )
+        val heldResult = held.execute()
+        held.close()
+        assertEquals(RunStatus.Held, heldResult.status)
+        assertTrue(heldResult.resumable, "the hold is recorded in the caller's database")
+        assertTrue(runs.heldRuns().any { it.runId == runId })
+
+        val resumed = runs.resumeSeats(
+            runId = runId,
+            roster = roster,
+            seats = listOf(seat),
+            resolution = HoldResolution.Completed("sent"),
+            tools = setOf(holdingTool),
+        )
+        val result = resumed.execute()
+        resumed.close()
+
+        assertEquals(RunStatus.Succeeded, result.status)
+        assertEquals(runId, result.runId)
+        assertEquals(2, result.stepOutcomes.size, "the held step, settled, and the step after it")
+        assertEquals(1, holds, "the held tool ran once and was not run again")
+        assertTrue(runs.heldRuns().none { it.runId == runId }, "the finished run's record is gone")
+
+        instance.close()
+    }
+
     private companion object {
+        const val HOLDING_TOOL = "send_reply"
         const val HOST_ROLE = "planner"
         const val CALLER_RUN_ID = "ios-caller-run"
 
@@ -193,6 +298,18 @@ class AmpereFromEnvironmentIosTest {
             { "description": "Decide what to do next", "toolToUse": null, "seat": "planner" }
           ],
           "estimatedComplexity": 1,
+          "requiresHumanInput": false
+        }
+        """
+
+        /** A step that holds, then a reasoning step that runs once the hold is settled. */
+        val HOLDING_PLAN_JSON = """
+        {
+          "steps": [
+            { "description": "Send the reply", "toolToUse": "planner/send_reply", "seat": "planner" },
+            { "description": "Note that it went", "toolToUse": null, "seat": "planner" }
+          ],
+          "estimatedComplexity": 2,
           "requiresHumanInput": false
         }
         """

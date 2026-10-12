@@ -100,13 +100,55 @@ class PlanExecutor(
         plan: Plan,
         priorResults: List<StepOutcome>,
         stepExecutor: suspend (Task, StepContext) -> StepResult,
+    ): PlanExecutionResult = execute(
+        plan = plan,
+        priorResults = priorResults,
+        firstStepIndex = 0,
+        totalSteps = plan.tasks.size,
+        earlierStepOutcomes = emptyList(),
+        stepExecutor = stepExecutor,
+    )
+
+    /**
+     * Executes the steps of [plan] that remain of a plan already part-walked (AMPR-431).
+     *
+     * The same walk as the overload above, for a caller that ran the plan's first steps
+     * earlier — a hosted run carrying on after a hold, possibly in another process. A
+     * separate overload rather than defaulted parameters, so a caller passing the step
+     * executor positionally keeps compiling.
+     *
+     * @param plan The steps still to run, as a plan: the approved plan with the steps
+     *   before [firstStepIndex] removed.
+     * @param priorResults As above: everything that happened before [plan]'s first step.
+     * @param firstStepIndex Where [plan]'s first step stood in the plan a person approved,
+     *   counted from 0 (AMPR-431). A hosted run that resumes after a hold walks only the
+     *   steps after the held one, and its `PlanStepStarted.stepIndex` and `totalSteps` are
+     *   those of the approved plan, so a reader of the trace sees step 3 of 5 and not step
+     *   0 of 2.
+     * @param totalSteps How many steps the approved plan has.
+     * @param earlierStepOutcomes What the approved plan's steps before [firstStepIndex]
+     *   ended as, oldest first. Not walked and not published — they have been — but folded
+     *   into the overall outcome beside the steps walked here, so a plan walked in two
+     *   parts settles to the outcome it would have settled to in one. A walk of no steps
+     *   with earlier outcomes folds those alone.
+     * @param stepExecutor Function to execute individual steps
+     * @return PlanExecutionResult with overall outcome and the details of the steps walked
+     *   here — [earlierStepOutcomes] are not repeated in its `stepOutcomes`
+     */
+    suspend fun execute(
+        plan: Plan,
+        priorResults: List<StepOutcome>,
+        firstStepIndex: Int,
+        totalSteps: Int,
+        earlierStepOutcomes: List<StepOutcome>,
+        stepExecutor: suspend (Task, StepContext) -> StepResult,
     ): PlanExecutionResult {
         val startTime = Clock.System.now()
         val stepOutcomes = mutableListOf<StepOutcome>()
         val context = MutableStepContext(priorResults)
 
         // Handle empty or non-task plans
-        if (plan !is Plan.ForTask || plan.tasks.isEmpty()) {
+        if (plan !is Plan.ForTask || (plan.tasks.isEmpty() && earlierStepOutcomes.isEmpty())) {
             val taskId = if (plan is Plan.ForTask) plan.task.id else ""
             return PlanExecutionResult(
                 outcome = ExecutionOutcome.NoChanges.Success(
@@ -124,9 +166,10 @@ class PlanExecutor(
         }
 
         // Execute steps sequentially
-        for ((index, step) in plan.tasks.withIndex()) {
+        for ((offset, step) in plan.tasks.withIndex()) {
+            val index = firstStepIndex + offset
             val stepStartTime = Clock.System.now()
-            publishStepStarted(plan, step, index, stepStartTime)
+            publishStepStarted(plan, step, index, totalSteps, stepStartTime)
 
             val stepResult = try {
                 stepExecutor(step, context.toImmutable())
@@ -145,7 +188,7 @@ class PlanExecutor(
                 endTimestamp = Clock.System.now(),
             )
             stepOutcomes.add(stepOutcome)
-            publishStepCompleted(plan, step, index, stepOutcome)
+            publishStepCompleted(plan, step, index, totalSteps, stepOutcome)
 
             // AMPR-408: the next step's executor — and so the parameter prompt of
             // whatever tool it nominates — sees what this one produced.
@@ -171,7 +214,7 @@ class PlanExecutor(
                 // Mark remaining steps as skipped. A skip inherits the origin of the step
                 // that caused it: a held reason is the tool's own text and is quoted into
                 // the skip's (AMPR-453).
-                for (remainingIndex in (index + 1) until plan.tasks.size) {
+                for (remainingIndex in (offset + 1) until plan.tasks.size) {
                     val remainingStep = plan.tasks[remainingIndex]
                     stepOutcomes.add(
                         StepOutcome.Skipped(
@@ -189,13 +232,14 @@ class PlanExecutor(
 
         // Build overall outcome
         val endTime = Clock.System.now()
-        val summary = buildSummary(stepOutcomes, context)
-        val hasFailures = stepOutcomes.any { it is StepOutcome.Failure }
-        val heldStep = stepOutcomes.firstNotNullOfOrNull { it as? StepOutcome.Held }
+        val folded = earlierStepOutcomes + stepOutcomes
+        val summary = buildSummary(folded, context)
+        val hasFailures = folded.any { it is StepOutcome.Failure }
+        val heldStep = folded.firstNotNullOfOrNull { it as? StepOutcome.Held }
         // AMPR-453: the fold's text quotes its steps — the summary lists their errors and
         // held reasons, and a one-step plan's message becomes the step's own report — so it
         // is the run's own only when every step was.
-        val origin = originOfAll(stepOutcomes.map { it.origin })
+        val origin = originOfAll(folded.map { it.origin })
 
         // A hold outranks an earlier non-critical failure: it is why the walk ended.
         val overallOutcome = when {
@@ -245,6 +289,7 @@ class PlanExecutor(
         plan: Plan.ForTask,
         step: Task,
         index: Int,
+        totalSteps: Int,
         startedAt: Instant,
     ) {
         val door = doorFor(step) ?: return
@@ -255,7 +300,7 @@ class PlanExecutor(
                 stepId = step.id,
                 stepDescription = step.describe(),
                 stepIndex = index,
-                totalSteps = plan.tasks.size,
+                totalSteps = totalSteps,
                 eventSource = EventSource.Agent(door.agentId),
                 timestamp = startedAt,
                 runId = runId,
@@ -268,11 +313,16 @@ class PlanExecutor(
      * The step has run and its outcome is known. The description comes off the outcome
      * rather than the task: that is what the step executor reported having done, where
      * `Task.describe` is only what the plan asked for.
+     *
+     * Internal rather than private for the one step whose outcome is known without a walk:
+     * a held step a hosted run resumes, whose result the consumer reported (AMPR-431). Its
+     * `PlanStepStarted` went out before it held; this is the completion it was owed.
      */
-    private suspend fun publishStepCompleted(
+    internal suspend fun publishStepCompleted(
         plan: Plan.ForTask,
         step: Task,
         index: Int,
+        totalSteps: Int,
         outcome: StepOutcome,
     ) {
         val door = doorFor(step) ?: return
@@ -283,7 +333,7 @@ class PlanExecutor(
                 stepId = step.id,
                 stepDescription = outcome.stepDescription,
                 stepIndex = index,
-                totalSteps = plan.tasks.size,
+                totalSteps = totalSteps,
                 outcome = outcome,
                 eventSource = EventSource.Agent(door.agentId),
                 timestamp = Clock.System.now(),

@@ -13,7 +13,7 @@ tracked_sources:
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/pause/PauseStore.sq
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/HumanInteractionEvent.kt
 related: [Emission, AgentPause, MessageEvent, EventSerialBus, CancellationAddress]
-last_verified: 2026-10-11
+last_verified: 2026-10-12
 ---
 
 # CHI (Computer-Human Interface)
@@ -154,6 +154,14 @@ The three remaining uncoordinated CHI paths:
 - **A pause store holds the decision, never the coroutine ([AMPR-274](https://linear.app/miley/issue/AMPR-274) Contract 4, D4).**
   `PauseStore.resolve` returning means the answer is committed and nothing more. Resume is a fresh
   perceive over the settled row; nothing in the store may start, unblock or notify a suspended loop.
+  **D4 amended for hosted runs (Miley, 2026-10-11, on AMPR-274; built by AMPR-431):** "for a hosted
+  run, the approved plan is part of the durable committed state. On resume the steps after the held
+  one run as planned, with the held action's result in hand. There is no fresh Perceive and no new
+  plan for the cycle that was held." What does not change: "nothing is kept alive in memory. The
+  process that held may die; resume is a fresh call that rebuilds the run from a stored record, and
+  the store holds the decision, never the coroutine. A hold still settles exactly once. Consent is
+  still checked at every tool call, and the hold's expiry bounds how old a resumed plan can be." The
+  record is `HeldRunStore`'s, and nothing in it starts or notifies a run either.
 - **Expiry is an outcome written down, not a silence.** A pause past its deadline settles to
   `AgentPauseResponse.TimedOut` in the table — by the `expire` sweep, or by the first `get` /
   `listOpen` that finds it due. A reader can always tell "expired" from "still open"; an

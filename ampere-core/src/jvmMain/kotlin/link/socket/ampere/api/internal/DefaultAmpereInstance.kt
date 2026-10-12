@@ -33,6 +33,7 @@ import link.socket.ampere.dsl.events.Escalated
 import link.socket.ampere.dsl.events.TeamEventAdapter
 import link.socket.ampere.memory.memoryStoreOf
 import link.socket.ampere.propel.RunHost
+import link.socket.ampere.propel.SqlDelightHeldRunStore
 import link.socket.ampere.propel.rosterRunHost
 import link.socket.ampere.subject.SqlDelightRelationshipStore
 import link.socket.ampere.subject.SqlDelightSubjectStore
@@ -93,6 +94,9 @@ internal class DefaultAmpereInstance(
     override val runs: RunHost = rosterRunHost(
         createEventApi = environmentService::createEventApi,
         agentScope = scope,
+        // AMPR-431: held runs are recorded in this instance's own database, so one can be
+        // resumed by a later instance over the same file.
+        heldRuns = SqlDelightHeldRunStore(database, eventApi = sdkEventApi),
     )
 
     override val agents: AgentService = DefaultAgentService(

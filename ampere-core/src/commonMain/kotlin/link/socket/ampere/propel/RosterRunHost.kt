@@ -45,6 +45,7 @@ internal class RosterRunHost(
     private val createEventApi: (AgentId) -> AgentEventApi,
     private val agentScope: CoroutineScope,
     private val executor: Executor?,
+    private val heldRuns: HeldRunStore? = null,
 ) : RunHost {
 
     /**
@@ -76,21 +77,14 @@ internal class RosterRunHost(
         register(id)
 
         val run = try {
-            val built = seats.mapValues { (role, descriptor) ->
-                buildSeat(
-                    runId = id,
-                    descriptor = descriptor,
-                    config = requireNotNull(roster.byId(role)) { "role '${role.value}' is not on the roster" },
-                    tools = tools,
-                )
-            }
             RosterHostedRun(
                 runId = id,
                 roster = roster,
-                seats = built,
+                seats = buildSeats(id, roster, seats, tools),
                 goal = goal,
                 policy = policy,
                 onClosed = ::forget,
+                heldRuns = heldRuns,
             )
         } catch (throwable: Throwable) {
             release(id, holder = null)
@@ -110,8 +104,97 @@ internal class RosterRunHost(
         }
     }
 
+    /**
+     * The resume of a held run (AMPR-431). Everything that can refuse it does so before the
+     * claim — the same validation [open] runs, the store, the id this host has open, and
+     * whether the roster's host is the one the run held under — and nothing is built or
+     * published until the claim has landed. A refusal after the claim cannot happen short
+     * of a record replaced between the read and the claim; that one leaves the record
+     * claimed, as an interrupted resume does.
+     */
+    override suspend fun resume(
+        runId: RunId,
+        roster: Roster,
+        seats: Map<RoleId, HostedAgent>,
+        resolution: HoldResolution,
+        tools: Set<Tool<*>>,
+        policy: RunPolicy,
+    ): HostedRun {
+        validate(roster, seats, policy, runId)
+        val store = heldRuns ?: throw HeldRunUnavailableException(runId, HeldRunUnavailableException.Why.NoStore)
+        if (!tryRegister(runId)) throw HeldRunUnavailableException(runId, HeldRunUnavailableException.Why.StillOpen)
+
+        val record = try {
+            // Read first, so a roster that could not carry the run on is refused while the
+            // record is still there for one that can. Claimed second: from here it is ours.
+            val stored = store.get(runId).getOrThrow()
+                ?: throw HeldRunUnavailableException(runId, HeldRunUnavailableException.Why.NotHeld)
+            requireHost(stored, roster)
+            when (val claim = store.claim(runId).getOrThrow()) {
+                is HeldRunClaim.Claimed -> claim.run.also { requireHost(it, roster) }
+                HeldRunClaim.NotHeld ->
+                    throw HeldRunUnavailableException(runId, HeldRunUnavailableException.Why.NotHeld)
+                is HeldRunClaim.AlreadyClaimed ->
+                    throw HeldRunUnavailableException(runId, HeldRunUnavailableException.Why.AlreadyClaimed)
+            }
+        } catch (throwable: Throwable) {
+            release(runId, holder = null)
+            throw throwable
+        }
+
+        val run = try {
+            RosterHostedRun(
+                runId = runId,
+                roster = roster,
+                seats = buildSeats(runId, roster, seats, tools),
+                goal = record.goal,
+                policy = policy,
+                onClosed = ::forget,
+                heldRuns = store,
+            )
+        } catch (throwable: Throwable) {
+            release(runId, holder = null)
+            throw throwable
+        }
+
+        install(run)
+        return try {
+            run.resume(record, resolution)
+            run
+        } catch (throwable: Throwable) {
+            forget(run)
+            throw throwable
+        }
+    }
+
+    override suspend fun heldRuns(): List<HeldRunSummary> =
+        heldRuns?.list()?.getOrThrow() ?: emptyList()
+
     override fun openRunSeats(): List<OpenSeat> =
         openRuns.load().values.filterNotNull().flatMap { it.openSeats() }
+
+    /** Refuse a roster whose host is not the role that planned the held run. */
+    private fun requireHost(record: HeldRun, roster: Roster) {
+        require(record.hostRole == roster.host.value) {
+            "run '${record.runId}' held with '${record.hostRole}' as its host, and this roster's " +
+                "host is '${roster.host.value}'; a held run carries on with the plan its own host made"
+        }
+    }
+
+    /** Every seat of a run, built under [runId]. */
+    private fun buildSeats(
+        runId: RunId,
+        roster: Roster,
+        seats: Map<RoleId, HostedAgent>,
+        tools: Set<Tool<*>>,
+    ): Map<RoleId, HostedSeat> = seats.mapValues { (role, descriptor) ->
+        buildSeat(
+            runId = runId,
+            descriptor = descriptor,
+            config = requireNotNull(roster.byId(role)) { "role '${role.value}' is not on the roster" },
+            tools = tools,
+        )
+    }
 
     /**
      * Reserve [runId] for a run about to be built, or refuse it.
@@ -122,13 +205,18 @@ internal class RosterRunHost(
      * host or another process holds.
      */
     private fun register(runId: RunId) {
+        require(tryRegister(runId)) {
+            "the run id '$runId' names a run this host still has open; a run id is " +
+                "accepted again once the run holding it has closed"
+        }
+    }
+
+    /** [register], answering false rather than throwing when [runId] is already open. */
+    private fun tryRegister(runId: RunId): Boolean {
         while (true) {
             val current = openRuns.load()
-            require(runId !in current) {
-                "the run id '$runId' names a run this host still has open; a run id is " +
-                    "accepted again once the run holding it has closed"
-            }
-            if (openRuns.compareAndSet(current, current + (runId to null))) return
+            if (runId in current) return false
+            if (openRuns.compareAndSet(current, current + (runId to null))) return true
         }
     }
 

@@ -108,6 +108,32 @@ never the coroutine:
   no in-memory handle, which is why that id is the whole address.
 - Work continues when something performs a new Perceive, reads the settled row, and acts on it.
 
+#### D4 amended for hosted runs (Miley, 2026-10-11)
+
+Recorded on [AMPR-274](https://linear.app/miley/issue/AMPR-274); built by AMPR-431. A hosted run is
+the one exception to "fresh perceive", and only in what is carried, not in what is kept alive:
+
+> On 2026-10-11 Miley ruled that a hosted run stopped by a held action "must resume where it
+> stopped", and, given the choice between carrying on with the plan that was approved and
+> perceiving and planning the rest afresh, approved carrying on with the plan (AMPR-385 rows H29
+> and H30).
+>
+> What changes: for a hosted run, the approved plan is part of the durable committed state. On
+> resume the steps after the held one run as planned, with the held action's result in hand. There
+> is no fresh Perceive and no new plan for the cycle that was held.
+>
+> What does not change: nothing is kept alive in memory. The process that held may die; resume is a
+> fresh call that rebuilds the run from a stored record, and the store holds the decision, never the
+> coroutine. A hold still settles exactly once. Consent is still checked at every tool call, and the
+> hold's expiry bounds how old a resumed plan can be.
+>
+> Why: a fresh cycle costs two host model calls per resume and can change work the person already
+> approved at the plan gate. A run with several held actions would pay that at each one.
+
+A held hosted run's record is `HeldRunStore`, not this store: this one holds a decision, that one
+holds a run's state, and the two are not unified (see [HostedRun](../concepts/hosted-run.md),
+"Hold and resume"). A `PauseStore` correlation id may be what a held step's `reference` points at.
+
 ### Expiry is an outcome
 
 A pause past its deadline settles durably to `AgentPauseResponse.TimedOut`. `expire()` sweeps every
