@@ -35,6 +35,12 @@ import link.socket.ampere.util.getEnvironmentVariable
  * what it would be with phases off. `AMPERE_PHASE_SPARKS` is a developer override that forces all
  * three on.
  *
+ * Declarative sparks from a [PhaseSparkLibrary] are gated by [declarativeSparks], a value this
+ * manager is constructed with and nothing else (AMPR-455). It used to be a process-wide flag that
+ * `AgentFactory.create` switched on and never off, so building one agent changed what every
+ * other agent's manager did. It defaults off: a manager handed a library but not the gate applies
+ * only the built-in phase spark.
+ *
  * Phase brackets are published through [eventApi] (F1, AMPR-339): every `PhaseEntered` /
  * `PhaseExited` is persisted before it is dispatched, which is what lets a run's phase history
  * be replayed from the store (F18). The api is the owning agent's own door, so the events are
@@ -56,6 +62,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
     private val injectPhaseSparks: Boolean,
     private val activePhases: Set<CognitivePhase>,
     private val library: PhaseSparkLibrary?,
+    private val declarativeSparks: Boolean,
     private val eventApi: AgentEventApi?,
 ) {
     constructor(
@@ -72,6 +79,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
         injectPhaseSparks = injectPhaseSparks,
         activePhases = activePhases,
         library = null,
+        declarativeSparks = false,
         eventApi = eventApi,
     )
 
@@ -225,7 +233,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
     ): List<PhaseSpark> {
         val sparks = mutableListOf<PhaseSpark>(PhaseSpark.forPhase(phase))
         val lib = library
-        if (AmpereSpikeFlags.declarativeSparksEnabled && lib != null) {
+        if (declarativeSparks && lib != null) {
             val context = selectionContext ?: SparkSelectionContext(phase = phase, text = "")
             sparks += runCatching { lib.selectFor(context) }.getOrElse { emptyList() }
         }
@@ -325,14 +333,21 @@ class PhaseSparkManager<S : AgentState> private constructor(
             agent: AutonomousAgent<S>,
             phaseConfig: PhaseSparkConfig? = null,
             eventApi: AgentEventApi? = null,
-        ): PhaseSparkManager<S> = createInternal(agent, phaseConfig, library = null, eventApi = eventApi)
+        ): PhaseSparkManager<S> = createInternal(
+            agent,
+            phaseConfig,
+            library = null,
+            declarativeSparks = false,
+            eventApi = eventApi,
+        )
 
         internal fun <S : AgentState> createWithLibrary(
             agent: AutonomousAgent<S>,
             phaseConfig: PhaseSparkConfig? = null,
             library: PhaseSparkLibrary? = null,
+            declarativeSparks: Boolean = false,
             eventApi: AgentEventApi? = null,
-        ): PhaseSparkManager<S> = createInternal(agent, phaseConfig, library, eventApi)
+        ): PhaseSparkManager<S> = createInternal(agent, phaseConfig, library, declarativeSparks, eventApi)
 
         internal fun <S : AgentState> internalCreate(
             agent: AutonomousAgent<S>,
@@ -341,6 +356,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
             injectPhaseSparks: Boolean = true,
             activePhases: Set<CognitivePhase> = DEFAULT_PHASES,
             library: PhaseSparkLibrary? = null,
+            declarativeSparks: Boolean = false,
             eventApi: AgentEventApi? = null,
         ): PhaseSparkManager<S> = PhaseSparkManager(
             agent = agent,
@@ -349,6 +365,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
             injectPhaseSparks = injectPhaseSparks,
             activePhases = activePhases,
             library = library,
+            declarativeSparks = declarativeSparks,
             eventApi = eventApi,
         )
 
@@ -356,6 +373,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
             agent: AutonomousAgent<S>,
             phaseConfig: PhaseSparkConfig?,
             library: PhaseSparkLibrary?,
+            declarativeSparks: Boolean,
             eventApi: AgentEventApi?,
         ): PhaseSparkManager<S> {
             // The env var is a developer override (AMPR-387): it enables phases and both
@@ -370,6 +388,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
                 injectPhaseSparks = envOverride || (phaseConfig?.injectPhaseSparks ?: true),
                 activePhases = phases,
                 library = library,
+                declarativeSparks = declarativeSparks,
                 eventApi = eventApi,
             )
         }

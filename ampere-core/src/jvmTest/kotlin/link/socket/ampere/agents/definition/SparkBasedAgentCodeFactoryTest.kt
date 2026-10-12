@@ -1,23 +1,31 @@
 package link.socket.ampere.agents.definition
 
+import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
-import link.socket.ampere.agents.domain.cognition.sparks.AmpereSpikeFlags
 import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.cognition.sparks.DefaultPhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkLibrary
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
 import link.socket.ampere.agents.domain.cognition.sparks.SparkSelectionContext
+import link.socket.ampere.agents.environment.EnvironmentService
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.planning.PLAN_STEPS_TOOL_ID
+import link.socket.ampere.db.Database
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModel
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
@@ -183,9 +191,8 @@ class SparkBasedAgentCodeFactoryTest {
             agent = agent,
             enabled = true,
             library = library,
+            declarativeSparks = true,
         )
-        val previousFlag = AmpereSpikeFlags.declarativeSparksEnabled
-        AmpereSpikeFlags.declarativeSparksEnabled = true
         try {
             manager.enterPhase(
                 phase = CognitivePhase.PLAN,
@@ -203,8 +210,68 @@ class SparkBasedAgentCodeFactoryTest {
                     "in the active system prompt, got: $systemPrompt",
             )
         } finally {
-            AmpereSpikeFlags.declarativeSparksEnabled = previousFlag
             manager.cleanup()
+        }
+    }
+
+    /**
+     * AMPR-455: `AgentFactory.create` used to set a process-wide flag that no one cleared, so
+     * building one agent changed what every other agent's manager did. A manager that was handed
+     * a library but not the gate must apply only the built-in phase spark, whatever was built
+     * before it.
+     */
+    @Test
+    fun `AgentFactory create leaves a hand-built manager's declarative gate off`() = runBlocking<Unit> {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        try {
+            Database.Schema.create(driver)
+            val environmentService = EnvironmentService.create(database = Database(driver), scope = scope)
+            val factory = AgentFactory(
+                scope = scope,
+                ticketOrchestrator = environmentService.ticketOrchestrator,
+                workspace = ExecutionWorkspace(baseDirectory = "/tmp/ampr455-factory-gate-workspace"),
+                createEventApi = environmentService::createEventApi,
+            )
+            // Attaches the bundled library to this agent, which is all the factory ever did to the process.
+            factory.create<SparkBasedAgent<*>>(AgentType.CODE)
+
+            val library = DefaultPhaseSparkLibrary.load()
+            val handBuilt = SparkBasedAgent.Code(
+                sparkRegistry = library,
+                agentId = "code-factory-test-hand-built",
+                aiConfiguration = FakeAIConfiguration(),
+            )
+            val manager = PhaseSparkManager.internalCreate(
+                agent = handBuilt,
+                enabled = true,
+                library = library,
+            )
+            val depthBefore = handBuilt.sparkDepth
+            manager.enterPhase(
+                phase = CognitivePhase.PLAN,
+                selectionContext = SparkSelectionContext(
+                    phase = CognitivePhase.PLAN,
+                    // Overlaps the code-agent spark's whenToUse, which the gate-on test above selects.
+                    text = "write code in the workspace to commit changes",
+                ),
+            )
+            try {
+                assertEquals(
+                    1,
+                    handBuilt.sparkDepth - depthBefore,
+                    "only the built-in phase spark should apply, got: ${handBuilt.cognitiveState}",
+                )
+                assertFalse(
+                    handBuilt.cognitiveState.contains("[PhaseSpark:"),
+                    "no declarative spark should apply, got: ${handBuilt.cognitiveState}",
+                )
+            } finally {
+                manager.cleanup()
+            }
+        } finally {
+            scope.cancel()
+            driver.close()
         }
     }
 }
