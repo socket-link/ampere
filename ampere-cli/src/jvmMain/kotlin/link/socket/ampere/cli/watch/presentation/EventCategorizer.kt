@@ -182,7 +182,10 @@ object EventCategorizer {
         // A dead supervisor's journal settled by a reconciliation pass: the same
         // "nothing is owed" fact, established after the fact rather than on exit.
         is SupervisorEvent.JournalReconciled,
-        is BenchEvent.BenchRunCompleted -> EventSignificance.SIGNIFICANT
+        is BenchEvent.BenchRunCompleted,
+        // A hosted run cut its plan to fit its step cap (AMPR-452): the run will do less
+        // than its planner asked for, which whoever quoted for it should see.
+        is PlanEvent.PlanTruncated -> EventSignificance.SIGNIFICANT
 
         // A rung floor with no satisfying model is a terminal routing failure:
         // the call cannot proceed, so it warrants immediate human awareness.

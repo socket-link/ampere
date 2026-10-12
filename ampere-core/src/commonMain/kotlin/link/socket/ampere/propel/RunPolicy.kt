@@ -35,6 +35,18 @@ import link.socket.ampere.memory.RecallSource
  * @property quotas The run's token, wall-clock and step ceilings (AMPR-445). Each one set
  *   is a Hard rule the Breaker admits every step against, read from the run's persisted
  *   events. The default sets none. See [RunQuotas].
+ * @property maxStepsPerCycle The most steps one cycle may execute, or null — the
+ *   default — for no cap (AMPR-452, row H20 (c)). Set, it bounds a plan two ways
+ *   before the [planGate] sees it: no more than this many steps, and no step naming a
+ *   tool that no seat of the run has. A plan that breaks either goes back to the host
+ *   seat's planner **once**, told what was wrong — and that re-plan is a second PLAN
+ *   call on the host seat, **billed** like the first. If the second plan still breaks
+ *   a rule it is cut: steps naming unknown tools are dropped, then the rest is cut to
+ *   the cap, and a `PlanEvent.PlanTruncated` goes on the record before the gate is
+ *   asked. A plan cut to nothing is not sent to the gate and ends the run. Null checks
+ *   nothing, re-plans nothing and publishes nothing, so a run without a cap is the
+ *   run it was before the cap existed — and a step naming an unknown tool still fails
+ *   at dispatch, as it always has.
  */
 @AmpereStableApi
 data class RunPolicy(
@@ -45,12 +57,16 @@ data class RunPolicy(
     val goalCheck: GoalCheck = GoalCheck.Off,
     val judgmentResultClip: Int = 400,
     val quotas: RunQuotas = RunQuotas.None,
+    val maxStepsPerCycle: Int? = null,
 ) {
 
     init {
         require(cycles >= 1) { "a run runs at least one cycle; got $cycles" }
         require(judgmentResultClip > 0) {
             "a clipped result has at least one character; got $judgmentResultClip"
+        }
+        require(maxStepsPerCycle == null || maxStepsPerCycle >= 1) {
+            "a capped cycle runs at least one step; got $maxStepsPerCycle"
         }
     }
 }
@@ -186,6 +202,10 @@ enum class LearnPolicy {
  * whose tool is about to receive different ones — because a parameter strategy filled in
  * what the planner left out, or a schema filled in a default — does not run until
  * [reviewChangedStep] has approved them.
+ *
+ * Under [RunPolicy.maxStepsPerCycle] the plan a gate is handed is already within the cap
+ * and names only the run's tools, and a plan that had to be cut to get there has its
+ * `PlanTruncated` on the record before `review` is called (AMPR-452).
  */
 @AmpereStableApi
 interface PlanGate {

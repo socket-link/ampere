@@ -103,6 +103,57 @@ sealed interface PlanEvent : Event {
         }
     }
 
+    /**
+     * Emitted when a hosted run cut a plan to fit its bounds (AMPR-452, row H20 (c)).
+     *
+     * Published through the host seat's door, under [runId], inside PLAN and before the
+     * plan gate is asked — so the plan a gate approves or stops is one whose cut is
+     * already on the record. Only a run with a step cap
+     * (`RunPolicy.maxStepsPerCycle`) publishes one, and only after the planner was sent
+     * back once and its second plan still broke a rule: steps naming a tool no seat of
+     * the run has are dropped, then what is left is cut to the cap.
+     *
+     * @property planId The id of the plan that was kept, which is the `planId` its
+     *   steps' [PlanStepStarted] / [PlanStepCompleted] pairs carry. The plan that was
+     *   cut never ran and has no other record.
+     * @property cycle Which cycle of the run the plan was for, counting from 1.
+     * @property originalStepCount How many steps the second plan had before the cut.
+     * @property keptStepCount How many steps are left. Zero means every step named an
+     *   unknown tool: the plan is not sent to the gate, and the run ends.
+     * @property reasons What was cut and why, one entry per rule broken, in the order the
+     *   cut applies them — unknown tools first, then the cap.
+     * @property maxStepsPerCycle The cap the plan was cut to.
+     * @property droppedToolIds The unknown tool ids the dropped steps named, each once.
+     */
+    @Serializable
+    data class PlanTruncated(
+        override val eventId: EventId,
+        val runId: RunId,
+        val planId: String,
+        val cycle: Int,
+        val originalStepCount: Int,
+        val keptStepCount: Int,
+        val reasons: List<String>,
+        val maxStepsPerCycle: Int,
+        val droppedToolIds: List<String> = emptyList(),
+        override val eventSource: EventSource,
+        override val timestamp: Instant,
+        override val urgency: Urgency = Urgency.MEDIUM,
+    ) : PlanEvent {
+
+        override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Plan for cycle $cycle cut from $originalStepCount to $keptStepCount step(s): " +
+            "${reasons.joinToString("; ")} ${formatUrgency(urgency)}"
+
+        companion object {
+            const val EVENT_TYPE: EventType = "PlanTruncated"
+        }
+    }
+
     /** Emitted when a task is assigned to an agent. */
     @Serializable
     data class TaskAssigned(
