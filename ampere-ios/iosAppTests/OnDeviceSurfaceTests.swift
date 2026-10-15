@@ -15,16 +15,14 @@ import shared
 /// answers `accessibilityActivate`, and a focused text field makes Compose's input view the
 /// first responder, which takes `insertText`.
 ///
-/// Skips where Apple Intelligence is off, like its sibling. Lines prefixed `AMPR373|surface|`
+/// Skips where the model cannot generate (`OnDeviceModelGate`), like its sibling. Lines prefixed `AMPR373|surface|`
 /// carry the timings, and a host watching the simulator while this runs can screenshot the
 /// running state.
 @available(iOS 26.0, *)
 final class OnDeviceSurfaceTests: XCTestCase {
 
-    override func setUpWithError() throws {
-        guard case .available = SystemLanguageModel.default.availability else {
-            throw XCTSkip("Apple Intelligence is not available on this system: \(SystemLanguageModel.default.availability)")
-        }
+    override func setUp() async throws {
+        try await OnDeviceModelGate.requireReady()
     }
 
     @MainActor

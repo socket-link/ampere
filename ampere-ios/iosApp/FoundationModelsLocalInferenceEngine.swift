@@ -43,9 +43,9 @@ final class FoundationModelsLocalInferenceEngine: SwiftLocalInferenceEngine {
                 available: true,
                 modelId: Self.modelId,
                 // The system's own figure for the running model (`contextSize` is iOS 26
-                // API, back-deployed before 26.4). 4,096 on iOS 27.1 and macOS 27.0 as
-                // measured by AMPR-373. The relay reads this to keep a prompt that will
-                // not fit from being routed here.
+                // API, back-deployed before 26.4). 4,096 on iOS 26.4.1, iOS 27.1 and
+                // macOS 27.0 as measured by AMPR-373. The relay reads this to keep a
+                // prompt that will not fit from being routed here.
                 maxContextTokens: KotlinInt(int: Int32(clamping: model.contextSize)),
                 providerId: AIProvider_OnDevice.shared.id,
                 reason: nil

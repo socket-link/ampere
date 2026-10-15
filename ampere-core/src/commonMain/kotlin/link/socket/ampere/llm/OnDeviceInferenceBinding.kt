@@ -165,7 +165,7 @@ class OnDeviceInferenceBinding(
      * the catalog was seeded with.
      *
      * The bundled on-device descriptor carries 4,096 tokens, the figure the
-     * live model reported on iOS 27.1 and macOS 27.0 (AMPR-373). A system whose model
+     * live model reported on iOS 26.4.1, iOS 27.1 and macOS 27.0 (AMPR-373). A system whose model
      * has a different window says so in [LocalCapacity.maxContextTokens] —
      * Apple's engine reads `SystemLanguageModel.contextSize` at every probe —
      * and the relay decides whether a prompt fits from the descriptor, so the

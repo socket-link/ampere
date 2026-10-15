@@ -19,6 +19,7 @@
 		AC413AAAAAAAAAAAAAAA0002 /* RosterAuthoringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC413AAAAAAAAAAAAAAA0001 /* RosterAuthoringTests.swift */; };
 		AC373AAAAAAAAAAAAAAA0002 /* OnDeviceGenerationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC373AAAAAAAAAAAAAAA0001 /* OnDeviceGenerationTests.swift */; };
 		AC373AAAAAAAAAAAAAAA0004 /* OnDeviceSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC373AAAAAAAAAAAAAAA0003 /* OnDeviceSurfaceTests.swift */; };
+		AC373AAAAAAAAAAAAAAA0006 /* OnDeviceModelGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC373AAAAAAAAAAAAAAA0005 /* OnDeviceModelGate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +37,7 @@
 		AC413AAAAAAAAAAAAAAA0001 /* RosterAuthoringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RosterAuthoringTests.swift; sourceTree = "<group>"; };
 		AC373AAAAAAAAAAAAAAA0001 /* OnDeviceGenerationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceGenerationTests.swift; sourceTree = "<group>"; };
 		AC373AAAAAAAAAAAAAAA0003 /* OnDeviceSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceSurfaceTests.swift; sourceTree = "<group>"; };
+		AC373AAAAAAAAAAAAAAA0005 /* OnDeviceModelGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceModelGate.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXContainerItemProxy section */
@@ -130,6 +132,7 @@
 				AC413AAAAAAAAAAAAAAA0001 /* RosterAuthoringTests.swift */,
 				AC373AAAAAAAAAAAAAAA0001 /* OnDeviceGenerationTests.swift */,
 				AC373AAAAAAAAAAAAAAA0003 /* OnDeviceSurfaceTests.swift */,
+				AC373AAAAAAAAAAAAAAA0005 /* OnDeviceModelGate.swift */,
 			);
 			path = iosAppTests;
 			sourceTree = "<group>";
@@ -280,6 +283,7 @@
 				AC413AAAAAAAAAAAAAAA0002 /* RosterAuthoringTests.swift in Sources */,
 				AC373AAAAAAAAAAAAAAA0002 /* OnDeviceGenerationTests.swift in Sources */,
 				AC373AAAAAAAAAAAAAAA0004 /* OnDeviceSurfaceTests.swift in Sources */,
+				AC373AAAAAAAAAAAAAAA0006 /* OnDeviceModelGate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

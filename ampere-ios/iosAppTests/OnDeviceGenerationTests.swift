@@ -11,9 +11,11 @@ import shared
 /// `DispatchingUpstreamLlmClient` → `FoundationModelsLocalInferenceEngine` — with the indicator
 /// state going ready → running → ready and the `ProviderCall*` pair persisted under the run id.
 ///
-/// It needs a system with Apple Intelligence on. A simulator inherits the host Mac's model, so on
+/// It needs a system whose model can generate. A simulator inherits the host Mac's model, so on
 /// a Mac with Apple Intelligence enabled this runs for real; anywhere else it is skipped, not
-/// failed — an unavailable model is a fact about the machine, not about Ampere.
+/// failed — an unavailable model is a fact about the machine, not about Ampere. The gate is
+/// `OnDeviceModelGate`, which generates once rather than trusting `availability`: GitHub's hosted
+/// runners say available and then cannot generate.
 ///
 /// Every measurement is printed on a line prefixed `AMPR373|` so the figures can be lifted from
 /// the `xcodebuild` log, and the events land in `on-device-verify.db` in the host app's container
@@ -26,10 +28,8 @@ final class OnDeviceGenerationTests: XCTestCase {
 
     private var session: OnDeviceInferenceSession?
 
-    override func setUpWithError() throws {
-        guard case .available = SystemLanguageModel.default.availability else {
-            throw XCTSkip("Apple Intelligence is not available on this system: \(SystemLanguageModel.default.availability)")
-        }
+    override func setUp() async throws {
+        try await OnDeviceModelGate.requireReady()
     }
 
     override func tearDownWithError() throws {

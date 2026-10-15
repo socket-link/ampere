@@ -38,9 +38,8 @@ sealed class AIModel_OnDevice(
      * Apple Foundation Models' on-device model (iOS 26+ / Apple Intelligence).
      *
      * The limits are measured, not provisional (AMPR-373, 2026-10-15): the live
-     * `SystemLanguageModel.contextSize` reported 4,096 on the iOS 27.1
-     * simulator and on macOS 27.0 (the iOS 26.5 simulator reported Apple
-     * Intelligence not enabled, so it is unmeasured there), and a 9,060-token prompt was
+     * `SystemLanguageModel.contextSize` reported 4,096 on the iOS 27.1 and
+     * iOS 26.4.1 simulators and on macOS 27.0, and a 9,060-token prompt was
      * refused by the model itself as exceeding "the maximum allowed context
      * size of 4096". `contextSize` is iOS 26 API (back-deployed before 26.4),
      * so the figure is read from the system at probe time and the engine's
