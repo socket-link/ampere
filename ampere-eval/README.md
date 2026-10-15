@@ -290,6 +290,93 @@ availability under some other provider id has not opened the gate.
 `recordGoldenTraces` re-records these alongside the Arc probes; an empty diff
 on an unchanged catalog is the same proof it is for them.
 
+## The goal-met decision bench
+
+The Arc probes and the Rung 0 bench measure a run. The decision bench
+(AMPR-422) measures a *judgment about* a run: can a decision client tell
+whether a hosted run met its goal from the state the run renders for it?
+
+- The bench: `src/commonMain/kotlin/.../decide/` — `DecisionCase`, `DecisionArm`,
+  `DecisionBench`, `DecisionBenchReport`, `PlaybackDecisionClient`, and the two
+  rules a run uses today as deterministic arms (`GoalMetArms`).
+- The corpus and its generator: `src/jvmTest/kotlin/.../decide/GoalMetCorpus.kt`
+  → `src/jvmTest/resources/decide/goal-met/cases.json`.
+- The gates: `GoalMetCorpusValidatorTest`, `GoalMetDeterministicBenchTest`,
+  `GoalMetRecordedBenchTest` — all offline, all in plain `jvmTest`.
+- The live run: `DecideBenchLive` / `DecideBenchLiveTest`, behind the
+  `decideBenchLive` task, never in CI.
+- The report: `docs/ampr-422-goal-met-bench.md`.
+
+### What a case is
+
+A `DecisionCase` is a state already rendered as a decision call's text — for
+the goal-met corpus, `RunObservation.asDecisionState(clip)` exactly as a hosted
+run with `GoalCheck.Record` renders it — plus the question asked
+(`RunQuestions.goalMet`, the shipped `noul`) and the answer a correct client
+gives. Labels are set **by construction**: eight goal families × six targets,
+rendered by nine rules (three that leave the goal met, six that do not), 288
+cases, exactly half met. A met and an unmet case of the same target share a
+goal and most of their text; only what the rule changed separates them.
+
+| kind | met | rule |
+| -- | -- | -- |
+| `clean` | yes | every step succeeded, every result shows the outcome |
+| `redundant_failure` | yes | one step failed, a retry of it succeeded; cycle 2 |
+| `terse` | yes | every step succeeded with a short result that still states the outcome |
+| `partial` | no | the last step never ran |
+| `wrong_target` | no | every step succeeded, on a different target than the goal names |
+| `empty_result` | no | the lookup is intact; every later step succeeded with an empty result |
+| `error_as_success` | no | the lookup is intact; every later step is marked succeeded but its text is an error or a refusal |
+| `unverifiable` | no | the lookup is intact; every later step claims an attempt and shows no outcome |
+| `all_failed` | no | every step failed; cycle 2 |
+
+`GoalMetCorpusValidatorTest` checks every committed case against its kind's
+rule, that no two states are equal, and that regenerating reproduces the file
+byte for byte.
+
+### What the report measures
+
+Two errors, kept apart everywhere: **false met** (an unmet case called met —
+the run would stop, LEARN would store a success that was not one) and **false
+not met** (a met case called unmet — a cycle or an escalation nobody needed).
+A call that returned no answer counts as not met and is reported as missing.
+
+For an arm whose every answer `BandFitGuard` accepts (measured, with a
+distribution) the report adds a 21-point threshold sweep on `P(met)` and the
+**zero-false-met operating point**: the loosest threshold at which no unmet
+case is called met, with the share of met cases still recognised there, on the
+mean of the repeats and on every single call. A self-reported arm gets no
+sweep — that would fit a band on a self-report (J5).
+
+### Running it
+
+```bash
+# The gates. Offline; part of :ampere-eval:jvmTest.
+./gradlew :ampere-eval:jvmTest --tests "link.socket.ampere.eval.decide.*"
+
+# Regenerate the corpus (deterministic; an empty diff is the proof).
+./gradlew :ampere-eval:generateGoalMetCorpus
+git diff --stat ampere-eval/src/jvmTest/resources/decide
+
+# The live arms. Network. Credentials from the environment; an arm whose
+# credential is absent is skipped and named. Running this is the approval.
+OPENROUTER_API_KEY=… CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_AUTH_TOKEN=… \
+  ./gradlew :ampere-eval:decideBenchLive
+./gradlew :ampere-eval:decideBenchLive -PdecideDryRun=true          # print one request, send nothing
+./gradlew :ampere-eval:decideBenchLive -PdecideArms=clef.noul -PdecideLimit=5 -PdecideRepeats=1
+```
+
+The live arms, each through the adapter as shipped and in both question forms
+(the shipped `noul` and a three-option `choice` whose `cannot_tell` counts as
+not met): `ModelBackedDecisionClient` over the bundled chat transport for
+`claude-sonnet-5` and `claude-haiku-4-5`; `HostedSystemOneDecisionClient` for
+`jev-1.13` through OpenRouter and for `clef` and `clef-flash` on Workers AI.
+Recorded answers land in `src/jvmTest/resources/decide/goal-met/recorded/<arm>.jsonl`
+and are committed — the corpus is constructed, so they hold nothing private —
+and `GoalMetRecordedBenchTest` replays every file through `PlaybackDecisionClient`
+and reproduces the report's headline numbers offline. It also writes the full
+rendered report to `build/reports/decide/goal-met.md`.
+
 ## Re-recording a golden trace
 
 When an Arc's behavior legitimately changes, the gate goes red and the golden

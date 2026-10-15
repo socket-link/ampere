@@ -106,6 +106,12 @@ kotlin {
                 implementation(project(":ampere-core-test-fixtures")) {
                     exclude(group = "org.jetbrains.kotlin", module = "kotlin-test-junit")
                 }
+                // AMPR-422: the live goal-met run binds the hosted System One adapter over a Ktor
+                // client (a mock engine in its offline tests) and meters the chat transport under
+                // the model-backed adapter. Test classpath only; commonMain gains no dependency.
+                implementation("io.ktor:ktor-client-core:3.2.2")
+                implementation("io.ktor:ktor-client-mock:3.2.2")
+                implementation("com.aallam.openai:openai-client:4.0.1")
             }
         }
     }
@@ -191,6 +197,72 @@ val recordGoldenTraces by tasks.registering(Test::class) {
     testLogging {
         showStandardStreams = true
     }
+}
+
+// endregion
+
+// region — AMPR-422: the goal-met decision bench
+
+val decideResourcesDir = layout.projectDirectory.dir("src/jvmTest/resources/decide")
+
+/**
+ * Regenerates the constructed goal-met corpus into the source resources directory. Deterministic:
+ * an empty `git diff` afterwards is the proof. `GoalMetCorpusGeneratorTest` does nothing unless
+ * this property is set, so a plain `jvmTest` never rewrites the corpus it validates.
+ */
+val generateGoalMetCorpus by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Regenerates ampere-eval/src/jvmTest/resources/decide/goal-met/cases.json from its generator."
+
+    testClassesDirs = jvmTestCompilation.output.classesDirs
+    classpath = jvmTestCompilation.output.allOutputs + jvmTestCompilation.runtimeDependencyFiles
+    useJUnitPlatform()
+
+    filter {
+        includeTestsMatching("link.socket.ampere.eval.decide.GoalMetCorpusGeneratorTest")
+    }
+
+    systemProperty("ampere.eval.decideDir", decideResourcesDir.asFile.absolutePath)
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
+/**
+ * The live goal-met run: every hosted decision arm over the committed corpus, recorded to
+ * `decide/goal-met/recorded/<arm>.jsonl` for offline replay. Never runs in CI; `DecideBenchLiveTest`
+ * does nothing unless this task set the directory property. Credentials come from the
+ * environment (`OPENROUTER_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AUTH_TOKEN`) and from the
+ * generative provider's key as the bundled client reads it; an arm with no credential is skipped
+ * and named. Running this task is the approval for calls to those endpoints.
+ *
+ * `-PdecideDryRun=true` prints the request for one case and sends nothing. `-PdecideArms=a,b`,
+ * `-PdecideLimit=n` and `-PdecideRepeats=n` narrow a run; `-PdecideParallelism=n` sets calls in flight.
+ */
+val decideBenchLive by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Records the live goal-met decision arms (network; credentials from the environment)."
+
+    testClassesDirs = jvmTestCompilation.output.classesDirs
+    classpath = jvmTestCompilation.output.allOutputs + jvmTestCompilation.runtimeDependencyFiles
+    useJUnitPlatform()
+
+    filter {
+        includeTestsMatching("link.socket.ampere.eval.decide.DecideBenchLiveTest")
+    }
+
+    systemProperty("ampere.eval.decideDir", decideResourcesDir.asFile.absolutePath)
+    listOf(
+        "decideDryRun" to "ampere.eval.decide.dryRun",
+        "decideArms" to "ampere.eval.decide.arms",
+        "decideLimit" to "ampere.eval.decide.limit",
+        "decideRepeats" to "ampere.eval.decide.repeats",
+        "decideParallelism" to "ampere.eval.decide.parallelism",
+    ).forEach { (gradleProperty, systemPropertyName) ->
+        providers.gradleProperty(gradleProperty).orNull?.let { systemProperty(systemPropertyName, it) }
+    }
+
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
 }
 
 // endregion
