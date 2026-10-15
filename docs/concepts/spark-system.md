@@ -11,7 +11,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/AutonomousAgent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/SparkBasedAgent.kt
 related: [PropelLoop, CognitiveRelay, PlugPermissions, CognitionTrace, HostedRun]
-last_verified: 2026-10-11
+last_verified: 2026-10-15
 ---
 
 > **2026-05-17 (AMPR-165):** Declarative `.spark.md` documents now use JSON
@@ -52,6 +52,16 @@ last_verified: 2026-10-11
 > `internal` rather than private, so step dispatch has one definition across both
 > drivers. A seat's tools are its role's, namespaced `<seat>/<tool>`, and the spark
 > stack narrows them on top (AMPR-400). See [HostedRun](hosted-run.md).
+
+> **2026-10-15 (AMPR-456):** The `runLLMTo*` lambdas still block, under
+> `SparkBasedAgent.DEFAULT_LLM_CALL_TIMEOUT` (60 s, on the real clock), but they are no
+> longer the only public way in. `perceiveState`, `determinePlanForTask`, `runTool`,
+> `evaluateNextIdeaFromOutcomes` and `callLLM` each have a suspending overload taking a
+> trailing, named `timeout: Duration`, which calls the phase service under
+> `withTimeout(timeout)` in the caller's coroutine and does not block. They share
+> `AutonomousAgent`'s bookkeeping (`perceiveWith` and its siblings) with the methods they
+> sit beside, so a host bounding each call with its own budget leaves the same memory the
+> loop does.
 
 > **2026-10-09 (AMPR-387):** `PhaseSparkConfig` on `AgentConfiguration.cognitiveConfig`
 > now actually reaches `PhaseSparkManager`: `SparkBasedAgent` builds its

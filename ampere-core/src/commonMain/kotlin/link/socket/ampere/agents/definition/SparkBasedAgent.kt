@@ -1,5 +1,7 @@
 package link.socket.ampere.agents.definition
 
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -362,11 +364,13 @@ open class SparkBasedAgent<S : AgentState>(
      * This agent's reasoning unit — the phase services, reached as the suspending
      * functions they are (AMPR-393).
      *
-     * The `runLLMTo*` lambdas above are the same services wrapped in
-     * [runBlockingCompat] and a 60 s timeout, which is what `AutonomousAgent`'s
+     * The `runLLMTo*` lambdas below are the same services wrapped in
+     * [runBlockingCompat] and [DEFAULT_LLM_CALL_TIMEOUT], which is what `AutonomousAgent`'s
      * loop needs and what a hosted run must not have: blocking a thread throws
      * outright on JS and wasm, and a run's caller owns its own time limits. A
-     * suspend-only driver therefore needs the unit itself.
+     * suspend-only driver therefore needs the unit itself. (A host that drives the
+     * public phase methods one at a time has the timed overloads instead — see
+     * [perceiveState] — which suspend and take the caller's bound, AMPR-456.)
      *
      * `internal` because it is a seam, not a surface: a consumer drives phases
      * through [RunHost][link.socket.ampere.propel.RunHost], which is the entry
@@ -408,7 +412,7 @@ open class SparkBasedAgent<S : AgentState>(
 
     override val runLLMToEvaluatePerception: (Perception<S>) -> Idea = { perception ->
         runBlockingCompat(ioDispatcher) {
-            withTimeout(60000) {
+            withTimeout(DEFAULT_LLM_CALL_TIMEOUT) {
                 reasoning.evaluatePerception(perception)
             }
         }
@@ -423,7 +427,7 @@ open class SparkBasedAgent<S : AgentState>(
     override val runLLMToPlan: (Task, List<Idea>, List<KnowledgeWithScore>) -> Plan =
         { task, ideas, relevantKnowledge ->
             runBlockingCompat(ioDispatcher) {
-                withTimeout(60000) {
+                withTimeout(DEFAULT_LLM_CALL_TIMEOUT) {
                     // AMPR-388: knowledge Recall found reaches `PlanGenerator`'s prompt. This
                     // used to call `generatePlan(task, ideas)` and take the empty default.
                     reasoning.generatePlan(task, ideas, relevantKnowledge)
@@ -450,7 +454,7 @@ open class SparkBasedAgent<S : AgentState>(
      */
     override val runLLMToExecuteTask: (Task, List<StepOutcome>) -> Outcome = { task, priorResults ->
         runBlockingCompat(ioDispatcher) {
-            withTimeout(60000) {
+            withTimeout(DEFAULT_LLM_CALL_TIMEOUT) {
                 dispatchStepAsPlan(task, priorResults)
             }
         }
@@ -476,7 +480,7 @@ open class SparkBasedAgent<S : AgentState>(
      */
     fun runSubPlanForTask(task: Task): Outcome =
         runBlockingCompat(ioDispatcher) {
-            withTimeout(60000) {
+            withTimeout(DEFAULT_LLM_CALL_TIMEOUT) {
                 val relevantKnowledge = recallRelevantKnowledgeForTask(task)
                 val plan = reasoning.generatePlan(task, emptyList(), relevantKnowledge)
                 // Nothing ran before this sub-plan: the entry point takes a Task and
@@ -766,7 +770,7 @@ open class SparkBasedAgent<S : AgentState>(
 
     override val runLLMToExecuteTool: (Tool<*>, ExecutionRequest<*>) -> ExecutionOutcome = { tool, request ->
         runBlockingCompat(ioDispatcher) {
-            withTimeout(60000) {
+            withTimeout(DEFAULT_LLM_CALL_TIMEOUT) {
                 reasoning.executeTool(tool, request)
             }
         }
@@ -774,7 +778,7 @@ open class SparkBasedAgent<S : AgentState>(
 
     override val runLLMToEvaluateOutcomes: (List<Outcome>) -> Idea = { outcomes ->
         runBlockingCompat(ioDispatcher) {
-            withTimeout(60000) {
+            withTimeout(DEFAULT_LLM_CALL_TIMEOUT) {
                 reasoning.evaluateOutcomes(outcomes, memoryService).summaryIdea
             }
         }
@@ -799,12 +803,114 @@ open class SparkBasedAgent<S : AgentState>(
         prompt: String,
         requirements: CapabilityRequirement?,
     ): String = runBlockingCompat(ioDispatcher) {
-        withTimeout(60000) {
+        withTimeout(DEFAULT_LLM_CALL_TIMEOUT) {
             reasoning.callLLM(prompt, requirements = requirements)
         }
     }
 
+    // ========================================================================
+    // Per-call bounds (AMPR-456)
+    // ========================================================================
+
+    /**
+     * [perceiveState], with its model call bounded by [timeout] instead of
+     * [DEFAULT_LLM_CALL_TIMEOUT] (AMPR-456).
+     *
+     * For a host that drives this agent one phase at a time and owns a budget per
+     * request: a slow model's Perceive gets the time the host gave it, not a fixed 60 s.
+     * The bound is a plain value on the call because it differs from one request to the
+     * next. It covers the model call alone — the bookkeeping around it is
+     * [perceiveWith]'s, the same as the unbounded method's.
+     *
+     * Unlike the unbounded method, this one suspends instead of blocking: the call runs
+     * in the caller's coroutine, with no [runBlockingCompat] and no dispatcher switch of
+     * its own, so [timeout] runs on the caller's clock (a test's virtual one under
+     * `runTest`) and the call can run on JS and wasm. A call that overruns its bound
+     * throws [TimeoutCancellationException][kotlinx.coroutines.TimeoutCancellationException]
+     * at the bound, as the unbounded method does at 60 s.
+     *
+     * [timeout] is trailing and has no default, so it is always passed by name, and a
+     * call without one is the unbounded method's: `perceiveState(state)` is unchanged.
+     */
+    suspend fun perceiveState(
+        currentState: S,
+        vararg newIdeas: Idea,
+        timeout: Duration,
+    ): Perception<S> = perceiveWith(currentState, newIdeas.toList()) { perception ->
+        withTimeout(timeout) {
+            reasoning.evaluatePerception(perception)
+        }
+    }
+
+    /**
+     * [determinePlanForTask], with its model call bounded by [timeout] instead of
+     * [DEFAULT_LLM_CALL_TIMEOUT]. Suspends rather than blocks; see the timed [perceiveState].
+     */
+    suspend fun determinePlanForTask(
+        task: Task,
+        vararg ideas: Idea,
+        relevantKnowledge: List<KnowledgeWithScore> = emptyList(),
+        timeout: Duration,
+    ): Plan = planWith {
+        withTimeout(timeout) {
+            reasoning.generatePlan(task, ideas.toList(), relevantKnowledge)
+        }
+    }
+
+    /**
+     * [runTool], with [timeout] bounding everything [AgentReasoning.executeTool] does — the
+     * parameter call *and* the tool run, as the unbounded method's 60 s does. Suspends
+     * rather than blocks; see the timed [perceiveState].
+     */
+    suspend fun runTool(
+        tool: Tool<*>,
+        request: ExecutionRequest<*>,
+        timeout: Duration,
+    ): ExecutionOutcome = runToolWith {
+        withTimeout(timeout) {
+            reasoning.executeTool(tool, request)
+        }
+    }
+
+    /**
+     * [evaluateNextIdeaFromOutcomes], with its model call bounded by [timeout] instead of
+     * [DEFAULT_LLM_CALL_TIMEOUT]. Suspends rather than blocks; see the timed [perceiveState].
+     */
+    suspend fun evaluateNextIdeaFromOutcomes(
+        vararg outcomes: Outcome,
+        timeout: Duration,
+    ): Idea = evaluateOutcomesWith {
+        withTimeout(timeout) {
+            reasoning.evaluateOutcomes(outcomes.toList(), memoryService).summaryIdea
+        }
+    }
+
+    /**
+     * [callLLM], with the call bounded by [timeout] instead of [DEFAULT_LLM_CALL_TIMEOUT].
+     * [requirements] composes with the agent's floor exactly as it does there. Suspends
+     * rather than blocks; see the timed [perceiveState].
+     */
+    suspend fun callLLM(
+        prompt: String,
+        requirements: CapabilityRequirement? = null,
+        timeout: Duration,
+    ): String = withTimeout(timeout) {
+        reasoning.callLLM(prompt, requirements = requirements)
+    }
+
     companion object {
+
+        /**
+         * How long one model call may take when its caller names no bound of its own
+         * (AMPR-456): every `runLLMTo*` lambda, [callLLM], and [runSubPlanForTask].
+         *
+         * A host with its own per-request budget passes it to the timed overloads
+         * ([perceiveState], [determinePlanForTask], [runTool],
+         * [evaluateNextIdeaFromOutcomes], [callLLM] with `timeout =`) instead. The bound
+         * here runs on the blocking path's real clock, inside [runBlockingCompat], so no
+         * test scheduler can advance it.
+         */
+        val DEFAULT_LLM_CALL_TIMEOUT: Duration = 60.seconds
 
         /**
          * Canonical id of the bundled role spark fixture
