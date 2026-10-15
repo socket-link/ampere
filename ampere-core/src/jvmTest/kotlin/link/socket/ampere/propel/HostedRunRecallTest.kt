@@ -5,6 +5,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
@@ -18,6 +19,7 @@ import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.knowledge.Knowledge
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.knowledge.KnowledgeType
+import link.socket.ampere.agents.domain.memory.MemoryContext
 import link.socket.ampere.agents.domain.memory.MemoryTaskTypes
 import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepositoryImpl
 import link.socket.ampere.agents.events.InMemoryEventDoor
@@ -242,6 +244,111 @@ class HostedRunRecallTest {
         )
     }
 
+    /**
+     * AMPR-457: what RECALL searches for is the consumer's, not the goal's.
+     *
+     * Same goal, two queries: PLAN plans for the same text in both, and the one event each
+     * run publishes says what that run actually searched with.
+     */
+    @Test
+    fun `two runs with one goal and different queries search for different things`() = runBlocking<Unit> {
+        val queries = listOf("a photo of a receipt", "a screenshot of a recipe")
+        val contexts = queries.map { query ->
+            val corpus = FakeCorpus()
+            val run = openRun(
+                planningSeat(),
+                seat(DOER_ID, DOER_ROLE) { "thought about it" },
+                RunPolicy(recall = RecallPolicy(sources = listOf(corpus), query = query)),
+            )
+            run.execute()
+            run.close()
+
+            assertEquals(listOf(query), corpus.calls.map { it.intent }, "the source is asked the query, not the goal")
+            val recalls = rows(run.runId).mapNotNull { decode(it) as? MemoryEvent.KnowledgeRecalled }
+            assertNotNull(recalls.singleOrNull(), "one KnowledgeRecalled per run").context
+        }
+
+        assertEquals(queries, contexts.map { it.description }, "each event carries the query its run searched with")
+        contexts.forEach { context ->
+            assertEquals(MemoryTaskTypes.GENERIC, context.taskType, "a null task type keeps the goal's bucket")
+            assertEquals(setOf(SCOPE), context.tags, "and the scopes are still the tags")
+        }
+    }
+
+    /**
+     * AMPR-457: an empty query searches nothing, and the task type is the scope.
+     *
+     * The entry under the consumer's task type carries none of the seat's scopes and none of
+     * the goal's words, so only the task-type strategy can find it. The one under `GENERIC`
+     * repeats the goal word for word, so a run that searched with the goal — or kept the
+     * goal's bucket — would have found it.
+     */
+    @Test
+    fun `an empty query asks no source and recalls by task type alone`() = runBlocking<Unit> {
+        storeMemory(
+            approach = MEMORY_APPROACH,
+            learnings = MEMORY_LEARNINGS,
+            taskType = ARC_TASK_TYPE,
+            tags = emptyList(),
+        )
+        storeMemory(approach = GOAL_TEXT, learnings = GOAL_TEXT, tags = emptyList())
+        val corpus = FakeCorpus(Recalled(id = "doc-1", title = DOC_TITLE, text = DOC_TEXT, score = 0.9))
+
+        val host = planningSeat()
+        val doer = seat(DOER_ID, DOER_ROLE) { "thought about it" }
+        val run = openRun(
+            host,
+            doer,
+            RunPolicy(recall = RecallPolicy(sources = listOf(corpus), query = "", taskType = ARC_TASK_TYPE)),
+        )
+        run.execute()
+        run.close()
+
+        assertTrue(corpus.calls.isEmpty(), "a source asked with no intent is asked for everything")
+
+        val recalls = rows(run.runId).mapNotNull { decode(it) as? MemoryEvent.KnowledgeRecalled }
+        val event = assertNotNull(recalls.singleOrNull(), "one KnowledgeRecalled for the phase")
+        assertEquals(
+            MemoryContext(taskType = ARC_TASK_TYPE, tags = setOf(SCOPE), description = ""),
+            event.context,
+            "the event carries the context RECALL ran with",
+        )
+        assertEquals(
+            listOf(MEMORY_APPROACH),
+            event.retrievedKnowledge.map { it.approach },
+            "only the entry filed under the task type: ${event.retrievedKnowledge}",
+        )
+
+        val section = recalledSection(assertNotNull(host.planPrompt(), "the host planned"))
+        assertTrue(section.contains(MEMORY_APPROACH), "the task type's entry reaches the prompt: $section")
+        assertTrue(!section.contains(DOC_TITLE), "and no corpus item does: $section")
+    }
+
+    /** AMPR-457: the default policy asks exactly the question it asked before the two fields existed. */
+    @Test
+    fun `the default policy recalls with the goal's context`() = runBlocking<Unit> {
+        val corpus = FakeCorpus()
+        val run = openRun(
+            planningSeat(),
+            seat(DOER_ID, DOER_ROLE) { "thought about it" },
+            RunPolicy(recall = RecallPolicy(sources = listOf(corpus))),
+        )
+        run.execute()
+        run.close()
+
+        assertEquals(listOf(GOAL_TEXT), corpus.calls.map { it.intent })
+        val recalls = rows(run.runId).mapNotNull { decode(it) as? MemoryEvent.KnowledgeRecalled }
+        assertEquals(
+            MemoryContext(taskType = MemoryTaskTypes.GENERIC, tags = setOf(SCOPE), description = GOAL_TEXT),
+            assertNotNull(recalls.singleOrNull()).context,
+        )
+    }
+
+    @Test
+    fun `a blank task type is refused`() {
+        assertFailsWith<IllegalArgumentException> { RecallPolicy(taskType = " ") }
+    }
+
     // ========================================================================
     // Fixture
     // ========================================================================
@@ -313,7 +420,12 @@ class HostedRunRecallTest {
         policy = policy,
     )
 
-    private suspend fun storeMemory(approach: String, learnings: String) {
+    private suspend fun storeMemory(
+        approach: String,
+        learnings: String,
+        taskType: String = MemoryTaskTypes.GENERIC,
+        tags: List<String> = listOf(SCOPE),
+    ) {
         store.knowledge.storeKnowledge(
             knowledge = Knowledge.FromOutcome(
                 outcomeId = "outcome-under-test",
@@ -321,8 +433,8 @@ class HostedRunRecallTest {
                 learnings = learnings,
                 timestamp = Clock.System.now(),
             ),
-            tags = listOf(SCOPE),
-            taskType = MemoryTaskTypes.GENERIC,
+            tags = tags,
+            taskType = taskType,
             runId = "an-earlier-run",
         ).getOrThrow()
     }
@@ -351,6 +463,7 @@ class HostedRunRecallTest {
         const val DOER_ID = "seat-doer"
         const val SCOPE = "recipes"
         const val GOAL_TEXT = "Add a retry to the uploader"
+        const val ARC_TASK_TYPE = "arc-capture"
         const val RECALLED_HEADING = "# Recalled context"
 
         const val MEMORY_APPROACH = "Retried the upload with a capped backoff"

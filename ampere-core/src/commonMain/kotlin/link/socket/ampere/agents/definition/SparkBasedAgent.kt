@@ -389,9 +389,23 @@ open class SparkBasedAgent<S : AgentState>(
      *
      * @param scopes The run's [recall scopes][link.socket.ampere.propel.HostedAgent.recallScopes],
      *   which become the context's tags. Empty leaves the query what the loop's is.
+     * @param query The consumer's [RecallPolicy.query][link.socket.ampere.propel.RecallPolicy.query],
+     *   which replaces the task's description. Null keeps it (AMPR-457).
+     * @param taskType The consumer's [RecallPolicy.taskType][link.socket.ampere.propel.RecallPolicy.taskType],
+     *   which replaces the task's bucket. Null keeps it (AMPR-457).
      */
-    internal fun recallContextForRun(task: Task, scopes: Set<String>): MemoryContext =
-        memoryContextForTask(task, tags = scopes)
+    internal fun recallContextForRun(
+        task: Task,
+        scopes: Set<String>,
+        query: String? = null,
+        taskType: String? = null,
+    ): MemoryContext {
+        val context = memoryContextForTask(task, tags = scopes)
+        return context.copy(
+            taskType = taskType ?: context.taskType,
+            description = query ?: context.description,
+        )
+    }
 
     /**
      * What Recall finds for [context], under this agent's own memory, publishing
