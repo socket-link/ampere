@@ -132,7 +132,7 @@ class OnDeviceInferenceBinding(
      *
      * The snapshot is attributed to the on-device provider when the engine does
      * not name one, and a reported context window replaces the catalog's
-     * provisional figure. An engine whose probe throws is reported unavailable
+     * figure when they differ. An engine whose probe throws is reported unavailable
      * with the failure as the reason, so a caller asking "can the device
      * serve?" gets "no, and here is why" rather than an exception to handle.
      */
@@ -164,11 +164,12 @@ class OnDeviceInferenceBinding(
      * Route against the context window the engine actually has, not the one
      * the catalog was seeded with.
      *
-     * The bundled on-device descriptor carries a provisional 4,096 tokens. An
-     * engine that knows better says so in [LocalCapacity.maxContextTokens] —
-     * Apple's reports the running model's real window from iOS 27 — and the
-     * relay decides whether a prompt fits from the descriptor, so the figure
-     * has to land there to count. Only a local model's own descriptor is
+     * The bundled on-device descriptor carries 4,096 tokens, the figure the
+     * live model reported on iOS 27.1 and macOS 27.0 (AMPR-373). A system whose model
+     * has a different window says so in [LocalCapacity.maxContextTokens] —
+     * Apple's engine reads `SystemLanguageModel.contextSize` at every probe —
+     * and the relay decides whether a prompt fits from the descriptor, so the
+     * figure has to land there to count. Only a local model's own descriptor is
      * touched, and only when the engine names both the model and the window.
      */
     private suspend fun adoptReportedContextWindow(capacity: LocalCapacity) {
