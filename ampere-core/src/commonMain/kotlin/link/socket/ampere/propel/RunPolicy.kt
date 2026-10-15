@@ -136,6 +136,19 @@ enum class GoalCheck {
  * @property textClip How many characters of an item's learnings or text reach the
  *   prompt, cut the same way. Larger than [titleClip] because this is the half that
  *   carries the content.
+ * @property query What RECALL searches *for* (AMPR-457): the memory half's full-text
+ *   description and every source's `intent`. Null — the default — searches with the
+ *   goal's description, which is also what PLAN plans for; set it when the two differ,
+ *   such as a run handed a photo, whose goal has to say something for PLAN but whose
+ *   input has no words yet. Empty searches nothing: memory is recalled by [taskType]
+ *   and the seat's scopes alone, and no source is asked, because a corpus query with
+ *   no intent is a request for the whole corpus.
+ * @property taskType Which bucket RECALL is scoped *to* (AMPR-457): the memory half's
+ *   `MemoryContext.taskType`, which Recall matches exactly against the task type a row
+ *   was stored under. Null — the default — keeps the goal's bucket (`CODE_CHANGE` for a
+ *   code change, `GENERIC` otherwise). A run's own LEARN still files under the goal's
+ *   bucket, so a consumer that sets this and wants to recall its own runs' lessons stores
+ *   them under the same task type itself.
  */
 @AmpereStableApi
 data class RecallPolicy(
@@ -144,6 +157,8 @@ data class RecallPolicy(
     val memoryLimit: Int = 10,
     val titleClip: Int = 200,
     val textClip: Int = 400,
+    val query: String? = null,
+    val taskType: String? = null,
 ) {
 
     init {
@@ -151,6 +166,9 @@ data class RecallPolicy(
         require(memoryLimit >= 0) { "memory cannot contribute a negative number of entries; got $memoryLimit" }
         require(titleClip > 0) { "a clipped title has at least one character; got $titleClip" }
         require(textClip > 0) { "clipped text has at least one character; got $textClip" }
+        require(taskType == null || taskType.isNotBlank()) {
+            "a task type names a bucket; leave it null to keep the goal's"
+        }
     }
 }
 

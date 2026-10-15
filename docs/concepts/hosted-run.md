@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/service/AgentService.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/internal/DefaultAgentService.kt
 related: [PropelLoop, TeamLayer, SparkSystem, MemoryProvenance, CognitionTrace, Probe, SubjectRegistry, PlugPermissions]
-last_verified: 2026-10-12
+last_verified: 2026-10-15
 ---
 
 # Hosted Run
@@ -117,7 +117,10 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     host's door (AMPR-394). The memory half reaches PLAN as `relevantKnowledge`; both
     halves reach *every* seat's active prompt as the "# Recalled context" section, so
     the seat that runs a step three phases later still knows what the run recalled.
-    No model call: RECALL is two retrievals and a clip.
+    No model call: RECALL is two retrievals and a clip. What it searches *for* and
+    which bucket it is scoped *to* are the consumer's (`RecallPolicy.query`,
+    `RecallPolicy.taskType`, AMPR-457); the goal is only their default, and the event
+    carries the context RECALL actually ran with.
 13. **A seat without grants is denied** (AMPR-423, row H26). A tool that declares a
     `plugManifest` is checked against the `UserGrants` its seat's
     `HostedAgent.userGrants` returns, asked on every dispatch — on a plan step by the
@@ -393,11 +396,23 @@ Two reads and two destinations (row H4, AMPR-388 for a, AMPR-394 for b):
 
 | Half | Query | Reaches |
 |------|-------|---------|
-| The seat's memory | `MemoryContext(taskType = GENERIC, tags = recallScopes, description = goal)`, through the host seat's `AgentMemoryService` | `PlanGenerator`'s `relevantKnowledge`, **and** the prompt section |
-| The consumer's corpora | `RecallSource.recall(intent = goal, scopes = recallScopes, limit = perSourceLimit)`, per source | the prompt section only |
+| The seat's memory | `MemoryContext(taskType = recall.taskType ?: GENERIC, tags = recallScopes, description = recall.query ?: goal)`, through the host seat's `AgentMemoryService` | `PlanGenerator`'s `relevantKnowledge`, **and** the prompt section |
+| The consumer's corpora | `RecallSource.recall(intent = recall.query ?: goal, scopes = recallScopes, limit = perSourceLimit)`, per source | the prompt section only |
 
-The task type is `MemoryTaskTypes.GENERIC` — the bucket a hosted run's own LEARN files
-under — and the scopes are the context's *tags*, not its task type. AMPR-394 proposed
+The **query** and the **scope** are separate inputs, and neither is the goal's (AMPR-457).
+The goal is what PLAN plans for; `RecallPolicy.query` is what RECALL searches for, and
+`RecallPolicy.taskType` plus the seat's `recallScopes` are what it searches *under*. Both
+fields default to null, which is the goal's description and the goal's bucket
+(`CODE_CHANGE` for a code change, `GENERIC` otherwise) — the context a run recalled with
+before the fields existed. They exist for the run whose goal and input differ: a run
+handed a photo has to give PLAN *some* goal text, but has no words of its own to search
+with yet, and searching with the goal text instead recalls the same memories for every
+photo (SCKT-886). An empty query searches nothing: the memory half is recalled by task
+type and tags alone, and no source is asked, since a source asked with no intent is asked
+for everything. A null query with an empty goal description still asks, as it did before.
+
+By default the task type is `MemoryTaskTypes.GENERIC` — the bucket a hosted run's own
+LEARN files under — and the scopes are the context's *tags*, not its task type. AMPR-394 proposed
 `taskType = agent.role`; that would have made a hosted run unable to recall the
 Knowledge its own LEARN wrote, because Recall matches `task_type` exactly and LEARN
 stores `GENERIC` with the role as a tag. The symmetric reading of the same intent is
@@ -444,7 +459,7 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | `RunQuotas` | `tokens: Long?`, `wallClock: Duration?`, `steps: Int?` — the run's Hard ceilings, each checked by the Breaker before every step; `RunQuotas.None` (the default) sets none |
 | `GoalCheck` | `Off` / `Record`: whether the run asks itself, after each executed cycle, whether the goal is met. `Record` is one decision call per executed cycle on the host seat's transport |
 | `RunQuestions` | The run's own question (`goalMet`, `GOAL_MET_ID`) and `RunObservation.asDecisionState(clip)`, the fixed-key-order JSON a decision call is given |
-| `RecallPolicy` | `sources`, `perSourceLimit`, `memoryLimit`, `titleClip`, `textClip` |
+| `RecallPolicy` | `sources`, `perSourceLimit`, `memoryLimit`, `titleClip`, `textClip`, `query` (null = the goal's description; empty = search nothing), `taskType` (null = the goal's bucket) |
 | `RecallSource` / `Recalled` | The consumer-implemented corpus SPI (`memory/`, beside `MemoryStore`) and one item of it |
 | `PlanGate` / `PlanDecision` | `review(plan)` → `Approved(plan)` (possibly trimmed) or `Stopped(reason)`; `reviewChangedStep(step, approved, actual)` when a step is about to run with arguments the gate did not approve, defaulting to `review` of a one-step plan carrying `actual` |
 | `StepArguments` / `Task.Step.argumentsHash` | `canonical`, `hash` (SHA-256 hex) and `same` over a step's arguments: key order never matters, a value always does, and none / `null` / `{}` are one value |
@@ -574,6 +589,17 @@ interrupted (`heldRuns()` lists it with its `claimedAt`).
   a corpus query with no scope is a request for the whole corpus. The scopes live on
   the seat and the sources on the policy because the consumer wires its corpus once per
   run and the seat declares which slice of it this run is about.
+- **Putting the recall query in the goal.** The goal is what PLAN plans for, and a run
+  whose input is a photo still has to tell PLAN something. Whatever it says becomes the
+  query too unless `RecallPolicy.query` says otherwise — so a goal written to steer
+  recall steers PLAN as well, and a goal written for PLAN recalls the same memories for
+  every input (SCKT-886). Set `query`, or set it empty when there is nothing to search
+  with yet.
+- **Setting `RecallPolicy.taskType` and expecting the run's own lessons back.** LEARN
+  still files under the goal's bucket (AMPR-457 left H6 alone), and Recall matches the
+  task type exactly — so a run recalling `taskType = arcId` never sees what the hosted
+  run's own LEARN stored. A consumer that recalls by its own bucket stores its lessons
+  under that bucket itself.
 - **Catching a `RecallSource` that throws.** It propagates, like a `Probe` that throws
   in OBSERVE: `RunHost.open` fails and the run never opens. A source that treats an
   unreachable backend as an empty recall should return `emptyList()` and say so in its

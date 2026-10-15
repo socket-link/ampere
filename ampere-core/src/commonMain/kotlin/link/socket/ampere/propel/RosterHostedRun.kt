@@ -276,7 +276,10 @@ internal class RosterHostedRun(
 
     /**
      * RECALL: the host seat's own memory and the consumer's corpora, scoped to the goal
-     * (rows H4a, H4b).
+     * (rows H4a, H4b) unless [RecallPolicy.query] and [RecallPolicy.taskType] say
+     * otherwise (AMPR-457). The goal is only the default: what PLAN plans for and what
+     * RECALL searches for are separate inputs, and the event carries the context RECALL
+     * actually ran with.
      *
      * Two reads, one event, two destinations. The memory half goes to PLAN as
      * `relevantKnowledge` (AMPR-388); both halves go to every seat's active prompt as
@@ -297,11 +300,20 @@ internal class RosterHostedRun(
         host.phases.withPhase(CognitivePhase.RECALL, runId) {
             val recallPolicy = policy.recall
             val scopes = host.descriptor.recallScopes
-            val context = host.agent.recallContextForRun(goal, scopes)
+            val context = host.agent.recallContextForRun(
+                task = goal,
+                scopes = scopes,
+                query = recallPolicy.query,
+                taskType = recallPolicy.taskType,
+            )
+            // AMPR-457: an explicitly empty query has no intent to hand a source, and a
+            // source asked with none is asked for everything. A null query keeps the
+            // goal's description and today's behaviour, whatever that description is.
+            val searchesNothing = recallPolicy.query?.isEmpty() == true
 
             val found = RecalledContext(
                 fromMemory = host.agent.recallForRun(context, recallPolicy.memoryLimit),
-                fromSources = if (scopes.isEmpty()) {
+                fromSources = if (scopes.isEmpty() || searchesNothing) {
                     emptyList()
                 } else {
                     recallPolicy.sources

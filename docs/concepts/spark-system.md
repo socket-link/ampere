@@ -11,7 +11,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/AutonomousAgent.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/SparkBasedAgent.kt
 related: [PropelLoop, CognitiveRelay, PlugPermissions, CognitionTrace, HostedRun]
-last_verified: 2026-10-11
+last_verified: 2026-10-15
 ---
 
 > **2026-05-17 (AMPR-165):** Declarative `.spark.md` documents now use JSON
@@ -37,7 +37,8 @@ last_verified: 2026-10-11
 > null leaves the prompt byte-for-byte what it was, so nothing outside a hosted run is
 > affected. `SparkBasedAgent.recallForRun` now takes the `MemoryContext` rather than
 > the `Task` and publishes no event, and `recallContextForRun` is the seam that builds
-> that context from the run's scopes.
+> that context from the run's scopes — and, when the consumer's `RecallPolicy` sets
+> them, its query and task type in place of the goal's (AMPR-457).
 > See [MemoryProvenance](memory-provenance.md) and [HostedRun](hosted-run.md).
 
 > **2026-10-10 (AMPR-393):** A roster-hosted run differentiates one seat per role
