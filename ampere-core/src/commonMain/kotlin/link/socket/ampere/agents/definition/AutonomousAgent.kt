@@ -661,16 +661,34 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
     override suspend fun perceiveState(
         currentState: S,
         vararg newIdeas: Idea,
+    ): Perception<S> = perceiveWith(currentState, newIdeas.toList()) { perception ->
+        runLLMToEvaluatePerception(perception)
+    }
+
+    /**
+     * [perceiveState]'s bookkeeping around one evaluation of the perception: the perception
+     * is assembled and remembered before [evaluate] runs, and the idea it returns is
+     * remembered after.
+     *
+     * `protected` so a subclass with a second way to make the model call keeps one
+     * definition of what Perceive leaves in memory — `SparkBasedAgent`'s timed overloads
+     * call this with a call bounded by the caller's own timeout (AMPR-456). The same holds
+     * for [planWith], [runToolWith] and [evaluateOutcomesWith].
+     */
+    protected suspend fun perceiveWith(
+        currentState: S,
+        newIdeas: List<Idea>,
+        evaluate: suspend (Perception<S>) -> Idea,
     ): Perception<S> {
         val perception = Perception(
             id = generateUUID(id),
-            ideas = newIdeas.toList(),
+            ideas = newIdeas,
             currentState = currentState,
             timestamp = Clock.System.now(),
         )
         rememberNewPerception(perception)
 
-        val ideaAboutPerception = runLLMToEvaluatePerception(perception)
+        val ideaAboutPerception = evaluate(perception)
         rememberNewIdea(ideaAboutPerception)
 
         return Perception(
@@ -686,11 +704,16 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
         task: Task,
         vararg ideas: Idea,
         relevantKnowledge: List<KnowledgeWithScore>,
-    ): Plan {
+    ): Plan = planWith {
         // AMPR-388: what Recall retrieved reaches the planner. This used to call
         // `runLLMToPlan(task, ideas.toList())`, so every `KnowledgeRecalled` the loop
         // recorded described knowledge no planning prompt ever saw.
-        val plan = runLLMToPlan(task, ideas.toList(), relevantKnowledge)
+        runLLMToPlan(task, ideas.toList(), relevantKnowledge)
+    }
+
+    /** [determinePlanForTask]'s bookkeeping: the plan [generate] returns is remembered. See [perceiveWith]. */
+    protected suspend fun planWith(generate: suspend () -> Plan): Plan {
+        val plan = generate()
         rememberNewPlan(plan)
         return plan
     }
@@ -932,8 +955,11 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
     override suspend fun runTool(
         tool: Tool<*>,
         request: ExecutionRequest<*>,
-    ): ExecutionOutcome {
-        val outcome = runLLMToExecuteTool(tool, request)
+    ): ExecutionOutcome = runToolWith { runLLMToExecuteTool(tool, request) }
+
+    /** [runTool]'s bookkeeping: the outcome [execute] returns is remembered. See [perceiveWith]. */
+    protected suspend fun runToolWith(execute: suspend () -> ExecutionOutcome): ExecutionOutcome {
+        val outcome = execute()
         rememberNewOutcome(outcome)
         return outcome
     }
@@ -941,8 +967,14 @@ abstract class AutonomousAgent<S : AgentState> : Agent<S>, NeuralAgent<S> {
     /** Evaluates the current state of the world and determines the best action to take next */
     override suspend fun evaluateNextIdeaFromOutcomes(
         vararg outcomes: Outcome,
-    ): Idea {
-        val idea = runLLMToEvaluateOutcomes(outcomes.toList())
+    ): Idea = evaluateOutcomesWith { runLLMToEvaluateOutcomes(outcomes.toList()) }
+
+    /**
+     * [evaluateNextIdeaFromOutcomes]'s bookkeeping: the idea [evaluate] returns is
+     * remembered. See [perceiveWith].
+     */
+    protected suspend fun evaluateOutcomesWith(evaluate: suspend () -> Idea): Idea {
+        val idea = evaluate()
         rememberNewIdea(idea)
         return idea
     }
