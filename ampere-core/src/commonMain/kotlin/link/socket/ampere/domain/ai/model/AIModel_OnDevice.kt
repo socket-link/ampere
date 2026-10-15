@@ -36,9 +36,18 @@ sealed class AIModel_OnDevice(
 
     /**
      * Apple Foundation Models' on-device model (iOS 26+ / Apple Intelligence).
-     * Context window and reasoning level are provisional pending on-device
-     * verification (AMPR-225 recon, §1.1) — update once confirmed against the
-     * live `SystemLanguageModel`.
+     *
+     * The limits are measured, not provisional (AMPR-373, 2026-10-15): the live
+     * `SystemLanguageModel.contextSize` reported 4,096 on the iOS 27.1 and
+     * iOS 26.4.1 simulators and on macOS 27.0, and a 9,060-token prompt was
+     * refused by the model itself as exceeding "the maximum allowed context
+     * size of 4096". `contextSize` is iOS 26 API (back-deployed before 26.4),
+     * so the figure is read from the system at probe time and the engine's
+     * report replaces this constant in the registry whenever they differ —
+     * see `OnDeviceInferenceBinding.adoptReportedContextWindow`. `LOW`
+     * reasoning stands on the same run: asked to count 158 repeated
+     * sentences it answered 42. The output ceiling is the window; the
+     * session reserves half of it for output by default.
      */
     data object AppleFoundationModels : AIModel_OnDevice(
         name = APPLE_FOUNDATION_MODELS_NAME,

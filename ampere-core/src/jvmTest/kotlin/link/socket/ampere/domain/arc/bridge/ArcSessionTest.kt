@@ -708,8 +708,8 @@ class ArcSessionTest {
     @Test
     fun `an Arc bound to an engine runs eligible steps on the device and traces them`() = runBlocking<Unit> {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { Database.Schema.create(it) }
-        // The window a real engine reports from iOS 27 — far larger than the catalog's
-        // provisional 4,096 — adopted by the binding so every Arc prompt fits.
+        // A window far larger than the catalog's 4,096 (the live model's figure, AMPR-373),
+        // adopted by the binding so every Arc prompt fits in this test.
         val engine = FakeLocalInferenceEngine(
             capacity = deviceAvailable(maxContextTokens = 32_768),
             respond = { Result.success("{}") },
