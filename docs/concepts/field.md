@@ -9,13 +9,15 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/internal/DefaultFieldService.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/knowledge/KnowledgeBelief.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/observe/ObservationStore.kt
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/observe/ObservationBudget.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/field/ObservationStore.sq
+  - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/field/ObservationStorePruning.sq
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/field/Commitment.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/commitment/CommitmentStore.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/commitment/CommitmentLedger.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/field/CommitmentStore.sq
 related: [SubjectRegistry, GoalBranch, MemoryProvenance, DomainCanon, EventSerialBus]
-last_verified: 2026-10-12
+last_verified: 2026-10-17
 ---
 
 # Field
@@ -82,7 +84,12 @@ concrete event classes".
 - `observe/ObservationStore.kt` — `ObservationStore` / `SqlDelightObservationStore`: the
   Environment branch's rows. A non-leaf package, because it imports the database.
   `db/field/ObservationStore.sq`, created by `12.sqm`. Written by
-  `RecordedPerception.store(holder, store)` (`plug/spi/RecordedPerceive.kt`).
+  `RecordedPerception.store(holder, store)` (`plug/spi/RecordedPerceive.kt`). `forgetSubject` /
+  `forgetHolder` are the sanctioned deletes.
+- `observe/ObservationBudget.kt` — the retention contract (AMPR-465): `MAX_AGE` (90 days),
+  `MAX_ROWS` (300 000) / `PRUNE_TO_ROWS` (240 000), `SWEEP_INTERVAL_INSERTS` (256),
+  `MAX_PRUNING_RECORDS`. Enforced by `SqlDelightObservationStore.insert`; each pass that drops
+  anything leaves one row in `db/field/ObservationStorePruning.sq` (`16.sqm`).
 - `agents/domain/knowledge/KnowledgeBelief.kt` — `KnowledgeEntry.toBelief(subject)`,
   `KnowledgeType.beliefKind()` and `UnprovenancedKnowledgeException`.
 - `KnowledgeStore.sq` `findKnowledgeVisibleTo` / `KnowledgeRepository.findKnowledgeVisibleTo` — the
@@ -129,6 +136,18 @@ concrete event classes".
   it. Observations are never written to `KnowledgeStore`, so recall never returns one. A replay
   read (`replayable`) never returns a `PROTECTED` row, which by default is every Observation of a
   person. `beliefLimit` bounds the beliefs and the Observations separately.
+- **The Observation table is bounded, write-side (AMPR-465).** Every `insert` counts rows added,
+  and on the store's first insert and then every `ObservationBudget.SWEEP_INTERVAL_INSERTS` rows
+  it sweeps, in one transaction after the insert's own has committed: rows older than `MAX_AGE`
+  by `created_at` go, rows whose `Decay.ExpiresAt` is at or before now go, and only if the table
+  is still over `MAX_ROWS` the oldest rows go down to `PRUNE_TO_ROWS`. Oldest-first by
+  `created_at`, never by sensitivity — F12 is a visibility rule, not a retention rule. A pass that
+  dropped anything writes one `ObservationStorePruning` row (counts by age, expiry and cap, rows
+  before and after); a pass that dropped nothing writes none. Time is the store's `Clock`, never
+  `Clock.System` inline. No row is exempt for being cited: `Provenance.createdBy` on every
+  primitive names an event, never an Observation row, so a Belief or Commitment never dangles
+  when one is dropped. The default Observation `decay` is `HalfLife(MAX_AGE)`, so the row says
+  what the store will do to it; a caller's explicit `ExpiresAt` is honoured by the same sweep.
 - **Signals are derived, never stored.** No priority, urgency, trust, Potential or Resistance is
   computed here or carried on a `Field`; how they combine is F28, open.
 - **`field/` stays a leaf.** `Field.kt` imports nothing outside `field`; the service and the
@@ -167,6 +186,12 @@ concrete event classes".
 - **Put a perceive in the Field** — `source.recordedPerceive(query, eventApi)`, then
   `perception.store(holder, SqlDelightObservationStore(database))`. Nothing in Ampere does this
   on a production path; the consumer that perceives chooses the holder.
+- **Forget what was observed about an entity** — `store.forgetSubject(ref)` (every holder's rows
+  for that subject), or `store.forgetHolder(holder)` for everything one Subject observed; both
+  return the row count. Never raw SQL against the table.
+- **Pin the sweep in a test** — construct `SqlDelightObservationStore(database, clock = …)` with
+  a clock near the rows' `created_at`; the bounds are constructor parameters too, so a cap test
+  writes a dozen rows, not 300 000.
 - **Add a branch to the snapshot** (Constraints) — give it a store first; the snapshot reads
   stores, so a branch with no store has nothing to contribute. Actions are the one exception,
   because Q5 put their retype in the fold and the tool events already carry everything a taken
@@ -216,6 +241,14 @@ concrete event classes".
 - *Pairing each completion with a per-invocation `payload LIKE` lookup.* `invocationId` lives only
   in the payload, so each lookup scans every start row in the store. The fold reads one bounded,
   newest-first window of starts and pairs them in memory.
+- *Constructing a store over old fixture rows with the default clock.* The first insert sweeps,
+  and a row recorded in 2023 against `Clock.System` is past `MAX_AGE`; the test's rows vanish
+  on write and the failure reads like a broken insert. Pass a `FixedClock`.
+- *Exempting rows a Belief "cites" from the sweep.* Nothing cites an Observation row in 0.20.0;
+  a reference column to protect rows nothing points at is a table rebuild for a guarantee nothing
+  needs. If a later F-row adds evidence links, the exemption is added then.
+- *Keeping `PROTECTED` rows longer (or shorter) than `PRIVATE` ones.* Sensitivity decides who may
+  read a row, not how long it lives.
 - *Treating `findKnowledgeVisibleTo`'s interface default as a working read.* It fails with
   `UnsupportedOperationException` so a repository that predates it — a consumer's `MemoryStore`
   override — makes the snapshot fail loudly rather than report a world with no beliefs.

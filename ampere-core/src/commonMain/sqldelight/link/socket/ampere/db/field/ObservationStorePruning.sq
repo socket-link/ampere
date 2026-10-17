@@ -1,0 +1,37 @@
+-- AMPR-465: the marker that records a retention pass over ObservationStore.
+--
+-- Dropping Observations silently is the failure this table exists to prevent: a reader whose
+-- holder perceived something last quarter and finds no row for it can tell from here whether it
+-- was never stored or was swept out, and when. One row per pass that dropped something, not per
+-- dropped row, and not per pass that dropped nothing.
+--
+-- Bounded like the table it guards: each pass trims this one to ObservationBudget.MAX_PRUNING_RECORDS.
+CREATE TABLE ObservationStorePruning (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pruned_at INTEGER NOT NULL,
+  dropped_by_age INTEGER NOT NULL,
+  dropped_by_expiry INTEGER NOT NULL,
+  dropped_by_cap INTEGER NOT NULL,
+  rows_before INTEGER NOT NULL,
+  rows_after INTEGER NOT NULL
+);
+
+CREATE INDEX idx_observation_store_pruning_pruned_at ON ObservationStorePruning(pruned_at);
+
+insertPruning:
+INSERT INTO ObservationStorePruning(
+  pruned_at, dropped_by_age, dropped_by_expiry, dropped_by_cap, rows_before, rows_after
+)
+VALUES (?, ?, ?, ?, ?, ?);
+
+-- Newest pass first, matching EventStorePruning.
+getPruningRecords:
+SELECT *
+FROM ObservationStorePruning
+ORDER BY id DESC;
+
+trimPruningRecords:
+DELETE FROM ObservationStorePruning
+WHERE id NOT IN (
+  SELECT id FROM ObservationStorePruning ORDER BY id DESC LIMIT :keep
+);

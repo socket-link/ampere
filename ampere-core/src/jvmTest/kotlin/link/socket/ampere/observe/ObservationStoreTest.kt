@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Instant
@@ -30,11 +31,15 @@ import link.socket.ampere.link.LinkId
 import link.socket.ampere.plug.spi.PerceivePage
 import link.socket.ampere.plug.spi.PerceiveQuery
 import link.socket.ampere.plug.spi.RecordedPerception
+import link.socket.ampere.room.FixedClock
 
 /**
  * [SqlDelightObservationStore] (AMPR-447, F7): the Environment branch's rows on
  * `JdbcSqliteDriver(IN_MEMORY)`, brought to the current schema the way every JVM open is, and
  * written the way production writes them — through [RecordedPerception.store].
+ *
+ * The store's clock is pinned a day after the rows are recorded, so the budget sweep every
+ * insert may run (AMPR-465, [ObservationBudgetTest]) leaves these rows alone.
  */
 class ObservationStoreTest {
 
@@ -50,7 +55,7 @@ class ObservationStoreTest {
     fun setUp() {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         DatabaseSchemaManager.ensure(driver).getOrThrow()
-        store = SqlDelightObservationStore(Database(driver))
+        store = SqlDelightObservationStore(Database(driver), clock = FixedClock(observedAt + 1.days))
     }
 
     @AfterTest
@@ -174,9 +179,11 @@ class ObservationStoreTest {
 
     @Test
     fun `the limit applies to what the viewer may see and not to the whole table`() = runBlocking<Unit> {
-        perception("evt-own", recordedAtMillis = 1_000) { listOf(place("own", it)) }.store(holder, store).getOrThrow()
+        perception("evt-own", recordedAtMillis = 1_700_000_001_000) { listOf(place("own", it)) }
+            .store(holder, store)
+            .getOrThrow()
         // Newer than the holder's row and invisible to it: a filter after the LIMIT would hand it nothing.
-        perception("evt-other", recordedAtMillis = 2_000) { id -> (1..3).map { place("other-$it", id) } }
+        perception("evt-other", recordedAtMillis = 1_700_000_002_000) { id -> (1..3).map { place("other-$it", id) } }
             .store(other, store)
             .getOrThrow()
 

@@ -13,6 +13,7 @@ import link.socket.ampere.field.Ref
 import link.socket.ampere.field.Sensitivity
 import link.socket.ampere.field.Subject
 import link.socket.ampere.link.LinkId
+import link.socket.ampere.observe.ObservationBudget
 
 /*
  * Package `link.socket.ampere.field.observe` — how a canon entity enters the Field (F7).
@@ -78,6 +79,11 @@ val CanonEntity.environmentRef: Ref<Environment>
  * Environment state the ref names, and copying its fields into prose would put a perceived
  * person's details somewhere [sensitivity] was not chosen for.
  *
+ * The default [decay] is [Decay.HalfLife] at [ObservationBudget.MAX_AGE]: the store drops the row
+ * at that age regardless (AMPR-465), so the default makes the row *say* what will happen to it,
+ * and a reader deriving strength from `decay` agrees with the sweep. A caller that passes
+ * [decay] is unchanged, and a [Decay.ExpiresAt] it passes is honoured by the same sweep.
+ *
  * @param holder The perceiving Subject — the agent whose door recorded the perceive.
  * @param recordedAt The perceive event's envelope `recorded_at`; see [Provenance.createdAt].
  */
@@ -86,7 +92,7 @@ fun CanonEntity.toObservation(
     recordedAt: Instant,
     confidence: Double = OBSERVATION_CONFIDENCE,
     sensitivity: Sensitivity = defaultObservationSensitivity(canonType),
-    decay: Decay = Decay.None,
+    decay: Decay = Decay.HalfLife(ObservationBudget.MAX_AGE),
 ): Result<Belief.Settled> {
     val perceiveEventId = provenance.perceiveEventId
         ?: return Result.failure(UnrecordedObservationException(canonId, canonType))
