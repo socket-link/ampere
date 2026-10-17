@@ -194,13 +194,28 @@ class OnDeviceInferenceBinding(
         if (providerId == null) copy(providerId = onDeviceProviderId) else this
 
     /**
-     * The engine as the client sees it: generation passes straight through, and
-     * every probe goes through [probe] so it is attributed, adopted and folded.
+     * The engine as the client sees it: generation passes straight through,
+     * every probe goes through [probe] so it is attributed, adopted and folded,
+     * and a token count that fails becomes "cannot count".
      */
     private inner class ObservedEngine : LocalInferenceEngine {
         override suspend fun probe(): LocalCapacity = this@OnDeviceInferenceBinding.probe()
 
         override suspend fun generate(prompt: String): Result<String> = engine.generate(prompt)
+
+        /**
+         * The engine's own count, or null when it has none or fails to produce one
+         * (AMPR-460). A counter that throws is an engine that cannot count: the
+         * caller sizes by the estimate, and nothing about the call fails.
+         */
+        override suspend fun tokenCount(text: String): Int? =
+            try {
+                engine.tokenCount(text)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                null
+            }
 
         override suspend fun generateStructured(kind: EmissionKind, prompt: String): Result<EmissionPayload> =
             engine.generateStructured(kind, prompt)

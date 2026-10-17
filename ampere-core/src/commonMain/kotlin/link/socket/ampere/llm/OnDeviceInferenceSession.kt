@@ -115,7 +115,9 @@ sealed interface LocalFirstOutcome {
  * 2. The service probes the bound [LocalInferenceEngine] and hands the result to
  *    the [CognitiveRelay], which picks the cheapest model that satisfies the
  *    call. The on-device model is free, so when the engine reports it available
- *    and the prompt fits its context window, it wins.
+ *    and the prompt fits its context window, it wins. Whether it fits is
+ *    measured with the engine's own token count when the engine offers one
+ *    (AMPR-460), and estimated at four characters per token when it does not.
  * 3. [DispatchingUpstreamLlmClient] executes the choice: on the engine for the
  *    on-device model, on the cloud transport for anything else.
  * 4. The service publishes `ProviderCallStarted` / `ProviderCallCompleted`
@@ -234,8 +236,12 @@ class OnDeviceInferenceSession(
         }
 
         val runId = generateUUID(RUN_ID_PREFIX)
-        val contextTokens = PromptTokenEstimator.estimateInputTokens(listOf(systemMessage, prompt)) +
-            maxOutputTokens
+        // Sized by the engine's own tokenizer when it has one (AMPR-460), counting exactly
+        // the flattened prompt the engine would be handed; by chars/4 otherwise. The service
+        // sizes the same way below and only ever widens, so the two cannot disagree.
+        val inputTokens = binding.client.countLocalTokens(LocalUpstreamLlmClient.flattenToPrompt(systemMessage, prompt))
+            ?: PromptTokenEstimator.estimateInputTokens(listOf(systemMessage, prompt))
+        val contextTokens = inputTokens + maxOutputTokens
 
         return try {
             val result = service.callDetailed(

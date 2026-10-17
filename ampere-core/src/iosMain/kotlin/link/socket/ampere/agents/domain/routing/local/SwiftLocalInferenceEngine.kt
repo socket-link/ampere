@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.domain.routing.local
 
+import kotlinx.coroutines.CancellationException
 import link.socket.ampere.agents.domain.emission.EmissionKind
 import link.socket.ampere.agents.domain.emission.EmissionPayload
 import link.socket.ampere.agents.domain.emission.ProseFormat
@@ -27,6 +28,16 @@ abstract class SwiftLocalInferenceEngine {
     @Throws(Exception::class)
     abstract suspend fun generate(prompt: String): String
 
+    /**
+     * Mirrors [LocalInferenceEngine.tokenCount]: the engine's own count of
+     * [text], or `nil` when it cannot count (AMPR-460). Boxed because a Kotlin
+     * `Int?` crosses the Objective-C export as an optional `KotlinInt`, which
+     * Swift can return. A throw is adapted to "cannot count", never to a
+     * failed call.
+     */
+    @Throws(Exception::class)
+    open suspend fun tokenCount(text: String): Int? = null
+
     /** Mirrors [LocalInferenceEngine.generateStructured]'s own Prose-only default. */
     @Throws(Exception::class)
     open suspend fun generateStructured(kind: EmissionKind, prompt: String): EmissionPayload =
@@ -47,6 +58,15 @@ fun SwiftLocalInferenceEngine.toLocalInferenceEngine(): LocalInferenceEngine =
 
         override suspend fun generate(prompt: String): Result<String> =
             runCatching { this@toLocalInferenceEngine.generate(prompt) }
+
+        override suspend fun tokenCount(text: String): Int? =
+            try {
+                this@toLocalInferenceEngine.tokenCount(text)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                null
+            }
 
         override suspend fun generateStructured(kind: EmissionKind, prompt: String): Result<EmissionPayload> =
             runCatching { this@toLocalInferenceEngine.generateStructured(kind, prompt) }
