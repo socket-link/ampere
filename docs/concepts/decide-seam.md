@@ -7,7 +7,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/reasoning/ConfidenceSource.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/CognitiveEvent.kt
 related: [CognitiveRelay, CognitionTrace, PropelLoop, EventSerialBus, Probe]
-last_verified: 2026-10-11
+last_verified: 2026-10-17
 ---
 
 # Decide Seam
@@ -58,7 +58,7 @@ model wrote about itself (AMPR-381, G1). Three pressures shaped the seam:
 - `llm/decide/UpstreamDecisionClient.kt` — the seam (`decide(request, configuration)`), `MissingUpstreamDecisionClientException`, `MalformedDecisionResponseException`.
 - `llm/decide/HostedSystemOneDecisionClient.kt` — one Ktor POST, no SDK. Endpoint + credential + model snapshot + body extras (`"model"` for every vendor's route). Accepts the bare body and Cloudflare's `{"result": …, "success": true}` envelope. Measured, `CLOUD`. `HostedSystemOneDecisionClient.of(model, route, credential)` is the one way to bind a named model over a named route.
 - `llm/decide/DecisionModel.kt` — `DecisionModel(makerId, modelId)` and `DecisionModels` (`Jev_1_13` from `typesafe`; `Clef`, `ClefFlash` from `cloudflare`); `DecisionRoute(via, endpoint, wireModelId, bodyExtras)` and `DecisionRoutes` (`jevViaOpenRouter()`, `jevViaTypeSafe(modelId)`, `clefOnWorkersAi(accountId, flash)`). Names only: a route holds no credential and naming one binds nothing (AMPR-435).
-- `llm/decide/ModelBackedDecisionClient.kt` — the question rendered as a prompt to `AgentLLMService.callDetailed`, answered as JSON. `SELF_REPORTED`, no distribution; the model's own level lands on `confidence` through F10. The state reaches the prompt inside the one delimited data block the step-results renderer uses (`dataBlock`, AMPR-453) — a hosted run's state carries its step results, which are tool output — and the question follows the block, outside it. The digest is still of the state as given, not of the rendered block.
+- `llm/decide/ModelBackedDecisionClient.kt` — the question rendered as a prompt to `AgentLLMService.callDetailed`, answered as JSON. `SELF_REPORTED`, no distribution; the model's own level lands on `confidence` through F10. The state reaches the prompt inside the one delimited data block the step-results renderer uses (`dataBlock`, AMPR-453) — a hosted run's state carries its step results, which are tool output — and the question follows the block, outside it. The digest is still of the state as given, not of the rendered block. The reply is read through `LLMResponseParser.cleanJsonResponse`'s first-value rule (AMPR-463): a reply that parses as it stands is read unchanged, and otherwise the first complete JSON value — inside the first fence, then anywhere — is the answer, so a fenced object followed by prose is an answer, not a parse failure.
 - `llm/decide/DeterministicDecisionClient.kt` — a `(state, question) -> answerKey` function. Measured one-hot, `ON_DEVICE`.
 - `llm/decide/BandFitGuard.kt` — the one check at the mouth of a band fit; refuses `SELF_REPORTED` and distribution-less judgments.
 - `llm/decide/Digests.kt` — `stateDigest(state)` (full SHA-256 hex) and `Question.version`.

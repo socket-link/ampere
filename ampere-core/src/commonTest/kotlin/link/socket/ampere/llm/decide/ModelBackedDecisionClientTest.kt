@@ -119,6 +119,38 @@ class ModelBackedDecisionClientTest {
     }
 
     @Test
+    fun `a fenced answer followed by prose is read as the answer`() = runTest {
+        val (client, _) = clientAnswering(
+            """```json
+{
+  "answer": "false",
+  "confidence": "high"
+}
+```
+
+The customer is asking about a feature that is missing: nothing in the message mentions money.""",
+        )
+
+        val judgment = client.decide(DecisionRequest("s", mapOf("refund" to refund)), aiConfiguration)
+            .judgments.getValue("refund")
+
+        assertEquals("false", judgment.answer)
+        assertEquals(0.75, judgment.confidence)
+        assertEquals(ConfidenceSource.SELF_REPORTED, judgment.source)
+    }
+
+    @Test
+    fun `a fenced answer outside the declared keys followed by prose is still malformed`() = runTest {
+        val (client, _) = clientAnswering(
+            "```json\n{\"answer\": \"sales\", \"confidence\": \"high\"}\n```\n\nIt reads like a sales lead.",
+        )
+
+        assertFailsWith<MalformedDecisionResponseException> {
+            client.decide(DecisionRequest("s", mapOf("team" to team)), aiConfiguration)
+        }
+    }
+
+    @Test
     fun `an answer outside the declared keys is a malformed response`() = runTest {
         val (client, _) = clientAnswering("""{"answer": "sales", "confidence": "high"}""")
 
