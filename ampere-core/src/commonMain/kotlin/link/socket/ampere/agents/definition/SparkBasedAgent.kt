@@ -57,6 +57,8 @@ import link.socket.ampere.agents.execution.tools.planning.ToolPlanSteps
 import link.socket.ampere.domain.agent.bundled.AgentDefinition
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
+import link.socket.ampere.domain.ai.model.AIModel_OnDevice
+import link.socket.ampere.domain.ai.provider.AIProvider_OnDevice
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.field.Hardness
 import link.socket.ampere.field.Rule
@@ -83,6 +85,15 @@ import link.socket.ampere.util.runBlockingCompat
  * Parameterized over [S] so role-specific factories (e.g.
  * `SparkBasedAgent<CodeState>`, `SparkBasedAgent<ProductState>`) can carry
  * domain-specific state without subclassing for behavior.
+ *
+ * This agent runs the PROPEL loop, so none of its calls runs on the device: rung
+ * ZERO serves display text only (AMPR-372). Construction refuses a declared floor
+ * below [CapabilityRung.ONE] and a configuration that names the on-device provider
+ * or model (AMPR-459), and that covers every way one is built — the role factories
+ * below, [SparkAgentFactory], [AgentFactory], an Arc step and a hosted seat. A
+ * missing floor is legal and keeps the configured model. Words for a person to read
+ * go through [OnDeviceInferenceSession][link.socket.ampere.llm.OnDeviceInferenceSession],
+ * which is not an agent.
  *
  * @param agentId Unique identifier for this agent
  * @param cognitiveAffinity The cognitive affinity that shapes how this agent thinks
@@ -142,7 +153,9 @@ open class SparkBasedAgent<S : AgentState>(
      * Per-agent capability-rung floor (AMPR-219). Threaded onto the agent's
      * [AgentDefinition] so [AgentLLMService][link.socket.ampere.agents.domain.reasoning.AgentLLMService]
      * merges it into the [RoutingContext][link.socket.ampere.agents.domain.routing.RoutingContext]
-     * and the relay refuses to route below it. Null declares no floor.
+     * and the relay refuses to route below it. Null declares no floor and keeps the
+     * agent on its configured model; a floor below [CapabilityRung.ONE] is refused at
+     * construction (AMPR-459).
      */
     @Transient
     private val _minimumRung: CapabilityRung? = null,
@@ -286,8 +299,12 @@ open class SparkBasedAgent<S : AgentState>(
             upstreamDecisionClient = _upstreamDecisionClient,
         )
 
-    // Initialize the SparkStack with the configured affinity
     init {
+        // AMPR-459: refused before the stack is built, so an agent that would run on the
+        // device fails where it is declared rather than on its first model call.
+        requireOffTheDevice(agentId, _minimumRung, _aiConfiguration)
+
+        // Initialize the SparkStack with the configured affinity
         reinitializeSparkStack()
     }
 
@@ -811,7 +828,10 @@ open class SparkBasedAgent<S : AgentState>(
      *
      * The requirement's [CapabilityRequirement.minRung] composes with the agent's
      * declared [_minimumRung] as the stricter of the two, so a call site can raise
-     * the floor for one call without ever lowering the agent's own.
+     * the floor for one call without ever lowering the agent's own. A requirement
+     * with no floor, or one below [CapabilityRung.ONE], arrives at `ONE`
+     * ([AgentReasoning.callLLM], AMPR-459): a call this agent makes is never display
+     * text. Null forwards no requirement.
      */
     fun callLLM(
         prompt: String,
@@ -901,8 +921,8 @@ open class SparkBasedAgent<S : AgentState>(
 
     /**
      * [callLLM], with the call bounded by [timeout] instead of [DEFAULT_LLM_CALL_TIMEOUT].
-     * [requirements] composes with the agent's floor exactly as it does there. Suspends
-     * rather than blocks; see the timed [perceiveState].
+     * [requirements] is raised to rung `ONE` and composes with the agent's floor exactly
+     * as it does there. Suspends rather than blocks; see the timed [perceiveState].
      */
     suspend fun callLLM(
         prompt: String,
@@ -992,6 +1012,12 @@ open class SparkBasedAgent<S : AgentState>(
          * @param outcomeRepository episodic store for the outcomes the agent's tool
          *   calls produce (AMPR-406). Only has anything to record when [executor] is
          *   set too — without one no engine is built and no tool dispatches.
+         * @param aiConfiguration what the agent's calls resolve to when nothing routes
+         *   them elsewhere; null uses the default. One that names the on-device provider
+         *   or model is refused (AMPR-459), as by every factory here.
+         * @param minimumRung the agent's floor (AMPR-219), `ONE` or above. Null declares
+         *   none and keeps the agent on [aiConfiguration]; a floor below `ONE` is refused
+         *   (AMPR-459).
          */
         fun Code(
             sparkRegistry: SparkRegistry,
@@ -1070,7 +1096,8 @@ open class SparkBasedAgent<S : AgentState>(
          *
          * Mirrors the legacy `ProductAgent` shape. Declarative
          * `product-agent.spark.md` guidance is wired separately by the
-         * surrounding `AgentFactory`.
+         * surrounding `AgentFactory`. An `aiConfiguration` that names the
+         * on-device provider or model is refused (AMPR-459).
          */
         fun Product(
             sparkRegistry: SparkRegistry,
@@ -1132,7 +1159,8 @@ open class SparkBasedAgent<S : AgentState>(
          * Mirrors the legacy `ProjectAgent` shape. Typical tool stack
          * includes the issue-creation tool and the human-escalation
          * tool, each carrying its own `ProjectParams.*` parameter
-         * strategy.
+         * strategy. An `aiConfiguration` that names the on-device provider
+         * or model is refused (AMPR-459).
          */
         fun Project(
             sparkRegistry: SparkRegistry,
@@ -1194,7 +1222,8 @@ open class SparkBasedAgent<S : AgentState>(
          *
          * Mirrors the legacy `QualityAgent` shape. Per AMPR-165, the role
          * spark is resolved from [sparkRegistry] by canonical id;
-         * construction fails fast if it isn't present.
+         * construction fails fast if it isn't present. An `aiConfiguration`
+         * that names the on-device provider or model is refused (AMPR-459).
          */
         fun Quality(
             sparkRegistry: SparkRegistry,
@@ -1254,3 +1283,43 @@ private fun Task.promptDescription(): String =
     // for rather than by its id (AMPR-410) — the reader this would otherwise have
     // been, silently.
     planStepDescription ?: id.ifBlank { "unnamed task" }
+
+/**
+ * Refuses the two declarations that put an agent's calls on the device (AMPR-459).
+ *
+ * A [SparkBasedAgent] runs the PROPEL loop, and rung ZERO serves display text only
+ * (AMPR-372), so:
+ *
+ * - a floor below [CapabilityRung.ONE] is refused. `AgentLLMService` turns the floor
+ *   into a requirement on every call, which makes every phase eligible for the device,
+ *   PLAN included, and sends what the device cannot take cheapest-capable over the whole
+ *   catalog rather than to the agent's own model. No floor is not refused: it keeps the
+ *   configured model.
+ * - a configuration that names the on-device provider or an on-device model is refused.
+ *   It is what a call with no requirement resolves to, so every such call would run on
+ *   the device with no floor involved. The model counts as well as the provider because
+ *   the dispatching client keys on the model. The pairs are read through
+ *   [AIConfiguration.getAvailableModels], never [AIConfiguration.provider], whose read
+ *   decides which configuration of a set with backups answers.
+ */
+private fun requireOffTheDevice(
+    agentId: AgentId,
+    minimumRung: CapabilityRung?,
+    configuration: AIConfiguration?,
+) {
+    require(minimumRung == null || minimumRung >= CapabilityRung.ONE) {
+        "SparkBasedAgent '$agentId' declares minimumRung ${minimumRung?.ordinal}, below ONE. Rung ZERO " +
+            "serves display text only, and this agent runs the PROPEL loop, so its floor is ONE or above " +
+            "(AMPR-372). Leave it unset to keep the agent on its configured model. See the CognitiveRelay " +
+            "concept, docs/concepts/cognitive-relay.md."
+    }
+    val onDevice = configuration?.getAvailableModels().orEmpty()
+        .filter { (provider, model) -> provider.id == AIProvider_OnDevice.id || model is AIModel_OnDevice }
+    require(onDevice.isEmpty()) {
+        "SparkBasedAgent '$agentId' is configured with " +
+            onDevice.joinToString { (provider, model) -> "${provider.id}/${model.name}" } +
+            ", which executes on the device. Rung ZERO serves display text only, and this agent runs the " +
+            "PROPEL loop (AMPR-372): configure a cloud model, and hand words for a person to read to " +
+            "OnDeviceInferenceSession. See the CognitiveRelay concept, docs/concepts/cognitive-relay.md."
+    }
+}

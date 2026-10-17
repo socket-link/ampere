@@ -55,7 +55,9 @@ import link.socket.ampere.plug.permission.UserGrants
  * @param outcomeRepository Episodic store for the outcomes created agents' tool calls produce
  *   (AMPR-406). Pair it with [executor]: without an executor no tool-execution engine is built,
  *   so there is nothing to record. Null leaves tool outcomes unrecorded.
- * @param defaultAiConfiguration Default AI configuration for agents
+ * @param defaultAiConfiguration Default AI configuration for agents. One that names the on-device provider or
+ *   model is refused when an agent is created (AMPR-459): every agent built here runs the PROPEL loop, and
+ *   rung ZERO serves display text only.
  * @param sparkRegistry Optional declarative spark registry; defaults to bundled fixtures
  * @param cognitiveRelay Optional relay injected into created agents (e.g. a `PlaybackRelay` for eval Bench runs)
  * @param executor Optional tool executor injected into created agents (e.g. a `NoOpExecutor` for effect-free Bench runs)
@@ -273,7 +275,8 @@ class SparkAgentFactory(
      * @param minimumRung Capability-rung floor for this agent (AMPR-232). Threaded onto the agent's
      *   `AgentDefinition` so the relay refuses to route below it; an agent declaring one is given
      *   [floorEnforcingRelay] when no relay was injected, so the floor is enforced rather than ignored.
-     *   Null declares no floor and leaves the agent unconstrained.
+     *   Null declares no floor and keeps the agent on its configured model. A floor below `ONE` is
+     *   refused (AMPR-459), and so is an Arc that declares one, before it gets here.
      * @return A bare agent ready for custom Spark configuration
      */
     fun createAgent(

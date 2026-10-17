@@ -7,7 +7,9 @@ import link.socket.ampere.agents.domain.reasoning.AgentLLMService
 import link.socket.ampere.agents.domain.reasoning.Confidence
 import link.socket.ampere.agents.domain.reasoning.ConfidenceSource
 import link.socket.ampere.agents.domain.reasoning.LLMResponseParser
+import link.socket.ampere.agents.domain.reasoning.withFloorAtLeast
 import link.socket.ampere.agents.domain.routing.RoutingContext
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.agents.domain.routing.local.InferenceLocality
 import link.socket.ampere.agents.domain.routing.local.InferenceLocalityClassifier
 import link.socket.ampere.agents.execution.dataBlock
@@ -32,18 +34,39 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
  *
  * Nothing falls back to this adapter. A consumer names it.
  *
+ * ## Never on the device
+ *
+ * A judgment is never display text, so it never runs on the on-device model,
+ * which serves rung ZERO only (AMPR-372). Measured through this adapter, that
+ * model called 59.0% of unmet runs met, against 15.0% for a rung-`THREE` cloud
+ * model on the same prompts, while every one of its replies parsed. A
+ * requirement on [routingContext] therefore has its floor raised to rung `ONE`
+ * before it is forwarded, which leaves the device out of the candidates
+ * (AMPR-459); a stricter floor stands. A context with no requirement is
+ * forwarded as it is, so the judgment keeps the configured model: adding a
+ * requirement would turn on cheapest-capable routing, and that is a routing
+ * change, not a refusal.
+ *
  * @param llmService The generative path. Its relay, transport and telemetry
  *   apply unchanged; every question is one `ProviderCall*` pair.
- * @param routingContext Routing context for each generative call, or null.
+ * @param routingContext Routing context for each generative call, or null. Its
+ *   requirement, if it has one, is raised to rung `ONE` (see above).
  * @param localityClassifier Says where the answering model ran. Null labels
  *   every judgment [InferenceLocality.CLOUD], the safe direction.
  */
 @AmpereStableApi
 class ModelBackedDecisionClient(
     private val llmService: AgentLLMService,
-    private val routingContext: RoutingContext? = null,
+    routingContext: RoutingContext? = null,
     private val localityClassifier: InferenceLocalityClassifier? = null,
 ) : UpstreamDecisionClient {
+
+    /** The constructor's context as every call forwards it: its requirement off rung ZERO. */
+    private val routingContext: RoutingContext? = routingContext?.let { context ->
+        context.requirements
+            ?.let { requirement -> context.copy(requirements = requirement.withFloorAtLeast(CapabilityRung.ONE)) }
+            ?: context
+    }
 
     override suspend fun decide(
         request: DecisionRequest,

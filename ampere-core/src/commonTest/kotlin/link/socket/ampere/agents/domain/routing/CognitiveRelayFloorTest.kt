@@ -56,7 +56,9 @@ class CognitiveRelayFloorTest {
                 reasoning = RelativeReasoning.LOW,
                 maxContextTokens = 8_192,
                 supportedInputs = SupportedInputs.TEXT,
-                cost = CostPolicy.Free,
+                // The cheapest, and below the floor. Metered, not Free: a Free model executes
+                // on the device, and the registry refuses one rated above ZERO (AMPR-459).
+                costPerWatt = 0.001,
                 rung = CapabilityRung.ONE,
             ),
             ModelDescriptor(
@@ -82,7 +84,9 @@ class CognitiveRelayFloorTest {
                 reasoning = RelativeReasoning.LOW,
                 maxContextTokens = 8_192,
                 supportedInputs = SupportedInputs.TEXT,
-                cost = CostPolicy.Free,
+                // The cheapest, and below the floor. Metered, not Free: a Free model executes
+                // on the device, and the registry refuses one rated above ZERO (AMPR-459).
+                costPerWatt = 0.001,
                 rung = CapabilityRung.ONE,
             ),
             ModelDescriptor(

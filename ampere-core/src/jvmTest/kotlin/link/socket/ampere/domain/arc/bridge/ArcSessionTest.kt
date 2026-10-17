@@ -1,6 +1,12 @@
 package link.socket.ampere.domain.arc.bridge
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import com.aallam.openai.api.chat.ChatChoice
+import com.aallam.openai.api.chat.ChatCompletion
+import com.aallam.openai.api.chat.ChatCompletionRequest
+import com.aallam.openai.api.chat.ChatMessage
+import com.aallam.openai.api.chat.ChatRole
+import com.aallam.openai.api.model.ModelId
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -42,11 +48,12 @@ import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.agents.domain.routing.local.FakeLocalInferenceEngine
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
-import link.socket.ampere.agents.domain.routing.local.LocalUnavailableReason
 import link.socket.ampere.agents.domain.routing.local.OnDeviceAvailability
 import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceState
 import link.socket.ampere.agents.events.bus.EventSerialBus
 import link.socket.ampere.db.Database
+import link.socket.ampere.domain.ai.configuration.AIConfiguration
+import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
 import link.socket.ampere.domain.ai.model.AIModel_OnDevice
 import link.socket.ampere.domain.ai.provider.AIProvider_OnDevice
 import link.socket.ampere.domain.arc.AmpereRuntime
@@ -60,6 +67,7 @@ import link.socket.ampere.domain.arc.OrchestrationConfig
 import link.socket.ampere.domain.arc.OrchestrationType
 import link.socket.ampere.domain.arc.TerminationReason
 import link.socket.ampere.llm.MissingUpstreamLlmClientException
+import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.trace.ModelInvocationTrace
 import okio.Path.Companion.toPath
 
@@ -108,30 +116,30 @@ class ArcSessionTest {
     )
 
     /**
-     * An Arc whose one step is eligible for the device: a `ZERO` floor is the one the on-device
-     * model clears. Eligibility is the Arc's declaration, not the bridge's (AMPR-372) — the
-     * bridge only makes the engine reachable.
+     * An Arc whose one step declares [floor], or none. `ONE` is the lowest floor a step may
+     * declare: a `ZERO` floor is refused where the Arc is written (AMPR-459), so no Arc step is
+     * eligible for the device and the bridge's engine serves none of them.
      */
-    private fun onDeviceArcConfig(name: String) = ArcConfig(
+    private fun flooredArcConfig(name: String, floor: CapabilityRung?) = ArcConfig(
         name = name,
-        agents = listOf(ArcAgentConfig(role = "code", minimumRung = CapabilityRung.ZERO)),
+        agents = listOf(ArcAgentConfig(role = "code", minimumRung = floor)),
         orchestration = OrchestrationConfig(
             type = OrchestrationType.SEQUENTIAL,
             order = listOf("code"),
         ),
     )
 
+    /** The floors an Arc step may declare: none, and the lowest legal one. */
+    private val legalFloors: List<CapabilityRung?> = listOf(null, CapabilityRung.ONE)
+
+    /** The model a step with no floor is configured with: the default configuration's. */
+    private val configuredModel: String = AIConfigurationFactory.getDefaultConfiguration().model.name
+
     private fun deviceAvailable(maxContextTokens: Int) = LocalCapacity(
         available = true,
         modelId = AIModel_OnDevice.AppleFoundationModels.name,
         maxContextTokens = maxContextTokens,
         providerId = AIProvider_OnDevice.id,
-    )
-
-    private fun deviceUnavailable(reason: String) = LocalCapacity(
-        available = false,
-        providerId = AIProvider_OnDevice.id,
-        reason = reason,
     )
 
     private suspend fun ArcRunHandle.modelInvocations(): List<ModelInvocationTrace> =
@@ -698,176 +706,140 @@ class ArcSessionTest {
         }
     }
 
-    // ---- on-device (AMPR-374) ----------------------------------------------------------
+    // ---- on-device (AMPR-374, AMPR-459) -----------------------------------------------
 
     /**
-     * The objective end to end: an Arc started through `create` with an engine runs its
-     * eligible steps on the device, the session's state shows it, and the run's trace records
-     * each call under the run id with the reason the relay chose the device.
+     * An engine-bound session whose device could take every prompt, and still no Arc step hands
+     * it one (AMPR-459): a step runs the PROPEL loop, and rung ZERO serves display text only. With
+     * no floor and with `ONE`, every call goes to the cloud transport — with no floor to the
+     * agent's own configured model, as before AMPR-459; with `ONE` cheapest-capable over the rated
+     * cloud models. The binding still probes the engine, so the session's state shows a device
+     * that is there, available and unused.
      */
     @Test
-    fun `an Arc bound to an engine runs eligible steps on the device and traces them`() = runBlocking<Unit> {
-        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { Database.Schema.create(it) }
-        // A window far larger than the catalog's 4,096 (the live model's figure, AMPR-373),
-        // adopted by the binding so every Arc prompt fits in this test.
-        val engine = FakeLocalInferenceEngine(
-            capacity = deviceAvailable(maxContextTokens = 32_768),
-            respond = { Result.success("{}") },
-        )
-        val session = ArcSession.create(
-            arcConfig = onDeviceArcConfig("bridge-on-device-arc"),
-            projectDirPath = arcProjectDir("bridge-on-device").toString(),
-            maxFlowTicks = 1,
-            database = Database(driver),
-            engine = engine,
-            cloud = null,
-        )
+    fun `an engine-bound session's Arc steps never hand the engine a prompt`() = runBlocking<Unit> {
+        legalFloors.forEach { floor ->
+            val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { Database.Schema.create(it) }
+            // A window far larger than the catalog's 4,096 (the live model's figure, AMPR-373),
+            // adopted by the binding, so it is not a prompt's size that keeps it off the device.
+            val engine = FakeLocalInferenceEngine(
+                capacity = deviceAvailable(maxContextTokens = 32_768),
+                respond = { Result.success("{}") },
+            )
+            val cloud = CloudTransport()
+            val session = ArcSession.create(
+                arcConfig = flooredArcConfig("bridge-engine-bound-arc", floor),
+                projectDirPath = arcProjectDir("bridge-engine-bound").toString(),
+                maxFlowTicks = 1,
+                database = Database(driver),
+                engine = engine,
+                cloud = cloud,
+            )
 
-        try {
-            val state = assertNotNull(session.onDeviceState, "An engine-bound session exposes its state")
-            val observed = Channel<OnDeviceInferenceState>(Channel.UNLIMITED)
-            val observation = assertNotNull(session.observeOnDeviceState { observed.trySend(it) })
+            try {
+                val state = assertNotNull(session.onDeviceState, "An engine-bound session exposes its state")
+                val observed = Channel<OnDeviceInferenceState>(Channel.UNLIMITED)
+                val observation = assertNotNull(session.observeOnDeviceState { observed.trySend(it) })
 
-            val handle = session.start("Add a health check endpoint")
-            val outcome = withTimeout(timeoutMillis) { assertIs<ArcOutcome.Completed>(handle.await()) }
-            assertEquals(handle.runId, outcome.runId)
+                val handle = session.start("Add a health check endpoint")
+                withTimeout(timeoutMillis) { assertIs<ArcOutcome.Completed>(handle.await()) }
 
-            assertTrue(engine.generateCount >= 1, "The eligible step must be handed to the engine")
+                assertEquals(0, engine.generateCount, "floor $floor: no Arc step may hand the engine a prompt")
+                val cloudCalls = cloud.calls.get()
+                assertTrue(cloudCalls >= 1, "floor $floor: the steps ran, and in the cloud")
 
-            val settled = withTimeout(timeoutMillis) {
-                state.first { it.servedOnDevice >= engine.generateCount && !it.isInUse }
+                val settled = withTimeout(timeoutMillis) {
+                    state.first { it.servedInCloud >= cloudCalls && !it.isInUse }
+                }
+                assertEquals(cloudCalls, settled.servedInCloud)
+                assertEquals(0, settled.servedOnDevice)
+                assertEquals(0, settled.failedOnDevice)
+                // The device was never a candidate, so the relay never routed around it either.
+                assertNull(settled.lastFallback)
+                val availability = assertIs<OnDeviceAvailability.Available>(settled.availability)
+                assertEquals(32_768, availability.maxContextTokens, "The engine's own window is what the state shows")
+
+                // The Swift-facing observation saw the same facts.
+                val lastObserved = withTimeout(timeoutMillis) {
+                    var latest = observed.receive()
+                    while (latest.servedInCloud < cloudCalls) latest = observed.receive()
+                    latest
+                }
+                assertEquals(0, lastObserved.servedOnDevice)
+                observation.cancel()
+
+                // Persisted under the run id: every step ran in the cloud, and a step with no floor
+                // ran on the model it was configured with.
+                val invocations = handle.modelInvocations()
+                assertEquals(cloudCalls, invocations.size)
+                invocations.forEach { invocation ->
+                    assertTrue(invocation.providerId != AIProvider_OnDevice.id)
+                    assertEquals(true, invocation.success)
+                    if (floor == null) {
+                        assertEquals(configuredModel, invocation.modelId)
+                    } else {
+                        assertTrue(
+                            invocation.routingReason.orEmpty().startsWith("capability:"),
+                            "A ONE floor routes cheapest-capable; got ${invocation.routingReason}",
+                        )
+                    }
+                }
+            } finally {
+                session.close()
+                driver.close()
             }
-            assertEquals(engine.generateCount, settled.servedOnDevice)
-            assertEquals(0, settled.servedInCloud, "Nothing left the device")
-            assertEquals(0, settled.failedOnDevice)
-            val availability = assertIs<OnDeviceAvailability.Available>(settled.availability)
-            assertEquals(32_768, availability.maxContextTokens, "The engine's own window is what the state shows")
-
-            // The Swift-facing observation saw the same facts.
-            val lastObserved = withTimeout(timeoutMillis) {
-                var latest = observed.receive()
-                while (latest.servedOnDevice < engine.generateCount) latest = observed.receive()
-                latest
-            }
-            assertEquals(engine.generateCount, lastObserved.servedOnDevice)
-            observation.cancel()
-
-            // Persisted under the run id, with the relay's reason, so the trace can say where
-            // each step ran.
-            val invocations = handle.modelInvocations()
-            assertEquals(engine.generateCount, invocations.size)
-            invocations.forEach { invocation ->
-                assertEquals(AIProvider_OnDevice.id, invocation.providerId)
-                assertEquals(AIModel_OnDevice.AppleFoundationModels.name, invocation.modelId)
-                assertEquals(true, invocation.success)
-                assertFalse(invocation.routingReason.isNullOrBlank(), "A call without a routing reason is a trace gap")
-            }
-        } finally {
-            session.close()
-            driver.close()
         }
     }
 
     /**
-     * No cloud transport and a device that cannot serve: the step fails cleanly, the prompt is
-     * sent nowhere, and the state says why the device was unavailable.
+     * A device-only session with its device available: nothing a step may run on is bound. No Arc
+     * step is eligible for the device (AMPR-459), and with no cloud transport every model call
+     * fails before anything is sent — each on record as a failure to find a transport, never under
+     * the on-device provider, and none of them retried on the device. The steps fail; the run does
+     * not, the same as a run with no transport at all.
      */
     @Test
-    fun `an on-device only Arc sends nothing when the device cannot serve`() = runBlocking<Unit> {
-        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { Database.Schema.create(it) }
-        val engine = FakeLocalInferenceEngine(capacity = deviceUnavailable(LocalUnavailableReason.NOT_ENABLED))
-        val session = ArcSession.create(
-            arcConfig = onDeviceArcConfig("bridge-device-unavailable-arc"),
-            projectDirPath = arcProjectDir("bridge-device-unavailable").toString(),
-            maxFlowTicks = 1,
-            database = Database(driver),
-            engine = engine,
-            cloud = null,
-        )
+    fun `a device-only session sends nothing and every model call fails`() = runBlocking<Unit> {
+        legalFloors.forEach { floor ->
+            val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { Database.Schema.create(it) }
+            val engine = FakeLocalInferenceEngine(
+                capacity = deviceAvailable(maxContextTokens = 32_768),
+                respond = { Result.success("{}") },
+            )
+            val session = ArcSession.create(
+                arcConfig = flooredArcConfig("bridge-device-only-arc", floor),
+                projectDirPath = arcProjectDir("bridge-device-only").toString(),
+                maxFlowTicks = 1,
+                database = Database(driver),
+                engine = engine,
+                cloud = null,
+            )
 
-        try {
-            val state = assertNotNull(session.onDeviceState)
-            val handle = session.start("Add a health check endpoint")
+            try {
+                val state = assertNotNull(session.onDeviceState)
+                val handle = session.start("Add a health check endpoint")
+                withTimeout(timeoutMillis) { assertIs<ArcOutcome.Completed>(handle.await()) }
 
-            // The step fails; the run does not. Same as a run with no transport at all.
-            withTimeout(timeoutMillis) { assertIs<ArcOutcome.Completed>(handle.await()) }
+                assertEquals(0, engine.generateCount, "floor $floor: the engine must not be given a prompt")
+                assertTrue(engine.probeCount >= 1, "Availability is still asked before each call, by the probe")
 
-            assertEquals(0, engine.generateCount, "An unavailable engine must not be given a prompt")
-            assertTrue(engine.probeCount >= 1, "Availability is decided before the call, by the probe")
+                val invocations = handle.modelInvocations()
+                assertTrue(invocations.isNotEmpty(), "The attempts are traced, so a reader sees the steps refused")
+                invocations.forEach { invocation ->
+                    assertEquals(false, invocation.success)
+                    assertEquals(MissingUpstreamLlmClientException::class.simpleName, invocation.errorType)
+                    assertTrue(invocation.providerId != AIProvider_OnDevice.id)
+                }
 
-            // The relay wanted the device and routed around it, and said so on the bus.
-            val settled = withTimeout(timeoutMillis) { state.first { it.lastFallback != null } }
-            assertEquals(LocalUnavailableReason.NOT_ENABLED, settled.lastFallback?.reason)
-            val availability = assertIs<OnDeviceAvailability.Unavailable>(settled.availability)
-            assertEquals(LocalUnavailableReason.NOT_ENABLED, availability.reason)
-            assertEquals(0, settled.servedOnDevice)
-            assertEquals(0, settled.servedInCloud)
-            assertFalse(settled.isInUse)
-
-            // Every attempt is on record as a failure to find a transport — not as a call that
-            // went out, and never under the on-device provider.
-            val invocations = handle.modelInvocations()
-            assertTrue(invocations.isNotEmpty(), "The attempt is traced, so a reader can see the step was refused")
-            invocations.forEach { invocation ->
-                assertEquals(false, invocation.success)
-                assertEquals(MissingUpstreamLlmClientException::class.simpleName, invocation.errorType)
-                assertTrue(invocation.providerId != AIProvider_OnDevice.id)
+                val snapshot = state.value
+                assertEquals(0, snapshot.servedOnDevice)
+                assertEquals(0, snapshot.failedOnDevice)
+                assertEquals(0, snapshot.servedInCloud)
+                assertNull(snapshot.lastFallback, "The device was never a candidate, so nothing routed around it")
+            } finally {
+                session.close()
+                driver.close()
             }
-        } finally {
-            session.close()
-            driver.close()
-        }
-    }
-
-    /**
-     * A prompt the engine's window cannot hold is routed away from the device before it is
-     * sent — and with no cloud to route to, the step fails without the engine ever seeing it.
-     * The window is the engine's own report, adopted by the binding; the Arc's prompts are
-     * sized by `AgentLLMService` against it.
-     */
-    @Test
-    fun `a prompt the device's window cannot hold is never handed to the engine`() = runBlocking<Unit> {
-        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { Database.Schema.create(it) }
-        // Smaller than any step's output budget alone, so no Arc prompt fits.
-        val engine = FakeLocalInferenceEngine(
-            capacity = deviceAvailable(maxContextTokens = 64),
-            respond = { Result.success("{}") },
-        )
-        val session = ArcSession.create(
-            arcConfig = onDeviceArcConfig("bridge-window-arc"),
-            projectDirPath = arcProjectDir("bridge-window").toString(),
-            maxFlowTicks = 1,
-            database = Database(driver),
-            engine = engine,
-            cloud = null,
-        )
-
-        try {
-            val state = assertNotNull(session.onDeviceState)
-            val handle = session.start("Add a health check endpoint")
-            withTimeout(timeoutMillis) { assertIs<ArcOutcome.Completed>(handle.await()) }
-
-            assertEquals(0, engine.generateCount, "A prompt that does not fit must not be given to the engine")
-            assertTrue(engine.probeCount >= 1)
-
-            // The device was available — it was the prompt that did not fit — so this is not a
-            // fallback the relay announces; it is a step that was never eligible for that window.
-            val snapshot = state.value
-            val availability = assertIs<OnDeviceAvailability.Available>(snapshot.availability)
-            assertEquals(64, availability.maxContextTokens)
-            assertNull(snapshot.lastFallback)
-            assertEquals(0, snapshot.servedOnDevice)
-            assertEquals(0, snapshot.failedOnDevice)
-
-            val invocations = handle.modelInvocations()
-            assertTrue(invocations.isNotEmpty())
-            invocations.forEach { invocation ->
-                assertEquals(false, invocation.success)
-                assertTrue(invocation.providerId != AIProvider_OnDevice.id)
-            }
-        } finally {
-            session.close()
-            driver.close()
         }
     }
 
@@ -885,6 +857,26 @@ class ArcSessionTest {
             assertNull(session.refreshOnDeviceAvailability())
         } finally {
             session.close()
+        }
+    }
+
+    /** The cloud side of an engine-bound session: answers every call with `{}`, and counts them. */
+    private class CloudTransport : UpstreamLlmClient {
+        val calls = AtomicInteger(0)
+
+        override suspend fun call(
+            request: ChatCompletionRequest,
+            configuration: AIConfiguration,
+        ): ChatCompletion {
+            calls.incrementAndGet()
+            return ChatCompletion(
+                id = "cloud-completion",
+                created = 0L,
+                model = ModelId(configuration.model.name),
+                choices = listOf(
+                    ChatChoice(index = 0, message = ChatMessage(role = ChatRole.Assistant, content = "{}")),
+                ),
+            )
         }
     }
 
