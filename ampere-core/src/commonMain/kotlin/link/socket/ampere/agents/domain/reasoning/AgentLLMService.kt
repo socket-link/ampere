@@ -30,6 +30,7 @@ import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.domain.util.toClientModelId
 import link.socket.ampere.llm.BundledUpstreamLlmClient
 import link.socket.ampere.llm.DispatchingUpstreamLlmClient
+import link.socket.ampere.llm.LocalUpstreamLlmClient
 import link.socket.ampere.llm.MissingUpstreamLlmClientException
 import link.socket.ampere.llm.ServedBy
 import link.socket.ampere.llm.UpstreamCompletion
@@ -286,7 +287,8 @@ class AgentLLMService(
         // Probe the bound local engine (if any) so the relay's on-device
         // availability gate (AMPR-207/225) can see whether Rung 0 is usable
         // right now. Never overwrites a caller-supplied localCapacity.
-        val probedLocalCapacity = (client as? DispatchingUpstreamLlmClient)?.probeLocalCapacity()
+        val dispatching = client as? DispatchingUpstreamLlmClient
+        val probedLocalCapacity = dispatching?.probeLocalCapacity()
         fun RoutingContext.withProbedLocalCapacity(): RoutingContext =
             if (probedLocalCapacity != null && localCapacity == null) {
                 copy(localCapacity = probedLocalCapacity)
@@ -308,18 +310,32 @@ class AgentLLMService(
             } ?: RoutingContext(requirements = CapabilityRequirement(minRung = rung)).withProbedLocalCapacity()
         } ?: routingContext?.withProbedLocalCapacity()
 
+        val messages = listOf(
+            ChatMessage(
+                role = ChatRole.System,
+                content = effectiveSystemMessage,
+            ),
+            ChatMessage(
+                role = ChatRole.User,
+                content = prompt,
+            ),
+        )
+
         // Context-window fit (AMPR-374). With an engine bound, a small-window model is a
         // candidate, and the relay can only keep a prompt that will not fit away from it
         // if the requirement says how much room the prompt needs. This service is the one
         // place that knows the final system message, the prompt and the output budget, so
         // it widens an *existing* requirement here. It never creates one: a step with no
         // requirement is not eligible for the device, and sizing it would make it so.
-        val fittedRoutingContext = if (probedLocalCapacity != null) {
-            effectiveRoutingContext?.withContextWindowFit(
-                tokensNeeded = PromptTokenEstimator.estimateInputTokens(
-                    listOf(effectiveSystemMessage, prompt),
-                ) + maxTokens,
-            )
+        //
+        // The input side is the engine's own count of the flattened prompt it would be
+        // handed when the engine can count (AMPR-460), and the chars/4 estimate when it
+        // cannot: the estimate undercounts digit-dense text, and a prompt admitted on an
+        // undercount is one the model refuses mid-call.
+        val fittedRoutingContext = if (probedLocalCapacity != null && effectiveRoutingContext?.requirements != null) {
+            val inputTokens = dispatching?.countLocalTokens(LocalUpstreamLlmClient.flattenToPrompt(messages))
+                ?: PromptTokenEstimator.estimateInputTokens(listOf(effectiveSystemMessage, prompt))
+            effectiveRoutingContext.withContextWindowFit(tokensNeeded = inputTokens + maxTokens)
         } else {
             effectiveRoutingContext
         }
@@ -357,17 +373,6 @@ class AgentLLMService(
         // gateway's id never lands in `providerId`. Direct, the two are the same id and
         // `via` stays null, which leaves a direct call's record exactly as it was.
         val resolved = attribution(route = route, model = model)
-
-        val messages = listOf(
-            ChatMessage(
-                role = ChatRole.System,
-                content = effectiveSystemMessage,
-            ),
-            ChatMessage(
-                role = ChatRole.User,
-                content = prompt,
-            ),
-        )
 
         val request = ChatCompletionRequest(
             // The route's own id for the model, which a gateway spells differently (AMPR-434).

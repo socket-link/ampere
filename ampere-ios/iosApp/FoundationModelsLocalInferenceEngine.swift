@@ -62,6 +62,19 @@ final class FoundationModelsLocalInferenceEngine: SwiftLocalInferenceEngine {
         return response.content
     }
 
+    /// The model's own count of `text` (AMPR-460), so the relay sizes a prompt against the
+    /// 4,096-token window with the tokenizer that will read it rather than with four
+    /// characters per token — which runs 1.55× low on a log full of timestamps (AMPR-372).
+    /// `tokenCount(for:)` arrived in iOS 26.4; before that the engine cannot count and says
+    /// so with `nil`, leaving the caller on the estimate. Counted on the model itself, not on
+    /// a session: nothing is kept between calls. A throw here is adapted on the Kotlin side
+    /// to "cannot count" and never fails the call.
+    override func tokenCount(text: String) async throws -> KotlinInt? {
+        guard #available(iOS 26.4, *) else { return nil }
+        let count = try await SystemLanguageModel.default.tokenCount(for: text)
+        return KotlinInt(int: Int32(clamping: count))
+    }
+
     override func generateStructured(kind: EmissionKind, prompt: String) async throws -> EmissionPayload {
         // Prose is a single free-text field — the guided-generation schema
         // path adds nothing over the plain response, so reuse it directly.

@@ -74,6 +74,30 @@ final class OnDeviceGenerationTests: XCTestCase {
         XCTAssertFalse(state.isInUse)
     }
 
+    func testTheEngineCountsAPromptWithTheModelsOwnTokenizer() async throws {
+        guard #available(iOS 26.4, *) else { throw XCTSkip("SystemLanguageModel.tokenCount(for:) needs iOS 26.4") }
+
+        // Digit-dense on purpose: the shape the chars/4 estimate undercounts (AMPR-372).
+        let text = "System: \(OnDeviceAssistantAgent.shared.prompt)\n\nUser: " +
+            "2026-10-17T10:07:33.418Z build 1284 failed after 2719 ms; retry 2 of 3 at 10:07:41."
+        let estimate = text.count / 4 + 8
+
+        let engine = FoundationModelsLocalInferenceEngine()
+        let counted = try await engine.tokenCount(text: text)
+        let adaptedCount = try await engine.toLocalInferenceEngine().tokenCount(text: text)
+        let count = try XCTUnwrap(counted, "the engine must count on iOS 26.4+").intValue
+        let adapted = try XCTUnwrap(adaptedCount).intValue
+
+        record("token-count", [
+            "textChars": "\(text.count)",
+            "engineCount": "\(count)",
+            "estimate": "\(estimate)",
+            "ratio": String(format: "%.2f", Double(count) / Double(estimate)),
+        ])
+        XCTAssertGreaterThan(count, 0)
+        XCTAssertEqual(adapted, count, "the Kotlin adapter must hand back the engine's own figure")
+    }
+
     func testShortPromptIsAnsweredOnTheDeviceAndTheIndicatorRunsThenRests() async throws {
         let session = makeSession()
         _ = try await session.refreshAvailability()

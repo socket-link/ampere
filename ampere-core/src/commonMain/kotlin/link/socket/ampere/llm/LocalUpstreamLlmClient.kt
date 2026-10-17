@@ -129,11 +129,27 @@ class LocalUpstreamLlmClient(
          * the [LlmProvider][link.socket.ampere.domain.llm.LlmProvider] bypass, so
          * a local engine sees a familiar shape.
          */
-        internal fun ChatCompletionRequest.flattenToPrompt(): String =
+        internal fun ChatCompletionRequest.flattenToPrompt(): String = flattenToPrompt(messages)
+
+        /**
+         * The string the engine is handed for [messages] — the one place that
+         * shape is written, so a caller sizing a call with the engine's own
+         * tokenizer (AMPR-460) counts exactly what [callDetailed] will send.
+         */
+        internal fun flattenToPrompt(messages: List<ChatMessage>): String =
             messages.joinToString(separator = "\n\n") { message ->
                 val label = message.role.role.replaceFirstChar { it.uppercaseChar() }
                 "$label: ${message.content.orEmpty()}"
             }
+
+        /** [flattenToPrompt] for the system-then-user pair every `AgentLLMService` call sends. */
+        internal fun flattenToPrompt(systemMessage: String, prompt: String): String =
+            flattenToPrompt(
+                listOf(
+                    ChatMessage(role = ChatRole.System, content = systemMessage),
+                    ChatMessage(role = ChatRole.User, content = prompt),
+                ),
+            )
     }
 }
 

@@ -177,6 +177,33 @@ class OnDeviceInferenceSessionTest {
     }
 
     @Test
+    fun `a prompt the engine counts over its window goes to the cloud though the estimate fits`() = runBlocking<Unit> {
+        // Digit-dense text is where chars/4 runs low (AMPR-372); this engine's tokenizer says so.
+        val engine = FakeLocalInferenceEngine(capacity = available(), countTokens = { 5_000 })
+        val cloud = RecordingCloud()
+        val session = session(engine, cloud)
+
+        val answer = session.ask("2026-10-17T10:07:33Z build 1284 failed after 2719 ms").answer()
+
+        assertEquals(InferenceLocality.CLOUD, answer.locality)
+        assertEquals(0, engine.generateCount, "a prompt the engine counted over its window must not reach it")
+        assertEquals(1, cloud.callCount)
+    }
+
+    @Test
+    fun `a prompt the engine counts over its window is refused when there is no cloud`() = runBlocking<Unit> {
+        val engine = FakeLocalInferenceEngine(capacity = available(), countTokens = { 5_000 })
+        val session = session(engine, cloud = null)
+
+        val outcome = session.ask("2026-10-17T10:07:33Z build 1284 failed after 2719 ms")
+
+        val failed = assertIs<LocalFirstOutcome.Failed>(outcome)
+        assertEquals(LocalFirstOutcome.FailureReason.PROMPT_TOO_LARGE, failed.reason)
+        assertTrue(failed.detail.orEmpty().contains("7048 tokens"), "sized by the engine's count: ${failed.detail}")
+        assertEquals(0, engine.generateCount)
+    }
+
+    @Test
     fun `routes against the context window the engine reports`() = runBlocking<Unit> {
         // The catalog seeds 4096 tokens. This engine has four times that so the same
         // prompt the device refused above now fits.

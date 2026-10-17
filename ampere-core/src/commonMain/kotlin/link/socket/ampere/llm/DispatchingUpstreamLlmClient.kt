@@ -2,6 +2,7 @@ package link.socket.ampere.llm
 
 import com.aallam.openai.api.chat.ChatCompletion
 import com.aallam.openai.api.chat.ChatCompletionRequest
+import kotlinx.coroutines.CancellationException
 import link.socket.ampere.agents.domain.routing.capability.CostPolicy
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorRegistry
@@ -87,6 +88,28 @@ class DispatchingUpstreamLlmClient(
      * like the existing `:ampere-core` (no platform module) default.
      */
     suspend fun probeLocalCapacity(): LocalCapacity? = localEngine?.probe()
+
+    /**
+     * The bound engine's own token count of [text], or `null` when no engine is
+     * bound, the engine cannot count, or its counter fails (AMPR-460).
+     *
+     * Exposed the way [probeLocalCapacity] exposes capacity, and for the same
+     * caller: [link.socket.ampere.agents.domain.reasoning.AgentLLMService]
+     * sizes a call's context-window requirement with this figure when there is
+     * one and with `PromptTokenEstimator`'s chars/4 otherwise. The count only
+     * sizes a call; eligibility for the device is the routing floor's and is
+     * never widened by it. A failure to count is never a failed call.
+     */
+    suspend fun countLocalTokens(text: String): Int? {
+        val engine = localEngine ?: return null
+        return try {
+            engine.tokenCount(text)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            null
+        }
+    }
 
     override suspend fun call(
         request: ChatCompletionRequest,

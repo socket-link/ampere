@@ -55,6 +55,28 @@ interface LocalInferenceEngine {
     suspend fun generate(prompt: String): Result<String>
 
     /**
+     * How many tokens the engine's own tokenizer makes of [text], or `null` when
+     * the engine cannot say (AMPR-460).
+     *
+     * The relay decides whether a prompt fits a model's context window from a
+     * token figure, and without one from the engine it falls back to
+     * `PromptTokenEstimator`'s four characters per token. That estimate runs
+     * high on ordinary prose and low on digit-dense text — a log with
+     * timestamps measured 1.55× the estimate against Apple's tokenizer
+     * (AMPR-372) — and a prompt admitted on an undercount is one the model then
+     * refuses mid-call. An engine that can count is asked to count exactly the
+     * string [generate] would be handed.
+     *
+     * Only ever *sizes* a call: a count never makes work eligible for the
+     * device, which is the routing floor's decision. Stateless, like
+     * [generate]: no session is kept to count on. The default is `null`, so an
+     * engine written before this seam compiles unchanged and is sized by the
+     * estimate as before. An engine that throws while counting is treated as
+     * one that cannot count; the call proceeds on the estimate.
+     */
+    suspend fun tokenCount(text: String): Int? = null
+
+    /**
      * Generate a structured [EmissionPayload] shaped like [kind] directly —
      * the point of guided/constrained on-device generation (AMPR-225; e.g.
      * Apple's `@Generable`): the returned payload is produced under a
