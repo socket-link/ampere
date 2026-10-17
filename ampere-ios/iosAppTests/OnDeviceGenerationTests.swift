@@ -17,6 +17,13 @@ import shared
 /// `OnDeviceModelGate`, which generates once rather than trusting `availability`: GitHub's hosted
 /// runners say available and then cannot generate.
 ///
+/// Since AMPR-462 the engine is handed a request — the system message as the session's
+/// instructions, the call's output budget and temperature as `GenerationOptions` — so the run
+/// also records what a capped call returns, and what the engine counts a request at against what
+/// the model bills for it.
+/// `OnDeviceRequestForwardingTests`, below, needs no model: it pins that the request reaches a
+/// Swift engine whole.
+///
 /// Every measurement is printed on a line prefixed `AMPR373|` so the figures can be lifted from
 /// the `xcodebuild` log, and the events land in `on-device-verify.db` in the host app's container
 /// so the persisted rows can be read back with `sqlite3` from outside the process.
@@ -188,7 +195,8 @@ final class OnDeviceGenerationTests: XCTestCase {
         // guardrail throws (`May contain unsafe content`, in well under a second), or the model
         // answers with a refusal in-band. Measured on iOS 27.1: without instructions this prompt
         // throws every time; with `OnDeviceAssistantAgent`'s instructions it is answered with a
-        // one-line refusal. Either way the prompt stayed on the device.
+        // one-line refusal — the form `ask` gets since the engine passes the system message as
+        // instructions (AMPR-462). Either way the prompt stayed on the device.
         let state = currentState(of: session)
         if let failed = outcome as? LocalFirstOutcomeFailed {
             record("guardrail", [
@@ -243,6 +251,86 @@ final class OnDeviceGenerationTests: XCTestCase {
         XCTAssertFalse(currentState(of: session).isInUse)
         XCTAssertEqual(currentState(of: session).servedOnDevice, 2)
     }
+
+    // MARK: - The request's parts (AMPR-462)
+
+    func testACappedRequestComesBackNoLongerThanItsCap() async throws {
+        guard #available(iOS 26.4, *) else { throw XCTSkip("SystemLanguageModel.tokenCount(for:) needs iOS 26.4") }
+
+        // A reply that runs long whatever the instructions say: uncapped, it is about 390 tokens.
+        let cap = 16
+        let request = LocalGenerationRequest(
+            instructions: OnDeviceAssistantAgent.shared.prompt,
+            prompt: "Count from 1 to 100, one number per line.",
+            maxOutputTokens: KotlinInt(int: Int32(cap)),
+            temperature: nil
+        )
+
+        let started = Date()
+        let text: String
+        do {
+            text = try await FoundationModelsLocalInferenceEngine().generate(request: request)
+        } catch {
+            // The framework documents a cut-short reply, not an error. Record the other form if it
+            // ever appears, then fail: the cell says a capped call answers.
+            record("capped", ["form": "reported the limit", "cap": "\(cap)", "error": "\(error)"])
+            throw error
+        }
+        let latencyMs = Int(Date().timeIntervalSince(started) * 1000)
+
+        // The model's own count of the reply. Counting any string costs one token on its own.
+        let model = SystemLanguageModel.default
+        let countedReply = try await model.tokenCount(for: text)
+        let countedNothing = try await model.tokenCount(for: "")
+        let replyTokens = countedReply - countedNothing
+        record("capped", [
+            "form": text.contains("100") ? "complete" : "truncated",
+            "cap": "\(cap)",
+            "replyTokens": "\(replyTokens)",
+            "replyChars": "\(text.count)",
+            "latencyMs": "\(latencyMs)",
+            "text": text,
+        ])
+        XCTAssertFalse(text.isEmpty)
+        XCTAssertLessThanOrEqual(replyTokens, cap, "a capped request must come back no longer than its cap: \(text)")
+    }
+
+    // `LanguageModelSession.Response.usage` is iOS 27 SDK API. Xcode 26's SDK has no such member,
+    // and `#available` guards the run, not the compile, so the test is compiled only by the
+    // Xcode 27 toolchain, Swift 6.4. It skips at run time below iOS 27 like any other.
+    #if compiler(>=6.4)
+    /// What the window fit counts against what the model bills (AMPR-462). The fit asks the engine
+    /// for the request it will send, and Apple's engine counts the transcript a session for it
+    /// starts from, so the count includes the system turn the framework wraps around every call —
+    /// the turn a string count of the flattened prompt never saw. With instructions and without.
+    func testTheEngineCountsARequestAsTheModelBillsIt() async throws {
+        guard #available(iOS 27.0, *) else { throw XCTSkip("LanguageModelSession.Response.usage needs iOS 27") }
+
+        let engine = FoundationModelsLocalInferenceEngine()
+        let prompt = "In one sentence, what is a volt?"
+        for instructions in [OnDeviceAssistantAgent.shared.prompt, nil] as [String?] {
+            let request = LocalGenerationRequest(
+                instructions: instructions,
+                prompt: prompt,
+                maxOutputTokens: KotlinInt(int: 64),
+                temperature: nil
+            )
+            let countedBox = try await engine.tokenCount(request: request)
+            let counted = try XCTUnwrap(countedBox, "the engine must count a request on iOS 26.4+").intValue
+            let stringCount = try await SystemLanguageModel.default.tokenCount(for: request.flattenedPrompt)
+            let billed = try await FoundationModelsLocalInferenceEngine.respond(to: request).usage.input.totalTokenCount
+
+            record("request-count", [
+                "instructions": instructions == nil ? "none" : "OnDeviceAssistantAgent",
+                "engineCount": "\(counted)",
+                "billedInput": "\(billed)",
+                "flattenedStringCount": "\(stringCount)",
+                "flattenedUnderBilled": "\(billed - stringCount)",
+            ])
+            XCTAssertGreaterThanOrEqual(counted, billed, "the window fit must not undercount what the model bills")
+        }
+    }
+    #endif
 
     // MARK: - Watching the indicator state
 
@@ -333,5 +421,121 @@ final class OnDeviceGenerationTests: XCTestCase {
         attachment.name = "AMPR-373 \(step)"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+}
+
+/// The road from `ask` to a Swift engine carries the request whole (AMPR-462).
+///
+/// No model is involved: the engines below record what reaches them and answer with a fixed word,
+/// so this runs wherever the app builds, GitHub's hosted runners included. It pins the two pieces
+/// only iOS has — the Kotlin adapter `toLocalInferenceEngine()`, which must forward the request
+/// forms of `generate` and `tokenCount` rather than let the interface's defaults flatten them,
+/// and the Swift bridge's own defaults, which must hand an engine written before the request
+/// forms the prompt it always received and the same string to count.
+final class OnDeviceRequestForwardingTests: XCTestCase {
+
+    private var session: OnDeviceInferenceSession?
+
+    override func tearDownWithError() throws {
+        session?.close()
+        session = nil
+    }
+
+    private func makeSession(engine: SwiftLocalInferenceEngine) -> OnDeviceInferenceSession {
+        let driver = IOSDatabaseDriverKt.createIosDriver(dbName: "on-device-forwarding.db")
+        let session = OnDeviceInferenceSession.companion.create(
+            engine: engine.toLocalInferenceEngine(),
+            database: DatabaseCompanion.shared.invoke(driver: driver)
+        )
+        self.session = session
+        return session
+    }
+
+    func testTheSwiftEngineReceivesTheSystemMessageAsInstructionsAndTheBudget() async throws {
+        let engine = RecordingEngine()
+        let session = makeSession(engine: engine)
+
+        let outcome = try await session.ask(prompt: "Name one planet.", systemMessage: OnDeviceAssistantAgent.shared.prompt)
+
+        XCTAssertTrue(outcome is LocalFirstOutcomeAnswered, "\(outcome)")
+        XCTAssertTrue(engine.prompts.isEmpty, "the request was flattened on its way to the engine: \(engine.prompts)")
+        let request = try XCTUnwrap(engine.requests.last, "the engine was never handed a request")
+        XCTAssertEqual(request.instructions, OnDeviceAssistantAgent.shared.prompt)
+        XCTAssertEqual(request.prompt, "Name one planet.")
+        XCTAssertEqual(request.maxOutputTokens?.intValue, Int(OnDeviceInferenceSession.companion.DEFAULT_MAX_OUTPUT_TOKENS))
+        XCTAssertEqual(request.temperature?.doubleValue, AgentLLMService.companion.DEFAULT_TEMPERATURE)
+
+        // The call was sized by asking the engine to count the same request (AMPR-462).
+        let counted = try XCTUnwrap(engine.countedRequests.last, "the engine was never asked to count the request")
+        XCTAssertEqual(counted.instructions, request.instructions)
+        XCTAssertEqual(counted.prompt, request.prompt)
+    }
+
+    func testASwiftEngineWithOnlyThePromptFormReceivesTheFlattenedPrompt() async throws {
+        let engine = PromptOnlyEngine()
+        let session = makeSession(engine: engine)
+
+        let outcome = try await session.ask(prompt: "Name one planet.", systemMessage: "Be brief.")
+
+        XCTAssertTrue(outcome is LocalFirstOutcomeAnswered, "\(outcome)")
+        XCTAssertEqual(engine.prompts, ["System: Be brief.\n\nUser: Name one planet."])
+        // Sized by its count of the same string, through the bridge's default request count.
+        XCTAssertFalse(engine.countedTexts.isEmpty, "the engine was never asked to count")
+        XCTAssertEqual(Set(engine.countedTexts), ["System: Be brief.\n\nUser: Name one planet."])
+    }
+
+    /// Reports the on-device model ready with the window the live one has, so the relay routes here.
+    private static func ready() -> LocalCapacity {
+        LocalCapacity(
+            available: true,
+            modelId: AIModel_OnDevice.AppleFoundationModels.shared.name,
+            maxContextTokens: KotlinInt(int: 4096),
+            providerId: AIProvider_OnDevice.shared.id,
+            reason: nil
+        )
+    }
+
+    /// An engine that takes the request apart, as Apple's does, and cannot count, so the call is
+    /// sized by the estimate.
+    private final class RecordingEngine: SwiftLocalInferenceEngine {
+        private(set) var requests: [LocalGenerationRequest] = []
+        private(set) var prompts: [String] = []
+        private(set) var countedRequests: [LocalGenerationRequest] = []
+
+        override func probe() async throws -> LocalCapacity { OnDeviceRequestForwardingTests.ready() }
+
+        override func generate(prompt: String) async throws -> String {
+            prompts.append(prompt)
+            return "Mars"
+        }
+
+        override func generate(request: LocalGenerationRequest) async throws -> String {
+            requests.append(request)
+            return "Mars"
+        }
+
+        override func tokenCount(request: LocalGenerationRequest) async throws -> KotlinInt? {
+            countedRequests.append(request)
+            return nil
+        }
+    }
+
+    /// An engine written before the request forms existed: the prompt form, and a string count
+    /// that cannot count.
+    private final class PromptOnlyEngine: SwiftLocalInferenceEngine {
+        private(set) var prompts: [String] = []
+        private(set) var countedTexts: [String] = []
+
+        override func probe() async throws -> LocalCapacity { OnDeviceRequestForwardingTests.ready() }
+
+        override func generate(prompt: String) async throws -> String {
+            prompts.append(prompt)
+            return "Mars"
+        }
+
+        override func tokenCount(text: String) async throws -> KotlinInt? {
+            countedTexts.append(text)
+            return nil
+        }
     }
 }

@@ -23,9 +23,17 @@ import shared
 /// `EmissionPayload` case directly — the shape was already constrained at
 /// generation time, so this is a typed read, not a parse of free text.
 ///
+/// ## The request's parts, where the framework takes them
+///
+/// Ampere's client calls `generate(request:)` (AMPR-462). The system message
+/// becomes the session's instructions, the user's turn the prompt, and the
+/// output budget and temperature `GenerationOptions` — so the budget
+/// `AgentLLMService` set is one the model honours, not only the figure the
+/// relay reserved when it decided the prompt fits.
+///
 /// ## One session per call
 ///
-/// `LocalInferenceEngine.generate` is stateless: a prompt in, text out, no
+/// `LocalInferenceEngine.generate` is stateless: a request in, text out, no
 /// memory of the call before. A `LanguageModelSession` is the opposite — it
 /// accumulates a transcript, which counts against the context window, and it
 /// traps if asked to respond while it is already responding. So each call gets
@@ -57,9 +65,36 @@ final class FoundationModelsLocalInferenceEngine: SwiftLocalInferenceEngine {
         }
     }
 
+    /// The bare form, for a caller with a prompt alone: no instructions, the framework's own options.
     override func generate(prompt: String) async throws -> String {
         let response = try await LanguageModelSession().respond(to: prompt)
         return response.content
+    }
+
+    /// A reply that reaches `maximumResponseTokens` is cut short by the framework without an
+    /// error, so it comes back as an answer — mid-sentence if need be — and never as a failure
+    /// to re-send. Asked to count from 1 to 100 under a 16-token cap, the model stopped at 6.
+    override func generate(request: LocalGenerationRequest) async throws -> String {
+        try await Self.respond(to: request).content
+    }
+
+    /// One session for one request, as `generate(request:)` runs it. Kept apart so a test can
+    /// read the response's own usage report, which `generate` does not return.
+    static func respond(to request: LocalGenerationRequest) async throws -> LanguageModelSession.Response<String> {
+        try await LanguageModelSession(instructions: request.instructions)
+            .respond(to: request.prompt, options: options(for: request))
+    }
+
+    /// Apple documents `temperature` as 0 to 1 inclusive and `maximumResponseTokens` as positive.
+    /// Ampere's temperature runs on the same 0-to-1 scale, so one outside it is clamped to the
+    /// nearer end, and a cap that is not positive is sent as no cap. The live model took 1.5, -0.5
+    /// and a cap of 0 without an error (AMPR-462); this keeps a request inside what is documented
+    /// rather than inside what happens to work today.
+    static func options(for request: LocalGenerationRequest) -> GenerationOptions {
+        GenerationOptions(
+            temperature: request.temperature.map { min(max($0.doubleValue, 0), 1) },
+            maximumResponseTokens: request.maxOutputTokens.map { $0.intValue }.flatMap { $0 > 0 ? $0 : nil }
+        )
     }
 
     /// The model's own count of `text` (AMPR-460), so the relay sizes a prompt against the
@@ -73,6 +108,31 @@ final class FoundationModelsLocalInferenceEngine: SwiftLocalInferenceEngine {
         guard #available(iOS 26.4, *) else { return nil }
         let count = try await SystemLanguageModel.default.tokenCount(for: text)
         return KotlinInt(int: Int32(clamping: count))
+    }
+
+    /// What `request` costs the model as input (AMPR-462), which is what the relay's window fit
+    /// asks: the transcript a session for it starts from, counted by the model. A string count
+    /// misses the system turn the framework wraps around every call — about 50 tokens — and the
+    /// model's usage report bills it: 137 input tokens for a one-line question under the
+    /// on-device assistant's instructions, where the flattened string counts 87. Counted this
+    /// way the two agreed exactly on every prompt measured, with instructions and without.
+    override func tokenCount(request: LocalGenerationRequest) async throws -> KotlinInt? {
+        guard #available(iOS 26.4, *) else { return nil }
+        let count = try await SystemLanguageModel.default.tokenCount(for: Self.transcript(for: request))
+        return KotlinInt(int: Int32(clamping: count))
+    }
+
+    /// The entries a session for `request` starts from: its instructions, then its prompt. A
+    /// request with no instructions still gets an empty instructions entry, because a session
+    /// without instructions is billed exactly what one with empty instructions is.
+    static func transcript(for request: LocalGenerationRequest) -> [Transcript.Entry] {
+        [
+            .instructions(Transcript.Instructions(
+                segments: [.text(Transcript.TextSegment(content: request.instructions ?? ""))],
+                toolDefinitions: []
+            )),
+            .prompt(Transcript.Prompt(segments: [.text(Transcript.TextSegment(content: request.prompt))])),
+        ]
     }
 
     override func generateStructured(kind: EmissionKind, prompt: String) async throws -> EmissionPayload {

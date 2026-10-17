@@ -5,6 +5,7 @@ import com.aallam.openai.api.chat.ChatCompletion
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
+import link.socket.ampere.agents.domain.routing.local.LocalGenerationRequest
 import link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine
 import link.socket.ampere.api.AmpereStableApi
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
@@ -22,9 +23,15 @@ import link.socket.ampere.domain.ai.configuration.AIConfiguration
  *
  * ## Adaptation
  *
- * - **Request → prompt:** the request's messages are flattened to a single
- *   `Role: content` block per message (see [flattenToPrompt]). v1 is text-only;
- *   structured output and tool-calling over the local seam are out of scope.
+ * - **Request → engine request:** the system message and the user message
+ *   become a [LocalGenerationRequest]'s instructions and prompt, with the
+ *   request's `max_tokens` as its output budget and its temperature carried
+ *   over (AMPR-462), and the engine is called with that. An engine that
+ *   implements only the prompt form receives it flattened to one
+ *   `Role: content` block per message, as before. Any other shape of request —
+ *   a conversation, say — has no faithful split and goes to the prompt form
+ *   flattened (see [flattenToPrompt]). v1 is text-only; structured output and
+ *   tool-calling over the local seam are out of scope.
  * - **Text → response:** the engine's text is wrapped in a minimal
  *   [ChatCompletion] matching [BundledUpstreamLlmClient]'s return shape — one
  *   assistant choice carrying the text. No `usage` is attached: a local call has
@@ -75,7 +82,13 @@ class LocalUpstreamLlmClient(
         request: ChatCompletionRequest,
         configuration: AIConfiguration,
     ): UpstreamCompletion {
-        val text = engine.generate(request.flattenToPrompt()).getOrElse { cause ->
+        val generation = request.toLocalGenerationRequest()
+        val result = if (generation != null) {
+            engine.generate(generation)
+        } else {
+            engine.generate(flattenToPrompt(request.messages))
+        }
+        val text = result.getOrElse { cause ->
             throw LocalInferenceException(
                 "Local inference engine failed to generate a completion for " +
                     "provider '${configuration.provider.id}'",
@@ -122,34 +135,81 @@ class LocalUpstreamLlmClient(
         const val LOCAL_COMPLETION_ID: String = "local-inference"
 
         /**
-         * Flatten a [ChatCompletionRequest] to a single prompt string for the
-         * text-shaped local engine. Each message becomes a `Role: content` line,
-         * separated by blank lines — mirroring the system/user layout that
+         * The string a prompt-only engine is handed for [messages]. Each message
+         * is a `Role: content` block, separated by blank lines — mirroring the
+         * system/user layout that
          * [link.socket.ampere.agents.domain.reasoning.AgentLLMService] uses for
          * the [LlmProvider][link.socket.ampere.domain.llm.LlmProvider] bypass, so
          * a local engine sees a familiar shape.
-         */
-        internal fun ChatCompletionRequest.flattenToPrompt(): String = flattenToPrompt(messages)
-
-        /**
-         * The string the engine is handed for [messages] — the one place that
-         * shape is written, so a caller sizing a call with the engine's own
-         * tokenizer (AMPR-460) counts exactly what [callDetailed] will send.
+         *
+         * The shape an engine request has slots for — a system message and a
+         * user message, or a user message alone — is written by
+         * [LocalGenerationRequest.flattenedPrompt], which is what the engine
+         * contract's default hands on. It produces the same bytes the
+         * role-by-role join below gives those messages.
          */
         internal fun flattenToPrompt(messages: List<ChatMessage>): String =
-            messages.joinToString(separator = "\n\n") { message ->
-                val label = message.role.role.replaceFirstChar { it.uppercaseChar() }
-                "$label: ${message.content.orEmpty()}"
-            }
+            messages.toInstructionsAndPrompt()?.flattenedPrompt
+                ?: messages.joinToString(separator = "\n\n") { message ->
+                    val label = message.role.role.replaceFirstChar { it.uppercaseChar() }
+                    "$label: ${message.content.orEmpty()}"
+                }
 
-        /** [flattenToPrompt] for the system-then-user pair every `AgentLLMService` call sends. */
-        internal fun flattenToPrompt(systemMessage: String, prompt: String): String =
-            flattenToPrompt(
-                listOf(
-                    ChatMessage(role = ChatRole.System, content = systemMessage),
-                    ChatMessage(role = ChatRole.User, content = prompt),
-                ),
+        /**
+         * The request [callDetailed] hands the engine for [messages], without
+         * the budget and temperature no count reads — so a caller sizing the
+         * call (AMPR-460, AMPR-462) counts what the engine is given, by the split
+         * the client itself makes. Null for messages that split into no request,
+         * which the engine is handed as [flattenToPrompt] instead.
+         */
+        internal fun generationRequestFor(messages: List<ChatMessage>): LocalGenerationRequest? =
+            messages.toInstructionsAndPrompt()
+
+        /** [generationRequestFor] for the system-then-user pair every `AgentLLMService` call sends. */
+        internal fun generationRequestFor(systemMessage: String, prompt: String): LocalGenerationRequest =
+            LocalGenerationRequest(instructions = systemMessage, prompt = prompt)
+
+        /**
+         * The engine request for this chat request (AMPR-462), or null when its
+         * messages are not the shape the request has slots for.
+         *
+         * The output budget is the request's `max_tokens`, which
+         * `AgentLLMService` sets on every call; a request that sets
+         * `max_completion_tokens` instead is honoured too, and the tighter of
+         * the two wins when both are set. The temperature is passed only where
+         * the request carried one.
+         */
+        private fun ChatCompletionRequest.toLocalGenerationRequest(): LocalGenerationRequest? =
+            messages.toInstructionsAndPrompt()?.copy(
+                maxOutputTokens = outputBudget(),
+                temperature = temperature,
             )
+
+        /**
+         * These messages as instructions and a prompt: a system message followed
+         * by a user message, or a user message alone. Anything else — a
+         * conversation, a second system message, another role — is null, since
+         * no split of it is faithful. A message with no text keeps its slot as an
+         * empty string, so the flattened form keeps the bytes the role-by-role
+         * join gives it.
+         */
+        private fun List<ChatMessage>.toInstructionsAndPrompt(): LocalGenerationRequest? {
+            val user = lastOrNull()?.takeIf { it.role == ChatRole.User } ?: return null
+            val system = when (size) {
+                1 -> null
+                2 -> first().takeIf { it.role == ChatRole.System } ?: return null
+                else -> return null
+            }
+            return LocalGenerationRequest(
+                instructions = system?.let { it.content.orEmpty() },
+                prompt = user.content.orEmpty(),
+            )
+        }
+
+        // `max_tokens` is what AgentLLMService sets; the 4.x client deprecates it for `max_completion_tokens`.
+        @Suppress("DEPRECATION")
+        private fun ChatCompletionRequest.outputBudget(): Int? =
+            listOfNotNull(maxTokens, maxCompletionTokens).minOrNull()
     }
 }
 

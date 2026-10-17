@@ -30,7 +30,6 @@ import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.domain.util.toClientModelId
 import link.socket.ampere.llm.BundledUpstreamLlmClient
 import link.socket.ampere.llm.DispatchingUpstreamLlmClient
-import link.socket.ampere.llm.LocalUpstreamLlmClient
 import link.socket.ampere.llm.MissingUpstreamLlmClientException
 import link.socket.ampere.llm.ServedBy
 import link.socket.ampere.llm.UpstreamCompletion
@@ -328,12 +327,13 @@ class AgentLLMService(
         // it widens an *existing* requirement here. It never creates one: a step with no
         // requirement is not eligible for the device, and sizing it would make it so.
         //
-        // The input side is the engine's own count of the flattened prompt it would be
-        // handed when the engine can count (AMPR-460), and the chars/4 estimate when it
+        // The input side is the engine's own count of the request it would be handed when
+        // the engine can count (AMPR-460) — what it will send, framework turns included,
+        // for an engine that counts requests (AMPR-462) — and the chars/4 estimate when it
         // cannot: the estimate undercounts digit-dense text, and a prompt admitted on an
         // undercount is one the model refuses mid-call.
         val fittedRoutingContext = if (probedLocalCapacity != null && effectiveRoutingContext?.requirements != null) {
-            val inputTokens = dispatching?.countLocalTokens(LocalUpstreamLlmClient.flattenToPrompt(messages))
+            val inputTokens = dispatching?.countLocalTokens(messages)
                 ?: PromptTokenEstimator.estimateInputTokens(listOf(effectiveSystemMessage, prompt))
             effectiveRoutingContext.withContextWindowFit(tokensNeeded = inputTokens + maxTokens)
         } else {

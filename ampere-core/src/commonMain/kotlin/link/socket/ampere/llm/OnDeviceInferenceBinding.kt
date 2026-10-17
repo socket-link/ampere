@@ -16,6 +16,7 @@ import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescript
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.executesLocally
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
+import link.socket.ampere.agents.domain.routing.local.LocalGenerationRequest
 import link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine
 import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceMonitor
 import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceState
@@ -199,11 +200,19 @@ class OnDeviceInferenceBinding(
      * The engine as the client sees it: generation passes straight through,
      * every probe goes through [probe] so it is attributed, adopted and folded,
      * and a token count that fails becomes "cannot count".
+     *
+     * Both generation forms are forwarded, and both counting forms. Left to the
+     * interface's default, a request would be flattened here and reach [engine]
+     * as a bare prompt or a bare string, and an engine that takes the request
+     * apart would never see its instructions or its output budget, nor count
+     * what it sends (AMPR-462).
      */
     private inner class ObservedEngine : LocalInferenceEngine {
         override suspend fun probe(): LocalCapacity = this@OnDeviceInferenceBinding.probe()
 
         override suspend fun generate(prompt: String): Result<String> = engine.generate(prompt)
+
+        override suspend fun generate(request: LocalGenerationRequest): Result<String> = engine.generate(request)
 
         /**
          * The engine's own count, or null when it has none or fails to produce one
@@ -213,6 +222,16 @@ class OnDeviceInferenceBinding(
         override suspend fun tokenCount(text: String): Int? =
             try {
                 engine.tokenCount(text)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                null
+            }
+
+        /** [tokenCount] for a request, under the same rule: a counter that throws cannot count. */
+        override suspend fun tokenCount(request: LocalGenerationRequest): Int? =
+            try {
+                engine.tokenCount(request)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: Throwable) {

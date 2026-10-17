@@ -259,10 +259,11 @@ class OnDeviceInferenceSession private constructor(
         }
 
         val runId = generateUUID(RUN_ID_PREFIX)
-        // Sized by the engine's own tokenizer when it has one (AMPR-460), counting exactly
-        // the flattened prompt the engine would be handed; by chars/4 otherwise. The service
-        // sizes the same way below and only ever widens, so the two cannot disagree.
-        val inputTokens = binding.client.countLocalTokens(LocalUpstreamLlmClient.flattenToPrompt(systemMessage, prompt))
+        // Sized by the engine's own count when it has one (AMPR-460): of the request it would
+        // be handed, as it will send it (AMPR-462); by chars/4 otherwise. The service sizes
+        // the same way below and only ever widens, so the two cannot disagree.
+        val generation = LocalUpstreamLlmClient.generationRequestFor(systemMessage, prompt)
+        val inputTokens = binding.client.countLocalTokens(generation)
             ?: PromptTokenEstimator.estimateInputTokens(listOf(systemMessage, prompt))
         val contextTokens = inputTokens + maxOutputTokens
 

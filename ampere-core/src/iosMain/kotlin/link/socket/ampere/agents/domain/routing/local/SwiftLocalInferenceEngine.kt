@@ -29,6 +29,20 @@ abstract class SwiftLocalInferenceEngine {
     abstract suspend fun generate(prompt: String): String
 
     /**
+     * Mirrors [LocalInferenceEngine.generate] for a [LocalGenerationRequest]
+     * (AMPR-462): the system message, the user's turn, the output budget and
+     * the temperature, apart. Override it to hand them to a framework that
+     * takes them separately, as Apple's engine does.
+     *
+     * The default is the Kotlin contract's: it hands [generate] the request's
+     * [flattenedPrompt][LocalGenerationRequest.flattenedPrompt], so a Swift
+     * engine written before this method compiles unchanged and receives the
+     * prompt it always did.
+     */
+    @Throws(Exception::class)
+    open suspend fun generate(request: LocalGenerationRequest): String = generate(request.flattenedPrompt)
+
+    /**
      * Mirrors [LocalInferenceEngine.tokenCount]: the engine's own count of
      * [text], or `nil` when it cannot count (AMPR-460). Boxed because a Kotlin
      * `Int?` crosses the Objective-C export as an optional `KotlinInt`, which
@@ -37,6 +51,17 @@ abstract class SwiftLocalInferenceEngine {
      */
     @Throws(Exception::class)
     open suspend fun tokenCount(text: String): Int? = null
+
+    /**
+     * Mirrors [LocalInferenceEngine.tokenCount] for a [LocalGenerationRequest]
+     * (AMPR-462): what the request costs the model as input, or `nil`. Override
+     * it to count what the engine actually sends, as Apple's engine does. The
+     * default is the Kotlin contract's — [tokenCount] of the request's
+     * [flattenedPrompt][LocalGenerationRequest.flattenedPrompt] — so a Swift
+     * engine written before this method is sized as it was.
+     */
+    @Throws(Exception::class)
+    open suspend fun tokenCount(request: LocalGenerationRequest): Int? = tokenCount(request.flattenedPrompt)
 
     /** Mirrors [LocalInferenceEngine.generateStructured]'s own Prose-only default. */
     @Throws(Exception::class)
@@ -59,9 +84,25 @@ fun SwiftLocalInferenceEngine.toLocalInferenceEngine(): LocalInferenceEngine =
         override suspend fun generate(prompt: String): Result<String> =
             runCatching { this@toLocalInferenceEngine.generate(prompt) }
 
+        // Forwarded, not left to the interface's default: that would flatten the request
+        // here, and the Swift engine would never see its instructions or its budget.
+        override suspend fun generate(request: LocalGenerationRequest): Result<String> =
+            runCatching { this@toLocalInferenceEngine.generate(request) }
+
         override suspend fun tokenCount(text: String): Int? =
             try {
                 this@toLocalInferenceEngine.tokenCount(text)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                null
+            }
+
+        // Forwarded for the same reason as the request form of generate: the default would
+        // count the flattened string here, and the Swift engine's own count would go unasked.
+        override suspend fun tokenCount(request: LocalGenerationRequest): Int? =
+            try {
+                this@toLocalInferenceEngine.tokenCount(request)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: Throwable) {

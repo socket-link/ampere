@@ -2,6 +2,7 @@ package link.socket.ampere.llm
 
 import com.aallam.openai.api.chat.ChatCompletion
 import com.aallam.openai.api.chat.ChatCompletionRequest
+import com.aallam.openai.api.chat.ChatMessage
 import kotlinx.coroutines.CancellationException
 import link.socket.ampere.agents.domain.routing.capability.CostPolicy
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
@@ -10,6 +11,7 @@ import link.socket.ampere.agents.domain.routing.capability.executesLocally
 import link.socket.ampere.agents.domain.routing.local.InferenceLocality
 import link.socket.ampere.agents.domain.routing.local.InferenceLocalityClassifier
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
+import link.socket.ampere.agents.domain.routing.local.LocalGenerationRequest
 import link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine
 import link.socket.ampere.api.AmpereStableApi
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
@@ -93,12 +95,11 @@ class DispatchingUpstreamLlmClient(
      * The bound engine's own token count of [text], or `null` when no engine is
      * bound, the engine cannot count, or its counter fails (AMPR-460).
      *
-     * Exposed the way [probeLocalCapacity] exposes capacity, and for the same
-     * caller: [link.socket.ampere.agents.domain.reasoning.AgentLLMService]
-     * sizes a call's context-window requirement with this figure when there is
-     * one and with `PromptTokenEstimator`'s chars/4 otherwise. The count only
-     * sizes a call; eligibility for the device is the routing floor's and is
-     * never widened by it. A failure to count is never a failed call.
+     * Exposed the way [probeLocalCapacity] exposes capacity. The window fit
+     * asks the request form below instead, since a string count misses what an
+     * engine wraps around a call. The count only sizes a call; eligibility for
+     * the device is the routing floor's and is never widened by it. A failure
+     * to count is never a failed call.
      */
     suspend fun countLocalTokens(text: String): Int? {
         val engine = localEngine ?: return null
@@ -110,6 +111,42 @@ class DispatchingUpstreamLlmClient(
             null
         }
     }
+
+    /**
+     * What [request] costs the bound engine's model as input, by the engine's
+     * own count, or `null` when no engine is bound, the engine cannot count, or
+     * its counter fails (AMPR-462).
+     *
+     * The figure both sizing sites read — `OnDeviceInferenceSession.ask`
+     * directly and [link.socket.ampere.agents.domain.reasoning.AgentLLMService]'s
+     * window fit through the messages overload — for the request
+     * [LocalUpstreamLlmClient.generationRequestFor] says the call will hand the
+     * engine, falling back to `PromptTokenEstimator`'s chars/4 without one. An
+     * engine that counts only text answers for the request's flattened prompt,
+     * as before; one that counts requests answers for what it will send.
+     */
+    suspend fun countLocalTokens(request: LocalGenerationRequest): Int? {
+        val engine = localEngine ?: return null
+        return try {
+            engine.tokenCount(request)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /**
+     * What a call carrying [messages] costs the bound engine's model as input:
+     * the count of exactly what [LocalUpstreamLlmClient] would hand the engine
+     * — the request the messages split into, or the flattened prompt when they
+     * split into none (AMPR-462). The service's window fit asks this.
+     */
+    internal suspend fun countLocalTokens(messages: List<ChatMessage>): Int? =
+        when (val generation = LocalUpstreamLlmClient.generationRequestFor(messages)) {
+            null -> countLocalTokens(LocalUpstreamLlmClient.flattenToPrompt(messages))
+            else -> countLocalTokens(generation)
+        }
 
     override suspend fun call(
         request: ChatCompletionRequest,
