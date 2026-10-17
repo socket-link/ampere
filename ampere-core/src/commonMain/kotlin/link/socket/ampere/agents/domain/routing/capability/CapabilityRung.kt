@@ -11,9 +11,17 @@ import kotlinx.serialization.Serializable
  * ("fast", "premium", etc.) so they remain stable as the landscape evolves — a rung
  * is placed by what a model can *do*, not by its current reputation or price:
  *
- * - [ZERO] — 0W, on-device generation (e.g. Apple Foundation Models). Always the
- *   cheapest candidate via [ModelDescriptor.routingCostPerWatt] when its
- *   [ModelDescriptor.cost] is [CostPolicy.Free].
+ * - [ZERO] — the rung of 0W, on-device generation (e.g. Apple Foundation Models),
+ *   always the cheapest candidate via [ModelDescriptor.routingCostPerWatt] when its
+ *   [ModelDescriptor.cost] is [CostPolicy.Free]. As a *floor*, [ZERO] admits every
+ *   rated model, cloud ones included; only an unrated model (`rung = null`) fails
+ *   it. It is not "the device": when the device cannot take a call, a [ZERO] floor
+ *   routes cheapest-capable over the whole catalog. Only work whose output is
+ *   display text — words a person reads, which nothing in the run acts on, decides
+ *   on or remembers — may declare it. Every PROPEL phase call and every judgment
+ *   stays at [ONE] or above, because the on-device model restates reliably and
+ *   derives unreliably (AMPR-372, measured and ratified in
+ *   `docs/ampr-372-rung-zero-eligibility.md`).
  * - [ONE] — baseline hosted capability: general instruction-following without a
  *   claim to strong reasoning, large context, or tool use.
  * - [TWO] — adds one differentiating axis over [ONE] (e.g. reliable tool/function
@@ -55,6 +63,12 @@ import kotlinx.serialization.Serializable
  * (e.g. an agent-level policy floor and a per-call requirement), they compose
  * with `maxOf` — the effective floor is the highest of the inputs, never an
  * average or the most recently applied one.
+ *
+ * A floor is declared by whoever configured the agent or the Arc; a per-call
+ * requirement may raise the effective floor and never lowers it (AMPR-229,
+ * AMPR-372). Agents that run the PROPEL loop declare [ONE] or above; the one
+ * bundled definition at [ZERO] is the display-text identity,
+ * [link.socket.ampere.domain.agent.bundled.OnDeviceAssistantAgent].
  *
  * An unmet floor is terminal, not a downgrade: if no candidate model satisfies
  * the requested [CapabilityRequirement.minRung], routing fails closed (see
