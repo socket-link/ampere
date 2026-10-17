@@ -19,7 +19,8 @@ link.socket:ampere-phosphor:<version>
 
 Depends on:
 - `:ampere-core` (cognitive event types)
-- `link.socket:phosphor-lumos` (atmosphere, glyph, runtime types)
+- `link.socket:phosphor-core` and `link.socket:phosphor-lumos` 0.9.0
+  (atmosphere, glyph, look switch, runtime types)
 
 ## Canonical PROPEL mapping
 
@@ -59,6 +60,47 @@ renderer's `VoxelFrameBuilder`.
 | `ToolEvent.ToolExecutionCompleted` with `success=false` | EXCLAIM  |
 | `MemoryEvent.MilestoneReached`                          | STAR     |
 
+## Driving the orb's body
+
+The atmosphere is the orb's skin. Phosphor 0.9.0's `CognitiveLookSwitch`
+drives its body: with `VoxelFrameBuilder.lookSwitch` set, the builder reads a
+scene agent's `cognitivePhase`, `state` and `escalated` from each snapshot and
+blends the orb into a look from a table.
+
+The bridge keeps one scene agent for the whole bus, `sceneAgentId` (default
+`"ampere"`), added to `runtime.agents` on `start()` if the host has not placed
+one, and writes through to it:
+
+| Event                            | Scene agent                                  |
+| -------------------------------- | -------------------------------------------- |
+| `CognitivePhaseEvent.PhaseEntered` | `cognitivePhase` ← the phase; `escalated` ← false |
+| `CognitiveEvent.EscalationFired` | `escalated` ← true                           |
+| `bridge.clearEscalation()`       | `escalated` ← false, ahead of the next phase |
+
+The six PROPEL names map one to one onto Phosphor's; AMPERE has no `LOOP` or
+`NONE`. The bus carries no end to an escalation, so the flag holds until the
+next `PhaseEntered`, or until a host that knows the person answered calls
+`clearEscalation()`. The bridge never sets the agent's activity `state`; a
+run's lifecycle lives with the host.
+
+Install `AmperePhosphorBridge.LOOK_SWITCH`, not Phosphor's default:
+
+```kotlin
+voxelFrameBuilder.lookSwitch = AmperePhosphorBridge.LOOK_SWITCH
+```
+
+It is Phosphor's confirmed phase → look table (searching lens, reasoning
+walk, lighthouse beam, twin walkers, working ring, compacting fuse; the
+waiting look while escalated) with every glyph dropped. Phosphor's default
+table fires CHECK on `COMPLETE` and QUESTION on escalation itself, and the
+bridge already fires both from the events, so installing the default next to
+the bridge fires each glyph twice and `queueGlyph` restarts the fade: the glyph
+blinks. Each glyph has exactly one owner, and that owner is the bridge.
+
+A host that installs no switch sees no change: the builder ignores agents
+while `lookSwitch` is null, so the atmosphere path and the glyphs are exactly
+as before the agent existed.
+
 ## Wiring
 
 ```kotlin
@@ -68,6 +110,7 @@ val bridge = AmperePhosphorBridge(
     voxelFrameBuilder = voxelFrameBuilder,
 )
 bridge.start()
+voxelFrameBuilder.lookSwitch = AmperePhosphorBridge.LOOK_SWITCH // optional: phase drives the body
 
 // In your frame loop:
 val snapshot = cognitiveSceneRuntime.update(deltaTimeSeconds)
@@ -136,8 +179,10 @@ lifecycle.
 
 ## Lifecycle
 
-- `start()` — register handlers on the bus. Idempotent while started.
-- `stop()` — unsubscribe and quiesce. `EventSerialBus.unsubscribe(eventType)`
+- `start()` — register handlers on the bus and add the scene agent if absent.
+  Idempotent while started.
+- `stop()` — unsubscribe and quiesce. The scene agent stays in the runtime;
+  the host that owns the scene decides when it goes. `EventSerialBus.unsubscribe(eventType)`
   removes every handler for the affected event types, not just the bridge's.
   Defer `stop` until other subscribers on the same types are also being torn
   down.
@@ -146,6 +191,10 @@ lifecycle.
 
 - Own a frame loop.
 - Configure transition durations (the choreographer owns timing).
+- Set the scene agent's activity `state` (SPAWNING / PROCESSING / COMPLETE).
+  A run's lifecycle is the host's, for example Socket's `WorkflowStatus`.
+- Keep one scene agent per run. One agent stands for the whole bus, as the
+  atmosphere mapping already does.
 - Bridge in the reverse direction (Lumos → AMPERE).
 - Subscribe to `EscalationConsidered` or `ProvenanceCommitted` events —
   consumers wanting telemetry-grade or provenance signals provide their own
