@@ -1,6 +1,9 @@
 package link.socket.ampere.cli.layout
 
 import com.github.ajalt.mordant.terminal.Terminal
+import link.socket.ampere.terminal.TerminalSymbols
+import link.socket.ampere.ui.inference.OnDeviceIndicatorModel
+import link.socket.ampere.ui.inference.OnDeviceIndicatorTone
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -155,4 +158,70 @@ class StatusBarTest {
         assertEquals("A", shortcut.key)
         assertEquals("Test Label", shortcut.label)
     }
+
+    // ---- the on-device indicator (AMPR-375) --------------------------------------------------
+
+    private val ready = OnDeviceIndicatorModel(
+        tone = OnDeviceIndicatorTone.READY,
+        title = "On-device ready",
+        detail = "Apple Foundation Models (on-device) · 2 answered here",
+    )
+
+    @Test
+    fun `without an on-device engine the bar has no on-device segment`() {
+        TerminalSymbols.reset()
+        val plain = stripAnsi(onDeviceBar(width = 120, onDevice = null))
+
+        assertFalse(plain.contains("On-device"))
+        assertEquals(120, plain.length)
+        assertTrue(plain.endsWith("WORKING"))
+    }
+
+    @Test
+    fun `the on-device indicator sits before the status in the indicator's words`() {
+        TerminalSymbols.reset()
+        val plain = stripAnsi(onDeviceBar(width = 240, onDevice = ready))
+
+        assertTrue(plain.contains("◇ On-device ready · ${ready.detail}"), plain)
+        assertTrue(plain.indexOf("On-device ready") < plain.indexOf("WORKING"), plain)
+        assertTrue(plain.endsWith("WORKING"), plain)
+    }
+
+    @Test
+    fun `a generating model is marked as running on this device`() {
+        TerminalSymbols.reset()
+        val inUse = OnDeviceIndicatorModel(
+            tone = OnDeviceIndicatorTone.IN_USE,
+            title = "Running on this device",
+            detail = "Apple Foundation Models (on-device)",
+        )
+
+        val plain = stripAnsi(onDeviceBar(width = 240, onDevice = inUse))
+
+        assertTrue(plain.contains("◆ Running on this device"), plain)
+    }
+
+    @Test
+    fun `short of room the detail goes first and the segment after it while the status stays`() {
+        TerminalSymbols.reset()
+        // At width 1 the bar is its left side, one space and the status, so this is what they take.
+        val base = stripAnsi(onDeviceBar(width = 1, onDevice = null)).length
+        val titleOnly = " On-device ready".length + 1 + " │ ".length
+
+        val roomForTitle = stripAnsi(onDeviceBar(width = base + titleOnly + 5, onDevice = ready))
+        val noRoom = stripAnsi(onDeviceBar(width = base + 5, onDevice = ready))
+
+        assertTrue(roomForTitle.contains("On-device ready"), roomForTitle)
+        assertFalse(roomForTitle.contains("answered here"), roomForTitle)
+        assertFalse(noRoom.contains("On-device"), noRoom)
+        assertTrue(noRoom.endsWith("WORKING"), noRoom)
+    }
+
+    private fun onDeviceBar(width: Int, onDevice: OnDeviceIndicatorModel?): String =
+        StatusBar(Terminal()).render(
+            width = width,
+            shortcuts = StatusBar.defaultShortcuts("dashboard"),
+            status = StatusBar.SystemStatus.WORKING,
+            onDevice = onDevice,
+        )
 }

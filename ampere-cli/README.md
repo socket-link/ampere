@@ -119,11 +119,21 @@ In headless mode `ampere` exits after synchronous one-shot work (`--issue N`, `-
 
 **Command mode (press `:`):**
 - `:goal <description>` - Start agent with goal
+- `:ask <question>` - Ask the on-device model (macOS); the question stays on this machine
 - `:help` - Show available commands
 - `:agents` - List all active agents
 - `:ticket <id>` - Show ticket details
 - `:thread <id>` - Show conversation thread
 - `:quit` - Exit TUI
+
+**On-device model (macOS):** on a Mac running macOS 26 or later with Apple Intelligence on, the
+CLI can reach Apple's on-device model through a small Swift helper, `ampere-helper`.
+`./gradlew :ampere-cli:installDist` builds it on a Mac and installs it next to the `ampere`
+script. When the helper is there, the status bar shows the on-device indicator ("On-device
+ready", "Running on this device", or "On-device unavailable" with the reason). Event rows for
+calls that ran on this device carry a `◆` marker. The model answers `:ask` only: it serves
+display text, and no agent call is ever sent to it (AMPR-372). Without the helper, or on Linux
+and Windows, the CLI behaves exactly as before. See [macos-helper/README.md](macos-helper/README.md).
 
 ### Active Work Modes
 

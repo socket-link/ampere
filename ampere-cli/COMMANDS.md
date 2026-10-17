@@ -411,10 +411,15 @@ ampere --arc devops-pipeline  # Use a specific arc workflow
 
 **Command Mode (press `:`):**
 - `:goal <description>` - Start agent with goal
+- `:ask <question>` - Ask the on-device model (macOS, through `ampere-helper`); nothing leaves the machine
 - `:agents` - List all active agents
 - `:ticket <id>` - Show ticket details
 - `:thread <id>` - Show conversation thread
 - `:quit` - Exit TUI
+
+**On-device indicator:** with `ampere-helper` installed (macOS), the status bar shows whether the
+on-device model is ready, generating, or unavailable and why, and event rows for calls that ran on
+this device carry a `◆` marker. See [macos-helper/README.md](macos-helper/README.md).
 
 ---
 

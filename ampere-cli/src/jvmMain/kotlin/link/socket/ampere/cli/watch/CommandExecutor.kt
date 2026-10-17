@@ -1,15 +1,21 @@
 package link.socket.ampere.cli.watch
 
+import link.socket.ampere.agents.domain.routing.local.LocalUnavailableReason
 import link.socket.ampere.agents.execution.tools.issue.BatchIssueCreateRequest
 import link.socket.ampere.cli.goal.GoalHandler
 import link.socket.ampere.cli.help.CommandRegistry
+import link.socket.ampere.cli.ondevice.OnDeviceAssistant
 import link.socket.ampere.cli.watch.presentation.SparkTransitionDirection
 import link.socket.ampere.cli.watch.presentation.WatchPresenter
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.integrations.issues.BatchIssueCreator
 import link.socket.ampere.integrations.issues.github.GitHubCliProvider
+import link.socket.ampere.llm.LocalFirstOutcome
 import link.socket.ampere.renderer.SparkColors
 import link.socket.ampere.renderer.SparkNameFormatter
+import link.socket.ampere.ui.inference.describeFailure
+import link.socket.ampere.ui.inference.describeProvenance
+import link.socket.ampere.ui.inference.describeUnavailableReason
 import java.io.File
 
 /**
@@ -22,6 +28,10 @@ class CommandExecutor(
     private val presenter: WatchPresenter,
     private val goalHandler: GoalHandler? = null,
     private val onGoalActivated: (() -> Unit)? = null,
+    /** What `:ask` asks (AMPR-375). Unbound when the host has no on-device engine. */
+    private val onDevice: OnDeviceAssistant = OnDeviceAssistant.Unbound(
+        "No on-device model was set up for this dashboard.",
+    ),
 ) {
 
     /**
@@ -43,6 +53,7 @@ class CommandExecutor(
         return when (command) {
             "help", "h", "?" -> executeHelp()
             "agents" -> executeAgents()
+            "ask" -> executeAsk(arg)
             "goal" -> executeGoal(arg)
             "issues" -> executeIssues(arg)
             "ticket" -> executeTicket(arg)
@@ -65,6 +76,42 @@ class CommandExecutor(
             appendLine("Press ESC to cancel command mode")
         }
         return CommandResult.Success(helpText)
+    }
+
+    /**
+     * `:ask <question>`: one answer from the on-device model, as display text (AMPR-375).
+     *
+     * The answer is shown and goes nowhere else: not to an agent, a run, a plan or memory. Rung
+     * ZERO serves exactly that (AMPR-372). The session behind it has no cloud transport, so when
+     * the device cannot serve, the person is told why and that nothing was sent.
+     */
+    private suspend fun executeAsk(question: String?): CommandResult {
+        if (question.isNullOrBlank()) {
+            return CommandResult.Error(
+                "Usage: :ask <question>\n\n" +
+                    "Asks the on-device model. The question does not leave this machine.\n\n" +
+                    "Example: :ask What does a rung floor do?",
+            )
+        }
+
+        return when (onDevice) {
+            is OnDeviceAssistant.Unbound -> CommandResult.Error(
+                "${describeUnavailableReason(LocalUnavailableReason.NO_ENGINE)}. Nothing was sent.\n\n" +
+                    onDevice.reason,
+            )
+            is OnDeviceAssistant.Bound -> when (val outcome = onDevice.ask(question)) {
+                is LocalFirstOutcome.Answered -> CommandResult.Success(
+                    buildString {
+                        appendLine(question.trim())
+                        appendLine()
+                        appendLine(outcome.answer.text.trim())
+                        appendLine()
+                        append(outcome.answer.describeProvenance())
+                    },
+                )
+                is LocalFirstOutcome.Failed -> CommandResult.Error(outcome.describeFailure())
+            }
+        }
     }
 
     private suspend fun executeGoal(goalText: String?): CommandResult {

@@ -109,6 +109,8 @@ fun describeUnavailableReason(reason: String?): String = when (reason) {
     LocalUnavailableReason.NO_ENGINE,
     RoutingRule.ByCapability.DEFAULT_UNAVAILABLE_REASON,
     -> "No on-device model is connected"
+    LocalUnavailableReason.HELPER_INCOMPATIBLE -> "The on-device model helper does not match this version"
+    LocalUnavailableReason.HELPER_UNREACHABLE -> "The on-device model helper is not responding"
     else -> reason
 }
 
@@ -118,7 +120,7 @@ fun describeUnavailableReason(reason: String?): String = when (reason) {
  */
 fun LocalFirstAnswer.describeProvenance(): String {
     val where = when (locality) {
-        InferenceLocality.ON_DEVICE -> "Answered on this device"
+        InferenceLocality.ON_DEVICE -> ANSWERED_ON_THIS_DEVICE
         InferenceLocality.CLOUD -> "Answered in the cloud"
     }
     val model = when (locality) {
@@ -140,6 +142,18 @@ fun LocalFirstOutcome.Failed.describeFailure(): String = when (reason) {
     LocalFirstOutcome.FailureReason.CLOUD_GENERATION_FAILED ->
         "The cloud model could not answer" + (detail?.let { ": $it" } ?: ".")
 }
+
+/**
+ * The row for a finished on-device call, as a list of events shows it (AMPR-375):
+ * how it ended and how long it took. Shorter than [describeProvenance], because a
+ * row has no room for the model, which the indicator already names.
+ */
+fun describeOnDeviceCall(success: Boolean, latencyMs: Long): String {
+    val outcome = if (success) ANSWERED_ON_THIS_DEVICE else "Failed on this device"
+    return "$outcome · ${describeLatency(latencyMs)}"
+}
+
+private const val ANSWERED_ON_THIS_DEVICE = "Answered on this device"
 
 private fun describeLatency(latencyMs: Long): String =
     if (latencyMs < 1_000) {
