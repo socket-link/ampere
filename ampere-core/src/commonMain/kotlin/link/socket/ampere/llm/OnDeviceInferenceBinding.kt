@@ -16,6 +16,7 @@ import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescript
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.executesLocally
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
+import link.socket.ampere.agents.domain.routing.local.LocalGenerationRequest
 import link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine
 import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceMonitor
 import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceState
@@ -199,11 +200,18 @@ class OnDeviceInferenceBinding(
      * The engine as the client sees it: generation passes straight through,
      * every probe goes through [probe] so it is attributed, adopted and folded,
      * and a token count that fails becomes "cannot count".
+     *
+     * Both generation forms are forwarded. Left to the interface's default, a
+     * request would be flattened here and reach [engine] as a bare prompt, and
+     * an engine that takes the request apart would never see its instructions
+     * or its output budget (AMPR-462).
      */
     private inner class ObservedEngine : LocalInferenceEngine {
         override suspend fun probe(): LocalCapacity = this@OnDeviceInferenceBinding.probe()
 
         override suspend fun generate(prompt: String): Result<String> = engine.generate(prompt)
+
+        override suspend fun generate(request: LocalGenerationRequest): Result<String> = engine.generate(request)
 
         /**
          * The engine's own count, or null when it has none or fails to produce one

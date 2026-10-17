@@ -17,6 +17,12 @@ import shared
 /// `OnDeviceModelGate`, which generates once rather than trusting `availability`: GitHub's hosted
 /// runners say available and then cannot generate.
 ///
+/// Since AMPR-462 the engine is handed a request — the system message as the session's
+/// instructions, the call's output budget and temperature as `GenerationOptions` — so the run
+/// also records what a capped call returns and what the request form costs the model in input.
+/// `OnDeviceRequestForwardingTests`, below, needs no model: it pins that the request reaches a
+/// Swift engine whole.
+///
 /// Every measurement is printed on a line prefixed `AMPR373|` so the figures can be lifted from
 /// the `xcodebuild` log, and the events land in `on-device-verify.db` in the host app's container
 /// so the persisted rows can be read back with `sqlite3` from outside the process.
@@ -188,7 +194,8 @@ final class OnDeviceGenerationTests: XCTestCase {
         // guardrail throws (`May contain unsafe content`, in well under a second), or the model
         // answers with a refusal in-band. Measured on iOS 27.1: without instructions this prompt
         // throws every time; with `OnDeviceAssistantAgent`'s instructions it is answered with a
-        // one-line refusal. Either way the prompt stayed on the device.
+        // one-line refusal — the form `ask` gets since the engine passes the system message as
+        // instructions (AMPR-462). Either way the prompt stayed on the device.
         let state = currentState(of: session)
         if let failed = outcome as? LocalFirstOutcomeFailed {
             record("guardrail", [
@@ -242,6 +249,79 @@ final class OnDeviceGenerationTests: XCTestCase {
         XCTAssertNotEqual(answerA.runId, answerB.runId)
         XCTAssertFalse(currentState(of: session).isInUse)
         XCTAssertEqual(currentState(of: session).servedOnDevice, 2)
+    }
+
+    // MARK: - The request's parts (AMPR-462)
+
+    func testACappedRequestComesBackNoLongerThanItsCap() async throws {
+        guard #available(iOS 26.4, *) else { throw XCTSkip("SystemLanguageModel.tokenCount(for:) needs iOS 26.4") }
+
+        // A reply that runs long whatever the instructions say: uncapped, it is about 390 tokens.
+        let cap = 16
+        let request = LocalGenerationRequest(
+            instructions: OnDeviceAssistantAgent.shared.prompt,
+            prompt: "Count from 1 to 100, one number per line.",
+            maxOutputTokens: KotlinInt(int: Int32(cap)),
+            temperature: nil
+        )
+
+        let started = Date()
+        let text: String
+        do {
+            text = try await FoundationModelsLocalInferenceEngine().generate(request: request)
+        } catch {
+            // The framework documents a cut-short reply, not an error. Record the other form if it
+            // ever appears, then fail: the cell says a capped call answers.
+            record("capped", ["form": "reported the limit", "cap": "\(cap)", "error": "\(error)"])
+            throw error
+        }
+        let latencyMs = Int(Date().timeIntervalSince(started) * 1000)
+
+        // The model's own count of the reply. Counting any string costs one token on its own.
+        let model = SystemLanguageModel.default
+        let countedReply = try await model.tokenCount(for: text)
+        let countedNothing = try await model.tokenCount(for: "")
+        let replyTokens = countedReply - countedNothing
+        record("capped", [
+            "form": text.contains("100") ? "complete" : "truncated",
+            "cap": "\(cap)",
+            "replyTokens": "\(replyTokens)",
+            "replyChars": "\(text.count)",
+            "latencyMs": "\(latencyMs)",
+            "text": text,
+        ])
+        XCTAssertFalse(text.isEmpty)
+        XCTAssertLessThanOrEqual(replyTokens, cap, "a capped request must come back no longer than its cap: \(text)")
+    }
+
+    /// What the model was handed, by its own usage report, against what the relay's window fit
+    /// counts: the flattened prompt (AMPR-460). The fit has never seen the framework's own wrapping,
+    /// so neither form costs exactly the count; the point is that the request form adds nothing to it.
+    func testTheRequestFormCostsTheModelNoMoreInputThanTheFlattenedPrompt() async throws {
+        guard #available(iOS 27.0, *) else { throw XCTSkip("LanguageModelSession.Response.usage needs iOS 27") }
+
+        let request = LocalGenerationRequest(
+            instructions: OnDeviceAssistantAgent.shared.prompt,
+            prompt: "In one sentence, what is a volt?",
+            maxOutputTokens: KotlinInt(int: 64),
+            temperature: nil
+        )
+        let fitCount = try await SystemLanguageModel.default.tokenCount(for: request.flattenedPrompt)
+        // What the engine sent before AMPR-462: the flattened prompt, and no instructions.
+        let flattened = try await LanguageModelSession().respond(to: request.flattenedPrompt)
+        let requestForm = try await FoundationModelsLocalInferenceEngine.respond(to: request)
+
+        let flattenedInput = flattened.usage.input.totalTokenCount
+        let requestInput = requestForm.usage.input.totalTokenCount
+        record("input-cost", [
+            "fitCount": "\(fitCount)",
+            "flattenedInput": "\(flattenedInput)",
+            "requestInput": "\(requestInput)",
+            "flattenedOverFit": "\(flattenedInput - fitCount)",
+            "requestOverFit": "\(requestInput - fitCount)",
+        ])
+        XCTAssertLessThanOrEqual(requestInput, flattenedInput,
+                                 "the request form must not cost the model more than the prompt the fit was sized for")
     }
 
     // MARK: - Watching the indicator state
@@ -333,5 +413,98 @@ final class OnDeviceGenerationTests: XCTestCase {
         attachment.name = "AMPR-373 \(step)"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+}
+
+/// The road from `ask` to a Swift engine carries the request whole (AMPR-462).
+///
+/// No model is involved: the engines below record what reaches them and answer with a fixed word,
+/// so this runs wherever the app builds, GitHub's hosted runners included. It pins the two pieces
+/// only iOS has — the Kotlin adapter `toLocalInferenceEngine()`, which must forward the request
+/// form rather than let the interface's default flatten it, and the Swift bridge's own default,
+/// which must hand an engine written before the request form the prompt it always received.
+final class OnDeviceRequestForwardingTests: XCTestCase {
+
+    private var session: OnDeviceInferenceSession?
+
+    override func tearDownWithError() throws {
+        session?.close()
+        session = nil
+    }
+
+    private func makeSession(engine: SwiftLocalInferenceEngine) -> OnDeviceInferenceSession {
+        let driver = IOSDatabaseDriverKt.createIosDriver(dbName: "on-device-forwarding.db")
+        let session = OnDeviceInferenceSession.companion.create(
+            engine: engine.toLocalInferenceEngine(),
+            database: DatabaseCompanion.shared.invoke(driver: driver)
+        )
+        self.session = session
+        return session
+    }
+
+    func testTheSwiftEngineReceivesTheSystemMessageAsInstructionsAndTheBudget() async throws {
+        let engine = RecordingEngine()
+        let session = makeSession(engine: engine)
+
+        let outcome = try await session.ask(prompt: "Name one planet.", systemMessage: OnDeviceAssistantAgent.shared.prompt)
+
+        XCTAssertTrue(outcome is LocalFirstOutcomeAnswered, "\(outcome)")
+        XCTAssertTrue(engine.prompts.isEmpty, "the request was flattened on its way to the engine: \(engine.prompts)")
+        let request = try XCTUnwrap(engine.requests.last, "the engine was never handed a request")
+        XCTAssertEqual(request.instructions, OnDeviceAssistantAgent.shared.prompt)
+        XCTAssertEqual(request.prompt, "Name one planet.")
+        XCTAssertEqual(request.maxOutputTokens?.intValue, Int(OnDeviceInferenceSession.companion.DEFAULT_MAX_OUTPUT_TOKENS))
+        XCTAssertEqual(request.temperature?.doubleValue, AgentLLMService.companion.DEFAULT_TEMPERATURE)
+    }
+
+    func testASwiftEngineWithOnlyThePromptFormReceivesTheFlattenedPrompt() async throws {
+        let engine = PromptOnlyEngine()
+        let session = makeSession(engine: engine)
+
+        let outcome = try await session.ask(prompt: "Name one planet.", systemMessage: "Be brief.")
+
+        XCTAssertTrue(outcome is LocalFirstOutcomeAnswered, "\(outcome)")
+        XCTAssertEqual(engine.prompts, ["System: Be brief.\n\nUser: Name one planet."])
+    }
+
+    /// Reports the on-device model ready with the window the live one has, so the relay routes here.
+    private static func ready() -> LocalCapacity {
+        LocalCapacity(
+            available: true,
+            modelId: AIModel_OnDevice.AppleFoundationModels.shared.name,
+            maxContextTokens: KotlinInt(int: 4096),
+            providerId: AIProvider_OnDevice.shared.id,
+            reason: nil
+        )
+    }
+
+    /// An engine that takes the request apart, as Apple's does.
+    private final class RecordingEngine: SwiftLocalInferenceEngine {
+        private(set) var requests: [LocalGenerationRequest] = []
+        private(set) var prompts: [String] = []
+
+        override func probe() async throws -> LocalCapacity { OnDeviceRequestForwardingTests.ready() }
+
+        override func generate(prompt: String) async throws -> String {
+            prompts.append(prompt)
+            return "Mars"
+        }
+
+        override func generate(request: LocalGenerationRequest) async throws -> String {
+            requests.append(request)
+            return "Mars"
+        }
+    }
+
+    /// An engine written before the request form existed: the prompt form and nothing else.
+    private final class PromptOnlyEngine: SwiftLocalInferenceEngine {
+        private(set) var prompts: [String] = []
+
+        override func probe() async throws -> LocalCapacity { OnDeviceRequestForwardingTests.ready() }
+
+        override func generate(prompt: String) async throws -> String {
+            prompts.append(prompt)
+            return "Mars"
+        }
     }
 }

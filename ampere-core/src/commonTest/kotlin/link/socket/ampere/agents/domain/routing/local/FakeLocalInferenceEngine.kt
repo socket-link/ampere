@@ -17,6 +17,11 @@ import link.socket.ampere.agents.domain.emission.EmissionPayload
  * sizes its prompt by the estimate, as before AMPR-460. A test that stands in
  * for an engine with a tokenizer scripts a count; one that throws stands in
  * for an engine whose counter fails.
+ *
+ * A request is recorded in [lastRequest] and then handed to the interface's
+ * own default, which flattens it into [generate] with a prompt (AMPR-462). So
+ * [lastRequest] is what an engine that takes the request apart would read, and
+ * [lastPrompt] is what one that implements only the prompt form is handed.
  */
 class FakeLocalInferenceEngine(
     private val capacity: LocalCapacity = LocalCapacity(available = true, modelId = "fake-local"),
@@ -30,6 +35,8 @@ class FakeLocalInferenceEngine(
     var generateCount: Int = 0
         private set
     var lastPrompt: String? = null
+        private set
+    var lastRequest: LocalGenerationRequest? = null
         private set
     var structuredGenerateCount: Int = 0
         private set
@@ -49,6 +56,11 @@ class FakeLocalInferenceEngine(
         generateCount++
         lastPrompt = prompt
         return respond(prompt)
+    }
+
+    override suspend fun generate(request: LocalGenerationRequest): Result<String> {
+        lastRequest = request
+        return super.generate(request)
     }
 
     override suspend fun tokenCount(text: String): Int? {
