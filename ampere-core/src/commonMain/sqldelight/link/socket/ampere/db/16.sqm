@@ -1,0 +1,20 @@
+-- AMPR-465: retention for the Environment branch. ObservationStore (12.sqm) had no DELETE, no
+-- budget and no marker, so the first consumer to store a perceive would have inherited unbounded
+-- growth on the most privacy-sensitive table in the schema. This adds the marker table a sweep
+-- writes; the sweep itself and its queries live in ObservationStore.sq and need no migration.
+-- Definition copied from ObservationStorePruning.sq; IF NOT EXISTS keeps this a no-op on a
+-- database that already has it. Nothing to backfill: no pass has ever run.
+--
+-- This ticket owns 16.sqm and only 16.sqm; 15.sqm is the outcome actor column (AMPR-443), which
+-- landed first.
+CREATE TABLE IF NOT EXISTS ObservationStorePruning (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pruned_at INTEGER NOT NULL,
+  dropped_by_age INTEGER NOT NULL,
+  dropped_by_expiry INTEGER NOT NULL,
+  dropped_by_cap INTEGER NOT NULL,
+  rows_before INTEGER NOT NULL,
+  rows_after INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_observation_store_pruning_pruned_at ON ObservationStorePruning(pruned_at);

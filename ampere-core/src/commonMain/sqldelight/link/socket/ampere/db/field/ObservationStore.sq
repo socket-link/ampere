@@ -72,3 +72,47 @@ SELECT holder, subject, content, confidence, sensitivity, decay, created_by_even
 FROM ObservationStore
 WHERE created_by_event = ? AND sensitivity != 'PROTECTED'
 ORDER BY subject ASC, holder ASC;
+
+-- -----------------------------------------------------------------------------
+-- Retention (AMPR-465).
+--
+-- The budget (`observe/ObservationBudget.kt`) is enforced write-side by `SqlDelightObservationStore`:
+-- an age pass, an expiry pass and a row-cap pass, each leaving a marker in ObservationStorePruning.
+-- Dropping is oldest-first by created_at and never by sensitivity. The two forget queries are a
+-- consumer's sanctioned path to removing what was observed about an entity or by a holder, so no
+-- service outside this module writes raw SQL against the table.
+-- -----------------------------------------------------------------------------
+
+-- The cap pass's one scan: rows across every holder.
+countObservations:
+SELECT COUNT(*) FROM ObservationStore;
+
+-- The age pass: every row whose perceive was recorded before the cutoff.
+deleteObservationsOlderThan:
+DELETE FROM ObservationStore
+WHERE created_at < :cutoffMs;
+
+-- The expiry pass: rows carrying `EXPIRES_AT:<epoch ms>` whose time has come. Prefix match plus a
+-- cast of the suffix, so the codec in ObservationStore.kt stays the one place the encoding lives
+-- and no column is added. A row this build cannot decode is left alone, as the reads leave it.
+deleteObservationsExpiredBy:
+DELETE FROM ObservationStore
+WHERE decay LIKE 'EXPIRES_AT:%'
+  AND CAST(substr(decay, length('EXPIRES_AT:') + 1) AS INTEGER) <= :nowMs;
+
+-- The cap pass: the oldest :count rows, by rowid so a composite-key row can be named in one term.
+deleteOldestObservations:
+DELETE FROM ObservationStore
+WHERE rowid IN (
+  SELECT rowid FROM ObservationStore ORDER BY created_at ASC LIMIT :count
+);
+
+-- Forget what was observed about one entity, for every holder.
+deleteObservationsBySubject:
+DELETE FROM ObservationStore
+WHERE subject = :subject;
+
+-- Forget everything one holder observed.
+deleteObservationsByHolder:
+DELETE FROM ObservationStore
+WHERE holder = :holder;

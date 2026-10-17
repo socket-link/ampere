@@ -16,6 +16,7 @@ import link.socket.ampere.field.Ref
 import link.socket.ampere.field.Sensitivity
 import link.socket.ampere.field.Subject
 import link.socket.ampere.link.LinkId
+import link.socket.ampere.observe.ObservationBudget
 
 /**
  * The canon → Field mapper (F7): a perceived entity becomes an Observation held by the perceiving
@@ -45,7 +46,8 @@ class CanonObservationTest {
         assertEquals(recordedAt, belief.provenance.createdAt)
         assertEquals(OBSERVATION_CONFIDENCE, belief.confidence)
         assertEquals(Sensitivity.PRIVATE, belief.sensitivity)
-        assertEquals(Decay.None, belief.decay)
+        // The row says what the store will do to it: dropped at the budget's age cap (AMPR-465).
+        assertEquals(Decay.HalfLife(ObservationBudget.MAX_AGE), belief.decay)
     }
 
     @Test
