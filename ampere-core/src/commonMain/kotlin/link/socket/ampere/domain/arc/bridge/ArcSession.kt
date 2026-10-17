@@ -30,6 +30,7 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
+import link.socket.ampere.domain.agent.bundled.OnDeviceAssistantAgent
 import link.socket.ampere.domain.arc.AmpereRuntime
 import link.socket.ampere.domain.arc.ArcConcurrencyPolicy
 import link.socket.ampere.domain.arc.ArcConfig
@@ -39,7 +40,9 @@ import link.socket.ampere.domain.arc.CompletionManifest
 import link.socket.ampere.domain.arc.CompletionManifestSink
 import link.socket.ampere.domain.arc.TerminationReason
 import link.socket.ampere.goal.GoalBranch
+import link.socket.ampere.llm.LocalFirstOutcome
 import link.socket.ampere.llm.OnDeviceInferenceBinding
+import link.socket.ampere.llm.OnDeviceInferenceSession
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.llm.decide.UpstreamDecisionClient
 import link.socket.ampere.trace.ArcRunId
@@ -192,9 +195,9 @@ class ArcSession(
         get() = eventSerialBus
 
     /**
-     * When the on-device model is being used by this session's runs, and everything a surface
-     * needs to say so (AMPR-374): availability and its reason, the model, calls in flight, and
-     * the split between device and cloud so far.
+     * When the on-device model is being used by this session, and everything a surface needs to
+     * say so (AMPR-374): availability and its reason, the model, calls in flight, and the split
+     * between device and cloud so far. It counts the runs' calls and every [ask] alike.
      *
      * Null when no engine is bound — a session built without one has nothing to report, and
      * says so rather than showing an indicator that can never light up.
@@ -241,6 +244,56 @@ class ArcSession(
      * Null when no engine is bound.
      */
     suspend fun refreshOnDeviceAvailability(): LocalCapacity? = onDeviceInference?.probe()
+
+    /**
+     * The display-text path over [onDeviceInference] (AMPR-461): a session built on the binding
+     * the runtime already holds, publishing through [eventApi], so its calls land in the same
+     * ledger as the runs'. It follows no bus itself; the `init` above already does.
+     */
+    private val displayText: OnDeviceInferenceSession? =
+        onDeviceInference?.let { OnDeviceInferenceSession.over(binding = it, eventApi = eventApi) }
+
+    /**
+     * Answer [prompt] on the device when the device can — the Arc host's path to *display text*
+     * (AMPR-461, the rule AMPR-372 ratified): words a person reads beside a run, such as a
+     * progress line or a summary of a run's results.
+     *
+     * Display text and nothing else. The answer is returned to the caller and goes no further:
+     * it is not fed into a run, a plan, a judgment or memory, and the caller must not feed it into
+     * one. Measured on the production engine path, the on-device model restated a single source
+     * soundly 33 of 33 times and was often wrong when it selected, compared or counted across
+     * several items — fine for a person to read, never for a run to act on. Work a run consumes
+     * goes through the loop, at rung `ONE` or above.
+     *
+     * The call runs under [OnDeviceAssistantAgent], the one bundled identity whose floor is
+     * `ZERO`, through the same binding, relay, client and monitor as the session's runs: there is
+     * no second binding over the engine. It belongs to no Arc run — it carries its own run id
+     * (`LocalFirstAnswer.runId`) — and its `ProviderCall*` pair is persisted through [eventApi],
+     * so [onDeviceState] counts it like any other on-device call. Without a database there is no
+     * door: the call still runs, and nothing is published, the same as for the runs' calls.
+     *
+     * An on-device failure is returned, never re-sent. With no cloud transport, nothing leaves
+     * the device: when it cannot serve, the call fails as
+     * `ON_DEVICE_UNAVAILABLE` having sent the prompt nowhere. With one, the relay may route a
+     * prompt the device cannot take to the cloud before the call, never after a device failure.
+     *
+     * Never throws for a model or routing failure; see [LocalFirstOutcome.Failed]. Cancellation
+     * propagates as cancellation.
+     *
+     * Null when no engine is bound, for the same reason [onDeviceState] is.
+     *
+     * From Swift the call is `async`, and the Objective-C export drops the default, so the system
+     * message is passed explicitly:
+     * ```swift
+     * let outcome = try await session.ask(prompt: line, systemMessage: OnDeviceAssistantAgent.shared.prompt)
+     * ```
+     *
+     * @param systemMessage Context for the model. Defaults to the [OnDeviceAssistantAgent] prompt.
+     */
+    suspend fun ask(
+        prompt: String,
+        systemMessage: String = OnDeviceAssistantAgent.prompt,
+    ): LocalFirstOutcome? = displayText?.ask(prompt = prompt, systemMessage = systemMessage)
 
     /** Start an Arc for [userGoal] under a freshly generated run identity. */
     fun start(userGoal: String): ArcRunHandle = start(userGoal, generateUUID("arc-run"))
@@ -469,9 +522,10 @@ class ArcSession(
          *
          * Every step of every run this session starts is routed by a relay that knows the
          * engine, executed by a client that runs the on-device model on it, and folded into
-         * [onDeviceState]. Which steps are *eligible* is the routing floor's call — an agent or
-         * Arc step whose effective floor the on-device model clears — and this session does not
-         * change it.
+         * [onDeviceState]. Which calls are *eligible* is the routing floor's call, and this
+         * session does not change it: no Arc step is (AMPR-459), so the engine is probed and shown
+         * but serves none of a run's calls. What it does serve is [ask], the session's
+         * display-text path (AMPR-461), through this same binding.
          *
          * With a null [cloud] the session is on-device only: a step the device cannot serve
          * fails cleanly, having sent its prompt nowhere. Supplying a transport is what opts the

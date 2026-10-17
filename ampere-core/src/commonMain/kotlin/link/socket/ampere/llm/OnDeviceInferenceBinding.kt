@@ -35,9 +35,11 @@ import link.socket.ampere.domain.ai.provider.ProviderId
  * An Arc needs the same wiring handed to its `AmpereRuntime`, so it lives here,
  * where both can construct it — the session for `ask`, and
  * [ArcSession][link.socket.ampere.domain.arc.bridge.ArcSession] for every step
- * of every run. Nothing here decides *which* work runs on the device: that is
- * the routing floor's call, declared on the agent or the Arc step, and this
- * binding is only the road to the engine once a step is eligible.
+ * of every run. An Arc session's own display-text `ask` is a session built over
+ * the Arc's binding (AMPR-461), not a second binding over the same engine: one
+ * engine, one binding, one ledger. Nothing here decides *which* work runs on the
+ * device: that is the routing floor's call, declared on the agent or the Arc
+ * step, and this binding is only the road to the engine once a call is eligible.
  *
  * ## One registry
  *

@@ -45,12 +45,18 @@ import link.socket.ampere.agents.domain.emission.EmissionProvenance
 import link.socket.ampere.agents.domain.emission.ProseFormat
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
+import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.agents.domain.routing.local.FakeLocalInferenceEngine
+import link.socket.ampere.agents.domain.routing.local.InferenceLocality
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
+import link.socket.ampere.agents.domain.routing.local.LocalUnavailableReason
 import link.socket.ampere.agents.domain.routing.local.OnDeviceAvailability
 import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceState
+import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.bus.EventSerialBus
+import link.socket.ampere.data.DEFAULT_JSON
 import link.socket.ampere.db.Database
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfigurationFactory
@@ -66,6 +72,7 @@ import link.socket.ampere.domain.arc.ArcRunRejectedException
 import link.socket.ampere.domain.arc.OrchestrationConfig
 import link.socket.ampere.domain.arc.OrchestrationType
 import link.socket.ampere.domain.arc.TerminationReason
+import link.socket.ampere.llm.LocalFirstOutcome
 import link.socket.ampere.llm.MissingUpstreamLlmClientException
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.trace.ModelInvocationTrace
@@ -843,7 +850,144 @@ class ArcSessionTest {
         }
     }
 
-    /** A session without an engine has no on-device state to show, and says so. */
+    // ---- display text (AMPR-461) -----------------------------------------------------
+
+    /**
+     * The session's display-text path: `ask` runs on the device through the binding the runtime
+     * already holds, so the session's one ledger counts it, nothing reaches the cloud transport
+     * while the device can serve, and its `ProviderCall*` pair is persisted through the session's
+     * door under the ask's own run id, outside any Arc run.
+     */
+    @Test
+    fun `ask answers on the device through the session's own binding`() = runBlocking<Unit> {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { Database.Schema.create(it) }
+        val database = Database(driver)
+        val engine = FakeLocalInferenceEngine(
+            capacity = deviceAvailable(maxContextTokens = 4_096),
+            respond = { Result.success("Three of four checks passed.") },
+        )
+        val cloud = CloudTransport()
+        val session = ArcSession.create(
+            arcConfig = arcConfig("bridge-ask-arc"),
+            projectDirPath = arcProjectDir("bridge-ask").toString(),
+            maxFlowTicks = 1,
+            database = database,
+            engine = engine,
+            cloud = cloud,
+        )
+        val readerScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+        try {
+            val state = assertNotNull(session.onDeviceState)
+
+            val outcome = withTimeout(timeoutMillis) {
+                session.ask("Summarise for the person watching: three of four checks passed.")
+            }
+
+            val answer = assertIs<LocalFirstOutcome.Answered>(outcome).answer
+            assertEquals("Three of four checks passed.", answer.text)
+            assertEquals(InferenceLocality.ON_DEVICE, answer.locality)
+            assertEquals(AIProvider_OnDevice.id, answer.providerId)
+            assertEquals(1, engine.generateCount, "The device answered")
+            assertEquals(0, cloud.calls.get(), "Nothing reaches the cloud transport while the device can serve")
+
+            val settled = withTimeout(timeoutMillis) {
+                state.first { it.servedOnDevice == 1 && !it.isInUse }
+            }
+            assertEquals(0, settled.servedInCloud)
+            assertEquals(0, settled.failedOnDevice)
+
+            // Persisted before it was dispatched, so the rows are there once the state has counted it.
+            val events = EventRepository(DEFAULT_JSON, readerScope, database)
+            val started = events.getEventsByType(ProviderCallStartedEvent.EVENT_TYPE).getOrThrow()
+                .filterIsInstance<ProviderCallStartedEvent>()
+            val completed = events.getEventsByType(ProviderCallCompletedEvent.EVENT_TYPE).getOrThrow()
+                .filterIsInstance<ProviderCallCompletedEvent>()
+            assertEquals(listOf(answer.runId), started.map { it.workflowId }, "One call, under the ask's own run")
+            assertEquals(AIProvider_OnDevice.id, started.single().providerId)
+            assertEquals(listOf(answer.runId), completed.map { it.workflowId })
+            assertTrue(completed.single().success)
+        } finally {
+            readerScope.cancel()
+            session.close()
+            driver.close()
+        }
+    }
+
+    /**
+     * A device failure is returned and not re-sent, though the session has a cloud transport:
+     * availability was decided before the call, and the prompt went to the device alone.
+     */
+    @Test
+    fun `an ask the device fails is returned and not retried in the cloud`() = runBlocking<Unit> {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also { Database.Schema.create(it) }
+        val engine = FakeLocalInferenceEngine(
+            capacity = deviceAvailable(maxContextTokens = 4_096),
+            respond = { Result.failure(IllegalStateException("guardrail refused the prompt")) },
+        )
+        val cloud = CloudTransport()
+        val session = ArcSession.create(
+            arcConfig = arcConfig("bridge-ask-fails-arc"),
+            projectDirPath = arcProjectDir("bridge-ask-fails").toString(),
+            maxFlowTicks = 1,
+            database = Database(driver),
+            engine = engine,
+            cloud = cloud,
+        )
+
+        try {
+            val state = assertNotNull(session.onDeviceState)
+
+            val outcome = withTimeout(timeoutMillis) { session.ask("Summarise the run for the person watching.") }
+
+            val failed = assertIs<LocalFirstOutcome.Failed>(outcome)
+            assertEquals(LocalFirstOutcome.FailureReason.ON_DEVICE_GENERATION_FAILED, failed.reason)
+            assertEquals(1, engine.generateCount)
+            assertEquals(0, cloud.calls.get(), "A device failure is never re-sent to the cloud")
+
+            val settled = withTimeout(timeoutMillis) { state.first { it.failedOnDevice == 1 && !it.isInUse } }
+            assertEquals(0, settled.servedOnDevice)
+            assertEquals(0, settled.servedInCloud)
+        } finally {
+            session.close()
+            driver.close()
+        }
+    }
+
+    /** With no cloud transport and a device that cannot serve, the prompt goes nowhere. */
+    @Test
+    fun `a device-only ask sends nothing when the device cannot serve`() = runBlocking<Unit> {
+        val engine = FakeLocalInferenceEngine(
+            capacity = LocalCapacity(
+                available = false,
+                reason = LocalUnavailableReason.NOT_ENABLED,
+                providerId = AIProvider_OnDevice.id,
+            ),
+        )
+        val session = ArcSession.create(
+            arcConfig = arcConfig("bridge-ask-device-only-arc"),
+            projectDirPath = arcProjectDir("bridge-ask-device-only").toString(),
+            maxFlowTicks = 1,
+            engine = engine,
+            cloud = null,
+        )
+
+        try {
+            val outcome = withTimeout(timeoutMillis) { session.ask("Summarise the run for the person watching.") }
+
+            val failed = assertIs<LocalFirstOutcome.Failed>(outcome)
+            assertEquals(LocalFirstOutcome.FailureReason.ON_DEVICE_UNAVAILABLE, failed.reason)
+            assertEquals(LocalUnavailableReason.NOT_ENABLED, failed.detail)
+            assertEquals(0, engine.generateCount, "The engine was not given the prompt")
+            val state = assertNotNull(session.onDeviceState).value
+            val unavailable = assertIs<OnDeviceAvailability.Unavailable>(state.availability)
+            assertEquals(LocalUnavailableReason.NOT_ENABLED, unavailable.reason)
+        } finally {
+            session.close()
+        }
+    }
+
+    /** A session without an engine has no on-device state to show and no device to ask, and says so. */
     @Test
     fun `a session without an engine reports no on-device state`() = runBlocking<Unit> {
         val session = ArcSession.create(
@@ -855,6 +999,7 @@ class ArcSessionTest {
             assertNull(session.onDeviceState)
             assertNull(session.observeOnDeviceState { })
             assertNull(session.refreshOnDeviceAvailability())
+            assertNull(session.ask("Summarise the run for the person watching."))
         } finally {
             session.close()
         }
