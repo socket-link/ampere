@@ -11,6 +11,7 @@ import link.socket.ampere.cli.watch.presentation.AgentActivityState
 import link.socket.ampere.cli.watch.presentation.EventSignificance
 import link.socket.ampere.cli.watch.presentation.SignificantEventSummary
 import link.socket.ampere.renderer.SparkColors
+import link.socket.ampere.terminal.TerminalSymbols
 
 /**
  * Event pane with rich content display and expandable details.
@@ -34,7 +35,9 @@ class RichEventPane(
         val headline: String,
         val details: List<String>,
         val significance: EventSignificance,
-        val sourceAgentName: String
+        val sourceAgentName: String,
+        /** A model call that ran on this device (AMPR-375); its [icon] is the on-device marker. */
+        val onDevice: Boolean = false,
     )
 
     private var events: List<RichEvent> = emptyList()
@@ -273,7 +276,7 @@ class RichEventPane(
      * Convert a SignificantEventSummary to a RichEvent.
      */
     private fun SignificantEventSummary.toRichEvent(index: Int): RichEvent {
-        val icon = getEventIcon(eventType)
+        val icon = if (onDevice) TerminalSymbols.Status.onDevice else getEventIcon(eventType)
         // Truncate any UUIDs in the summary text for better readability
         val formattedSummary = IdFormatter.truncateUuidsInText(summaryText)
 
@@ -285,7 +288,8 @@ class RichEventPane(
             headline = formattedSummary.take(40),
             details = listOf(formattedSummary),
             significance = significance,
-            sourceAgentName = sourceAgentName
+            sourceAgentName = sourceAgentName,
+            onDevice = onDevice,
         )
     }
 

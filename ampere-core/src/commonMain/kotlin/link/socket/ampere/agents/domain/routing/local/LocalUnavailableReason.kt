@@ -34,4 +34,17 @@ object LocalUnavailableReason {
 
     /** No engine is bound on this platform, so there is nothing to ask. */
     const val NO_ENGINE: String = "on_device_engine_not_bound"
+
+    /**
+     * A JVM host reaches the model through a helper process (AMPR-375), and the helper it found
+     * speaks another protocol version or does not serve inference. Permanent until the helper is
+     * rebuilt. The same code Socket's desktop engine reports for its own helper.
+     */
+    const val HELPER_INCOMPATIBLE: String = "apple_foundation_models_helper_incompatible"
+
+    /**
+     * That helper could not be started, exited, or did not answer in time. Transient: the next
+     * probe starts a fresh one.
+     */
+    const val HELPER_UNREACHABLE: String = "apple_foundation_models_helper_unreachable"
 }

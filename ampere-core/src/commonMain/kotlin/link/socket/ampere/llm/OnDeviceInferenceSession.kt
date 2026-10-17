@@ -19,6 +19,7 @@ import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.local.InferenceLocality
+import link.socket.ampere.agents.domain.routing.local.InferenceLocalityClassifier
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
 import link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine
 import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceState
@@ -225,6 +226,15 @@ class OnDeviceInferenceSession private constructor(
 
     /** When the on-device model is being used, and everything a surface needs to say so. */
     val state: StateFlow<OnDeviceInferenceState> = binding.state
+
+    /**
+     * What this session's calls are labelled by: its dispatching client, which alone knows an
+     * engine is bound. A surface that marks single calls on a shared bus as on-device asks this
+     * (AMPR-375), so a call it marks is one this session's client ran on the engine: the same
+     * answer [state] and [LocalFirstAnswer.locality] rest on.
+     */
+    val classifier: InferenceLocalityClassifier
+        get() = binding.client
 
     /**
      * Ask the engine whether it can serve right now, and fold the answer into

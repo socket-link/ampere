@@ -81,6 +81,8 @@ class OnDeviceIndicatorModelTest {
             LocalUnavailableReason.UNAVAILABLE,
             LocalUnavailableReason.OS_TOO_OLD,
             LocalUnavailableReason.NO_ENGINE,
+            LocalUnavailableReason.HELPER_INCOMPATIBLE,
+            LocalUnavailableReason.HELPER_UNREACHABLE,
             RoutingRule.ByCapability.DEFAULT_UNAVAILABLE_REASON,
         )
 
@@ -124,6 +126,15 @@ class OnDeviceIndicatorModelTest {
 
         assertTrue(unavailable.describeFailure().endsWith("Nothing was sent."))
         assertTrue(tooLarge.describeFailure().endsWith("Nothing was sent."))
+    }
+
+    @Test
+    fun `a row for a finished on-device call says how it ended and how long it took`() {
+        val provenance = answer(InferenceLocality.ON_DEVICE, onDeviceModel.name, latencyMs = 812).describeProvenance()
+
+        assertEquals("Answered on this device · 812 ms", describeOnDeviceCall(success = true, latencyMs = 812))
+        assertEquals("Failed on this device · 60.0 s", describeOnDeviceCall(success = false, latencyMs = 60_000))
+        assertTrue(provenance.startsWith("Answered on this device · "))
     }
 
     private fun available(): OnDeviceInferenceState = OnDeviceInferenceProjection.fold(

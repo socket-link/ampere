@@ -6,14 +6,17 @@ import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
 import link.socket.ampere.cli.help.CommandRegistry
 import link.socket.ampere.terminal.TerminalSymbols
+import link.socket.ampere.ui.inference.OnDeviceIndicatorModel
+import link.socket.ampere.ui.inference.OnDeviceIndicatorTone
 
 /**
  * Status bar component for the bottom of the demo layout.
  *
- * Shows keyboard shortcuts on the left and system status on the right.
+ * Shows keyboard shortcuts on the left and system status on the right. With an on-device engine
+ * bound, the on-device indicator sits just before the status (AMPR-375).
  *
  * Example:
- * [d]ashboard [e]vents [m]emory [v]erbose [h]elp [q]uit    Status: WORKING
+ * [d]ashboard [e]vents [m]emory [v]erbose [h]elp [q]uit    ◇ On-device ready │ ● WORKING
  */
 class StatusBar(private val terminal: Terminal) {
 
@@ -64,6 +67,8 @@ class StatusBar(private val terminal: Terminal) {
      * @param focusedAgent Currently focused agent index (null if none)
      * @param inputHint Pending input hint (e.g., "agent [1-9]") - deprecated, use escalationShortcuts instead
      * @param escalationShortcuts Shortcuts to display during escalation (replaces normal shortcuts)
+     * @param onDevice The on-device indicator (AMPR-375), shown beside the status when there is room.
+     *   Null, when no on-device engine is bound, renders the bar exactly as before.
      * @return Formatted status bar string
      */
     fun render(
@@ -72,53 +77,67 @@ class StatusBar(private val terminal: Terminal) {
         status: SystemStatus,
         focusedAgent: Int? = null,
         inputHint: String? = null,
-        escalationShortcuts: List<EscalationShortcut>? = null
+        escalationShortcuts: List<EscalationShortcut>? = null,
+        onDevice: OnDeviceIndicatorModel? = null,
     ): String {
-        // If escalation shortcuts are provided, render them instead of normal shortcuts
-        if (escalationShortcuts != null && escalationShortcuts.isNotEmpty()) {
-            val shortcutsStr = renderEscalationShortcuts(escalationShortcuts)
-            val statusStr = renderStatus(status)
+        val left = when {
+            // If escalation shortcuts are provided, render them instead of normal shortcuts
+            escalationShortcuts != null && escalationShortcuts.isNotEmpty() ->
+                renderEscalationShortcuts(escalationShortcuts)
 
-            val shortcutsVisible = shortcutsStr.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
-            val statusVisible = statusStr.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
+            // Legacy input hint handling (for non-escalation input modes like AWAITING_AGENT)
+            inputHint != null ->
+                terminal.render(bold(TextColors.yellow(": $inputHint"))) + terminal.render(dim(" [ESC cancel]"))
 
-            val padding = (width - shortcutsVisible - statusVisible).coerceAtLeast(1)
-            return "$shortcutsStr${" ".repeat(padding)}$statusStr"
+            // If an agent is focused, show hint to return
+            else -> renderShortcuts(shortcuts) + if (focusedAgent != null) terminal.render(dim(" [ESC] return")) else ""
         }
+        val right = renderRight(status, onDevice, room = width - visibleLength(left) - 1)
 
-        // Legacy input hint handling (for non-escalation input modes like AWAITING_AGENT)
-        if (inputHint != null) {
-            val hintStr = terminal.render(bold(TextColors.yellow(": $inputHint")))
-            val escHint = terminal.render(dim(" [ESC cancel]"))
-            val statusStr = renderStatus(status)
-
-            val hintVisible = hintStr.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
-            val escVisible = escHint.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
-            val statusVisible = statusStr.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
-
-            val padding = (width - hintVisible - escVisible - statusVisible).coerceAtLeast(1)
-            return "$hintStr$escHint${" ".repeat(padding)}$statusStr"
-        }
-
-        val shortcutsStr = renderShortcuts(shortcuts)
-        val statusStr = renderStatus(status)
-
-        // If an agent is focused, show hint to return
-        val focusHint = if (focusedAgent != null) {
-            terminal.render(dim(" [ESC] return"))
-        } else {
-            ""
-        }
-
-        // Calculate padding between shortcuts and status
-        val shortcutsVisible = shortcutsStr.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
-        val statusVisible = statusStr.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
-        val hintVisible = focusHint.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "").length
-
-        val padding = (width - shortcutsVisible - statusVisible - hintVisible).coerceAtLeast(1)
-
-        return "$shortcutsStr$focusHint${" ".repeat(padding)}$statusStr"
+        // Pad between the shortcuts and the status
+        val padding = (width - visibleLength(left) - visibleLength(right)).coerceAtLeast(1)
+        return "$left${" ".repeat(padding)}$right"
     }
+
+    /**
+     * The status, preceded by the on-device segment when [room] allows: with its detail if that
+     * fits, by its title alone if only that does, and not at all otherwise. The status always shows.
+     */
+    private fun renderRight(status: SystemStatus, onDevice: OnDeviceIndicatorModel?, room: Int): String {
+        val statusStr = renderStatus(status)
+        if (onDevice == null) return statusStr
+
+        val separator = terminal.render(dim(" ${TerminalSymbols.Separator.vertical} "))
+        return listOf(true, false)
+            .map { withDetail -> renderOnDevice(onDevice, withDetail) + separator + statusStr }
+            .firstOrNull { visibleLength(it) <= room }
+            ?: statusStr
+    }
+
+    /**
+     * The on-device segment, in the indicator's own words (`ui/inference/OnDeviceIndicatorModel.kt`):
+     * a filled marker while the model is generating, an empty one at rest.
+     */
+    private fun renderOnDevice(model: OnDeviceIndicatorModel, withDetail: Boolean): String {
+        val color = when (model.tone) {
+            OnDeviceIndicatorTone.IN_USE -> TextColors.cyan
+            OnDeviceIndicatorTone.READY -> TextColors.green
+            OnDeviceIndicatorTone.UNAVAILABLE -> TextColors.yellow
+            OnDeviceIndicatorTone.UNKNOWN -> TextColors.gray
+        }
+        val marker = if (model.tone == OnDeviceIndicatorTone.IN_USE) {
+            TerminalSymbols.Status.onDevice
+        } else {
+            TerminalSymbols.Status.onDeviceIdle
+        }
+        val title = if (model.tone == OnDeviceIndicatorTone.IN_USE) bold(color(model.title)) else color(model.title)
+        val detail = model.detail?.takeIf { withDetail && it.isNotBlank() }
+            ?.let { terminal.render(dim(" · $it")) }
+            .orEmpty()
+        return terminal.render(color(marker)) + " " + terminal.render(title) + detail
+    }
+
+    private fun visibleLength(text: String): Int = text.replace(ANSI_ESCAPE, "").length
 
     private fun renderShortcuts(shortcuts: List<Shortcut>): String {
         // Group shortcuts by category:
@@ -215,6 +234,8 @@ class StatusBar(private val terminal: Terminal) {
     }
 
     companion object {
+        private val ANSI_ESCAPE = Regex("\u001B\\[[0-9;]*[a-zA-Z]")
+
         /**
          * Default shortcuts for the interactive TUI.
          * Pulls from CommandRegistry for consistency.

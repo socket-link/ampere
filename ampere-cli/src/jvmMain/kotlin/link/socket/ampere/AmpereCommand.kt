@@ -43,6 +43,7 @@ import link.socket.ampere.cli.launch.HeadlessReason
 import link.socket.ampere.cli.launch.TuiDecision
 import link.socket.ampere.cli.launch.decideTuiUsage
 import link.socket.ampere.cli.launch.userMessage
+import link.socket.ampere.cli.ondevice.OnDeviceAssistant
 import link.socket.ampere.cli.render.LumosBridgeController
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.subscription.Subscription
@@ -222,7 +223,16 @@ class AmpereCommand(
         }
 
         val terminal = TerminalFactory.createTerminal()
-        val presenter = WatchPresenter(context.eventRelayService)
+        // AMPR-375: the on-device display-text path behind `:ask` and the status bar's indicator,
+        // when this host has the helper. Unbound changes nothing about the dashboard. The agents'
+        // own transports are not touched: no agent call can reach the device (AMPR-459).
+        val onDevice = OnDeviceAssistant.bind(context.environmentService::createEventApi)
+        val boundOnDevice = onDevice as? OnDeviceAssistant.Bound
+        val presenter = WatchPresenter(
+            eventRelayService = context.eventRelayService,
+            onDeviceState = boundOnDevice?.state,
+            localityClassifier = boundOnDevice?.classifier,
+        )
         val workspaceStateStore = context.environmentService.workspaceStateStore
 
         // Create TUI components
@@ -256,11 +266,16 @@ class AmpereCommand(
         var lastCommandResult: CommandResult? = null
 
         // Create command executor with callback when goal is activated
-        val commandExecutor = CommandExecutor(presenter, goalHandler) {
-            // Callback when goal is activated via :goal command
-            jazzPane.startDemo()
-            systemStatus = StatusBar.SystemStatus.WORKING
-        }
+        val commandExecutor = CommandExecutor(
+            presenter = presenter,
+            goalHandler = goalHandler,
+            onGoalActivated = {
+                // Callback when goal is activated via :goal command
+                jazzPane.startDemo()
+                systemStatus = StatusBar.SystemStatus.WORKING
+            },
+            onDevice = onDevice,
+        )
 
         try {
             // Initialize terminal for full-screen rendering
@@ -271,6 +286,10 @@ class AmpereCommand(
 
             // Start the presenter
             presenter.start()
+
+            // Probe the device once at launch, so the indicator says "ready", or why not, before
+            // anything is asked. This starts the helper; it never loads the model.
+            boundOnDevice?.let { bound -> agentScope.launch { bound.refreshAvailability() } }
 
             // Activate work mode (if any)
             if (autoWork) {
@@ -463,7 +482,8 @@ class AmpereCommand(
                             shortcuts = shortcuts,
                             status = systemStatus,
                             focusedAgent = viewConfig.focusedAgentIndex,
-                            inputHint = viewConfig.inputHint
+                            inputHint = viewConfig.inputHint,
+                            onDevice = watchState.onDevice,
                         )
 
                         // Determine right pane based on mode
@@ -537,6 +557,9 @@ class AmpereCommand(
             presenter.stop()
             inputHandler.close()
             cancelAndSettle(agentScope)
+            // Ends the helper's process group; it would also exit on its own once this JVM's pipe
+            // closed, so a failure here must not cost the terminal its restore.
+            runCatching { onDevice.close() }
             restoreTerminal()
             println("\nAMPERE stopped")
         }

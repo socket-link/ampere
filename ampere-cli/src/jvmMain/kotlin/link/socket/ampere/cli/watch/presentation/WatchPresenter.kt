@@ -6,6 +6,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -24,8 +25,15 @@ import link.socket.ampere.agents.domain.event.SparkEvent
 import link.socket.ampere.agents.domain.event.SparkRemovedEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
+import link.socket.ampere.agents.domain.routing.local.InferenceLocality
+import link.socket.ampere.agents.domain.routing.local.InferenceLocalityClassifier
+import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceProjection
+import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceState
 import link.socket.ampere.agents.events.relay.EventRelayFilters
 import link.socket.ampere.agents.events.relay.EventRelayService
+import link.socket.ampere.ui.inference.OnDeviceIndicatorModel
+import link.socket.ampere.ui.inference.describeOnDeviceCall
+import link.socket.ampere.ui.inference.toIndicatorModel
 
 /**
  * The sensory cortex of the watch interface.
@@ -33,10 +41,20 @@ import link.socket.ampere.agents.events.relay.EventRelayService
  * Subscribes to all events from the nervous system (EventSerialBus),
  * filters and interprets them, and maintains presentable state for
  * the dashboard view.
+ *
+ * ## The on-device indicator (AMPR-375)
+ *
+ * With an on-device engine bound, [onDeviceState] is that engine's session state and
+ * [localityClassifier] its client. The state becomes [WatchViewState.onDevice], in the wording of
+ * `ui/inference/OnDeviceIndicatorModel.kt`, and every model call the classifier places on this
+ * device is marked in the event feed. Both come from the events Ampere already emits around a call;
+ * nothing here invents a signal of its own. With neither, the view is exactly what it was.
  */
 class WatchPresenter(
     private val eventRelayService: EventRelayService,
-    private val clock: Clock = Clock.System
+    private val clock: Clock = Clock.System,
+    private val onDeviceState: StateFlow<OnDeviceInferenceState>? = null,
+    private val localityClassifier: InferenceLocalityClassifier? = null,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -50,8 +68,12 @@ class WatchPresenter(
     private val providerTelemetry = mutableListOf<ProviderCallTelemetrySummary>()
     private var systemVitals = SystemVitals()
 
+    @Volatile
+    private var onDeviceIndicator: OnDeviceIndicatorModel? = onDeviceState?.value?.toIndicatorModel()
+
     private var eventCollectionJob: Job? = null
     private var cleanupJob: Job? = null
+    private var onDeviceJob: Job? = null
 
     fun start() {
         // Subscribe to all events
@@ -64,6 +86,15 @@ class WatchPresenter(
                 .collect { event ->
                     handleEvent(event)
                 }
+        }
+
+        onDeviceJob = onDeviceState?.let { states ->
+            scope.launch {
+                states.collect { state ->
+                    onDeviceIndicator = state.toIndicatorModel()
+                    invalidateCache()
+                }
+            }
         }
 
         // Start periodic cleanup of stale pending events and idle detection
@@ -79,10 +110,11 @@ class WatchPresenter(
     fun stop() {
         eventCollectionJob?.cancel()
         cleanupJob?.cancel()
+        onDeviceJob?.cancel()
         scope.cancel()
     }
 
-    private fun handleEvent(event: Event) {
+    private suspend fun handleEvent(event: Event) {
         try {
             val agentId = (event.eventSource as? EventSource.Agent)?.agentId ?: return
             val significance = categorizer.categorize(event)
@@ -98,7 +130,7 @@ class WatchPresenter(
 
             // Add to significant events feed if warranted
             if (significance.shouldDisplayByDefault) {
-                addSignificantEvent(event, significance)
+                addSignificantEvent(event, significance, onDevice = ranOnDevice(event))
             }
 
             if (event is ProviderCallCompletedEvent) {
@@ -215,15 +247,33 @@ class WatchPresenter(
         }
     }
 
-    private fun addSignificantEvent(event: Event, significance: EventSignificance) {
+    /**
+     * Whether [event] is a finished model call that ran on this device. Asked of the on-device
+     * session's own client, through the projection its monitor folds with, so a marked row and the
+     * indicator cannot disagree about where a call ran (AMPR-375). Only a completion: its start is
+     * routine and never reaches the feed, and a routing fallback the classifier places on the device
+     * is a call that did not stay there.
+     */
+    private suspend fun ranOnDevice(event: Event): Boolean {
+        val classifier = localityClassifier ?: return false
+        if (event !is ProviderCallCompletedEvent) return false
+        return OnDeviceInferenceProjection.classify(event, classifier) == InferenceLocality.ON_DEVICE
+    }
+
+    private fun addSignificantEvent(event: Event, significance: EventSignificance, onDevice: Boolean) {
         val agentId = (event.eventSource as? EventSource.Agent)?.agentId ?: "unknown"
         val summary = SignificantEventSummary(
             eventId = event.eventId,
             timestamp = event.timestamp,
             eventType = event.eventType,
             sourceAgentName = extractAgentName(agentId),
-            summaryText = generateSummaryText(event),
-            significance = significance
+            summaryText = if (event is ProviderCallCompletedEvent && onDevice) {
+                describeOnDeviceCall(event.success, event.latencyMs)
+            } else {
+                generateSummaryText(event)
+            },
+            significance = significance,
+            onDevice = onDevice,
         )
 
         significantEvents.add(0, summary) // Add to front
@@ -405,9 +455,11 @@ class WatchPresenter(
     private var cacheInvalidated = true
 
     fun getViewState(): WatchViewState {
-        // Return cached view state if still valid
-        if (!cacheInvalidated && cachedViewState != null) {
-            return cachedViewState!!
+        // Return cached view state if still valid. The indicator is compared as well: it is written
+        // from the on-device state's own collector, which can land between a rebuild and its reset.
+        val cached = cachedViewState
+        if (!cacheInvalidated && cached != null && cached.onDevice == onDeviceIndicator) {
+            return cached
         }
 
         // Create new view state snapshot
@@ -415,7 +467,8 @@ class WatchPresenter(
             systemVitals = systemVitals,
             agentStates = agentStates.toMap(), // Immutable copy
             recentSignificantEvents = significantEvents.toList(), // Immutable copy
-            recentProviderTelemetry = providerTelemetry.toList()
+            recentProviderTelemetry = providerTelemetry.toList(),
+            onDevice = onDeviceIndicator,
         )
 
         cachedViewState = viewState

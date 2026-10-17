@@ -84,6 +84,12 @@ object TerminalSymbols {
         val dotCircle: String get() = if (useUnicode) "◌" else "o"
 
         val lightning: String get() = if (useUnicode) "⚡" else "*"
+
+        /** A model call that ran on this device, and the on-device indicator while one runs (AMPR-375). */
+        val onDevice: String get() = if (useUnicode) "◆" else "D"
+
+        /** The on-device indicator at rest: ready, unavailable, or not yet known. */
+        val onDeviceIdle: String get() = if (useUnicode) "◇" else "d"
     }
 
     // ============================================================

@@ -91,6 +91,12 @@ object CommandRegistry {
             usage = null,
         ),
         CommandDefinition(
+            name = "ask",
+            aliases = emptyList(),
+            description = "Ask the on-device model; the question stays on this machine",
+            usage = "<question>",
+        ),
+        CommandDefinition(
             name = "goal",
             aliases = emptyList(),
             description = "Set an autonomous goal for the agent",

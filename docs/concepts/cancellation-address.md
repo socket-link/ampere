@@ -5,7 +5,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/process/CancellationAddress.kt
   - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/process/ProcessGroups.kt
 related: [EventSerialBus, ChassisSpi, StartupReconciliation]
-last_verified: 2026-10-09
+last_verified: 2026-10-17
 ---
 
 # CancellationAddress
@@ -51,7 +51,8 @@ in `ampere-core` alongside `ProcessGroups`, not in `ampere-cli`.
   its address.
 - Callers: `GitCliProvider.execute`, `GitHubCliProvider.executeGh`,
   `ProcessGroupGitRunner` and `GhMergeRequestLookup` (the reconciliation pass's git and
-  `gh`), `ToolRunTests.jvm.kt` (via `run`); `StdioProcessHandler.jvm.kt` (via `start`,
+  `gh`), `ToolRunTests.jvm.kt` (via `run`); `StdioProcessHandler.jvm.kt` and
+  `ampere-cli`'s `AmpereHelperProcess`, the on-device model helper (AMPR-375) (via `start`,
   long-lived).
 - `ampere-core/src/jvmTest/.../agents/execution/process/ProcessGroupsTest.kt` — behaviour
   pinned against real processes.
@@ -91,7 +92,10 @@ JVM); otherwise `setsid` on the PATH; otherwise (Windows) no group — the addre
   }
   ```
 - **Hold a long-lived child** — `val grouped = ProcessGroups.start(builder)`; stop it with
-  `grouped.terminate()`, not `grouped.process.destroy()`.
+  `grouped.terminate()`, not `grouped.process.destroy()`. A child that must not outlive its
+  caller should also exit when its stdin reaches EOF. That still holds after a SIGKILL, when no
+  `terminate` runs, and it is what lets such a child's address stay in memory: there is nothing
+  to reap after a restart (`AmpereHelperProcess`, AMPR-375).
 - **Make it recoverable** — persist `grouped.address` (it's `@Serializable`) with the work it
   belongs to; after a restart, `ProcessGroups.terminate(address)` for every record without a
   clean-exit marker.

@@ -158,3 +158,48 @@ tasks.named<CreateStartScripts>("startScriptsForJvm") {
 tasks.named("installDist") {
     dependsOn("installJvmDist")
 }
+
+// === macOS on-device helper (AMPR-375) ===
+// `ampere-helper` is the Swift process that reaches Apple's on-device model, which a JVM cannot
+// call. It is built only on a Mac, only for the installed distribution, and up-to-date-checked:
+// `swift build` costs memory on a shared development Mac, so `assemble`, `jvmTest` and CI never
+// run it. See macos-helper/README.md.
+val macHelperDir = layout.projectDirectory.dir("macos-helper")
+val isMacHost = System.getProperty("os.name").orEmpty().lowercase().contains("mac")
+
+val buildMacHelper = tasks.register<Exec>("buildMacHelper") {
+    description = "Builds ampere-helper, the Swift process behind the CLI's on-device model (AMPR-375)."
+    // A local rather than the script property, so the task does not capture the build script.
+    val macHost = isMacHost
+    val helper = macHelperDir.file(".build/release/ampere-helper").asFile
+    onlyIf { macHost }
+    workingDir = macHelperDir.asFile
+    // `swift` honours DEVELOPER_DIR, for a Mac whose selected toolchain cannot build the package.
+    commandLine("swift", "build", "-c", "release")
+    inputs.dir(macHelperDir.dir("Sources")).withPropertyName("sources")
+    inputs.file(macHelperDir.file("Package.swift")).withPropertyName("manifest")
+    outputs.file(helper).withPropertyName("helper")
+    outputs.cacheIf { false }
+    // A Mac that cannot build Swift gets the CLI without the helper, which is the CLI as it was
+    // before the helper existed, rather than no CLI at all. Without a binary the task is never
+    // up to date, so the next install tries again.
+    isIgnoreExitValue = true
+    outputs.upToDateWhen { helper.canExecute() }
+    doLast {
+        val exit = executionResult.get().exitValue
+        if (exit != 0) {
+            logger.warn(
+                "ampere-helper was not built (swift build exited $exit), so this CLI has no on-device " +
+                    "model. Point DEVELOPER_DIR at an Xcode with the macOS 26.4 SDK or later and reinstall.",
+            )
+        }
+    }
+}
+
+// Next to the `ampere` start script, where the CLI looks for it first. On a host that skipped the
+// build there is no file to copy, and the CLI runs exactly as it did without the helper.
+tasks.withType<Sync>().matching { it.name == "installJvmDist" }.configureEach {
+    from(buildMacHelper) {
+        into("bin")
+    }
+}
