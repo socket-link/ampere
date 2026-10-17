@@ -19,6 +19,7 @@ import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
+import link.socket.ampere.agents.domain.routing.capability.CapabilityRung
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.events.api.AgentEventApi
@@ -347,7 +348,11 @@ class AgentReasoning private constructor(
      *   `AgentDefinition.minimumRung` (AMPR-229), so a per-call floor only ever
      *   *raises* the bar: agent `THREE` + call-site `FOUR` resolves against `FOUR`,
      *   and agent `FOUR` + call-site `THREE` still resolves against `FOUR`. Neither
-     *   direction downgrades. Null keeps the agent's own floor.
+     *   direction downgrades. Its floor arrives at [CapabilityRung.ONE] or above
+     *   (AMPR-459): a call made here is never display text, and a requirement with
+     *   no floor routes cheapest-capable over the whole catalog, where the free
+     *   on-device model wins. A stricter floor stands. Null forwards no requirement
+     *   and keeps the agent's own floor, or with none, its configured model.
      * @param phase Per-call cognitive phase (AMPR-273). Without it, the invocation's
      *   [RoutingContext.phase] is null and `ArcTraceProjection` files the call under
      *   `UNKNOWN`. Supplying it here tags the call the same way the phase-aware
@@ -494,7 +499,9 @@ class AgentReasoning private constructor(
         RoutingContext(
             agentId = settings.actorId,
             agentRole = settings.agentRole,
-            requirements = requirements,
+            // AMPR-459: a forwarded requirement never routes below ONE. No requirement
+            // stays none, so a call without one keeps the agent's configured model.
+            requirements = requirements?.withFloorAtLeast(CapabilityRung.ONE),
             workflowId = runId,
             phase = phase,
         )
@@ -584,6 +591,16 @@ class AgentReasoning private constructor(
         }
     }
 }
+
+/**
+ * This requirement with its rung floor raised to at least [floor], and nothing else changed.
+ *
+ * Only ever a raise: a stricter floor already on it stands, composed with `maxOf` as every
+ * floor is (AMPR-229). `internal` because the model-backed Decide adapter raises the
+ * requirement it forwards the same way (AMPR-459).
+ */
+internal fun CapabilityRequirement.withFloorAtLeast(floor: CapabilityRung): CapabilityRequirement =
+    copy(minRung = minRung?.let { maxOf(it, floor) } ?: floor)
 
 private fun List<Outcome>.firstRunIdOrNull(): RunId? =
     filterIsInstance<ExecutionOutcome>()

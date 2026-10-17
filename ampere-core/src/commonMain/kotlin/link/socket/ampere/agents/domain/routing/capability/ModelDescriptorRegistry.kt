@@ -24,6 +24,13 @@ import link.socket.ampere.domain.limits.numericValue
  *
  * Keyed by `modelName` (= [AIModel.name]): selection is per-model because a tier
  * belongs to a model, not a provider (AMPR-214).
+ *
+ * A model that [executes on the device][executesLocally] is rated
+ * [CapabilityRung.ZERO] or left unrated, never higher (AMPR-459). Rung ZERO serves
+ * display text only (AMPR-372), and an agent's floor of `ONE` keeps the device out of
+ * its calls only while that holds: a re-rated on-device model would clear `ONE` and
+ * win every cheapest-capable choice on price. [InMemoryModelDescriptorRegistry]
+ * refuses such a catalog at seed, on [refresh] and on [register].
  */
 interface ModelDescriptorRegistry {
 
@@ -33,7 +40,10 @@ interface ModelDescriptorRegistry {
     /** Every registered descriptor. */
     suspend fun all(): List<ModelDescriptor>
 
-    /** Register (or replace) the descriptor for its `modelName`. */
+    /**
+     * Register (or replace) the descriptor for its `modelName`. A descriptor that
+     * executes on the device and is rated above ZERO is refused (AMPR-459).
+     */
     suspend fun register(descriptor: ModelDescriptor)
 
     /**
@@ -42,8 +52,9 @@ interface ModelDescriptorRegistry {
      * runtime — no relay reconstruction, no framework release.
      *
      * A load that fails returns that failure with the previous catalog
-     * untouched; it never leaves the registry empty. Defaults to a no-op
-     * success, because a registry with a fixed catalog has nothing to reload.
+     * untouched; it never leaves the registry empty. So does a catalog that
+     * rates a model executing on the device above ZERO (AMPR-459). Defaults to a
+     * no-op success, because a registry with a fixed catalog has nothing to reload.
      */
     suspend fun refresh(): Result<Unit> = Result.success(Unit)
 }
@@ -61,6 +72,12 @@ interface ModelDescriptorRegistry {
  * identical to [DefaultModelDescriptorSource]. Pass a [source] to hand catalog
  * ownership to the consumer while [seed] keeps routing working until the first
  * [refresh] lands; or use [from] to load once before the registry exists.
+ *
+ * Every catalog it holds keeps two rules, however it arrived: model names are
+ * unique (AMPR-233), and a model that executes on the device is rated ZERO or
+ * unrated (AMPR-459). A seed that breaks one throws at construction, a
+ * [register] that would throws, and a [refresh] returns a failure and keeps the
+ * catalog it had.
  *
  * @param seed The catalog the registry starts with.
  * @param source Where [refresh] reads the replacement catalog from.
@@ -86,13 +103,16 @@ class InMemoryModelDescriptorRegistry(
         mutex.withLock { descriptors.values.toList() }
 
     override suspend fun register(descriptor: ModelDescriptor) {
+        // AMPR-459: checked before the lock, so a refused descriptor changes nothing.
+        requireDeviceModelsAtZero(listOf(descriptor))
         mutex.withLock { descriptors = descriptors + (descriptor.modelName to descriptor) }
     }
 
     override suspend fun refresh(): Result<Unit> {
-        // Loaded and indexed outside the lock — including the duplicate check,
-        // which arrives here as a failure rather than a throw because a bad
-        // catalog must leave the live one alone, not tear the registry down.
+        // Loaded and indexed outside the lock — including the duplicate and
+        // device-rung checks, which arrive here as a failure rather than a throw
+        // because a bad catalog must leave the live one alone, not tear the
+        // registry down.
         val next = try {
             source.load().map(::indexCatalog)
         } catch (e: CancellationException) {
@@ -125,7 +145,7 @@ class InMemoryModelDescriptorRegistry(
          * Shared by seeding and [refresh] so a consumer-supplied catalog is held
          * to the same rule as the bundled one; the two paths differ only in how
          * the rejection surfaces (a throw at construction, a failed [Result] on
-         * refresh).
+         * refresh). The device-rung rule is checked here too.
          */
         private fun indexCatalog(catalog: List<ModelDescriptor>): Map<String, ModelDescriptor> {
             val duplicates = catalog.groupingBy { it.modelName }.eachCount().filterValues { it > 1 }.keys
@@ -133,7 +153,34 @@ class InMemoryModelDescriptorRegistry(
                 "Duplicate modelName(s) in model catalog (two providers exposing the same model " +
                     "name would silently drop one): $duplicates"
             }
+            requireDeviceModelsAtZero(catalog)
             return catalog.associateBy { it.modelName }
+        }
+
+        /**
+         * Refuses descriptors that [execute on the device][executesLocally] and
+         * are rated above [CapabilityRung.ZERO] (AMPR-459).
+         *
+         * Rung ZERO serves display text only (AMPR-372), and "a floor of `ONE`
+         * keeps the device out" holds only while everything that runs there is
+         * rated ZERO. Re-rate the on-device model to `ONE` — through a consumer's
+         * source, a YAML override or [register] — and every agent floored at `ONE`
+         * becomes eligible for it, and it wins on price. An unrated local model is
+         * not refused: it fails every declared floor already.
+         */
+        private fun requireDeviceModelsAtZero(catalog: List<ModelDescriptor>) {
+            val rerated = catalog.filter { descriptor ->
+                val rung = descriptor.rung
+                descriptor.executesLocally && rung != null && rung > CapabilityRung.ZERO
+            }
+            require(rerated.isEmpty()) {
+                "Model catalog rates model(s) that execute on the device above ZERO: " +
+                    rerated.joinToString { "${it.modelName} at rung ${it.rung?.ordinal}" } +
+                    ". Rung ZERO serves display text only, and a floor of ONE keeps the device out of " +
+                    "every PROPEL phase call and every judgment only while nothing there is rated higher " +
+                    "(AMPR-372). Rate a model that executes on the device ZERO, or leave it unrated. See " +
+                    "the CognitiveRelay concept, docs/concepts/cognitive-relay.md."
+            }
         }
 
         /**

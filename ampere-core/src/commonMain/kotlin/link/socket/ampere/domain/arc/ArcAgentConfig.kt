@@ -18,7 +18,16 @@ data class ArcAgentConfig(
      *
      * Composes with [ArcConfig.minimumRung] as the *stricter* of the two — see
      * [minimumRungFor]. Floors only ever raise: null declares no floor and leaves
-     * the step unconstrained.
+     * the step on its configured model.
+     *
+     * A floor below [CapabilityRung.ONE] is refused at construction, so a manifest
+     * that declares one fails where it is decoded rather than when the step runs
+     * (AMPR-459): the step runs the PROPEL loop, and rung ZERO serves display text
+     * only (AMPR-372). See [requireArcFloor].
      */
     val minimumRung: CapabilityRung? = null,
-)
+) {
+    init {
+        requireArcFloor(minimumRung) { "Arc step '$role'" }
+    }
+}

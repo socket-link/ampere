@@ -84,11 +84,15 @@ enum class AgentType {
  *   `environmentService::createEventApi`. Null builds agents with no door (tests, headless use).
  * @param issueTrackerProvider Optional GitHub/issue tracker integration
  * @param repository Optional repository name for issue tracking
- * @param aiConfiguration Optional AI configuration for model selection
+ * @param aiConfiguration Optional AI configuration for model selection. One that names the
+ *   on-device provider or model is refused when an agent is built (AMPR-459): every agent
+ *   built here runs the PROPEL loop, and rung ZERO serves display text only.
  * @param projectSpark Optional project spark (defaults to AmpereProjectSpark)
  * @param toolWriteCodeFileOverride Optional override for write_code_file tool
  * @param modelDescriptorSource Optional catalog source for the default relay's
- *   model registry (AMPR-231); ignored when [cognitiveRelay] is supplied
+ *   model registry (AMPR-231); ignored when [cognitiveRelay] is supplied. A catalog
+ *   that rates a model executing on the device above ZERO is refused when the relay
+ *   is built (AMPR-459).
  * @param workspace The directory every agent built here is confined to (AMPR-300);
  *   required, no default. See the constructor parameter.
  * @param executor What every agent built here dispatches its tool calls through
@@ -136,7 +140,8 @@ class AgentFactory(
      * Capability-rung floor declared on the activated CODE agent (AMPR-219).
      * Defaults to [DEFAULT_CODE_AGENT_RUNG]; pass an unsatisfiable rung to
      * verify the relay returns a typed floor-unmet failure rather than
-     * downgrading.
+     * downgrading. A floor below `ONE` is refused when the CODE agent is built
+     * (AMPR-459); null declares none and keeps it on [aiConfiguration].
      */
     private val codeAgentMinimumRung: CapabilityRung? = DEFAULT_CODE_AGENT_RUNG,
     /**
@@ -282,10 +287,11 @@ class AgentFactory(
      * agent's declared [codeAgentMinimumRung] is the floor it must clear. No
      * [link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine] is
      * bound here (AMPR-203/225: `:ampere-core` binds none), so the on-device
-     * rule can never actually be selected from this factory yet — it stays
-     * inert (its `availabilityGated` descriptor has no
+     * rule stays inert (its `availabilityGated` descriptor has no
      * [link.socket.ampere.agents.domain.routing.local.LocalCapacity] reporting
-     * it available) until a platform module binds a real engine.
+     * it available). It would stay out with an engine bound too: the CODE
+     * agent declares `ONE` or above or no floor at all, and the catalog never
+     * rates the on-device model above ZERO (AMPR-459).
      *
      * Built lazily and cached so a single relay (and registry) is shared across
      * every CODE agent this factory makes. Tests override it via [cognitiveRelay].

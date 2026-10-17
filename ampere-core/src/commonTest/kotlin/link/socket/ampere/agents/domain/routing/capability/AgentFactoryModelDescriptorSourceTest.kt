@@ -42,7 +42,6 @@ class AgentFactoryModelDescriptorSourceTest {
         reasoning = RelativeReasoning.HIGH,
         maxContextTokens = 200_000,
         supportedInputs = SupportedInputs.TEXT,
-        cost = CostPolicy.Free,
         rung = CapabilityRung.THREE,
     )
 
