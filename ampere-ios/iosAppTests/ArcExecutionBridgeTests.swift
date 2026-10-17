@@ -336,6 +336,55 @@ final class ArcExecutionBridgeTests: XCTestCase {
         XCTAssertEqual(trace.runId, handle.runId)
     }
 
+    /// The session's display-text path (AMPR-461): `ask` is reachable from Swift as `async`, runs
+    /// on the device through the session's own binding, and lands in the same `onDeviceState` the
+    /// runs report into — one engine, one ledger.
+    ///
+    /// Skips where the model cannot generate (`OnDeviceModelGate`): `availability` alone is not
+    /// the test, because hosted runners report `.available` and then fail every generation.
+    func testAskAnswersOnTheDeviceThroughTheSessionsBinding() async throws {
+        guard #available(iOS 26.0, *) else {
+            throw XCTSkip("FoundationModels ships with iOS 26")
+        }
+        try await OnDeviceModelGate.requireReady()
+
+        let driver = IOSDatabaseDriverKt.createIosDriver(dbName: "arc-bridge-ask-\(UUID().uuidString).db")
+        defer { driver.close() }
+
+        let session = ArcSession.companion.create(
+            arcConfig: ArcRegistry.shared.getDefault(),
+            projectDirPath: projectDir.path,
+            maxFlowTicks: 1,
+            database: DatabaseCompanion.shared.invoke(driver: driver),
+            engine: FoundationModelsLocalInferenceEngine().toLocalInferenceEngine(),
+            cloud: nil
+        )
+        self.session = session
+
+        let state = try XCTUnwrap(session.onDeviceState, "an engine-bound session exposes its on-device state")
+
+        // The export drops Kotlin defaults, so the system message is passed explicitly.
+        let asked = try await session.ask(
+            prompt: "Name one primary colour. One word.",
+            systemMessage: OnDeviceAssistantAgent.shared.prompt
+        )
+        let outcome = try XCTUnwrap(asked, "an engine-bound session can be asked")
+        let answer = try XCTUnwrap(outcome as? LocalFirstOutcomeAnswered, "\(outcome)").answer
+        XCTAssertFalse(answer.text.isEmpty)
+        XCTAssertEqual(answer.locality, InferenceLocality.onDevice)
+        XCTAssertEqual(answer.providerId, AIProvider_OnDevice.shared.id)
+
+        // The completion is persisted, then dispatched, then folded: give the fold a moment.
+        let deadline = Date().addingTimeInterval(10)
+        var served: Int32 = 0
+        while Date() < deadline {
+            served = (state.value as? OnDeviceInferenceState)?.servedOnDevice ?? 0
+            if served >= 1 { break }
+            try await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertEqual(served, 1, "The session's own state counts the ask")
+    }
+
     /// Cancelling the consuming `Task` releases the bus subscription rather than leaking it.
     func testCancellingTheConsumerReleasesTheObservation() async throws {
         let session = makeSession(maxFlowTicks: Int32.max)

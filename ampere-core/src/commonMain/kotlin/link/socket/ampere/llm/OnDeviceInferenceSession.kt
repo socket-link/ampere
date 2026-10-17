@@ -128,7 +128,7 @@ sealed interface LocalFirstOutcome {
  *
  * ## On-device only, by default
  *
- * With no [cloud] transport the session can only ever run on the device: the
+ * With no cloud transport the session can only ever run on the device: the
  * relay is given the on-device rules alone, and a cloud-resolved call has no
  * client to go out on. [ask] then fails with
  * [LocalFirstOutcome.FailureReason.ON_DEVICE_UNAVAILABLE] when the engine cannot
@@ -143,41 +143,72 @@ sealed interface LocalFirstOutcome {
  * not quietly re-sent to the cloud. A person who was shown "on-device" must not
  * find out afterwards that their prompt left.
  *
- * @param engine The on-device engine to prefer.
- * @param eventApi The door this session's telemetry is published through.
- * @param scope Runs the bus subscription behind [state]. Cancelled by [close]
- *   only when this session created it (see [Companion.create]).
- * @param cloud Transport for calls the device cannot serve, or null to keep the
- *   session on-device only.
- * @param registry The model catalog the relay and the dispatching client share.
- *   One instance, so routing and execution cannot disagree about a model.
+ * ## Over a binding someone else holds
+ *
+ * An [ArcSession][link.socket.ampere.domain.arc.bridge.ArcSession] already holds an
+ * [OnDeviceInferenceBinding] for its engine, and already follows its bus into the
+ * binding's monitor. Its display-text call is a session built [over] that binding
+ * (AMPR-461): the same relay, client, registry and monitor, so one engine has one
+ * ledger and one indicator. Such a session does not follow a bus itself, since the
+ * holder already does and a second subscription would count every call twice.
+ *
+ * @param binding The engine, relay, registry, client and monitor this session asks
+ *   through.
+ * @param eventApi The door this session's telemetry is published through, or null
+ *   to publish nothing: a holder with no store has nowhere to persist the calls,
+ *   and nothing is dispatched that was not persisted first.
  * @param maxOutputTokens Output budget requested from the model, and reserved
  *   out of its context window when deciding whether a prompt fits.
- * @param clock Stamps availability probes; defaults to the door's clock so a
- *   probe and an event are ordered on the same timeline.
  */
-class OnDeviceInferenceSession(
-    private val engine: LocalInferenceEngine,
-    private val eventApi: AgentEventApi,
-    private val scope: CoroutineScope,
-    private val cloud: UpstreamLlmClient? = null,
-    registry: ModelDescriptorRegistry = InMemoryModelDescriptorRegistry(),
-    private val maxOutputTokens: Int = DEFAULT_MAX_OUTPUT_TOKENS,
-    clock: Clock = eventApi.clock,
+class OnDeviceInferenceSession private constructor(
+    private val binding: OnDeviceInferenceBinding,
+    private val eventApi: AgentEventApi?,
+    private val maxOutputTokens: Int,
 ) {
     /**
-     * The engine, relay, registry, client and monitor, wired once (AMPR-374).
-     * The same binding an [ArcSession][link.socket.ampere.domain.arc.bridge.ArcSession]
-     * hands its runtime, so a single prompt and an Arc step reach the device
-     * by one road.
+     * Build a session with its own [OnDeviceInferenceBinding] over [engine], following
+     * [eventApi]'s bus into it so [state] reflects every call made here.
+     *
+     * @param engine The on-device engine to prefer.
+     * @param eventApi The door this session's telemetry is published through.
+     * @param scope Runs the bus subscription behind [state]. Cancelled by [close]
+     *   only when this session created it (see [Companion.create]).
+     * @param cloud Transport for calls the device cannot serve, or null to keep the
+     *   session on-device only.
+     * @param registry The model catalog the relay and the dispatching client share.
+     *   One instance, so routing and execution cannot disagree about a model.
+     * @param maxOutputTokens Output budget requested from the model, and reserved
+     *   out of its context window when deciding whether a prompt fits.
+     * @param clock Stamps availability probes; defaults to the door's clock so a
+     *   probe and an event are ordered on the same timeline.
      */
-    private val binding = OnDeviceInferenceBinding(
-        engine = engine,
-        cloud = cloud,
-        routingEvents = eventApi.routingEventSink(),
-        registry = registry,
-        clock = clock,
-    )
+    constructor(
+        engine: LocalInferenceEngine,
+        eventApi: AgentEventApi,
+        scope: CoroutineScope,
+        cloud: UpstreamLlmClient? = null,
+        registry: ModelDescriptorRegistry = InMemoryModelDescriptorRegistry(),
+        maxOutputTokens: Int = DEFAULT_MAX_OUTPUT_TOKENS,
+        clock: Clock = eventApi.clock,
+    ) : this(
+        // The engine, relay, registry, client and monitor, wired once (AMPR-374): the
+        // same binding an ArcSession hands its runtime and asks through.
+        binding = OnDeviceInferenceBinding(
+            engine = engine,
+            cloud = cloud,
+            routingEvents = eventApi.routingEventSink(),
+            registry = registry,
+            clock = clock,
+        ),
+        eventApi = eventApi,
+        maxOutputTokens = maxOutputTokens,
+    ) {
+        // UNDISPATCHED so the bus subscriptions are registered before the constructor
+        // returns: a call made on the very next line is already being watched.
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            binding.follow(eventApi.eventSerialBus)
+        }
+    }
 
     private val service = AgentLLMService(
         agentConfiguration = AgentConfiguration(
@@ -194,14 +225,6 @@ class OnDeviceInferenceSession(
 
     /** When the on-device model is being used, and everything a surface needs to say so. */
     val state: StateFlow<OnDeviceInferenceState> = binding.state
-
-    init {
-        // UNDISPATCHED so the bus subscriptions are registered before the constructor
-        // returns: a call made on the very next line is already being watched.
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            binding.follow(eventApi.eventSerialBus)
-        }
-    }
 
     /**
      * Ask the engine whether it can serve right now, and fold the answer into
@@ -228,7 +251,7 @@ class OnDeviceInferenceSession(
         }
 
         val capacity = refreshAvailability()
-        if (cloud == null && !capacity.available) {
+        if (binding.onDeviceOnly && !capacity.available) {
             return LocalFirstOutcome.Failed(
                 reason = LocalFirstOutcome.FailureReason.ON_DEVICE_UNAVAILABLE,
                 detail = capacity.reason,
@@ -253,7 +276,7 @@ class OnDeviceInferenceSession(
                     // bucketed in the trace instead of filed under an unknown phase: a model
                     // call with no phase is invisible to the read model PROPEL reports against.
                     phase = CognitivePhase.EXECUTE,
-                    agentId = eventApi.agentId,
+                    agentId = eventApi?.agentId ?: AGENT_ID,
                     agentRole = OnDeviceAssistantAgent.name,
                     workflowId = runId,
                     requirements = CapabilityRequirement(
@@ -301,7 +324,7 @@ class OnDeviceInferenceSession(
             )
         } catch (failure: Throwable) {
             LocalFirstOutcome.Failed(
-                reason = if (cloud == null) {
+                reason = if (binding.onDeviceOnly) {
                     LocalFirstOutcome.FailureReason.ON_DEVICE_GENERATION_FAILED
                 } else {
                     LocalFirstOutcome.FailureReason.CLOUD_GENERATION_FAILED
@@ -348,6 +371,30 @@ class OnDeviceInferenceSession(
 
         /** Bound on the cause chain walked for a failure message; guards a cyclic chain. */
         private const val MAX_CAUSE_DEPTH = 16
+
+        /**
+         * A session that asks through [binding] instead of building its own (AMPR-461):
+         * its relay, client, registry and monitor, so the engine keeps one ledger.
+         *
+         * The session does not follow a bus. The holder of [binding] must already follow
+         * the bus [eventApi] publishes on into it, as
+         * [ArcSession][link.socket.ampere.domain.arc.bridge.ArcSession] does; a second
+         * subscription would count every call twice. Nothing to [close], since no scope
+         * is made here.
+         *
+         * @param eventApi The door the calls' telemetry is persisted and dispatched
+         *   through, or null when the holder has no store: the call still runs, and
+         *   nothing is published.
+         */
+        internal fun over(
+            binding: OnDeviceInferenceBinding,
+            eventApi: AgentEventApi?,
+            maxOutputTokens: Int = DEFAULT_MAX_OUTPUT_TOKENS,
+        ): OnDeviceInferenceSession = OnDeviceInferenceSession(
+            binding = binding,
+            eventApi = eventApi,
+            maxOutputTokens = maxOutputTokens,
+        )
 
         /**
          * Build an on-device-only session that owns its scope and its bus.
