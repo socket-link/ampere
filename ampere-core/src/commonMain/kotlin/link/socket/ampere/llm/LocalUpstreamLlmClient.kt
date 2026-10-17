@@ -135,10 +135,8 @@ class LocalUpstreamLlmClient(
         const val LOCAL_COMPLETION_ID: String = "local-inference"
 
         /**
-         * The string a prompt-only engine is handed for [messages], so a caller
-         * sizing a call with the engine's own tokenizer (AMPR-460) counts
-         * exactly what [callDetailed] sends such an engine. Each message is a
-         * `Role: content` block, separated by blank lines — mirroring the
+         * The string a prompt-only engine is handed for [messages]. Each message
+         * is a `Role: content` block, separated by blank lines — mirroring the
          * system/user layout that
          * [link.socket.ampere.agents.domain.reasoning.AgentLLMService] uses for
          * the [LlmProvider][link.socket.ampere.domain.llm.LlmProvider] bypass, so
@@ -157,9 +155,19 @@ class LocalUpstreamLlmClient(
                     "$label: ${message.content.orEmpty()}"
                 }
 
-        /** [flattenToPrompt] for the system-then-user pair every `AgentLLMService` call sends. */
-        internal fun flattenToPrompt(systemMessage: String, prompt: String): String =
-            LocalGenerationRequest(instructions = systemMessage, prompt = prompt).flattenedPrompt
+        /**
+         * The request [callDetailed] hands the engine for [messages], without
+         * the budget and temperature no count reads — so a caller sizing the
+         * call (AMPR-460, AMPR-462) counts what the engine is given, by the split
+         * the client itself makes. Null for messages that split into no request,
+         * which the engine is handed as [flattenToPrompt] instead.
+         */
+        internal fun generationRequestFor(messages: List<ChatMessage>): LocalGenerationRequest? =
+            messages.toInstructionsAndPrompt()
+
+        /** [generationRequestFor] for the system-then-user pair every `AgentLLMService` call sends. */
+        internal fun generationRequestFor(systemMessage: String, prompt: String): LocalGenerationRequest =
+            LocalGenerationRequest(instructions = systemMessage, prompt = prompt)
 
         /**
          * The engine request for this chat request (AMPR-462), or null when its

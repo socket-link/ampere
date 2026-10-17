@@ -52,6 +52,17 @@ abstract class SwiftLocalInferenceEngine {
     @Throws(Exception::class)
     open suspend fun tokenCount(text: String): Int? = null
 
+    /**
+     * Mirrors [LocalInferenceEngine.tokenCount] for a [LocalGenerationRequest]
+     * (AMPR-462): what the request costs the model as input, or `nil`. Override
+     * it to count what the engine actually sends, as Apple's engine does. The
+     * default is the Kotlin contract's — [tokenCount] of the request's
+     * [flattenedPrompt][LocalGenerationRequest.flattenedPrompt] — so a Swift
+     * engine written before this method is sized as it was.
+     */
+    @Throws(Exception::class)
+    open suspend fun tokenCount(request: LocalGenerationRequest): Int? = tokenCount(request.flattenedPrompt)
+
     /** Mirrors [LocalInferenceEngine.generateStructured]'s own Prose-only default. */
     @Throws(Exception::class)
     open suspend fun generateStructured(kind: EmissionKind, prompt: String): EmissionPayload =
@@ -81,6 +92,17 @@ fun SwiftLocalInferenceEngine.toLocalInferenceEngine(): LocalInferenceEngine =
         override suspend fun tokenCount(text: String): Int? =
             try {
                 this@toLocalInferenceEngine.tokenCount(text)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                null
+            }
+
+        // Forwarded for the same reason as the request form of generate: the default would
+        // count the flattened string here, and the Swift engine's own count would go unasked.
+        override suspend fun tokenCount(request: LocalGenerationRequest): Int? =
+            try {
+                this@toLocalInferenceEngine.tokenCount(request)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: Throwable) {

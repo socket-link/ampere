@@ -10,6 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlinx.coroutines.test.runTest
 import link.socket.ampere.agents.config.AgentConfiguration
@@ -24,6 +25,7 @@ import link.socket.ampere.agents.domain.routing.capability.CapabilityRequirement
 import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.local.FakeLocalInferenceEngine
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
+import link.socket.ampere.agents.domain.routing.local.LocalGenerationRequest
 import link.socket.ampere.domain.agent.bundled.APIDesignAgent
 import link.socket.ampere.domain.agent.bundled.OnDeviceAssistantAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
@@ -39,10 +41,11 @@ import link.socket.ampere.domain.ai.provider.AIProvider_OnDevice
  *
  * `AgentLLMService` decides whether a prompt fits the on-device window from a
  * token figure. With an engine that can count, that figure is the engine's count
- * of exactly the flattened prompt it would be handed; with one that cannot, it is
- * `PromptTokenEstimator`'s four characters per token, as before. The fit's rule
- * is unchanged either way: it widens an existing requirement and never creates
- * one.
+ * of the request it would be handed (AMPR-462): what it will send, for an engine
+ * that counts requests, and the flattened prompt for one that counts only text.
+ * With one that cannot, it is `PromptTokenEstimator`'s four characters per token,
+ * as before. The fit's rule is unchanged either way: it widens an existing
+ * requirement and never creates one.
  *
  * Driven through the service rather than `OnDeviceInferenceSession`, which needs
  * a door that commonTest has no driver for; the session's own sizing is pinned
@@ -97,6 +100,41 @@ class OnDeviceTokenCountFitTest {
         assertNull(OnDeviceInferenceBinding(engine = throwing).client.countLocalTokens("anything"))
     }
 
+    @Test
+    fun `the dispatcher reports no request count when no engine is bound`() = runTest {
+        val client = DispatchingUpstreamLlmClient(InMemoryModelDescriptorRegistry(), localEngine = null)
+
+        assertNull(client.countLocalTokens(LocalGenerationRequest(instructions = null, prompt = "anything")))
+    }
+
+    @Test
+    fun `the binding forwards a request count through its observed engine`() = runTest {
+        val request = LocalGenerationRequest(instructions = "Be brief.", prompt = "Hello")
+        val engine = FakeLocalInferenceEngine(capacity = available(), countRequests = { 77 })
+
+        assertEquals(77, OnDeviceInferenceBinding(engine = engine).client.countLocalTokens(request))
+        assertEquals(request, engine.lastCountedRequest)
+
+        val throwing = FakeLocalInferenceEngine(capacity = available(), countRequests = { error("tokenizer offline") })
+        assertNull(OnDeviceInferenceBinding(engine = throwing).client.countLocalTokens(request))
+    }
+
+    @Test
+    fun `a conversation is counted as the flattened prompt it is handed`() = runTest {
+        val engine = FakeLocalInferenceEngine(countTokens = { 9 }, countRequests = { 99 })
+        val client = DispatchingUpstreamLlmClient(InMemoryModelDescriptorRegistry(), engine)
+        val conversation = listOf(
+            ChatMessage(role = ChatRole.System, content = "Be brief."),
+            ChatMessage(role = ChatRole.User, content = "Hello"),
+            ChatMessage(role = ChatRole.Assistant, content = "Hi"),
+            ChatMessage(role = ChatRole.User, content = "Again"),
+        )
+
+        assertEquals(9, client.countLocalTokens(conversation))
+        assertEquals("System: Be brief.\n\nUser: Hello\n\nAssistant: Hi\n\nUser: Again", engine.lastCountedText)
+        assertNull(engine.lastCountedRequest, "a conversation splits into no request, so none is counted")
+    }
+
     // The fit.
 
     @Test
@@ -138,6 +176,44 @@ class OnDeviceTokenCountFitTest {
 
         assertEquals("System: Be brief.\n\nUser: Hello", engine.lastCountedText)
         assertEquals(engine.lastCountedText, engine.lastPrompt, "what was counted is what was generated from")
+    }
+
+    @Test
+    fun `the fit counts the request the engine is handed`() = runTest {
+        val engine = FakeLocalInferenceEngine(capacity = available(), countRequests = { 10 })
+        val service = service(engine, cloud = null, CapabilityRoutingDefaults.onDeviceCapabilityRules())
+
+        service.callDetailed(
+            prompt = "Hello",
+            systemMessage = "Be brief.",
+            maxTokens = OUTPUT_BUDGET,
+            routingContext = eligible(),
+        )
+
+        val counted = assertNotNull(engine.lastCountedRequest)
+        val sent = assertNotNull(engine.lastRequest)
+        assertEquals(LocalGenerationRequest(instructions = "Be brief.", prompt = "Hello"), counted)
+        assertEquals(
+            counted,
+            sent.copy(maxOutputTokens = null, temperature = null),
+            "what was counted is what was sent",
+        )
+    }
+
+    @Test
+    fun `a request count over the window keeps the call off the device though its flattened string fits`() = runTest {
+        // The undercount AMPR-462 closed: a string count misses the turns an engine wraps
+        // around every call, and the request count is what the model is billed.
+        val engine = FakeLocalInferenceEngine(capacity = available(), countTokens = { 10 }, countRequests = { 5_000 })
+        val cloud = RecordingCloud()
+        val service = service(engine, cloud, CapabilityRoutingDefaults.defaultCapabilityRules())
+
+        val result = service.callDetailed(prompt = "Hello", maxTokens = OUTPUT_BUDGET, routingContext = eligible())
+
+        assertNotEquals(AIProvider_OnDevice.id, result.providerId, result.routingReason)
+        assertEquals(1, cloud.callCount)
+        assertEquals(0, engine.generateCount, "a request the engine counted over its window must not reach it")
+        assertEquals(0, engine.tokenCountCount, "an engine that counts requests is not asked for a string")
     }
 
     @Test

@@ -97,11 +97,10 @@ interface LocalInferenceEngine {
      * high on ordinary prose and low on digit-dense text — a log with
      * timestamps measured 1.55× the estimate against Apple's tokenizer
      * (AMPR-372) — and a prompt admitted on an undercount is one the model then
-     * refuses mid-call. An engine that can count is asked to count the
-     * request's [flattenedPrompt][LocalGenerationRequest.flattenedPrompt]:
-     * exactly what an engine implementing only the prompt form of [generate] is
-     * handed, and the same text, less its two role labels, that an engine
-     * taking the request apart passes on.
+     * refuses mid-call. The relay asks the request form below, whose default
+     * asks this method for the request's
+     * [flattenedPrompt][LocalGenerationRequest.flattenedPrompt]: exactly what an
+     * engine implementing only the prompt form of [generate] is handed.
      *
      * Only ever *sizes* a call: a count never makes work eligible for the
      * device, which is the routing floor's decision. Stateless, like
@@ -111,6 +110,27 @@ interface LocalInferenceEngine {
      * one that cannot count; the call proceeds on the estimate.
      */
     suspend fun tokenCount(text: String): Int? = null
+
+    /**
+     * How many tokens of the model's context [request] takes as input, by the
+     * engine's own count, or `null` when the engine cannot say (AMPR-462).
+     *
+     * This is what the relay's window fit asks. The default counts the
+     * request's [flattenedPrompt][LocalGenerationRequest.flattenedPrompt] with
+     * [tokenCount] — exactly what an engine that implements only the prompt
+     * form of [generate] is handed — so an engine written before this method
+     * is sized as it was. An engine whose framework wraps each call in turns of
+     * its own overrides it to count what it sends: a string count never sees
+     * that wrapping, and the call is billed for it. Apple's engine counts the
+     * instructions and prompt entries its session is built from, which is the
+     * input the model's usage report bills — 137 tokens for a one-line question
+     * under the on-device assistant's instructions, where the flattened string
+     * counts 87.
+     *
+     * The rules are [tokenCount]'s: it only ever sizes a call, it keeps no
+     * session to count on, and an engine that throws is one that cannot count.
+     */
+    suspend fun tokenCount(request: LocalGenerationRequest): Int? = tokenCount(request.flattenedPrompt)
 
     /**
      * Generate a structured [EmissionPayload] shaped like [kind] directly —
@@ -175,8 +195,8 @@ data class LocalGenerationRequest(
      * the temperature have no place in it.
      *
      * The layout `LocalUpstreamLlmClient` sent before engines received a
-     * request, byte for byte, and the one place it is written. The relay's
-     * window fit counts this string (AMPR-460).
+     * request, byte for byte, and the one place it is written. An engine that
+     * does not count requests is sized by its count of this string (AMPR-460).
      */
     val flattenedPrompt: String
         get() = listOfNotNull(

@@ -31,6 +31,7 @@ import link.socket.ampere.agents.domain.event.ProviderCallStartedEvent
 import link.socket.ampere.agents.domain.routing.local.FakeLocalInferenceEngine
 import link.socket.ampere.agents.domain.routing.local.InferenceLocality
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
+import link.socket.ampere.agents.domain.routing.local.LocalGenerationRequest
 import link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine
 import link.socket.ampere.agents.domain.routing.local.LocalUnavailableReason
 import link.socket.ampere.agents.domain.routing.local.OnDeviceAvailability
@@ -38,6 +39,7 @@ import link.socket.ampere.agents.domain.routing.local.OnDeviceInferenceState
 import link.socket.ampere.agents.events.InMemoryEventApi
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.utils.SilentEventLogger
+import link.socket.ampere.domain.agent.bundled.OnDeviceAssistantAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.model.AIModel_OnDevice
 import link.socket.ampere.domain.ai.provider.AIProvider_OnDevice
@@ -200,6 +202,26 @@ class OnDeviceInferenceSessionTest {
         val failed = assertIs<LocalFirstOutcome.Failed>(outcome)
         assertEquals(LocalFirstOutcome.FailureReason.PROMPT_TOO_LARGE, failed.reason)
         assertTrue(failed.detail.orEmpty().contains("7048 tokens"), "sized by the engine's count: ${failed.detail}")
+        assertEquals(0, engine.generateCount)
+    }
+
+    @Test
+    fun `a request the engine counts over its window is refused though its prompt alone fits`() = runBlocking<Unit> {
+        // The text counts small and the request it would send counts large: the framework's own
+        // turns are billed on every call, and the session sizes by the request (AMPR-462).
+        val engine = FakeLocalInferenceEngine(capacity = available(), countTokens = { 10 }, countRequests = { 5_000 })
+        val session = session(engine, cloud = null)
+
+        val prompt = "In one sentence, what is a volt?"
+        val outcome = session.ask(prompt)
+
+        val failed = assertIs<LocalFirstOutcome.Failed>(outcome)
+        assertEquals(LocalFirstOutcome.FailureReason.PROMPT_TOO_LARGE, failed.reason)
+        assertTrue(failed.detail.orEmpty().contains("7048 tokens"), "sized by the request count: ${failed.detail}")
+        assertEquals(
+            LocalGenerationRequest(instructions = OnDeviceAssistantAgent.prompt, prompt = prompt),
+            engine.lastCountedRequest,
+        )
         assertEquals(0, engine.generateCount)
     }
 

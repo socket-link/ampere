@@ -110,6 +110,31 @@ final class FoundationModelsLocalInferenceEngine: SwiftLocalInferenceEngine {
         return KotlinInt(int: Int32(clamping: count))
     }
 
+    /// What `request` costs the model as input (AMPR-462), which is what the relay's window fit
+    /// asks: the transcript a session for it starts from, counted by the model. A string count
+    /// misses the system turn the framework wraps around every call — about 50 tokens — and the
+    /// model's usage report bills it: 137 input tokens for a one-line question under the
+    /// on-device assistant's instructions, where the flattened string counts 87. Counted this
+    /// way the two agreed exactly on every prompt measured, with instructions and without.
+    override func tokenCount(request: LocalGenerationRequest) async throws -> KotlinInt? {
+        guard #available(iOS 26.4, *) else { return nil }
+        let count = try await SystemLanguageModel.default.tokenCount(for: Self.transcript(for: request))
+        return KotlinInt(int: Int32(clamping: count))
+    }
+
+    /// The entries a session for `request` starts from: its instructions, then its prompt. A
+    /// request with no instructions still gets an empty instructions entry, because a session
+    /// without instructions is billed exactly what one with empty instructions is.
+    static func transcript(for request: LocalGenerationRequest) -> [Transcript.Entry] {
+        [
+            .instructions(Transcript.Instructions(
+                segments: [.text(Transcript.TextSegment(content: request.instructions ?? ""))],
+                toolDefinitions: []
+            )),
+            .prompt(Transcript.Prompt(segments: [.text(Transcript.TextSegment(content: request.prompt))])),
+        ]
+    }
+
     override func generateStructured(kind: EmissionKind, prompt: String) async throws -> EmissionPayload {
         // Prose is a single free-text field — the guided-generation schema
         // path adds nothing over the plain response, so reuse it directly.

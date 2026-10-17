@@ -184,6 +184,26 @@ class LocalUpstreamLlmClientTest {
     }
 
     @Test
+    fun `the request a caller sizes is the request the engine is handed`() = runTest {
+        val engine = FakeLocalInferenceEngine()
+        val messages = listOf(system, user)
+
+        LocalUpstreamLlmClient(engine).call(request(messages, maxTokens = 64, temperature = 0.3), configuration)
+
+        // The count reads neither the budget nor the temperature, so the sizing request carries neither.
+        val sent = assertNotNull(engine.lastRequest)
+        assertEquals(
+            sent.copy(maxOutputTokens = null, temperature = null),
+            LocalUpstreamLlmClient.generationRequestFor(messages),
+        )
+        val conversation = messages + ChatMessage(role = ChatRole.Assistant, content = "4")
+        assertNull(
+            LocalUpstreamLlmClient.generationRequestFor(conversation),
+            "a conversation splits into no request, and is sized as its flattened prompt",
+        )
+    }
+
+    @Test
     fun `the binding hands its engine the request whole`() = runTest {
         val engine = FakeLocalInferenceEngine()
         val binding = OnDeviceInferenceBinding(engine = engine)
