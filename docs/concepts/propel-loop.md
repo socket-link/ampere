@@ -72,8 +72,13 @@ brackets four:
   `ChargePhase` spawns the agents with brackets on and guidance off, so every Arc
   run is bracketed without anyone opting in.
 - **`RosterHostedRun`** (`propel/`) — one consumer-opened run over a roster,
-  bracketing all six phases on the host seat (AMPR-393). See *Where it lives*
-  and [HostedRun](hosted-run.md).
+  bracketing all six phases on the host seat (AMPR-393). Its PERCEIVE is the one
+  place a driver is shown the Field today: under `FieldScope.Goal` (or `Full`,
+  `RunPolicy.observe`, AMPR-480) the host seat's PERCEIVE prompt carries a
+  goal-scoped "# World" section rendered from one `FieldService.snapshot` taken
+  inside the bracket, and the OBSERVE after each executed cycle takes one more,
+  kept and not yet read. `Off`, the default, perceives the memory cell alone, as
+  before. See *Where it lives* and [HostedRun](hosted-run.md).
 
 ### One loop: what the Arc and a hosted run share
 

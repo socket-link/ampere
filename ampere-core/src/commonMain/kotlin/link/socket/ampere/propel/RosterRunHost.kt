@@ -12,6 +12,7 @@ import link.socket.ampere.agents.domain.cognition.Spark
 import link.socket.ampere.agents.domain.cognition.sparks.PhaseSparkManager
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.reasoning.PlanSeat
+import link.socket.ampere.agents.domain.reasoning.defaultPerceptionContext
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.domain.task.Task
@@ -22,6 +23,8 @@ import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.execution.tools.ToolId
+import link.socket.ampere.api.AmpereExperimentalApi
+import link.socket.ampere.api.service.FieldService
 import link.socket.ampere.goal.GoalBranch
 import link.socket.ampere.roster.RoleConfig
 import link.socket.ampere.roster.RoleId
@@ -41,13 +44,14 @@ import link.socket.ampere.roster.SeatTool
  * event it publishes. One agent class, differentiated per seat — a roster does not
  * need six agent *types*, which is the whole bet of the Spark system.
  */
-@OptIn(ExperimentalAtomicApi::class)
+@OptIn(ExperimentalAtomicApi::class, AmpereExperimentalApi::class)
 internal class RosterRunHost(
     private val createEventApi: (AgentId) -> AgentEventApi,
     private val agentScope: CoroutineScope,
     private val executor: Executor?,
     private val heldRuns: HeldRunStore? = null,
     private val goalBranch: ((AgentEventApi) -> GoalBranch)? = null,
+    private val field: FieldService? = null,
 ) : RunHost {
 
     /**
@@ -89,6 +93,7 @@ internal class RosterRunHost(
                 onClosed = ::forget,
                 heldRuns = heldRuns,
                 goalBranch = branchFor(roster, built),
+                field = field,
             )
         } catch (throwable: Throwable) {
             release(id, holder = null)
@@ -157,6 +162,7 @@ internal class RosterRunHost(
                 onClosed = ::forget,
                 heldRuns = store,
                 goalBranch = branchFor(roster, built),
+                field = field,
             )
         } catch (throwable: Throwable) {
             release(runId, holder = null)
@@ -207,6 +213,7 @@ internal class RosterRunHost(
             descriptor = descriptor,
             config = requireNotNull(roster.byId(role)) { "role '${role.value}' is not on the roster" },
             tools = tools,
+            isHost = role == roster.host,
         )
     }
 
@@ -342,14 +349,28 @@ internal class RosterRunHost(
      * a prompt preamble: `AutonomousAgent.currentSystemPrompt` builds from the stack
      * alone, and a charter that is a spark is also a charter that is on the record as
      * a `SparkAppliedEvent` — what a seat was told is part of why it did what it did.
+     *
+     * The host seat's PERCEIVE renders the default context and then the "# World" section
+     * (AMPR-480, row N10), read off a [PerceivedWorld] the run fills before PERCEIVE — a seat
+     * is built before its run exists, so the builder closes over the holder, not the run. The
+     * hook *replaces* `defaultPerceptionContext` (AMPR-403), which is why the default is called
+     * here by hand; with the holder empty the output is the default's, byte for byte. Every
+     * other seat is built with no builder, and perceives nothing of the Field.
      */
     private fun buildSeat(
         runId: RunId,
         descriptor: HostedAgent,
         config: RoleConfig,
         tools: Set<Tool<*>>,
+        isHost: Boolean,
     ): HostedSeat {
         val door = createEventApi(descriptor.id)
+        val world = PerceivedWorld()
+        val perceptionContextBuilder: ((AgentState) -> String)? = if (isHost) {
+            { state -> defaultPerceptionContext(state) + (world.section ?: "") }
+        } else {
+            null
+        }
         val memory = descriptor.memory?.let { store ->
             AgentMemoryService(
                 agentId = descriptor.id,
@@ -382,6 +403,7 @@ internal class RosterRunHost(
             // lets each spark's `## When <Phase>` section reach the phase it names.
             _cognitiveConfig = CognitiveConfig(phaseSparks = PhaseSparkConfig(enabled = true)),
             _outcomeRepository = descriptor.memory?.outcomes,
+            _perceptionContextBuilder = perceptionContextBuilder,
         )
 
         descriptor.charterSpark()?.let { agent.spark<SparkBasedAgent<AgentState>>(it) }
@@ -394,6 +416,7 @@ internal class RosterRunHost(
             door = door,
             memory = memory,
             phases = PhaseSparkManager(agent = agent, enabled = true, eventApi = door),
+            world = world,
         )
     }
 }
@@ -409,6 +432,8 @@ internal class RosterRunHost(
  * @property memory This seat's RECALL and LEARN, or null when it was given no store.
  * @property phases This seat's phase brackets. One manager per seat, so a step run by
  *   seat A brackets EXECUTE on A's door, inside the run-level EXECUTE the host opened.
+ * @property world Where this seat's PERCEIVE reads the "# World" section from (AMPR-480).
+ *   Only the host seat's builder reads it; on every other seat it stays empty.
  */
 internal class HostedSeat(
     val descriptor: HostedAgent,
@@ -417,6 +442,7 @@ internal class HostedSeat(
     val door: AgentEventApi,
     val memory: AgentMemoryService?,
     val phases: PhaseSparkManager<AgentState>,
+    val world: PerceivedWorld = PerceivedWorld(),
 ) {
 
     val id: AgentId get() = descriptor.id

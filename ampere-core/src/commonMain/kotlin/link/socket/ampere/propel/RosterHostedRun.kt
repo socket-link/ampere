@@ -37,9 +37,14 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.describeResult
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.api.AmpereExperimentalApi
+import link.socket.ampere.api.service.FieldService
 import link.socket.ampere.domain.arc.GoalNode
 import link.socket.ampere.domain.arc.GoalTree
 import link.socket.ampere.field.Admission
+import link.socket.ampere.field.Field
+import link.socket.ampere.field.Ref
+import link.socket.ampere.field.Subject
 import link.socket.ampere.goal.GoalBranch
 import link.socket.ampere.llm.DispatchingUpstreamLlmClient
 import link.socket.ampere.plug.permission.UserGrants
@@ -102,9 +107,18 @@ import link.socket.ampere.util.logWith
  * Subject, and LEARN completes that goal or abandons it. The run plans steps, not sub-goals,
  * so the goal is never more than its root. Without one nothing touches the branch.
  *
+ * With a [FieldService] and a [RunPolicy.observe] that asks for it, the run observes the Field
+ * (AMPR-480, rows N1 and N10): one snapshot as the host seat inside PERCEIVE, rendered into that
+ * seat's PERCEIVE prompt as the "# World" section, and one inside OBSERVE after each executed
+ * cycle, kept on [observedField] for the fold the next ticket adds (AMPR-479) and read by nothing
+ * here. Nothing is persisted and no event is added; a snapshot that fails is logged and that
+ * boundary behaves as [FieldScope.Off]. Without a service, or with the scope `Off`, the run
+ * touches no store and is what it was, byte for byte.
+ *
  * One run, one driver: the fields below are not synchronised, and two coroutines
  * driving the same run would interleave its phases.
  */
+@OptIn(AmpereExperimentalApi::class)
 internal class RosterHostedRun(
     override val runId: RunId,
     private val roster: Roster,
@@ -114,6 +128,7 @@ internal class RosterHostedRun(
     private val onClosed: (RosterHostedRun) -> Unit,
     private val heldRuns: HeldRunStore? = null,
     private val goalBranch: GoalBranch? = null,
+    private val field: FieldService? = null,
 ) : HostedRun {
 
     /** The seat that plans. Validated to exist before the run was constructed. */
@@ -228,6 +243,31 @@ internal class RosterHostedRun(
     internal val goalCompletionAnswers: List<Boolean>
         get() = completions.toList()
 
+    /**
+     * Whether this run reads the Field at all (AMPR-480): a service to read it from, and a
+     * policy that asks. Either missing is `Off`, and `Off` is byte-identical to before.
+     */
+    private val observesField: Boolean
+        // `this.field`, because a bare `field` inside a getter is the backing-field keyword.
+        get() = this.field != null && policy.observe.field != FieldScope.Off
+
+    /**
+     * The Field as the host seat saw it inside PERCEIVE, or null for a run that does not observe
+     * or whose snapshot failed (AMPR-480, row N1). What the "# World" section was rendered from.
+     */
+    private var perceivedField: Field? = null
+
+    /**
+     * The Field as the host seat saw it inside the OBSERVE after the latest executed cycle, or
+     * null (AMPR-480, row N1). Taken and kept; nothing here reads it. The after-cycle request
+     * (AMPR-479) folds it with [perceivedField] into what moved.
+     */
+    private var observedField: Field? = null
+
+    /** The two snapshots, for a test that has to see them; the run itself reads neither. */
+    internal val fieldSnapshots: Pair<Field?, Field?>
+        get() = perceivedField to observedField
+
     override val plan: Plan
         get() = gatedPlan
 
@@ -311,23 +351,72 @@ internal class RosterHostedRun(
         }
     }
 
+    /**
+     * One read of the Field as the host seat sees it (AMPR-480), bounded by
+     * [ObservePolicy.beliefLimit], or null when the read failed. A failure is logged on the
+     * [onBranch] model — naming the run and the phase, never what the Field holds — and is never
+     * thrown: the Field is a record the run looks at, not a precondition of it, and a run whose
+     * world could not be read goes on exactly as one that was told not to look.
+     */
+    private suspend fun snapshotField(at: String): Field? {
+        val service = field ?: return null
+        return try {
+            service.snapshot(viewer = Ref(host.id), beliefLimit = policy.observe.beliefLimit).getOrThrow()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logWith("RosterHostedRun").w(e) { "Run $runId could not read the Field at $at; it goes on as if Off" }
+            null
+        }
+    }
+
+    /** The run's root goal on the branch, or null for a run with no branch to have formed one on. */
+    private fun rootGoalRef() = goalBranch?.let { GoalBranch.goalRef(runId, ROOT_GOAL_NODE) }
+
+    /**
+     * PERCEIVE, on the host seat. With a Field to observe (AMPR-480) the snapshot is taken first,
+     * inside the bracket, and rendered into the seat's [HostedSeat.world] so the one PERCEIVE
+     * call that follows is shown it; the holder is cleared again on the way out, so no later
+     * prompt of the seat carries a world it perceived earlier. A section rendered is outside
+     * content shown to a model, and raises [readExternalContent] as RECALL's does (AMPR-453).
+     */
     private suspend fun perceive() {
         host.phases.withPhase(CognitivePhase.PERCEIVE, runId) {
-            // The stack is built and on the record before anything reasons with it: one
-            // `SparkAppliedEvent` per spark as the seat was constructed, and this
-            // snapshot of what they added up to.
-            host.agent.emitCognitiveSnapshot()
-
-            val perception = Perception(
-                id = generateUUID("perception", host.id),
-                currentState = host.agent.getCurrentState(),
-                ideas = ideas,
-            )
-            host.agent.rememberNewPerception(perception)
-            val idea = host.agent.reasoningUnit.evaluatePerception(perception)
-            host.agent.rememberNewIdea(idea)
-            ideas = listOf(idea)
+            if (observesField) {
+                perceivedField = snapshotField("perceive")
+                val section = perceivedField?.asPerceptionSection(
+                    scope = policy.observe.field,
+                    rootGoal = rootGoalRef(),
+                    holder = Ref(host.id),
+                    ownActors = seats.values.mapTo(mutableSetOf()) { Ref<Subject>(it.id) },
+                    policy = policy.observe,
+                )
+                if (section != null) shownExternal = true
+                host.world.section = section?.let { "\n" + it + "\n" }
+            }
+            try {
+                perceiveWithin()
+            } finally {
+                host.world.section = null
+            }
         }
+    }
+
+    private suspend fun perceiveWithin() {
+        // The stack is built and on the record before anything reasons with it: one
+        // `SparkAppliedEvent` per spark as the seat was constructed, and this
+        // snapshot of what they added up to.
+        host.agent.emitCognitiveSnapshot()
+
+        val perception = Perception(
+            id = generateUUID("perception", host.id),
+            currentState = host.agent.getCurrentState(),
+            ideas = ideas,
+        )
+        host.agent.rememberNewPerception(perception)
+        val idea = host.agent.reasoningUnit.evaluatePerception(perception)
+        host.agent.rememberNewIdea(idea)
+        ideas = listOf(idea)
     }
 
     /**
@@ -782,6 +871,11 @@ internal class RosterHostedRun(
      * `FunctionExecutor`, so the walk returns normally on a dead scope. Without the
      * check a `DeterministicDecisionClient`, which has no suspension point to be
      * cancelled at, would answer and the record would go out under `NonCancellable`.
+     *
+     * A run that observes the Field (AMPR-480, row N1) enters the same bracket whether or not
+     * anything is asked, and reads the world first — "entered and read the world" is a phase
+     * even with no question in it, and one bracket, not two, when there is one. The snapshot is
+     * kept on [observedField] and read by nothing here.
      */
     private suspend fun assess() {
         if (cancellation != null || !coroutineContext.isActive) return
@@ -790,9 +884,13 @@ internal class RosterHostedRun(
         val verifier = roster.verifier
             ?.let { seats[it] }
             ?.takeIf { it.descriptor.questions.isNotEmpty() }
-        if (!asksGoal && verifier == null) return
+        val observes = observesField
+        if (!asksGoal && verifier == null && !observes) return
 
         host.phases.withPhase(CognitivePhase.OBSERVE, runId) {
+            if (observes) observedField = snapshotField("observe")
+            if (!asksGoal && verifier == null) return@withPhase
+
             val state = RunObservation(
                 runId = runId,
                 goal = goal,
