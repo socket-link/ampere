@@ -1,6 +1,15 @@
 package link.socket.ampere.cli.layout
 
 import com.github.ajalt.mordant.terminal.Terminal
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import org.jline.terminal.Attributes
+import org.jline.terminal.impl.DumbTerminal
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -150,7 +159,7 @@ class DemoInputHandlerTest {
     }
 
     @Test
-    fun `Ctrl+C returns Exit even in escalation mode`() {
+    fun `Ctrl+C returns Interrupt even in escalation mode`() {
         val handler = DemoInputHandler(terminal)
         val config = DemoInputHandler.DemoViewConfig(
             inputMode = DemoInputHandler.InputMode.AWAITING_ESCALATION,
@@ -159,7 +168,45 @@ class DemoInputHandlerTest {
 
         val result = handler.processKey(3.toChar(), config) // Ctrl+C = 3
 
+        assertIs<DemoInputHandler.KeyResult.Interrupt>(result)
+    }
+
+    @Test
+    fun `q returns Exit in NORMAL mode`() {
+        val handler = DemoInputHandler(terminal)
+
+        val result = handler.processKey('q', DemoInputHandler.DemoViewConfig())
+
         assertIs<DemoInputHandler.KeyResult.Exit>(result)
+    }
+
+    // ==================== Ctrl+C as a signal (AMPR-467) ====================
+
+    @Test
+    fun `Ctrl+C on a terminal that keeps ISIG reaches onInterrupt instead of processKey`() = runBlocking<Unit> {
+        // Raw mode keeps ISIG, so the terminal turns the byte into SIGINT before any read sees it.
+        val jline = DumbTerminal(ByteArrayInputStream(byteArrayOf(3)), ByteArrayOutputStream())
+        jline.setAttributes(
+            jline.attributes.apply {
+                setLocalFlag(Attributes.LocalFlag.ISIG, true)
+                setControlChar(Attributes.ControlChar.VINTR, 3)
+            }
+        )
+        val handler = DemoInputHandler(terminal, jline)
+        val interrupts = AtomicInteger()
+        handler.onInterrupt { interrupts.incrementAndGet() }
+
+        val keys = mutableListOf<Char>()
+        withTimeout(5.seconds) {
+            while (interrupts.get() == 0) {
+                handler.readKey()?.let(keys::add)
+                delay(5)
+            }
+        }
+
+        assertEquals(1, interrupts.get())
+        assertTrue(keys.isEmpty(), "the Ctrl+C byte reached the key path: $keys")
+        handler.close()
     }
 
     // ==================== A/B keys do NOT trigger escalation in normal mode ====================

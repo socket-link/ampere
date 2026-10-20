@@ -15,7 +15,6 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -39,9 +38,12 @@ import link.socket.ampere.cli.layout.RichEventPane
 import link.socket.ampere.cli.layout.StatusBar
 import link.socket.ampere.cli.layout.TaskChecklistPane
 import link.socket.ampere.cli.hybrid.HybridDashboardRenderer
+import link.socket.ampere.cli.launch.DashboardExit
 import link.socket.ampere.cli.launch.HeadlessReason
 import link.socket.ampere.cli.launch.TuiDecision
 import link.socket.ampere.cli.launch.decideTuiUsage
+import link.socket.ampere.cli.launch.requestedExit
+import link.socket.ampere.cli.launch.runDashboardLoops
 import link.socket.ampere.cli.launch.userMessage
 import link.socket.ampere.cli.ondevice.OnDeviceAssistant
 import link.socket.ampere.cli.render.LumosBridgeController
@@ -161,6 +163,13 @@ class AmpereCommand(
         help = "Disable the Lumos TUI dashboard and stream plain-text agent events to stdout (auto-enabled when stdout is not a TTY or the terminal is too small)"
     ).flag(default = false)
 
+    /**
+     * How the dashboard ended, once it has; null for every other path, headless included. `Main`
+     * exits with its status after the context closes (AMPR-467).
+     */
+    internal var dashboardExit: DashboardExit? = null
+        private set
+
     override fun run() = runBlocking {
         // Handle --list-arcs flag (non-TUI, prints and exits)
         if (listArcs) {
@@ -249,6 +258,10 @@ class AmpereCommand(
         val taskChecklistPane = TaskChecklistPane(terminal)
         val statusBar = StatusBar(terminal)
         val inputHandler = DemoInputHandler(terminal)
+        // Completed by whichever exit comes first. Ctrl+C reaches it through JLine's SIGINT handler,
+        // which replaces the JVM's default exit, so the `finally` below runs for it too (AMPR-467).
+        val exit = CompletableDeferred<DashboardExit>()
+        inputHandler.onInterrupt { exit.complete(DashboardExit.INTERRUPTED) }
         val helpRenderer = HelpOverlayRenderer(terminal)
 
         // Create goal handler with AI configuration from user config (if available)
@@ -386,56 +399,45 @@ class AmpereCommand(
             // Wait a moment for initial events to be processed
             delay(500)
 
-            // Launch input handling in background
-            val inputJob = launch(Dispatchers.IO) {
-                while (isActive) {
-                    val key = inputHandler.readKey()
-                    if (key != null) {
-                        if (lastCommandResult != null) {
-                            lastCommandResult = null
-                        } else {
-                            when (val result = inputHandler.processKey(key, viewConfig)) {
-                                is DemoInputHandler.KeyResult.Exit -> {
-                                    throw CancellationException("User requested exit")
-                                }
-                                is DemoInputHandler.KeyResult.ConfigChange -> {
-                                    val wasVerbose = viewConfig.verboseMode
-                                    viewConfig = result.newConfig
+            // Both loops run until one of `q`, `:quit` or Ctrl+C completes `exit` (AMPR-467); the
+            // `finally` below is then the one cleanup every exit runs through.
+            dashboardExit = runDashboardLoops(
+                exit = exit,
+                readKey = inputHandler::readKey,
+                onKey = onKey@{ key ->
+                    if (lastCommandResult != null) {
+                        lastCommandResult = null
+                        return@onKey null
+                    }
+                    when (val result = inputHandler.processKey(key, viewConfig)) {
+                        is DemoInputHandler.KeyResult.ConfigChange -> {
+                            val wasVerbose = viewConfig.verboseMode
+                            viewConfig = result.newConfig
 
-                                    eventPane.verboseMode = viewConfig.verboseMode
+                            eventPane.verboseMode = viewConfig.verboseMode
 
-                                    if (viewConfig.verboseMode != wasVerbose) {
-                                        val out = LogCapture.getOriginalOut() ?: System.out
-                                        out.print("\u001B[2J\u001B[H")
-                                        out.flush()
-                                    }
-                                }
-                                is DemoInputHandler.KeyResult.ExecuteCommand -> {
-                                    viewConfig = result.newConfig
-                                    val cmdResult = commandExecutor.execute(result.command)
-                                    when (cmdResult) {
-                                        is CommandResult.Quit -> {
-                                            throw CancellationException("User requested quit")
-                                        }
-                                        else -> {
-                                            lastCommandResult = cmdResult
-                                        }
-                                    }
-                                }
-                                is DemoInputHandler.KeyResult.EscalationResponse -> {
-                                    viewConfig = result.newConfig
-                                }
-                                is DemoInputHandler.KeyResult.NoChange -> {}
+                            if (viewConfig.verboseMode != wasVerbose) {
+                                val out = LogCapture.getOriginalOut() ?: System.out
+                                out.print("\u001B[2J\u001B[H")
+                                out.flush()
+                            }
+                            null
+                        }
+                        is DemoInputHandler.KeyResult.ExecuteCommand -> {
+                            viewConfig = result.newConfig
+                            val cmdResult = commandExecutor.execute(result.command)
+                            cmdResult.requestedExit().also { requested ->
+                                if (requested == null) lastCommandResult = cmdResult
                             }
                         }
+                        is DemoInputHandler.KeyResult.EscalationResponse -> {
+                            viewConfig = result.newConfig
+                            null
+                        }
+                        else -> result.requestedExit()
                     }
-                    delay(50) // 20 Hz polling
-                }
-            }
-
-            // Launch rendering in background
-            val renderJob = launch(Dispatchers.IO) {
-                while (isActive) {
+                },
+                renderFrame = {
                     val output = if (lastCommandResult != null) {
                         renderCommandResult(lastCommandResult!!, terminal)
                     } else if (viewConfig.showHelp) {
@@ -533,14 +535,9 @@ class AmpereCommand(
                     val out = LogCapture.getOriginalOut() ?: System.out
                     out.print(output)
                     out.flush()
-
-                    delay(50) // Render at 20 FPS
-                }
-            }
-
-            // Wait for jobs (they run until cancellation)
-            inputJob.join()
-            renderJob.join()
+                },
+                releaseInput = inputHandler::close,
+            )
 
         } catch (e: CancellationException) {
             throw e
