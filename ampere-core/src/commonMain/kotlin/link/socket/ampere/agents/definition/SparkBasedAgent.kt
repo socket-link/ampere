@@ -199,6 +199,16 @@ open class SparkBasedAgent<S : AgentState>(
     @Transient
     private val _workspace: ExecutionWorkspace? = null,
     /**
+     * How this agent's Perceive phase renders its state into the prompt (AMPR-480). Handed to
+     * [AgentReasoning] as its settings' `perceptionContextBuilder`, which *replaces*
+     * `defaultPerceptionContext` rather than extending it (AMPR-403) — a caller that wants both
+     * calls the default itself. Null, the default, keeps the default renderer, so every caller
+     * that does not pass one is unchanged byte for byte. A hosted run's host seat is the one
+     * production caller: it appends the "# World" section.
+     */
+    @Transient
+    private val _perceptionContextBuilder: ((AgentState) -> String)? = null,
+    /**
      * Cognitive-loop configuration (AMPR-387). Reaches [agentConfiguration], which
      * is what [createPhaseSparkManager] reads, so a caller that sets
      * `phaseSparks.enabled = true` actually gets phase handling — before AMPR-387
@@ -326,6 +336,7 @@ open class SparkBasedAgent<S : AgentState>(
             availableTools = { effectiveTools }
             executor = _executor
             outcomeRepository = _outcomeRepository
+            perceptionContextBuilder = _perceptionContextBuilder
             _userGrantProvider?.let { provider ->
                 execution { userGrants(provider) }
             }

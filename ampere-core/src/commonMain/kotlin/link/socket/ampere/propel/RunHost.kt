@@ -8,7 +8,9 @@ import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.api.AmpereExperimentalApi
 import link.socket.ampere.api.AmpereStableApi
+import link.socket.ampere.api.service.FieldService
 import link.socket.ampere.goal.GoalBranch
 import link.socket.ampere.roster.RoleId
 import link.socket.ampere.roster.Roster
@@ -270,18 +272,29 @@ private fun seatsByRole(seats: List<HostedAgent>): Map<RoleId, HostedAgent> {
  *   as a Subject before PERCEIVE, and LEARN completes the goal on [RunStatus.Succeeded] and
  *   abandons it on any other end but [RunStatus.Held]. Null, the default, writes nothing to the
  *   branch: no goal, no registration, no extra event.
+ * @param field The Field a run may observe (AMPR-480, row N1) — the same
+ *   [FieldService][link.socket.ampere.api.service.FieldService] an `AmpereInstance` exposes as
+ *   `field`, built over the caller's database. Read only when a run's
+ *   [RunPolicy.observe] asks for a [FieldScope] other than [FieldScope.Off]: then the run
+ *   takes one snapshot as the host seat inside PERCEIVE, renders it into that seat's PERCEIVE
+ *   prompt, and takes one more inside OBSERVE after each executed cycle. Nothing is written
+ *   and no event is added. Null, the default, is a host whose runs never read the Field,
+ *   whatever their policy says — byte-identical to a host from before the slot existed.
  */
 @AmpereStableApi
+@OptIn(AmpereExperimentalApi::class)
 fun rosterRunHost(
     createEventApi: (AgentId) -> AgentEventApi,
     agentScope: CoroutineScope,
     executor: Executor? = FunctionExecutor.create(),
     heldRuns: HeldRunStore? = null,
     goalBranch: ((AgentEventApi) -> GoalBranch)? = null,
+    field: FieldService? = null,
 ): RunHost = RosterRunHost(
     createEventApi = createEventApi,
     agentScope = agentScope,
     executor = executor,
     heldRuns = heldRuns,
     goalBranch = goalBranch,
+    field = field,
 )

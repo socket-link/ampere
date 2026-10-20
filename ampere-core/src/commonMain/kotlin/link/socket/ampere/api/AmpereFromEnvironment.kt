@@ -150,6 +150,16 @@ fun Ampere.fromEnvironment(
     val effectiveKnowledgeRepository = memoryStore?.knowledge ?: knowledgeRepository
     val effectiveOutcomeRepository = memoryStore?.outcomes ?: environmentService.outcomeMemoryRepository
 
+    // AMPR-439: the Field read, over the caller's database when there is one. The knowledge half
+    // is the effective repository, so a memory-store override is what the Field's beliefs come from.
+    val fieldService: FieldService? = database?.let { db ->
+        FieldService.over(
+            database = db,
+            knowledge = effectiveKnowledgeRepository,
+            events = environmentService.eventRepository,
+        )
+    }
+
     // AMPR-393: the hosted run. Its seats get their own doors off the same environment,
     // so a seat's events are attributed to the seat and not to the SDK's own door, and
     // they dispatch through the same executor the bound factory's agents do.
@@ -165,6 +175,9 @@ fun Ampere.fromEnvironment(
         // the goal it formed and its lessons are about that goal. Built per run over the host
         // seat's door, never here: composing the instance touches no store.
         goalBranch = database?.let { db -> { door: AgentEventApi -> GoalBranch.over(db, door) } },
+        // AMPR-480: the same Field read this instance exposes as `field`, so a run told to observe
+        // sees the world its consumer can see. Null without a database, and then no run reads it.
+        field = fieldService,
     )
 
     val agentService = DefaultAgentService(
@@ -265,16 +278,6 @@ fun Ampere.fromEnvironment(
         // an executor beside it, which is why it is wired here and not before.
         outcomeRepository = effectiveOutcomeRepository,
     )
-
-    // AMPR-439: the Field read, over the caller's database when there is one. The knowledge half
-    // is the effective repository, so a memory-store override is what the Field's beliefs come from.
-    val fieldService: FieldService? = database?.let { db ->
-        FieldService.over(
-            database = db,
-            knowledge = effectiveKnowledgeRepository,
-            events = environmentService.eventRepository,
-        )
-    }
 
     return object : AmpereInstance {
         override val agents = agentService

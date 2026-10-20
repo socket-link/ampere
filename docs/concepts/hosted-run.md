@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/service/AgentService.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/internal/DefaultAgentService.kt
 related: [PropelLoop, TeamLayer, SparkSystem, MemoryProvenance, CognitionTrace, Probe, SubjectRegistry, PlugPermissions]
-last_verified: 2026-10-19
+last_verified: 2026-10-20
 ---
 
 # Hosted Run
@@ -356,6 +356,30 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     is a record of the run, not a precondition of it. Without a branch the run writes no
     goal, registers no seat and publishes no `GoalEvent` or `SubjectEvent`. Nothing in
     `propel/` touches `GoalStore` directly.
+28. **A run observes the Field only when told to, as the host sees it, snapshots at PERCEIVE
+    and after each executed cycle, persists nothing, and never renders a `PROTECTED` row into
+    a prompt** (AMPR-480, rows N1 and N10). With `rosterRunHost(field = …)` — wired by
+    `fromEnvironment` to the same `FieldService` the instance exposes — and a
+    `RunPolicy.observe.field` other than `FieldScope.Off`, `perceive()` takes one
+    `FieldService.snapshot(viewer = host seat, beliefLimit)` inside the PERCEIVE bracket and
+    renders it (`Field.asPerceptionSection`, `propel/FieldPerception.kt`) into the host seat's
+    PERCEIVE prompt as a "# World" section after `defaultPerceptionContext`'s output: the root
+    goal and its state, open commitments soonest due first, beliefs about the goal or held by the
+    host (`LESSON` first), the host's Observations, and the newest taken Actions no seat of the
+    run took — each branch bounded by `ObservePolicy`, each content string clipped, every entry
+    `[external]` inside one `dataBlock` (invariant 18; `readExternalContent` goes up when a
+    section is rendered). After each executed cycle `assess` enters the OBSERVE bracket — the
+    same one a judgment is asked in, never a second — and takes one more snapshot, kept on the
+    run and read by nothing (AMPR-479 folds it). A `PROTECTED` belief or Observation is counted
+    into `(n protected entries not shown)` and nothing it holds reaches the text, because the
+    prompt goes to a generative model off the device (F12, AMPR-381 J11). The hook that puts the
+    section in front of PERCEIVE is `SparkBasedAgent`'s perception context builder, installed on
+    the host seat alone, reading a `PerceivedWorld` the run fills just before PERCEIVE and clears
+    after. Nothing is persisted and no event type is added: under `Goal` or `Full` the only
+    change to the stream is the OBSERVE bracket after each executed cycle. A snapshot that fails
+    is logged (naming the run, never its content) and that boundary behaves as `Off`. `Off`, and
+    a host with `field == null`, are byte-identical to before — prompts, events, `RunResult` —
+    pinned by `PerceptionPromptGoldenTest` and `RosterHostedRunFieldTest`.
 
 ## How it composes
 
@@ -473,7 +497,8 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | `RunHost` | `open(…, runId: RunId? = null)`, `openSeats(roster, seats: List<HostedAgent>, …, runId)` (the Swift-friendly overload), `openRunSeats(): List<OpenSeat>`; `resume(runId, roster, seats, resolution, tools, policy)`, `resumeSeats(…)` and `heldRuns(): List<HeldRunSummary>` (AMPR-431), each with a default body — `resume` throws `NoStore`, `heldRuns` is empty. A supplied `runId` is `HostedRun.runId`, `RunResult.runId`, the envelope run id of every event, the task lifecycle's id and LEARN's outcome `ticketId`/`runId`; null mints one |
 | `HostedAgent` | Who fills a seat: id, role, sparks, charter, `AIConfiguration`, `CognitiveRelay?`, **required** `UpstreamLlmClient`, `MemoryStore?`, `recallScopes`, affinity, `probes`, `questions`, `UpstreamDecisionClient?`, `userGrants: (suspend (PlugManifest) -> UserGrants)?` (null denies) |
 | `HostedRun` | `runId`, `plan`, `readExternalContent`, `execute()`, `close()`. `readExternalContent` defaults to `true` on the interface, so an implementation that does not track it is assumed to have read something |
-| `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip`, `quotas`, `maxStepsPerCycle` (null = no cap) |
+| `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip`, `quotas`, `maxStepsPerCycle` (null = no cap), `observe` |
+| `ObservePolicy` / `FieldScope` | Whether the run observes the Field and how much of it the host seat's PERCEIVE is shown (AMPR-480): `field: FieldScope` (`Off` / `Goal` / `Full`, default `Off`), `beliefLimit`, `commitmentLimit`, `actionLimit`, `clip`. Store reads, no model call; `Off` is byte-identical to a run that never observed; a `PROTECTED` row is counted and never rendered |
 | `RunQuotas` | `tokens: Long?`, `wallClock: Duration?`, `steps: Int?` — the run's Hard ceilings, each checked by the Breaker before every step; `RunQuotas.None` (the default) sets none |
 | `GoalCheck` | `Off` / `Record`: whether the run asks itself, after each executed cycle, whether the goal is met. `Record` is one decision call per executed cycle on the host seat's transport |
 | `RunQuestions` | The run's own question (`goalMet`, `GOAL_MET_ID`) and `RunObservation.asDecisionState(clip)`, the fixed-key-order JSON a decision call is given |
@@ -485,7 +510,7 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | `HoldResolution` | How a person settled a hold: `Completed(details)` — the consumer performed the action, and `details` becomes the held step's result — or `Declined(reason)`, also used for an expired hold |
 | `HeldRunUnavailableException` | `resume` could not take the run up: `why` is `NoStore`, `NotHeld`, `StillOpen` or `AlreadyClaimed`. Thrown before anything is built or published |
 | `RunObservation` | What OBSERVE hands the verifier's Probes: run id, goal, cycle, prior results |
-| `rosterRunHost(...)` | The shipped implementation, for composing without an `AmpereInstance`. `heldRuns: HeldRunStore? = null` is where a held run is recorded; null records nothing. `goalBranch: ((AgentEventApi) -> GoalBranch)? = null` builds the Goal branch a run lives on over the host seat's door (invariant 27); null touches no branch |
+| `rosterRunHost(...)` | The shipped implementation, for composing without an `AmpereInstance`. `heldRuns: HeldRunStore? = null` is where a held run is recorded; null records nothing. `goalBranch: ((AgentEventApi) -> GoalBranch)? = null` builds the Goal branch a run lives on over the host seat's door (invariant 27); null touches no branch. `field: FieldService? = null` is the Field a run may observe when its policy asks (invariant 28); null reads nothing whatever the policy says |
 | `HeldRun` / `HeldRunStore` | The durable record of a held run and its store: `hold`, `get`, `list` (→ `HeldRunSummary`), `claim` (→ `HeldRunClaim`: `Claimed`, `NotHeld`, `AlreadyClaimed`), `delete`. `SqlDelightHeldRunStore` and `InMemoryHeldRunStore`. A run that holds writes it; `RunHost.resume` claims it |
 
 `Ampere.fromEnvironment` exposes one as `AmpereInstance.runs`, and `agentScope` is
@@ -613,6 +638,18 @@ interrupted (`heldRuns()` lists it with its `claimedAt`).
   recall steers PLAN as well, and a goal written for PLAN recalls the same memories for
   every input (SCKT-886). Set `query`, or set it empty when there is nothing to search
   with yet.
+- **Supplying a `perceptionContextBuilder` and expecting the default context too.** The hook
+  *replaces* `defaultPerceptionContext` (AMPR-403). The host seat's builder calls the default by
+  hand and appends the "# World" section after it, which is why an `Off` run's PERCEIVE prompt
+  is byte-identical: with the holder empty the builder is the default. A builder that forgets
+  the default perceives no task.
+- **Rendering a `PROTECTED` row because the viewer may see it.** The snapshot is the host's
+  own view, so the host's `PROTECTED` beliefs *are* in it — visibility is not the rule here.
+  The PERCEIVE prompt leaves the device, and a belief about a person never does; the section
+  counts the row and renders nothing of it, holder and subject included.
+- **Reading the after-cycle snapshot in the run.** `observedField` is taken and kept so the
+  next ticket can fold it (AMPR-479); nothing in the loop, `currentStatus()` or LEARN consults
+  it, and a run that observes ends exactly as one that does not.
 - **Setting `RecallPolicy.taskType` and expecting the run's own lessons back.** LEARN
   still files under the goal's bucket (AMPR-457 left H6 alone), and Recall matches the
   task type exactly — so a run recalling `taskType = arcId` never sees what the hosted

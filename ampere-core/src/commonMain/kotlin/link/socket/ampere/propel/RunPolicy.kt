@@ -47,6 +47,9 @@ import link.socket.ampere.memory.RecallSource
  *   nothing, re-plans nothing and publishes nothing, so a run without a cap is the
  *   run it was before the cap existed — and a step naming an unknown tool still fails
  *   at dispatch, as it always has.
+ * @property observe Whether the run reads the Field, and how much of it the host seat's
+ *   PERCEIVE is shown (AMPR-480, rows N1 and N10). See [ObservePolicy]; the default reads
+ *   nothing and renders nothing.
  */
 @AmpereStableApi
 data class RunPolicy(
@@ -58,6 +61,7 @@ data class RunPolicy(
     val judgmentResultClip: Int = 400,
     val quotas: RunQuotas = RunQuotas.None,
     val maxStepsPerCycle: Int? = null,
+    val observe: ObservePolicy = ObservePolicy(),
 ) {
 
     init {
@@ -110,6 +114,98 @@ enum class GoalCheck {
      * records exist to feed.
      */
     Record,
+}
+
+/**
+ * Whether a hosted run observes the Field, and how much of it reaches a prompt (AMPR-480,
+ * rows N1 and N10 of the continuous-PROPEL epic).
+ *
+ * ## What it costs
+ *
+ * Stated here because the consumer is the one quoting for it:
+ *
+ * - [FieldScope.Goal] and [FieldScope.Full] are **store reads and no model call**: one
+ *   `FieldService.snapshot` inside PERCEIVE, once per run, and one inside the OBSERVE bracket
+ *   after each executed cycle, each as the host seat sees the Field. The PERCEIVE snapshot is
+ *   rendered into the host seat's PERCEIVE prompt as a "# World" section; the after-cycle
+ *   snapshot is taken and kept, and nothing is done with it yet (AMPR-479 folds it). The
+ *   section makes the one PERCEIVE prompt longer by at most the bounds below; it adds no call.
+ *   A run that executed nothing is not asked for the after-cycle snapshot, and neither is a
+ *   cycle that held.
+ * - [FieldScope.Off] reads nothing and renders nothing. It is the default, and the only
+ *   setting under which a hosted run's prompts, event stream and `RunResult` are
+ *   byte-identical to a run from before the Field was observed. A host built with no
+ *   `FieldService` behaves as `Off` whatever this says.
+ *
+ * A snapshot that fails never fails the run: it is logged, naming the run and nothing it
+ * holds, and that boundary behaves as `Off`.
+ *
+ * ## The sensitivity rule
+ *
+ * A `PROTECTED` belief or Observation is a belief about a real person (F12, AMPR-381 J11). The
+ * PERCEIVE prompt goes to the host's generative model, which is off the device, so a
+ * `PROTECTED` row is **counted and never rendered**: the section ends with
+ * `(n protected entries not shown)` and carries nothing the row holds. There is no setting
+ * that turns this off.
+ *
+ * @property field Which part of the Field the host seat's PERCEIVE is shown. See [FieldScope].
+ * @property beliefLimit The most beliefs the snapshot carries and the most the section
+ *   renders, newest first; Observations are bounded by the same number on their own. Zero
+ *   renders no belief and no Observation.
+ * @property commitmentLimit The most open commitments the section renders, soonest due first.
+ * @property actionLimit The most taken Actions the section renders, newest first, counting
+ *   only those no seat of this run took.
+ * @property clip How many characters of any one entry's content reach the prompt. Longer text
+ *   is cut there and an ellipsis appended, by the same convention the recalled section uses.
+ */
+@AmpereStableApi
+data class ObservePolicy(
+    val field: FieldScope = FieldScope.Off,
+    val beliefLimit: Int = 20,
+    val commitmentLimit: Int = 10,
+    val actionLimit: Int = 20,
+    val clip: Int = 200,
+) {
+
+    init {
+        require(beliefLimit >= 0) { "the Field cannot contribute a negative number of beliefs; got $beliefLimit" }
+        require(commitmentLimit >= 0) {
+            "the Field cannot contribute a negative number of commitments; got $commitmentLimit"
+        }
+        require(actionLimit >= 0) { "the Field cannot contribute a negative number of actions; got $actionLimit" }
+        require(clip > 0) { "a clipped entry has at least one character; got $clip" }
+    }
+}
+
+/**
+ * How much of the Field a hosted run's PERCEIVE is shown (AMPR-480, row N10).
+ *
+ * Every scope but [Off] is a store read and no model call; see [ObservePolicy] for the cost
+ * and for the sensitivity rule every scope obeys.
+ */
+@AmpereStableApi
+enum class FieldScope {
+
+    /**
+     * Read nothing, render nothing. The default, and the only setting under which a hosted
+     * run's prompts, events and `RunResult` are what they were before AMPR-480, byte for byte.
+     */
+    Off,
+
+    /**
+     * The Field as it bears on this run's goal: the run's root goal and its state, every open
+     * commitment, the beliefs about that goal or held by the host seat, the Observations the
+     * host holds, and the taken Actions no seat of this run took — each branch under
+     * [ObservePolicy]'s bounds. The default scope for a run that observes at all.
+     */
+    Goal,
+
+    /**
+     * Every branch of the snapshot under the same bounds and the same sensitivity rule, with
+     * no goal or holder filter: every goal, every visible belief and Observation, every taken
+     * Action by anyone outside this run.
+     */
+    Full,
 }
 
 /**
