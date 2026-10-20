@@ -175,6 +175,10 @@ object EventRegistry {
         GoalEvent.GoalFormed.EVENT_TYPE,
         GoalEvent.GoalUpdated.EVENT_TYPE,
 
+        // CommitmentEvent types (undertakings that are not tickets, AMPR-475)
+        CommitmentEvent.Undertaken.EVENT_TYPE,
+        CommitmentEvent.Released.EVENT_TYPE,
+
         // LinkEvent types
         LinkEvent.LinkGranted.EVENT_TYPE,
         LinkEvent.LinkRevoked.EVENT_TYPE,

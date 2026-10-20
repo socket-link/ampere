@@ -12,7 +12,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/**
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/events/**
 related: [PropelLoop, AgentSurface, CognitionTrace, MemoryProvenance, LinkLayer]
-last_verified: 2026-10-12
+last_verified: 2026-10-20
 ---
 
 # EventSerialBus

@@ -10,6 +10,7 @@ import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.CanonPerceivedEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
+import link.socket.ampere.agents.domain.event.CommitmentEvent
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
@@ -286,6 +287,10 @@ class SignificanceAwareEventLogger(
         // The Goal branch grew or moved (AMPR-419): the run's own goals on the record. Routine -
         // the goal tree is what the run already shows; the row is its durable form.
         is GoalEvent -> EventSignificance.ROUTINE
+
+        // Someone undertook work by a date, or no longer owes it (AMPR-475). Significant: a
+        // commitment forming or ending is a fact about what a person owes, not bookkeeping.
+        is CommitmentEvent -> EventSignificance.SIGNIFICANT
     }
 
     private fun formatUrgency(urgency: Urgency): String = when (urgency) {
