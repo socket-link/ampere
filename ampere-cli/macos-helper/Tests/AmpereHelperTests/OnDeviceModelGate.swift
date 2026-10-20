@@ -1,0 +1,60 @@
+import Foundation
+import XCTest
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
+
+/// Whether the on-device model can actually generate here, decided once per test process: the
+/// macOS copy of `ampere-ios/iosAppTests/OnDeviceModelGate.swift` (AMPR-373).
+///
+/// `SystemLanguageModel.availability` is not enough: GitHub's hosted macOS runners report
+/// `.available` with a `contextSize`, then fail every generation for missing model assets. So the
+/// gate asks the model for one word, through the framework rather than through the helper, so a
+/// broken helper fails its live cases instead of skipping them. Only a system that answers runs
+/// them; anywhere else they skip, and the skip names the reason so a log reader can tell "off" from
+/// "broken".
+enum OnDeviceModelGate {
+    enum Verdict {
+        case ready
+        case unavailable(String)
+    }
+
+    private static var cached: Verdict?
+
+    static func verdict() async -> Verdict {
+        if let cached { return cached }
+        let verdict = await decide()
+        cached = verdict
+        return verdict
+    }
+
+    /// Throws `XCTSkip` unless the model generated once.
+    static func requireReady() async throws {
+        if case let .unavailable(reason) = await verdict() {
+            throw XCTSkip(reason)
+        }
+    }
+
+    private static func decide() async -> Verdict {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *) {
+            switch SystemLanguageModel.default.availability {
+            case .available:
+                do {
+                    _ = try await LanguageModelSession().respond(to: "Reply with the single word OK.")
+                    return .ready
+                } catch {
+                    return .unavailable("the model reports available but cannot generate: \(error)")
+                }
+            case let .unavailable(reason):
+                return .unavailable("Apple Intelligence is not available on this system: \(reason)")
+            @unknown default:
+                return .unavailable("Apple Intelligence availability is unknown on this system")
+            }
+        }
+        return .unavailable("FoundationModels needs macOS 26")
+        #else
+        return .unavailable("this SDK cannot link FoundationModels")
+        #endif
+    }
+}

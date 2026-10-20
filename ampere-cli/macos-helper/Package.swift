@@ -11,7 +11,7 @@ import PackageDescription
 ///
 /// No dependencies, so building this package stays a cheap, offline, one-time cost on a shared
 /// development Mac. `:ampere-cli:buildMacHelper` builds it, up-to-date-checked against
-/// `Sources/` and this file.
+/// `Sources/` and this file. The test target adds nothing to that build.
 let package = Package(
     name: "ampere-helper",
     platforms: [.macOS(.v13)],
@@ -24,6 +24,14 @@ let package = Package(
             path: "Sources/AmpereHelper",
             // The Swift 5 language mode: Swift 6's strict concurrency checking has nothing to add
             // to a process that handles one request at a time.
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        // `swift test --package-path ampere-cli/macos-helper` (AMPR-470). The wire cases need no
+        // model. The live cases run only where the model generates once, and skip anywhere else.
+        .testTarget(
+            name: "AmpereHelperTests",
+            dependencies: ["AmpereHelper"],
+            path: "Tests/AmpereHelperTests",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

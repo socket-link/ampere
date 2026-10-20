@@ -118,5 +118,32 @@ reason (`apple_foundation_models_helper_unreachable`, `…_incompatible`), never
 `cli/ondevice/*Test.kt` drives the whole JVM half against a **fake helper script**
 (`FakeAmpereHelper`). The suite covers the protocol, every availability token, the deadline, the
 restart, the version check, serialisation and the process-group termination. Per the fidelity
-rule, the suite **clears nothing about FoundationModels**. Real-framework behaviour is checked by
-running this binary against the live model on a Mac.
+rule, the suite **clears nothing about this binary or FoundationModels**. This package's own suite
+covers the Swift half (AMPR-470):
+
+```bash
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  swift test --package-path ampere-cli/macos-helper
+```
+
+It has two halves, both sending request lines through `AmpereHelper.handle(line:inference:)`, the
+function `main` hands every line it reads:
+
+- **`WireTests` needs no model** and passes with Apple Intelligence off. `probe` is answered at any
+  version; every other op outside the range is refused with `unsupported_protocol`; an unknown op
+  with `unknown_op`; a line that is not a request frame with `malformed_request` and an empty id; a
+  generation without a prompt, and a count with neither `text` nor `prompt`, with
+  `malformed_request`. It also pins the tables `FoundationModelsInference` reads a request with:
+  the temperature clamped to 0–1, the cap sent only when it is a positive whole number, and a count
+  of a `prompt` taken as a request ahead of any `text`.
+- **`LiveModelTests` needs a model that generates.** `inference.probe` reports `available` with a
+  context size, a request counts more than its flattened string, a 16-token cap returns text without
+  an error, and a generation with instructions returns text. Before any of it,
+  `OnDeviceModelGate` asks the framework for one word, as `ampere-ios`'s gate does (AMPR-373),
+  because GitHub's hosted runners report the model `available` and then cannot generate. **Where
+  that word does not come back the live cases skip, not fail**, and the skip says why: Apple
+  Intelligence off, an ineligible Mac, a model not downloaded, an OS before macOS 26. The count case
+  also skips before macOS 26.4, where the helper answers `{"tokens": null}`.
+
+The suite needs the same toolchain as the build. CI does not run it: hosted runners cannot generate,
+and the model-free half alone would lengthen the macOS job's critical path.
