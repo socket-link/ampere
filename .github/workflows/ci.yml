@@ -356,9 +356,16 @@ jobs:
 
       # ~/.konan holds the Kotlin/Native toolchain *and* the gSTATIC compiler caches. The test
       # binary's bucket and the framework's are different, so each job keeps its own entry —
-      # `-kotlin-` here, `-swift-` in the bridge job.
+      # `konan-kotlin-` here, `konan-swift-` in the bridge job. The job name is the *first*
+      # segment so that neither job's prefix can match the other's entries.
       #
-      # Do NOT add a restore-key broader than this job's own prefix. AMPR-253 added a cross-job
+      # The second restore-key, `konan-<os>-ios-`, is the bucket the pre-split single job wrote:
+      # it holds both the test binary's and the framework's caches, so it is a correct superset
+      # for either job and a warm start until main has written the per-job entries. New keys
+      # never start with that prefix, so it can only ever match the old entries; once those age
+      # out of the cache it is a clean miss and can be deleted.
+      #
+      # Do NOT add a restore-key broader than those two. AMPR-253 added a cross-job
       # "konan-<os>-" key and the bridge job restored the test job's bucket instead: the framework
       # link went 323s (no cache) -> 1208s (wrong bucket) -> 138s (right bucket). A mismatched
       # Konan cache is far worse than none, so a clean miss is the good failure mode here.
@@ -378,9 +385,10 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.konan
-          key: konan-${{ runner.os }}-ios-kotlin-${{ hashFiles('gradle.properties') }}
+          key: konan-kotlin-${{ runner.os }}-ios-${{ hashFiles('gradle.properties') }}
           restore-keys: |
-            konan-${{ runner.os }}-ios-kotlin-
+            konan-kotlin-${{ runner.os }}-ios-
+            konan-${{ runner.os }}-ios-
 
       - name: Create local.properties
         run: |
@@ -401,7 +409,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.konan
-          key: konan-${{ runner.os }}-ios-kotlin-${{ hashFiles('gradle.properties') }}
+          key: konan-kotlin-${{ runner.os }}-ios-${{ hashFiles('gradle.properties') }}
 
   ios-swift-bridge:
     name: iOS Swift Bridge Tests (macos, JDK 21)
@@ -451,7 +459,9 @@ jobs:
           key: gradle-dist-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}
 
       # This job's own ~/.konan bucket: the framework's gSTATIC caches, not the test binary's.
-      # See ios-kotlin-tests for the key discipline; the prefix here must stay distinct.
+      # See ios-kotlin-tests for the key discipline and for what the second restore-key is. A
+      # cold miss here is expensive: with no toolchain and no caches the framework link inside
+      # xcodebuild measured 15m against ~5m warm.
       #
       # AMPR-244 once had to revert caching ~/.konan on the bridge job because a Gradle step in
       # this job ran concurrently with Xcode's nested Gradle and the two raced on Konan's
@@ -462,9 +472,10 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.konan
-          key: konan-${{ runner.os }}-ios-swift-${{ hashFiles('gradle.properties') }}
+          key: konan-swift-${{ runner.os }}-ios-${{ hashFiles('gradle.properties') }}
           restore-keys: |
-            konan-${{ runner.os }}-ios-swift-
+            konan-swift-${{ runner.os }}-ios-
+            konan-${{ runner.os }}-ios-
 
       - name: Create local.properties
         run: |
@@ -520,7 +531,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.konan
-          key: konan-${{ runner.os }}-ios-swift-${{ hashFiles('gradle.properties') }}
+          key: konan-swift-${{ runner.os }}-ios-${{ hashFiles('gradle.properties') }}
 
   # Kept as a separate aggregate job under its original name because that name is the required
   # status check on main. The iOS work is two jobs again, but branch protection still looks for
