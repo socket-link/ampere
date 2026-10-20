@@ -104,14 +104,21 @@ that loop, moved into Ampere, so the consumer can delete its copy.
    default, that `FlowPhase` asks after each agent's tick. There is no second planner.
 10. **A non-code agent is first class.** No `CodeState`, no project directory, no
     workspace required.
-11. **A judgment asked by the run is recorded and never read** (AMPR-421). A cycle
-    that executed may be asked whether the goal is met, and the verifier seat may be
-    asked its own declared questions; every answer leaves a `JudgmentRecorded` and
+11. **A judgment asked by the run is recorded and never read** (AMPR-421, AMPR-481). A
+    cycle that executed may be asked whether the goal is met, the verifier seat may be
+    asked its own declared questions, and the receptor's two questions — would a fresh
+    perception read the world differently (`perception_drift`), did this cycle produce a
+    lesson worth keeping (`lesson_worth_keeping`) — are asked under a `Record` cadence
+    (`RunPolicy.cadence`: `PerceiveCadence.Record`, `LearnCadence.Record`), in their own
+    request over their own state, `RunDrift` — the two Field snapshots folded
+    (`FieldDelta`) and this cycle's results — so the goal question's request, state and
+    digests are what AMPR-421 made them. Every answer leaves a `JudgmentRecorded` and
     nothing consults it. The loop, `currentStatus()`, LEARN and every `Verdict` are the
     same with a judgment as without one, and `RunResult` is identical whatever came
-    back. Acting on one is AMPR-381 rows J6, J8 and J9, none of which has a verdict —
-    the records exist so that AMPR-422 can measure whether a model answers well enough
-    for a verdict to be taken at all.
+    back. Acting on one is AMPR-381 rows J6, J8 and J9 and the continuous-PROPEL W1
+    tickets, none of which has a verdict — the records exist so that AMPR-422 and the
+    receptor bench can measure whether a model answers well enough for a verdict to be
+    taken at all.
 12. **RECALL reads twice and reports once.** The host seat's own memory and every
     `RecallSource` the run was given, merged into one `KnowledgeRecalled` through the
     host's door (AMPR-394). The memory half reaches PLAN as `relevantKnowledge`; both
@@ -370,7 +377,8 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     `[external]` inside one `dataBlock` (invariant 18; `readExternalContent` goes up when a
     section is rendered). After each executed cycle `assess` enters the OBSERVE bracket — the
     same one a judgment is asked in, never a second — and takes one more snapshot, kept on the
-    run and read by nothing (AMPR-479 folds it). A `PROTECTED` belief or Observation is counted
+    run; the receptor's request (invariant 11) is the one thing that reads it, folding it with
+    the PERCEIVE snapshot into a `FieldDelta` (AMPR-479). A `PROTECTED` belief or Observation is counted
     into `(n protected entries not shown)` and nothing it holds reaches the text, because the
     prompt goes to a generative model off the device (F12, AMPR-381 J11). The hook that puts the
     section in front of PERCEIVE is `SparkBasedAgent`'s perception context builder, installed on
@@ -497,11 +505,13 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | `RunHost` | `open(…, runId: RunId? = null)`, `openSeats(roster, seats: List<HostedAgent>, …, runId)` (the Swift-friendly overload), `openRunSeats(): List<OpenSeat>`; `resume(runId, roster, seats, resolution, tools, policy)`, `resumeSeats(…)` and `heldRuns(): List<HeldRunSummary>` (AMPR-431), each with a default body — `resume` throws `NoStore`, `heldRuns` is empty. A supplied `runId` is `HostedRun.runId`, `RunResult.runId`, the envelope run id of every event, the task lifecycle's id and LEARN's outcome `ticketId`/`runId`; null mints one |
 | `HostedAgent` | Who fills a seat: id, role, sparks, charter, `AIConfiguration`, `CognitiveRelay?`, **required** `UpstreamLlmClient`, `MemoryStore?`, `recallScopes`, affinity, `probes`, `questions`, `UpstreamDecisionClient?`, `userGrants: (suspend (PlugManifest) -> UserGrants)?` (null denies) |
 | `HostedRun` | `runId`, `plan`, `readExternalContent`, `execute()`, `close()`. `readExternalContent` defaults to `true` on the interface, so an implementation that does not track it is assumed to have read something |
-| `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip`, `quotas`, `maxStepsPerCycle` (null = no cap), `observe` |
+| `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip`, `quotas`, `maxStepsPerCycle` (null = no cap), `observe`, `cadence` |
+| `PhaseCadence` / `PerceiveCadence` / `RecallCadence` / `LearnCadence` | When PERCEIVE, RECALL and LEARN run again inside a run (AMPR-481, row N4). `PerceiveCadence { OncePerRun, Record }` and `LearnCadence { AtClose, Record }` are sealed so the W1 acting values arrive without a break; `RecallCadence { OncePerRun, WithPerceive }` has no effect until PERCEIVE can re-run. `Record` is one decision call per executed cycle on the host seat carrying up to two questions; nothing moves and `RunResult` is identical. `open` refuses `Record` on a host seat with no transport, and `PerceiveCadence.Record` with `FieldScope.Off` or a host with no `FieldService` |
+| `RunDrift` | What the receptor is asked about (AMPR-481, row N6): run id, goal, cycle, the host's last PERCEIVE idea, the `FieldDelta` between the two snapshots, this cycle's outcomes, and the names the delta's references resolve to. `RunDrift.asDecisionState(clip)` renders the fixed-key-order JSON (`goal`, `cycle`, `perceived`, `changes`, `cycle_results`); no id, no timestamp, no `PROTECTED` row |
 | `ObservePolicy` / `FieldScope` | Whether the run observes the Field and how much of it the host seat's PERCEIVE is shown (AMPR-480): `field: FieldScope` (`Off` / `Goal` / `Full`, default `Off`), `beliefLimit`, `commitmentLimit`, `actionLimit`, `clip`. Store reads, no model call; `Off` is byte-identical to a run that never observed; a `PROTECTED` row is counted and never rendered |
 | `RunQuotas` | `tokens: Long?`, `wallClock: Duration?`, `steps: Int?` — the run's Hard ceilings, each checked by the Breaker before every step; `RunQuotas.None` (the default) sets none |
 | `GoalCheck` | `Off` / `Record`: whether the run asks itself, after each executed cycle, whether the goal is met. `Record` is one decision call per executed cycle on the host seat's transport |
-| `RunQuestions` | The run's own question (`goalMet`, `GOAL_MET_ID`) and `RunObservation.asDecisionState(clip)`, the fixed-key-order JSON a decision call is given |
+| `RunQuestions` | The run's own questions — `goalMet` (`GOAL_MET_ID`), and the receptor's `perceptionDrift` (`PERCEPTION_DRIFT_ID`) and `lessonWorthKeeping` (`LESSON_WORTH_KEEPING_ID`) — and `RunObservation.asDecisionState(clip)`, the fixed-key-order JSON the goal question is given |
 | `RecallPolicy` | `sources`, `perSourceLimit`, `memoryLimit`, `titleClip`, `textClip`, `query` (null = the goal's description; empty = search nothing), `taskType` (null = the goal's bucket) |
 | `RecallSource` / `Recalled` | The consumer-implemented corpus SPI (`memory/`, beside `MemoryStore`) and one item of it |
 | `PlanGate` / `PlanDecision` | `review(plan)` → `Approved(plan)` (possibly trimmed) or `Stopped(reason)`; `reviewChangedStep(step, approved, actual)` when a step is about to run with arguments the gate did not approve, defaulting to `review` of a one-step plan carrying `actual` |
@@ -662,21 +672,28 @@ interrupted (`heldRuns()` lists it with its `claimedAt`).
   remembered nothing" and "the corpus was down" the same observation.
 - **Expecting a wired decision transport to be asked anything.**
   `HostedAgent.upstreamDecisionClient` is inert on its own: the host seat is asked only
-  under `RunPolicy.goalCheck == Record`, and a seat's `questions` only when it is the
-  roster's verifier — a non-verifier's are ignored exactly as its `probes` are. The
+  under `RunPolicy.goalCheck == Record` or a `Record` value of `RunPolicy.cadence`, and a
+  seat's `questions` only when it is the roster's verifier — a non-verifier's are ignored
+  exactly as its `probes` are. The
   converse is refused rather than ignored: `open` throws when a seat *would* be asked
   and carries no transport, because `assess` drops what a failed decision call throws,
   so the alternative is a run that silently records nothing all the way through.
 - **Folding the goal question into the next cycle's OBSERVE.** It is asked after
   EXECUTE, before the loop decides whether to continue, because that is where a
   judgment that *acts* would have to sit. A cycle later the run has already decided to
-  continue, and the final cycle never reaches another OBSERVE at all.
+  continue, and the final cycle never reaches another OBSERVE at all. The receptor's two
+  questions sit in the same bracket for the same reason (AMPR-481): a drift that would
+  re-run PERCEIVE, or a lesson that would run LEARN early, has to be judged before the
+  next PLAN — and in their own request, after the goal's, never folded into it, so the
+  goal question's digests and AMPR-422's corpus stay what they were.
 - **Putting a step's id or timestamps in a decision state.** The record carries a
   `stateDigest` and never the state, so the digest is the only join key back — and a
   state that is unique per render makes the join useless.
   `RunObservation.asDecisionState` renders the goal, the cycle, and per step a
   description, a status word, its origin (`own` / `external`, AMPR-453) and a clipped
-  result, in a fixed key order, for that reason.
+  result, in a fixed key order, for that reason. `RunDrift.asDecisionState` does the
+  same for the receptor's state, and renders a commitment's `due` as a date rather
+  than an instant: the date is what was undertaken, the instant would be a timestamp.
 - **Querying a seat's permission denials by run id.** `publishPermissionDenied`, which
   both the seat's Breaker and its engine call, publishes `PermissionDeniedEvent` without
   a run id on its envelope, so a `run_id` query of a

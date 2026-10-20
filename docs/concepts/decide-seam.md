@@ -7,7 +7,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/reasoning/ConfidenceSource.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/CognitiveEvent.kt
 related: [CognitiveRelay, CognitionTrace, PropelLoop, EventSerialBus, Probe]
-last_verified: 2026-10-17
+last_verified: 2026-10-20
 ---
 
 # Decide Seam
@@ -24,8 +24,10 @@ is the one entry point; it routes through the injected client and publishes
 one `CognitiveEvent.JudgmentRecorded` per judgment through the agent's event
 door. The seam shipped shadow-only in `0.18.0` (AMPR-384) and has its first
 callers in `0.19.0`: a hosted run asks whether its goal is met, and a verifier
-seat asks its own declared questions (AMPR-421). Both are record-only — no
-call site reads a judgment.
+seat asks its own declared questions (AMPR-421); the receptor's two questions —
+has the world drifted since PERCEIVE, is there a lesson worth keeping — joined
+them under a `Record` cadence (AMPR-481). All are record-only — no call site
+reads a judgment, and that remains true after AMPR-481.
 
 ## Why it exists
 
@@ -77,7 +79,7 @@ model wrote about itself (AMPR-381, G1). Three pressures shaped the seam:
 - **No band is ever fitted on a self-reported value.** `BandFitGuard` is the entry to every fit; it refuses `SELF_REPORTED` and refuses a measured judgment with no distribution. Every `Confidence` level is self-reported by construction, and the F10 mapping (`asProbability()`) produces a self-reported number still.
 - **One record per judgment, through the one door, and never the state.** `AgentReasoning.decide` publishes `JudgmentRecorded` via `AgentEventApi.publish` under the run id, carrying `stateDigest` (SHA-256), `questionId` + `questionVersion`, the distribution when there is one, the band (null in W1), model snapshot, locality, latency, usage and `causedBy`. The state text appears in no event. Without a door nothing is recorded, as with the `ProviderCall*` pair; a transport that throws leaves no record.
 - **A judgment is filed under the phase that asked.** `JudgmentRecorded.cognitivePhase` is read by `ArcTraceProjection.phaseNameFor`; a call with no phase falls under whatever phase is active.
-- **Record-only callers in the hosted run; no call site acts on a judgment.** The first callers are a hosted run's own "is the goal met?" on the host seat and the verifier seat's declared questions, both after an executed cycle and both opted into (AMPR-421, `HostedRun`). Every answer is recorded and discarded: `RunResult` is identical whatever came back, and mapping a judgment onto a `Verdict` (J6), onto an escalation (J8) or onto a goal-completion decision that ends a run (J9) has no verdict. No *existing* call site switched: `FlowPhase.evaluateGoalCompletion` is unchanged until J9. No new routing rule, rung or locality; `RoutingContext` is reused; metering stays `WattCostAggregator.costFor` (J13).
+- **Record-only callers in the hosted run; no call site acts on a judgment.** The first callers are a hosted run's own "is the goal met?" on the host seat and the verifier seat's declared questions, both after an executed cycle and both opted into (AMPR-421, `HostedRun`); the receptor's `perception_drift` and `lesson_worth_keeping` (`RunQuestions`) are asked the same way, in one request of their own over `RunDrift`, under `PerceiveCadence.Record` / `LearnCadence.Record` (AMPR-481). Every answer is recorded and discarded: `RunResult` is identical whatever came back, and mapping a judgment onto a `Verdict` (J6), onto an escalation (J8) or onto a goal-completion decision that ends a run (J9) has no verdict. No *existing* call site switched: `FlowPhase.evaluateGoalCompletion` is unchanged until J9. No new routing rule, rung or locality; `RoutingContext` is reused; metering stays `WattCostAggregator.costFor` (J13).
 - **A model-backed judgment never runs on the device.** A judgment is never display text, and rung `ZERO` serves display text only (AMPR-372). `ModelBackedDecisionClient` raises the floor of any requirement on its routing context to `ONE` with `maxOf` — a stricter floor stands — which leaves the on-device model, rated `ZERO`, out of the candidates; a context with no requirement is forwarded unchanged, so the judgment keeps its configured model rather than being switched to cheapest-capable routing (AMPR-459). The adapter cannot see the floor of the agent behind its `AgentLLMService`, which `AgentLLMService` merges in; that one is the caller's to keep at `ONE` or above.
 - **Every public parameter is constructible from Swift.** Strings, maps of strings, lists of strings, enums and data classes only. A Swift-implemented `UpstreamDecisionClient` would need the callback-style bridge the chat seam has; it is not in W1.
 
@@ -88,6 +90,7 @@ model wrote about itself (AMPR-381, G1). Three pressures shaped the seam:
 - **Turn a heuristic into an explicit judgment** — `DeterministicDecisionClient(name = "any-success") { state, question -> … }`. The record names the rule on `modelSnapshot.modelId`.
 - **Make a self-reported confidence a number** — `confidence.asProbability()`. Do not put the result anywhere a band is fitted.
 - **Have a hosted run ask whether it met its goal** — give the host seat a `HostedAgent.upstreamDecisionClient` and open the run with `RunPolicy(goalCheck = GoalCheck.Record)`. One decision call per executed cycle, one `JudgmentRecorded` under `questionId == RunQuestions.GOAL_MET_ID`, and nothing about the run changes. A verifier seat's own `HostedAgent.questions` are asked beside it, all of them in one request, on that seat's transport.
+- **Have a hosted run ask whether the world drifted, or a cycle taught something** — give the host seat a transport, observe the Field (`RunPolicy(observe = ObservePolicy(field = FieldScope.Goal))`) and set `cadence = PhaseCadence(perceive = PerceiveCadence.Record, learn = LearnCadence.Record)`. One decision call per executed cycle carrying both questions over one `RunDrift` state, two `JudgmentRecorded` sharing a `stateDigest` under `RunQuestions.PERCEPTION_DRIFT_ID` and `LESSON_WORTH_KEEPING_ID`, and nothing about the run changes. `open` refuses the drift cadence without a Field to have drifted.
 - **Store a confidence on a belief row** — pass a `BeliefConfidence` (`agents/domain/knowledge/BeliefConfidence.kt`, AMPR-417): `SelfReported(level)` is written as its F10 mapping, `Measured(probability)` as given. The `KnowledgeStore.confidence` column keeps the number and not the source, so nothing fits a band on it.
 - **Stream the records** — `eventApi.onJudgmentRecorded { … }` or `events.judgmentRecordedEvents()`; filter on `source == MEASURED` before fitting anything.
 - **Join a record back to its state** — compare `stateDigest(state)` to the record's `stateDigest`. The state itself is not recoverable from the record, by design.

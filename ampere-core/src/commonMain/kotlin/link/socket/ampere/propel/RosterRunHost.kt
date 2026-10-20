@@ -286,6 +286,12 @@ internal class RosterRunHost(
      * run, not one per seat, so a question declared on a seat nobody asks is the same
      * kind of unused declaration.
      *
+     * The receptor's cadences are refused on the same ground (AMPR-481, row N7): a `Record`
+     * value of [PhaseCadence] asks on the host seat, so it needs that seat's transport; and
+     * [PerceiveCadence.Record] asks what moved in the Field, so it needs a Field to have
+     * moved — a [FieldScope.Off] policy or a host built with no `FieldService` would leave
+     * the drift question unasked every cycle, silently, for the same reason.
+     *
      * The last is a blank caller-supplied run id (AMPR-385 row H27). The id is the only
      * thing that joins the run's events, its task lifecycle and its outcome, and a blank
      * one joins them to nothing a reader can query by. Whether the id is already *open*
@@ -321,6 +327,33 @@ internal class RosterRunHost(
                 "GoalCheck.Record asks the host seat '${roster.host.value}' one question per " +
                     "executed cycle, and that seat carries no upstreamDecisionClient; a " +
                     "decision transport is opted into, never inherited"
+            }
+        }
+        val asksDrift = policy.cadence.perceive == PerceiveCadence.Record
+        val asksLesson = policy.cadence.learn == LearnCadence.Record
+        if (asksDrift || asksLesson) {
+            val asked = listOfNotNull(
+                "PerceiveCadence.Record".takeIf { asksDrift },
+                "LearnCadence.Record".takeIf { asksLesson },
+            ).joinToString(" and ")
+            require(seats.getValue(roster.host).upstreamDecisionClient != null) {
+                "$asked asks the host seat '${roster.host.value}' after each executed cycle, " +
+                    "and that seat carries no upstreamDecisionClient; a decision transport is " +
+                    "opted into, never inherited"
+            }
+        }
+        if (asksDrift) {
+            require(policy.observe.field != FieldScope.Off) {
+                "PerceiveCadence.Record asks whether the world drifted since PERCEIVE, and " +
+                    "ObservePolicy.field is FieldScope.Off; a drift question needs a world to " +
+                    "have drifted, so observe the Field (FieldScope.Goal or Full) or keep the " +
+                    "cadence at OncePerRun"
+            }
+            require(field != null) {
+                "PerceiveCadence.Record asks whether the world drifted since PERCEIVE, and " +
+                    "this host has no FieldService to read it from; a drift question needs a " +
+                    "world to have drifted, so build the host with a Field (rosterRunHost(field = …)) " +
+                    "or keep the cadence at OncePerRun"
             }
         }
         val verifier = roster.verifier?.let { seats[it] }

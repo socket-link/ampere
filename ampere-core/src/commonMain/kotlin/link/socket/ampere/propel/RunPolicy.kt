@@ -50,6 +50,10 @@ import link.socket.ampere.memory.RecallSource
  * @property observe Whether the run reads the Field, and how much of it the host seat's
  *   PERCEIVE is shown (AMPR-480, rows N1 and N10). See [ObservePolicy]; the default reads
  *   nothing and renders nothing.
+ * @property cadence When PERCEIVE, RECALL and LEARN run again inside a run (AMPR-481, row N4
+ *   of the continuous-PROPEL epic). See [PhaseCadence]; the default is the run as it was —
+ *   each once — and the only values shipped so far ask the receptor's two questions and
+ *   move nothing.
  */
 @AmpereStableApi
 data class RunPolicy(
@@ -62,6 +66,7 @@ data class RunPolicy(
     val quotas: RunQuotas = RunQuotas.None,
     val maxStepsPerCycle: Int? = null,
     val observe: ObservePolicy = ObservePolicy(),
+    val cadence: PhaseCadence = PhaseCadence(),
 ) {
 
     init {
@@ -114,6 +119,130 @@ enum class GoalCheck {
      * records exist to feed.
      */
     Record,
+}
+
+/**
+ * When the three phases a hosted run charges or closes with run again inside the run
+ * (AMPR-481, epic AMPR-478 row N4).
+ *
+ * A hosted run perceives once at `open`, recalls once beside it, and learns once at
+ * `close()` (hosted-run invariant 7). The continuous loop re-runs PERCEIVE when the world
+ * has drifted and LEARN when a cycle produced a lesson worth keeping — and whether either
+ * has happened is a judgment, asked of the host seat's decision transport after each
+ * executed cycle. This value says what the run does with that judgment. The values shipped
+ * here **record and never act**: the acting values (`WhenDrifted(moveAbove)`,
+ * `WhenLesson(keepAbove)`, `EveryCycle`) are the W1 tickets', and the interfaces are sealed
+ * rather than enums so they arrive without a breaking change.
+ *
+ * ## What it costs
+ *
+ * Stated here because the consumer is the one quoting for it, and because a decision call
+ * bills on a transport the consumer supplied:
+ *
+ * - [PerceiveCadence.Record] and [LearnCadence.Record] together are **one decision call per
+ *   executed cycle**, on the host seat's [HostedAgent.upstreamDecisionClient], carrying up to
+ *   two questions ([RunQuestions.perceptionDrift], [RunQuestions.lessonWorthKeeping]) in
+ *   one request over one state ([RunDrift.asDecisionState]). Either alone is the same one
+ *   call carrying one question. It is a request of its own: [GoalCheck.Record]'s question
+ *   keeps its own request and its own state, so its records are what they were.
+ * - [RecallCadence.WithPerceive] costs nothing until PERCEIVE can re-run (W1).
+ *
+ * Neither is a generative call, so neither shows up in the run's prompts or in its
+ * `ProviderCall*` pairs. A cycle that did not execute — stopped at the gate, planned into
+ * nothing, held, cancelled — asks nothing.
+ *
+ * @property perceive When PERCEIVE runs again. See [PerceiveCadence].
+ * @property recall When RECALL runs again. See [RecallCadence].
+ * @property learn When LEARN runs. See [LearnCadence].
+ */
+@AmpereStableApi
+data class PhaseCadence(
+    val perceive: PerceiveCadence = PerceiveCadence.OncePerRun,
+    val recall: RecallCadence = RecallCadence.OncePerRun,
+    val learn: LearnCadence = LearnCadence.AtClose,
+)
+
+/**
+ * When a hosted run's PERCEIVE runs again (AMPR-481, row N4).
+ *
+ * Sealed rather than an enum so the acting value — `WhenDrifted(moveAbove)`, a W1 ticket —
+ * can carry its threshold without a breaking change. See [PhaseCadence] for the cost.
+ */
+@AmpereStableApi
+sealed interface PerceiveCadence {
+
+    /**
+     * Perceive once, at `open`. The default, and the only value under which the run asks
+     * nothing about drift: its event stream is what it was before AMPR-481, event for event.
+     */
+    data object OncePerRun : PerceiveCadence
+
+    /**
+     * Ask [RunQuestions.perceptionDrift] on the host seat after each executed cycle, record
+     * the answer, and change nothing.
+     *
+     * The question is asked over [RunDrift]: what moved in the Field between the PERCEIVE
+     * snapshot and the one OBSERVE takes after the cycle (AMPR-479, AMPR-480), so it needs a
+     * Field to have drifted — `open` refuses this value with [FieldScope.Off] or on a host
+     * with no `FieldService`, and refuses it on a host seat with no decision transport. A
+     * cycle whose snapshot failed is asked only the lesson question, if that is on too, and
+     * the run logs once that drift could not be asked.
+     *
+     * Record-only, deliberately: PERCEIVE does not re-run on a `true`, the plan is not
+     * revisited on a `false`, and [RunResult] is identical whatever came back. Acting on the
+     * answer is the W1 ticket's; the records here are what the bench measures first.
+     */
+    data object Record : PerceiveCadence
+}
+
+/**
+ * When a hosted run's RECALL runs again (AMPR-481, row N4).
+ *
+ * An enum, because RECALL has no threshold of its own: it follows PERCEIVE or it does not.
+ */
+@AmpereStableApi
+enum class RecallCadence {
+
+    /** Recall once, beside the PERCEIVE at `open`. The default. */
+    OncePerRun,
+
+    /**
+     * Recall again whenever PERCEIVE runs again.
+     *
+     * No effect until PERCEIVE can re-run inside a run (the W1 ticket): under every
+     * [PerceiveCadence] shipped so far PERCEIVE runs once, so RECALL does too. Declared now
+     * so a consumer's policy reads the same before and after that ticket.
+     */
+    WithPerceive,
+}
+
+/**
+ * When a hosted run's LEARN runs (AMPR-481, row N4).
+ *
+ * Sealed rather than an enum so the acting value — `WhenLesson(keepAbove)`, a W1 ticket —
+ * can carry its threshold without a breaking change. See [PhaseCadence] for the cost.
+ */
+@AmpereStableApi
+sealed interface LearnCadence {
+
+    /**
+     * Learn once, at `close()`, as hosted-run invariant 7 says. The default, and the only
+     * value under which the run asks nothing about lessons.
+     */
+    data object AtClose : LearnCadence
+
+    /**
+     * Ask [RunQuestions.lessonWorthKeeping] on the host seat after each executed cycle,
+     * record the answer, and change nothing.
+     *
+     * Asked over [RunDrift] beside the drift question when that is on too, in the same
+     * request; alone, over a drift whose `changes` are empty when the run observes no Field.
+     * `open` refuses this value on a host seat with no decision transport.
+     *
+     * Record-only, deliberately: LEARN still runs once, at `close()`, whatever came back,
+     * and [RunResult] is identical. Acting on the answer is the W1 ticket's.
+     */
+    data object Record : LearnCadence
 }
 
 /**
