@@ -19,6 +19,7 @@ import link.socket.ampere.agents.domain.event.BenchEvent
 import link.socket.ampere.agents.domain.event.CanonPerceivedEvent
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
+import link.socket.ampere.agents.domain.event.CommitmentEvent
 import link.socket.ampere.agents.domain.event.EmissionEvent
 import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.EventSource
@@ -243,6 +244,10 @@ class EventRenderer(
             // record of the run's own intent, not a decision.
             is GoalEvent.GoalFormed -> "🎯" to blue
             is GoalEvent.GoalUpdated -> "🏁" to blue
+            // An undertaking that is not a ticket (AMPR-475): someone now owes the work by a
+            // date, or no longer does. Blue: a record, not a decision.
+            is CommitmentEvent.Undertaken -> "🤝" to blue
+            is CommitmentEvent.Released -> "🔓" to blue
         }
     }
 

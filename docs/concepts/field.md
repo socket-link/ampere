@@ -15,9 +15,10 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/field/Commitment.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/commitment/CommitmentStore.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/commitment/CommitmentLedger.kt
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/CommitmentEvent.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/field/CommitmentStore.sq
 related: [SubjectRegistry, GoalBranch, MemoryProvenance, DomainCanon, EventSerialBus]
-last_verified: 2026-10-19
+last_verified: 2026-10-20
 ---
 
 # Field
@@ -53,6 +54,16 @@ meet it. A `TicketAssigned` on a ticket with a due date now forms `Commitment(co
 assignee, ticket, due)`; a `TicketStatusChanged` to Done, or a reassignment, resolves it. That
 history is what F32 (coordination state, Trust) will read; F32 is deferred to W5.
 
+A consumer's undertakings are not tickets (AMPR-475, F36). Nothing a consumer does assigns an
+Ampere ticket, and a hosted run's plan steps have no due date, so the ticket folds alone left a
+consumer's Commitment branch empty. What it does have is a work session the person planned: who
+undertook what, due when — a Commitment held by the Principal. It announces that with
+`CommitmentEvent.Undertaken` through its own door and ends it with `CommitmentEvent.Released`, and
+the same ledger folds both into the same table. Tickets still have no Commitment event: a ticket's
+commitment is the fold of the ticket's own events; an undertaking that is not a ticket is
+announced by its own event. `Commitment.ticketId` kept its name (it is a stored column) and now
+reads "a ticket id, or a consumer's work id".
+
 Actions and Lessons (AMPR-448, F20 and F21) are retypes, and the ruling on AMPR-328 question Q5
 (2026-10-11) is that **the retypes are fold-side: no event class carries them**. F20 said the tool
 events "are `ActionTaken` / `ActionFailed`" and F21 that Pulse's learnings become
@@ -70,12 +81,18 @@ concrete event classes".
 - `field/Action.kt` — `Action` with nullable `reversibility` / `cost` (`null` = unknown) and
   `result: ActionResult?` (`Succeeded` | `Failed(reason?)`), which only a `TAKEN` Action may have.
 - `field/Commitment.kt` — `Commitment` and `Commitment.Status { OPEN, RESOLVED }`. Data only, inside
-  the leaf; `ticketId` is a `String` because `TicketId` lives outside it.
+  the leaf; `ticketId` is a `String` because `TicketId` lives outside it, and holds a consumer's
+  work id for an undertaking.
+- `agents/domain/event/CommitmentEvent.kt` — `CommitmentEvent.Undertaken(committer, workId, due,
+  description, runId?)` and `Released(workId, reason, runId?)`, types `CommitmentUndertaken` /
+  `CommitmentReleased`. The committer travels as the Subject ref's `String` value.
 - `commitment/CommitmentStore.kt` — `CommitmentStore` and `SqlDelightCommitmentStore` over
   `CommitmentStore.sq` (`13.sqm`); a row's identity is its forming `TicketAssigned` event id.
-- `commitment/CommitmentLedger.kt` — the fold: `assigned(event, recordedAt, ticket)` and
-  `statusChanged(event, recordedAt)`. One per environment (`EnvironmentService.commitmentLedger`),
-  shared by `TicketOrchestrator` and every `TicketActionService` built off it.
+- `commitment/CommitmentLedger.kt` — the fold: `assigned(event, recordedAt, ticket)`,
+  `statusChanged(event, recordedAt)`, `undertaken(event, recordedAt)` and
+  `released(event, recordedAt)`. One per environment (`EnvironmentService.commitmentLedger`),
+  shared by `TicketOrchestrator` and every `TicketActionService` built off it; a consumer with no
+  environment builds its own with `CommitmentLedger.over(database)`.
 - `api/service/FieldService.kt` — the public read: `snapshot(viewer, beliefLimit)`, and
   `FieldService.over(database, knowledge, events)` (AMPR-474), the one place a reader is built.
 - `api/internal/DefaultFieldService.kt` — the read over `SubjectStore`, `RelationshipStore`,
@@ -103,6 +120,8 @@ concrete event classes".
   `DefaultFieldService`.
 - `jvmTest/.../api/FieldServiceTest.kt`, `jvmTest/.../observe/ObservationStoreTest.kt`,
   `jvmTest/.../commitment/CommitmentLedgerTest.kt`,
+  `jvmTest/.../commitment/CommitmentLedgerUndertakingTest.kt`,
+  `jvmTest/.../agents/domain/event/CommitmentEventSerializationTest.kt`,
   `commonTest/.../knowledge/KnowledgeBeliefTest.kt`.
 
 ## Invariants
@@ -167,11 +186,23 @@ concrete event classes".
   it changes `DefaultFieldService.aboutOf` only, never the mapper.
 - **Any store's failure is the snapshot's failure.** A Field with one branch silently missing reads
   as a world where that branch is empty.
-- **A Commitment is a fold of the ticket events, with no event of its own.** `TicketAssigned` on a
-  ticket with a due date forms one, held by the assignee; the same event resolves any other
-  holder's open one on the ticket (unassigning resolves them all). `TicketStatusChanged` to Done
-  resolves every open one. The row's `created_by_event` / `resolved_by_event` are those events,
-  stamped with their envelopes' `recorded_at`, and folding an event twice changes nothing.
+- **A ticket's Commitment is a fold of the ticket events, with no event of its own.**
+  `TicketAssigned` on a ticket with a due date forms one, held by the assignee; the same event
+  resolves any other holder's open one on the ticket (unassigning resolves them all).
+  `TicketStatusChanged` to Done resolves every open one. The row's `created_by_event` /
+  `resolved_by_event` are those events, stamped with their envelopes' `recorded_at`, and folding
+  an event twice changes nothing.
+- **An undertaking that is not a ticket is announced by its own event.** `CommitmentEvent.Undertaken`
+  forms the committer's commitment on the work id; the same event resolves any other holder's open
+  one on that work, and the committer's own at a different due date (a re-plan), and keeps the
+  committer's own at the same due date. `CommitmentEvent.Released` resolves every open one on the
+  work. An `Undertaken` already folded returns its row and resolves nothing, so re-folding an old
+  one cannot release a later re-plan. A work id shares the key with ticket ids, so a consumer's
+  must never be one.
+- **A commitment's forming event is published before its row exists.** Every fold takes the event
+  as published and the `recorded_at` the door returned, never bare values, and the event's id is
+  the row's identity. A consumer calls `undertaken` / `released` only after its own `publish`
+  succeeded, as `TicketActionService.assignTicket` calls `assigned`.
 - **Every publisher of those two events folds into the same ledger.** Today that is
   `TicketOrchestrator` (`assignTicket`, `transitionTicketStatus`, and `blockTicket` when it hands
   the ticket on) and `TicketActionService`, each right after the door records the event; a
@@ -216,6 +247,12 @@ concrete event classes".
 - **Add a ticket publisher** — take a `CommitmentLedger?`, wire it from
   `EnvironmentService.commitmentLedger`, and call `assigned` / `statusChanged` with the
   `StoredEvent.recordedAt` that `publish` returned.
+- **Announce an undertaking that is not a ticket** — build a `CommitmentEvent.Undertaken(committer
+  = SubjectRegistry.PRINCIPAL_REF.value, workId, due = session end, description, …)`, publish it
+  through the consumer's `AgentEventApi` (passing its `runId` when it has one), then
+  `CommitmentLedger.over(database).undertaken(event, recorded.recordedAt)`. A re-plan is another
+  `Undertaken` with the new due date; ending it is a `Released` folded the same way. It reads back
+  on `Field.commitments` with the ticket ones, soonest due first.
 
 ## Anti-patterns
 
@@ -230,9 +267,17 @@ concrete event classes".
   sensitivity and provenance all fit, but every perceived entity would surface in recall.
 - *Storing a computed ranking on `Field` "for convenience".* That is a signal stored, and F28 has
   not decided the arithmetic.
-- *Publishing a `CommitmentFormed` event, or forming a commitment from a bus subscriber.* The
-  ticket events already are the record; a second event is a second source of truth, and a
-  subscriber folds after the publisher has returned, so the caller cannot see the fold fail.
+- *Publishing a `CommitmentFormed` event for a ticket, or a `CommitmentEvent.Undertaken` beside a
+  `TicketAssigned`, or forming a commitment from a bus subscriber.* The ticket events already are
+  a ticket's record; a second event is a second source of truth, and a subscriber folds after the
+  publisher has returned, so the caller cannot see the fold fail. `CommitmentEvent` is for work
+  that has no ticket.
+- *A consumer-side commitments table beside the Field's.* It is the two-of-everything bug again:
+  two answers to "what does the person owe", and only one of them on the Field, in provenance, or
+  in what F32 will read. Announce the undertaking and let the ledger fold it.
+- *Folding an undertaking with the caller's own clock, or before `publish` returned.* The
+  provenance would name an instant the log does not hold, or an event the log may never hold if
+  the publish then fails.
 - *Building a `TicketActionService` without `commitmentLedger`.* It still publishes, so the event
   log looks right while no commitment forms. Every SDK and CLI site passes
   `environmentService.commitmentLedger`.
