@@ -43,10 +43,12 @@ import link.socket.ampere.domain.arc.GoalNode
 import link.socket.ampere.domain.arc.GoalTree
 import link.socket.ampere.field.Admission
 import link.socket.ampere.field.Field
+import link.socket.ampere.field.FieldDelta
 import link.socket.ampere.field.Ref
 import link.socket.ampere.field.Subject
 import link.socket.ampere.goal.GoalBranch
 import link.socket.ampere.llm.DispatchingUpstreamLlmClient
+import link.socket.ampere.llm.decide.Question
 import link.socket.ampere.plug.permission.UserGrants
 import link.socket.ampere.probe.ProbeSuite
 import link.socket.ampere.roster.RoleId
@@ -114,6 +116,13 @@ import link.socket.ampere.util.logWith
  * here. Nothing is persisted and no event is added; a snapshot that fails is logged and that
  * boundary behaves as [FieldScope.Off]. Without a service, or with the scope `Off`, the run
  * touches no store and is what it was, byte for byte.
+ *
+ * Under a `Record` value of [RunPolicy.cadence] (AMPR-481, rows N6 and N7) the same OBSERVE
+ * bracket asks the receptor's two questions — would a fresh perception read the world
+ * differently, and did this cycle produce a lesson worth keeping — in one request of their own
+ * over a [RunDrift]: the two snapshots folded ([FieldDelta.between]) and this cycle's results.
+ * Recorded and never read, like the goal question; the loop, [currentStatus] and LEARN are
+ * what they were.
  *
  * One run, one driver: the fields below are not synchronised, and two coroutines
  * driving the same run would interleave its phases.
@@ -267,6 +276,20 @@ internal class RosterHostedRun(
     /** The two snapshots, for a test that has to see them; the run itself reads neither. */
     internal val fieldSnapshots: Pair<Field?, Field?>
         get() = perceivedField to observedField
+
+    /**
+     * The outcomes of the steps the latest cycle executed — this cycle's alone, where [results]
+     * is every cycle's — for the receptor's `cycle_results` (AMPR-481). Replaced by each
+     * [runCycle]; empty before the first.
+     */
+    private var cycleResults: List<StepOutcome> = emptyList()
+
+    /**
+     * Whether the run has already said that drift could not be asked for lack of a snapshot
+     * (AMPR-481). Logged once per run, not once per cycle: the cause — a Field that could not
+     * be read — is the same every cycle, and the snapshot's own failure is already logged.
+     */
+    private var driftUnavailableLogged: Boolean = false
 
     override val plan: Plan
         get() = gatedPlan
@@ -819,6 +842,7 @@ internal class RosterHostedRun(
         }
 
         results += execution.stepOutcomes
+        cycleResults = execution.stepOutcomes
         lastPlanOutcome = execution.outcome
 
         execution.stepOutcomes.firstNotNullOfOrNull { it as? StepOutcome.Held }?.let { held ->
@@ -875,7 +899,16 @@ internal class RosterHostedRun(
      * A run that observes the Field (AMPR-480, row N1) enters the same bracket whether or not
      * anything is asked, and reads the world first — "entered and read the world" is a phase
      * even with no question in it, and one bracket, not two, when there is one. The snapshot is
-     * kept on [observedField] and read by nothing here.
+     * kept on [observedField], and the receptor is the one thing that reads it.
+     *
+     * The receptor's two questions (AMPR-481, rows N6 and N7) are asked last, in a request of
+     * their own over their own state — a [RunDrift] — so the goal question's request, state
+     * and digests are untouched: `perception_drift` under [PerceiveCadence.Record] and
+     * `lesson_worth_keeping` under [LearnCadence.Record], both on the host seat, keyed by
+     * their ids, and the two records of one cycle share one `stateDigest`. The drift question
+     * needs the two snapshots; when the run has only one or none — a snapshot failed — it is
+     * left out, the lesson question goes alone over an empty `changes`, and the run logs once.
+     * [recordOnly] drops the answers as it drops the goal question's.
      */
     private suspend fun assess() {
         if (cancellation != null || !coroutineContext.isActive) return
@@ -885,38 +918,103 @@ internal class RosterHostedRun(
             ?.let { seats[it] }
             ?.takeIf { it.descriptor.questions.isNotEmpty() }
         val observes = observesField
-        if (!asksGoal && verifier == null && !observes) return
+        val asksReceptor = policy.cadence.perceive == PerceiveCadence.Record ||
+            policy.cadence.learn == LearnCadence.Record
+        if (!asksGoal && verifier == null && !observes && !asksReceptor) return
 
         host.phases.withPhase(CognitivePhase.OBSERVE, runId) {
             if (observes) observedField = snapshotField("observe")
-            if (!asksGoal && verifier == null) return@withPhase
+            if (asksGoal || verifier != null) {
+                val state = RunObservation(
+                    runId = runId,
+                    goal = goal,
+                    cycle = cyclesUsed,
+                    priorResults = results.toList(),
+                ).asDecisionState(policy.judgmentResultClip)
+                aboutToShow(results)
 
-            val state = RunObservation(
-                runId = runId,
-                goal = goal,
-                cycle = cyclesUsed,
-                priorResults = results.toList(),
-            ).asDecisionState(policy.judgmentResultClip)
-            aboutToShow(results)
-
-            if (asksGoal) {
-                recordOnly(host) {
-                    host.agent.reasoningUnit.decide(
-                        state = state,
-                        questions = mapOf(RunQuestions.GOAL_MET_ID to RunQuestions.goalMet),
-                        phase = CognitivePhase.OBSERVE,
-                    )
+                if (asksGoal) {
+                    recordOnly(host) {
+                        host.agent.reasoningUnit.decide(
+                            state = state,
+                            questions = mapOf(RunQuestions.GOAL_MET_ID to RunQuestions.goalMet),
+                            phase = CognitivePhase.OBSERVE,
+                        )
+                    }
+                }
+                verifier?.let { seat ->
+                    recordOnly(seat) {
+                        seat.agent.reasoningUnit.decide(
+                            state = state,
+                            questions = seat.descriptor.questions,
+                            phase = CognitivePhase.OBSERVE,
+                        )
+                    }
                 }
             }
-            verifier?.let { seat ->
-                recordOnly(seat) {
-                    seat.agent.reasoningUnit.decide(
-                        state = state,
-                        questions = seat.descriptor.questions,
-                        phase = CognitivePhase.OBSERVE,
-                    )
+            if (asksReceptor) askReceptor()
+        }
+    }
+
+    /**
+     * The receptor's request (AMPR-481): one `decide` on the host seat over [RunDrift], carrying
+     * whichever of the two questions the cadence puts on `Record`, inside the OBSERVE bracket
+     * [assess] opened. Nothing reads what comes back.
+     *
+     * Called after the goal question so the order of a cycle's records is the goal's, then the
+     * receptor's; the two are separate requests over separate states either way.
+     */
+    private suspend fun askReceptor() {
+        val before = perceivedField
+        val after = observedField
+        val delta = if (before != null && after != null) {
+            val ownActors = seats.values.mapTo(mutableSetOf()) { Ref<Subject>(it.id) }
+            FieldDelta.between(before, after, ownActors = ownActors)
+        } else {
+            null
+        }
+
+        val questions = buildMap<String, Question> {
+            if (policy.cadence.perceive == PerceiveCadence.Record) {
+                if (delta != null) {
+                    put(RunQuestions.PERCEPTION_DRIFT_ID, RunQuestions.perceptionDrift)
+                } else if (!driftUnavailableLogged) {
+                    driftUnavailableLogged = true
+                    logWith("RosterHostedRun").w {
+                        "Run $runId has no Field snapshot to fold, so perception_drift is not asked; " +
+                            "the Field could not be read at PERCEIVE or after a cycle"
+                    }
                 }
             }
+            if (policy.cadence.learn == LearnCadence.Record) {
+                put(RunQuestions.LESSON_WORTH_KEEPING_ID, RunQuestions.lessonWorthKeeping)
+            }
+        }
+        if (questions.isEmpty()) return
+
+        // The later snapshot's names, over the earlier one's for anything it no longer holds.
+        val names = buildMap {
+            listOfNotNull(before, after).forEach { field ->
+                field.subjects.forEach { put(it.id.value, it.name) }
+                field.goals.forEach { put(it.goal.id.value, it.goal.description) }
+            }
+        }
+        val drift = RunDrift(
+            runId = runId,
+            goal = goal,
+            cycle = cyclesUsed,
+            perceived = ideas.firstOrNull()?.description.orEmpty(),
+            delta = delta ?: noDrift(),
+            cycleResults = cycleResults,
+            names = names,
+        )
+        aboutToShow(cycleResults)
+        recordOnly(host) {
+            host.agent.reasoningUnit.decide(
+                state = drift.asDecisionState(policy.judgmentResultClip),
+                questions = questions,
+                phase = CognitivePhase.OBSERVE,
+            )
         }
     }
 

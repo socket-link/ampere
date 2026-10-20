@@ -11,18 +11,20 @@ import link.socket.ampere.api.AmpereStableApi
 import link.socket.ampere.llm.decide.Question
 
 /**
- * What a hosted run asks about itself (AMPR-421).
+ * What a hosted run asks about itself (AMPR-421, AMPR-481).
  *
- * One question, and the id its records are filed under. The run asks it on the host
- * seat after each executed cycle when [RunPolicy.goalCheck] is [GoalCheck.Record], and
- * the answer is recorded and never read: nothing in the loop, in
+ * Three questions, and the ids their records are filed under. The run asks [goalMet] on
+ * the host seat after each executed cycle when [RunPolicy.goalCheck] is
+ * [GoalCheck.Record], and the receptor's two — [perceptionDrift], [lessonWorthKeeping] —
+ * in a request of their own, over [RunDrift], under a `Record` value of
+ * [RunPolicy.cadence]. Every answer is recorded and never read: nothing in the loop, in
  * [RunResult.status][RunResult] or in LEARN consults it. That is deliberate — whether
- * a model can answer this well enough for the run to *act* on it is what AMPR-422
- * measures, and the records left here are what it measures against.
+ * a model can answer these well enough for the run to *act* on them is what AMPR-422 and
+ * the receptor bench measure, and the records left here are what they measure against.
  *
  * A consumer asking its own questions declares them on the verifier seat
- * ([HostedAgent.questions]) rather than adding to this object: this one is the run's,
- * phrased about the state the run renders, and its id is reserved.
+ * ([HostedAgent.questions]) rather than adding to this object: these are the run's,
+ * phrased about the states the run renders, and their ids are reserved.
  */
 @AmpereStableApi
 object RunQuestions {
@@ -52,6 +54,66 @@ object RunQuestions {
         whenTrue = "Every part of the goal is done, and the step results show it",
         whenFalse = "Some part of the goal is not done, was done to the wrong thing, " +
             "or the results do not show it was done",
+    )
+
+    /**
+     * The question id [perceptionDrift] is asked under (AMPR-481, row N3), and the
+     * `questionId` a reader filters the run's drift records by. Reserved as [GOAL_MET_ID] is.
+     */
+    const val PERCEPTION_DRIFT_ID: String = "perception_drift"
+
+    /**
+     * The question id [lessonWorthKeeping] is asked under (AMPR-481, row N3), and the
+     * `questionId` a reader filters the run's lesson records by. Reserved as [GOAL_MET_ID] is.
+     */
+    const val LESSON_WORTH_KEEPING_ID: String = "lesson_worth_keeping"
+
+    /**
+     * "Would a fresh perception read the situation differently?", as a [Question.Noul]
+     * (AMPR-481, row N3).
+     *
+     * Asked about the state [RunDrift.asDecisionState] renders — the goal, the cycle, what
+     * the host last perceived, and under `changes` what moved in the Field since
+     * (AMPR-479) — on the host seat after each executed cycle when
+     * [RunPolicy.cadence]`.perceive` is [PerceiveCadence.Record]. The two answer
+     * descriptions are about the *changes* rather than about the world, so a model is told
+     * which kinds of change count and which — this run's own recorded work, bookkeeping,
+     * detail the earlier perception already covered — do not.
+     *
+     * Nothing reads the answer. PERCEIVE does not re-run on a `true`; acting on it is the
+     * W1 ticket's, once the bench has measured whether a model answers well enough.
+     */
+    val perceptionDrift: Question.Noul = Question.Noul.of(
+        instructions = "Since the agent last perceived the world, the changes under `changes` happened. " +
+            "Given what it perceived and its goal, would a fresh perception reach a different " +
+            "reading of the situation?",
+        whenTrue = "A change bears on the goal: something the plan depends on moved, a goal or " +
+            "commitment changed state, a lesson, belief or observation about the goal's subject " +
+            "appeared, or another subject acted on it.",
+        whenFalse = "Every change is beside the goal: about other subjects, this run's own recorded " +
+            "work, bookkeeping, or detail the earlier perception already accounted for.",
+    )
+
+    /**
+     * "Do this cycle's results hold something a later run should be told?", as a
+     * [Question.Noul] (AMPR-481, row N3).
+     *
+     * Asked about the same state as [perceptionDrift], in the same request, whose
+     * `cycle_results` are the steps the cycle just executed — on the host seat after each
+     * executed cycle when [RunPolicy.cadence]`.learn` is [LearnCadence.Record]. The `true`
+     * branch names the four things worth keeping so a model does not read every success as
+     * a lesson.
+     *
+     * Nothing reads the answer. LEARN still runs once, at `close()`; acting on it is the W1
+     * ticket's.
+     */
+    val lessonWorthKeeping: Question.Noul = Question.Noul.of(
+        instructions = "Do this cycle's results under `cycle_results` hold something a later run of a " +
+            "similar goal should be told?",
+        whenTrue = "A result reveals a reusable fact, a way that worked, a way that failed, or a " +
+            "constraint that was not known before.",
+        whenFalse = "The results are routine: expected outcomes, nothing that would change how a " +
+            "similar goal is approached.",
     )
 }
 
@@ -109,6 +171,10 @@ fun RunObservation.asDecisionState(clip: Int): String {
 /**
  * The one word a decision model reads a step's outcome as.
  *
+ * `internal`, with [originWord] and [reportedText], because [RunDrift.asDecisionState]
+ * renders a cycle's results by the same three words (AMPR-481): two vocabularies for one
+ * outcome would be two things to keep in step.
+ *
  * One word per outcome, including the one the ticket's three did not name:
  * a [StepOutcome.Skipped] step is not a failed step, and calling it one would have the
  * model judge a run against work it was never asked to do (the walk skips what came
@@ -116,7 +182,7 @@ fun RunObservation.asDecisionState(clip: Int): String {
  * [StepOutcome.Held] step is its own word for the same reason (AMPR-425), although the
  * run itself never asks about a held cycle.
  */
-private fun StepOutcome.statusWord(): String = when (this) {
+internal fun StepOutcome.statusWord(): String = when (this) {
     is StepOutcome.Success -> "succeeded"
     is StepOutcome.PartialSuccess -> "partial"
     is StepOutcome.Failure -> "failed"
@@ -129,13 +195,13 @@ private fun StepOutcome.statusWord(): String = when (this) {
  * (AMPR-453). The decision model reads the result next to it, so it is told whether that
  * result is the run's own or outside text before it reads it.
  */
-private fun StepOutcome.originWord(): String = when (origin) {
+internal fun StepOutcome.originWord(): String = when (origin) {
     ContentOrigin.Own -> "own"
     ContentOrigin.External -> "external"
 }
 
 /** What this step says about itself: its details, its error, what it waits on, or why it was skipped. */
-private fun StepOutcome.reportedText(): String = when (this) {
+internal fun StepOutcome.reportedText(): String = when (this) {
     is StepOutcome.Success -> details
     is StepOutcome.PartialSuccess -> details
     is StepOutcome.Failure -> error
