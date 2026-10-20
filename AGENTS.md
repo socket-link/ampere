@@ -401,8 +401,8 @@ gates:
 | `ampere-work-linear` | `:ampere-work-linear:jvmTest` | |
 | `ampere-core` on iOS | `:ampere-core:iosSimulatorArm64Test` | CI's macOS job; also builds the Swift bridge |
 
-- Narrow with `--tests "*ClassName*"`. A filter that matches nothing fails the task with
-  "No tests found for given includes", so check the class name before blaming the build.
+- Narrow with `--tests "*ClassName*"`. The pattern matches class names, so before you trust a
+  green, check that the output shows your tests actually ran.
 - Prefer `:<module>:jvmTest` over `testDebugUnitTest` locally: the Android variant compiles the
   module again for the same `commonTest` sources.
 - `commonTest` is also compiled for Kotlin/Native, where a backticked test name may not contain a
