@@ -19,7 +19,7 @@ link.socket:ampere-phosphor:<version>
 
 Depends on:
 - `:ampere-core` (cognitive event types)
-- `link.socket:phosphor-core` and `link.socket:phosphor-lumos` 0.9.0
+- `link.socket:phosphor-core` and `link.socket:phosphor-lumos` 0.10.0
   (atmosphere, glyph, look switch, runtime types)
 
 ## Canonical PROPEL mapping
@@ -62,7 +62,7 @@ renderer's `VoxelFrameBuilder`.
 
 ## Driving the orb's body
 
-The atmosphere is the orb's skin. Phosphor 0.9.0's `CognitiveLookSwitch`
+The atmosphere is the orb's skin. Phosphor's `CognitiveLookSwitch`
 drives its body: with `VoxelFrameBuilder.lookSwitch` set, the builder reads a
 scene agent's `cognitivePhase`, `state` and `escalated` from each snapshot and
 blends the orb into a look from a table.
