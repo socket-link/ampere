@@ -47,7 +47,7 @@ class CommandExecutor(
         }
 
         val parts = trimmed.split(" ", limit = 2)
-        val command = parts[0].lowercase()
+        val command = commandName(trimmed)
         val arg = parts.getOrNull(1)
 
         return when (command) {
@@ -59,9 +59,22 @@ class CommandExecutor(
             "ticket" -> executeTicket(arg)
             "thread" -> executeThread(arg)
             "stack", "sparks", "spark", "cognitive" -> executeSparks(arg)
-            "quit", "q", "exit" -> CommandResult.Quit
+            in QUIT_COMMANDS -> CommandResult.Quit
             else -> CommandResult.Error("Unknown command: $command\nType :help for available commands")
         }
+    }
+
+    /**
+     * What the dashboard shows while [commandInput] runs (AMPR-468). Every command can be
+     * cancelled, so every message names ESC.
+     */
+    fun describePending(commandInput: String): CommandResult.Pending {
+        val trimmed = commandInput.trim()
+        val message = when (commandName(trimmed)) {
+            "ask" -> "Asking the on-device model…"
+            else -> "Running :$trimmed…"
+        }
+        return CommandResult.Pending("$message [ESC] cancel")
     }
 
     private fun executeHelp(): CommandResult {
@@ -481,5 +494,17 @@ class CommandExecutor(
             elapsed < 86400_000 -> "${elapsed / 3600_000}h ago"
             else -> "${elapsed / 86400_000}d ago"
         }
+    }
+
+    companion object {
+        private val QUIT_COMMANDS = setOf("quit", "q", "exit")
+
+        private fun commandName(trimmed: String): String = trimmed.substringBefore(' ').lowercase()
+
+        /**
+         * Whether [commandInput] ends the dashboard. The dashboard answers these itself, so `:quit`
+         * still exits while another command is running (AMPR-468).
+         */
+        fun isQuit(commandInput: String): Boolean = commandName(commandInput.trim()) in QUIT_COMMANDS
     }
 }

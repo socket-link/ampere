@@ -38,10 +38,12 @@ import link.socket.ampere.cli.layout.RichEventPane
 import link.socket.ampere.cli.layout.StatusBar
 import link.socket.ampere.cli.layout.TaskChecklistPane
 import link.socket.ampere.cli.hybrid.HybridDashboardRenderer
+import link.socket.ampere.cli.launch.DashboardCommands
 import link.socket.ampere.cli.launch.DashboardExit
 import link.socket.ampere.cli.launch.HeadlessReason
 import link.socket.ampere.cli.launch.TuiDecision
 import link.socket.ampere.cli.launch.decideTuiUsage
+import link.socket.ampere.cli.launch.intercept
 import link.socket.ampere.cli.launch.requestedExit
 import link.socket.ampere.cli.launch.runDashboardLoops
 import link.socket.ampere.cli.launch.userMessage
@@ -276,7 +278,6 @@ class AmpereCommand(
         var viewConfig = DemoInputHandler.DemoViewConfig()
         var memoryState = AgentMemoryPane.AgentMemoryState()
         var systemStatus = if (hasActiveWork) StatusBar.SystemStatus.WORKING else StatusBar.SystemStatus.IDLE
-        var lastCommandResult: CommandResult? = null
 
         // Create command executor with callback when goal is activated
         val commandExecutor = CommandExecutor(
@@ -288,6 +289,14 @@ class AmpereCommand(
                 systemStatus = StatusBar.SystemStatus.WORKING
             },
             onDevice = onDevice,
+        )
+        // Commands run on the agents' scope, off the input loop, so the dashboard keeps reading
+        // keys while one waits and ESC can cancel it (AMPR-468). The cleanup below cancels and
+        // settles that scope, which ends a command still running at exit.
+        val commands = DashboardCommands(
+            scope = agentScope,
+            execute = commandExecutor::execute,
+            describePending = commandExecutor::describePending,
         )
 
         try {
@@ -405,10 +414,7 @@ class AmpereCommand(
                 exit = exit,
                 readKey = inputHandler::readKey,
                 onKey = onKey@{ key ->
-                    if (lastCommandResult != null) {
-                        lastCommandResult = null
-                        return@onKey null
-                    }
+                    if (commands.intercept(key, viewConfig)) return@onKey null
                     when (val result = inputHandler.processKey(key, viewConfig)) {
                         is DemoInputHandler.KeyResult.ConfigChange -> {
                             val wasVerbose = viewConfig.verboseMode
@@ -425,10 +431,7 @@ class AmpereCommand(
                         }
                         is DemoInputHandler.KeyResult.ExecuteCommand -> {
                             viewConfig = result.newConfig
-                            val cmdResult = commandExecutor.execute(result.command)
-                            cmdResult.requestedExit().also { requested ->
-                                if (requested == null) lastCommandResult = cmdResult
-                            }
+                            commands.submit(result.command)
                         }
                         is DemoInputHandler.KeyResult.EscalationResponse -> {
                             viewConfig = result.newConfig
@@ -438,8 +441,9 @@ class AmpereCommand(
                     }
                 },
                 renderFrame = {
-                    val output = if (lastCommandResult != null) {
-                        renderCommandResult(lastCommandResult!!, terminal)
+                    val screen = commands.screen
+                    val output = if (screen != null) {
+                        renderCommandResult(screen, terminal, viewConfig.inputHint)
                     } else if (viewConfig.showHelp) {
                         helpRenderer.render()
                     } else {
@@ -578,7 +582,8 @@ class AmpereCommand(
         System.out.flush()
     }
 
-    private fun renderCommandResult(result: CommandResult, terminal: Terminal): String {
+    /** A command's screen; [inputHint] is a command line typed over a waiting one. */
+    private fun renderCommandResult(result: CommandResult, terminal: Terminal, inputHint: String?): String {
         return buildString {
             append("\u001B[2J")
             append("\u001B[H")
@@ -593,6 +598,20 @@ class AmpereCommand(
                     append(terminal.render(bold(TextColors.red("Command Error"))))
                     append("\n\n")
                     append(result.message)
+                }
+                is CommandResult.Pending -> {
+                    append(terminal.render(bold(TextColors.cyan("Command Running"))))
+                    append("\n\n")
+                    append(result.message)
+                    result.notice?.let { notice ->
+                        append("\n\n")
+                        append(terminal.render(TextColors.yellow(notice)))
+                    }
+                    inputHint?.let { hint ->
+                        append("\n\n")
+                        append(hint)
+                    }
+                    return@buildString
                 }
                 is CommandResult.Quit -> {
                     append("Exiting...")

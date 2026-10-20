@@ -119,7 +119,7 @@ In headless mode `ampere` exits after synchronous one-shot work (`--issue N`, `-
 
 **Command mode (press `:`):**
 - `:goal <description>` - Start agent with goal
-- `:ask <question>` - Ask the on-device model (macOS); the question stays on this machine
+- `:ask <question>` - Ask the on-device model (macOS); the question stays on this machine. `ESC` cancels an ask that is still waiting
 - `:help` - Show available commands
 - `:agents` - List all active agents
 - `:ticket <id>` - Show ticket details
