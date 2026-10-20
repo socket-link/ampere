@@ -51,9 +51,10 @@ import link.socket.ampere.memory.RecallSource
  *   PERCEIVE is shown (AMPR-480, rows N1 and N10). See [ObservePolicy]; the default reads
  *   nothing and renders nothing.
  * @property cadence When PERCEIVE, RECALL and LEARN run again inside a run (AMPR-481, row N4
- *   of the continuous-PROPEL epic). See [PhaseCadence]; the default is the run as it was —
- *   each once — and the only values shipped so far ask the receptor's two questions and
- *   move nothing.
+ *   of the continuous-PROPEL epic; AMPR-483, rows N3–N5). See [PhaseCadence]; the default is
+ *   the run as it was — each once. `Record` values ask the receptor's two questions and move
+ *   nothing; [PerceiveCadence.WhenDrifted] and [PerceiveCadence.EveryCycle] re-enter the next
+ *   cycle at PERCEIVE, and [RecallCadence.WithPerceive] re-runs RECALL beside it.
  */
 @AmpereStableApi
 data class RunPolicy(
@@ -123,16 +124,18 @@ enum class GoalCheck {
 
 /**
  * When the three phases a hosted run charges or closes with run again inside the run
- * (AMPR-481, epic AMPR-478 row N4).
+ * (AMPR-481, epic AMPR-478 row N4; AMPR-483, rows N3–N5).
  *
  * A hosted run perceives once at `open`, recalls once beside it, and learns once at
  * `close()` (hosted-run invariant 7). The continuous loop re-runs PERCEIVE when the world
  * has drifted and LEARN when a cycle produced a lesson worth keeping — and whether either
  * has happened is a judgment, asked of the host seat's decision transport after each
- * executed cycle. This value says what the run does with that judgment. The values shipped
- * here **record and never act**: the acting values (`WhenDrifted(moveAbove)`,
- * `WhenLesson(keepAbove)`, `EveryCycle`) are the W1 tickets', and the interfaces are sealed
- * rather than enums so they arrive without a breaking change.
+ * executed cycle. This value says what the run does with that judgment. The `Record` values
+ * **record and never act**; [PerceiveCadence.WhenDrifted] acts on the drift judgment in the
+ * add-only direction — the next cycle re-enters at PERCEIVE rather than at OBSERVE — and
+ * [PerceiveCadence.EveryCycle] re-enters there without asking. The acting value for LEARN
+ * (`WhenLesson(keepAbove)`) is a later W1 ticket's, and the interfaces are sealed rather than
+ * enums so each arrives without a breaking change.
  *
  * ## What it costs
  *
@@ -145,11 +148,20 @@ enum class GoalCheck {
  *   one request over one state ([RunDrift.asDecisionState]). Either alone is the same one
  *   call carrying one question. It is a request of its own: [GoalCheck.Record]'s question
  *   keeps its own request and its own state, so its records are what they were.
- * - [RecallCadence.WithPerceive] costs nothing until PERCEIVE can re-run (W1).
+ * - [PerceiveCadence.WhenDrifted] is the same **one decision call per executed cycle** — the
+ *   receptor's, carrying the lesson question too when [LearnCadence.Record] is on — plus
+ *   **one PERCEIVE model call** on the host seat for every cycle whose verdict was
+ *   `Violated` or `Undetermined`, and nothing more on a `Holds`.
+ * - [PerceiveCadence.EveryCycle] is **one PERCEIVE model call per executed cycle** with no
+ *   judge and no decision call.
+ * - [RecallCadence.WithPerceive] is one more RECALL — store reads and corpus queries, no model
+ *   call — beside every PERCEIVE that re-runs. Under [PerceiveCadence.OncePerRun] and
+ *   [PerceiveCadence.Record] it costs nothing, because PERCEIVE never re-runs.
  *
- * Neither is a generative call, so neither shows up in the run's prompts or in its
- * `ProviderCall*` pairs. A cycle that did not execute — stopped at the gate, planned into
- * nothing, held, cancelled — asks nothing.
+ * A decision call is not a generative call, so it shows up in neither the run's prompts nor
+ * its `ProviderCall*` pairs; a re-run PERCEIVE is a generative call and shows up in both. A
+ * cycle that did not execute — stopped at the gate, planned into nothing, held, cancelled —
+ * asks nothing and re-enters nowhere.
  *
  * @property perceive When PERCEIVE runs again. See [PerceiveCadence].
  * @property recall When RECALL runs again. See [RecallCadence].
@@ -163,10 +175,15 @@ data class PhaseCadence(
 )
 
 /**
- * When a hosted run's PERCEIVE runs again (AMPR-481, row N4).
+ * When a hosted run's PERCEIVE runs again (AMPR-481, row N4; AMPR-483, rows N3 and N5).
  *
- * Sealed rather than an enum so the acting value — `WhenDrifted(moveAbove)`, a W1 ticket —
- * can carry its threshold without a breaking change. See [PhaseCadence] for the cost.
+ * Sealed rather than an enum so the acting value — [WhenDrifted] — carries its threshold
+ * without a breaking change. See [PhaseCadence] for the cost.
+ *
+ * Phase order is fixed (propel-loop invariant): a cadence chooses *where the next cycle
+ * starts* — at PERCEIVE, or at OBSERVE as before — and never reorders or repeats a phase
+ * inside a cycle. A cycle that re-enters at PERCEIVE runs PERCEIVE, then RECALL when
+ * [RecallCadence.WithPerceive] says so, then OBSERVE → PLAN → EXECUTE as every cycle does.
  */
 @AmpereStableApi
 sealed interface PerceiveCadence {
@@ -189,14 +206,70 @@ sealed interface PerceiveCadence {
      * the run logs once that drift could not be asked.
      *
      * Record-only, deliberately: PERCEIVE does not re-run on a `true`, the plan is not
-     * revisited on a `false`, and [RunResult] is identical whatever came back. Acting on the
-     * answer is the W1 ticket's; the records here are what the bench measures first.
+     * revisited on a `false`, and [RunResult] is identical whatever came back. The records
+     * here are what the bench measures; [WhenDrifted] is the value that acts.
      */
     data object Record : PerceiveCadence
+
+    /**
+     * Re-enter the next cycle at PERCEIVE when the world has drifted since the last one
+     * (AMPR-483, rows N3 and N5; the add-only direction of AMPR-381 J6).
+     *
+     * After each executed cycle the run's drift receptor — a `Probe<RunDrift>` whose verdict
+     * is on the record as a `ProbeEvent.VerdictReached` beside the `JudgmentRecorded` the
+     * decision call leaves — asks [RunQuestions.perceptionDrift] over the same [RunDrift]
+     * [Record] asks over, and reads the measured probability of `true`:
+     *
+     * - at or above [moveAbove] the verdict is `Violated`, and the next cycle re-enters at
+     *   PERCEIVE: one PERCEIVE model call on the host seat, shown the world as it is now, and
+     *   a RECALL beside it under [RecallCadence.WithPerceive]. The rendered delta reaches that
+     *   cycle's PLAN as the "Observed since the last cycle" block;
+     * - below it the verdict is `Holds`, and the next cycle re-enters at OBSERVE exactly as
+     *   under [OncePerRun] — event for event;
+     * - a verdict the receptor could not reach — the transport threw, or answered with no
+     *   measured distribution — is `Undetermined`, and the next cycle re-enters at PERCEIVE
+     *   too: an unchecked cell is not trusted (convict-but-not-acquit). A delta with nothing
+     *   in it is `Holds` with no call, and one whose only entries are `PROTECTED` rows is
+     *   `Violated` with no call, since what moved cannot be shown to the judge.
+     *
+     * Add-only: no verdict ends the run, re-plans past the planner's empty answer, or touches
+     * `RunResult.status`. A run whose quota has tripped does not re-perceive, and a run that
+     * held, stopped, was declined or was cancelled never re-enters at all. `open` refuses this
+     * value exactly where it refuses [Record]: a host seat with no decision transport, a policy
+     * with [FieldScope.Off], a host with no `FieldService`.
+     *
+     * @property moveAbove The probability of `true` at or above which a cycle's drift counts.
+     *   Strictly between 0 and 1, and **Ampere ships no default**: the number separating
+     *   `Violated` from `Holds` is the consumer's (AMPR-422, Q5). AMPR-482's report — the
+     *   receptor measured on the drift corpus — is where a starting value comes from; it is
+     *   a starting value, not a constant of Ampere's.
+     */
+    data class WhenDrifted(val moveAbove: Double) : PerceiveCadence {
+
+        init {
+            require(moveAbove > 0.0 && moveAbove < 1.0) {
+                "moveAbove is a probability strictly between 0 and 1; got $moveAbove"
+            }
+        }
+    }
+
+    /**
+     * Re-enter every later cycle at PERCEIVE, with no judge (AMPR-483, row N5).
+     *
+     * One PERCEIVE model call per executed cycle on the host seat, shown the world as it is
+     * now, and a RECALL beside it under [RecallCadence.WithPerceive]; no decision call, no
+     * verdict, no record beyond the phase's own. When the run observes the Field, the delta
+     * since the last PERCEIVE reaches the cycle's PLAN as the "Observed since the last
+     * cycle" block. Needs no transport and no Field: `open` refuses nothing for it.
+     *
+     * Add-only, like [WhenDrifted]: a run whose quota has tripped does not re-perceive, and a
+     * run that held, stopped, was declined or was cancelled never re-enters.
+     */
+    data object EveryCycle : PerceiveCadence
 }
 
 /**
- * When a hosted run's RECALL runs again (AMPR-481, row N4).
+ * When a hosted run's RECALL runs again (AMPR-481, row N4; AMPR-483, row N4).
  *
  * An enum, because RECALL has no threshold of its own: it follows PERCEIVE or it does not.
  */
@@ -209,9 +282,12 @@ enum class RecallCadence {
     /**
      * Recall again whenever PERCEIVE runs again.
      *
-     * No effect until PERCEIVE can re-run inside a run (the W1 ticket): under every
-     * [PerceiveCadence] shipped so far PERCEIVE runs once, so RECALL does too. Declared now
-     * so a consumer's policy reads the same before and after that ticket.
+     * Effective under [PerceiveCadence.WhenDrifted] and [PerceiveCadence.EveryCycle], where a
+     * cycle can re-enter at PERCEIVE: RECALL then runs again inside that cycle, before OBSERVE,
+     * with the same query and scopes as at `open` (store reads and corpus queries, no model
+     * call), and leaves one more `KnowledgeRecalled` on the record. Under every other
+     * [PerceiveCadence] PERCEIVE runs once, so RECALL does too, and this value changes
+     * nothing.
      */
     WithPerceive,
 }

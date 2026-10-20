@@ -286,11 +286,14 @@ internal class RosterRunHost(
      * run, not one per seat, so a question declared on a seat nobody asks is the same
      * kind of unused declaration.
      *
-     * The receptor's cadences are refused on the same ground (AMPR-481, row N7): a `Record`
-     * value of [PhaseCadence] asks on the host seat, so it needs that seat's transport; and
-     * [PerceiveCadence.Record] asks what moved in the Field, so it needs a Field to have
+     * The receptor's cadences are refused on the same ground (AMPR-481, row N7; AMPR-483):
+     * a `Record` value of [PhaseCadence] and [PerceiveCadence.WhenDrifted] ask on the host
+     * seat, so they need that seat's transport; and [PerceiveCadence.Record] and
+     * [PerceiveCadence.WhenDrifted] ask what moved in the Field, so they need a Field to have
      * moved — a [FieldScope.Off] policy or a host built with no `FieldService` would leave
-     * the drift question unasked every cycle, silently, for the same reason.
+     * the drift question unasked every cycle, silently, for the same reason, and under
+     * `WhenDrifted` would re-perceive every cycle as unchecked. [PerceiveCadence.EveryCycle]
+     * asks nothing and needs nothing.
      *
      * The last is a blank caller-supplied run id (AMPR-385 row H27). The id is the only
      * thing that joins the run's events, its task lifecycle and its outcome, and a blank
@@ -329,11 +332,16 @@ internal class RosterRunHost(
                     "decision transport is opted into, never inherited"
             }
         }
-        val asksDrift = policy.cadence.perceive == PerceiveCadence.Record
+        val perceiveCadence = policy.cadence.perceive
+        val driftCadence = when (perceiveCadence) {
+            PerceiveCadence.Record -> "PerceiveCadence.Record"
+            is PerceiveCadence.WhenDrifted -> "PerceiveCadence.WhenDrifted"
+            PerceiveCadence.OncePerRun, PerceiveCadence.EveryCycle -> null
+        }
         val asksLesson = policy.cadence.learn == LearnCadence.Record
-        if (asksDrift || asksLesson) {
+        if (driftCadence != null || asksLesson) {
             val asked = listOfNotNull(
-                "PerceiveCadence.Record".takeIf { asksDrift },
+                driftCadence,
                 "LearnCadence.Record".takeIf { asksLesson },
             ).joinToString(" and ")
             require(seats.getValue(roster.host).upstreamDecisionClient != null) {
@@ -342,15 +350,15 @@ internal class RosterRunHost(
                     "opted into, never inherited"
             }
         }
-        if (asksDrift) {
+        if (driftCadence != null) {
             require(policy.observe.field != FieldScope.Off) {
-                "PerceiveCadence.Record asks whether the world drifted since PERCEIVE, and " +
+                "$driftCadence asks whether the world drifted since PERCEIVE, and " +
                     "ObservePolicy.field is FieldScope.Off; a drift question needs a world to " +
                     "have drifted, so observe the Field (FieldScope.Goal or Full) or keep the " +
                     "cadence at OncePerRun"
             }
             require(field != null) {
-                "PerceiveCadence.Record asks whether the world drifted since PERCEIVE, and " +
+                "$driftCadence asks whether the world drifted since PERCEIVE, and " +
                     "this host has no FieldService to read it from; a drift question needs a " +
                     "world to have drifted, so build the host with a Field (rosterRunHost(field = …)) " +
                     "or keep the cadence at OncePerRun"
