@@ -1,5 +1,6 @@
 package link.socket.ampere.cli.watch.presentation
 
+import link.socket.ampere.agents.domain.event.AdmissionRecord
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.ArcRunEvent
 import link.socket.ampere.agents.domain.event.AssetAccessEvent
@@ -186,6 +187,14 @@ object EventCategorizer {
         // A hosted run cut its plan to fit its step cap (AMPR-452): the run will do less
         // than its planner asked for, which whoever quoted for it should see.
         is PlanEvent.PlanTruncated -> EventSignificance.SIGNIFICANT
+
+        // A step's admission (AMPR-472): a clean pass is routine; a step that ran against
+        // resistance, or that a rule stopped, is a decision worth seeing.
+        is PlanEvent.StepAdmitted -> when (event.admission) {
+            AdmissionRecord.Pass -> EventSignificance.ROUTINE
+            is AdmissionRecord.Resist,
+            is AdmissionRecord.Trip -> EventSignificance.SIGNIFICANT
+        }
 
         // A rung floor with no satisfying model is a terminal routing failure:
         // the call cannot proceed, so it warrants immediate human awareness.

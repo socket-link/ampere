@@ -1,11 +1,20 @@
 package link.socket.ampere.propel
 
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.withContext
 import link.socket.ampere.agents.definition.SparkBasedAgent
+import link.socket.ampere.agents.domain.event.AdmissionRecord
+import link.socket.ampere.agents.domain.event.EventSource
+import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.outcome.ContentOrigin
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.StepOutcome
+import link.socket.ampere.agents.domain.outcome.TrippedRule
+import link.socket.ampere.agents.domain.reasoning.PlanWalk
 import link.socket.ampere.agents.domain.reasoning.StepResult
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.describeResult
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.field.Admission
@@ -138,9 +147,16 @@ internal suspend fun dispatchPlanStep(
  * The Breaker's answer for [step], as the failure the step ends with, or null when the
  * step may run (AMPR-440, AMPR-445).
  *
- * A trip is the step's failure with the tripped rule's reason; an admission that could
- * not be decided — a grant store that threw, a run record that could not be read — fails
- * closed. Both are critical, so the plan walk stops on them.
+ * A trip is the step's failure with the tripped rule's reason, and the rule on the failure
+ * as [TrippedRule]; an admission that could not be decided — a grant store that threw, a
+ * run record that could not be read — fails closed. Both are critical, so the plan walk
+ * stops on them.
+ *
+ * Every decided admission goes on the record as a `PlanEvent.StepAdmitted` first, Pass and
+ * Resist as well as Trip, through the seat's door under its run (AMPR-472, F33). Recording
+ * never changes the decision: what was decided is settled before the publish, and a
+ * publish that failed is reported by the door and changes nothing here. An admission that
+ * could not be decided has nothing to record, and publishes nothing beyond what it did.
  */
 private suspend fun admit(
     agent: SparkBasedAgent<*>,
@@ -149,18 +165,73 @@ private suspend fun admit(
     tool: Tool<*>?,
     rules: List<Pair<Rule, Hardness>>,
 ): StepResult? {
-    val admission = agent.breaker.admit(tool, rules).getOrElse { e ->
+    val admitted = agent.breaker.admitDetailed(tool, rules).getOrElse { e ->
         return StepResult.failure(
             description = description,
             error = "Plan step ${step.id} was not admitted: ${e.message}",
             isCritical = true,
         )
     }
-    return (admission as? Admission.Trip)?.let { trip ->
+    val record = admitted.record(tool)
+    recordAdmission(agent, step, description, record)
+    return (record as? AdmissionRecord.Trip)?.let { trip ->
         StepResult.failure(
             description = description,
             error = trip.reason,
             isCritical = true,
+            tripped = TrippedRule(rule = trip.rule, reason = trip.reason),
+        )
+    }
+}
+
+/**
+ * [Breaker.Admitted] as the record of it, naming each breached rule by
+ * [Breaker.ruleName]. A trip names the Hard rule it tripped on, which is always the last
+ * one breached.
+ */
+private fun Breaker.Admitted.record(tool: Tool<*>?): AdmissionRecord = when (val decided = admission) {
+    Admission.Pass -> AdmissionRecord.Pass
+    is Admission.Resist -> AdmissionRecord.Resist(
+        degree = decided.degree.value,
+        rules = breached.map { (rule, _) -> Breaker.ruleName(rule, tool) },
+    )
+    is Admission.Trip -> AdmissionRecord.Trip(
+        rule = Breaker.ruleName(breached.last().first, tool),
+        reason = decided.reason,
+    )
+}
+
+/**
+ * Publishes [record] for [step] through the door the seat's Breaker reports through, under
+ * the seat's run — or does nothing for a step outside a plan walk, which has no plan to name
+ * and no `PlanStepStarted` / `PlanStepCompleted` pair to sit between (AMPR-472).
+ *
+ * Under [NonCancellable], like `PlanExecutor`'s own step events: the decision is already
+ * made, and a cancellation landing on the publish would otherwise turn a trip's typed
+ * failure into a throw, which is the decision changing because it was being recorded.
+ */
+private suspend fun recordAdmission(
+    agent: SparkBasedAgent<*>,
+    step: Task,
+    description: String,
+    record: AdmissionRecord,
+) {
+    val door = agent.breaker.eventApi ?: return
+    val walk = currentCoroutineContext()[PlanWalk] ?: return
+    val runId = agent.currentRunId
+    withContext(NonCancellable) {
+        door.publish(
+            PlanEvent.StepAdmitted(
+                eventId = generateUUID("plan-step-admitted", walk.planId, step.id),
+                planId = walk.planId,
+                stepId = step.id,
+                stepDescription = description,
+                runId = runId,
+                admission = record,
+                eventSource = EventSource.Agent(door.agentId),
+                timestamp = door.clock.now(),
+            ),
+            runId = runId,
         )
     }
 }

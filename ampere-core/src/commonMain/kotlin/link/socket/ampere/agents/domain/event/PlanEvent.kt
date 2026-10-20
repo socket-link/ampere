@@ -1,6 +1,7 @@
 package link.socket.ampere.agents.domain.event
 
 import kotlinx.datetime.Instant
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
@@ -100,6 +101,60 @@ sealed interface PlanEvent : Event {
 
         companion object {
             const val EVENT_TYPE: EventType = "PlanStepCompleted"
+        }
+    }
+
+    /**
+     * Emitted when the Breaker has decided whether a plan step may run, before it runs
+     * (AMPR-472, F33).
+     *
+     * Published by `dispatchPlanStep` through the door of the seat that runs the step,
+     * under that seat's run, for every step it admits: a [AdmissionRecord.Pass] and a
+     * [AdmissionRecord.Resist] before the step's tool or model call, a [AdmissionRecord.Trip]
+     * before the step fails. One per step, between that step's [PlanStepStarted] and
+     * [PlanStepCompleted], matched on [stepId] within [planId] the same way they are. A
+     * tripped step's [PlanStepCompleted] carries the same rule on its
+     * [StepOutcome.Failure.tripped].
+     *
+     * Not every step has one. A step that never reaches the Breaker publishes none: a blank
+     * step, one naming a tool its seat does not have, one skipped before dispatch, and one
+     * dispatched outside a plan walk. Neither does an admission the Breaker could not
+     * decide, which fails its step closed with nothing decided to record.
+     *
+     * Recording never changes the decision. The record is published after the Breaker has
+     * answered and the answer is what the step does next, whether the publish landed or not.
+     */
+    @Serializable
+    @SerialName("PlanEvent.StepAdmitted")
+    data class StepAdmitted(
+        override val eventId: EventId,
+        val planId: String,
+        val stepId: String,
+        val stepDescription: String,
+        val runId: RunId?,
+        val admission: AdmissionRecord,
+        override val eventSource: EventSource,
+        override val timestamp: Instant,
+        override val urgency: Urgency = Urgency.LOW,
+    ) : PlanEvent {
+
+        override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String {
+            val decision = when (admission) {
+                AdmissionRecord.Pass -> "admitted"
+                is AdmissionRecord.Resist ->
+                    "admitted against resistance ${admission.degree} (${admission.rules.joinToString()})"
+                is AdmissionRecord.Trip -> "tripped ${admission.rule}: ${admission.reason}"
+            }
+            return "Plan step $decision: $stepDescription ${formatUrgency(urgency)}"
+        }
+
+        companion object {
+            const val EVENT_TYPE: EventType = "PlanStepAdmitted"
         }
     }
 
@@ -208,6 +263,46 @@ sealed interface PlanEvent : Event {
             const val EVENT_TYPE: EventType = "MonitoringStarted"
         }
     }
+}
+
+/**
+ * What the Breaker decided about one plan step, as [PlanEvent.StepAdmitted] records it
+ * (AMPR-472, F33).
+ *
+ * Mapped from `field.Admission`, and never the reverse: `field/` is a leaf package and
+ * knows nothing of the record. A rule is carried as the stable name `Breaker.ruleName` gives
+ * it (`Quota.Tokens`, `Quota.Count:steps`, `AccessPolicy:<plug id>`) and never as text to
+ * match, so a reader can tell a step a rule stopped from one that failed without parsing a
+ * reason that can be reworded.
+ */
+@Serializable
+sealed class AdmissionRecord {
+
+    /** No rule was breached; the step ran. */
+    @Serializable
+    @SerialName("AdmissionRecord.Pass")
+    data object Pass : AdmissionRecord()
+
+    /**
+     * Only Soft rules were breached; the step ran against [degree].
+     *
+     * @property degree The breached rules' resistance added together, the value of
+     *   `Admission.Resist.degree`.
+     * @property rules The breached rules' names, in the order the Breaker evaluated them.
+     */
+    @Serializable
+    @SerialName("AdmissionRecord.Resist")
+    data class Resist(val degree: Double, val rules: List<String>) : AdmissionRecord()
+
+    /**
+     * A Hard rule was breached; the step did not run.
+     *
+     * @property rule The Hard rule's name.
+     * @property reason Why, word for word the trip's reason, which is also the step's error.
+     */
+    @Serializable
+    @SerialName("AdmissionRecord.Trip")
+    data class Trip(val rule: String, val reason: String) : AdmissionRecord()
 }
 
 /**

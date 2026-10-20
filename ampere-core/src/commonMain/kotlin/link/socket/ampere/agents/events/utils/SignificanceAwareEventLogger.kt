@@ -2,6 +2,7 @@ package link.socket.ampere.agents.events.utils
 
 import co.touchlab.kermit.Logger
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.domain.event.AdmissionRecord
 import link.socket.ampere.agents.domain.event.AgentSurfaceEvent
 import link.socket.ampere.agents.domain.event.ArcRunEvent
 import link.socket.ampere.agents.domain.event.AssetAccessEvent
@@ -150,6 +151,14 @@ class SignificanceAwareEventLogger(
         is FileSystemEvent -> EventSignificance.SIGNIFICANT
         is PlanEvent.PlanStepStarted -> EventSignificance.SIGNIFICANT
         is PlanEvent.PlanStepCompleted -> EventSignificance.SIGNIFICANT
+        // A step's admission (AMPR-472): a clean pass is routine, a step that ran against
+        // resistance or was stopped by a rule is a decision worth surfacing.
+        is PlanEvent.StepAdmitted -> when (event.admission) {
+            AdmissionRecord.Pass -> EventSignificance.ROUTINE
+            is AdmissionRecord.Resist,
+            is AdmissionRecord.Trip,
+            -> EventSignificance.SIGNIFICANT
+        }
         is PlanEvent.PlanTruncated -> EventSignificance.SIGNIFICANT
         is PlanEvent.TaskAssigned -> EventSignificance.SIGNIFICANT
         is PlanEvent.MonitoringStarted -> EventSignificance.SIGNIFICANT

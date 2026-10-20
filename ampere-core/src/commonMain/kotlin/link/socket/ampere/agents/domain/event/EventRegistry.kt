@@ -113,6 +113,7 @@ object EventRegistry {
         // PlanEvent types
         PlanEvent.PlanStepStarted.EVENT_TYPE,
         PlanEvent.PlanStepCompleted.EVENT_TYPE,
+        PlanEvent.StepAdmitted.EVENT_TYPE,
         PlanEvent.PlanTruncated.EVENT_TYPE,
         PlanEvent.TaskAssigned.EVENT_TYPE,
         PlanEvent.MonitoringStarted.EVENT_TYPE,

@@ -9,7 +9,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/ToolExecutionEngine.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/propel/Breaker.kt
 related: [SparkSystem, AgentSurface, EventSerialBus, LinkLayer, PropelLoop]
-last_verified: 2026-10-11
+last_verified: 2026-10-20
 ---
 
 # Plug Permissions
@@ -74,7 +74,7 @@ Two design pressures shaped the gate:
 - `plug/PlugManifestValidator.kt` — structural manifest checks, including duplicate `DeviceCapability` declarations. Expected to run at plug install time on every host that accepts manifests; today only `PlugContext.create` calls it.
 - `commonMain/sqldelight/link/socket/ampere/db/PlugGrants.sq` — schema for user grants.
 - `agents/execution/ToolExecutionEngine.kt` — the call site that gates dispatch, and since AMPR-401 the *only* one: it is also where an `McpTool` is dispatched, through the `ServerManager` it is constructed with (a `PlugContext.mcpServerManager` for plug tools, `McpServerManager` for discovered ones). The dead second path, `propel/ExecuteStep`, is gone.
-- `propel/Breaker.kt` — the plan-step call site (AMPR-440). `SparkBasedAgent.executePlanStep` admits every step before its tool runs, and the Breaker's access rule is a Hard `Rule.AccessPolicy` derived from the tool's manifest, evaluated by calling `PlugPermissionGate.check` unchanged. It is the tool's rule (`Breaker.rulesFor`); a hosted run's quotas ride beside it as the run's rules (AMPR-445, see [HostedRun](hosted-run.md)) and are evaluated after it, so an access trip still wins and still publishes its denial. `Allow` is `Admission.Pass`; `DenyMissing` / `DenyRevoked` are `Admission.Trip`, with the plug, tool and permission in the reason.
+- `propel/Breaker.kt` — the plan-step call site (AMPR-440). `SparkBasedAgent.executePlanStep` admits every step before its tool runs, and the Breaker's access rule is a Hard `Rule.AccessPolicy` derived from the tool's manifest, evaluated by calling `PlugPermissionGate.check` unchanged. It is the tool's rule (`Breaker.rulesFor`); a hosted run's quotas ride beside it as the run's rules (AMPR-445, see [HostedRun](hosted-run.md)) and are evaluated after it, so an access trip still wins and still publishes its denial. `Allow` is `Admission.Pass`; `DenyMissing` / `DenyRevoked` are `Admission.Trip`, with the plug, tool and permission in the reason. Since AMPR-472 the trip is also on the record as a `PlanEvent.StepAdmitted` whose `Trip.rule` is `AccessPolicy:<plug id>`, published after the denial, and the failed step carries the same rule as `StepOutcome.Failure.tripped` — so a reader can tell a refused step from a failed one without parsing the `Permission denied for plug …` text.
 - `agents/domain/event/PermissionDeniedEvent.kt` — emitted on `Deny*` results, built by the one `internal` helper `publishPermissionDenied` (in `ToolExecutionEngine.kt`) that both the engine and the Breaker call.
 
 ## Invariants
@@ -84,7 +84,7 @@ Two design pressures shaped the gate:
 - **Revoked beats granted.** If a permission is in `userGrants.revoked`, the gate returns `DenyRevoked` regardless of whether it is also in `granted`. The order in `PlugPermissionGate.check` is intentional and load-bearing.
 - **Permissions are sealed.** New permission kinds must be added as variants of the sealed `PlugPermission` interface, with stable `@SerialName`s. Plugs cannot declare ad-hoc string permissions.
 - **Manifest and tool-call permissions are unioned, then deduplicated.** A permission listed in either is required. A change that ANDs them (only check the intersection) is a privilege escalation.
-- **`Deny*` results emit `PermissionDeniedEvent`, once per denied step.** The bus carries the denial so the trace and any UI can show *what was denied and why*. Silent denials defeat observability. A step the Breaker trips publishes it from the Breaker and never reaches the engine; a dispatch the engine refuses publishes it from the engine. Both go through `publishPermissionDenied`, so the event has the same fields whichever site refused.
+- **`Deny*` results emit `PermissionDeniedEvent`, once per denied step.** The bus carries the denial so the trace and any UI can show *what was denied and why*. Silent denials defeat observability. A step the Breaker trips publishes it from the Breaker and never reaches the engine; a dispatch the engine refuses publishes it from the engine. Both go through `publishPermissionDenied`, so the event has the same fields whichever site refused. The `StepAdmitted` a Breaker trip also leaves is the admission's record, not a second denial: `PermissionDeniedEvent` is still published exactly once.
 - **The gate is side-effect-free.** It does not mutate `UserGrants`, the bus, or any store. Granting / revoking happens through `UserGrantStore`. A change that has `check` mutate state is wrong.
 
 ## Common operations

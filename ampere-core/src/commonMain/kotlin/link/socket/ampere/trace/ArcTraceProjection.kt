@@ -454,6 +454,8 @@ class ArcTraceProjection(
         // `PlanEvent`s are project-management records, not phase-scoped, and fall through.
         is PlanEvent.PlanStepStarted -> default ?: EXECUTE_PHASE
         is PlanEvent.PlanStepCompleted -> default ?: EXECUTE_PHASE
+        // The Breaker's decision on a step (AMPR-472) sits between the step's pair, and is filed with it.
+        is PlanEvent.StepAdmitted -> default ?: EXECUTE_PHASE
         is SparkAppliedEvent -> event.phaseSparkName() ?: default
         is SparkRemovedEvent -> event.phaseSparkName() ?: default
         // The run's own record belongs to the run envelope, not to whichever PROPEL phase happened
