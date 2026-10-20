@@ -167,12 +167,16 @@ class PerceptionDriftRecordedBenchTest {
     private companion object {
         const val DOCUMENT = "docs/ampr-482-perception-drift-bench.md"
 
-        /** From the live run of 2026-10-20 (three repeats, 112 cases, 168 bears and 168 beside calls per arm). */
+        /**
+         * From the AMPR-486 re-record of 2026-10-20, over the state that renders a goal change's
+         * `relation` and a commitment's `about` (three repeats, 112 cases, 168 bears and 168
+         * beside calls per arm). The document's §3.3; §3.2's numbers are of the earlier state.
+         */
         val HEADLINES: Map<String, Headline> = mapOf(
             "claude-sonnet-5.noul" to
-                Headline(falseSettled = 58, falseMoved = 1, missing = 0, fittable = false, agreeingCases = 105),
+                Headline(falseSettled = 53, falseMoved = 0, missing = 0, fittable = false, agreeingCases = 109),
             "claude-sonnet-5.choice" to
-                Headline(falseSettled = 63, falseMoved = 1, missing = 0, fittable = false, agreeingCases = 106),
+                Headline(falseSettled = 45, falseMoved = 1, missing = 0, fittable = false, agreeingCases = 107),
         )
     }
 }

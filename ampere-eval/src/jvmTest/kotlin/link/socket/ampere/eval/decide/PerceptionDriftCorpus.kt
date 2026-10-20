@@ -73,12 +73,19 @@ import link.socket.ampere.propel.asDecisionState
  * That is the point of the fold (AMPR-479): the run's own work and the Field's bookkeeping are
  * taken out before a judge sees the state. The bench measures what is left for a judge to tell.
  *
+ * ### What the state shows of structure
+ *
+ * Since AMPR-486 the two structural branches carry their relation to the run in words. A changed
+ * goal renders a `relation` — `own`, `dependency` or `other` — read against the run's root goal,
+ * so `goal_state_changed`'s dependency goal is formed with `parent = ROOT_GOAL` and renders
+ * `dependency`. A [Commitment] on a goal renders that goal's description as `about`, so the two
+ * on-goal commitment kinds read the run's goal there and `unrelated_commitment` reads the
+ * unrelated goal's. The ticket ids keep their descriptive slugs (`records/file-signed-office-lease`),
+ * and the validator no longer reads them: a consumer's opaque ticket id now costs a judge nothing.
+ * (AMPR-482 measured the corpus before the relation was rendered; its report keeps those numbers.)
+ *
  * ### What the state cannot show
  *
- * A [Commitment] renders as its committer's name, its `ticketId` and its due date — not its
- * `goal`. The two commitment kinds therefore tell bears from beside only by the ticket id's
- * text, so the corpus uses descriptive slugs (`records/file-signed-office-lease`). A consumer
- * whose ticket ids are opaque gives a judge nothing to read there; the report says so.
  * An observation renders as its entity reference and its content; production's `names`
  * hold Subjects and Goals only, so the reference is the raw value and the content carries
  * the meaning, as here.
@@ -171,7 +178,8 @@ internal object PerceptionDriftCorpus {
      * each kind adds to the Field.
      *
      * @property target The thing the goal is about, as a substring every text about it carries.
-     * @property dependency A goal the plan depends on, held by another subject.
+     * @property dependency A goal the plan depends on, held by another subject: a child of the
+     *   run's goal, so it renders `relation: dependency`.
      * @property unrelatedGoal A goal of another subject that the run's goal has nothing to do with.
      * @property onGoalTicket The ticket id of a commitment on the goal; a descriptive slug.
      * @property unrelatedTicket The ticket id of a commitment on something else.
@@ -555,6 +563,7 @@ internal object PerceptionDriftCorpus {
             delta = delta,
             cycleResults = family.steps.map { succeeded(it.description, it.result) },
             names = names,
+            rootGoal = ROOT_GOAL,
         )
         return DecisionCase(
             id = "${family.id}/${kind.wireName}",
@@ -574,8 +583,9 @@ internal object PerceptionDriftCorpus {
 
     /**
      * The Field the host seat perceived, before the cycle: the five subjects, the three goals
-     * (the run's own, held open by the host; the dependency and the unrelated one, held by other
-     * subjects), the host's own perception as a belief, and one commitment open on the goal.
+     * (the run's own, held open by the host; the dependency — a child of the run's goal — and the
+     * unrelated one, held by other subjects), the host's own perception as a belief, and one
+     * commitment open on the goal.
      */
     fun before(family: Family): Field = Field(
         viewer = HOST,
@@ -592,6 +602,7 @@ internal object PerceptionDriftCorpus {
                 goal = Goal(
                     id = DEPENDENCY_GOAL,
                     description = family.dependency,
+                    parent = ROOT_GOAL,
                     provenance = provenance("event-goal-dep"),
                 ),
                 subject = actorOf(family),

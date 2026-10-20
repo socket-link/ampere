@@ -1258,7 +1258,11 @@ internal class RosterHostedRun(
         return delta to names
     }
 
-    /** The receptor's state for the cycle that just executed (AMPR-481, row N6). */
+    /**
+     * The receptor's state for the cycle that just executed (AMPR-481, row N6), carrying the
+     * run's root goal so a changed goal renders its relation to it (AMPR-486). The edge that
+     * relation reads, a goal's parent, is already on the later snapshot's goal in [delta].
+     */
     private fun runDrift(delta: FieldDelta, names: Map<String, String>): RunDrift = RunDrift(
         runId = runId,
         goal = goal,
@@ -1267,6 +1271,7 @@ internal class RosterHostedRun(
         delta = delta,
         cycleResults = cycleResults,
         names = names,
+        rootGoal = rootGoalRef(),
     )
 
     /**

@@ -31,7 +31,8 @@ import link.socket.ampere.field.Subject
 import link.socket.ampere.llm.decide.version
 
 /**
- * AMPR-481 (N3, N6): the receptor's state and its two questions.
+ * AMPR-481 (N3, N6): the receptor's state and its two questions; AMPR-486: a changed goal's
+ * relation to the run's goal, and the goal a commitment is on.
  *
  * The state is pinned as a golden string because its key order and its vocabulary are the
  * contract: a record carries only the state's digest, and the bench measures a model on the
@@ -150,6 +151,91 @@ class RunDriftStateTest {
     }
 
     // ========================================================================
+    // Relations to the run's goal (AMPR-486)
+    // ========================================================================
+
+    @Test
+    fun `the run's own goal changing renders relation own`() {
+        val state = drift(goalChanged(Goal(id = ROOT_GOAL, description = GOAL_TEXT, provenance = PROVENANCE)))
+            .asDecisionState(CLIP)
+
+        assertTrue(
+            state.contains("{\"goal\":\"$GOAL_TEXT\",\"from\":\"OPEN\",\"to\":\"ABANDONED\",\"relation\":\"own\"}"),
+            state,
+        )
+    }
+
+    @Test
+    fun `a goal whose parent is the run's goal renders relation dependency`() {
+        val dependency = Goal(
+            id = Ref("goal-2"),
+            description = DEPENDENCY_TEXT,
+            parent = ROOT_GOAL,
+            provenance = PROVENANCE,
+        )
+        val state = drift(goalChanged(dependency)).asDecisionState(CLIP)
+
+        assertTrue(
+            state.contains(
+                "{\"goal\":\"$DEPENDENCY_TEXT\",\"from\":\"OPEN\",\"to\":\"ABANDONED\",\"relation\":\"dependency\"}",
+            ),
+            state,
+        )
+        assertFalse(state.contains("goal-2"), "the dependency's id is not rendered: $state")
+    }
+
+    @Test
+    fun `a goal the run's goal has nothing to do with renders relation other`() {
+        val unrelated = Goal(id = Ref("goal-3"), description = UNRELATED_TEXT, provenance = PROVENANCE)
+        val grandchild = Goal(
+            id = Ref("goal-4"),
+            description = DEPENDENCY_TEXT,
+            parent = Ref("goal-3"),
+            provenance = PROVENANCE,
+        )
+        val state = drift(goalChanged(unrelated, grandchild)).asDecisionState(CLIP)
+
+        assertEquals(2, Regex("\"relation\":\"other\"").findAll(state).count(), state)
+    }
+
+    @Test
+    fun `a run with no root goal renders every goal change as other`() {
+        val own = Goal(id = ROOT_GOAL, description = GOAL_TEXT, provenance = PROVENANCE)
+        val child = Goal(id = Ref("goal-2"), description = DEPENDENCY_TEXT, parent = ROOT_GOAL, provenance = PROVENANCE)
+        val state = drift(goalChanged(own, child), rootGoal = null).asDecisionState(CLIP)
+
+        assertEquals(2, Regex("\"relation\":\"other\"").findAll(state).count(), state)
+        assertFalse(state.contains("\"own\""), state)
+        assertFalse(state.contains("\"dependency\""), state)
+    }
+
+    @Test
+    fun `a commitment on a goal renders that goal's description as about`() {
+        val onGoal = commitment(goal = ROOT_GOAL)
+        val delta = noDrift().copy(commitmentsOpened = listOf(onGoal), commitmentsResolved = listOf(onGoal))
+        val state = drift(delta).asDecisionState(CLIP)
+
+        val rendered = "{\"by\":\"Ada\",\"on\":\"AMPR-9\",\"due\":\"2026-10-21\",\"about\":\"$GOAL_TEXT\"}"
+        assertTrue(state.contains("\"opened\":[$rendered]"), state)
+        assertTrue(state.contains("\"resolved\":[$rendered]"), state)
+    }
+
+    @Test
+    fun `a commitment on no goal renders exactly as before the about key existed`() {
+        val delta = noDrift().copy(commitmentsOpened = listOf(commitment(goal = null)))
+        val state = drift(delta, cycleResults = emptyList()).asDecisionState(CLIP)
+
+        assertEquals(
+            "{\"goal\":\"$GOAL_TEXT\",\"cycle\":2,\"perceived\":\"$PERCEIVED\"," +
+                "\"changes\":{\"goals\":[],\"commitments\":{\"opened\":[{\"by\":\"Ada\",\"on\":\"AMPR-9\"," +
+                "\"due\":\"2026-10-21\"}],\"resolved\":[]}," +
+                "\"beliefs\":[],\"observations\":[],\"actions\":[],\"subjects\":[],\"protected_left_out\":0}," +
+                "\"cycle_results\":[]}",
+            state,
+        )
+    }
+
+    // ========================================================================
     // The questions
     // ========================================================================
 
@@ -186,6 +272,7 @@ class RunDriftStateTest {
         delta: FieldDelta,
         cycleResults: List<StepOutcome> = listOf(searchOutcome()),
         names: Map<String, String> = NAMES,
+        rootGoal: Ref<Goal>? = ROOT_GOAL,
     ): RunDrift = RunDrift(
         runId = RUN_ID,
         goal = Task.Step(id = "goal-1", status = TaskStatus.Pending, description = GOAL_TEXT),
@@ -194,6 +281,20 @@ class RunDriftStateTest {
         delta = delta,
         cycleResults = cycleResults,
         names = names,
+        rootGoal = rootGoal,
+    )
+
+    private fun goalChanged(vararg goals: Goal): FieldDelta = noDrift().copy(
+        goalsChanged = goals.map { GoalChange(goal = it, from = Field.GoalState.OPEN, to = Field.GoalState.ABANDONED) },
+    )
+
+    private fun commitment(goal: Ref<Goal>?): Commitment = Commitment(
+        committer = ADA,
+        ticketId = "AMPR-9",
+        goal = goal,
+        due = Instant.parse("2026-10-21T13:00:00Z"),
+        status = Commitment.Status.OPEN,
+        provenance = PROVENANCE,
     )
 
     private fun populated(): FieldDelta = FieldDelta(
@@ -215,7 +316,7 @@ class RunDriftStateTest {
                 provenance = PROVENANCE,
             ),
         ),
-        commitmentsResolved = emptyList(),
+        commitmentsResolved = listOf(commitment(goal = ROOT_GOAL).copy(ticketId = "AMPR-8")),
         beliefsAdded = listOf(
             belief(subject = ROOT_GOAL, content = "the uploader retries twice", kind = BeliefKind.LESSON),
             belief(subject = ADA, content = SECRET, kind = BeliefKind.TASK, sensitivity = Sensitivity.PROTECTED),
@@ -275,6 +376,8 @@ class RunDriftStateTest {
     private companion object {
         const val RUN_ID = "run-ampr-481"
         const val GOAL_TEXT = "Add a retry to the uploader"
+        const val DEPENDENCY_TEXT = "Keep the upload endpoint reachable"
+        const val UNRELATED_TEXT = "Rename the staging bucket"
         const val PERCEIVED = "the seats are declared"
         const val SECRET = "Ada's home address is 12 Elm Street"
         const val CLIP = 400
@@ -291,13 +394,19 @@ class RunDriftStateTest {
             "goal-1" to GOAL_TEXT,
         )
 
-        /** The state of [populated]: every branch filled, the protected belief counted and absent. */
+        /**
+         * The state of [populated]: every branch filled, the protected belief counted and absent,
+         * the run's own goal changing (`own`), a commitment on no goal opened (no `about`) and one
+         * on the run's goal resolved.
+         */
         const val GOLDEN_STATE: String =
             "{\"goal\":\"Add a retry to the uploader\",\"cycle\":2,\"perceived\":\"the seats are declared\"," +
                 "\"changes\":{" +
-                "\"goals\":[{\"goal\":\"Add a retry to the uploader\",\"from\":\"OPEN\",\"to\":\"COMPLETED\"}]," +
+                "\"goals\":[{\"goal\":\"Add a retry to the uploader\",\"from\":\"OPEN\",\"to\":\"COMPLETED\"," +
+                "\"relation\":\"own\"}]," +
                 "\"commitments\":{\"opened\":[{\"by\":\"Ada\",\"on\":\"AMPR-9\",\"due\":\"2026-10-21\"}]," +
-                "\"resolved\":[]}," +
+                "\"resolved\":[{\"by\":\"Ada\",\"on\":\"AMPR-8\",\"due\":\"2026-10-21\"," +
+                "\"about\":\"Add a retry to the uploader\"}]}," +
                 "\"beliefs\":[{\"kind\":\"lesson\",\"holder\":\"Host\",\"about\":\"Add a retry to the uploader\"," +
                 "\"content\":\"the uploader retries twice\"}]," +
                 "\"observations\":[{\"about\":\"canon/link-1/entity-1\",\"content\":\"the queue is empty\"}]," +

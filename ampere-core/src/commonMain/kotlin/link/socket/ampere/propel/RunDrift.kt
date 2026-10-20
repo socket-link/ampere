@@ -17,6 +17,7 @@ import link.socket.ampere.field.Action
 import link.socket.ampere.field.ActionResult
 import link.socket.ampere.field.Belief
 import link.socket.ampere.field.FieldDelta
+import link.socket.ampere.field.Goal
 import link.socket.ampere.field.Primitive
 import link.socket.ampere.field.Ref
 import link.socket.ampere.field.Sensitivity
@@ -49,6 +50,9 @@ import link.socket.ampere.field.Sensitivity
  *   [Ref.value]: a Subject's name, a Goal's description. A delta names a committer, a holder,
  *   an actor or a belief's subject by reference only, so the run passes the lookup it has —
  *   the later snapshot's subjects and goals. A reference with no name renders as its value.
+ * @property rootGoal The run's own goal on the Goal branch (AMPR-473), which a changed goal's
+ *   `relation` is read against (AMPR-486); null for a run with no branch, whose goal changes
+ *   all render `other`. A reference, never rendered: see [asDecisionState].
  */
 @AmpereStableApi
 data class RunDrift(
@@ -59,6 +63,7 @@ data class RunDrift(
     val delta: FieldDelta,
     val cycleResults: List<StepOutcome>,
     val names: Map<String, String> = emptyMap(),
+    val rootGoal: Ref<Goal>? = null,
 )
 
 /**
@@ -67,8 +72,8 @@ data class RunDrift(
  *
  * ```json
  * {"goal":"…","cycle":2,"perceived":"…",
- *  "changes":{"goals":[{"goal":"…","from":"OPEN","to":"COMPLETED"}],
- *   "commitments":{"opened":[{"by":"…","on":"…","due":"2026-10-21"}],"resolved":[]},
+ *  "changes":{"goals":[{"goal":"…","from":"OPEN","to":"COMPLETED","relation":"dependency"}],
+ *   "commitments":{"opened":[{"by":"…","on":"…","due":"2026-10-21","about":"…"}],"resolved":[]},
  *   "beliefs":[{"kind":"lesson","holder":"…","about":"…","content":"…"}],
  *   "observations":[{"about":"…","content":"…"}],
  *   "actions":[{"by":"…","did":"…","result":"succeeded"}],
@@ -90,14 +95,28 @@ data class RunDrift(
  * holder. There is no setting that turns this off.
  *
  * What each branch renders, every text through [clipTo] at [clip]: a changed goal by its
- * description and its two states; a commitment by its committer's name, its `ticketId` and
- * the ISO date of its `due` in UTC; a belief by its kind lower-cased, its holder's name, what
+ * description, its two states and its `relation` to the run's goal; a commitment by its
+ * committer's name, its `ticketId`, the ISO date of its `due` in UTC and, when it is on a goal,
+ * that goal's description as `about`; a belief by its kind lower-cased, its holder's name, what
  * it is about and its content; an observation by what it is about and its content; an Action
  * by its actor's name, its description and `succeeded` / `failed` (`pending` for one not yet
  * taken); a subject by its name; and a cycle result by the same `statusWord`, `originWord`
  * and `reportedText` the goal question's state uses, so one outcome reads the same in both.
  * Relationships added are not rendered: an edge is bookkeeping to a receptor, and the
  * subjects it joins are already in `subjects`.
+ *
+ * **The structure a change carries is rendered as its relation to the run (AMPR-486).** A judge
+ * asked whether a goal's move or a commitment bears on the run cannot infer a link the state
+ * leaves out, so the two structural branches say it in words:
+ *
+ * - a changed goal's `relation` is one of three — `own` when it is [RunDrift.rootGoal];
+ *   `dependency` when the run's goal depends on it, which the later snapshot carries as the
+ *   changed goal's [Goal.parent] being the run's goal (the Field holds no `Rule.Dependency`
+ *   yet, so a parent is the one dependency edge there is to read); `other` otherwise, and for
+ *   every change of a run with no [RunDrift.rootGoal]. The set is closed.
+ * - a commitment's `about` is the description of the goal it is on, through the same [RunDrift.names]
+ *   lookup as every other reference. A commitment on no goal has no `about` key at all, so a state
+ *   with no goal-bound commitment renders exactly as it did before the key existed.
  *
  * @param clip The most characters of any one text that reach the state.
  * @throws IllegalArgumentException when [clip] is not positive.
@@ -119,6 +138,7 @@ fun RunDrift.asDecisionState(clip: Int): String {
                         put("goal", change.goal.description.clipTo(clip))
                         put("from", change.from.name)
                         put("to", change.to.name)
+                        put("relation", relationOf(change.goal))
                     }
                 }
             }
@@ -129,6 +149,7 @@ fun RunDrift.asDecisionState(clip: Int): String {
                             put("by", nameOf(commitment.committer))
                             put("on", commitment.ticketId.clipTo(clip))
                             put("due", commitment.due.toLocalDateTime(TimeZone.UTC).date.toString())
+                            commitment.goal?.let { goal -> put("about", nameOf(goal)) }
                         }
                     }
                 }
@@ -138,6 +159,7 @@ fun RunDrift.asDecisionState(clip: Int): String {
                             put("by", nameOf(commitment.committer))
                             put("on", commitment.ticketId.clipTo(clip))
                             put("due", commitment.due.toLocalDateTime(TimeZone.UTC).date.toString())
+                            commitment.goal?.let { goal -> put("about", nameOf(goal)) }
                         }
                     }
                 }
@@ -189,6 +211,18 @@ fun RunDrift.asDecisionState(clip: Int): String {
     // insertion order — the fixed order this function's contract rests on — exactly as
     // `RunObservation.asDecisionState` relies on it.
     return state.toString()
+}
+
+/**
+ * How a changed [goal] relates to this run's goal, in one of three words (AMPR-486): `own`,
+ * `dependency` — the run's goal depends on it, read as [goal]'s parent being the run's goal —
+ * or `other`.
+ */
+private fun RunDrift.relationOf(goal: Goal): String = when {
+    rootGoal == null -> "other"
+    goal.id == rootGoal -> "own"
+    goal.parent == rootGoal -> "dependency"
+    else -> "other"
 }
 
 private val Belief.isProtected: Boolean
