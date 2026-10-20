@@ -74,6 +74,16 @@ corpus, and the one that does is the deterministic rule's.
 The report ends at a STOP (§5): three plain-language questions for Miley, each with its
 evidence and a recommended default.
 
+**Update, AMPR-486 (§3.3).** The renderer now says the relation: a goal change carries
+`relation` (`own` / `dependency` / `other`) and a commitment on a goal carries that goal's
+description as `about`. Re-recorded on that state, Sonnet's false settled went from 58 to
+**53 / 168** (noul) and from 63 to **45 / 168** (choice). The relation fixed most of
+`goal_state_changed` (21 → 9 noul misses of 24) and almost none of the commitment kinds: a
+commitment opened on the run's goal, with `about` naming that goal word for word, is still read
+as settled on 24 of 24 noul calls. That is a different finding from "the renderer left the
+relation out", and §3.3 says what it is and is not. The recordings in the repository are now
+AMPR-486's; §3.2's numbers are kept as they were measured.
+
 ---
 
 ## 1. The bench
@@ -153,7 +163,9 @@ Two more things the construction decided:
   corpus uses slugs — `records/file-signed-office-lease` against `kitchen/cleaning-schedule` — so
   the two commitment kinds carry a signal. A consumer whose tracker issues `AMPR-9` gives the
   judge none, and the renderer would need to add the goal's name for the question to be
-  answerable there. Out of scope here; worth a ticket.
+  answerable there. Out of scope here; worth a ticket. *(Done in AMPR-486: a commitment on a
+  goal now renders the goal's description as `about`, and the validator reads that instead of
+  the slug. The slugs are kept.)*
 - **An observation's `about` is a raw reference.** Production's `names` hold Subjects and Goals
   only, so an observation of an entity renders as `canon/link-1/entity-5`, and its content is
   the only thing a judge can read. The corpus renders the same: opaque reference, content that
@@ -197,6 +209,10 @@ These numbers follow from the construction and are asserted as such in the gate.
 
 Run on 2026-10-20 from a developer machine with `./gradlew :ampere-eval:perceptionDriftBenchLive`.
 Three repeats, both forms, 336 calls per arm (168 on bears cases, 168 on beside).
+
+*These are the numbers of the state as AMPR-482 measured it, before AMPR-486 rendered the
+relation. The recordings they came from were replaced by §3.3's and are in the history of
+`recordings/` at commit `d6d67ab4`; `PerceptionDriftRecordedBenchTest` now pins §3.3's.*
 
 | Arm | Ran | Why not |
 | -- | -- | -- |
@@ -300,7 +316,91 @@ Both are renderer changes in `ampere-core` (`RunDrift.asDecisionState`), out of 
 scope and the first thing to do before this corpus is measured again: render `"depends_on":true`
 (or the parent goal's description) on a goal change, and the goal's description on a commitment
 that has one. The validator's rule for the two kinds would then read the new field rather than
-the slug.
+the slug. AMPR-486 did both; §3.3 is the re-measure.
+
+### 3.3 The live arms on the state that renders the relation (AMPR-486)
+
+Run on 2026-10-20 from a developer machine with
+`./gradlew :ampere-eval:perceptionDriftBenchLive -PdecideArms=claude-sonnet-5.noul,claude-sonnet-5.choice`,
+over the corpus regenerated on the new state. Same arm, adapter, forms, three repeats and 336
+calls per arm as §3.2.1; the System One arms are still not run (their keys are still absent).
+
+**What changed in the state.** Two additive keys, in a fixed position, and nothing else:
+
+- a goal change renders `goal, from, to, relation`, where `relation` is `own` (the changed goal
+  is the run's goal), `dependency` (its `parent` is the run's goal — the Field carries no
+  `Rule.Dependency` yet, so the parent is the one edge there is) or `other`;
+- a commitment on a goal renders `by, on, due, about`, where `about` is that goal's description;
+  a commitment on no goal renders exactly as before.
+
+So `goal_state_changed` now reads
+`{"goal":"Restore search indexing on the shared drive","from":"OPEN","to":"ABANDONED","relation":"dependency"}`,
+the two on-goal commitment kinds read
+`{"by":"Reviewer","on":"docs/summarise-onboarding-handbook","due":"2026-10-27","about":"Find the latest version of the onboarding handbook and summarise its key points in three bullets"}`
+— `about` is the run's `goal`, word for word — and `unrelated_commitment` reads the unrelated
+goal's description there. 32 of the 112 states changed (those four kinds, in eight families); the
+other 80 are byte-identical, since neither key appears in them.
+
+| Form | False settled (own answer) | False moved | Missing | Same answer on all 3 repeats | Majority of 3: false settled / false moved |
+| -- | -- | -- | -- | -- | -- |
+| `noul` (shipped) | **53 / 168 (31.5%)** | 0 / 168 (0.0%) | 0 | 109 / 112 (97.3%) | 18 / 56 (32.1%) / 0 / 56 |
+| `choice` | **45 / 168 (26.8%)** | 1 / 168 (0.6%) | 0 | 107 / 112 (95.5%) | 15 / 56 (26.8%) / 0 / 56 |
+
+`cannot_tell` was not answered once. The one false-moved call is the same case as §3.2.1's
+(`find-and-summarise/bookkeeping_subjects_added`, choice form).
+
+**Per kind, beside §3.2.1** (false settled over 24 bears calls per kind; every beside kind but
+`bookkeeping_subjects_added` is still 0 false moved in both forms):
+
+| Kind | noul before | noul now | choice before | choice now |
+| -- | -- | -- | -- | -- |
+| **`goal_state_changed`** | 21 (87.5%) | **9 (37.5%)** | 18 (75.0%) | **6 (25.0%)** |
+| **`commitment_on_goal_opened`** | 16 (66.7%) | **24 (100.0%)** | 23 (95.8%) | **23 (95.8%)** |
+| **`commitment_on_goal_resolved`** | 21 (87.5%) | **20 (83.3%)** | 22 (91.7%) | **16 (66.7%)** |
+| `lesson_about_goal_subject` | 0 | 0 | 0 | 0 |
+| `other_actor_on_goal_target` | 0 | 0 | 0 | 0 |
+| `observation_of_target_changed` | 0 | 0 | 0 | 0 |
+| `constraint_added` | 0 | 0 | 0 | 0 |
+| `bookkeeping_subjects_added` (false moved) | 1 (4.2%) | 0 (0.0%) | 1 (4.2%) | 1 (4.2%) |
+
+**The relation fixed the goal change, and did not fix the commitments.** These are two findings,
+not one:
+
+1. **`goal_state_changed`: the missing relation was most of the gap.** With `relation:
+   dependency` rendered, the misses fell from 21 to 9 (noul) and 18 to 6 (choice). A third of
+   the noul calls still read an abandoned dependency as beside the goal, so the word helps and is
+   not sufficient.
+2. **The commitment kinds: the relation is rendered and still not used.** A commitment opened by
+   another subject *on the run's own goal*, with `about` repeating the goal, is read as settled
+   on every noul call (16 → 24) and 23 of 24 choice calls; a resolved one barely moves
+   (21 → 20 noul, 22 → 16 choice). The gap §3.2.2 named — the state did not say what a
+   commitment is on — is closed, and the misses are not. So for these two kinds the cause is
+   not a missing relation. What the bench can show is only that Sonnet, told plainly that
+   another subject took on or released a commitment on this goal, answers that a fresh
+   perception would not read the situation differently. Whether that is the model under-reading
+   the change or the corpus over-labelling it (a commitment is a promise about work, not a
+   change in the world the plan acts on) is a question about the label and the question's
+   wording, which this ticket does not touch, and is the next thing to decide before the
+   commitment kinds are measured again.
+
+Per family the misses stay even (3–9 of 21 bears calls per family in both forms), so it is
+still the kind, not the goal.
+
+**Self-reported confidence** still carries signal and is still not fittable (J5): on the noul
+form `medium` (0.5) answers were wrong 32 of 48 times and `high` (0.75) 21 of 288; on the choice
+form `medium` 21 of 33 and `high` 25 of 303.
+
+**Latency and cost** (same price source):
+
+| Form | p50 | p95 | Mean tokens in / out | USD per 1,000 calls | Spend for this run |
+| -- | -- | -- | -- | -- | -- |
+| `noul` | 1,255 ms | 3,749 ms | 763 / 99 | 2.51 | 0.84 |
+| `choice` | 862 ms | 3,926 ms | 796 / 79 | 2.39 | 0.80 |
+
+**What this changes for §5.** Nothing that was decided: `empty-only` is still the only arm that
+holds zero false settled, so `WhenDrifted` still starts there, and no `moveAbove` below 1.0 is
+supported by a measured arm. Sonnet at 45–53 false settled in 168 is better than at 58–63 and
+still one bears call in three to four.
 
 ## 4. Technical Guidelines
 

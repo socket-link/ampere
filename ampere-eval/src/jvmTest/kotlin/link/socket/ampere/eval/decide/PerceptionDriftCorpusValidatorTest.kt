@@ -40,10 +40,12 @@ class PerceptionDriftCorpusValidatorTest {
 
     private data class Action(val by: String, val did: String, val result: String)
 
-    private data class Commitment(val by: String, val on: String, val due: String)
+    private data class Commitment(val by: String, val on: String, val due: String, val about: String?)
+
+    private data class GoalChange(val goal: String, val from: String, val to: String, val relation: String)
 
     private data class Changes(
-        val goals: List<Triple<String, String, String>>,
+        val goals: List<GoalChange>,
         val opened: List<Commitment>,
         val resolved: List<Commitment>,
         val beliefs: List<Belief>,
@@ -75,14 +77,19 @@ class PerceptionDriftCorpusValidatorTest {
         val root = Json.parseToJsonElement(state).jsonObject
         val changes = root.getValue("changes").jsonObject
         val commitments = changes.getValue("commitments").jsonObject
-        fun commitment(element: JsonObject) = Commitment(element.text("by"), element.text("on"), element.text("due"))
+        fun commitment(element: JsonObject) = Commitment(
+            by = element.text("by"),
+            on = element.text("on"),
+            due = element.text("due"),
+            about = element["about"]?.jsonPrimitive?.content,
+        )
         return State(
             goal = root.text("goal"),
             cycle = root.getValue("cycle").jsonPrimitive.int,
             perceived = root.text("perceived"),
             changes = Changes(
                 goals = changes.getValue("goals").jsonArray.map { it.jsonObject }
-                    .map { Triple(it.text("goal"), it.text("from"), it.text("to")) },
+                    .map { GoalChange(it.text("goal"), it.text("from"), it.text("to"), it.text("relation")) },
                 opened = commitments.getValue("opened").jsonArray.map { commitment(it.jsonObject) },
                 resolved = commitments.getValue("resolved").jsonArray.map { commitment(it.jsonObject) },
                 beliefs = changes.getValue("beliefs").jsonArray.map { it.jsonObject }
@@ -158,11 +165,24 @@ class PerceptionDriftCorpusValidatorTest {
     }
 
     @Test
+    fun `every goal change and commitment says how it relates to a goal`() {
+        cases.forEach { case ->
+            val changes = case.parsed().changes
+            changes.goals.forEach { change ->
+                assertTrue(change.relation in RELATIONS, "${case.id}: '${change.relation}' is one of $RELATIONS")
+            }
+            (changes.opened + changes.resolved).forEach { commitment ->
+                assertTrue(commitment.about != null, "${case.id}: every corpus commitment is on a goal")
+            }
+        }
+    }
+
+    @Test
     fun `the state carries no id and no timestamp`() {
         cases.forEach { case ->
             assertFalse("perception-drift-corpus" in case.state, "${case.id}: the run id")
             assertFalse("event-" in case.state, "${case.id}: a provenance")
-            assertFalse("goal-root" in case.state, "${case.id}: the goal's id")
+            assertFalse("goal-" in case.state, "${case.id}: a goal's id")
             assertFalse("action-" in case.state, "${case.id}: an Action's id")
             assertFalse("2026-10-20" in case.state, "${case.id}: a timestamp")
             assertFalse("T09:00" in case.state, "${case.id}: a commitment's time of day")
@@ -196,19 +216,20 @@ class PerceptionDriftCorpusValidatorTest {
                     assertTrue(changes.isEmpty, "$id: every list empty")
                 }
                 Kind.GOAL_STATE_CHANGED -> {
-                    val (goal, from, to) = changes.goals.single()
-                    assertEquals(family.dependency, goal, "$id: the dependency goal")
-                    assertNotEquals(from, to, "$id: the state moved")
-                    assertEquals("OPEN" to "ABANDONED", from to to, id)
+                    val change = changes.goals.single()
+                    assertEquals(family.dependency, change.goal, "$id: the dependency goal")
+                    assertEquals("dependency", change.relation, "$id: the run's goal depends on it")
+                    assertNotEquals(change.from, change.to, "$id: the state moved")
+                    assertEquals("OPEN" to "ABANDONED", change.from to change.to, id)
                 }
                 Kind.COMMITMENT_ON_GOAL_OPENED -> {
                     val commitment = changes.opened.single()
-                    assertEquals(family.onGoalTicket, commitment.on, "$id: on the goal's ticket")
+                    assertEquals(family.goal, commitment.about, "$id: on the run's goal")
                     assertTrue(commitment.by !in own, "$id: by another subject")
                 }
                 Kind.COMMITMENT_ON_GOAL_RESOLVED -> {
                     val commitment = changes.resolved.single()
-                    assertEquals(family.onGoalTicket, commitment.on, "$id: on the goal's ticket")
+                    assertEquals(family.goal, commitment.about, "$id: on the run's goal")
                 }
                 Kind.LESSON_ABOUT_GOAL_SUBJECT -> {
                     val belief = changes.beliefs.single()
@@ -247,8 +268,8 @@ class PerceptionDriftCorpusValidatorTest {
                 }
                 Kind.UNRELATED_COMMITMENT -> {
                     val commitment = changes.opened.single()
-                    assertEquals(family.unrelatedTicket, commitment.on, "$id: on an unrelated ticket")
-                    assertNotEquals(family.onGoalTicket, commitment.on, id)
+                    assertEquals(family.unrelatedGoal, commitment.about, "$id: on the unrelated goal")
+                    assertNotEquals(family.goal, commitment.about, id)
                 }
                 Kind.BOOKKEEPING_SUBJECTS_ADDED -> {
                     assertEquals(family.bookkeepingSubjects, changes.subjects, "$id: the two registered subjects")
@@ -285,5 +306,10 @@ class PerceptionDriftCorpusValidatorTest {
         val generated = PerceptionDriftCorpus.generate()
         assertEquals(generated, PerceptionDriftCorpus.decode(PerceptionDriftCorpus.encode(generated)))
         assertEquals(PerceptionDriftCorpus.encode(generated), PerceptionDriftCorpus.committedText())
+    }
+
+    private companion object {
+        /** The closed set a changed goal's `relation` is one of (AMPR-486). */
+        val RELATIONS: Set<String> = setOf("own", "dependency", "other")
     }
 }
