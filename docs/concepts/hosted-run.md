@@ -22,7 +22,8 @@ PERCEIVE → RECALL → OBSERVE → PLAN on the roster's **host seat** and retur
 `HostedRun.execute()` is EXECUTE plus a re-entry into OBSERVE → PLAN while cycles
 remain — each later PLAN shown the step results so far, and free to answer with no
 steps, which ends the run (AMPR-424) — or, under a cadence that asks for it, a re-entry
-one phase earlier at PERCEIVE (AMPR-483); `HostedRun.close()` is LEARN. A step whose tool
+one phase earlier at PERCEIVE (AMPR-483), and a LEARN that closes a successful cycle before
+the loop decides (AMPR-484); `HostedRun.close()` is the run's own LEARN. A step whose tool
 reports it is waiting on a person ends the run where it stands (AMPR-425), and
 `RunHost.resume(runId, …, resolution)` carries it on from its record once the person has
 decided (AMPR-431); a step that fails skips only the steps that depend on it, and a run
@@ -78,15 +79,29 @@ that loop, moved into Ampere, so the consumer can delete its copy.
 6. **`close()` runs under `NonCancellable`**, and a cancelled step publishes its
    completed pair before the run rethrows. A run that happened always records that it
    happened.
-7. **LEARN runs once per run, not once per cycle**, and the default bills nothing:
-   one `OutcomeMemoryRepository.recordOutcome` for the run keyed by the run id — its
-   actor the host seat, its executor `RosterHostedRun.HOSTED_RUN_EXECUTOR_ID`
+7. **The close-time LEARN runs once per run; a cycle may learn under the consumer's
+   `LearnCadence`, and what it stores is kept whatever the run's end** (AMPR-484, row N8;
+   Miley's answer of 2026-10-20). The close-time LEARN is `close()`, and the default bills
+   nothing: one `OutcomeMemoryRepository.recordOutcome` for the run keyed by the run id —
+   its actor the host seat, its executor `RosterHostedRun.HOSTED_RUN_EXECUTOR_ID`
    (`hosted-run`) rather than the seat's id, since several seats may have performed the
    run's steps and each step's own row names its executor (AMPR-443, F17) — plus —
    for a `Succeeded` run only — `KnowledgeExtractor.extractDefault` per seat that
    executed a step. `LearnPolicy.ModelBacked` adds `OutcomeEvaluator` for the host seat,
    is opt-in because it bills, and is Knowledge too, so it also runs only for
-   `Succeeded` (invariant 17).
+   `Succeeded` (invariant 17). Under `LearnCadence.EveryCycle`, or `WhenLesson(keepAbove)`
+   when the cycle's `lesson_worth_keeping` judgment is `MEASURED` with `p(true) ≥ keepAbove`,
+   a cycle whose plan walk settled to an `Outcome.Success` also learns, after `assess` and
+   before the loop decides: one LEARN bracket on the host seat, and per seat that ran a step
+   *in that cycle* one `extractDefault` row through its own `AgentMemoryService`, tagged
+   `<role>` and `cycle:<n>` (`RosterHostedRun.CYCLE_TAG_PREFIX`). No model call, and no
+   `ModelBacked` evaluation per cycle (row N14). A held, stopped, declined or cancelled cycle,
+   a cycle whose walk did not settle to a success, and — under `WhenLesson` — a cycle whose
+   lesson judgment is missing or self-reported learn nothing: a lesson is a claim, and the
+   quiet direction is the safe one. The `Succeeded`-only rule is the *run's* and is not
+   applied to a cycle; a `Succeeded` run therefore holds a cycle row and a close row for the
+   same seat, and a run that fails on its last cycle keeps what its earlier cycles stored.
+   Under `AtClose` — the default — no cycle learns and the run is byte-identical to before.
 8. **A seat runs only the tools its role declares**, intersected with the run's
    `tools`. Each reaches the seat under the seat-namespaced id `<seat>/<tool>`
    (`SeatTool`), which is the id the planner is offered and the id dispatch resolves.
@@ -530,7 +545,7 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | `HostedAgent` | Who fills a seat: id, role, sparks, charter, `AIConfiguration`, `CognitiveRelay?`, **required** `UpstreamLlmClient`, `MemoryStore?`, `recallScopes`, affinity, `probes`, `questions`, `UpstreamDecisionClient?`, `userGrants: (suspend (PlugManifest) -> UserGrants)?` (null denies) |
 | `HostedRun` | `runId`, `plan`, `readExternalContent`, `execute()`, `close()`. `readExternalContent` defaults to `true` on the interface, so an implementation that does not track it is assumed to have read something |
 | `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip`, `quotas`, `maxStepsPerCycle` (null = no cap), `observe`, `cadence` |
-| `PhaseCadence` / `PerceiveCadence` / `RecallCadence` / `LearnCadence` | When PERCEIVE, RECALL and LEARN run again inside a run (AMPR-481, row N4; AMPR-483, rows N3–N5). `PerceiveCadence { OncePerRun, Record, WhenDrifted(moveAbove), EveryCycle }` and `LearnCadence { AtClose, Record }` are sealed so acting values arrive without a break; `RecallCadence { OncePerRun, WithPerceive }`. `Record` is one decision call per executed cycle on the host seat carrying up to two questions; nothing moves and `RunResult` is identical. `WhenDrifted(moveAbove)` — `moveAbove` strictly in (0, 1), no default — is the same one call, read by `DriftReceptor`, plus one PERCEIVE model call for every cycle whose verdict was not `Holds`; `EveryCycle` is one PERCEIVE per executed cycle with no judge; `WithPerceive` is one RECALL beside every re-run PERCEIVE. `open` refuses `Record` and `WhenDrifted` on a host seat with no transport, and either with `FieldScope.Off` or a host with no `FieldService`; `EveryCycle` needs nothing |
+| `PhaseCadence` / `PerceiveCadence` / `RecallCadence` / `LearnCadence` | When PERCEIVE, RECALL and LEARN run again inside a run (AMPR-481, row N4; AMPR-483, rows N3–N5; AMPR-484, row N8). `PerceiveCadence { OncePerRun, Record, WhenDrifted(moveAbove), EveryCycle }` and `LearnCadence { AtClose, Record, WhenLesson(keepAbove), EveryCycle }` are sealed so acting values arrive without a break; `RecallCadence { OncePerRun, WithPerceive }`. `Record` is one decision call per executed cycle on the host seat carrying up to two questions; nothing moves and `RunResult` is identical. `WhenDrifted(moveAbove)` — `moveAbove` strictly in (0, 1), no default — is the same one call, read by `DriftReceptor`, plus one PERCEIVE model call for every cycle whose verdict was not `Holds`; `PerceiveCadence.EveryCycle` is one PERCEIVE per executed cycle with no judge; `WithPerceive` is one RECALL beside every re-run PERCEIVE. `LearnCadence.WhenLesson(keepAbove)` — `keepAbove` strictly in (0, 1), no default — is the same one call again, the lesson question riding in the receptor's request, plus one deterministic knowledge row per seat that ran in a successful cycle whose `p(true)` reached the threshold, tagged `cycle:<n>`; `LearnCadence.EveryCycle` is those rows after every successful cycle with no judge. Neither touches the close-time LEARN. `open` refuses `Record`, `WhenDrifted` and `WhenLesson` on a host seat with no transport, and the two drift values with `FieldScope.Off` or a host with no `FieldService`; the two `EveryCycle`s need nothing |
 | `DriftReceptor` | `internal class DriftReceptor(reasoning, moveAbove, clip, alsoAsk) : Probe<RunDrift>` (`propel/DriftReceptor.kt`, AMPR-483): the decision-backed probe of AMPR-381 J6. `evaluate` is `Holds` with no call for an empty delta, `Violated` with no call for a delta of only `PROTECTED` rows, else one `decide` under OBSERVE read against `moveAbove` — `Violated` at or above, `Holds` below — and `Undetermined(EVIDENCE_UNREADABLE)` for a self-reported or missing distribution or a transport that threw. Evaluated inside a `ProbeSuite` over the host's door under the run id; the lesson question rides in `alsoAsk` and comes back on `judgments` |
 | `PhaseCell<T>` | `internal data class PhaseCell<T>(value, inputDigest, cycle)` (`propel/PhaseCell.kt`, AMPR-483 row N11): what PERCEIVE (`Idea`) and RECALL (`RecalledContext`) last produced, the SHA-256 of the input they ran over, and the cycle. In memory only; `PhaseCell.digest(parts…)` is `stateDigest` over the NUL-joined parts |
 | `RunDrift` | What the receptor is asked about (AMPR-481, row N6): run id, goal, cycle, the host's last PERCEIVE idea, the `FieldDelta` between the two snapshots, this cycle's outcomes, and the names the delta's references resolve to. `RunDrift.asDecisionState(clip)` renders the fixed-key-order JSON (`goal`, `cycle`, `perceived`, `changes`, `cycle_results`); no id, no timestamp, no `PROTECTED` row |
@@ -710,8 +725,8 @@ interrupted (`heldRuns()` lists it with its `claimedAt`).
   remembered nothing" and "the corpus was down" the same observation.
 - **Expecting a wired decision transport to be asked anything.**
   `HostedAgent.upstreamDecisionClient` is inert on its own: the host seat is asked only
-  under `RunPolicy.goalCheck == Record`, a `Record` value of `RunPolicy.cadence` or
-  `PerceiveCadence.WhenDrifted`, and a
+  under `RunPolicy.goalCheck == Record`, a `Record` value of `RunPolicy.cadence`,
+  `PerceiveCadence.WhenDrifted` or `LearnCadence.WhenLesson`, and a
   seat's `questions` only when it is the roster's verifier — a non-verifier's are ignored
   exactly as its `probes` are. The
   converse is refused rather than ignored: `open` throws when a seat *would* be asked
@@ -725,6 +740,17 @@ interrupted (`heldRuns()` lists it with its `claimedAt`).
   re-run PERCEIVE, or a lesson that would run LEARN early, has to be judged before the
   next PLAN — and in their own request, after the goal's, never folded into it, so the
   goal question's digests and AMPR-422's corpus stay what they were.
+- **Expecting `WhenLesson` to store a lesson for a cycle the receptor never asked about.**
+  The lesson question rides in the receptor's request and nowhere else, so under
+  `PerceiveCadence.WhenDrifted` a cycle whose `DriftReceptor` made no call — nothing moved,
+  or everything that moved was `PROTECTED` — has no lesson judgment, and a missing judgment
+  stores nothing. That is the quiet direction on purpose: a lesson is a claim, and
+  `WhenLesson` keeps only one a judge measured. A consumer that wants every successful
+  cycle's row asks for `LearnCadence.EveryCycle`.
+- **Applying invariant 17's `Succeeded`-only rule to a cycle's LEARN.** The rule is about a
+  *run* that finished its work; a cycle that settled to a success finished its own, and what
+  it stored is kept whatever the run goes on to do (row N8). A close that deleted or
+  superseded a cycle's row would be a forget path, which is the consumer's, not `close()`'s.
 - **Putting a step's id or timestamps in a decision state.** The record carries a
   `stateDigest` and never the state, so the digest is the only join key back — and a
   state that is unique per render makes the join useless.
@@ -854,8 +880,7 @@ judging whether the goal was met (AMPR-421 records that judgment, AMPR-422 measu
 and nothing reads it — the planner's empty answer is the planner's, not a verdict over
 one); and handing prior results to a `customPromptBuilder`, whose signature is unchanged.
 
-AMPR-483 (rows N3, N4, N5, N9, N11) deliberately comes without: LEARN per cycle (the W1
-LEARN ticket); intra-cycle plan revision (N13); a revised RECALL query on re-run (N15 —
+AMPR-483 (rows N3, N4, N5, N9, N11) deliberately comes without: intra-cycle plan revision (N13); a revised RECALL query on re-run (N15 —
 `WithPerceive` asks the same question again); the Arc path, which has no run policy; bands
 or a replay (J10, J14); a persisted cell (F25 is the cross-run design); a per-cycle view in
 the trace (`ArcTraceProjection.buildPhases` keys phases by name, so a run's re-perceives
@@ -950,4 +975,4 @@ query (AMPR-483).
 - [PropelLoop](propel-loop.md) — the six phases and the services behind them
 - [TeamLayer](team-layer.md) — the roster types a run is opened over
 - [CognitionTrace](cognition-trace.md) — what `project(runId)` reads back
-- [MemoryProvenance](memory-provenance.md) — what LEARN writes
+- [MemoryProvenance](memory-provenance.md) — what LEARN writes, at close and per cycle
