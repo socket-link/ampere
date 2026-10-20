@@ -411,7 +411,7 @@ ampere --arc devops-pipeline  # Use a specific arc workflow
 
 **Command Mode (press `:`):**
 - `:goal <description>` - Start agent with goal
-- `:ask <question>` - Ask the on-device model (macOS, through `ampere-helper`); nothing leaves the machine
+- `:ask <question>` - Ask the on-device model (macOS, through `ampere-helper`); nothing leaves the machine. The dashboard keeps running while it waits; `ESC` cancels the ask
 - `:agents` - List all active agents
 - `:ticket <id>` - Show ticket details
 - `:thread <id>` - Show conversation thread

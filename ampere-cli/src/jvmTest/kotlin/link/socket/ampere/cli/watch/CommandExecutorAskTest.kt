@@ -2,18 +2,27 @@ package link.socket.ampere.cli.watch
 
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import link.socket.ampere.agents.domain.routing.local.LocalCapacity
 import link.socket.ampere.agents.domain.routing.local.LocalInferenceEngine
 import link.socket.ampere.agents.domain.routing.local.LocalUnavailableReason
 import link.socket.ampere.agents.events.InMemoryEventDoor
 import link.socket.ampere.agents.events.relay.EventRelayServiceImpl
 import link.socket.ampere.agents.events.utils.SilentEventLogger
+import link.socket.ampere.cli.launch.DashboardCommands
+import link.socket.ampere.cli.launch.intercept
+import link.socket.ampere.cli.layout.DemoInputHandler
 import link.socket.ampere.cli.ondevice.OnDeviceAssistant
 import link.socket.ampere.cli.watch.presentation.WatchPresenter
 import link.socket.ampere.domain.ai.model.AIModel_OnDevice
@@ -97,10 +106,61 @@ class CommandExecutorAskTest {
         }
     }
 
+    @Test
+    fun `ESC cancels an ask that is still waiting and the engine sees the cancellation`() = runBlocking<Unit> {
+        val engine = HeldEngine()
+
+        OnDeviceAssistant.Bound(engine = engine, eventApi = door.api).use { assistant ->
+            val executor = executor(assistant)
+            val commands = DashboardCommands(
+                scope = scope,
+                execute = executor::execute,
+                describePending = executor::describePending,
+            )
+
+            assertNull(commands.submit("ask What is an Arc?"))
+            withTimeout(5.seconds) { engine.generating.await() }
+            assertEquals(
+                CommandResult.Pending("Asking the on-device model… [ESC] cancel"),
+                commands.screen,
+            )
+
+            // ESC with no command line open, as the dashboard hands it over.
+            assertTrue(commands.intercept('\u001B', DemoInputHandler.DemoViewConfig()))
+
+            withTimeout(5.seconds) { engine.cancelled.await() }
+            commands.awaitIdle()
+            assertNull(commands.screen, "a cancelled ask left a screen in place of the dashboard")
+        }
+    }
+
     private fun executor(onDevice: OnDeviceAssistant) = CommandExecutor(
         presenter = WatchPresenter(EventRelayServiceImpl(door.bus, door.repository)),
         onDevice = onDevice,
     )
+
+    /** An available engine whose generation waits until it is cancelled. */
+    private class HeldEngine : LocalInferenceEngine {
+        val generating = CompletableDeferred<Unit>()
+        val cancelled = CompletableDeferred<Unit>()
+
+        override suspend fun probe(): LocalCapacity = LocalCapacity(
+            available = true,
+            modelId = AIModel_OnDevice.AppleFoundationModels.name,
+            maxContextTokens = 4_096,
+            providerId = AIProvider_OnDevice.id,
+        )
+
+        override suspend fun generate(prompt: String): Result<String> {
+            generating.complete(Unit)
+            try {
+                awaitCancellation()
+            } catch (cancellation: CancellationException) {
+                cancelled.complete(Unit)
+                throw cancellation
+            }
+        }
+    }
 
     /** The on-device engine, scripted: available or turned off, and one answer. */
     private class ScriptedEngine(private val available: Boolean, private val answer: String) : LocalInferenceEngine {
