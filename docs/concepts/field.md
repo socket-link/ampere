@@ -3,6 +3,7 @@ concept: Field
 status: experimental
 tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/field/Field.kt
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/field/FieldDelta.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/field/Action.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/field/Belief.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/service/FieldService.kt
@@ -76,6 +77,12 @@ concrete event classes".
 ## Where it lives
 
 - `field/Field.kt` — `Field`, `Field.HeldGoal`, `Field.GoalState`. Data only, inside the leaf.
+- `field/FieldDelta.kt` — `FieldDelta` and `GoalChange` (AMPR-479, N2): what moved between two
+  snapshots, from `FieldDelta.between(before, after, ownActors)`. Beliefs and observations fold
+  by `(provenance.createdBy, holder)`, commitments by `provenance.createdBy`, actions by `id`,
+  goals by `goal.id` with their state, subjects by `id`, relationships by `(from, to, kind)`.
+  Actions by an own actor are left out; `PROTECTED` rows stay in and are counted on
+  `protectedLeftOut`. Data only, inside the leaf; `commonTest/.../field/FieldDeltaTest.kt`.
 - `field/Belief.kt` — `Belief` and `BeliefKind { LESSON, IDEA, PERCEPTION, PLAN, TASK,
   OBSERVATION }`; `kind` is required, with no default.
 - `field/Action.kt` — `Action` with nullable `reversibility` / `cost` (`null` = unknown) and
@@ -171,6 +178,13 @@ concrete event classes".
   primitive names an event, never an Observation row, so a Belief or Commitment never dangles
   when one is dropped. The default Observation `decay` is `HalfLife(MAX_AGE)`, so the row says
   what the store will do to it; a caller's explicit `ExpiresAt` is honoured by the same sweep.
+- **A delta is a fold of two snapshots by provenance, never a replay, never stored, never on an
+  event; equal anchors fold to empty for free.** `FieldDelta.between` compares two `Field` values
+  on the identities their primitives already carry and reads no log; two snapshots with the same
+  `asOfSequence` return the empty delta without comparing anything. A delta of only `PROTECTED`
+  rows is not empty: the rows stay in its lists, and `protectedLeftOut` only counts them for the
+  renderer, which is `propel/`'s. A run's own Actions are not in `actionsByOthers` because its
+  planner already sees them as step results (AMPR-424).
 - **Signals are derived, never stored.** No priority, urgency, trust, Potential or Resistance is
   computed here or carried on a `Field`; how they combine is F28, open.
 - **`field/` stays a leaf.** `Field.kt` imports nothing outside `field`; the service and the
