@@ -18,6 +18,7 @@ import link.socket.ampere.agents.domain.outcome.ContentOrigin
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.outcome.StepOutcome
+import link.socket.ampere.agents.domain.reasoning.ConfidenceSource
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Perception
 import link.socket.ampere.agents.domain.reasoning.Plan
@@ -49,6 +50,7 @@ import link.socket.ampere.field.Ref
 import link.socket.ampere.field.Subject
 import link.socket.ampere.goal.GoalBranch
 import link.socket.ampere.llm.DispatchingUpstreamLlmClient
+import link.socket.ampere.llm.decide.Judgment
 import link.socket.ampere.llm.decide.Question
 import link.socket.ampere.plug.permission.UserGrants
 import link.socket.ampere.probe.ProbeSuite
@@ -140,6 +142,15 @@ import link.socket.ampere.util.logWith
  * a run whose quota tripped does not re-perceive; a held, stopped, declined or cancelled run
  * never re-enters.
  *
+ * Under [LearnCadence.WhenLesson] or [LearnCadence.EveryCycle] (AMPR-484, row N8) LEARN may
+ * also *close a cycle*: after an executed cycle whose walk settled to a success, once the
+ * receptor has been asked, the host seat opens one LEARN bracket and every seat that ran a step
+ * in that cycle stores one deterministic `Knowledge.FromOutcome` through its own memory, tagged
+ * `cycle:<n>` ([learnCycle]). Under `WhenLesson` the lesson judgment the receptor's request
+ * came back with is the one thing read, against the consumer's `keepAbove`; a missing or
+ * unmeasured one stores nothing. What a cycle stored is kept whatever the run's later end, and
+ * the LEARN at [close] is untouched: one outcome row, Knowledge for a `Succeeded` run only.
+ *
  * One run, one driver: the fields below are not synchronised, and two coroutines
  * driving the same run would interleave its phases.
  */
@@ -214,6 +225,15 @@ internal class RosterHostedRun(
      */
     private val failedRoots = mutableMapOf<TaskId, TaskId>()
     private val seatsThatRan = mutableSetOf<RoleId>()
+
+    /**
+     * The roles that executed a step in the latest cycle — this cycle's alone, where
+     * [seatsThatRan] is every cycle's — for the LEARN that may close a cycle (AMPR-484).
+     * Cleared by each [runCycle]. For the held cycle of a resumed run it holds the seats that
+     * ran after the hold: the ones before it ran in another process, and are on the record
+     * only run-wide.
+     */
+    private val cycleSeats = mutableSetOf<RoleId>()
     private var cyclesUsed: Int = 0
     private var lastPlanOutcome: Outcome = Outcome.blank
     private var cancellation: CancellationException? = null
@@ -334,6 +354,14 @@ internal class RosterHostedRun(
      * [runCycle]; empty before the first.
      */
     private var cycleResults: List<StepOutcome> = emptyList()
+
+    /**
+     * The answer to `lesson_worth_keeping` for the latest executed cycle, or null (AMPR-484).
+     * Kept only under [LearnCadence.WhenLesson], the one value that reads it; under `Record`
+     * the answer is dropped at the call site as every record-only answer is. Cleared by each
+     * [runCycle], set by [askReceptor], read once by [learnCycle].
+     */
+    private var lessonJudgment: Judgment? = null
 
     /**
      * Whether the run has already said that drift could not be asked for lack of a snapshot
@@ -851,6 +879,9 @@ internal class RosterHostedRun(
                     // (AMPR-483, row N5). Decided here rather than in `assess`, which a run
                     // that observes nothing and asks nothing returns from before its bracket.
                     if (policy.cadence.perceive == PerceiveCadence.EveryCycle) reentryAtPerceive = true
+                    // LEARN may close the cycle (AMPR-484, row N8): after the receptor has
+                    // been asked, before the loop decides whether to continue.
+                    learnCycle()
                 }
             }
             captureCancellation()
@@ -964,6 +995,8 @@ internal class RosterHostedRun(
         // the approved plan's indices, and folded with the steps that ran before the hold.
         val resuming = resumePoint
         resumePoint = null
+        cycleSeats.clear()
+        lessonJudgment = null
         val execution = host.phases.withPhase(CognitivePhase.EXECUTE, runId) {
             // The summary is the walk's (PlanExecutor's default), not the host seat's: the
             // seat is the door's identity on every pair, not an executor (AMPR-443).
@@ -1063,7 +1096,7 @@ internal class RosterHostedRun(
         val perceiveCadence = policy.cadence.perceive
         val asksReceptor = perceiveCadence == PerceiveCadence.Record ||
             perceiveCadence is PerceiveCadence.WhenDrifted ||
-            policy.cadence.learn == LearnCadence.Record
+            asksLesson
         if (!asksGoal && verifier == null && !observes && !asksReceptor) return
 
         host.phases.withPhase(CognitivePhase.OBSERVE, runId) {
@@ -1132,7 +1165,7 @@ internal class RosterHostedRun(
     private suspend fun askReceptor() {
         val (delta, names) = foldDrift()
         val perceiveCadence = policy.cadence.perceive
-        val lesson = if (policy.cadence.learn == LearnCadence.Record) {
+        val lesson = if (asksLesson) {
             mapOf(RunQuestions.LESSON_WORTH_KEEPING_ID to RunQuestions.lessonWorthKeeping)
         } else {
             emptyMap()
@@ -1156,6 +1189,7 @@ internal class RosterHostedRun(
             )
             aboutToShow(cycleResults)
             val verdict = evaluateReceptor(receptor, runDrift(delta, names)) ?: return
+            keepLesson(receptor.judgments)
             if (verdict is Verdict.Holds) {
                 perceivedField = observedField
             } else {
@@ -1177,11 +1211,27 @@ internal class RosterHostedRun(
         val drift = runDrift(delta ?: noDrift(), names)
         aboutToShow(cycleResults)
         recordOnly(host) {
-            host.agent.reasoningUnit.decide(
+            val response = host.agent.reasoningUnit.decide(
                 state = drift.asDecisionState(policy.judgmentResultClip),
                 questions = questions,
                 phase = CognitivePhase.OBSERVE,
             )
+            keepLesson(response.judgments)
+        }
+    }
+
+    /** Whether the receptor's request carries [RunQuestions.lessonWorthKeeping] this run. */
+    private val asksLesson: Boolean
+        get() = policy.cadence.learn == LearnCadence.Record || policy.cadence.learn is LearnCadence.WhenLesson
+
+    /**
+     * Keeps the lesson answer out of [judgments] for [learnCycle] to read — under
+     * [LearnCadence.WhenLesson] only. Under `Record` the answer is discarded here with the
+     * rest, so "nothing reads the answer" stays visible at the call site (AMPR-481).
+     */
+    private fun keepLesson(judgments: Map<String, Judgment>) {
+        if (policy.cadence.learn is LearnCadence.WhenLesson) {
+            lessonJudgment = judgments[RunQuestions.LESSON_WORTH_KEEPING_ID]
         }
     }
 
@@ -1354,6 +1404,7 @@ internal class RosterHostedRun(
 
         val seat = seatFor(step)
         seatsThatRan += seat.role
+        cycleSeats += seat.role
         aboutToShow(priorResults)
         val argumentGate = StepArgumentGate.forStep(step, policy.planGate)
         val result = try {
@@ -1681,6 +1732,68 @@ internal class RosterHostedRun(
     // LEARN
     // ========================================================================
 
+    /**
+     * The LEARN that may close a cycle (AMPR-484, epic AMPR-478 row N8).
+     *
+     * Called after [assess], before the loop decides whether to continue, for a cycle that
+     * executed and neither held nor was stopped. It writes when the cycle's walk settled to an
+     * [Outcome.Success] and the cadence says so: [LearnCadence.EveryCycle] always,
+     * [LearnCadence.WhenLesson] when the lesson judgment the receptor's request came back with
+     * is `MEASURED` and puts `keepAbove` or more on `true`. Then the host seat opens one LEARN
+     * bracket and every seat that ran a step *in this cycle* stores one `Knowledge.FromOutcome`
+     * — `KnowledgeExtractor.extractDefault` over the cycle's outcome and plan, no model call —
+     * through its own `AgentMemoryService` under the run id, tagged with its role and
+     * `cycle:<n>`, so the `KnowledgeStored` names the holder (F1, F9, F11) and a reader can tell
+     * a cycle's row from the close-time one.
+     *
+     * Nothing is written for a cycle whose walk did not settle to a success, a cancelled run,
+     * or — under `WhenLesson` — a lesson judgment that is missing or carries no measured
+     * distribution: a lesson is a claim, and the quiet direction is the safe one. The
+     * `Succeeded`-only rule of the close-time LEARN (invariant 17) is deliberately not applied
+     * to a cycle: that rule is about a *run* that finished its work, and this is about a cycle
+     * that finished its own, whatever the run goes on to do. What is stored here stays, and
+     * [learnWithin] is what it was: one outcome row, Knowledge for a `Succeeded` run only.
+     *
+     * A seat with no memory stores nothing, as at `close()`; the bracket is still entered, as a
+     * LEARN that found nowhere to write is still a LEARN.
+     */
+    private suspend fun learnCycle() {
+        if (cancellation != null || !coroutineContext.isActive) return
+        val outcome = lastPlanOutcome
+        if (outcome !is Outcome.Success) return
+        val stores = when (val cadence = policy.cadence.learn) {
+            LearnCadence.AtClose, LearnCadence.Record -> false
+            LearnCadence.EveryCycle -> true
+            is LearnCadence.WhenLesson -> lessonWorthKeeping(cadence.keepAbove)
+        }
+        if (!stores) return
+
+        val cycle = cyclesUsed
+        val cyclePlan = gatedPlan
+        host.phases.withPhase(CognitivePhase.LEARN, runId) {
+            cycleSeats.mapNotNull { seats[it] }.forEach { seat ->
+                seat.memory?.storeKnowledge(
+                    knowledge = seat.agent.extractKnowledgeFromOutcome(outcome, goal, cyclePlan),
+                    tags = listOf(seat.role.value, "$CYCLE_TAG_PREFIX$cycle"),
+                    taskType = MemoryTaskTypes.GENERIC,
+                    runId = runId,
+                )
+            }
+        }
+    }
+
+    /**
+     * Whether the latest cycle's lesson judgment says keep: `MEASURED`, with `keepAbove` or more
+     * on `true`. Missing, self-reported or without mass on `true` is no.
+     */
+    private fun lessonWorthKeeping(keepAbove: Double): Boolean {
+        val judgment = lessonJudgment ?: return false
+        val distribution = judgment.distribution ?: return false
+        if (judgment.source != ConfidenceSource.MEASURED) return false
+        val keep = distribution[Question.Noul.TRUE_KEY] ?: return false
+        return keep >= keepAbove
+    }
+
     override suspend fun close() {
         // Read before the `NonCancellable` hop, which is what makes the rest of this
         // method run at all: inside it, the caller's cancellation is no longer visible.
@@ -1698,7 +1811,8 @@ internal class RosterHostedRun(
     }
 
     /**
-     * LEARN: once per run, never once per cycle.
+     * The close-time LEARN: once per run. A cycle may learn too, under the consumer's
+     * [LearnCadence] ([learnCycle], AMPR-484); nothing here reads or undoes what it stored.
      *
      * Three writes, in order. One `recordOutcome` for the run as a whole, keyed by the
      * run id and attributed to the host seat — its first production caller in this
@@ -1903,6 +2017,12 @@ internal class RosterHostedRun(
          * hosted-run` lists every hosted run's own row.
          */
         const val HOSTED_RUN_EXECUTOR_ID: ExecutorId = "hosted-run"
+
+        /**
+         * The prefix of the tag a cycle's LEARN puts on each row it stores (AMPR-484):
+         * `cycle:<n>`, beside the seat's role. A close-time row carries the role alone.
+         */
+        const val CYCLE_TAG_PREFIX: String = "cycle:"
 
         /**
          * The node id of a hosted run's one goal (AMPR-473), the id `GoalTreeBuilder` gives an

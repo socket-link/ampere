@@ -84,6 +84,28 @@ class RunPolicyTest {
     }
 
     @Test
+    fun `WhenLesson takes a probability strictly between 0 and 1`() {
+        assertEquals(0.7, LearnCadence.WhenLesson(0.7).keepAbove)
+        LearnCadence.WhenLesson(0.01)
+        LearnCadence.WhenLesson(0.99)
+        assertFailsWith<IllegalArgumentException> { LearnCadence.WhenLesson(0.0) }
+        assertFailsWith<IllegalArgumentException> { LearnCadence.WhenLesson(1.0) }
+        assertFailsWith<IllegalArgumentException> { LearnCadence.WhenLesson(-0.2) }
+        assertFailsWith<IllegalArgumentException> { LearnCadence.WhenLesson(1.5) }
+        assertFailsWith<IllegalArgumentException> { LearnCadence.WhenLesson(Double.NaN) }
+    }
+
+    @Test
+    fun `the learn cadences ride on the run policy beside the rest`() {
+        val judged = RunPolicy(cycles = 3, cadence = PhaseCadence(learn = LearnCadence.WhenLesson(0.7)))
+        assertEquals(LearnCadence.WhenLesson(0.7), judged.cadence.learn)
+        assertEquals(PerceiveCadence.OncePerRun, judged.cadence.perceive)
+        assertEquals(3, judged.cycles)
+        val unjudged = RunPolicy(cadence = PhaseCadence(learn = LearnCadence.EveryCycle))
+        assertEquals(LearnCadence.EveryCycle, unjudged.cadence.learn)
+    }
+
+    @Test
     fun `the acting cadences ride on the run policy beside the rest`() {
         val drifted = RunPolicy(
             cycles = 3,

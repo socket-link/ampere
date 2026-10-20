@@ -286,9 +286,11 @@ internal class RosterRunHost(
      * run, not one per seat, so a question declared on a seat nobody asks is the same
      * kind of unused declaration.
      *
-     * The receptor's cadences are refused on the same ground (AMPR-481, row N7; AMPR-483):
-     * a `Record` value of [PhaseCadence] and [PerceiveCadence.WhenDrifted] ask on the host
-     * seat, so they need that seat's transport; and [PerceiveCadence.Record] and
+     * The receptor's cadences are refused on the same ground (AMPR-481, row N7; AMPR-483;
+     * AMPR-484): a `Record` value of [PhaseCadence], [PerceiveCadence.WhenDrifted] and
+     * [LearnCadence.WhenLesson] ask on the host seat, so they need that seat's transport —
+     * under `WhenLesson` a missing answer would store nothing, silently, for the whole run;
+     * [LearnCadence.EveryCycle] asks nothing and needs nothing. [PerceiveCadence.Record] and
      * [PerceiveCadence.WhenDrifted] ask what moved in the Field, so they need a Field to have
      * moved — a [FieldScope.Off] policy or a host built with no `FieldService` would leave
      * the drift question unasked every cycle, silently, for the same reason, and under
@@ -338,12 +340,13 @@ internal class RosterRunHost(
             is PerceiveCadence.WhenDrifted -> "PerceiveCadence.WhenDrifted"
             PerceiveCadence.OncePerRun, PerceiveCadence.EveryCycle -> null
         }
-        val asksLesson = policy.cadence.learn == LearnCadence.Record
-        if (driftCadence != null || asksLesson) {
-            val asked = listOfNotNull(
-                driftCadence,
-                "LearnCadence.Record".takeIf { asksLesson },
-            ).joinToString(" and ")
+        val lessonCadence = when (policy.cadence.learn) {
+            LearnCadence.Record -> "LearnCadence.Record"
+            is LearnCadence.WhenLesson -> "LearnCadence.WhenLesson"
+            LearnCadence.AtClose, LearnCadence.EveryCycle -> null
+        }
+        if (driftCadence != null || lessonCadence != null) {
+            val asked = listOfNotNull(driftCadence, lessonCadence).joinToString(" and ")
             require(seats.getValue(roster.host).upstreamDecisionClient != null) {
                 "$asked asks the host seat '${roster.host.value}' after each executed cycle, " +
                     "and that seat carries no upstreamDecisionClient; a decision transport is " +

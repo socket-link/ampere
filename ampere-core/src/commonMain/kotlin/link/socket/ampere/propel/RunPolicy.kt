@@ -54,7 +54,9 @@ import link.socket.ampere.memory.RecallSource
  *   of the continuous-PROPEL epic; AMPR-483, rows N3–N5). See [PhaseCadence]; the default is
  *   the run as it was — each once. `Record` values ask the receptor's two questions and move
  *   nothing; [PerceiveCadence.WhenDrifted] and [PerceiveCadence.EveryCycle] re-enter the next
- *   cycle at PERCEIVE, and [RecallCadence.WithPerceive] re-runs RECALL beside it.
+ *   cycle at PERCEIVE, and [RecallCadence.WithPerceive] re-runs RECALL beside it;
+ *   [LearnCadence.WhenLesson] and [LearnCadence.EveryCycle] let a successful cycle store its
+ *   deterministic lesson before the loop decides (AMPR-484, row N8).
  */
 @AmpereStableApi
 data class RunPolicy(
@@ -124,18 +126,20 @@ enum class GoalCheck {
 
 /**
  * When the three phases a hosted run charges or closes with run again inside the run
- * (AMPR-481, epic AMPR-478 row N4; AMPR-483, rows N3–N5).
+ * (AMPR-481, epic AMPR-478 row N4; AMPR-483, rows N3–N5; AMPR-484, row N8).
  *
- * A hosted run perceives once at `open`, recalls once beside it, and learns once at
+ * A hosted run perceives once at `open`, recalls once beside it, and closes with a LEARN at
  * `close()` (hosted-run invariant 7). The continuous loop re-runs PERCEIVE when the world
  * has drifted and LEARN when a cycle produced a lesson worth keeping — and whether either
  * has happened is a judgment, asked of the host seat's decision transport after each
  * executed cycle. This value says what the run does with that judgment. The `Record` values
  * **record and never act**; [PerceiveCadence.WhenDrifted] acts on the drift judgment in the
  * add-only direction — the next cycle re-enters at PERCEIVE rather than at OBSERVE — and
- * [PerceiveCadence.EveryCycle] re-enters there without asking. The acting value for LEARN
- * (`WhenLesson(keepAbove)`) is a later W1 ticket's, and the interfaces are sealed rather than
- * enums so each arrives without a breaking change.
+ * [PerceiveCadence.EveryCycle] re-enters there without asking. [LearnCadence.WhenLesson] acts
+ * on the lesson judgment the same way — a successful cycle stores its deterministic lesson
+ * before the loop decides, and the close-time LEARN is untouched — and
+ * [LearnCadence.EveryCycle] stores it without asking. The interfaces are sealed rather than
+ * enums so each acting value arrives without a breaking change.
  *
  * ## What it costs
  *
@@ -157,6 +161,13 @@ enum class GoalCheck {
  * - [RecallCadence.WithPerceive] is one more RECALL — store reads and corpus queries, no model
  *   call — beside every PERCEIVE that re-runs. Under [PerceiveCadence.OncePerRun] and
  *   [PerceiveCadence.Record] it costs nothing, because PERCEIVE never re-runs.
+ * - [LearnCadence.WhenLesson] is the same **one decision call per executed cycle** — the
+ *   receptor's request, which carries the lesson question beside the drift question when
+ *   that is asked too, so it adds no call of its own — plus **one knowledge row per seat
+ *   that ran** in a successful cycle whose measured `p(true)` reached `keepAbove`. No model
+ *   call: the row is `KnowledgeExtractor.extractDefault`'s, as at `close()`.
+ * - [LearnCadence.EveryCycle] is **no decision call and no model call**: the same rows after
+ *   every successful cycle, with no judge.
  *
  * A decision call is not a generative call, so it shows up in neither the run's prompts nor
  * its `ProviderCall*` pairs; a re-run PERCEIVE is a generative call and shows up in both. A
@@ -293,17 +304,30 @@ enum class RecallCadence {
 }
 
 /**
- * When a hosted run's LEARN runs (AMPR-481, row N4).
+ * When a hosted run's LEARN runs (AMPR-481, row N4; AMPR-484, row N8).
  *
- * Sealed rather than an enum so the acting value — `WhenLesson(keepAbove)`, a W1 ticket —
- * can carry its threshold without a breaking change. See [PhaseCadence] for the cost.
+ * Sealed rather than an enum so the acting value — [WhenLesson] — carries its threshold
+ * without a breaking change. See [PhaseCadence] for the cost.
+ *
+ * Whatever the value, the LEARN at `close()` is what it always was (hosted-run invariant 7):
+ * one outcome row for the run, Knowledge only for a run that `Succeeded`, the model-backed
+ * evaluation under [LearnPolicy.ModelBacked] there and only there. The acting values add a
+ * LEARN that *closes a cycle*: after an executed cycle whose plan walk settled to a success,
+ * before the loop decides whether to continue, each seat that ran a step in that cycle
+ * stores one `Knowledge.FromOutcome` — `KnowledgeExtractor.extractDefault` over the cycle's
+ * outcome, no model call — through its own `AgentMemoryService` under the run id, tagged
+ * with its role and `cycle:<n>`. What a cycle stored is kept whatever the run's later end
+ * (Miley's answer to row N8, 2026-10-20): a long run that fails on its last cycle no longer
+ * loses what its earlier cycles found. A cycle that held, was stopped by the gate, was
+ * declined, was cancelled, or whose walk did not settle to a success learns nothing.
  */
 @AmpereStableApi
 sealed interface LearnCadence {
 
     /**
-     * Learn once, at `close()`, as hosted-run invariant 7 says. The default, and the only
-     * value under which the run asks nothing about lessons.
+     * Learn once, at `close()`, as hosted-run invariant 7 says. The default, the only
+     * value under which the run asks nothing about lessons, and the only one under which
+     * no cycle learns: the event stream is what it was before AMPR-481, event for event.
      */
     data object AtClose : LearnCadence
 
@@ -316,9 +340,56 @@ sealed interface LearnCadence {
      * `open` refuses this value on a host seat with no decision transport.
      *
      * Record-only, deliberately: LEARN still runs once, at `close()`, whatever came back,
-     * and [RunResult] is identical. Acting on the answer is the W1 ticket's.
+     * and [RunResult] is identical. [WhenLesson] is the value that acts.
      */
     data object Record : LearnCadence
+
+    /**
+     * Let a successful cycle store its lesson when the judge says it is worth keeping
+     * (AMPR-484, row N8).
+     *
+     * After each executed cycle [RunQuestions.lessonWorthKeeping] is asked on the host seat
+     * exactly as under [Record] — in the receptor's request, beside the drift question when
+     * [PerceiveCadence.Record] or [PerceiveCadence.WhenDrifted] asks that too, so it adds no
+     * call of its own — and the measured probability of `true` is read against [keepAbove]:
+     *
+     * - at or above it, when the cycle's plan walk settled to a success, the host seat opens
+     *   one LEARN bracket and every seat that ran a step in that cycle stores one
+     *   `Knowledge.FromOutcome` through its own memory, tagged `cycle:<n>`;
+     * - below it, nothing is stored and the cycle goes on as under [Record];
+     * - a lesson judgment that is missing — the transport threw, answered without it, or the
+     *   drift receptor made no call because nothing moved — or that carries no measured
+     *   distribution stores nothing. A lesson is a claim, and the quiet direction is the safe
+     *   one: an unchecked lesson is not kept, where an unchecked drift re-perceives.
+     *
+     * Add-only beside the close-time LEARN: no cycle's row ends the run, changes
+     * `RunResult.status`, or replaces the run's own LEARN at `close()`, which still writes
+     * what it wrote — so a `Succeeded` run under this value holds a cycle row and a close row
+     * for the same seat. `open` refuses this value on a host seat with no decision transport.
+     *
+     * @property keepAbove The probability of `true` at or above which a cycle's lesson is
+     *   stored. Strictly between 0 and 1, and **Ampere ships no default**: the number
+     *   separating a lesson worth recall from routine is the consumer's (AMPR-422, Q5), and
+     *   the judge exists so routine cycles do not fill recall with routine.
+     */
+    data class WhenLesson(val keepAbove: Double) : LearnCadence {
+
+        init {
+            require(keepAbove > 0.0 && keepAbove < 1.0) {
+                "keepAbove is a probability strictly between 0 and 1; got $keepAbove"
+            }
+        }
+    }
+
+    /**
+     * Let every successful cycle store its lesson, with no judge (AMPR-484, row N8).
+     *
+     * The same LEARN bracket and the same `cycle:<n>` rows as [WhenLesson] stores above its
+     * threshold, after every executed cycle whose walk settled to a success; no decision call,
+     * no judgment, no record beyond the phase's own and the `KnowledgeStored` each row leaves.
+     * Needs no transport: `open` refuses nothing for it. The close-time LEARN is what it was.
+     */
+    data object EveryCycle : LearnCadence
 }
 
 /**
