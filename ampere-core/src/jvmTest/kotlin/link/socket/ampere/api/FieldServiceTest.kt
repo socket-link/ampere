@@ -1,5 +1,7 @@
 package link.socket.ampere.api
 
+import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import java.io.File
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -32,6 +34,7 @@ import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.environment.EnvironmentService
+import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.events.InMemoryEventApi
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.tickets.Ticket
@@ -46,12 +49,16 @@ import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.service.TicketActionService
 import link.socket.ampere.api.internal.DefaultFieldService
+import link.socket.ampere.api.service.FieldService
 import link.socket.ampere.canon.CanonId
 import link.socket.ampere.canon.CanonPlace
 import link.socket.ampere.canon.CanonProvenance
 import link.socket.ampere.canon.CanonType
 import link.socket.ampere.canon.SourceHandle
 import link.socket.ampere.commitment.CommitmentLedger
+import link.socket.ampere.data.DEFAULT_JSON
+import link.socket.ampere.data.DatabaseSchemaManager
+import link.socket.ampere.db.Database
 import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
@@ -115,7 +122,7 @@ class FieldServiceTest {
     private lateinit var branch: GoalBranch
     private lateinit var memoryA: AgentMemoryService
     private lateinit var memoryB: AgentMemoryService
-    private lateinit var service: DefaultFieldService
+    private lateinit var service: FieldService
 
     private val now: Instant = Instant.fromEpochMilliseconds(Clock.System.now().toEpochMilliseconds())
 
@@ -146,7 +153,7 @@ class FieldServiceTest {
         branch = GoalBranch.over(handle.database, handle.api)
         memoryA = AgentMemoryService(AGENT_A, repository, handle.api)
         memoryB = AgentMemoryService(AGENT_B, repository, doorB)
-        service = DefaultFieldService.over(handle.database, repository, handle.repository)
+        service = FieldService.over(handle.database, repository, handle.repository)
     }
 
     @AfterTest
@@ -536,6 +543,62 @@ class FieldServiceTest {
         assertTrue(seenByNobody.observations.isEmpty())
         // Kept out of knowledge: the belief branch is exactly what it was before the perceive.
         assertEquals(setOf(content("public-a"), content("private-a")), seenByA.beliefContents())
+    }
+
+    // ==================== Outside a run (AMPR-474) ====================
+
+    @Test
+    fun `a field reader over a caller's own database needs no environment`() = runBlocking<Unit> {
+        // What a caller with only its database holds: no bus, no ticket repository, no orchestrator.
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        try {
+            DatabaseSchemaManager.ensure(driver).getOrThrow()
+            val database = Database(driver)
+            val beliefs = KnowledgeRepositoryImpl(database)
+            val events = EventRepository(DEFAULT_JSON, scope, database)
+            val holder = Ref<Subject>(AGENT_A)
+            beliefs.storeKnowledge(
+                knowledge = knowledge("outside-a-run", minutesAgo = 1),
+                holder = holder,
+                sensitivity = Sensitivity.PRIVATE,
+                createdByEvent = "event-outside-a-run",
+            ).getOrThrow()
+
+            val field = FieldService.over(database, beliefs, events).snapshot(viewer = holder).getOrThrow()
+
+            assertEquals(1, field.beliefs.size)
+            assertEquals(holder, field.beliefs.single().holder)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun `the field reader is built through its public factory and nowhere else`() {
+        // One construction path: every reader, the instances' included, comes from FieldService.over.
+        val allowed = setOf("FieldService.kt", "DefaultFieldService.kt")
+        val offenders = moduleDir().resolve("src").listFiles().orEmpty()
+            .filter { it.name.endsWith("Main") }
+            .flatMap { sourceSet -> sourceSet.walkTopDown().filter { it.extension == "kt" } }
+            .filter { it.name !in allowed && it.readText().contains("DefaultFieldService") }
+            .map { it.relativeTo(moduleDir()).invariantSeparatorsPath }
+            .sorted()
+
+        assertTrue(
+            offenders.isEmpty(),
+            "Build the Field reader with FieldService.over, not in:\n${offenders.joinToString("\n")}",
+        )
+    }
+
+    /** `ampere-core`, found from wherever the test was launched, as the boundary tests do. */
+    private fun moduleDir(): File {
+        var dir: File? = File(System.getProperty("user.dir")).absoluteFile
+        while (dir != null) {
+            if (dir.resolve("src/commonMain/kotlin").isDirectory) return dir
+            if (dir.resolve("ampere-core/src/commonMain/kotlin").isDirectory) return dir.resolve("ampere-core")
+            dir = dir.parentFile
+        }
+        error("Could not locate ampere-core from ${System.getProperty("user.dir")}")
     }
 
     // ==================== On the instance ====================
