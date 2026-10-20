@@ -1,5 +1,7 @@
 package link.socket.ampere.agents.domain.reasoning
 
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
@@ -12,6 +14,7 @@ import link.socket.ampere.agents.domain.outcome.ContentOrigin
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.Outcome
 import link.socket.ampere.agents.domain.outcome.StepOutcome
+import link.socket.ampere.agents.domain.outcome.TrippedRule
 import link.socket.ampere.agents.domain.outcome.originOfAll
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.domain.task.planStepDescription
@@ -171,10 +174,19 @@ class PlanExecutor(
             val stepStartTime = Clock.System.now()
             publishStepStarted(plan, step, index, totalSteps, stepStartTime)
 
+            // The step runs with its plan in its context, which is how the admission
+            // `dispatchPlanStep` records before the step runs names the plan (AMPR-472).
+            // What the step executor returned is kept even when the walk was cancelled
+            // while it ran: leaving `withContext` would otherwise swap that answer — a
+            // hosted run's "cancelled before completing" — for the cancellation, and the
+            // record of where the walk stopped would read differently than it did.
+            var returned: StepResult? = null
             val stepResult = try {
-                stepExecutor(step, context.toImmutable())
+                withContext(PlanWalk(plan.id)) {
+                    stepExecutor(step, context.toImmutable()).also { returned = it }
+                }
             } catch (e: Exception) {
-                StepResult.failure(
+                returned ?: StepResult.failure(
                     description = "Execute step ${step.id}",
                     error = "Exception during step execution: ${e.message}",
                     isCritical = true,
@@ -416,6 +428,22 @@ class PlanExecutor(
 }
 
 /**
+ * The plan [PlanExecutor] is walking, in the coroutine context of each step it hands its
+ * step executor (AMPR-472).
+ *
+ * It is how `dispatchPlanStep` names the plan on the `PlanEvent.StepAdmitted` it publishes
+ * before a step runs. The step executor is the caller's lambda, and both drivers' lambdas
+ * hand the dispatcher the step and the results before it, never the plan; carrying the id
+ * here, the way a hosted run is carried as a context element, keeps it out of every
+ * signature in between. Read with `currentCoroutineContext()[PlanWalk]`. A step dispatched
+ * outside a walk has none, and publishes no admission, the same way it has no
+ * `PlanStepStarted` / `PlanStepCompleted` pair for one to sit between.
+ */
+internal class PlanWalk(val planId: PlanId) : AbstractCoroutineContextElement(PlanWalk) {
+    companion object Key : CoroutineContext.Key<PlanWalk>
+}
+
+/**
  * What the plan asked this step to do. Only the two plan-step types carry a
  * description; anything else is named by its id, matching the fallback
  * [PlanExecutor] already used when turning a thrown step into a
@@ -454,12 +482,17 @@ sealed class StepResult {
         override val origin: ContentOrigin = ContentOrigin.External,
     ) : StepResult()
 
+    /**
+     * @property tripped The rule that stopped the step before it ran (AMPR-472), carried
+     *   onto [StepOutcome.Failure.tripped]. Null for every failure a rule did not cause.
+     */
     data class Failure(
         override val description: String,
         val error: String,
         val isCritical: Boolean = false,
         override val contextUpdates: Map<String, Any> = emptyMap(),
         override val origin: ContentOrigin = ContentOrigin.External,
+        val tripped: TrippedRule? = null,
     ) : StepResult()
 
     data class Skipped(
@@ -528,6 +561,7 @@ sealed class StepResult {
                 error = error,
                 isCritical = isCritical,
                 origin = origin,
+                tripped = tripped,
             )
             is Skipped -> StepOutcome.Skipped(
                 id = stepId,
@@ -565,8 +599,12 @@ sealed class StepResult {
             details: String? = null,
         ) = PartialSuccess(description, successCount, failureCount, details)
 
-        fun failure(description: String, error: String, isCritical: Boolean = false) =
-            Failure(description, error, isCritical)
+        fun failure(
+            description: String,
+            error: String,
+            isCritical: Boolean = false,
+            tripped: TrippedRule? = null,
+        ) = Failure(description, error, isCritical, tripped = tripped)
 
         fun skip(description: String, reason: String) =
             Skipped(description, reason)

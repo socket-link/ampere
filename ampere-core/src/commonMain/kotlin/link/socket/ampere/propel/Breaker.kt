@@ -70,7 +70,8 @@ import link.socket.ampere.plug.permission.UserGrants
  *   disagree about a step.
  * @param eventApi Where a Hard access trip is reported as a `PermissionDeniedEvent`, so a
  *   step the Breaker stops is as visible as one the engine used to stop. Null publishes
- *   nothing.
+ *   nothing. `dispatchPlanStep` records each step's admission through the same door
+ *   (AMPR-472), which is why it is visible inside the module.
  * @param actorId The agent the steps are admitted for; names the denial event. Called
  *   `executorId` until AMPR-443 (F17), though it always held the agent's id.
  * @param runId The run whose spend a `Rule.Quota` is read against. Null — an agent outside
@@ -82,7 +83,7 @@ import link.socket.ampere.plug.permission.UserGrants
  */
 class Breaker(
     private val userGrants: suspend (PlugManifest) -> UserGrants,
-    private val eventApi: AgentEventApi? = null,
+    internal val eventApi: AgentEventApi? = null,
     private val actorId: AgentId,
     private val runId: RunId? = null,
     private val runEvents: (suspend (RunId) -> Result<DecodedRows<StoredEvent>>)? =
@@ -104,13 +105,29 @@ class Breaker(
      *
      * The run's record is read at most once per admission, however many quotas are in
      * [rules], so every quota in one admission is measured against the same spend.
+     *
+     * [admitDetailed] is the same fold with the breached rules kept beside the answer.
      */
     suspend fun admit(
         tool: Tool<*>?,
         rules: List<Pair<Rule, Hardness>>,
-    ): Result<Admission> {
+    ): Result<Admission> = admitDetailed(tool, rules).map { it.admission }
+
+    /**
+     * [admit], with the rules that breached beside the answer (AMPR-472, F33).
+     *
+     * The same fold over the same rules in the same order, stopping at the same Hard trip,
+     * publishing the same denial. All this adds is what [admit] used to drop once it had
+     * built the [Admission]: which rules breached. A consumer can then be told which rule
+     * stopped a step without matching the reason's text.
+     */
+    suspend fun admitDetailed(
+        tool: Tool<*>?,
+        rules: List<Pair<Rule, Hardness>>,
+    ): Result<Admitted> {
         val record = RunRecordRead()
         var resistance = 0.0
+        val breached = mutableListOf<Pair<Rule, Hardness>>()
         for ((rule, hardness) in rules) {
             val evaluated = try {
                 evaluate(tool, rule, record)
@@ -125,6 +142,7 @@ class Breaker(
                 )
             }
             val breach = evaluated ?: continue
+            breached += rule to hardness
 
             when (hardness) {
                 Hardness.HARD -> {
@@ -138,14 +156,32 @@ class Breaker(
                             reason = denial.reason,
                         )
                     }
-                    return Result.success(Admission.Trip(breach.reason))
+                    return Result.success(Admitted(Admission.Trip(breach.reason), breached.toList()))
                 }
                 Hardness.SOFT -> resistance += SOFT_BREACH.value
             }
         }
-        return Result.success(
-            if (resistance > 0.0) Admission.Resist(Resistance(resistance)) else Admission.Pass,
-        )
+        val admission = if (resistance > 0.0) Admission.Resist(Resistance(resistance)) else Admission.Pass
+        return Result.success(Admitted(admission, breached.toList()))
+    }
+
+    /**
+     * What [admitDetailed] decided, and which rules decided it (AMPR-472, F33).
+     *
+     * @property admission The answer, exactly what [admit] returns for the same call.
+     * @property breached Every rule the step breached, with its hardness, in the order the
+     *   fold met them. Empty for a [Admission.Pass]. A [Admission.Resist]'s are all Soft. A
+     *   [Admission.Trip]'s may start with Soft ones and always end with the Hard rule that
+     *   tripped, because nothing after it is evaluated.
+     */
+    data class Admitted(
+        val admission: Admission,
+        val breached: List<Pair<Rule, Hardness>>,
+    ) {
+
+        /** The Hard rule a trip names: the last one breached. Null for a pass or a resist. */
+        val tripped: Rule?
+            get() = if (admission is Admission.Trip) breached.lastOrNull()?.first else null
     }
 
     /** The breach [rule] finds in running [tool], or null when it holds. Throws when it cannot say. */
@@ -340,6 +376,33 @@ class Breaker(
          * Breaker resolves them back against the manifest, never the other way round.
          */
         fun accessLabel(permission: PlugPermission): String = permission.toString()
+
+        /**
+         * The name a breached [rule] goes on the record under (AMPR-472, F33): the `Rule`
+         * case as `field/` spells it, plus whatever tells two rules of that case apart.
+         *
+         * - `AccessPolicy:<plug id>`, the plug whose manifest [tool] carries. A policy over
+         *   a tool with no manifest cannot breach, and is `AccessPolicy` alone.
+         * - `Quota.Tokens`, `Quota.Time`, and `Quota.Count:<what is counted>` —
+         *   `Quota.Count:steps` for a run's [RunQuotas.steps].
+         * - `Transition`, `Requirements`, `Dependency`, `Deadline`, `Cadence`.
+         *
+         * Each name is written out here rather than read off the class, so renaming a case
+         * does not rename what a consumer matches on. A limit is never part of a name: it
+         * says how far the rule was exceeded, which the trip's reason already says, not
+         * which rule it was.
+         */
+        fun ruleName(rule: Rule, tool: Tool<*>?): String = when (rule) {
+            is Rule.AccessPolicy -> tool?.plugManifest?.let { "AccessPolicy:${it.id.value}" } ?: "AccessPolicy"
+            is Rule.Quota.Tokens -> "Quota.Tokens"
+            is Rule.Quota.Time -> "Quota.Time"
+            is Rule.Quota.Count -> "Quota.Count:${rule.of}"
+            is Rule.Transition -> "Transition"
+            is Rule.Requirements -> "Requirements"
+            is Rule.Dependency -> "Dependency"
+            is Rule.Deadline -> "Deadline"
+            is Rule.Cadence -> "Cadence"
+        }
 
         /**
          * Admits a move from state [from] to state [to] under [rule] (F14).

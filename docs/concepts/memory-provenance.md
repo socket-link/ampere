@@ -12,7 +12,7 @@ tracked_sources:
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/15.sqm
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/internal/DefaultKnowledgeService.kt
 related: [PropelLoop, CognitionTrace, EventSerialBus, DreamCycle, SubjectRegistry, DecideSeam]
-last_verified: 2026-10-15
+last_verified: 2026-10-20
 ---
 
 # Memory Provenance
@@ -85,7 +85,7 @@ through `ArcTraceProjection` into the full phase-by-phase narrative.
 - `agents/domain/outcome/Outcome.kt` — base sealed `Outcome` (`Success` / `Failure`).
 - `agents/domain/outcome/ExecutionOutcome.kt` — tool-agnostic execution outcomes (variants: `CodeChanged`, `CodeReading`, `IssueManagement`, `GitOperation`, `NoChanges`).
 - `agents/domain/outcome/OutcomeMemoryRepository.kt` + `OutcomeMemoryRepositoryImpl.kt` — episodic store.
-- `agents/domain/outcome/StepOutcome.kt`, `TaskOutcome.kt`, `MeetingOutcome.kt` — outcome shapes for finer-grain steps and meetings.
+- `agents/domain/outcome/StepOutcome.kt`, `TaskOutcome.kt`, `MeetingOutcome.kt` — outcome shapes for finer-grain steps and meetings. A `StepOutcome.Failure` a rule stopped carries `tripped: TrippedRule` — the rule's stable name and the trip's reason (AMPR-472) — `@EncodeDefault(NEVER)` like `origin`, so every other failure encodes as it did before the field and one stored earlier decodes with none.
 - `agents/domain/outcome/ContentOrigin.kt` — `Own` / `External`: where a step result's text came from (AMPR-453). Every `StepOutcome` carries one, `External` by default and never written when it is, so a stored outcome without the key reads as outside content. It is a label on the result, not a provenance walk: it says *whether* the text came from outside the run, never from where. `ExecutionOutcome.NoChanges` and `Held` carry one as well — `PlanExecutor` stamps a plan's fold with it, `Own` only when every step was — and `Outcome.contentOrigin()` reads it off any outcome. A knowledge row stores none, so everything RECALL returns is rendered `[external]`: a learning distilled from a run's outcome can quote what that run's tools read.
 - `agents/domain/knowledge/Knowledge.kt` — sealed knowledge sources.
 - `agents/domain/knowledge/KnowledgeRepository.kt` + `KnowledgeRepositoryImpl.kt` — semantic store. Writes take `holder`, `confidence`, `sensitivity` and `createdByEvent`; every read takes a `viewer`. `KnowledgeEntry` carries the row's `runId`.

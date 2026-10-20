@@ -87,6 +87,11 @@ sealed interface StepOutcome : Outcome {
      * @property endTimestamp When step execution ended/failed
      * @property error Error message describing the failure
      * @property isCritical Whether this failure should halt the entire plan
+     * @property tripped The rule that stopped the step, when a rule did (AMPR-472, F33):
+     *   the Breaker tripped on it before the step ran. Null for every other failure — a
+     *   tool that failed, an admission that could not be decided. [error] is unchanged
+     *   either way, and is the trip's reason when there was one. Never written when null,
+     *   so a failure without one encodes exactly as it did before the field existed.
      */
     @Serializable
     data class Failure(
@@ -98,6 +103,8 @@ sealed interface StepOutcome : Outcome {
         val isCritical: Boolean = true,
         @EncodeDefault(EncodeDefault.Mode.NEVER)
         override val origin: ContentOrigin = ContentOrigin.External,
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        val tripped: TrippedRule? = null,
     ) : StepOutcome
 
     /**
@@ -144,3 +151,16 @@ sealed interface StepOutcome : Outcome {
         override val endTimestamp: Instant get() = timestamp
     }
 }
+
+/**
+ * The rule a step was stopped by, on the step's [StepOutcome.Failure] (AMPR-472, F33).
+ *
+ * The same pair `PlanEvent.StepAdmitted` records as its `AdmissionRecord.Trip`, so a reader
+ * holding only the outcome, or only `PlanStepCompleted`, knows the step was stopped by a
+ * rule rather than by a fault, without matching the error's text.
+ *
+ * @property rule The rule's stable name, as `Breaker.ruleName` gives it.
+ * @property reason The trip's reason, which is also the failure's error.
+ */
+@Serializable
+data class TrippedRule(val rule: String, val reason: String)

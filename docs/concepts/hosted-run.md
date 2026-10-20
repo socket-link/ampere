@@ -224,8 +224,12 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     back down. The run then ends `Partial` if an earlier step succeeded, else `Failed`. A
     quota is checked **before** a step and never during one, so the last admitted step can
     carry the run past its limit. A record that cannot be read, or holds a row this build
-    cannot decode, fails the step closed. A run with no quotas reads nothing and is
-    unchanged, event for event.
+    cannot decode, fails the step closed. A run with no quotas reads nothing. With quotas
+    or without, every step's admission is on the record as a `PlanEvent.StepAdmitted` from
+    the seat that runs it (AMPR-472), and a step a quota tripped carries the quota on its
+    outcome as `StepOutcome.Failure.tripped` (`Quota.Count:steps`, `Quota.Tokens`,
+    `Quota.Time`). The run's own second question once a step has failed — `quotaReached`,
+    which keeps the failure critical — is not an admission and records nothing.
 20. **A held run's record is kept beside its events, and bookkeeping never decodes it**
     (AMPR-430, row H30). `HeldRunStore` keeps one `HeldRun` per run id — what the run
     *was going to do*, which no event carries — in the `HeldRunStore` table (`14.sqm`).
