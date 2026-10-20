@@ -265,6 +265,64 @@ val decideBenchLive by tasks.registering(Test::class) {
     testLogging { showStandardStreams = true }
 }
 
+/**
+ * The perception-drift corpus (AMPR-482): runs `PerceptionDriftCorpusValidatorTest` with the
+ * directory property set, under which the corpus is regenerated and written first and then validated.
+ * An empty `git diff` afterwards is the proof the generator is deterministic.
+ */
+val generatePerceptionDriftCorpus by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Regenerates ampere-eval/src/jvmTest/resources/decide/perception-drift/cases.json from its generator."
+
+    testClassesDirs = jvmTestCompilation.output.classesDirs
+    classpath = jvmTestCompilation.output.allOutputs + jvmTestCompilation.runtimeDependencyFiles
+    useJUnitPlatform()
+
+    filter {
+        includeTestsMatching("link.socket.ampere.eval.decide.PerceptionDriftCorpusValidatorTest")
+    }
+
+    systemProperty("ampere.eval.decideDir", decideResourcesDir.asFile.absolutePath)
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
+/**
+ * The live perception-drift run (AMPR-482): every hosted decision arm over the committed corpus,
+ * recorded to `decide/perception-drift/recordings/<arm>.jsonl` for offline replay. Never runs in CI;
+ * `PerceptionDriftBenchLiveTest` does nothing unless this task set the directory property. Credentials
+ * and the narrowing properties are `decideBenchLive`'s: `OPENROUTER_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`,
+ * `CLOUDFLARE_AUTH_TOKEN` from the environment, the generative provider's key as the bundled client
+ * reads it, and `-PdecideDryRun`, `-PdecideArms`, `-PdecideLimit`, `-PdecideRepeats`,
+ * `-PdecideParallelism`. Running this task is the approval for calls to those endpoints.
+ */
+val perceptionDriftBenchLive by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Records the live perception-drift decision arms (network; credentials from the environment)."
+
+    testClassesDirs = jvmTestCompilation.output.classesDirs
+    classpath = jvmTestCompilation.output.allOutputs + jvmTestCompilation.runtimeDependencyFiles
+    useJUnitPlatform()
+
+    filter {
+        includeTestsMatching("link.socket.ampere.eval.decide.PerceptionDriftBenchLiveTest")
+    }
+
+    systemProperty("ampere.eval.decideDir", decideResourcesDir.asFile.absolutePath)
+    listOf(
+        "decideDryRun" to "ampere.eval.decide.dryRun",
+        "decideArms" to "ampere.eval.decide.arms",
+        "decideLimit" to "ampere.eval.decide.limit",
+        "decideRepeats" to "ampere.eval.decide.repeats",
+        "decideParallelism" to "ampere.eval.decide.parallelism",
+    ).forEach { (gradleProperty, systemPropertyName) ->
+        providers.gradleProperty(gradleProperty).orNull?.let { systemProperty(systemPropertyName, it) }
+    }
+
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
 // endregion
 
 ktlint {
