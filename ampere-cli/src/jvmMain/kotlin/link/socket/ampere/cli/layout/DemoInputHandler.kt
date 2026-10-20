@@ -1,9 +1,11 @@
 package link.socket.ampere.cli.layout
 
 import com.github.ajalt.mordant.terminal.Terminal
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jline.terminal.TerminalBuilder
+import org.jline.terminal.Terminal as JLineTerminal
 import org.jline.utils.NonBlockingReader
 
 /**
@@ -16,7 +18,8 @@ import org.jline.utils.NonBlockingReader
  * - `m` -> Memory mode
  * - `v` -> Toggle verbose
  * - `h`/`?` -> Help
- * - `q`/Ctrl+C -> Exit
+ * - `q` -> Exit
+ * - Ctrl+C -> Interrupt, from the byte or, in raw mode, from SIGINT ([onInterrupt])
  * - ESC -> Cancel pending input or return from focus
  *
  * Escalation response (when awaiting human input):
@@ -25,10 +28,11 @@ import org.jline.utils.NonBlockingReader
  * - ESC -> Skip with default response (A)
  */
 class DemoInputHandler(
-    private val terminal: Terminal
+    private val terminal: Terminal,
+    private val jlineTerminal: JLineTerminal = TerminalBuilder.terminal(),
 ) {
-    private val jlineTerminal = TerminalBuilder.terminal()
     private val reader: NonBlockingReader = jlineTerminal.reader()
+    private val closed = AtomicBoolean(false)
 
     init {
         jlineTerminal.enterRawMode()
@@ -89,7 +93,22 @@ class DemoInputHandler(
             val newConfig: DemoViewConfig
         ) : KeyResult()
         object Exit : KeyResult()
+
+        /** Ctrl+C, on a terminal that delivers the byte instead of raising SIGINT. */
+        object Interrupt : KeyResult()
         object NoChange : KeyResult()
+    }
+
+    /**
+     * Run [action] when the terminal raises SIGINT, in place of the JVM's default, which exits
+     * without running any of the dashboard's cleanup (AMPR-467).
+     *
+     * JLine's raw mode keeps `ISIG`, so Ctrl+C arrives as a signal, never as a byte [processKey]
+     * sees. [action] runs on the signal's thread: it should only request the exit. [close] puts the
+     * JVM's handler back, so a second Ctrl+C during cleanup still ends the process.
+     */
+    fun onInterrupt(action: () -> Unit) {
+        jlineTerminal.handle(JLineTerminal.Signal.INT) { action() }
     }
 
     /**
@@ -112,9 +131,9 @@ class DemoInputHandler(
      * Process a key and return the result.
      */
     fun processKey(key: Char, current: DemoViewConfig): KeyResult {
-        // Handle Ctrl+C - always exits
+        // Handle Ctrl+C - always interrupts
         if (key.code == 3) {
-            return KeyResult.Exit
+            return KeyResult.Interrupt
         }
 
         // Handle ESC
@@ -365,9 +384,11 @@ class DemoInputHandler(
     }
 
     /**
-     * Cleanup - restore terminal.
+     * Cleanup - restore terminal. Idempotent: the dashboard closes the input to release a key read
+     * in flight, and its cleanup closes it again.
      */
     fun close() {
+        if (!closed.compareAndSet(false, true)) return
         try {
             jlineTerminal.close()
         } catch (e: Exception) {

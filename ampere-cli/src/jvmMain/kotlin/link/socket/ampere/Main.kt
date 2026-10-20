@@ -134,6 +134,7 @@ fun main(args: Array<String>) {
         )
     }
 
+    val rootCommand = AmpereCommand { context }
     try {
         // Start all orchestrator services
         context.start()
@@ -143,7 +144,7 @@ fun main(args: Array<String>) {
 
         // Run the CLI
         val api = context.ampereInstance
-        AmpereCommand { context }
+        rootCommand
             .subcommands(
                 ThreadCommand(api.threads),
                 StatusCommand(api),
@@ -163,6 +164,10 @@ fun main(args: Array<String>) {
         // Clean up resources
         context.close()
     }
+
+    // The dashboard's exit status: 0 for `q`/`:quit`, 130 for Ctrl+C (AMPR-467). Only here, after
+    // the context has closed, since `exitProcess` skips every `finally` still on the stack.
+    rootCommand.dashboardExit?.let { exitProcess(it.status) }
 }
 
 /**
