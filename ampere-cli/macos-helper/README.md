@@ -1,11 +1,13 @@
 # `macos-helper`: `ampere-helper`
 
-The Swift process the CLI spawns to reach Apple's on-device model (AMPR-375).
+The Swift process the CLI (AMPR-375) and the desktop app (AMPR-469) spawn to reach Apple's
+on-device model.
 
 `FoundationModels` is a Swift-only framework with no C or Objective-C headers, so a JVM cannot
 call it through JNA, FFM or cinterop. A child process is the one route. This package is that
 process. `ampere-cli/src/jvmMain/.../cli/ondevice/` is its JVM half: the supervisor, the
-`LocalInferenceEngine` built on it, and the CLI's binding.
+`LocalInferenceEngine` built on it, the CLI's binding, and `OnDeviceHelperEngine.locate()`, the one
+public way to the engine for any other JVM host.
 
 ## What the CLI uses it for
 
@@ -17,6 +19,14 @@ cannot serve, `:ask` says why and that nothing was sent.
 
 The status bar shows the on-device indicator whenever a helper was found. Event rows for calls
 that ran on this device carry the `◆` marker.
+
+## What the desktop app uses it for
+
+The same, in a window. `ampere-desktop` renders `OnDeviceCognitionScreen`, the screen the iOS app
+renders, over an on-device-only `OnDeviceInferenceSession` on this engine: an ask field, the answer
+with its provenance, and the indicator, on top of the cognitive canvas. Its events go to its own
+database, `~/.ampere/desktop.db`. Without a helper, or on a host that is not a Mac, the indicator
+says why and there is no ask field. Closing the window ends the session and the helper.
 
 ## The wire
 
@@ -61,10 +71,27 @@ swift build -c release --package-path ampere-cli/macos-helper   # seconds, no de
 ```
 
 `:ampere-cli:buildMacHelper` does this, on a Mac only, up-to-date-checked against `Sources/` and
-`Package.swift`. `:ampere-cli:installJvmDist`, and therefore `./ampere-cli/ampere --rebuild`, copies
-the binary into the distribution's `bin/`, next to the `ampere` start script. Nothing else
-depends on it. `assemble`, `jvmTest` and CI never run `swift build`, because it costs memory on a
-shared development Mac.
+`Package.swift`. Two tasks depend on it, and nothing else does:
+
+- `:ampere-cli:installJvmDist`, and therefore `./ampere-cli/ampere --rebuild`, copies the binary into
+  the distribution's `bin/`, next to the `ampere` start script.
+- `:ampere-desktop:prepareAppResources` copies it into the app's Compose resources directory, so
+  `:ampere-desktop:run` and every packaged format carry it. Compose's packaging drops the execute
+  bit on app resources (without the fix the helper lands as `-rw-r--r--`), so
+  `createDistributable`, which every macOS format is built from, restores it (AMPR-477).
+
+In a packaged app the helper sits at `Ampere.app/Contents/app/resources/ampere-helper`. jpackage
+ad-hoc signs it along with the app, and `codesign --verify --deep` passes on the bundle. A DMG built
+and opened on the same Mac carries no quarantine, so Gatekeeper never looks at it. A copy
+downloaded from elsewhere is quarantined, and that case has not been tried: signing and
+notarizing are not done.
+
+The packaged app runs on a jlinked runtime holding only the modules `nativeDistributions.modules`
+names. Leave out `java.sql` and the helper is found, but the session's event store cannot open, so
+the screen says so instead of offering the model.
+
+`assemble`, `jvmTest` and CI never run `swift build`, because it costs memory on a shared
+development Mac.
 
 The package needs a Swift 6 toolchain and the macOS 26.4 SDK or later, where `tokenCount(for:)`
 first appears. `swift` honours `DEVELOPER_DIR`, so a Mac whose selected Command Line Tools cannot
@@ -74,15 +101,18 @@ build it can name an Xcode instead:
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./gradlew :ampere-cli:installDist
 ```
 
-A build that fails is a warning, not a failed install. The CLI is installed without the helper,
-which is the CLI as it was before the helper existed, and the next install tries again.
+A build that fails is a warning, not a failed install. The CLI is installed, and the desktop app
+run or packaged, without the helper, which is each as it was before the helper existed, and the
+next build tries again.
 
-## Where the CLI looks
+## Where the CLI and the desktop app look
 
 1. `-Dampere.helper=<path>` or `AMPERE_HELPER=<path>`. A path that points at nothing usable is
    reported as such, never skipped.
-2. The installed distribution's `bin/ampere-helper`.
-3. `ampere-cli/macos-helper/.build/release/ampere-helper` under the working directory.
+2. The directory Compose names in `compose.application.resources.dir`: the desktop app's
+   resources, under `run` and when packaged. The CLI never sets it.
+3. The installed distribution's `bin/ampere-helper`.
+4. `ampere-cli/macos-helper/.build/release/ampere-helper` under the working directory.
 
 No helper, or a host that is not a Mac: the CLI behaves exactly as it did before the helper
 existed. The status bar has no on-device segment, and `:ask` says why there is nothing to ask.

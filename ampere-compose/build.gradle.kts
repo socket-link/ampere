@@ -8,6 +8,7 @@ plugins {
 }
 
 val ampereVersion: String by project
+val phosphorVersion: String by project
 
 group = "link.socket"
 version = ampereVersion
@@ -34,7 +35,7 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                implementation("link.socket:phosphor-core:0.6.2")
+                implementation("link.socket:phosphor-core:$phosphorVersion")
                 implementation(compose.runtime)
                 implementation(compose.foundation)
                 implementation(compose.ui)

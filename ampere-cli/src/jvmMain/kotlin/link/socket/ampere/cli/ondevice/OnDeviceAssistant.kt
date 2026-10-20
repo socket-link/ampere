@@ -84,16 +84,13 @@ sealed interface OnDeviceAssistant : AutoCloseable {
         internal fun bind(
             eventApiFactory: (AgentId) -> AgentEventApi,
             locator: AmpereHelperLocator = AmpereHelperLocator(),
-        ): OnDeviceAssistant = when (val binary = locator.locate()) {
-            is AmpereHelperBinary.Absent -> Unbound(binary.reason)
-            is AmpereHelperBinary.Present -> {
-                val helper = AmpereHelperProcess(binary.file)
-                Bound(
-                    engine = HelperLocalInferenceEngine(helper),
-                    eventApi = eventApiFactory(OnDeviceInferenceSession.AGENT_ID),
-                    resources = helper,
-                )
-            }
+        ): OnDeviceAssistant = when (val found = OnDeviceHelperEngine.locate(locator)) {
+            is OnDeviceHelperEngine.Absent -> Unbound(found.reason)
+            is OnDeviceHelperEngine.Present -> Bound(
+                engine = found.engine,
+                eventApi = eventApiFactory(OnDeviceInferenceSession.AGENT_ID),
+                resources = found,
+            )
         }
     }
 }

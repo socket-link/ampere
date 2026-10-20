@@ -17,6 +17,7 @@ import java.awt.Dimension
 import kotlinx.coroutines.delay
 import link.socket.ampere.cli.animation.choreography.CognitiveChoreographer
 import link.socket.ampere.compose.CognitiveCanvas
+import link.socket.ampere.ui.inference.OnDeviceCognitionScreen
 import link.socket.phosphor.choreography.AgentLayer
 import link.socket.phosphor.choreography.AgentLayoutOrientation
 import link.socket.phosphor.field.FlowLayer
@@ -28,10 +29,20 @@ import link.socket.phosphor.signal.AgentActivityState
 import link.socket.phosphor.signal.AgentVisualState
 import link.socket.phosphor.signal.CognitivePhase
 
-fun main() =
+/**
+ * One window: the cognitive canvas, with Apple's on-device model on top of it where this Mac has
+ * one (AMPR-469). Without a helper, or on any other host, the indicator says why and there is no
+ * ask field. Closing the window ends the session and the helper before the app exits.
+ */
+fun main() {
+    val onDevice = DesktopOnDevice.open()
+
     application {
         Window(
-            onCloseRequest = ::exitApplication,
+            onCloseRequest = {
+                onDevice.close()
+                exitApplication()
+            },
             title = "Ampere \u2014 Cognitive Engine",
             state =
                 WindowState(
@@ -40,9 +51,16 @@ fun main() =
                 ),
         ) {
             window.minimumSize = Dimension(800, 600)
-            cognitiveDemoScreen()
+            OnDeviceCognitionScreen(
+                session = onDevice.session,
+                modifier = Modifier.fillMaxSize(),
+                unavailableReason = onDevice.unavailableReason,
+            ) {
+                cognitiveDemoScreen()
+            }
         }
     }
+}
 
 @Composable
 fun cognitiveDemoScreen() {

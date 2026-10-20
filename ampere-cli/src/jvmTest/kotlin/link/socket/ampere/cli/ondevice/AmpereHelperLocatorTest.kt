@@ -11,9 +11,9 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
 /**
- * Where the CLI looks for `ampere-helper` (AMPR-375), and that every miss is a reason. A host with
- * no helper must behave exactly as the CLI did before the helper existed, so the answer is never
- * an exception.
+ * Where the CLI (AMPR-375) and the desktop app (AMPR-469) look for `ampere-helper`, and that every
+ * miss is a reason. A host with no helper must behave exactly as it did before the helper existed,
+ * so the answer is never an exception.
  */
 class AmpereHelperLocatorTest {
 
@@ -71,6 +71,25 @@ class AmpereHelperLocatorTest {
     }
 
     @Test
+    fun `a desktop app finds the helper Compose bundled into its resources`() {
+        // Ahead of the SwiftPM build: the binary the app was packaged with is the one it runs.
+        executable(AmpereHelperLocator.SOURCE_TREE_PATH)
+        val resources = Files.createDirectories(directory.resolve("prepareAppResources")).toFile()
+        val helper = executable("prepareAppResources/${AmpereHelperLocator.BINARY_NAME}")
+
+        assertEquals(helper, assertIs<AmpereHelperBinary.Present>(locator(composeResources = resources).locate()).file)
+    }
+
+    @Test
+    fun `a desktop app built without the helper says it looked in its resources`() {
+        val resources = Files.createDirectories(directory.resolve("prepareAppResources")).toFile()
+
+        val reason = assertIs<AmpereHelperBinary.Absent>(locator(composeResources = resources).locate()).reason
+
+        assertTrue(reason.contains("prepareAppResources"), reason)
+    }
+
+    @Test
     fun `a CLI run from the repository finds the SwiftPM build`() {
         val helper = executable(AmpereHelperLocator.SOURCE_TREE_PATH)
 
@@ -90,9 +109,16 @@ class AmpereHelperLocatorTest {
         osName: String = "Mac OS X",
         named: String? = null,
         installDirectory: File? = null,
+        composeResources: File? = null,
     ) = AmpereHelperLocator(
         osName = osName,
-        property = { if (it == AmpereHelperLocator.HELPER_PROPERTY) named else null },
+        property = {
+            when (it) {
+                AmpereHelperLocator.HELPER_PROPERTY -> named
+                AmpereHelperLocator.COMPOSE_RESOURCES_PROPERTY -> composeResources?.path
+                else -> null
+            }
+        },
         environment = { null },
         workingDirectory = directory.toFile(),
         installDirectory = installDirectory,
