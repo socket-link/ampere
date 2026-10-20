@@ -88,11 +88,10 @@ clean, and no such tag exists yet; then it runs one Gradle build.
 `:ampere-core:compileCommonMainKotlinMetadata`, so a JVM-only stdlib call in
 `commonMain` compiles on the JVM target, passes CI, merges, and then fails the
 publish job — which is what happened to v0.5.0, after its tag had been pushed.
-CI also assembles only `ampere-core`, `ampere-cli`, `ampere-compose`,
-`ampere-eval` and `ampere-work-linear`; `ampere-phosphor`,
-`ampere-core-test-fixtures` and both `ampere-bindings-*` modules publish without
-any CI job compiling them, and a red one of those fails publish *partway*, with
-earlier modules already on Central.
+CI also compiles little of what publishes: since #1072 its lint job compiles
+only the JVM target of most modules (plus `ampere-core`'s js, wasm and debug
+Android targets), no job compiles either `ampere-bindings-*` module, and a red
+module fails publish *partway*, with earlier modules already on Central.
 
 If the pre-flight fails: fix it on a normal PR, merge, and start again from step
 1 on the new `main`. Do not tag a tree you had to patch locally.

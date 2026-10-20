@@ -76,10 +76,13 @@ fi
 
 # --- 4. Modules that publish but are not assembled by PR CI.
 #
-# ci.yml assembles ampere-core, ampere-cli, ampere-compose, ampere-eval and
-# ampere-work-linear. The rest of the publish list is compiled by nobody until
-# the tag lands, and a red one of them fails the publish job partway through —
-# after earlier modules have already reached Central. Compile them here.
+# ci.yml's lint job compiles a named list of modules (`:<module>:compileKotlinJvm`
+# since #1072; `:<module>:assemble` before it). A publishing module outside that
+# list is compiled by nobody until the tag lands, and a red one fails the publish
+# job partway through — after earlier modules have already reached Central.
+# Compile those here. Since #1072 CI compiles only the JVM target of most modules
+# (plus js/wasm/Android-debug of ampere-core and iOS-simulator of the macOS job),
+# which is the same bar this script holds its own list to.
 PREFLIGHT_MODULES=":ampere-phosphor :ampere-core-test-fixtures :ampere-bindings-apple :ampere-bindings-android"
 
 # Keep that list honest: the next module to opt into publishing must be covered
@@ -93,7 +96,7 @@ for build_file in */build.gradle.kts; do
     case " $PREFLIGHT_MODULES " in
         *" $module "*) continue ;;
     esac
-    grep -q "$module:assemble" .github/workflows/ci.yml && continue
+    grep -qE "$module:(assemble|compileKotlinJvm)([^A-Za-z0-9-]|\$)" .github/workflows/ci.yml && continue
 
     printf 'release-preflight: %s publishes to Maven Central but is compiled by neither this\n' "$module" >&2
     printf '  script nor .github/workflows/ci.yml. Add it to PREFLIGHT_MODULES here.\n' >&2
