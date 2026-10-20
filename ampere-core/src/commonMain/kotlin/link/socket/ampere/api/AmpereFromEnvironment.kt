@@ -18,7 +18,6 @@ import link.socket.ampere.agents.service.MessageActionService
 import link.socket.ampere.agents.service.TicketActionService
 import link.socket.ampere.api.internal.DefaultAgentService
 import link.socket.ampere.api.internal.DefaultEventService
-import link.socket.ampere.api.internal.DefaultFieldService
 import link.socket.ampere.api.internal.DefaultKnowledgeService
 import link.socket.ampere.api.internal.DefaultOutcomeService
 import link.socket.ampere.api.internal.DefaultPricingService
@@ -261,7 +260,7 @@ fun Ampere.fromEnvironment(
     // AMPR-439: the Field read, over the caller's database when there is one. The knowledge half
     // is the effective repository, so a memory-store override is what the Field's beliefs come from.
     val fieldService: FieldService? = database?.let { db ->
-        DefaultFieldService.over(
+        FieldService.over(
             database = db,
             knowledge = effectiveKnowledgeRepository,
             events = environmentService.eventRepository,

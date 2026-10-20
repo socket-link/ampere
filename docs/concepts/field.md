@@ -17,7 +17,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/commitment/CommitmentLedger.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/field/CommitmentStore.sq
 related: [SubjectRegistry, GoalBranch, MemoryProvenance, DomainCanon, EventSerialBus]
-last_verified: 2026-10-17
+last_verified: 2026-10-19
 ---
 
 # Field
@@ -76,10 +76,12 @@ concrete event classes".
 - `commitment/CommitmentLedger.kt` — the fold: `assigned(event, recordedAt, ticket)` and
   `statusChanged(event, recordedAt)`. One per environment (`EnvironmentService.commitmentLedger`),
   shared by `TicketOrchestrator` and every `TicketActionService` built off it.
-- `api/service/FieldService.kt` — the public read: `snapshot(viewer, beliefLimit)`.
+- `api/service/FieldService.kt` — the public read: `snapshot(viewer, beliefLimit)`, and
+  `FieldService.over(database, knowledge, events)` (AMPR-474), the one place a reader is built.
 - `api/internal/DefaultFieldService.kt` — the read over `SubjectStore`, `RelationshipStore`,
   `GoalStore`, `KnowledgeRepository`, `ObservationStore`, `EventRepository` and `CommitmentStore`;
   `DefaultFieldService.over(database, …)` builds every SQLDelight store from the one database.
+  It stays `internal`; only `FieldService.over` calls it.
   `takenActions` is the tool-event fold; `actionLimit` (default 100) bounds it.
 - `observe/ObservationStore.kt` — `ObservationStore` / `SqlDelightObservationStore`: the
   Environment branch's rows. A non-leaf package, because it imports the database.
@@ -96,7 +98,9 @@ concrete event classes".
   viewer-scoped list read; `EventStore.sq` `latestSequence` / `EventRepository.latestSequence`;
   `EventStore.sq` `getLatestEventsByType` / `EventRepository.getLatestEventsByType` — the
   bounded, newest-first, typed read the Action fold makes.
-- Wiring: `DefaultAmpereInstance` (always), `Ampere.fromEnvironment` (only with a `database`).
+- Wiring: `DefaultAmpereInstance` (always), `Ampere.fromEnvironment` (only with a `database`),
+  both through `FieldService.over`; `FieldServiceTest` fails if any other production file names
+  `DefaultFieldService`.
 - `jvmTest/.../api/FieldServiceTest.kt`, `jvmTest/.../observe/ObservationStoreTest.kt`,
   `jvmTest/.../commitment/CommitmentLedgerTest.kt`,
   `commonTest/.../knowledge/KnowledgeBeliefTest.kt`.
@@ -181,6 +185,11 @@ concrete event classes".
 
 - **Read the Field as an agent sees it** — `ampere.field?.snapshot(viewer = Ref(agentId))`.
 - **Read what anyone may see** — `snapshot(viewer = null)`: public beliefs only.
+- **Read the Field outside a run** — `FieldService.over(database, knowledge, events).snapshot(viewer)`,
+  for a caller that holds the database and composes no environment. `knowledge` is where the
+  beliefs come from (pass the memory-store override when there is one); `events` is an
+  `EventRepository` over the same database, which the snapshot is anchored to. It is the same
+  reader `AmpereInstance.field` is.
 - **Map one knowledge row** — `entry.toBelief(subject)`: `Settled` with a confidence, `Unsettled`
   without; holder and sensitivity from the row; provenance = `(createdByEvent, timestamp)`.
 - **Put a perceive in the Field** — `source.recordedPerceive(query, eventApi)`, then
@@ -249,6 +258,9 @@ concrete event classes".
   needs. If a later F-row adds evidence links, the exemption is added then.
 - *Keeping `PROTECTED` rows longer (or shorter) than `PRIVATE` ones.* Sensitivity decides who may
   read a row, not how long it lives.
+- *Constructing `DefaultFieldService` at a new wiring site.* A second construction path is a
+  second place for the stores to drift apart; call `FieldService.over`, and widen it if a site
+  needs a knob it lacks.
 - *Treating `findKnowledgeVisibleTo`'s interface default as a working read.* It fails with
   `UnsupportedOperationException` so a repository that predates it — a consumer's `MemoryStore`
   override — makes the snapshot fail loudly rather than report a world with no beliefs.

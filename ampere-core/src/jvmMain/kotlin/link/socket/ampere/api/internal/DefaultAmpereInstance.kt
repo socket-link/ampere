@@ -157,7 +157,7 @@ internal class DefaultAmpereInstance(
      * the SDK door and the hosted runs write, and the knowledge [knowledge] reads.
      */
     @AmpereExperimentalApi
-    override val field: FieldService = DefaultFieldService.over(
+    override val field: FieldService = FieldService.over(
         database = database,
         knowledge = KnowledgeRepositoryImpl(database, driver),
         events = environmentService.eventRepository,
