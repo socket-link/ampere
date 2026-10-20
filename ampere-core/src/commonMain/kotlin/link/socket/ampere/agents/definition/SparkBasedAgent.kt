@@ -132,7 +132,9 @@ open class SparkBasedAgent<S : AgentState>(
      * Outbound decision transport (AMPR-384). Null declares none: the agent's
      * first `decide` throws
      * [MissingUpstreamDecisionClientException][link.socket.ampere.llm.decide.MissingUpstreamDecisionClientException].
-     * Nothing in the loop calls `decide` yet (W1 is shadow only).
+     * Only a hosted run's seats are asked anything through it — the run's own questions
+     * after an executed cycle (AMPR-421, AMPR-481) and its drift receptor (AMPR-483) —
+     * and `RunHost.open` refuses a policy that would ask on a seat carrying none.
      */
     @Transient
     private val _upstreamDecisionClient: UpstreamDecisionClient? = null,

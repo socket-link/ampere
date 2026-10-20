@@ -3,8 +3,9 @@ concept: Probe
 status: experimental
 tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/probe/**
-related: [DomainCanon, MemoryProvenance, PropelLoop, HostedRun]
-last_verified: 2026-10-11
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/propel/DriftReceptor.kt
+related: [DomainCanon, MemoryProvenance, PropelLoop, HostedRun, DecideSeam]
+last_verified: 2026-10-20
 ---
 
 # Probe
@@ -33,7 +34,40 @@ Bench fixture or a unit test.
 the one-field interface (`observedAt: Instant`) that lets it run over a canon
 entity's `CanonProvenance` or a consumer's own binding type without Ampere
 importing either; `WorkPlanSubject` and `LineRef` are the same move for a plan
-and its manifest.
+and its manifest. The fourth, `DriftReceptor : Probe<RunDrift>` (`propel/`,
+AMPR-483), is the first *decision-backed* Probe — the shape AMPR-381 J6 named —
+and lives beside the hosted run that evaluates it rather than here; see *The
+decision-backed Probe* below.
+
+## The decision-backed Probe
+
+`DriftReceptor` asks a hosted run's drift question (`RunQuestions.perceptionDrift`)
+through the Decide seam and maps the one measured judgment it gets back onto the
+four verdicts. The mapping is the whole design:
+
+| The judge said | The verdict |
+|---|---|
+| Nothing asked: the `FieldDelta` is empty | `Holds("nothing moved since cycle n")`, no call |
+| Nothing asked: every entry of the delta is a `PROTECTED` row | `Violated("moved behind sensitivity …")`, no call — what moved cannot be shown to a judge off the device, so the receptor convicts rather than acquits on evidence it may not read |
+| A measured distribution with `p(true) ≥ moveAbove` | `Violated("p(bears on goal) = …")` |
+| A measured distribution with `p(true) < moveAbove` | `Holds("p(bears on goal) = …")` |
+| A self-reported answer, a missing distribution, a transport that threw | `Undetermined(…, EVIDENCE_UNREADABLE)` — the evidence exists and could not be used |
+
+No new `UndeterminedCause`: the threshold folds what would otherwise be a middle
+band, and a transport failure is unreadable evidence. `moveAbove` is the
+consumer's, from `PerceiveCadence.WhenDrifted(moveAbove)`, and appears as no
+constant (AMPR-422 Q5). The judgment's record is `AgentReasoning.decide`'s own
+(`JudgmentRecorded`); the verdict's is the `ProbeSuite` the run evaluates the
+receptor inside, over the host seat's door under the run id, exactly as the
+verifier's suite is built — so a reader finds the verdict beside the judgment it
+was read from. A cancellation is not a verdict and propagates.
+
+It is the one Probe whose verdict something in Ampere acts on, and the action is
+add-only (see *Anti-patterns*): a hosted run under `WhenDrifted` re-enters its
+next cycle at PERCEIVE on `Violated` or `Undetermined` — an unchecked cell is not
+trusted, convict-but-not-acquit — and at OBSERVE, as every cycle did before, on
+`Holds`. Nothing ends a run, re-plans, escalates or trips a step on it; a Hard
+rule stays code (J7), and the receptor feeds nothing to the Breaker.
 
 ## Why it exists
 
@@ -51,7 +85,9 @@ type would leave foreign subjects with no base to extend.
 
 A Probe reports on something that already exists — a plan graph, a manifest line, a
 recalled fact — and its `Verdict` goes on the record for someone else to act on.
-Nothing in Ampere routes on it (see *Anti-patterns*). The Breaker (`propel/Breaker.kt`,
+Nothing in Ampere routes on it (see *Anti-patterns*), with one add-only exception: the
+drift receptor's verdict chooses where a hosted run's next cycle *starts* (AMPR-483),
+and nothing more. The Breaker (`propel/Breaker.kt`,
 AMPR-440) stands in front of something about to happen — a plan step's tool — and its
 `field.Admission` (`Pass`, `Resist`, `Trip`) decides whether it runs. The two are
 deliberately different types (F13): `Verdict` is serialized inside
@@ -102,6 +138,7 @@ on `RoomEvent.Posted` carries category, hint and evidence as data.
 - `probe/safety/KeywordHazardClassifier.kt` — the v1 rules: line kinds, then line labels, then Task text.
 - `probe/safety/SafetyProbe.kt` — the Probe and `SafetyInspection` (findings + the verdict they imply).
 - `probe/safety/MitigationPlan.kt` — the pure insertion: one mitigation Task per finding, before the hazardous Task.
+- `propel/DriftReceptor.kt` — `DriftReceptor : Probe<RunDrift>`, the decision-backed Probe (AMPR-483): `internal`, built per cycle by `RosterHostedRun` over the host seat's reasoning unit, the consumer's `moveAbove` and the run's result clip, with the lesson question riding in `alsoAsk`. Its test is `commonTest/.../propel/DriftReceptorTest`.
 - `agents/domain/event/ProbeEvent.kt` — `VerdictReached`, the verdict on the bus. It lives in the event package, not here, because `Event` is sealed and Kotlin requires sealed subtypes to share module and package with the base type.
 - `commonTest/.../probe/` — `ProbeSuiteTest`, `ProbeSuiteEventTest`, `ProbeSerializationTest`, `SequenceProbeTest`, `FreshnessProbeTest`, and `probe/safety/` (`KeywordHazardClassifierTest`, `SafetyProbeTest`, `MitigationPlanTest`).
 - `ampere-eval/src/jvmTest/.../blueprint/` — the three Blueprint fixtures (vent, motion sensor, lawn) and `BlueprintSafetyReplayTest`, which pins each one's findings.
@@ -134,6 +171,7 @@ and is never re-stamped on receipt, cache hit, or Plan.
 - **A mitigation Task is never inspected.** Its title quotes the step it guards, so a keyword classifier reads the same hazard in it and asks for a mitigation of the mitigation, forever. `MitigationPlan.isMitigation` is the stop, and the Probe applies it before the classifier runs.
 - **A mitigation Task is identified, not accumulated.** `MitigationPlan.mitigationId(task, hint)` is pure, so inserting twice inserts nothing — the same identity-is-the-lookup rule the Room's thread ids use. A mitigated plan still warns: `Warn` says the plan contains hazardous work, not that the plan is unfinished.
 - **A verdict is recomputed, never replayed.** `PlaybackRelay` replays a recorded run's LLM calls; it does not replay verdicts. A Probe re-evaluated against a replayed subject must reach its verdict again, or a stale judgement outlives the code that formed it.
+- **A decision-backed Probe reads a measured distribution against a threshold it was given, and reads nothing else.** `DriftReceptor` maps `p(true)` onto `Violated` / `Holds` at the consumer's `moveAbove`, answers `Undetermined(EVIDENCE_UNREADABLE)` for a judgment with no measured distribution — the band rule of [DecideSeam](decide-seam.md), applied to a threshold — and for a transport that threw, and makes no call at all for a delta with nothing in it (`Holds`) or nothing it may show (`Violated`). The threshold is a constructor parameter and no constant; the judgment's record is the decision call's, the verdict's is the suite's.
 
 ## Common operations
 
@@ -149,7 +187,7 @@ and is never re-stamped on receipt, cache hit, or Plan.
 - **A `Boolean` verdict.** Two independent recons each needed a third value, and different thirds.
 - **Reading `WebPage.fetchedAt` from Ampere.** It is a Socket type; the isolation check forbids it and the binding already carries the timestamp.
 - **Per-fact tolerances.** Out of scope by design (AMPR-323); a fact does not know how stale is too stale for a given consumer.
-- **Routing on a verdict inside Ampere.** Re-plan, escalation to a human, retry — all consumer-side (Socket decision D21). The event is the signal, not the action.
+- **Routing on a verdict inside Ampere.** Re-plan, escalation to a human, retry — all consumer-side (Socket decision D21). The event is the signal, not the action. The one exception is the drift receptor's, and it is bounded by construction (AMPR-483): its verdict chooses whether a hosted run's next cycle re-enters at PERCEIVE or at OBSERVE, under a cadence the consumer opted into, and can do nothing else — not end the run, not re-plan a cycle the planner answered, not trip a step. A second reader of a verdict inside Ampere needs its own ruling, not this precedent.
 - **A `Violated` hazard verdict, or anything that turns a hazard into a refusal to plan.** The plan a person needs is the one with the mitigation step in it, not an error.
 - **Reading `LineRef.appliesTo` as optional.** It is the join between the manifest and the Tasks. A hazardous line it attaches to nothing is reported against the line itself (`HazardSubject.Line`) and inserts no Task — dropping it instead would leave a solvent in the room with nobody told.
 - **Stemming or substring-matching the keyword rules.** `substring` reads "execute" as a cutting hazard and "remains" as mains voltage. Tokens are whole words and inflections are listed, so the vocabulary is auditable by reading it.

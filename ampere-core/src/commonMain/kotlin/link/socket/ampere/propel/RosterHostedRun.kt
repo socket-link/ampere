@@ -24,6 +24,7 @@ import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.reasoning.PlanExecutor
 import link.socket.ampere.agents.domain.reasoning.PlanSeat
 import link.socket.ampere.agents.domain.reasoning.StepResult
+import link.socket.ampere.agents.domain.reasoning.defaultPerceptionContext
 import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.domain.task.TaskId
@@ -51,6 +52,7 @@ import link.socket.ampere.llm.DispatchingUpstreamLlmClient
 import link.socket.ampere.llm.decide.Question
 import link.socket.ampere.plug.permission.UserGrants
 import link.socket.ampere.probe.ProbeSuite
+import link.socket.ampere.probe.Verdict
 import link.socket.ampere.roster.RoleId
 import link.socket.ampere.roster.Roster
 import link.socket.ampere.roster.SeatTool
@@ -123,6 +125,20 @@ import link.socket.ampere.util.logWith
  * over a [RunDrift]: the two snapshots folded ([FieldDelta.between]) and this cycle's results.
  * Recorded and never read, like the goal question; the loop, [currentStatus] and LEARN are
  * what they were.
+ *
+ * Under [PerceiveCadence.WhenDrifted] (AMPR-483, rows N3, N4, N5, N9 and N11) the drift
+ * question is the [DriftReceptor]'s — a `Probe<RunDrift>` evaluated in that bracket inside a
+ * `ProbeSuite` over the host's door, so its verdict is on the record beside the judgment — and
+ * the loop reads the verdict, in the add-only direction: a `Violated` or an `Undetermined`
+ * re-enters the next cycle at PERCEIVE instead of OBSERVE, a `Holds` leaves the run exactly as
+ * it is today. [PerceiveCadence.EveryCycle] re-enters there without asking. A cycle that
+ * re-entered at PERCEIVE runs RECALL again under [RecallCadence.WithPerceive], and its PLAN is
+ * handed what moved as the "Observed since the last cycle" block — the first thing OBSERVE has
+ * ever handed PLAN. Phase order is fixed: re-entry chooses where a cycle starts, never the order
+ * it runs in. What PERCEIVE and RECALL last produced is held in a [PhaseCell] each, in memory.
+ * No verdict ends a run, re-plans past the planner's empty answer or touches [currentStatus];
+ * a run whose quota tripped does not re-perceive; a held, stopped, declined or cancelled run
+ * never re-enters.
  *
  * One run, one driver: the fields below are not synchronised, and two coroutines
  * driving the same run would interleave its phases.
@@ -268,14 +284,49 @@ internal class RosterHostedRun(
 
     /**
      * The Field as the host seat saw it inside the OBSERVE after the latest executed cycle, or
-     * null (AMPR-480, row N1). Taken and kept; nothing here reads it. The after-cycle request
-     * (AMPR-479) folds it with [perceivedField] into what moved.
+     * null (AMPR-480, row N1). The after-cycle request (AMPR-479, AMPR-481) folds it with
+     * [perceivedField] into what moved, and under [PerceiveCadence.WhenDrifted] a `Holds` makes
+     * it the next cycle's baseline (AMPR-483): what the receptor judged beside the goal is not
+     * judged again.
      */
     private var observedField: Field? = null
 
-    /** The two snapshots, for a test that has to see them; the run itself reads neither. */
+    /** The two snapshots, for a test that has to see them; the loop reads them only to fold. */
     internal val fieldSnapshots: Pair<Field?, Field?>
         get() = perceivedField to observedField
+
+    /**
+     * What PERCEIVE last produced, from what, and in which cycle (AMPR-483, row N11), or null
+     * before the first PERCEIVE and for a resumed run, whose ideas come off its held record.
+     * In memory for the run's length; nothing persists or publishes it. [ideas] carries the
+     * same value to PLAN and to the held record, as it did before the cell existed.
+     */
+    private var perceptionCell: PhaseCell<Idea>? = null
+
+    /**
+     * What RECALL last found, from what, and in which cycle (AMPR-483, row N11), or null before
+     * the first RECALL. [recalled] carries its memory half to PLAN, as before.
+     */
+    private var recallCell: PhaseCell<RecalledContext>? = null
+
+    /** The two cells, for a test that has to see them. */
+    internal val phaseCells: Pair<PhaseCell<Idea>?, PhaseCell<RecalledContext>?>
+        get() = perceptionCell to recallCell
+
+    /**
+     * Whether the next cycle re-enters at PERCEIVE rather than at OBSERVE (AMPR-483, row N5):
+     * the drift receptor's verdict was not `Holds`, or the cadence re-perceives every cycle.
+     * Set after an executed cycle, read and cleared by [reenter]. Never set for a cycle that
+     * held, was stopped, was declined or was cancelled — those never reach the re-entry.
+     */
+    private var reentryAtPerceive: Boolean = false
+
+    /**
+     * What moved in the Field since the last PERCEIVE, rendered for the next PLAN (AMPR-483,
+     * row N9), or null. Set beside [reentryAtPerceive] and handed to PLAN only on a cycle that
+     * actually re-entered at PERCEIVE; dropped otherwise.
+     */
+    private var observedSinceLastCycle: String? = null
 
     /**
      * The outcomes of the steps the latest cycle executed — this cycle's alone, where [results]
@@ -402,6 +453,11 @@ internal class RosterHostedRun(
      * call that follows is shown it; the holder is cleared again on the way out, so no later
      * prompt of the seat carries a world it perceived earlier. A section rendered is outside
      * content shown to a model, and raises [readExternalContent] as RECALL's does (AMPR-453).
+     *
+     * Called once by [charge], and again by [reenter] for a cycle that re-enters at PERCEIVE
+     * (AMPR-483): the snapshot is taken at the top, so a re-perceive sees the world as it is
+     * now, and the prior cell's [Idea] rides in `Perception.ideas` so the seat reads the world
+     * against what it last concluded. What it produces replaces [perceptionCell].
      */
     private suspend fun perceive() {
         host.phases.withPhase(CognitivePhase.PERCEIVE, runId) {
@@ -431,15 +487,23 @@ internal class RosterHostedRun(
         // snapshot of what they added up to.
         host.agent.emitCognitiveSnapshot()
 
+        val state = host.agent.getCurrentState()
+        // The cell's input is the context string the seat's builder renders for this call —
+        // `defaultPerceptionContext` plus the "# World" section the holder carries right now —
+        // digested, never kept: the world may hold a person's data (AMPR-483, row N11).
+        val inputDigest = PhaseCell.digest(defaultPerceptionContext(state) + host.world.section.orEmpty())
         val perception = Perception(
             id = generateUUID("perception", host.id),
-            currentState = host.agent.getCurrentState(),
+            currentState = state,
+            // The prior cell's idea, or a resumed run's restored ideas: what the seat last
+            // concluded, so a re-perceive reads the world against it (AMPR-483).
             ideas = ideas,
         )
         host.agent.rememberNewPerception(perception)
         val idea = host.agent.reasoningUnit.evaluatePerception(perception)
         host.agent.rememberNewIdea(idea)
         ideas = listOf(idea)
+        perceptionCell = PhaseCell(value = idea, inputDigest = inputDigest, cycle = cyclesUsed + 1)
     }
 
     /**
@@ -463,6 +527,11 @@ internal class RosterHostedRun(
      *
      * No model call: both halves are retrieval, and the clip lengths are what keeps
      * what they return affordable rather than a summarising call.
+     *
+     * Called once by [charge], by [resume] for a completed hold, and by [reenter] beside a
+     * re-run PERCEIVE under [RecallCadence.WithPerceive] (AMPR-483, row N4) — the same query
+     * and scopes each time, so what changes between two RECALLs of one run is what the stores
+     * hold, not what was asked. What it finds replaces [recallCell].
      */
     private suspend fun recall() {
         host.phases.withPhase(CognitivePhase.RECALL, runId) {
@@ -497,6 +566,18 @@ internal class RosterHostedRun(
             )
 
             recalled = found.fromMemory
+            recallCell = PhaseCell(
+                value = found,
+                // The context RECALL ran with, digested (AMPR-483, row N11): what it searched
+                // for, under which scopes, in which bucket. The scopes are sorted so one set
+                // digests one way whatever order the seat declared them in.
+                inputDigest = PhaseCell.digest(
+                    context.description,
+                    scopes.sorted().joinToString(","),
+                    context.taskType,
+                ),
+                cycle = cyclesUsed + 1,
+            )
             // The publish result is deliberately not folded into the run, as in
             // `ProbeSuite`: the door logs a persist failure and reports it on the bus,
             // and a run that recalled something should go on to plan with it rather
@@ -603,12 +684,18 @@ internal class RosterHostedRun(
      * `PlanTruncated` goes out after the task lifecycle opens and before the gate. A plan
      * cut to nothing skips the gate, as an empty later plan does, but ends the run as a
      * failure rather than as the planner's "done".
+     *
+     * On a cycle that re-entered at PERCEIVE (AMPR-483, row N9) the planner is also handed
+     * [observed] — what moved in the Field since the last PERCEIVE, rendered — which it puts
+     * after the work already done as the "Observed since the last cycle" block. Null, which
+     * is every other cycle, renders nothing. A re-plan under the cap is handed the same text.
      */
-    private suspend fun planCycle(): Unit =
+    private suspend fun planCycle(observed: String? = null): Unit =
         host.phases.withPhase(CognitivePhase.PLAN, runId) {
             aboutToShow(results)
+            if (observed != null) shownExternal = true
             val cycle = cyclesUsed + 1
-            val bounded = withinBounds(generatePlan(cycle, ideas), cycle)
+            val bounded = withinBounds(generatePlan(cycle, ideas, observed), cycle, observed)
             val generated = bounded.plan
             host.agent.rememberNewPlan(generated)
             heldCycleHead = emptyList()
@@ -651,7 +738,7 @@ internal class RosterHostedRun(
             }
         }
 
-    private suspend fun generatePlan(cycle: Int, ideas: List<Idea>): Plan =
+    private suspend fun generatePlan(cycle: Int, ideas: List<Idea>, observed: String?): Plan =
         host.agent.reasoningUnit.generatePlan(
             task = goal,
             ideas = ideas,
@@ -660,6 +747,7 @@ internal class RosterHostedRun(
             priorResults = results.toList(),
             cycle = cycle,
             availableTools = planTools,
+            observed = observed,
         )
 
     /**
@@ -684,11 +772,11 @@ internal class RosterHostedRun(
      * would fail `executePlanStep` as "not in the agent's effective tool set". A step
      * naming no tool is a reasoning step and is never unknown.
      */
-    private suspend fun withinBounds(generated: Plan, cycle: Int): BoundedPlan {
+    private suspend fun withinBounds(generated: Plan, cycle: Int, observed: String?): BoundedPlan {
         val cap = policy.maxStepsPerCycle ?: return BoundedPlan(generated)
         val first = boundsBrokenBy(generated, cap) ?: return BoundedPlan(generated)
 
-        val replanned = generatePlan(cycle, ideas + first.asCorrection())
+        val replanned = generatePlan(cycle, ideas + first.asCorrection(), observed)
         val second = boundsBrokenBy(replanned, cap) ?: return BoundedPlan(replanned)
 
         val known = replanned.tasks.filter(::namesKnownTool)
@@ -757,7 +845,13 @@ internal class RosterHostedRun(
                 // the run has already decided that nothing follows it. Nor is a cycle the
                 // gate stopped part-way, once a step's arguments changed (AMPR-454): the
                 // gate has said nothing more runs.
-                if (heldAt == null && stoppedAt == null) assess()
+                if (heldAt == null && stoppedAt == null) {
+                    assess()
+                    // No judge under `EveryCycle`: every executed cycle re-enters at PERCEIVE
+                    // (AMPR-483, row N5). Decided here rather than in `assess`, which a run
+                    // that observes nothing and asks nothing returns from before its bracket.
+                    if (policy.cadence.perceive == PerceiveCadence.EveryCycle) reentryAtPerceive = true
+                }
             }
             captureCancellation()
             // A hold is a full stop, whatever `cycles` says: the next PLAN would be planning
@@ -769,8 +863,11 @@ internal class RosterHostedRun(
             // first. An empty plan means the host had nothing left to ask for.
             if (cyclesUsed >= policy.cycles || (gatedPlan.tasks.isEmpty() && !finishingHeldCycle)) break
 
+            // Where the next cycle starts (AMPR-483, row N5): at PERCEIVE when the cycle
+            // asked for it, else at OBSERVE as every cycle did before. Never reordered.
+            val observed = reenter()
             observe(cycle = cyclesUsed + 1)
-            planCycle()
+            planCycle(observed)
             cyclesUsed++
         }
 
@@ -787,6 +884,46 @@ internal class RosterHostedRun(
         settled = result
         cancellation?.let { throw it }
         return result
+    }
+
+    /**
+     * The re-entry into PERCEIVE a cycle may ask for (AMPR-483, rows N4, N5 and N9), taken
+     * before the OBSERVE every later cycle re-enters at. Answers what the cycle's PLAN is to
+     * be shown about the world, or null.
+     *
+     * When [reentryAtPerceive] is up — the drift receptor convicted or could not decide, or
+     * the cadence re-perceives every cycle — PERCEIVE runs again on the host seat, shown the
+     * world as it is now, then RECALL under [RecallCadence.WithPerceive], and the delta the
+     * receptor was asked about is what the cycle's PLAN is handed. Otherwise nothing runs
+     * here and the cycle goes on exactly as it did before this seam existed.
+     *
+     * A run whose quota has tripped does not re-perceive. A quota trips steps, not the loop:
+     * the next PLAN still runs and its first step still fails on the quota, as it did before
+     * (AMPR-445); what this keeps out of a tripped run is one more PERCEIVE model call and
+     * one more store read on the way to that failure. The PLAN half — whether a tripped run
+     * should plan at all — is its own ticket. `quotaReached` reads the record only when a
+     * re-perceive was asked for, so a run under the default cadence reads nothing here.
+     *
+     * Both flags are consumed whatever happens, so a re-perceive refused by the quota does
+     * not carry over to the cycle after.
+     */
+    private suspend fun reenter(): String? {
+        val atPerceive = reentryAtPerceive
+        val observed = observedSinceLastCycle
+        reentryAtPerceive = false
+        observedSinceLastCycle = null
+        if (!atPerceive) return null
+        if (quotaReached()) {
+            logWith("RosterHostedRun").i {
+                "Run $runId was to re-enter cycle ${cyclesUsed + 1} at PERCEIVE and a quota has tripped; " +
+                    "it re-enters at OBSERVE instead"
+            }
+            return null
+        }
+
+        perceive()
+        if (policy.cadence.recall == RecallCadence.WithPerceive) recall()
+        return observed
     }
 
     /**
@@ -909,6 +1046,11 @@ internal class RosterHostedRun(
      * needs the two snapshots; when the run has only one or none — a snapshot failed — it is
      * left out, the lesson question goes alone over an empty `changes`, and the run logs once.
      * [recordOnly] drops the answers as it drops the goal question's.
+     *
+     * Under [PerceiveCadence.WhenDrifted] (AMPR-483) the drift question is the
+     * [DriftReceptor]'s, and the one answer the loop reads: see [askReceptor]. Under
+     * [PerceiveCadence.EveryCycle] nothing is asked, but a run that observes still folds the
+     * two snapshots here so the re-perceiving cycle's PLAN can be shown what moved.
      */
     private suspend fun assess() {
         if (cancellation != null || !coroutineContext.isActive) return
@@ -918,7 +1060,9 @@ internal class RosterHostedRun(
             ?.let { seats[it] }
             ?.takeIf { it.descriptor.questions.isNotEmpty() }
         val observes = observesField
-        val asksReceptor = policy.cadence.perceive == PerceiveCadence.Record ||
+        val perceiveCadence = policy.cadence.perceive
+        val asksReceptor = perceiveCadence == PerceiveCadence.Record ||
+            perceiveCadence is PerceiveCadence.WhenDrifted ||
             policy.cadence.learn == LearnCadence.Record
         if (!asksGoal && verifier == null && !observes && !asksReceptor) return
 
@@ -952,62 +1096,85 @@ internal class RosterHostedRun(
                     }
                 }
             }
-            if (asksReceptor) askReceptor()
+            if (asksReceptor) {
+                askReceptor()
+            } else if (perceiveCadence == PerceiveCadence.EveryCycle) {
+                // Nothing to ask, but the re-perceiving cycle's PLAN is shown what moved
+                // (AMPR-483, row N9) when there are two snapshots to fold.
+                val (delta, names) = foldDrift()
+                observedSinceLastCycle = delta?.asObservedText(policy.observe, names)
+            }
         }
     }
 
     /**
-     * The receptor's request (AMPR-481): one `decide` on the host seat over [RunDrift], carrying
-     * whichever of the two questions the cadence puts on `Record`, inside the OBSERVE bracket
-     * [assess] opened. Nothing reads what comes back.
+     * The receptor's request (AMPR-481, AMPR-483): one `decide` on the host seat over
+     * [RunDrift], carrying whichever of the two questions the cadence asks, inside the
+     * OBSERVE bracket [assess] opened.
      *
      * Called after the goal question so the order of a cycle's records is the goal's, then the
      * receptor's; the two are separate requests over separate states either way.
+     *
+     * Under a `Record` cadence nothing reads what comes back. Under
+     * [PerceiveCadence.WhenDrifted] the request is the [DriftReceptor]'s — evaluated in a
+     * `ProbeSuite` over the host's door under this run, so its verdict leaves as a
+     * `ProbeEvent.VerdictReached` beside the `JudgmentRecorded` the call leaves — and the
+     * lesson question rides in the same request when [LearnCadence.Record] asks for it, so the
+     * cycle's two records still share one state and one digest. The verdict is the one thing
+     * the loop reads: anything but `Holds` re-enters the next cycle at PERCEIVE, and the
+     * rendered delta is kept for that cycle's PLAN. A `Holds` also makes the after-cycle
+     * snapshot the next cycle's baseline, so what was judged beside the goal is not judged
+     * again. With no two snapshots to fold — the Field could not be read — there is nothing
+     * for the receptor to evaluate: the run logs once, treats the cycle as unchecked and
+     * re-enters at PERCEIVE (convict-but-not-acquit), and the lesson question, if on, goes
+     * alone over an empty `changes` as it does under `Record`.
      */
     private suspend fun askReceptor() {
-        val before = perceivedField
-        val after = observedField
-        val delta = if (before != null && after != null) {
-            val ownActors = seats.values.mapTo(mutableSetOf()) { Ref<Subject>(it.id) }
-            FieldDelta.between(before, after, ownActors = ownActors)
+        val (delta, names) = foldDrift()
+        val perceiveCadence = policy.cadence.perceive
+        val lesson = if (policy.cadence.learn == LearnCadence.Record) {
+            mapOf(RunQuestions.LESSON_WORTH_KEEPING_ID to RunQuestions.lessonWorthKeeping)
         } else {
-            null
+            emptyMap()
+        }
+        val asksDrift = perceiveCadence == PerceiveCadence.Record || perceiveCadence is PerceiveCadence.WhenDrifted
+        if (asksDrift && delta == null && !driftUnavailableLogged) {
+            driftUnavailableLogged = true
+            logWith("RosterHostedRun").w {
+                "Run $runId has no Field snapshot to fold, so perception_drift cannot be asked; " +
+                    "the Field could not be read at PERCEIVE or after a cycle" +
+                    if (perceiveCadence is PerceiveCadence.WhenDrifted) ", and an unchecked cycle re-perceives" else ""
+            }
         }
 
+        if (perceiveCadence is PerceiveCadence.WhenDrifted && delta != null) {
+            val receptor = DriftReceptor(
+                reasoning = host.agent.reasoningUnit,
+                moveAbove = perceiveCadence.moveAbove,
+                clip = policy.judgmentResultClip,
+                alsoAsk = lesson,
+            )
+            aboutToShow(cycleResults)
+            val verdict = evaluateReceptor(receptor, runDrift(delta, names)) ?: return
+            if (verdict is Verdict.Holds) {
+                perceivedField = observedField
+            } else {
+                reentryAtPerceive = true
+                observedSinceLastCycle = delta.asObservedText(policy.observe, names)
+            }
+            return
+        }
+        if (perceiveCadence is PerceiveCadence.WhenDrifted) reentryAtPerceive = true
+
         val questions = buildMap<String, Question> {
-            if (policy.cadence.perceive == PerceiveCadence.Record) {
-                if (delta != null) {
-                    put(RunQuestions.PERCEPTION_DRIFT_ID, RunQuestions.perceptionDrift)
-                } else if (!driftUnavailableLogged) {
-                    driftUnavailableLogged = true
-                    logWith("RosterHostedRun").w {
-                        "Run $runId has no Field snapshot to fold, so perception_drift is not asked; " +
-                            "the Field could not be read at PERCEIVE or after a cycle"
-                    }
-                }
+            if (perceiveCadence == PerceiveCadence.Record && delta != null) {
+                put(RunQuestions.PERCEPTION_DRIFT_ID, RunQuestions.perceptionDrift)
             }
-            if (policy.cadence.learn == LearnCadence.Record) {
-                put(RunQuestions.LESSON_WORTH_KEEPING_ID, RunQuestions.lessonWorthKeeping)
-            }
+            putAll(lesson)
         }
         if (questions.isEmpty()) return
 
-        // The later snapshot's names, over the earlier one's for anything it no longer holds.
-        val names = buildMap {
-            listOfNotNull(before, after).forEach { field ->
-                field.subjects.forEach { put(it.id.value, it.name) }
-                field.goals.forEach { put(it.goal.id.value, it.goal.description) }
-            }
-        }
-        val drift = RunDrift(
-            runId = runId,
-            goal = goal,
-            cycle = cyclesUsed,
-            perceived = ideas.firstOrNull()?.description.orEmpty(),
-            delta = delta ?: noDrift(),
-            cycleResults = cycleResults,
-            names = names,
-        )
+        val drift = runDrift(delta ?: noDrift(), names)
         aboutToShow(cycleResults)
         recordOnly(host) {
             host.agent.reasoningUnit.decide(
@@ -1016,6 +1183,60 @@ internal class RosterHostedRun(
                 phase = CognitivePhase.OBSERVE,
             )
         }
+    }
+
+    /**
+     * The two snapshots folded into what moved (AMPR-479), with the names the fold's
+     * references resolve to — the later snapshot's over the earlier one's for anything it no
+     * longer holds — or a null delta when the run has fewer than two snapshots to fold.
+     */
+    private fun foldDrift(): Pair<FieldDelta?, Map<String, String>> {
+        val before = perceivedField
+        val after = observedField
+        val delta = if (before != null && after != null) {
+            val ownActors = seats.values.mapTo(mutableSetOf()) { Ref<Subject>(it.id) }
+            FieldDelta.between(before, after, ownActors = ownActors)
+        } else {
+            null
+        }
+        val names = buildMap {
+            listOfNotNull(before, after).forEach { field ->
+                field.subjects.forEach { put(it.id.value, it.name) }
+                field.goals.forEach { put(it.goal.id.value, it.goal.description) }
+            }
+        }
+        return delta to names
+    }
+
+    /** The receptor's state for the cycle that just executed (AMPR-481, row N6). */
+    private fun runDrift(delta: FieldDelta, names: Map<String, String>): RunDrift = RunDrift(
+        runId = runId,
+        goal = goal,
+        cycle = cyclesUsed,
+        perceived = ideas.firstOrNull()?.description.orEmpty(),
+        delta = delta,
+        cycleResults = cycleResults,
+        names = names,
+    )
+
+    /**
+     * Runs [receptor] over [drift] inside a `ProbeSuite` on the host's door under this run
+     * (AMPR-483), the way the verifier's probes run, so the verdict is attributed to the seat
+     * that reached it and `ArcTraceProjection.project(runId)` can find it. Answers the verdict,
+     * or null when the scope was cancelled while the receptor ran — held in [cancellation] as
+     * [recordOnly] holds one, so [execute] rethrows it once the loop has unwound. A transport
+     * that throws is not a throw here: the receptor reads it as `Undetermined`.
+     */
+    private suspend fun evaluateReceptor(receptor: DriftReceptor, drift: RunDrift): Verdict? = try {
+        ProbeSuite(
+            probes = listOf(receptor),
+            eventApi = host.door,
+            eventSource = EventSource.Agent(host.id),
+            runId = runId,
+        ).evaluate(subjectId = runId, subject = drift).single().verdict
+    } catch (e: CancellationException) {
+        cancellation = e
+        null
     }
 
     /**

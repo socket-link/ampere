@@ -19,6 +19,7 @@ import link.socket.ampere.agents.domain.task.ExecutionAssignment
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.execution.ToolArgumentSchema
 import link.socket.ampere.agents.execution.completedWorkSection
+import link.socket.ampere.agents.execution.observedSection
 import link.socket.ampere.agents.execution.recalledBlock
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
@@ -100,6 +101,12 @@ class PlanGenerator(
      *   Cycle 1 keeps the step ids it always had, `step-<n>-<taskId>`; cycle 2 and later
      *   prefix them, `c<cycle>-step-<n>-<taskId>`, so no two steps of one run share an id.
      *   The fallback plan's step follows the same rule.
+     * @param observed What moved in the world since the planner's host last perceived it, as
+     *   prose lines, or null (AMPR-483, row N9). Non-null adds the "Observed since the last
+     *   cycle" block — `observedSection`, inside the data block, every line `[external]` —
+     *   immediately after the "work already done" block. A hosted run passes it only on a
+     *   cycle that re-entered at PERCEIVE; null, the default, renders nothing and leaves the
+     *   prompt byte-identical. Not handed to [customPromptBuilder], as [priorResults] is not.
      * @return A Plan containing sequential steps to accomplish the goal
      */
     suspend fun generate(
@@ -114,6 +121,7 @@ class PlanGenerator(
         runId: RunId? = null,
         priorResults: List<StepOutcome> = emptyList(),
         cycle: Int = 1,
+        observed: String? = null,
     ): Plan {
         // Handle blank task
         if (task is Task.Blank) {
@@ -133,6 +141,7 @@ class PlanGenerator(
                 availableTools = availableTools,
                 seats = seats,
                 priorResults = priorResults,
+                observed = observed,
             )
 
         return try {
@@ -230,6 +239,11 @@ class PlanGenerator(
      * block is rendered by `completedWorkSection`, the same per-result rendering a
      * step's own parameter prompt uses, so the detail of every result is clipped on
      * the way in and the prompt grows by a bounded amount per step.
+     *
+     * The "observed since the last cycle" block (AMPR-483) sits immediately after it, and
+     * only when [observed] is non-null: what OBSERVE saw move in the world, rendered by
+     * `observedSection` inside the same kind of data block. Null appends nothing, so every
+     * prompt rendered before the block existed is byte-identical.
      */
     private fun buildPlanningPrompt(
         taskDescription: String,
@@ -239,6 +253,7 @@ class PlanGenerator(
         availableTools: Set<Tool<*>>,
         seats: List<PlanSeat>,
         priorResults: List<StepOutcome>,
+        observed: String?,
     ): String = buildString {
         appendLine("You are the planning module of an autonomous $agentRole agent.")
         appendLine("Your task is to create a concrete, executable plan to accomplish the given task.")
@@ -255,6 +270,9 @@ class PlanGenerator(
         val completedWork = completedWorkSection(priorResults)
         if (completedWork.isNotEmpty()) {
             appendLine(completedWork)
+        }
+        if (observed != null) {
+            appendLine(observedSection(observed))
         }
 
         if (seats.isNotEmpty()) {

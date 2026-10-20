@@ -210,6 +210,11 @@ class AgentReasoning private constructor(
      *   here: the planner reads a tool's description and schema off these objects, and a
      *   seat's tool missing from them is listed with no description, offered no schema, and
      *   has its inline arguments dropped (AMPR-454).
+     * @param observed what moved in the world since the host last perceived it, as prose
+     *   lines, or null (AMPR-483, row N9). Forwarded to [PlanGenerator.generate] unchanged: a
+     *   hosted run passes it on a cycle that re-entered at PERCEIVE, where it renders as the
+     *   "Observed since the last cycle" block after the work already done. Null — the default,
+     *   and what every other caller passes — renders nothing.
      */
     suspend fun generatePlan(
         task: Task,
@@ -219,6 +224,7 @@ class AgentReasoning private constructor(
         priorResults: List<StepOutcome> = emptyList(),
         cycle: Int = 1,
         availableTools: Set<Tool<*>>? = null,
+        observed: String? = null,
     ): Plan {
         // Use mock response if available
         mockResponses?.planGenerator?.let { generator ->
@@ -237,6 +243,7 @@ class AgentReasoning private constructor(
             runId = runId,
             priorResults = priorResults,
             cycle = cycle,
+            observed = observed,
         ) ?: throw IllegalStateException("No plan generator configured")
     }
 
@@ -408,7 +415,11 @@ class AgentReasoning private constructor(
      * generates no text: every answer is declared on its [Question] and the
      * response is one [Judgment][link.socket.ampere.llm.decide.Judgment] per
      * question id, with a measured confidence when the transport is a decision
-     * model. Shadow only in W1 — nothing in the loop calls this yet.
+     * model. Called from the loop by a hosted run alone: its goal-met question, the
+     * verifier seat's declared questions and the receptor's two (AMPR-421, AMPR-481), all
+     * record-only, and the drift receptor (`propel/DriftReceptor.kt`, AMPR-483), which
+     * is the one caller that reads a judgment — to choose whether the next cycle re-enters
+     * at PERCEIVE, and nothing more.
      *
      * One [CognitiveEvent.JudgmentRecorded] per judgment is published through the
      * agent's event door, under the run id, carrying a digest of the state and

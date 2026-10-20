@@ -58,4 +58,43 @@ class RunPolicyTest {
         assertFailsWith<IllegalArgumentException> { RunPolicy(judgmentResultClip = 0) }
         assertFailsWith<IllegalArgumentException> { RunPolicy(maxStepsPerCycle = 0) }
     }
+
+    // ========================================================================
+    // Cadence (AMPR-483, task 1)
+    // ========================================================================
+
+    @Test
+    fun `the default cadence perceives and recalls once and learns at close`() {
+        val cadence = RunPolicy().cadence
+        assertEquals(PerceiveCadence.OncePerRun, cadence.perceive)
+        assertEquals(RecallCadence.OncePerRun, cadence.recall)
+        assertEquals(LearnCadence.AtClose, cadence.learn)
+    }
+
+    @Test
+    fun `WhenDrifted takes a probability strictly between 0 and 1`() {
+        assertEquals(0.5, PerceiveCadence.WhenDrifted(0.5).moveAbove)
+        PerceiveCadence.WhenDrifted(0.01)
+        PerceiveCadence.WhenDrifted(0.99)
+        assertFailsWith<IllegalArgumentException> { PerceiveCadence.WhenDrifted(0.0) }
+        assertFailsWith<IllegalArgumentException> { PerceiveCadence.WhenDrifted(1.0) }
+        assertFailsWith<IllegalArgumentException> { PerceiveCadence.WhenDrifted(-0.2) }
+        assertFailsWith<IllegalArgumentException> { PerceiveCadence.WhenDrifted(1.5) }
+        assertFailsWith<IllegalArgumentException> { PerceiveCadence.WhenDrifted(Double.NaN) }
+    }
+
+    @Test
+    fun `the acting cadences ride on the run policy beside the rest`() {
+        val drifted = RunPolicy(
+            cycles = 3,
+            observe = ObservePolicy(field = FieldScope.Goal),
+            cadence = PhaseCadence(perceive = PerceiveCadence.WhenDrifted(0.6), recall = RecallCadence.WithPerceive),
+        )
+        assertEquals(PerceiveCadence.WhenDrifted(0.6), drifted.cadence.perceive)
+        assertEquals(RecallCadence.WithPerceive, drifted.cadence.recall)
+
+        val every = RunPolicy(cadence = PhaseCadence(perceive = PerceiveCadence.EveryCycle))
+        assertEquals(PerceiveCadence.EveryCycle, every.cadence.perceive)
+        assertEquals(RecallCadence.OncePerRun, every.cadence.recall)
+    }
 }
