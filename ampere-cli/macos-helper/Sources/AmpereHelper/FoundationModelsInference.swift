@@ -74,8 +74,8 @@ final class FoundationModelsInference: Sendable {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
             let options = GenerationOptions(
-                temperature: params?["temperature"]?.doubleValue.map { min(max($0, 0), 1) },
-                maximumResponseTokens: params?["maxOutputTokens"]?.intValue.flatMap { $0 > 0 ? $0 : nil }
+                temperature: Self.temperature(from: params),
+                maximumResponseTokens: Self.maximumResponseTokens(from: params)
             )
             do {
                 let session = LanguageModelSession(instructions: params?["instructions"]?.stringValue)
@@ -104,9 +104,7 @@ final class FoundationModelsInference: Sendable {
     /// `tokenCount(for:)` arrived in macOS 26.4. Before that the answer is `{"tokens": null}`,
     /// which the host reads as "cannot count".
     func count(_ params: JSONValue?) async -> Result<[String: Any], HelperFailure> {
-        let text = params?["text"]?.stringValue
-        let prompt = params?["prompt"]?.stringValue
-        guard text != nil || prompt != nil else {
+        guard let input = Self.countInput(from: params) else {
             return .failure(HelperFailure(
                 code: Wire.ErrorCode.malformedRequest,
                 message: "inference.count needs a text, or a prompt"
@@ -117,11 +115,11 @@ final class FoundationModelsInference: Sendable {
             do {
                 let model = SystemLanguageModel.default
                 let tokens: Int
-                if let prompt {
-                    let instructions = params?["instructions"]?.stringValue
+                switch input {
+                case let .request(instructions, prompt):
                     tokens = try await model.tokenCount(for: Self.transcript(instructions: instructions, prompt: prompt))
-                } else {
-                    tokens = try await model.tokenCount(for: text ?? "")
+                case let .text(text):
+                    tokens = try await model.tokenCount(for: text)
                 }
                 return .success(["tokens": tokens])
             } catch {
@@ -130,6 +128,44 @@ final class FoundationModelsInference: Sendable {
         }
         #endif
         return .success(["tokens": NSNull()])
+    }
+
+    // MARK: - Reading a request
+    //
+    // What `generate` and `count` make of their params, apart from the model so a test can pin it
+    // on a Mac that has none (AMPR-470).
+
+    /// The temperature a generation is sent with: the request's, clamped to Apple's documented 0
+    /// to 1, or nil, the framework's default, when it carried none.
+    static func temperature(from params: JSONValue?) -> Double? {
+        params?["temperature"]?.doubleValue.map { min(max($0, 0), 1) }
+    }
+
+    /// The cap a generation is sent with: the request's `maxOutputTokens` when it is a positive
+    /// whole number, and no cap otherwise.
+    static func maximumResponseTokens(from params: JSONValue?) -> Int? {
+        params?["maxOutputTokens"]?.intValue.flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    /// What `inference.count` counts.
+    enum CountInput: Equatable {
+        /// One string, as given.
+        case text(String)
+
+        /// The entries a session for this request starts from.
+        case request(instructions: String?, prompt: String)
+    }
+
+    /// A `prompt` makes it a request, whether or not a `text` came with it. A `text` alone is one
+    /// string. Neither is nothing to count.
+    static func countInput(from params: JSONValue?) -> CountInput? {
+        if let prompt = params?["prompt"]?.stringValue {
+            return .request(instructions: params?["instructions"]?.stringValue, prompt: prompt)
+        }
+        if let text = params?["text"]?.stringValue {
+            return .text(text)
+        }
+        return nil
     }
 
     /// The framework's own words for a failure where it has them: a guardrail says "May contain
