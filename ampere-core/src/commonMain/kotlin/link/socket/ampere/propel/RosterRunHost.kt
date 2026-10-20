@@ -22,6 +22,7 @@ import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.FunctionTool
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.execution.tools.ToolId
+import link.socket.ampere.goal.GoalBranch
 import link.socket.ampere.roster.RoleConfig
 import link.socket.ampere.roster.RoleId
 import link.socket.ampere.roster.Roster
@@ -46,6 +47,7 @@ internal class RosterRunHost(
     private val agentScope: CoroutineScope,
     private val executor: Executor?,
     private val heldRuns: HeldRunStore? = null,
+    private val goalBranch: ((AgentEventApi) -> GoalBranch)? = null,
 ) : RunHost {
 
     /**
@@ -77,14 +79,16 @@ internal class RosterRunHost(
         register(id)
 
         val run = try {
+            val built = buildSeats(id, roster, seats, tools)
             RosterHostedRun(
                 runId = id,
                 roster = roster,
-                seats = buildSeats(id, roster, seats, tools),
+                seats = built,
                 goal = goal,
                 policy = policy,
                 onClosed = ::forget,
                 heldRuns = heldRuns,
+                goalBranch = branchFor(roster, built),
             )
         } catch (throwable: Throwable) {
             release(id, holder = null)
@@ -143,14 +147,16 @@ internal class RosterRunHost(
         }
 
         val run = try {
+            val built = buildSeats(runId, roster, seats, tools)
             RosterHostedRun(
                 runId = runId,
                 roster = roster,
-                seats = buildSeats(runId, roster, seats, tools),
+                seats = built,
                 goal = record.goal,
                 policy = policy,
                 onClosed = ::forget,
                 heldRuns = store,
+                goalBranch = branchFor(roster, built),
             )
         } catch (throwable: Throwable) {
             release(runId, holder = null)
@@ -172,6 +178,14 @@ internal class RosterRunHost(
 
     override fun openRunSeats(): List<OpenSeat> =
         openRuns.load().values.filterNotNull().flatMap { it.openSeats() }
+
+    /**
+     * The run's Goal branch, built over the host seat's own door (AMPR-473), or null when this
+     * host was given none. Built per run, inside [open] and [resume] and never at composition,
+     * so composing an instance touches no store.
+     */
+    private fun branchFor(roster: Roster, seats: Map<RoleId, HostedSeat>): GoalBranch? =
+        goalBranch?.invoke(seats.getValue(roster.host).door)
 
     /** Refuse a roster whose host is not the role that planned the held run. */
     private fun requireHost(record: HeldRun, roster: Roster) {

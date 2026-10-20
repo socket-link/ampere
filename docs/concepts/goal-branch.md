@@ -9,7 +9,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/domain/arc/ChargePhase.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/definition/project/ProjectState.kt
 related: [SubjectRegistry, DomainCanon, PropelLoop, EventSerialBus, CognitionTrace]
-last_verified: 2026-10-11
+last_verified: 2026-10-19
 ---
 
 # Goal Branch
@@ -44,8 +44,10 @@ by an edge, means each can be read on its own and reconciled rather than merged.
 - `sqldelight/.../db/field/GoalStore.sq`, `11.sqm` — schema and migration
 - `domain/arc/ChargePhase.kt` (forms the tree), `FlowPhase.kt` (`onGoalCompleted`),
   `AmpereRuntime.kt` (`goalBranch`), `bridge/ArcSession.kt` and the CLI's `AmpereContext` (wiring)
+- `propel/RosterHostedRun.kt` — a hosted run's one root goal (AMPR-473), wired by `rosterRunHost`
+  and `api/AmpereFromEnvironment.kt`
 - `jvmTest/.../goal/`, `domain/arc/ChargePhaseTest.kt`, `ArcGoalHandoffTest.kt`,
-  `data/DatabaseSchemaManagerTest.kt` — behaviour pinned by tests
+  `propel/HostedRunGoalBranchTest.kt`, `data/DatabaseSchemaManagerTest.kt` — behaviour pinned by tests
 
 ## Invariants
 
@@ -65,7 +67,12 @@ by an edge, means each can be read on its own and reconciled rather than merged.
 - Forming is idempotent per node: a goal already on the branch is neither announced nor written
   again, so re-forming a run's tree — or finishing one that failed partway — adds nothing.
 - A goal's holder is the agent behind the branch's door, registered as a Subject before its first
-  goal. For an Arc run that is the runtime's door (`ampere.arc-runtime`).
+  goal. For an Arc run that is the runtime's door (`ampere.arc-runtime`); for a hosted run it is
+  the host seat's door, and the run's other seats are registered through `registerAgent`.
+- A hosted run forms exactly one goal — its root, `<run id>/goal-0` — and never a goal per plan
+  step (AMPR-473, F34; HostedRun invariant 27). LEARN moves it to `COMPLETED` or `ABANDONED`.
+- `ABANDONED` is a state, not a judgment: the run that formed the goal ended without meeting it
+  (failed, partial, stopped or cancelled). A held run's goal stays `OPEN`.
 - Persistence never changes how a run goes. A failed write is logged; Charge falls back to the
   in-memory tree and Flow keeps ticking.
 - `status` is not CHECKed in the schema, and an unknown status is reported by name
@@ -85,7 +92,11 @@ by an edge, means each can be read on its own and reconciled rather than merged.
   takes instead of the retired string goals.
 - **Link a perceived tracker item** — `branch.mirror(canonEntity, GoalBranch.goalRef(runId, nodeId))`.
 - **Turn a work item's dependencies into a rule** — `branch.dependencies(workItem)`.
-- **Add a goal status** — add the `GoalStatus` value. No migration: the column is not CHECKed.
+- **Abandon a goal** — `branch.abandon(runId, nodeId)`; the same `GoalUpdated` path as `complete`.
+- **Put a hosted run on the branch** — `rosterRunHost(goalBranch = { door -> GoalBranch.over(db, door) })`;
+  `fromEnvironment` does this whenever it is given a `Database`.
+- **Add a goal status** — add the `GoalStatus` value, and the `Field.GoalState` it maps to in
+  `DefaultFieldService.toGoalState()`. No migration: the column is not CHECKed.
 
 ## Anti-patterns
 

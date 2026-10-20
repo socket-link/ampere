@@ -8,6 +8,7 @@ import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptorSource
 import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
+import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.messages.DefaultThreadViewService
 import link.socket.ampere.agents.events.tickets.DefaultTicketViewService
 import link.socket.ampere.agents.execution.executor.Executor
@@ -27,6 +28,7 @@ import link.socket.ampere.api.internal.DefaultThreadService
 import link.socket.ampere.api.internal.DefaultTicketService
 import link.socket.ampere.api.service.FieldService
 import link.socket.ampere.db.Database
+import link.socket.ampere.goal.GoalBranch
 import link.socket.ampere.llm.BundledUpstreamLlmClient
 import link.socket.ampere.llm.UpstreamLlmClient
 import link.socket.ampere.llm.decide.UpstreamDecisionClient
@@ -105,7 +107,10 @@ import link.socket.ampere.propel.rosterRunHost
  *   fail rather than report no beliefs. It is also where [AmpereInstance.runs]
  *   records a run that holds (AMPR-431), so
  *   [RunHost.resume][link.socket.ampere.propel.RunHost.resume] can carry it on from
- *   another process; without it a held run cannot be resumed.
+ *   another process; without it a held run cannot be resumed. And it is the Goal branch a
+ *   hosted run lives on (AMPR-473): each run forms its root goal there, held by its host seat,
+ *   registers its seats as Subjects, and closes the goal in LEARN; without it a run touches no
+ *   branch.
  * @param executor What the agents built off [AmpereInstance.agentFactory] dispatch
  *   their tool calls through (AMPR-405). Defaults to [FunctionExecutor.create], so a
  *   composed instance's agents can actually run the in-process tools they are built
@@ -157,6 +162,10 @@ fun Ampere.fromEnvironment(
         // resumed after this process is gone. Without one nothing is recorded, and a held
         // run cannot be resumed.
         heldRuns = database?.let { db -> SqlDelightHeldRunStore(db, eventApi = sdkEventApi) },
+        // AMPR-473: a run lives on the Goal branch of the same database, so `field.goals` lists
+        // the goal it formed and its lessons are about that goal. Built per run over the host
+        // seat's door, never here: composing the instance touches no store.
+        goalBranch = database?.let { db -> { door: AgentEventApi -> GoalBranch.over(db, door) } },
     )
 
     val agentService = DefaultAgentService(

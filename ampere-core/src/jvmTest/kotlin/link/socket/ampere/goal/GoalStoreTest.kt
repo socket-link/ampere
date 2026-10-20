@@ -122,6 +122,22 @@ class GoalStoreTest {
     }
 
     @Test
+    fun `an abandoned goal reads back abandoned and leaves the subject's open goals`() = runBlocking<Unit> {
+        val formed = store.insert(record("run-1/goal-0")).getOrThrow()
+        val update = Provenance(createdBy = "evt-abandoned", createdAt = Instant.fromEpochMilliseconds(5_000))
+
+        store.updateStatus(formed.id, GoalStatus.ABANDONED, update).getOrThrow()
+
+        assertEquals(GoalStatus.ABANDONED, store.get(formed.id).getOrThrow()?.status)
+        val subject = Ref<Subject>("ampere.arc-runtime")
+        assertEquals(emptyList(), store.forSubject(subject, GoalStatus.OPEN).getOrThrow())
+        assertEquals(
+            listOf("run-1/goal-0"),
+            store.forSubject(subject, GoalStatus.ABANDONED).getOrThrow().map { it.id.value },
+        )
+    }
+
+    @Test
     fun `moving a goal nothing formed returns null`() = runBlocking<Unit> {
         val update = Provenance(createdBy = "evt-updated", createdAt = Instant.fromEpochMilliseconds(5_000))
 

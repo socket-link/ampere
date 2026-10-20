@@ -17,7 +17,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/commitment/CommitmentLedger.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/field/CommitmentStore.sq
 related: [SubjectRegistry, GoalBranch, MemoryProvenance, DomainCanon, EventSerialBus]
-last_verified: 2026-10-17
+last_verified: 2026-10-19
 ---
 
 # Field
@@ -157,7 +157,9 @@ concrete event classes".
   `10.sqm` — is not a belief; the snapshot skips it and counts it on `unmappedBeliefs`.
 - **What a belief is about is the service's choice, not the row's.** The knowledge table has no
   subject column. A row written under a run that formed a goal tree is about that tree's root goal;
-  any other row is about its holder (self-knowledge). The default is AMPR-328 question Q6; changing
+  any other row is about its holder (self-knowledge). A hosted run opened with a Goal branch forms
+  one (AMPR-473), so its lessons are about its goal; one opened without is self-knowledge. A goal's
+  state is `OPEN`, `COMPLETED` or `ABANDONED`. The default is AMPR-328 question Q6; changing
   it changes `DefaultFieldService.aboutOf` only, never the mapper.
 - **Any store's failure is the snapshot's failure.** A Field with one branch silently missing reads
   as a world where that branch is empty.

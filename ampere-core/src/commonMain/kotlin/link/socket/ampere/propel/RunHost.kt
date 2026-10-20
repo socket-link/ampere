@@ -9,6 +9,7 @@ import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.api.AmpereStableApi
+import link.socket.ampere.goal.GoalBranch
 import link.socket.ampere.roster.RoleId
 import link.socket.ampere.roster.Roster
 
@@ -263,6 +264,12 @@ private fun seatsByRole(seats: List<HostedAgent>): Map<RoleId, HostedAgent> {
  *   (AMPR-431) — `SqlDelightHeldRunStore` over the caller's database, for a hold that has to
  *   outlive the process. Null, the default, records nothing: a held run ends
  *   [RunStatus.Held] all the same, and cannot be resumed.
+ * @param goalBranch The Goal branch a run lives on (AMPR-473), built over the host seat's door
+ *   — `{ door -> GoalBranch.over(database, door) }`. Called once per opened or resumed run.
+ *   With one, a run forms its single root goal held by the host seat and registers every seat
+ *   as a Subject before PERCEIVE, and LEARN completes the goal on [RunStatus.Succeeded] and
+ *   abandons it on any other end but [RunStatus.Held]. Null, the default, writes nothing to the
+ *   branch: no goal, no registration, no extra event.
  */
 @AmpereStableApi
 fun rosterRunHost(
@@ -270,9 +277,11 @@ fun rosterRunHost(
     agentScope: CoroutineScope,
     executor: Executor? = FunctionExecutor.create(),
     heldRuns: HeldRunStore? = null,
+    goalBranch: ((AgentEventApi) -> GoalBranch)? = null,
 ): RunHost = RosterRunHost(
     createEventApi = createEventApi,
     agentScope = agentScope,
     executor = executor,
     heldRuns = heldRuns,
+    goalBranch = goalBranch,
 )

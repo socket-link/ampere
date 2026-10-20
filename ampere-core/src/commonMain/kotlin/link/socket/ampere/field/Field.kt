@@ -40,7 +40,7 @@ package link.socket.ampere.field
  * @property subjects Every registered Subject, in registration order — the `system`
  *   pseudo-Subject included.
  * @property relationships Every edge touching a listed Subject, from either end, once each.
- * @property goals Every listed Subject's goals, open and completed.
+ * @property goals Every listed Subject's goals, open, completed and abandoned.
  * @property beliefs What [viewer] may see, newest first, up to the limit the read asked for. Each
  *   carries its [BeliefKind]; outcome knowledge is a [BeliefKind.LESSON].
  * @property observations The Observations [viewer] may see — each a [Belief.Settled] about an
@@ -89,5 +89,8 @@ data class Field(
 
         /** Met. */
         COMPLETED,
+
+        /** Given up: the run that formed it ended without meeting it. */
+        ABANDONED,
     }
 }

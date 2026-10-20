@@ -26,6 +26,7 @@ import link.socket.ampere.agents.domain.knowledge.KnowledgeEntry
 import link.socket.ampere.agents.domain.knowledge.KnowledgeRepositoryImpl
 import link.socket.ampere.agents.domain.memory.AgentMemoryService
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
+import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepositoryImpl
 import link.socket.ampere.agents.domain.reasoning.AgentLLMService
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.status.TicketStatus
@@ -70,11 +71,26 @@ import link.socket.ampere.field.Subject
 import link.socket.ampere.field.observe.environmentRef
 import link.socket.ampere.goal.GoalBranch
 import link.socket.ampere.link.LinkId
+import link.socket.ampere.memory.memoryStoreOf
 import link.socket.ampere.observe.SqlDelightObservationStore
 import link.socket.ampere.plug.spi.PerceivePage
 import link.socket.ampere.plug.spi.PerceiveQuery
 import link.socket.ampere.plug.spi.PerceiveSource
 import link.socket.ampere.plug.spi.recordedPerceive
+import link.socket.ampere.propel.CountingUpstreamLlmClient
+import link.socket.ampere.propel.HostedAgent
+import link.socket.ampere.propel.RunPolicy
+import link.socket.ampere.propel.RunStatus
+import link.socket.ampere.propel.goal
+import link.socket.ampere.propel.hostAnswers
+import link.socket.ampere.propel.planJson
+import link.socket.ampere.propel.planStep
+import link.socket.ampere.propel.rosterRunHost
+import link.socket.ampere.roster.PromptRef
+import link.socket.ampere.roster.RoleConfig
+import link.socket.ampere.roster.RoleId
+import link.socket.ampere.roster.RosterConfig
+import link.socket.ampere.roster.SeatTool
 import link.socket.ampere.subject.SqlDelightRelationshipStore
 import link.socket.ampere.subject.SqlDelightSubjectStore
 import link.socket.ampere.subject.SubjectRegistry
@@ -289,6 +305,66 @@ class FieldServiceTest {
         assertEquals(GoalBranch.goalRef(runId, "goal-0"), underRun.subject)
         assertEquals(Ref(AGENT_A), outsideRun.subject)
         assertEquals(Ref(AGENT_A), outsideRun.holder)
+    }
+
+    @Test
+    fun `a hosted run's lesson is about the goal the run formed`() = runBlocking<Unit> {
+        val runHost = rosterRunHost(
+            createEventApi = { id ->
+                AgentEventApi(agentId = id, eventRepository = handle.repository, eventSerialBus = handle.bus)
+            },
+            agentScope = scope,
+            goalBranch = { seatDoor -> GoalBranch.over(handle.database, seatDoor) },
+        )
+        val role = RoleId("planner")
+        val step = planStep("Search the archive", SeatTool(role, "search").id, role.value)
+        val run = runHost.open(
+            roster = RosterConfig(
+                host = role,
+                roles = listOf(
+                    RoleConfig(
+                        id = role,
+                        title = "Host",
+                        instructions = PromptRef(id = "test-prompt", version = 1),
+                        tools = setOf("search"),
+                    ),
+                ),
+            ),
+            seats = mapOf(
+                role to HostedAgent(
+                    id = HOSTED_SEAT,
+                    role = role,
+                    aiConfiguration = AIConfiguration_Default(
+                        provider = AIProvider_Anthropic,
+                        model = AIModel_Claude.Sonnet_5,
+                    ),
+                    upstreamLlmClient = CountingUpstreamLlmClient(
+                        hostAnswers { planJson(step) },
+                    ),
+                    memory = memoryStoreOf(
+                        knowledge = repository,
+                        outcomes = OutcomeMemoryRepositoryImpl(handle.database),
+                    ),
+                ),
+            ),
+            goal = goal("Answer the thread"),
+            tools = setOf(tool("search", "Search", failure = null)),
+            policy = RunPolicy(),
+        )
+        assertEquals(RunStatus.Succeeded, run.execute().status)
+        run.close()
+
+        val host = Ref<Subject>(HOSTED_SEAT)
+        val goalRef = GoalBranch.goalRef(run.runId, "goal-0")
+        val field = service.snapshot(viewer = host).getOrThrow()
+
+        val lesson = field.beliefs.single()
+        assertEquals(goalRef, lesson.subject, "a lesson about the work is about the run's goal, not its holder")
+        assertEquals(host, lesson.holder)
+        assertTrue(field.subjects.any { it.id == host }, "the lesson's holder is a listed Subject")
+        val held = field.goals.single { it.goal.id == goalRef }
+        assertEquals(host, held.subject)
+        assertEquals(Field.GoalState.COMPLETED, held.state)
     }
 
     @Test
@@ -619,5 +695,6 @@ class FieldServiceTest {
     private companion object {
         const val AGENT_A = "agent-a"
         const val AGENT_B = "agent-b"
+        const val HOSTED_SEAT = "seat-host"
     }
 }
