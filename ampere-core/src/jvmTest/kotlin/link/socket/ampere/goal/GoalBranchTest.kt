@@ -161,6 +161,39 @@ class GoalBranchTest {
     }
 
     @Test
+    fun `abandoning a goal publishes GoalUpdated under the run and moves the row`() = runBlocking<Unit> {
+        branch.form(tree, runId).getOrThrow()
+
+        val abandoned = branch.abandon(runId, "goal-0").getOrThrow()
+
+        val updated = goalEvents().single { it.event is GoalEvent.GoalUpdated }
+        val event = updated.event as GoalEvent.GoalUpdated
+        assertEquals("$runId/goal-0", event.goalId)
+        assertEquals(GoalStatus.ABANDONED.name, event.status)
+        assertEquals(runId, updated.runId)
+        assertEquals(GoalStatus.ABANDONED, abandoned.status)
+        assertEquals(event.eventId, abandoned.lastUpdate.createdBy)
+        assertEquals(GoalStatus.ABANDONED, branch.records(runId).getOrThrow().single { it.id == abandoned.id }.status)
+        assertEquals(
+            listOf("$runId/goal-0-0", "$runId/goal-0-1"),
+            branch.open().getOrThrow().map { it.id.value },
+            "the abandoned goal leaves the holder's open goals",
+        )
+    }
+
+    @Test
+    fun `an agent registered through the branch is a Subject beside the holder`() = runBlocking<Unit> {
+        branch.form(tree, runId).getOrThrow()
+
+        branch.registerAgent("seat.scout").getOrThrow()
+        branch.registerAgent("seat.scout").getOrThrow()
+
+        val registered = stored().map { it.event }.filterIsInstance<SubjectEvent.SubjectRegistered>()
+        assertEquals(listOf("ampere.arc-runtime", "seat.scout"), registered.map { it.subjectId })
+        assertIs<Subject.Agent>(SqlDelightSubjectStore(handle.database).get(Ref("seat.scout")).getOrThrow())
+    }
+
+    @Test
     fun `completing a goal twice announces it once`() = runBlocking<Unit> {
         branch.form(tree, runId).getOrThrow()
 

@@ -214,6 +214,7 @@ internal class DefaultFieldService(
     private fun GoalStatus.toGoalState(): Field.GoalState = when (this) {
         GoalStatus.OPEN -> Field.GoalState.OPEN
         GoalStatus.COMPLETED -> Field.GoalState.COMPLETED
+        GoalStatus.ABANDONED -> Field.GoalState.ABANDONED
     }
 
     companion object {

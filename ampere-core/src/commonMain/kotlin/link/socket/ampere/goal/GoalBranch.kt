@@ -1,5 +1,6 @@
 package link.socket.ampere.goal
 
+import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.GoalEvent
 import link.socket.ampere.agents.events.api.AgentEventApi
@@ -37,7 +38,9 @@ import link.socket.ampere.subject.asSubjectRef
  *
  * Every goal this branch forms is held by the agent behind its door ([holder]), which is
  * registered as a Subject before its first goal so the holder always resolves. For an Arc run
- * that is the runtime's own door — the agent that decomposed the person's goal into a tree.
+ * that is the runtime's own door — the agent that decomposed the person's goal into a tree. For a
+ * hosted run (AMPR-473) it is the host seat's door: the run's one root goal is the host's, and
+ * the other seats are registered beside it through [registerAgent].
  *
  * ## Arc goal ids
  *
@@ -92,6 +95,13 @@ class GoalBranch(
         }
     }
 
+    /**
+     * Register [agentId] as a Subject through this branch's registry, idempotently — an agent
+     * working toward goals it does not hold, such as a hosted run's non-host seat (AMPR-473), so
+     * a lesson that agent holds names a Subject the registry lists.
+     */
+    suspend fun registerAgent(agentId: AgentId): Result<Subject.Agent> = registry.registerAgent(agentId)
+
     /** The goal tree [runId] formed, as stored; `null` when the run formed none. */
     suspend fun tree(runId: String): Result<GoalTree?> =
         goals.forRun(runId).mapCatching { rows -> if (rows.isEmpty()) null else assemble(runId, rows) }
@@ -106,6 +116,10 @@ class GoalBranch(
     /** Mark [runId]'s goal [nodeId] complete. See [updateStatus]. */
     suspend fun complete(runId: String, nodeId: String): Result<GoalRecord> =
         updateStatus(goalRef(runId, nodeId), GoalStatus.COMPLETED)
+
+    /** Mark [runId]'s goal [nodeId] abandoned: the run ended without meeting it. See [updateStatus]. */
+    suspend fun abandon(runId: String, nodeId: String): Result<GoalRecord> =
+        updateStatus(goalRef(runId, nodeId), GoalStatus.ABANDONED)
 
     /**
      * Move [goal] to [status], announced first: a `GoalUpdated` through the door, then the row.

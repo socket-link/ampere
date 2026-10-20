@@ -25,6 +25,12 @@ enum class GoalStatus {
 
     /** Met — Flow judged the work toward it done. */
     COMPLETED,
+
+    /**
+     * Given up: the run that formed it ended without meeting it (AMPR-473). A state, not a
+     * judgment of the run — a failed, partial, stopped or cancelled run all leave their goal here.
+     */
+    ABANDONED,
 }
 
 /**

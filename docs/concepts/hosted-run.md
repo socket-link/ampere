@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/service/AgentService.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/internal/DefaultAgentService.kt
 related: [PropelLoop, TeamLayer, SparkSystem, MemoryProvenance, CognitionTrace, Probe, SubjectRegistry, PlugPermissions]
-last_verified: 2026-10-15
+last_verified: 2026-10-19
 ---
 
 # Hosted Run
@@ -338,6 +338,20 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     ran on either side of the hold, one terminal task event. A declined hold leaves the
     skips after the held step in place, runs and plans nothing whatever the cap, and
     ends `Failed` — outcome recorded, `TaskFailed` published, record deleted.
+27. **A hosted run with a branch forms exactly one root goal, held by the host, closed by
+    LEARN** (AMPR-473, F34). With a `GoalBranch` — `rosterRunHost(goalBranch = …)`, wired
+    by `fromEnvironment` over the caller's `Database` — `charge()` forms
+    `<run id>/goal-0` (`RosterHostedRun.ROOT_GOAL_NODE`) through `GoalBranch.form`, held
+    by the host seat, before PERCEIVE, and registers every other seat as a `Subject.Agent`
+    through the same branch. The branch is built per run over the host seat's own door,
+    never when the instance is composed. LEARN completes the goal for a `Succeeded` run
+    that was not cancelled and abandons it (`GoalStatus.ABANDONED`) for every other end;
+    a `Held` run's LEARN returns before it, so the goal stays `OPEN` until the resumed
+    run's LEARN closes it. A resume forms again, which is idempotent: one row, one
+    `GoalFormed`. A branch write that fails is logged and never fails the run — the branch
+    is a record of the run, not a precondition of it. Without a branch the run writes no
+    goal, registers no seat and publishes no `GoalEvent` or `SubjectEvent`. Nothing in
+    `propel/` touches `GoalStore` directly.
 
 ## How it composes
 
@@ -467,7 +481,7 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | `HoldResolution` | How a person settled a hold: `Completed(details)` — the consumer performed the action, and `details` becomes the held step's result — or `Declined(reason)`, also used for an expired hold |
 | `HeldRunUnavailableException` | `resume` could not take the run up: `why` is `NoStore`, `NotHeld`, `StillOpen` or `AlreadyClaimed`. Thrown before anything is built or published |
 | `RunObservation` | What OBSERVE hands the verifier's Probes: run id, goal, cycle, prior results |
-| `rosterRunHost(...)` | The shipped implementation, for composing without an `AmpereInstance`. `heldRuns: HeldRunStore? = null` is where a held run is recorded; null records nothing |
+| `rosterRunHost(...)` | The shipped implementation, for composing without an `AmpereInstance`. `heldRuns: HeldRunStore? = null` is where a held run is recorded; null records nothing. `goalBranch: ((AgentEventApi) -> GoalBranch)? = null` builds the Goal branch a run lives on over the host seat's door (invariant 27); null touches no branch |
 | `HeldRun` / `HeldRunStore` | The durable record of a held run and its store: `hold`, `get`, `list` (→ `HeldRunSummary`), `claim` (→ `HeldRunClaim`: `Claimed`, `NotHeld`, `AlreadyClaimed`), `delete`. `SqlDelightHeldRunStore` and `InMemoryHeldRunStore`. A run that holds writes it; `RunHost.resume` claims it |
 
 `Ampere.fromEnvironment` exposes one as `AmpereInstance.runs`, and `agentScope` is
@@ -725,6 +739,14 @@ interrupted (`heldRuns()` lists it with its `claimedAt`).
   re-plans and re-gates work the person already approved, mints a second task, and splits
   one run's trace and LEARN in two. A resume keeps the run id, re-attaches the task, and
   walks the approved plan from the step after the held one (AMPR-431).
+- **Forming a goal per plan step.** A step is a `Task`, not a `Goal`: the run plans steps
+  toward its one goal, and a goal per step would make every re-plan a new sub-goal tree, a
+  stopped step an abandoned "goal", and `Field.goals` a plan log. The run's goal is its
+  root and only its root (AMPR-473).
+- **Building the run's `GoalBranch` over a fresh door for the host's id.** The branch's
+  holder is its door's agent, so it is built over the host seat's own door
+  (`HostedSeat.door`) — the factory takes that door, not an id — and the run's goal events
+  leave through the same door as the rest of the host's work.
 
 ## Not implemented here
 

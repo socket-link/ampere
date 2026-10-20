@@ -37,7 +37,10 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.describeResult
 import link.socket.ampere.agents.execution.executor.ExecutorId
 import link.socket.ampere.agents.execution.tools.Tool
+import link.socket.ampere.domain.arc.GoalNode
+import link.socket.ampere.domain.arc.GoalTree
 import link.socket.ampere.field.Admission
+import link.socket.ampere.goal.GoalBranch
 import link.socket.ampere.llm.DispatchingUpstreamLlmClient
 import link.socket.ampere.plug.permission.UserGrants
 import link.socket.ampere.probe.ProbeSuite
@@ -94,6 +97,11 @@ import link.socket.ampere.util.logWith
  * a 60 s limit and therefore throw outright on JS and wasm. A run is driven by
  * whichever scope calls it, and cancelling that scope cancels the run.
  *
+ * With a [GoalBranch] the run lives on the Field's Goal branch (AMPR-473): [charge] forms
+ * one root goal — [ROOT_GOAL_NODE], held by the host seat — and registers every seat as a
+ * Subject, and LEARN completes that goal or abandons it. The run plans steps, not sub-goals,
+ * so the goal is never more than its root. Without one nothing touches the branch.
+ *
  * One run, one driver: the fields below are not synchronised, and two coroutines
  * driving the same run would interleave its phases.
  */
@@ -105,6 +113,7 @@ internal class RosterHostedRun(
     private val policy: RunPolicy,
     private val onClosed: (RosterHostedRun) -> Unit,
     private val heldRuns: HeldRunStore? = null,
+    private val goalBranch: GoalBranch? = null,
 ) : HostedRun {
 
     /** The seat that plans. Validated to exist before the run was constructed. */
@@ -248,11 +257,58 @@ internal class RosterHostedRun(
      */
     suspend fun charge() {
         host.agent.rememberNewTask(goal)
+        formGoal()
         perceive()
         recall()
         observe(cycle = 1)
         planCycle()
         cyclesUsed = 1
+    }
+
+    /**
+     * Puts the run on the Goal branch, when it has one (AMPR-473): the run's one root goal,
+     * held by the host seat — which `GoalBranch.form` registers — then every other seat, in
+     * the roster's order, so a lesson any seat holds names a Subject the registry lists.
+     *
+     * A failure is logged and the run goes on without it: the branch is a record of the run,
+     * not a precondition of it.
+     */
+    private suspend fun formGoal() {
+        val branch = goalBranch ?: return
+        onBranch("form its goal") {
+            branch.form(GoalTree(root = GoalNode(id = ROOT_GOAL_NODE, description = goalDescription())), runId)
+                .getOrThrow()
+            roster.all().mapNotNull { seats[it.id] }
+                .filter { it !== host }
+                .forEach { seat -> branch.registerAgent(seat.id).getOrThrow() }
+        }
+    }
+
+    /**
+     * Closes the run's goal in LEARN (AMPR-473): completed when the run [met] it, abandoned on
+     * any other end that is not a hold. A goal already closed is left as it is, with no event,
+     * and a failure is logged rather than thrown.
+     */
+    private suspend fun closeGoal(met: Boolean) {
+        val branch = goalBranch ?: return
+        onBranch("close its goal") {
+            if (met) {
+                branch.complete(runId, ROOT_GOAL_NODE).getOrThrow()
+            } else {
+                branch.abandon(runId, ROOT_GOAL_NODE).getOrThrow()
+            }
+        }
+    }
+
+    /** Runs one branch write, logging rather than throwing what it fails with. */
+    private suspend fun onBranch(what: String, write: suspend () -> Unit) {
+        try {
+            write()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logWith("RosterHostedRun").w(e) { "Run $runId could not $what on the Goal branch" }
+        }
     }
 
     private suspend fun perceive() {
@@ -1095,6 +1151,9 @@ internal class RosterHostedRun(
         val held = record.results[heldResult] as StepOutcome.Held
 
         host.agent.rememberNewTask(goal)
+        // Idempotent: a goal the run formed before it held is neither announced nor written
+        // again. A run held before it had a branch forms its goal here, so LEARN has one to close.
+        formGoal()
         ideas = record.ideas
         cyclesUsed = record.cycle
         record.seatsThatRan.mapTo(seatsThatRan) { RoleId(it) }
@@ -1253,6 +1312,11 @@ internal class RosterHostedRun(
      * folds every result before the hold and after, Knowledge comes from every seat that
      * ran on either side, and the terminal task event closes the task the run opened
      * before it held. Closing it in any status but held deletes the record it took up.
+     *
+     * On a run with a [GoalBranch] (AMPR-473), LEARN also closes the run's root goal before
+     * anything else is written: completed for a [RunStatus.Succeeded] run that was not
+     * cancelled, abandoned for every other end. A held run's goal stays open — LEARN returns
+     * before it — and the resumed run's LEARN is the one that closes it.
      */
     private suspend fun learn(cancelled: Boolean) {
         host.phases.withPhase(CognitivePhase.LEARN, runId) {
@@ -1264,6 +1328,7 @@ internal class RosterHostedRun(
         val status = currentStatus()
         if (status == RunStatus.Held) return
         retireRecord()
+        closeGoal(met = !cancelled && status == RunStatus.Succeeded)
 
         val outcome = executionOutcome(cancelled)
 
@@ -1421,6 +1486,12 @@ internal class RosterHostedRun(
          * hosted-run` lists every hosted run's own row.
          */
         const val HOSTED_RUN_EXECUTOR_ID: ExecutorId = "hosted-run"
+
+        /**
+         * The node id of a hosted run's one goal (AMPR-473), the id `GoalTreeBuilder` gives an
+         * Arc run's root — so on the branch it is `<run id>/goal-0` either way.
+         */
+        const val ROOT_GOAL_NODE: String = "goal-0"
     }
 }
 
