@@ -12,6 +12,7 @@ plugins {
 }
 
 val ampereVersion: String by project
+val phosphorVersion: String by project
 
 group = "link.socket"
 version = ampereVersion
@@ -88,7 +89,7 @@ kotlin {
                 // dead supervisor's claim is step 4 of the reconciliation pass, and the
                 // adapter is the only door onto the issue tracker (AMPR-310).
                 implementation(project(":ampere-work-linear"))
-                implementation("link.socket:phosphor-core:0.9.0")
+                implementation("link.socket:phosphor-core:$phosphorVersion")
 
                 // CLI argument parsing
                 implementation("com.github.ajalt.clikt:clikt:4.4.0")

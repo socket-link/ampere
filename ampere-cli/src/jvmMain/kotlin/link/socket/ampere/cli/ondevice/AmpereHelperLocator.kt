@@ -7,8 +7,8 @@ import java.util.Locale
  * Where `ampere-helper` is on this machine, or why there is none (AMPR-375).
  *
  * Every answer is a reason, never an exception. A Linux or Windows host has no helper, and neither
- * does a Mac whose CLI was built without one. Each must behave exactly as the CLI did before the
- * helper existed.
+ * does a Mac whose CLI or desktop app was built without one. Each must behave exactly as it did
+ * before the helper existed.
  *
  * ## Search order
  *
@@ -16,9 +16,13 @@ import java.util.Locale
  *    script this way, which is what lets the whole JVM half be covered without the model. A name
  *    that points at nothing usable is reported as such rather than skipped: a setting made on
  *    purpose must not quietly fall through to a different binary.
- * 2. Beside the installed CLI. `installJvmDist` copies the helper into the distribution's `bin/`,
+ * 2. The Compose application's resources directory, for `ampere-desktop` (AMPR-469). Its
+ *    `prepareAppResources` copies the helper there, and Compose names the directory in
+ *    `compose.application.resources.dir` for `run` and for every packaged format. The CLI is not a
+ *    Compose application, so the property is unset there and this step is skipped.
+ * 3. Beside the installed CLI. `installJvmDist` copies the helper into the distribution's `bin/`,
  *    next to the `ampere` start script, and the CLI's own jar in `lib/` says where that is.
- * 3. The SwiftPM build output under the working directory, for a CLI run from the repository root
+ * 4. The SwiftPM build output under the working directory, for a CLI run from the repository root
  *    without installing it.
  */
 internal class AmpereHelperLocator(
@@ -49,13 +53,14 @@ internal class AmpereHelperLocator(
         }
 
         val candidates = buildList {
+            property(COMPOSE_RESOURCES_PROPERTY)?.let { add(File(it).resolve(BINARY_NAME)) }
             installDirectory?.let { add(it.resolve("bin").resolve(BINARY_NAME)) }
             add(workingDirectory.resolve(SOURCE_TREE_PATH))
         }
         candidates.firstOrNull { it.isFile && it.canExecute() }?.let { return AmpereHelperBinary.Present(it) }
 
         return AmpereHelperBinary.Absent(
-            "No on-device model helper was built for this CLI. Looked in ${candidates.joinToString { it.path }}.",
+            "No on-device model helper was built for this app. Looked in ${candidates.joinToString { it.path }}.",
         )
     }
 
@@ -63,6 +68,9 @@ internal class AmpereHelperLocator(
         const val HELPER_PROPERTY: String = "ampere.helper"
         const val HELPER_ENVIRONMENT: String = "AMPERE_HELPER"
         const val BINARY_NAME: String = "ampere-helper"
+
+        /** Set by Compose for `run` and in every packaged app; never by the CLI. */
+        const val COMPOSE_RESOURCES_PROPERTY: String = "compose.application.resources.dir"
 
         /** Where `swift build -c release` leaves the binary, relative to the repository root. */
         const val SOURCE_TREE_PATH: String = "ampere-cli/macos-helper/.build/release/$BINARY_NAME"
