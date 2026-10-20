@@ -171,8 +171,10 @@ class DashboardCommandsTest {
     @Test
     fun `a result that arrives after its command was cancelled is not shown`() = runBlocking<Unit> {
         // A command that swallows its own cancellation and answers anyway.
+        val started = CompletableDeferred<Unit>()
         val swallowed = CompletableDeferred<Unit>()
         val commands = commands { _ ->
+            started.complete(Unit)
             try {
                 awaitCancellation()
             } catch (cancellation: CancellationException) {
@@ -182,7 +184,9 @@ class DashboardCommandsTest {
         }
 
         commands.submit("slow")
-        eventually("the command never started") { commands.isPending }
+        // Its body must be running before the cancel: `isPending` is true from `submit` on, and a
+        // command cancelled before it is dispatched never runs at all.
+        withTimeout(5.seconds) { started.await() }
         assertTrue(commands.cancel())
         withTimeout(5.seconds) { swallowed.await() }
         commands.awaitIdle()
