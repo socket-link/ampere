@@ -20,6 +20,7 @@ import link.socket.ampere.agents.domain.cognition.sparks.CognitivePhase
 import link.socket.ampere.agents.domain.event.CognitiveEvent
 import link.socket.ampere.agents.domain.event.CognitivePhaseEvent
 import link.socket.ampere.agents.domain.event.Event
+import link.socket.ampere.agents.domain.event.EventSource
 import link.socket.ampere.agents.domain.event.MemoryEvent
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ProbeEvent
@@ -79,6 +80,15 @@ import link.socket.ampere.roster.SeatTool
  *   leaves the run as it was, event for event;
  * - a run whose quota tripped does not re-perceive;
  * - `open` refuses `WhenDrifted` with no transport, with `FieldScope.Off`, or with no Field.
+ *
+ * AMPR-487 adds `WhenMoved` and the cycle on every bracket:
+ *
+ * - under `WhenMoved` a host seat with no decision transport re-perceives after every cycle in
+ *   which the Field moved, leaves a `Violated` "moved: n changes" per cycle and no judgment, and
+ *   every host bracket — and every seat's step bracket — carries the cycle it belongs to;
+ * - a Field that never moves `Holds` every cycle and re-enters at OBSERVE;
+ * - the lesson question goes in a request of its own beside it;
+ * - `open` refuses `WhenMoved` only with `FieldScope.Off` or no Field.
  *
  * `runBlocking`, not `runTest`: a door's publish hops to the IO dispatcher and a virtual clock
  * walks straight past it.
@@ -353,6 +363,182 @@ class RosterHostedRunCadenceTest {
     }
 
     // ========================================================================
+    // WhenMoved and the cycle on the bracket (AMPR-487)
+    // ========================================================================
+
+    @Test
+    fun `WhenMoved re-perceives on a non-empty delta with no decision call`() = runBlocking<Unit> {
+        val host = hostSeat(decision = null)
+        val run = openRun(host, runHost = runHost(field = MovingField()), policy = moved(cycles = 3))
+        val result = run.execute()
+        run.close()
+
+        assertEquals(3, result.cyclesUsed)
+        assertEquals(RunStatus.Succeeded, result.status)
+        assertEquals(
+            listOf(
+                CognitivePhase.PERCEIVE to 1, CognitivePhase.RECALL to 1, CognitivePhase.OBSERVE to 1,
+                CognitivePhase.PLAN to 1, CognitivePhase.EXECUTE to 1, CognitivePhase.OBSERVE to 1,
+                CognitivePhase.PERCEIVE to 2, CognitivePhase.OBSERVE to 2, CognitivePhase.PLAN to 2,
+                CognitivePhase.EXECUTE to 2, CognitivePhase.OBSERVE to 2,
+                CognitivePhase.PERCEIVE to 3, CognitivePhase.OBSERVE to 3, CognitivePhase.PLAN to 3,
+                CognitivePhase.EXECUTE to 3, CognitivePhase.OBSERVE to 3,
+                CognitivePhase.LEARN to 3,
+            ),
+            hostBracketsEntered(run.runId),
+            "the Field moved after every cycle, so every later cycle re-entered at PERCEIVE, " +
+                "and each bracket says which cycle it opened",
+        )
+        assertEquals(
+            hostBracketsEntered(run.runId),
+            hostBracketsExited(run.runId),
+            "every PhaseExited carries the cycle its PhaseEntered did",
+        )
+        assertEquals(
+            listOf(1, 2, 3),
+            rows(run.runId)
+                .filter { it.source_id == SCOUT_ID }
+                .mapNotNull { decode(it) as? CognitivePhaseEvent.PhaseEntered }
+                .map { it.cycle },
+            "a seat's step bracket carries the cycle its step ran in",
+        )
+
+        val reached = verdicts(run.runId)
+        assertEquals(List(3) { "verdict.violated" }, reached.map { it.verdict.kind() })
+        assertEquals(
+            listOf("moved: 1 change since cycle 1", "moved: 1 change since cycle 2", "moved: 1 change since cycle 3"),
+            reached.map { assertIs<Verdict.Violated>(it.verdict).reason },
+        )
+        reached.forEach { assertEquals(ProbeId(DriftReceptor.PROBE_ID), it.probeId) }
+        assertTrue(judgments(run.runId).isEmpty(), "no judge, so no judgment on the record")
+        assertEquals(3, host.perceivePrompts().size, "three PERCEIVE model calls")
+
+        val plans = host.planPrompts()
+        assertFalse(plans[0].contains(OBSERVED_HEADING))
+        assertTrue(plans[1].contains(OBSERVED_HEADING), "a re-perceiving cycle's PLAN is shown what moved")
+        assertTrue(plans[2].contains(OBSERVED_HEADING))
+
+        // The payload carries the field, and a decoder reading it back gets the same value.
+        val firstPerceive = rows(run.runId).first { it.source_id == HOST_ID && it.event_type == "PhaseEntered" }
+        assertTrue(firstPerceive.payload.contains("\"cycle\":1"), firstPerceive.payload)
+    }
+
+    @Test
+    fun `WhenMoved holds and re-enters at OBSERVE when nothing moved`() = runBlocking<Unit> {
+        val host = hostSeat(decision = null)
+        val run = openRun(host, runHost = runHost(field = StillField()), policy = moved(cycles = 2))
+        val result = run.execute()
+        run.close()
+
+        assertEquals(2, result.cyclesUsed)
+        assertEquals(
+            listOf(
+                CognitivePhase.PERCEIVE to 1, CognitivePhase.RECALL to 1, CognitivePhase.OBSERVE to 1,
+                CognitivePhase.PLAN to 1, CognitivePhase.EXECUTE to 1, CognitivePhase.OBSERVE to 1,
+                CognitivePhase.OBSERVE to 2, CognitivePhase.PLAN to 2,
+                CognitivePhase.EXECUTE to 2, CognitivePhase.OBSERVE to 2,
+                CognitivePhase.LEARN to 2,
+            ),
+            hostBracketsEntered(run.runId),
+            "nothing moved, so no re-perceive",
+        )
+        assertEquals(
+            listOf("nothing moved since cycle 1", "nothing moved since cycle 2"),
+            verdicts(run.runId).map { assertIs<Verdict.Holds>(it.verdict).reason },
+        )
+        assertEquals(1, host.perceivePrompts().size)
+        assertTrue(host.planPrompts().none { it.contains(OBSERVED_HEADING) })
+        assertTrue(judgments(run.runId).isEmpty())
+    }
+
+    @Test
+    fun `the lesson question goes in a request of its own under WhenMoved`() = runBlocking<Unit> {
+        val judge = ScriptedJudge(true, true)
+        val host = hostSeat(decision = judge.client)
+        val run = openRun(
+            host,
+            runHost = runHost(field = MovingField()),
+            policy = moved(cycles = 2).copy(
+                cadence = PhaseCadence(perceive = PerceiveCadence.WhenMoved, learn = LearnCadence.Record),
+            ),
+        )
+        run.execute()
+        run.close()
+
+        assertEquals(2, judge.requests.size, "one lesson request per executed cycle")
+        judge.requests.forEach { request ->
+            assertEquals(setOf(RunQuestions.LESSON_WORTH_KEEPING_ID), request.questions.keys, "drift is never asked")
+        }
+        assertEquals(
+            listOf(RunQuestions.LESSON_WORTH_KEEPING_ID, RunQuestions.LESSON_WORTH_KEEPING_ID),
+            judgments(run.runId).map { it.questionId },
+        )
+        assertEquals(listOf("verdict.violated", "verdict.violated"), verdicts(run.runId).map { it.verdict.kind() })
+        assertEquals(2, host.perceivePrompts().size, "the verdict, not the judge, re-perceived cycle 2")
+    }
+
+    @Test
+    fun `open refuses WhenMoved only with FieldScope Off or no Field`() = runBlocking<Unit> {
+        val host = hostSeat(decision = null)
+        val refusedScope = assertFailsWith<IllegalArgumentException> {
+            openRun(
+                host,
+                runHost = runHost(field = MovingField()),
+                policy = RunPolicy(cadence = PhaseCadence(perceive = PerceiveCadence.WhenMoved)),
+            )
+        }
+        assertTrue(refusedScope.message!!.startsWith("PerceiveCadence.WhenMoved"), refusedScope.message)
+        assertTrue(refusedScope.message!!.contains("FieldScope.Off"), refusedScope.message)
+
+        val refusedField = assertFailsWith<IllegalArgumentException> {
+            openRun(host, runHost = runHost(field = null), policy = moved(cycles = 2))
+        }
+        assertTrue(refusedField.message!!.startsWith("PerceiveCadence.WhenMoved"), refusedField.message)
+        assertTrue(refusedField.message!!.contains("no FieldService"), refusedField.message)
+
+        val refusedLesson = assertFailsWith<IllegalArgumentException> {
+            openRun(
+                host,
+                runHost = runHost(field = MovingField()),
+                policy = moved(cycles = 2).copy(
+                    cadence = PhaseCadence(perceive = PerceiveCadence.WhenMoved, learn = LearnCadence.WhenLesson(0.5)),
+                ),
+            )
+        }
+        assertTrue(
+            refusedLesson.message!!.startsWith("LearnCadence.WhenLesson asks the host seat"),
+            "the lesson beside it still needs the transport: ${refusedLesson.message}",
+        )
+        assertEquals(0, host.transport.callCount, "no seat was built, so nothing perceived")
+
+        // And with a Field and no transport it opens: WhenMoved needs no judge.
+        val opened = openRun(host, runHost = runHost(field = MovingField()), policy = moved(cycles = 1))
+        opened.close()
+    }
+
+    @Test
+    fun `a bracket outside a hosted run encodes no cycle`() {
+        val bracket = CognitivePhaseEvent.PhaseEntered(
+            eventId = "event-1",
+            timestamp = Instant.fromEpochSeconds(0),
+            eventSource = EventSource.Agent(HOST_ID),
+            agentId = HOST_ID,
+            oldPhase = null,
+            newPhase = CognitivePhase.PERCEIVE,
+            nestingDepth = 0,
+        )
+
+        val text = DEFAULT_JSON.encodeToString(Event.serializer(), bracket)
+        assertFalse(text.contains("cycle"), "a null cycle is not encoded, so the Arc path's payload is unchanged")
+        assertEquals(bracket, DEFAULT_JSON.decodeFromString(Event.serializer(), text))
+
+        val stamped = bracket.copy(cycle = 2)
+        val stampedText = DEFAULT_JSON.encodeToString(Event.serializer(), stamped)
+        assertTrue(stampedText.contains("\"cycle\":2"), stampedText)
+        assertEquals(stamped, DEFAULT_JSON.decodeFromString(Event.serializer(), stampedText))
+    }
+
+    // ========================================================================
     // Quota
     // ========================================================================
 
@@ -460,6 +646,40 @@ class RosterHostedRunCadenceTest {
             Provenance(createdBy = "event-$read", createdAt = Instant.fromEpochSeconds(read.toLong()))
     }
 
+    /** A Field that never moves: the same subjects and the same one lesson on every read. */
+    private class StillField : FieldService {
+        private var reads = 0
+
+        override suspend fun snapshot(viewer: Ref<Subject>?, beliefLimit: Int): Result<Field> {
+            reads += 1
+            val provenance = Provenance(createdBy = "event-still", createdAt = Instant.fromEpochSeconds(0))
+            return Result.success(
+                Field(
+                    viewer = viewer,
+                    asOfSequence = reads.toLong(),
+                    subjects = listOf(
+                        Subject.Agent(id = Ref(HOST_ID), name = "Host", provenance = provenance),
+                        Subject.Agent(id = Ref(SCOUT_ID), name = "Scout", provenance = provenance),
+                    ),
+                    relationships = emptyList(),
+                    goals = emptyList(),
+                    beliefs = listOf(
+                        Belief.Settled(
+                            holder = Ref(HOST_ID),
+                            subject = Ref<Goal>(GOAL_ID),
+                            content = BELIEF_TEXT,
+                            kind = BeliefKind.LESSON,
+                            confidence = 0.9,
+                            sensitivity = Sensitivity.PUBLIC,
+                            provenance = provenance,
+                        ),
+                    ),
+                    observations = emptyList(),
+                ),
+            )
+        }
+    }
+
     /**
      * A measured one-hot judge answering the drift question from a script, one answer per
      * request, and every other question `false`; keeps every request it was handed.
@@ -543,6 +763,11 @@ class RosterHostedRunCadenceTest {
         cadence = PhaseCadence(perceive = PerceiveCadence.WhenDrifted(moveAbove)),
     )
 
+    private fun moved(cycles: Int): RunPolicy = GOAL_POLICY.copy(
+        cycles = cycles,
+        cadence = PhaseCadence(perceive = PerceiveCadence.WhenMoved),
+    )
+
     private fun searchStep(): String =
         planStep("Search the archive", SeatTool(SCOUT_ROLE, SEARCH_TOOL).id, SCOUT_ROLE.value)
 
@@ -561,6 +786,20 @@ class RosterHostedRunCadenceTest {
             .filter { it.source_id == HOST_ID }
             .mapNotNull { decode(it) as? CognitivePhaseEvent.PhaseEntered }
             .map { it.newPhase }
+
+    /** The phases the host seat entered, in order, each with the cycle its bracket carries. */
+    private fun hostBracketsEntered(runId: String): List<Pair<CognitivePhase, Int?>> =
+        rows(runId)
+            .filter { it.source_id == HOST_ID }
+            .mapNotNull { decode(it) as? CognitivePhaseEvent.PhaseEntered }
+            .map { it.newPhase to it.cycle }
+
+    /** The phases the host seat exited, in order, each with the cycle its bracket carries. */
+    private fun hostBracketsExited(runId: String): List<Pair<CognitivePhase, Int?>> =
+        rows(runId)
+            .filter { it.source_id == HOST_ID }
+            .mapNotNull { decode(it) as? CognitivePhaseEvent.PhaseExited }
+            .map { it.exitedPhase to it.cycle }
 
     /** The run's own events as `<source>:<type>`, in order, as [RosterHostedRunFieldTest] pins them. */
     private fun runEvents(runId: String): List<String> =

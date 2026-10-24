@@ -54,6 +54,11 @@ import link.socket.ampere.util.getEnvironmentVariable
  * defaulting to the owning agent's [currentRunId][link.socket.ampere.agents.definition.Agent.currentRunId];
  * the entered run is held until the matching exit, so a bracket closed by [cleanup] (or by
  * [withPhase]'s `finally`) carries the run it opened under rather than whatever is current.
+ *
+ * A hosted run also stamps each bracket with the cycle it belongs to (AMPR-487), through the
+ * [withPhase] overload that takes one. The cycle is held beside the run id, so the `PhaseExited`
+ * and the `PhaseEntered` that restores an outer phase carry the cycle their own bracket opened
+ * under. Every other caller passes none, and its brackets carry `cycle = null`.
  */
 class PhaseSparkManager<S : AgentState> private constructor(
     private val agent: AutonomousAgent<S>,
@@ -96,6 +101,9 @@ class PhaseSparkManager<S : AgentState> private constructor(
     /** The run the active bracket was entered under, so its `PhaseExited` is stamped the same. */
     private var currentPhaseRunId: RunId? = null
 
+    /** The hosted-run cycle the active bracket was entered under, held like [currentPhaseRunId]. */
+    private var currentPhaseCycle: Int? = null
+
     suspend fun enterPhase(phase: CognitivePhase, runId: RunId? = agent.currentRunId) {
         enterPhaseInternal(phase, selectionContext = null, runId = runId)
     }
@@ -114,6 +122,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
         runId: RunId?,
         nestingDepth: Int = 0,
         oldPhaseOverride: CognitivePhase? = null,
+        cycle: Int? = null,
     ) {
         if (!enabled) return
 
@@ -137,6 +146,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
             newPhase = phase,
             nestingDepth = nestingDepth,
             runId = runId,
+            cycle = cycle,
         )
         for (spark in sparksToApply) {
             agent.spark<AutonomousAgent<S>>(spark)
@@ -145,6 +155,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
         currentPhase = phase
         currentPhaseNestingDepth = nestingDepth
         currentPhaseRunId = runId
+        currentPhaseCycle = cycle
     }
 
     suspend fun <R> withPhase(
@@ -152,6 +163,18 @@ class PhaseSparkManager<S : AgentState> private constructor(
         runId: RunId? = agent.currentRunId,
         block: suspend () -> R,
     ): R = withPhaseInternal(phase, selectionContext = null, runId = runId, block = block)
+
+    /**
+     * [withPhase], with both brackets stamped with the hosted-run [cycle] they belong to
+     * (AMPR-487). An overload rather than a new default on the one above, so a caller compiled
+     * against the two-argument form keeps linking. A null [cycle] is that form exactly.
+     */
+    suspend fun <R> withPhase(
+        phase: CognitivePhase,
+        runId: RunId?,
+        cycle: Int?,
+        block: suspend () -> R,
+    ): R = withPhaseInternal(phase, selectionContext = null, runId = runId, cycle = cycle, block = block)
 
     internal suspend fun <R> withPhase(
         phase: CognitivePhase,
@@ -164,6 +187,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
         phase: CognitivePhase,
         selectionContext: SparkSelectionContext?,
         runId: RunId?,
+        cycle: Int? = null,
         block: suspend () -> R,
     ): R {
         if (!enabled) return block()
@@ -174,6 +198,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
         val previousSparks = appliedSparks.toList()
         val previousPhaseNestingDepth = currentPhaseNestingDepth
         val previousPhaseRunId = currentPhaseRunId
+        val previousPhaseCycle = currentPhaseCycle
         appliedSparks = mutableListOf()
         currentPhase = null
         enterPhaseInternal(
@@ -182,6 +207,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
             runId = runId,
             nestingDepth = nestingDepth,
             oldPhaseOverride = previousPhase,
+            cycle = cycle,
         )
         withPhaseNestingDepth = nestingDepth + 1
 
@@ -200,11 +226,13 @@ class PhaseSparkManager<S : AgentState> private constructor(
                     currentPhase = previousPhase
                     currentPhaseNestingDepth = previousPhaseNestingDepth
                     currentPhaseRunId = previousPhaseRunId
+                    currentPhaseCycle = previousPhaseCycle
                     publishPhaseEntered(
                         oldPhase = phase,
                         newPhase = previousPhase,
                         nestingDepth = previousPhaseNestingDepth,
                         runId = previousPhaseRunId,
+                        cycle = previousPhaseCycle,
                     )
                 }
             }
@@ -246,6 +274,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
     ) {
         val exitedPhase = currentPhase ?: return
         val exitedRunId = currentPhaseRunId
+        val exitedCycle = currentPhaseCycle
         repeat(appliedSparks.size) {
             agent.unspark()
         }
@@ -253,12 +282,14 @@ class PhaseSparkManager<S : AgentState> private constructor(
         currentPhase = null
         currentPhaseNestingDepth = 0
         currentPhaseRunId = null
+        currentPhaseCycle = null
         if (injectPhaseSparks) agent.currentCognitivePhase = restoredToPhase
         publishPhaseExited(
             exitedPhase = exitedPhase,
             restoredToPhase = restoredToPhase,
             nestingDepth = nestingDepth,
             runId = exitedRunId,
+            cycle = exitedCycle,
         )
     }
 
@@ -267,6 +298,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
         newPhase: CognitivePhase,
         nestingDepth: Int,
         runId: RunId?,
+        cycle: Int? = null,
     ) {
         if (!publishBrackets) return
         eventApi?.let { api ->
@@ -279,6 +311,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
                     oldPhase = oldPhase,
                     newPhase = newPhase,
                     nestingDepth = nestingDepth,
+                    cycle = cycle,
                 ),
                 runId = runId,
             )
@@ -290,6 +323,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
         restoredToPhase: CognitivePhase?,
         nestingDepth: Int,
         runId: RunId?,
+        cycle: Int? = null,
     ) {
         if (!publishBrackets) return
         eventApi?.let { api ->
@@ -302,6 +336,7 @@ class PhaseSparkManager<S : AgentState> private constructor(
                     exitedPhase = exitedPhase,
                     restoredToPhase = restoredToPhase,
                     nestingDepth = nestingDepth,
+                    cycle = cycle,
                 ),
                 runId = runId,
             )
