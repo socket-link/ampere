@@ -125,7 +125,13 @@ fun ExecutionOutcome.describeResult(): String = when (this) {
         error.render(),
         partiallyReadFiles?.takeIf { it.isNotEmpty() }?.renderFiles(),
     ).joinToString("\n")
-    is ExecutionOutcome.CodeChanged.Success -> "changed files: ${changedFiles.joinToString()}"
+    // The harness's own account of what it did rides in the validation's diff summary
+    // (AMPR-492); a later step is handed it beside the file list, because a list of paths
+    // says what moved and not why.
+    is ExecutionOutcome.CodeChanged.Success -> listOfNotNull(
+        "changed files: ${changedFiles.joinToString()}",
+        validation.codeChanges?.diffSummary?.takeIf { it.isNotBlank() },
+    ).joinToString("\n")
     is ExecutionOutcome.CodeChanged.Failure -> listOfNotNull(
         error.render(),
         partiallyChangedFiles?.takeIf { it.isNotEmpty() }
