@@ -81,6 +81,8 @@ sealed class AIModel_OpenAI(
         limits = GPT_4o_mini_LIMITS,
     )
 
+    /** Shut down by OpenAI on 2026-10-23, so not in [ALL_MODELS] and never routed to. */
+    @Deprecated("OpenAI shut o4-mini down on 2026-10-23; every call to it fails. Use GPT_6_Luna or GPT_5_6_Terra.")
     data object o4_mini : AIModel_OpenAI(
         name = o4_mini_NAME,
         displayName = o4_mini_DISPLAY_NAME,
@@ -149,6 +151,47 @@ sealed class AIModel_OpenAI(
         description = GPT_5_6_Sol_DESCRIPTION,
         features = GPT_5_6_Sol_FEATURES,
         limits = GPT_5_6_Sol_LIMITS,
+    )
+
+    /**
+     * The GPT-6 and GPT-5.6 tiers below default to reasoning effort `medium`, and
+     * OpenAI documents Chat Completions function calling only at effort `none`.
+     * Ampere sends them no effort, so the same tool-calling caveat as [GPT_5_5]
+     * applies to each.
+     */
+    data object GPT_6_Sol : AIModel_OpenAI(
+        name = GPT_6_Sol_NAME,
+        displayName = GPT_6_Sol_DISPLAY_NAME,
+        description = GPT_6_Sol_DESCRIPTION,
+        features = GPT_6_Sol_FEATURES,
+        limits = GPT_6_Sol_LIMITS,
+    )
+
+    /** Same Chat Completions tool-calling caveat as [GPT_6_Sol]. */
+    data object GPT_6_Luna : AIModel_OpenAI(
+        name = GPT_6_Luna_NAME,
+        displayName = GPT_6_Luna_DISPLAY_NAME,
+        description = GPT_6_Luna_DESCRIPTION,
+        features = GPT_6_Luna_FEATURES,
+        limits = GPT_6_Luna_LIMITS,
+    )
+
+    /** The mini tier of GPT-5.6. Same tool-calling caveat as [GPT_6_Sol]. */
+    data object GPT_5_6_Terra : AIModel_OpenAI(
+        name = GPT_5_6_Terra_NAME,
+        displayName = GPT_5_6_Terra_DISPLAY_NAME,
+        description = GPT_5_6_Terra_DESCRIPTION,
+        features = GPT_5_6_Terra_FEATURES,
+        limits = GPT_5_6_Terra_LIMITS,
+    )
+
+    /** The nano tier of GPT-5.6. Same tool-calling caveat as [GPT_6_Sol]. */
+    data object GPT_5_6_Luna : AIModel_OpenAI(
+        name = GPT_5_6_Luna_NAME,
+        displayName = GPT_5_6_Luna_DISPLAY_NAME,
+        description = GPT_5_6_Luna_DESCRIPTION,
+        features = GPT_5_6_Luna_FEATURES,
+        limits = GPT_5_6_Luna_LIMITS,
     )
 
     /**
@@ -344,6 +387,38 @@ sealed class AIModel_OpenAI(
         private val GPT_5_5_RATE_LIMITS = GPT_5_4_RATE_LIMITS
         private val GPT_5_6_Sol_RATE_LIMITS = GPT_5_4_RATE_LIMITS
 
+        // The GPT-6 / GPT-5.6-tier pages publish three tiers (Build / Launch /
+        // Grow); they map onto tiers 1-3 here, and tiers 4+ are left unset.
+        private const val TIER_BUILD_RPM = 5000
+        private const val TIER_LAUNCH_RPM = 10000
+        private const val TIER_GROW_RPM = 15000
+        private const val TIER_GROW_LUNA_RPM = 30000
+
+        // One row covers gpt-6-sol and gpt-5.6-terra.
+        private val GPT_6_Sol_RATE_LIMITS = RateLimitsFactory(
+            tier1RequestLimits = Pair(TIER_BUILD_RPM, null),
+            tier2RequestLimits = Pair(TIER_LAUNCH_RPM, null),
+            tier3RequestLimits = Pair(TIER_GROW_RPM, null),
+        ).createRateLimits(
+            tier1TPM = TokenCount._1m,
+            tier2TPM = TokenCount._4m,
+            tier3TPM = TokenCount._40m,
+        )
+
+        // One row covers gpt-6-luna and gpt-5.6-luna.
+        private val GPT_6_Luna_RATE_LIMITS = RateLimitsFactory(
+            tier1RequestLimits = Pair(TIER_BUILD_RPM, null),
+            tier2RequestLimits = Pair(TIER_LAUNCH_RPM, null),
+            tier3RequestLimits = Pair(TIER_GROW_LUNA_RPM, null),
+        ).createRateLimits(
+            tier1TPM = TokenCount._2m,
+            tier2TPM = TokenCount._10m,
+            tier3TPM = TokenCount._180m,
+        )
+
+        private val GPT_5_6_Terra_RATE_LIMITS = GPT_6_Sol_RATE_LIMITS
+        private val GPT_5_6_Luna_RATE_LIMITS = GPT_6_Luna_RATE_LIMITS
+
         // ---- Token Limits ----
 
         private val GPT_5_CONTEXT_WINDOW_TOKENS = TokenCount._400k
@@ -393,6 +468,10 @@ sealed class AIModel_OpenAI(
         private val GPT_5_4_mini_TOKEN_LIMITS = GPT_5_TOKEN_LIMITS
         private val GPT_5_5_TOKEN_LIMITS = GPT_5_4_TOKEN_LIMITS
         private val GPT_5_6_Sol_TOKEN_LIMITS = GPT_5_4_TOKEN_LIMITS
+        private val GPT_6_Sol_TOKEN_LIMITS = GPT_5_4_TOKEN_LIMITS
+        private val GPT_6_Luna_TOKEN_LIMITS = GPT_5_4_TOKEN_LIMITS
+        private val GPT_5_6_Terra_TOKEN_LIMITS = GPT_5_4_TOKEN_LIMITS
+        private val GPT_5_6_Luna_TOKEN_LIMITS = GPT_5_4_TOKEN_LIMITS
 
         // ---- Limits ----
 
@@ -466,6 +545,26 @@ sealed class AIModel_OpenAI(
         private val GPT_5_6_Sol_LIMITS = ModelLimits(
             rate = GPT_5_6_Sol_RATE_LIMITS,
             token = GPT_5_6_Sol_TOKEN_LIMITS,
+        )
+
+        private val GPT_6_Sol_LIMITS = ModelLimits(
+            rate = GPT_6_Sol_RATE_LIMITS,
+            token = GPT_6_Sol_TOKEN_LIMITS,
+        )
+
+        private val GPT_6_Luna_LIMITS = ModelLimits(
+            rate = GPT_6_Luna_RATE_LIMITS,
+            token = GPT_6_Luna_TOKEN_LIMITS,
+        )
+
+        private val GPT_5_6_Terra_LIMITS = ModelLimits(
+            rate = GPT_5_6_Terra_RATE_LIMITS,
+            token = GPT_5_6_Terra_TOKEN_LIMITS,
+        )
+
+        private val GPT_5_6_Luna_LIMITS = ModelLimits(
+            rate = GPT_5_6_Luna_RATE_LIMITS,
+            token = GPT_5_6_Luna_TOKEN_LIMITS,
         )
 
         // ---- Training Cutoffs ----
@@ -570,6 +669,28 @@ sealed class AIModel_OpenAI(
             seconds = 0,
         )
 
+        // Every GPT-5.6 tier shares Sol's cutoff.
+        private val GPT_5_6_Terra_CUTOFF = GPT_5_6_Sol_CUTOFF
+        private val GPT_5_6_Luna_CUTOFF = GPT_5_6_Sol_CUTOFF
+
+        private val GPT_6_Sol_CUTOFF = GMTDate(
+            year = 2026,
+            month = Month.APRIL,
+            dayOfMonth = 20,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
+        private val GPT_6_Luna_CUTOFF = GMTDate(
+            year = 2026,
+            month = Month.MAY,
+            dayOfMonth = 18,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
         // ---- Supported Inputs ----
 
         private val GPT_5_SUPPORTED_INPUTS = TEXT_AND_IMAGE
@@ -589,6 +710,10 @@ sealed class AIModel_OpenAI(
         private val GPT_5_4_mini_SUPPORTED_INPUTS = TEXT_AND_IMAGE
         private val GPT_5_5_SUPPORTED_INPUTS = TEXT_AND_IMAGE
         private val GPT_5_6_Sol_SUPPORTED_INPUTS = TEXT_AND_IMAGE
+        private val GPT_6_Sol_SUPPORTED_INPUTS = TEXT_AND_IMAGE
+        private val GPT_6_Luna_SUPPORTED_INPUTS = TEXT_AND_IMAGE
+        private val GPT_5_6_Terra_SUPPORTED_INPUTS = TEXT_AND_IMAGE
+        private val GPT_5_6_Luna_SUPPORTED_INPUTS = TEXT_AND_IMAGE
 
         // ---- Model Features ----
 
@@ -734,6 +859,44 @@ sealed class AIModel_OpenAI(
             supportsSamplingParameters = false,
         )
 
+        // GPT-6 and the GPT-5.6 tiers default to effort `medium`, like 5.5 and
+        // 5.6 Sol, so they omit sampling parameters for the same reason.
+        private val GPT_6_Sol_FEATURES = AIModelFeatures(
+            availableTools = GPT_5_TOOLS,
+            reasoningLevel = AIModelFeatures.RelativeReasoning.HIGH,
+            speed = AIModelFeatures.RelativeSpeed.NORMAL,
+            supportedInputs = GPT_6_Sol_SUPPORTED_INPUTS,
+            trainingCutoffDate = GPT_6_Sol_CUTOFF,
+            supportsSamplingParameters = false,
+        )
+
+        private val GPT_6_Luna_FEATURES = AIModelFeatures(
+            availableTools = GPT_5_mini_TOOLS,
+            reasoningLevel = AIModelFeatures.RelativeReasoning.NORMAL,
+            speed = AIModelFeatures.RelativeSpeed.FAST,
+            supportedInputs = GPT_6_Luna_SUPPORTED_INPUTS,
+            trainingCutoffDate = GPT_6_Luna_CUTOFF,
+            supportsSamplingParameters = false,
+        )
+
+        private val GPT_5_6_Terra_FEATURES = AIModelFeatures(
+            availableTools = GPT_5_mini_TOOLS,
+            reasoningLevel = AIModelFeatures.RelativeReasoning.NORMAL,
+            speed = AIModelFeatures.RelativeSpeed.NORMAL,
+            supportedInputs = GPT_5_6_Terra_SUPPORTED_INPUTS,
+            trainingCutoffDate = GPT_5_6_Terra_CUTOFF,
+            supportsSamplingParameters = false,
+        )
+
+        private val GPT_5_6_Luna_FEATURES = AIModelFeatures(
+            availableTools = GPT_5_nano_TOOLS,
+            reasoningLevel = AIModelFeatures.RelativeReasoning.LOW,
+            speed = AIModelFeatures.RelativeSpeed.FAST,
+            supportedInputs = GPT_5_6_Luna_SUPPORTED_INPUTS,
+            trainingCutoffDate = GPT_5_6_Luna_CUTOFF,
+            supportsSamplingParameters = false,
+        )
+
         // ---- Model Names ----
 
         private const val GPT_5_NAME = "gpt-5"
@@ -831,6 +994,26 @@ sealed class AIModel_OpenAI(
         private const val GPT_5_6_Sol_DESCRIPTION =
             "GPT-5.6 Sol is the flagship of the GPT-5.6 family for reasoning-heavy coding and agentic work."
 
+        private const val GPT_6_Sol_NAME = "gpt-6-sol"
+        private const val GPT_6_Sol_DISPLAY_NAME = "GPT-6 Sol"
+        private const val GPT_6_Sol_DESCRIPTION =
+            "GPT-6 Sol is built for complex coding and agentic workflows, below GPT-6 Astra and above GPT-6 Luna."
+
+        private const val GPT_6_Luna_NAME = "gpt-6-luna"
+        private const val GPT_6_Luna_DISPLAY_NAME = "GPT-6 Luna"
+        private const val GPT_6_Luna_DESCRIPTION =
+            "GPT-6 Luna is OpenAI's most efficient model for focused, high-volume tasks."
+
+        private const val GPT_5_6_Terra_NAME = "gpt-5.6-terra"
+        private const val GPT_5_6_Terra_DISPLAY_NAME = "GPT-5.6 Terra"
+        private const val GPT_5_6_Terra_DESCRIPTION =
+            "GPT-5.6 Terra balances intelligence and cost; the mini tier of the GPT-5.6 family."
+
+        private const val GPT_5_6_Luna_NAME = "gpt-5.6-luna"
+        private const val GPT_5_6_Luna_DISPLAY_NAME = "GPT-5.6 Luna"
+        private const val GPT_5_6_Luna_DESCRIPTION =
+            "GPT-5.6 Luna is for cost-sensitive, high-volume workloads; the nano tier of the GPT-5.6 family."
+
         // ---- Models ----
 
         // Lazy to avoid the JVM class-init cycle: if any data object (GPT_4_1, etc.)
@@ -847,11 +1030,14 @@ sealed class AIModel_OpenAI(
                 GPT_5_4_mini,
                 GPT_5_5,
                 GPT_5_6_Sol,
+                GPT_5_6_Terra,
+                GPT_5_6_Luna,
+                GPT_6_Sol,
+                GPT_6_Luna,
                 GPT_4_1,
                 GPT_4_1_mini,
                 GPT_4o,
                 GPT_4o_mini,
-                o4_mini,
                 o3,
                 o3_mini,
             )

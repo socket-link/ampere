@@ -241,20 +241,27 @@ object ConfigConverter {
 
     private fun toClaudeModel(model: String): AIModel_Claude = when (model.lowercase()) {
         "fable-5.1" -> AIModel_Claude.Fable_5_1
+        "opus-5.5" -> AIModel_Claude.Opus_5_5
         "opus-5" -> AIModel_Claude.Opus_5
         "opus-4.8" -> AIModel_Claude.Opus_4_8
         "opus-4.7" -> AIModel_Claude.Opus_4_7
         "opus-4.6" -> AIModel_Claude.Opus_4_6
         "opus-4.5" -> AIModel_Claude.Opus_4_5
+        "sonnet-5.5" -> AIModel_Claude.Sonnet_5_5
         "sonnet-5" -> AIModel_Claude.Sonnet_5
         "sonnet-4.6" -> AIModel_Claude.Sonnet_4_6
         "sonnet-4.5" -> AIModel_Claude.Sonnet_4_5
+        "haiku-5.5" -> AIModel_Claude.Haiku_5_5
         "haiku-4.5" -> AIModel_Claude.Haiku_4_5
-        else -> throw IllegalArgumentException("Unknown Claude model: $model. Supported: fable-5.1, opus-5, opus-4.8, opus-4.7, opus-4.6, opus-4.5, sonnet-5, sonnet-4.6, sonnet-4.5, haiku-4.5")
+        else -> throw IllegalArgumentException("Unknown Claude model: $model. Supported: fable-5.1, opus-5.5, opus-5, opus-4.8, opus-4.7, opus-4.6, opus-4.5, sonnet-5.5, sonnet-5, sonnet-4.6, sonnet-4.5, haiku-5.5, haiku-4.5")
     }
 
     private fun toOpenAIModel(model: String): AIModel_OpenAI = when (model.lowercase()) {
+        "gpt-6-sol" -> AIModel_OpenAI.GPT_6_Sol
+        "gpt-6-luna" -> AIModel_OpenAI.GPT_6_Luna
         "gpt-5.6-sol" -> AIModel_OpenAI.GPT_5_6_Sol
+        "gpt-5.6-terra" -> AIModel_OpenAI.GPT_5_6_Terra
+        "gpt-5.6-luna" -> AIModel_OpenAI.GPT_5_6_Luna
         "gpt-5.5" -> AIModel_OpenAI.GPT_5_5
         "gpt-5.4" -> AIModel_OpenAI.GPT_5_4
         "gpt-5.4-mini" -> AIModel_OpenAI.GPT_5_4_mini
@@ -266,18 +273,20 @@ object ConfigConverter {
         "gpt-4.1-mini" -> AIModel_OpenAI.GPT_4_1_mini
         "gpt-4o" -> AIModel_OpenAI.GPT_4o
         "gpt-4o-mini" -> AIModel_OpenAI.GPT_4o_mini
-        "o4-mini" -> AIModel_OpenAI.o4_mini
         "o3" -> AIModel_OpenAI.o3
         "o3-mini" -> AIModel_OpenAI.o3_mini
-        else -> throw IllegalArgumentException("Unknown OpenAI model: $model. Supported: gpt-5.6-sol, gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.1, gpt-5, gpt-5-mini, gpt-5-nano, gpt-4.1, gpt-4.1-mini, gpt-4o, gpt-4o-mini, o4-mini, o3, o3-mini")
+        else -> throw IllegalArgumentException("Unknown OpenAI model: $model. Supported: gpt-6-sol, gpt-6-luna, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.1, gpt-5, gpt-5-mini, gpt-5-nano, gpt-4.1, gpt-4.1-mini, gpt-4o, gpt-4o-mini, o3, o3-mini")
     }
 
     private fun toGeminiModel(model: String): AIModel_Gemini = when (model.lowercase()) {
         "pro-3.1-preview", "pro-3" -> AIModel_Gemini.Pro_3_1_Preview
+        "argon-4" -> AIModel_Gemini.Argon_4
         "flash-3.8" -> AIModel_Gemini.Flash_3_8
+        "flash-3.6" -> AIModel_Gemini.Flash_3_6
+        "flash-3.5-lite" -> AIModel_Gemini.Flash_Lite_3_5
         "pro-2.5" -> AIModel_Gemini.Pro_2_5
         "flash-2.5" -> AIModel_Gemini.Flash_2_5
         "flash-2.5-lite" -> AIModel_Gemini.Flash_Lite_2_5
-        else -> throw IllegalArgumentException("Unknown Gemini model: $model. Supported: pro-3.1-preview, flash-3.8, pro-2.5, flash-2.5, flash-2.5-lite")
+        else -> throw IllegalArgumentException("Unknown Gemini model: $model. Supported: argon-4, pro-3.1-preview, flash-3.8, flash-3.6, flash-3.5-lite, pro-2.5, flash-2.5, flash-2.5-lite")
     }
 }

@@ -43,7 +43,9 @@ class ModelDescriptorRegistryRungTest {
         val expected = listOf(
             "gpt-5-nano",
             "gpt-4o-mini",
+            "gpt-5.6-luna",
             "gemini-2.5-flash-lite",
+            "gemini-3.5-flash-lite",
         )
         expected.forEach { name ->
             assertEquals(CapabilityRung.ONE, descriptors[name]?.rung, "$name should be rung ONE")
@@ -54,6 +56,7 @@ class ModelDescriptorRegistryRungTest {
     fun rungTwoModels() {
         val expected = listOf(
             "claude-haiku-4-5",
+            "claude-haiku-5-5",
             "gpt-5-mini",
             "gpt-4.1-mini",
             "gpt-4o",
@@ -61,6 +64,8 @@ class ModelDescriptorRegistryRungTest {
             "gpt-5.4-mini",
             "gemini-2.5-flash",
             "gemini-3.8-flash",
+            "gemini-3.6-flash",
+            "gpt-6-luna",
         )
         expected.forEach { name ->
             assertEquals(CapabilityRung.TWO, descriptors[name]?.rung, "$name should be rung TWO")
@@ -73,8 +78,9 @@ class ModelDescriptorRegistryRungTest {
             "claude-sonnet-4-5-20250929",
             "claude-sonnet-4-6",
             "claude-sonnet-5",
+            "claude-sonnet-5-5",
             "gpt-4.1",
-            "o4-mini",
+            "gpt-5.6-terra",
             "gemini-2.5-pro",
         )
         expected.forEach { name ->
@@ -91,13 +97,16 @@ class ModelDescriptorRegistryRungTest {
             "claude-opus-4-8",
             "claude-opus-5",
             "claude-fable-5-1",
+            "claude-opus-5-5",
             "gpt-5",
             "gpt-5.1",
             "gpt-5.4",
             "gpt-5.5",
             "gpt-5.6-sol",
+            "gpt-6-sol",
             "o3",
             "gemini-3.1-pro-preview",
+            "gemini-4-argon",
         )
         expected.forEach { name ->
             assertEquals(CapabilityRung.FOUR, descriptors[name]?.rung, "$name should be rung FOUR")

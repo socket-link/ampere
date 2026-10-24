@@ -5,6 +5,7 @@ import com.aallam.openai.api.chat.ChatCompletion
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
+import com.aallam.openai.api.chat.Effort
 import com.aallam.openai.api.model.ModelId
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -18,7 +19,11 @@ import link.socket.ampere.domain.agent.bundled.WriteCodeAgent
 import link.socket.ampere.domain.ai.configuration.AIConfiguration
 import link.socket.ampere.domain.ai.configuration.AIConfiguration_Default
 import link.socket.ampere.domain.ai.model.AIModel_Claude
+import link.socket.ampere.domain.ai.model.AIModel_Gemini
+import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 import link.socket.ampere.domain.ai.provider.AIProvider_Anthropic
+import link.socket.ampere.domain.ai.provider.AIProvider_Google
+import link.socket.ampere.domain.ai.provider.AIProvider_OpenAI
 
 class UpstreamLlmClientTest {
 
@@ -85,6 +90,76 @@ class UpstreamLlmClientTest {
         assertEquals(AIModel_Claude.Opus_5.name, captured.model.id)
         assertNull(captured.temperature)
     }
+
+    @Test
+    fun `a gemini 3 request carries no temperature`() = runTest {
+        // AMPR-488: Google says a temperature below 1.0 can make Gemini 3 loop.
+        val recorder = RecordingUpstreamClient(cannedResponse = "ok")
+        val service = AgentLLMService(
+            agentConfiguration = config.copy(aiConfiguration = geminiConfiguration(AIModel_Gemini.Flash_3_8)),
+            upstreamLlmClient = recorder,
+        )
+
+        service.call(prompt = "anything", temperature = 0.3)
+
+        val captured = assertNotNull(recorder.lastRequest)
+        assertEquals("gemini-3.8-flash", captured.model.id)
+        assertNull(captured.temperature)
+    }
+
+    @Test
+    fun `a quick gemini 3 call asks for low reasoning effort`() = runTest {
+        // A 500-token cap is what PERCEIVE sends. Gemini 3.8 Flash thinks at
+        // `medium` by default and counts thought against the cap.
+        val recorder = RecordingUpstreamClient(cannedResponse = "ok")
+        val service = AgentLLMService(
+            agentConfiguration = config.copy(aiConfiguration = geminiConfiguration(AIModel_Gemini.Flash_3_8)),
+            upstreamLlmClient = recorder,
+        )
+
+        service.call(prompt = "anything", maxTokens = 500)
+
+        val captured = assertNotNull(recorder.lastRequest)
+        assertEquals(Effort("low"), captured.reasoningEffort)
+        assertEquals(500, captured.maxTokens)
+    }
+
+    @Test
+    fun `a gemini 3 call with the default budget keeps the model default effort`() = runTest {
+        val recorder = RecordingUpstreamClient(cannedResponse = "ok")
+        val service = AgentLLMService(
+            agentConfiguration = config.copy(aiConfiguration = geminiConfiguration(AIModel_Gemini.Argon_4)),
+            upstreamLlmClient = recorder,
+        )
+
+        service.call(prompt = "anything")
+
+        assertEquals(Effort("medium"), assertNotNull(recorder.lastRequest).reasoningEffort)
+    }
+
+    @Test
+    fun `models outside gemini 3 get no reasoning effort`() = runTest {
+        // OpenAI documents Chat Completions tool calls on gpt-5.5 onward only at
+        // effort `none`, so Ampere leaves effort to the model everywhere else.
+        listOf(
+            config.aiConfiguration,
+            geminiConfiguration(AIModel_Gemini.Flash_2_5),
+            AIConfiguration_Default(provider = AIProvider_OpenAI, model = AIModel_OpenAI.GPT_6_Sol),
+        ).forEach { configuration ->
+            val recorder = RecordingUpstreamClient(cannedResponse = "ok")
+            val service = AgentLLMService(
+                agentConfiguration = config.copy(aiConfiguration = configuration),
+                upstreamLlmClient = recorder,
+            )
+
+            service.call(prompt = "anything", maxTokens = 500)
+
+            assertNull(assertNotNull(recorder.lastRequest).reasoningEffort, configuration.model.name)
+        }
+    }
+
+    private fun geminiConfiguration(model: AIModel_Gemini): AIConfiguration =
+        AIConfiguration_Default(provider = AIProvider_Google, model = model)
 
     @Test
     fun `custom upstream client errors propagate`() = runTest {

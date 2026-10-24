@@ -9,6 +9,15 @@ import link.socket.ampere.domain.tool.ProvidedTool
  *   sampling parameters (`temperature`, `top_p`). Models that reject them with
  *   a 400 (Claude Opus 4.7+, Sonnet 5, Fable 5.x; OpenAI reasoning models) set
  *   this to `false`, and Ampere omits those fields from the request.
+ *   Gemini 3 and later set it too (AMPR-488): Google accepts the fields but
+ *   says a temperature below its default of 1.0 can make those models loop or
+ *   degrade, so Ampere leaves them at the provider default.
+ * @property defaultThinking The thinking level the model runs at when the
+ *   request names none, for a model that takes a `reasoning_effort` from
+ *   Ampere. Null means Ampere sends no effort to this model. Only Gemini 3 and
+ *   later set it today. The effort a call sends is decided by
+ *   [ReasoningEffortPolicy][link.socket.ampere.agents.domain.reasoning.ReasoningEffortPolicy],
+ *   which lowers it from this default when the call's output budget is small.
  */
 @Serializable
 data class AIModelFeatures(
@@ -18,7 +27,19 @@ data class AIModelFeatures(
     val supportedInputs: SupportedInputs,
     val trainingCutoffDate: GMTDate,
     val supportsSamplingParameters: Boolean = true,
+    val defaultThinking: ThinkingLevel? = null,
 ) {
+    /**
+     * How much a model reasons before it answers, in the order Google's
+     * `thinking_level` and OpenAI's `reasoning_effort` share. [MINIMAL] exists
+     * because some models default to it (Gemini 3.5 Flash-Lite). Ampere never
+     * sends it: Gemini 3.8 Flash and Gemini 4 Argon reject it with an error.
+     */
+    @Serializable
+    enum class ThinkingLevel {
+        MINIMAL, LOW, MEDIUM, HIGH
+    }
+
     @Serializable
     enum class RelativeReasoning {
         LOW, NORMAL, HIGH
