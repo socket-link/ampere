@@ -20,7 +20,7 @@ class AiConfigurationFactoryTest {
         val config = assertIs<AIConfiguration_WithBackups>(AIConfigurationFactory.getDefaultConfiguration())
 
         assertEquals(
-            listOf("gemini-3.8-flash", "claude-sonnet-5", "gpt-5.4"),
+            listOf("gemini-3.8-flash", "claude-sonnet-5-5", "gpt-5.4"),
             config.configurations.map { it.model.name },
         )
         assertEquals(

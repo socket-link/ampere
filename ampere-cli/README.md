@@ -416,7 +416,11 @@ ai:
 **Available models:**
 | Model | Best For |
 |-------|----------|
-| `gpt-5.6-sol` | Most capable |
+| `gpt-6-sol` | Most capable |
+| `gpt-6-luna` | Fast, efficient |
+| `gpt-5.6-sol` | Frontier reasoning |
+| `gpt-5.6-terra` | Balanced |
+| `gpt-5.6-luna` | Fast, efficient |
 | `gpt-5.5` | Frontier reasoning |
 | `gpt-5.4` | Frontier reasoning (recommended) |
 | `gpt-5.4-mini` | Balanced |
@@ -428,7 +432,6 @@ ai:
 | `gpt-4.1-mini` | Cost-effective |
 | `gpt-4o` | Optimized |
 | `gpt-4o-mini` | Fast |
-| `o4-mini` | Reasoning |
 | `o3` | Advanced reasoning |
 | `o3-mini` | Fast reasoning |
 
@@ -443,8 +446,11 @@ ai:
 **Available models:**
 | Model | Best For |
 |-------|----------|
-| `pro-3.1-preview` | Most capable (`pro-3` is an alias) |
+| `argon-4` | Most capable |
+| `pro-3.1-preview` | Frontier reasoning, preview (`pro-3` is an alias) |
 | `flash-3.8` | Fast (recommended) |
+| `flash-3.6` | Fast |
+| `flash-3.5-lite` | Fastest, cheapest |
 | `pro-2.5` | High capability |
 | `flash-2.5` | Fast |
 | `flash-2.5-lite` | Fastest |

@@ -160,6 +160,48 @@ sealed class AIModel_Claude(
         limits = FABLE_LIMITS,
     )
 
+    // ---- 5.5 generation: no sampling parameters, no assistant prefill, and a
+    // forced `tool_choice` (`any` / `tool`) is a 400 on Opus 5.5 and Sonnet 5.5 ----
+
+    data object Opus_5_5 : AIModel_Claude(
+        name = Opus_5_5_NAME,
+        displayName = Opus_5_5_DISPLAY_NAME,
+        description = Opus_5_5_DESCRIPTION,
+        features = currentGenerationFeatures(
+            reasoningLevel = RelativeReasoning.HIGH,
+            speed = RelativeSpeed.NORMAL,
+            cutoffDate = GENERATION_5_5_CUTOFF,
+            supportsSamplingParameters = false,
+        ),
+        limits = CURRENT_GENERATION_LIMITS,
+    )
+
+    data object Sonnet_5_5 : AIModel_Claude(
+        name = Sonnet_5_5_NAME,
+        displayName = Sonnet_5_5_DISPLAY_NAME,
+        description = Sonnet_5_5_DESCRIPTION,
+        features = currentGenerationFeatures(
+            reasoningLevel = RelativeReasoning.NORMAL,
+            speed = RelativeSpeed.FAST,
+            cutoffDate = GENERATION_5_5_CUTOFF,
+            supportsSamplingParameters = false,
+        ),
+        limits = CURRENT_GENERATION_LIMITS,
+    )
+
+    data object Haiku_5_5 : AIModel_Claude(
+        name = Haiku_5_5_NAME,
+        displayName = Haiku_5_5_DISPLAY_NAME,
+        description = Haiku_5_5_DESCRIPTION,
+        features = currentGenerationFeatures(
+            reasoningLevel = RelativeReasoning.NORMAL,
+            speed = RelativeSpeed.FAST,
+            cutoffDate = GENERATION_5_5_CUTOFF,
+            supportsSamplingParameters = false,
+        ),
+        limits = CURRENT_GENERATION_LIMITS,
+    )
+
     /**
      * A Claude model Ampere has no bundled entry for, constructed by ID so a
      * consumer can roll to a new model without waiting on an Ampere release.
@@ -216,13 +258,14 @@ sealed class AIModel_Claude(
         )
 
         /**
-         * One published row covers Opus 5, Sonnet 5, Haiku 4.5 and the Opus 4.x
+         * One published row covers Opus 5.5, Sonnet 5.5, Haiku 5.5, Opus 5,
+         * Sonnet 5, Haiku 4.5 and the Opus 4.x
          * / Sonnet 4.x pools. Limits are separate ITPM/OTPM, and for most models
          * cached input reads don't count toward ITPM.
          *
          * These are per-*pool*, not per-model: traffic across Opus 4.8/4.7/4.6/
-         * 4.5 counts against one bucket, as does Sonnet 4.6/4.5. Opus 5 and
-         * Sonnet 5 each have their own.
+         * 4.5 counts against one bucket, as does Sonnet 4.6/4.5. Each 5.x model
+         * has its own.
          */
         private val STANDARD_RATE_LIMITS = standardRateLimitsFactory.createSeparatedRateLimits(
             tier1TPMs = TokenCount._2m to TokenCount._400k,
@@ -372,6 +415,16 @@ sealed class AIModel_Claude(
             seconds = 0,
         )
 
+        // Opus 5.5, Sonnet 5.5 and Haiku 5.5 share one reliable knowledge cutoff.
+        private val GENERATION_5_5_CUTOFF = GMTDate(
+            year = 2026,
+            month = Month.JUNE,
+            dayOfMonth = 1,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+        )
+
         private val Fable_5_1_CUTOFF = GMTDate(
             year = 2026,
             month = Month.JUNE,
@@ -426,6 +479,8 @@ sealed class AIModel_Claude(
          * Features for the 4.6 generation onward. [supportsSamplingParameters]
          * is `false` from Opus 4.7 on: those models reject `temperature` and
          * `top_p` with a 400, including through the OpenAI-compatible endpoint.
+         * (Sonnet 5.5 and Haiku 5.5 400 on a non-default value rather than on
+         * the field; omitting it is accepted by every one of them.)
          */
         private fun currentGenerationFeatures(
             reasoningLevel: RelativeReasoning,
@@ -503,6 +558,24 @@ sealed class AIModel_Claude(
             "Anthropic's most capable widely released model, for demanding reasoning and " +
                 "long-horizon agentic work. Thinking is always on; rejects sampling parameters."
 
+        private const val Opus_5_5_NAME = "claude-opus-5-5"
+        private const val Opus_5_5_DISPLAY_NAME = "Claude Opus 5.5"
+        private const val Opus_5_5_DESCRIPTION =
+            "Anthropic's flagship Opus for demanding reasoning, coding, and long-horizon agentic work. " +
+                "Thinking cannot be disabled (effort defaults to medium); rejects sampling parameters."
+
+        private const val Sonnet_5_5_NAME = "claude-sonnet-5-5"
+        private const val Sonnet_5_5_DISPLAY_NAME = "Claude Sonnet 5.5"
+        private const val Sonnet_5_5_DESCRIPTION =
+            "Speed and capability for everyday coding, agent, and enterprise work. Thinking is " +
+                "turned off with `between_tools`, not `disabled`; rejects sampling parameters."
+
+        private const val Haiku_5_5_NAME = "claude-haiku-5-5"
+        private const val Haiku_5_5_DISPLAY_NAME = "Claude Haiku 5.5"
+        private const val Haiku_5_5_DESCRIPTION =
+            "The small, fast model for high-volume, cost-sensitive work such as summarization and " +
+                "subagents. Adaptive thinking on by default; rejects sampling parameters."
+
         // ---- Models ----
 
         // Lazy to avoid the JVM class-init cycle: if any data object (Opus_5, etc.)
@@ -521,6 +594,9 @@ sealed class AIModel_Claude(
                 Sonnet_4_6,
                 Sonnet_5,
                 Fable_5_1,
+                Opus_5_5,
+                Sonnet_5_5,
+                Haiku_5_5,
             )
         }
     }

@@ -20,7 +20,7 @@ class ProviderPricingCatalogTest {
 
         assertEquals(1, catalog.version)
         assertEquals("USD", catalog.currency)
-        assertEquals("2026-09-20", catalog.publishedAt)
+        assertEquals("2026-10-24", catalog.publishedAt)
         assertTrue(catalog.entries.isNotEmpty())
     }
 
@@ -73,6 +73,17 @@ class ProviderPricingCatalogTest {
             ("openai" to "gpt-5.4-mini") to (0.75 to 4.5),
             ("google" to "gemini-3.1-pro-preview") to (2.0 to 12.0),
             ("google" to "gemini-3.8-flash") to (0.75 to 3.75),
+            // AMPR-488, read 2026-10-24.
+            ("anthropic" to "claude-opus-5-5") to (4.0 to 20.0),
+            ("anthropic" to "claude-sonnet-5-5") to (2.0 to 10.0),
+            ("anthropic" to "claude-haiku-5-5") to (0.1 to 0.5),
+            ("openai" to "gpt-6-sol") to (2.0 to 10.0),
+            ("openai" to "gpt-6-luna") to (0.1 to 0.5),
+            ("openai" to "gpt-5.6-terra") to (2.0 to 12.0),
+            ("openai" to "gpt-5.6-luna") to (0.2 to 1.2),
+            ("google" to "gemini-4-argon") to (2.0 to 10.0),
+            ("google" to "gemini-3.6-flash") to (0.75 to 3.75),
+            ("google" to "gemini-3.5-flash-lite") to (0.3 to 2.5),
         )
         expected.forEach { (key, rates) ->
             val pricing =

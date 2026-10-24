@@ -34,7 +34,13 @@ object AIConfigurationFactory {
 
     /**
      * Creates a default configuration with multiple provider fallbacks.
-     * Order: Gemini 3.8 Flash -> Claude Sonnet 5 -> GPT-5.4
+     * Order: Gemini 3.8 Flash -> Claude Sonnet 5.5 -> GPT-5.4
+     *
+     * None of the three has an announced shutdown (checked 2026-10-24, AMPR-488).
+     * Sonnet 5.5 replaced Sonnet 5 as its same-price successor. GPT-5.4 stays
+     * ahead of GPT-6 and the GPT-5.6 tiers: they default to reasoning effort
+     * `medium`, where Chat Completions refuses function calls, and 5.4 defaults
+     * to `none`.
      */
     fun getDefaultConfiguration(): AIConfiguration =
         AIConfiguration_WithBackups(
@@ -45,7 +51,7 @@ object AIConfigurationFactory {
                 ),
                 AIConfiguration_Default(
                     provider = AIProvider_Anthropic,
-                    model = AIModel_Claude.Sonnet_5,
+                    model = AIModel_Claude.Sonnet_5_5,
                 ),
                 AIConfiguration_Default(
                     provider = AIProvider_OpenAI,

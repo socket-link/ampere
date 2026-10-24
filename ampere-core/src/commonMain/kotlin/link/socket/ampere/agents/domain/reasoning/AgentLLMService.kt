@@ -5,6 +5,7 @@ import com.aallam.openai.api.chat.ChatCompletion
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
+import com.aallam.openai.api.chat.Effort
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -381,6 +382,12 @@ class AgentLLMService(
             // Omitted, not defaulted, for models that 400 on any sampling parameter.
             temperature = temperature.takeIf { model.features.supportsSamplingParameters },
             maxTokens = maxTokens,
+            // A thinking model spends its output cap on thought first (AMPR-488).
+            reasoningEffort = ReasoningEffortPolicy.effortFor(
+                model = model,
+                maxTokens = maxTokens,
+                routingContext = fittedRoutingContext,
+            )?.let { Effort(ReasoningEffortPolicy.wireValue(it)) },
         )
 
         // The started row names the *resolved* configuration, and only can: it is

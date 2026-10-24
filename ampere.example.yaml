@@ -49,20 +49,22 @@ ai:
 # -----------------
 # Anthropic (Claude):
 #   fable-5.1
-#   opus-5, opus-4.8, opus-4.7, opus-4.6, opus-4.5
-#   sonnet-5, sonnet-4.6, sonnet-4.5
-#   haiku-4.5
+#   opus-5.5, opus-5, opus-4.8, opus-4.7, opus-4.6, opus-4.5
+#   sonnet-5.5, sonnet-5, sonnet-4.6, sonnet-4.5
+#   haiku-5.5, haiku-4.5
 #
 # OpenAI (GPT):
-#   gpt-5.6-sol, gpt-5.5, gpt-5.4, gpt-5.4-mini
+#   gpt-6-sol, gpt-6-luna
+#   gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna
+#   gpt-5.5, gpt-5.4, gpt-5.4-mini
 #   gpt-5.1
 #   gpt-5, gpt-5-mini, gpt-5-nano
 #   gpt-4.1, gpt-4.1-mini
 #   gpt-4o, gpt-4o-mini
-#   o4-mini, o3, o3-mini
+#   o3, o3-mini
 #
 # Google (Gemini):
-#   pro-3.1-preview (alias: pro-3), flash-3.8
+#   argon-4, pro-3.1-preview (alias: pro-3), flash-3.8, flash-3.6, flash-3.5-lite
 #   pro-2.5, flash-2.5, flash-2.5-lite
 
 # Team Composition

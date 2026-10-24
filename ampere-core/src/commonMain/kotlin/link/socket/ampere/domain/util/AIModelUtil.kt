@@ -18,6 +18,8 @@ fun AIModel.toClientModelId(): ClientModelId =
 fun AIConfiguration.toClientModelId(): ClientModelId =
     ClientModelId(wireModelId)
 
+// o4_mini is deprecated (shut down) but still a subtype the sealed `when` must name.
+@Suppress("DEPRECATION")
 fun AIModel.toKoogLLMModel(): LLModel? = when (this) {
     is AIModel_OpenAI -> when (this) {
         is AIModel_OpenAI.GPT_5 -> OpenAIModels.Chat.GPT5
@@ -28,6 +30,10 @@ fun AIModel.toKoogLLMModel(): LLModel? = when (this) {
         is AIModel_OpenAI.GPT_5_4_mini -> null // TODO: Add to koog-agents
         is AIModel_OpenAI.GPT_5_5 -> null // TODO: Add to koog-agents
         is AIModel_OpenAI.GPT_5_6_Sol -> null // TODO: Add to koog-agents
+        is AIModel_OpenAI.GPT_5_6_Terra -> null // TODO: Add to koog-agents
+        is AIModel_OpenAI.GPT_5_6_Luna -> null // TODO: Add to koog-agents
+        is AIModel_OpenAI.GPT_6_Sol -> null // TODO: Add to koog-agents
+        is AIModel_OpenAI.GPT_6_Luna -> null // TODO: Add to koog-agents
         is AIModel_OpenAI.Custom -> null
         is AIModel_OpenAI.GPT_4_1 -> OpenAIModels.Chat.GPT4_1
         is AIModel_OpenAI.GPT_4_1_mini -> OpenAIModels.CostOptimized.GPT4_1Mini

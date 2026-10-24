@@ -1,7 +1,7 @@
 {
   "version": 1,
   "currency": "USD",
-  "publishedAt": "2026-09-20",
+  "publishedAt": "2026-10-24",
   "entries": [
     {
       "providerId": "openai",
@@ -154,6 +154,66 @@
       ]
     },
     {
+      "providerId": "openai",
+      "modelId": "gpt-5.6-terra",
+      "tiers": [
+        {
+          "maxInputTokens": 272000,
+          "inputUsdPerMillionTokens": 2.0,
+          "outputUsdPerMillionTokens": 12.0
+        },
+        {
+          "inputUsdPerMillionTokens": 4.0,
+          "outputUsdPerMillionTokens": 18.0
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-5.6-luna",
+      "tiers": [
+        {
+          "maxInputTokens": 272000,
+          "inputUsdPerMillionTokens": 0.2,
+          "outputUsdPerMillionTokens": 1.2
+        },
+        {
+          "inputUsdPerMillionTokens": 0.4,
+          "outputUsdPerMillionTokens": 1.8
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-6-sol",
+      "tiers": [
+        {
+          "maxInputTokens": 272000,
+          "inputUsdPerMillionTokens": 2.0,
+          "outputUsdPerMillionTokens": 10.0
+        },
+        {
+          "inputUsdPerMillionTokens": 4.0,
+          "outputUsdPerMillionTokens": 15.0
+        }
+      ]
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-6-luna",
+      "tiers": [
+        {
+          "maxInputTokens": 272000,
+          "inputUsdPerMillionTokens": 0.1,
+          "outputUsdPerMillionTokens": 0.5
+        },
+        {
+          "inputUsdPerMillionTokens": 0.2,
+          "outputUsdPerMillionTokens": 0.75
+        }
+      ]
+    },
+    {
       "providerId": "anthropic",
       "modelId": "claude-opus-4-5-20251101",
       "tiers": [
@@ -254,6 +314,41 @@
       ]
     },
     {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-5-5",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 4.0,
+          "outputUsdPerMillionTokens": 20.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-sonnet-5-5",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 2.0,
+          "outputUsdPerMillionTokens": 10.0
+        }
+      ]
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-haiku-5-5",
+      "tiers": [
+        {
+          "maxInputTokens": 100000,
+          "inputUsdPerMillionTokens": 0.1,
+          "outputUsdPerMillionTokens": 0.5
+        },
+        {
+          "inputUsdPerMillionTokens": 0.5,
+          "outputUsdPerMillionTokens": 2.5
+        }
+      ]
+    },
+    {
       "providerId": "google",
       "modelId": "gemini-2.5-pro",
       "tiers": [
@@ -320,6 +415,36 @@
         {
           "inputUsdPerMillionTokens": 0.75,
           "outputUsdPerMillionTokens": 3.75
+        }
+      ]
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-3.6-flash",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 0.75,
+          "outputUsdPerMillionTokens": 3.75
+        }
+      ]
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-3.5-flash-lite",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 0.3,
+          "outputUsdPerMillionTokens": 2.5
+        }
+      ]
+    },
+    {
+      "providerId": "google",
+      "modelId": "gemini-4-argon",
+      "tiers": [
+        {
+          "inputUsdPerMillionTokens": 2.0,
+          "outputUsdPerMillionTokens": 10.0
         }
       ]
     }

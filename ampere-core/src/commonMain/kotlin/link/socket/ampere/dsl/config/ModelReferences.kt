@@ -14,14 +14,17 @@ import link.socket.ampere.domain.ai.model.AIModel_OpenAI
  */
 object Claude {
     val Fable5_1 = AIModel_Claude.Fable_5_1
+    val Opus5_5 = AIModel_Claude.Opus_5_5
     val Opus5 = AIModel_Claude.Opus_5
     val Opus4_8 = AIModel_Claude.Opus_4_8
     val Opus4_7 = AIModel_Claude.Opus_4_7
     val Opus4_6 = AIModel_Claude.Opus_4_6
     val Opus4_5 = AIModel_Claude.Opus_4_5
+    val Sonnet5_5 = AIModel_Claude.Sonnet_5_5
     val Sonnet5 = AIModel_Claude.Sonnet_5
     val Sonnet4_6 = AIModel_Claude.Sonnet_4_6
     val Sonnet4_5 = AIModel_Claude.Sonnet_4_5
+    val Haiku5_5 = AIModel_Claude.Haiku_5_5
     val Haiku4_5 = AIModel_Claude.Haiku_4_5
 }
 
@@ -34,7 +37,11 @@ object Claude {
  * ```
  */
 object GPT {
+    val GPT6_Sol = AIModel_OpenAI.GPT_6_Sol
+    val GPT6_Luna = AIModel_OpenAI.GPT_6_Luna
     val GPT5_6_Sol = AIModel_OpenAI.GPT_5_6_Sol
+    val GPT5_6_Terra = AIModel_OpenAI.GPT_5_6_Terra
+    val GPT5_6_Luna = AIModel_OpenAI.GPT_5_6_Luna
     val GPT5_5 = AIModel_OpenAI.GPT_5_5
     val GPT5_4 = AIModel_OpenAI.GPT_5_4
     val GPT5_4_mini = AIModel_OpenAI.GPT_5_4_mini
@@ -46,6 +53,9 @@ object GPT {
     val GPT4_1_mini = AIModel_OpenAI.GPT_4_1_mini
     val GPT4o = AIModel_OpenAI.GPT_4o
     val GPT4o_mini = AIModel_OpenAI.GPT_4o_mini
+
+    @Suppress("DEPRECATION")
+    @Deprecated("OpenAI shut o4-mini down on 2026-10-23; every call to it fails.", ReplaceWith("GPT6_Luna"))
     val O4_mini = AIModel_OpenAI.o4_mini
     val O3 = AIModel_OpenAI.o3
     val O3_mini = AIModel_OpenAI.o3_mini
@@ -60,8 +70,11 @@ object GPT {
  * ```
  */
 object Gemini {
+    val Argon4 = AIModel_Gemini.Argon_4
     val Pro3_1_Preview = AIModel_Gemini.Pro_3_1_Preview
     val Flash3_8 = AIModel_Gemini.Flash_3_8
+    val Flash3_6 = AIModel_Gemini.Flash_3_6
+    val Flash3_5_Lite = AIModel_Gemini.Flash_Lite_3_5
 
     @Deprecated(
         "Pointed at gemini-3-pro-latest, which Google never served. Now resolves to Gemini 3.1 Pro (Preview).",

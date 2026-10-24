@@ -7,6 +7,7 @@ import io.ktor.util.date.Month
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
 import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeSpeed
 import link.socket.ampere.domain.ai.model.AIModelFeatures.SupportedInputs
+import link.socket.ampere.domain.ai.model.AIModelFeatures.ThinkingLevel
 import link.socket.ampere.domain.ai.provider.ProviderId
 import link.socket.ampere.domain.limits.ModelLimits
 import link.socket.ampere.domain.limits.RateLimitsFactory
@@ -66,6 +67,34 @@ sealed class AIModel_Gemini(
         limits = _3_8_Flash_LIMITS,
     )
 
+    data object Flash_3_6 : AIModel_Gemini(
+        name = _3_6_Flash_NAME,
+        displayName = _3_6_Flash_DISPLAY_NAME,
+        description = _3_6_Flash_DESCRIPTION,
+        features = _3_6_Flash_FEATURES,
+        limits = _3_6_Flash_LIMITS,
+    )
+
+    data object Flash_Lite_3_5 : AIModel_Gemini(
+        name = _3_5_Flash_Lite_NAME,
+        displayName = _3_5_Flash_Lite_DISPLAY_NAME,
+        description = _3_5_Flash_Lite_DESCRIPTION,
+        features = _3_5_Flash_Lite_FEATURES,
+        limits = _3_5_Flash_Lite_LIMITS,
+    )
+
+    /**
+     * Google's flagship. Its synchronous output cap is 64K; the 1M "long decode"
+     * output needs the background Interactions API, which Ampere does not call.
+     */
+    data object Argon_4 : AIModel_Gemini(
+        name = _4_Argon_NAME,
+        displayName = _4_Argon_DISPLAY_NAME,
+        description = _4_Argon_DESCRIPTION,
+        features = _4_Argon_FEATURES,
+        limits = _4_Argon_LIMITS,
+    )
+
     /**
      * A Gemini model Ampere has no bundled entry for, constructed by ID so a
      * consumer can roll to a new model without waiting on an Ampere release.
@@ -98,6 +127,9 @@ sealed class AIModel_Gemini(
 
         private val _3_1_Pro_Preview_TOOLS: List<ProvidedTool<AITool_Gemini>> = _2_5_Pro_TOOLS
         private val _3_8_Flash_TOOLS: List<ProvidedTool<AITool_Gemini>> = _2_5_Pro_TOOLS
+        private val _3_6_Flash_TOOLS: List<ProvidedTool<AITool_Gemini>> = _2_5_Pro_TOOLS
+        private val _3_5_Flash_Lite_TOOLS: List<ProvidedTool<AITool_Gemini>> = _2_5_Pro_TOOLS
+        private val _4_Argon_TOOLS: List<ProvidedTool<AITool_Gemini>> = _2_5_Pro_TOOLS
 
         // ---- Rate Limits ----
 
@@ -176,6 +208,9 @@ sealed class AIModel_Gemini(
         // approximation; treat them as a hint, not Google's contract.
         private val _3_1_Pro_Preview_RATE_LIMITS = _2_5_Pro_RATE_LIMITS
         private val _3_8_Flash_RATE_LIMITS = _2_5_Flash_RATE_LIMITS
+        private val _3_6_Flash_RATE_LIMITS = _2_5_Flash_RATE_LIMITS
+        private val _3_5_Flash_Lite_RATE_LIMITS = _2_5_Flash_Lite_RATE_LIMITS
+        private val _4_Argon_RATE_LIMITS = _2_5_Pro_RATE_LIMITS
 
         // ---- Token Limits ----
 
@@ -195,6 +230,12 @@ sealed class AIModel_Gemini(
         )
 
         private val _3_8_Flash_TOKEN_LIMITS = _3_1_Pro_Preview_TOKEN_LIMITS
+        private val _3_6_Flash_TOKEN_LIMITS = _3_1_Pro_Preview_TOKEN_LIMITS
+        private val _3_5_Flash_Lite_TOKEN_LIMITS = _3_1_Pro_Preview_TOKEN_LIMITS
+
+        // 65,536 is the synchronous cap; the 1,048,576 long-decode figure is
+        // background-only.
+        private val _4_Argon_TOKEN_LIMITS = _3_1_Pro_Preview_TOKEN_LIMITS
 
         // ---- Limits ----
 
@@ -223,6 +264,21 @@ sealed class AIModel_Gemini(
             token = _3_8_Flash_TOKEN_LIMITS,
         )
 
+        private val _3_6_Flash_LIMITS = ModelLimits(
+            rate = _3_6_Flash_RATE_LIMITS,
+            token = _3_6_Flash_TOKEN_LIMITS,
+        )
+
+        private val _3_5_Flash_Lite_LIMITS = ModelLimits(
+            rate = _3_5_Flash_Lite_RATE_LIMITS,
+            token = _3_5_Flash_Lite_TOKEN_LIMITS,
+        )
+
+        private val _4_Argon_LIMITS = ModelLimits(
+            rate = _4_Argon_RATE_LIMITS,
+            token = _4_Argon_TOKEN_LIMITS,
+        )
+
         // ---- Training Cutoffs ----
 
         private val _2_5_Pro_CUTOFF = GMTDate(
@@ -238,7 +294,8 @@ sealed class AIModel_Gemini(
         private val _2_5_Flash_Lite_CUTOFF = _2_5_Flash_CUTOFF
 
         // Google's Gemini 3 guide gives January 2025 for "Gemini 3 models"; the
-        // 3.8 Flash model page lists no cutoff of its own.
+        // 3.5 Flash-Lite, 3.6 Flash, 3.8 Flash and 4 Argon model pages list no
+        // cutoff of their own, so they carry the same date until Google says.
         private val _3_1_Pro_Preview_CUTOFF = GMTDate(
             year = 2025,
             month = Month.JANUARY,
@@ -249,6 +306,9 @@ sealed class AIModel_Gemini(
         )
 
         private val _3_8_Flash_CUTOFF = _3_1_Pro_Preview_CUTOFF
+        private val _3_6_Flash_CUTOFF = _3_1_Pro_Preview_CUTOFF
+        private val _3_5_Flash_Lite_CUTOFF = _3_1_Pro_Preview_CUTOFF
+        private val _4_Argon_CUTOFF = _3_1_Pro_Preview_CUTOFF
 
         // --- Supported Inputs ----
 
@@ -263,6 +323,9 @@ sealed class AIModel_Gemini(
 
         private val _3_1_Pro_Preview_SUPPORTED_INPUTS = SupportedInputs.ALL
         private val _3_8_Flash_SUPPORTED_INPUTS = SupportedInputs.ALL
+        private val _3_6_Flash_SUPPORTED_INPUTS = SupportedInputs.ALL
+        private val _3_5_Flash_Lite_SUPPORTED_INPUTS = SupportedInputs.ALL
+        private val _4_Argon_SUPPORTED_INPUTS = SupportedInputs.ALL
 
         // ---- Model Features ----
 
@@ -290,12 +353,24 @@ sealed class AIModel_Gemini(
             trainingCutoffDate = _2_5_Flash_Lite_CUTOFF,
         )
 
+        // Gemini 3 onward (AMPR-488). Google: "For all Gemini 3 models, we
+        // strongly recommend keeping the temperature parameter at its default
+        // value of 1.0"; lower values "may lead to unexpected behavior, such as
+        // looping or degraded performance." So these omit sampling parameters.
+        //
+        // Each also thinks by default, and the output cap includes thought
+        // tokens, so each names the level it thinks at when asked for none (the
+        // thinking guide's table) and Ampere sends a lower `reasoning_effort` for
+        // a call with a small cap. See ReasoningEffortPolicy.
+
         private val _3_1_Pro_Preview_FEATURES = AIModelFeatures(
             availableTools = _3_1_Pro_Preview_TOOLS,
             reasoningLevel = RelativeReasoning.HIGH,
             speed = RelativeSpeed.SLOW,
             supportedInputs = _3_1_Pro_Preview_SUPPORTED_INPUTS,
             trainingCutoffDate = _3_1_Pro_Preview_CUTOFF,
+            supportsSamplingParameters = false,
+            defaultThinking = ThinkingLevel.HIGH,
         )
 
         private val _3_8_Flash_FEATURES = AIModelFeatures(
@@ -304,6 +379,38 @@ sealed class AIModel_Gemini(
             speed = RelativeSpeed.FAST,
             supportedInputs = _3_8_Flash_SUPPORTED_INPUTS,
             trainingCutoffDate = _3_8_Flash_CUTOFF,
+            supportsSamplingParameters = false,
+            defaultThinking = ThinkingLevel.MEDIUM,
+        )
+
+        private val _3_6_Flash_FEATURES = AIModelFeatures(
+            availableTools = _3_6_Flash_TOOLS,
+            reasoningLevel = RelativeReasoning.NORMAL,
+            speed = RelativeSpeed.FAST,
+            supportedInputs = _3_6_Flash_SUPPORTED_INPUTS,
+            trainingCutoffDate = _3_6_Flash_CUTOFF,
+            supportsSamplingParameters = false,
+            defaultThinking = ThinkingLevel.MEDIUM,
+        )
+
+        private val _3_5_Flash_Lite_FEATURES = AIModelFeatures(
+            availableTools = _3_5_Flash_Lite_TOOLS,
+            reasoningLevel = RelativeReasoning.LOW,
+            speed = RelativeSpeed.FAST,
+            supportedInputs = _3_5_Flash_Lite_SUPPORTED_INPUTS,
+            trainingCutoffDate = _3_5_Flash_Lite_CUTOFF,
+            supportsSamplingParameters = false,
+            defaultThinking = ThinkingLevel.MINIMAL,
+        )
+
+        private val _4_Argon_FEATURES = AIModelFeatures(
+            availableTools = _4_Argon_TOOLS,
+            reasoningLevel = RelativeReasoning.HIGH,
+            speed = RelativeSpeed.SLOW,
+            supportedInputs = _4_Argon_SUPPORTED_INPUTS,
+            trainingCutoffDate = _4_Argon_CUTOFF,
+            supportsSamplingParameters = false,
+            defaultThinking = ThinkingLevel.MEDIUM,
         )
 
         // ---- Model Names ----
@@ -342,6 +449,25 @@ sealed class AIModel_Gemini(
                 "high-volume, low-latency, and agentic workloads. Features a " +
                 "1M token context window."
 
+        private const val _3_6_Flash_NAME = "gemini-3.6-flash"
+        private const val _3_6_Flash_DISPLAY_NAME = "Gemini 3.6 Flash"
+        private const val _3_6_Flash_DESCRIPTION =
+            "Google's previous-generation Flash model, balancing speed and " +
+                "multimodal capabilities across general agentic and everyday tasks."
+
+        private const val _3_5_Flash_Lite_NAME = "gemini-3.5-flash-lite"
+        private const val _3_5_Flash_Lite_DISPLAY_NAME = "Gemini 3.5 Flash-Lite"
+        private const val _3_5_Flash_Lite_DESCRIPTION =
+            "A cost-efficient model, optimized for high-volume agentic tasks, " +
+                "translation, and simple data processing."
+
+        private const val _4_Argon_NAME = "gemini-4-argon"
+        private const val _4_Argon_DISPLAY_NAME = "Gemini 4 Argon"
+        private const val _4_Argon_DESCRIPTION =
+            "Google's flagship reasoning model, built for complex software " +
+                "engineering, deep mathematical and scientific problem solving, " +
+                "and autonomous multi-step agents."
+
         // ---- Models ----
 
         // Lazy to avoid the JVM class-init cycle: if any data object (Pro_2_5, etc.)
@@ -355,6 +481,9 @@ sealed class AIModel_Gemini(
                 Flash_Lite_2_5,
                 Pro_3_1_Preview,
                 Flash_3_8,
+                Flash_3_6,
+                Flash_Lite_3_5,
+                Argon_4,
             )
         }
     }
