@@ -53,8 +53,9 @@ import link.socket.ampere.memory.RecallSource
  * @property cadence When PERCEIVE, RECALL and LEARN run again inside a run (AMPR-481, row N4
  *   of the continuous-PROPEL epic; AMPR-483, rows N3–N5). See [PhaseCadence]; the default is
  *   the run as it was — each once. `Record` values ask the receptor's two questions and move
- *   nothing; [PerceiveCadence.WhenDrifted] and [PerceiveCadence.EveryCycle] re-enter the next
- *   cycle at PERCEIVE, and [RecallCadence.WithPerceive] re-runs RECALL beside it;
+ *   nothing; [PerceiveCadence.WhenMoved], [PerceiveCadence.WhenDrifted] and
+ *   [PerceiveCadence.EveryCycle] re-enter the next cycle at PERCEIVE, and
+ *   [RecallCadence.WithPerceive] re-runs RECALL beside it;
  *   [LearnCadence.WhenLesson] and [LearnCadence.EveryCycle] let a successful cycle store its
  *   deterministic lesson before the loop decides (AMPR-484, row N8).
  */
@@ -134,8 +135,9 @@ enum class GoalCheck {
  * has happened is a judgment, asked of the host seat's decision transport after each
  * executed cycle. This value says what the run does with that judgment. The `Record` values
  * **record and never act**; [PerceiveCadence.WhenDrifted] acts on the drift judgment in the
- * add-only direction — the next cycle re-enters at PERCEIVE rather than at OBSERVE — and
- * [PerceiveCadence.EveryCycle] re-enters there without asking. [LearnCadence.WhenLesson] acts
+ * add-only direction — the next cycle re-enters at PERCEIVE rather than at OBSERVE —
+ * [PerceiveCadence.WhenMoved] re-enters there whenever anything moved, without asking, and
+ * [PerceiveCadence.EveryCycle] re-enters there every cycle, without asking. [LearnCadence.WhenLesson] acts
  * on the lesson judgment the same way — a successful cycle stores its deterministic lesson
  * before the loop decides, and the close-time LEARN is untouched — and
  * [LearnCadence.EveryCycle] stores it without asking. The interfaces are sealed rather than
@@ -156,6 +158,10 @@ enum class GoalCheck {
  *   receptor's, carrying the lesson question too when [LearnCadence.Record] is on — plus
  *   **one PERCEIVE model call** on the host seat for every cycle whose verdict was
  *   `Violated` or `Undetermined`, and nothing more on a `Holds`.
+ * - [PerceiveCadence.WhenMoved] is **no decision call**, and **one PERCEIVE model call** on the
+ *   host seat for every cycle after which anything in the Field moved; nothing on a cycle after
+ *   which nothing did. Under [LearnCadence.Record] or [LearnCadence.WhenLesson] the lesson
+ *   question is still one decision call per executed cycle, in a request of its own.
  * - [PerceiveCadence.EveryCycle] is **one PERCEIVE model call per executed cycle** with no
  *   judge and no decision call.
  * - [RecallCadence.WithPerceive] is one more RECALL — store reads and corpus queries, no model
@@ -188,8 +194,8 @@ data class PhaseCadence(
 /**
  * When a hosted run's PERCEIVE runs again (AMPR-481, row N4; AMPR-483, rows N3 and N5).
  *
- * Sealed rather than an enum so the acting value — [WhenDrifted] — carries its threshold
- * without a breaking change. See [PhaseCadence] for the cost.
+ * Sealed rather than an enum so the acting values — [WhenDrifted] with its threshold, and
+ * [WhenMoved] — arrive without a breaking change. See [PhaseCadence] for the cost.
  *
  * Phase order is fixed (propel-loop invariant): a cadence chooses *where the next cycle
  * starts* — at PERCEIVE, or at OBSERVE as before — and never reorders or repeats a phase
@@ -277,6 +283,42 @@ sealed interface PerceiveCadence {
      * run that held, stopped, was declined or was cancelled never re-enters.
      */
     data object EveryCycle : PerceiveCadence
+
+    /**
+     * Re-enter the next cycle at PERCEIVE whenever anything in the Field moved, with no judge
+     * (AMPR-487; Miley's answer to AMPR-482's STOP, 2026-10-20). **The recommended first acting
+     * value.**
+     *
+     * AMPR-482 benched the drift question over a corpus of beside-the-goal and bears-on-the-goal
+     * changes. A self-reported judge was false-settled — left a change that bore on the goal
+     * unperceived — on about one bears call in three; the rule "re-perceive whenever anything
+     * moved" is never false-settled, and costs a PERCEIVE on 57% of the beside-the-goal changes.
+     * This is that rule as a cadence. After each executed cycle the run's drift receptor runs
+     * without a transport over the same [RunDrift] [WhenDrifted] judges, and its verdict is on
+     * the record as a `ProbeEvent.VerdictReached`, as under [WhenDrifted]:
+     *
+     * - a delta with nothing in it is `Holds`, and the next cycle re-enters at OBSERVE exactly
+     *   as under [OncePerRun];
+     * - a delta whose only entries are `PROTECTED` rows is `Violated` ("moved behind
+     *   sensitivity"), and any other non-empty delta is `Violated` ("moved: n changes"); the
+     *   next cycle re-enters at PERCEIVE, shown the world as it is now, with a RECALL beside it
+     *   under [RecallCadence.WithPerceive], and its PLAN is handed the rendered delta as the
+     *   "Observed since the last cycle" block;
+     * - a cycle with no two snapshots to fold — the Field could not be read — re-enters at
+     *   PERCEIVE too: an unchecked cell is not trusted.
+     *
+     * `decide` is never called for drift. [LearnCadence.Record] and [LearnCadence.WhenLesson]
+     * beside it still ask [RunQuestions.lessonWorthKeeping] on the host seat's transport, in a
+     * request of their own over the same state, after every executed cycle.
+     *
+     * Add-only, like [WhenDrifted]: no verdict ends the run, re-plans past the planner's empty
+     * answer, or touches `RunResult.status`; a run whose quota has tripped does not
+     * re-perceive, and a run that held, stopped, was declined or was cancelled never re-enters.
+     * `open` refuses this value with [FieldScope.Off] or on a host with no `FieldService` — a
+     * world that cannot move would re-perceive every cycle as unchecked — and needs no decision
+     * transport of its own.
+     */
+    data object WhenMoved : PerceiveCadence
 }
 
 /**
@@ -293,8 +335,9 @@ enum class RecallCadence {
     /**
      * Recall again whenever PERCEIVE runs again.
      *
-     * Effective under [PerceiveCadence.WhenDrifted] and [PerceiveCadence.EveryCycle], where a
-     * cycle can re-enter at PERCEIVE: RECALL then runs again inside that cycle, before OBSERVE,
+     * Effective under [PerceiveCadence.WhenMoved], [PerceiveCadence.WhenDrifted] and
+     * [PerceiveCadence.EveryCycle], where a cycle can re-enter at PERCEIVE: RECALL then runs
+     * again inside that cycle, before OBSERVE,
      * with the same query and scopes as at `open` (store reads and corpus queries, no model
      * call), and leaves one more `KnowledgeRecalled` on the record. Under every other
      * [PerceiveCadence] PERCEIVE runs once, so RECALL does too, and this value changes
@@ -351,14 +394,17 @@ sealed interface LearnCadence {
      * After each executed cycle [RunQuestions.lessonWorthKeeping] is asked on the host seat
      * exactly as under [Record] — in the receptor's request, beside the drift question when
      * [PerceiveCadence.Record] or [PerceiveCadence.WhenDrifted] asks that too, so it adds no
-     * call of its own — and the measured probability of `true` is read against [keepAbove]:
+     * call of its own; under [PerceiveCadence.WhenMoved], which asks no drift question, in a
+     * request of its own every cycle — and the measured probability of `true` is read against
+     * [keepAbove]:
      *
      * - at or above it, when the cycle's plan walk settled to a success, the host seat opens
      *   one LEARN bracket and every seat that ran a step in that cycle stores one
      *   `Knowledge.FromOutcome` through its own memory, tagged `cycle:<n>`;
      * - below it, nothing is stored and the cycle goes on as under [Record];
      * - a lesson judgment that is missing — the transport threw, answered without it, or the
-     *   drift receptor made no call because nothing moved — or that carries no measured
+     *   drift receptor under [PerceiveCadence.WhenDrifted] made no call because nothing moved —
+     *   or that carries no measured
      *   distribution stores nothing. A lesson is a claim, and the quiet direction is the safe
      *   one: an unchecked lesson is not kept, where an unchecked drift re-perceives.
      *

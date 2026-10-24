@@ -49,9 +49,16 @@ import link.socket.ampere.probe.Verdict
  * [moveAbove] is read from the constructor and appears as no constant anywhere in Ampere
  * (AMPR-422, Q5): the number is the consumer's, from `PerceiveCadence.WhenDrifted`.
  *
+ * With no [moveAbove] the receptor has no judge (`PerceiveCadence.WhenMoved`, AMPR-487 — the
+ * rule AMPR-482's STOP was answered with): the first two rules above are unchanged, and every
+ * other non-empty delta is [Verdict.Violated] as "moved: n changes", with no call. [reasoning]
+ * is never asked, so a host seat with no decision transport can run it, and [alsoAsk] must be
+ * empty — with no request of the receptor's own there is nothing for a question to ride in.
+ *
  * @property reasoning The host seat's reasoning unit, whose `decide` carries the seat's
  *   decision transport and records the judgment through the seat's door.
- * @property moveAbove The probability of `true` at or above which the verdict is `Violated`.
+ * @property moveAbove The probability of `true` at or above which the verdict is `Violated`,
+ *   or null for no judge: anything that moved is `Violated`.
  * @property clip How many characters of any one text reach the state the judge is shown
  *   (`RunPolicy.judgmentResultClip`).
  * @property alsoAsk Questions to carry in the same request beside the drift question, keyed
@@ -59,14 +66,17 @@ import link.socket.ampere.probe.Verdict
  */
 internal class DriftReceptor(
     private val reasoning: AgentReasoning,
-    private val moveAbove: Double,
+    private val moveAbove: Double?,
     private val clip: Int,
     private val alsoAsk: Map<String, Question> = emptyMap(),
 ) : Probe<RunDrift> {
 
     init {
-        require(moveAbove > 0.0 && moveAbove < 1.0) {
+        require(moveAbove == null || (moveAbove > 0.0 && moveAbove < 1.0)) {
             "moveAbove is a probability strictly between 0 and 1; got $moveAbove"
+        }
+        require(moveAbove != null || alsoAsk.isEmpty()) {
+            "a receptor with no judge makes no request, so nothing can ride in one; got ${alsoAsk.keys}"
         }
         require(clip > 0) { "a clipped result has at least one character; got $clip" }
         require(RunQuestions.PERCEPTION_DRIFT_ID !in alsoAsk) {
@@ -95,6 +105,11 @@ internal class DriftReceptor(
                     "which no judge off the device may read",
             )
         }
+        val threshold = moveAbove
+            ?: return Verdict.Violated(
+                "moved: ${delta.entryCount} ${if (delta.entryCount == 1) "change" else "changes"} " +
+                    "since cycle ${subject.cycle}",
+            )
 
         val response = try {
             reasoning.decide(
@@ -121,7 +136,7 @@ internal class DriftReceptor(
         val distribution = judgment.distribution
         if (judgment.source != ConfidenceSource.MEASURED || distribution == null) {
             return Verdict.Undetermined(
-                reason = "self-reported answer: no measured distribution to read against $moveAbove",
+                reason = "self-reported answer: no measured distribution to read against $threshold",
                 cause = UndeterminedCause.EVIDENCE_UNREADABLE,
             )
         }
@@ -132,10 +147,10 @@ internal class DriftReceptor(
             )
 
         val reading = "p(bears on goal) = ${bearsOnGoal.rounded()}"
-        return if (bearsOnGoal >= moveAbove) {
-            Verdict.Violated("$reading, at or above ${moveAbove.rounded()}")
+        return if (bearsOnGoal >= threshold) {
+            Verdict.Violated("$reading, at or above ${threshold.rounded()}")
         } else {
-            Verdict.Holds("$reading, below ${moveAbove.rounded()}")
+            Verdict.Holds("$reading, below ${threshold.rounded()}")
         }
     }
 
@@ -158,6 +173,17 @@ private val FieldDelta.movedBehindSensitivity: Boolean
         subjectsAdded.isEmpty() &&
         relationshipsAdded.isEmpty() &&
         protectedLeftOut == beliefsAdded.size + observationsAdded.size
+
+/** How many entries moved, `PROTECTED` ones included: what a judgeless verdict reports. */
+private val FieldDelta.entryCount: Int
+    get() = goalsChanged.size +
+        commitmentsOpened.size +
+        commitmentsResolved.size +
+        beliefsAdded.size +
+        observationsAdded.size +
+        actionsByOthers.size +
+        subjectsAdded.size +
+        relationshipsAdded.size
 
 /** A probability to two decimal places, for a verdict's reason. */
 private fun Double.rounded(): String = ((this * 100).roundToInt() / 100.0).toString()

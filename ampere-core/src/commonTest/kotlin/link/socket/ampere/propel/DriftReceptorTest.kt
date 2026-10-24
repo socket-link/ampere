@@ -52,6 +52,10 @@ import link.socket.ampere.probe.Verdict
  *   judgment reads two ways under two thresholds, which is what "no constant" means;
  * - a self-reported answer and a transport that throws are both undetermined and unreadable;
  * - a cancellation is not a verdict.
+ *
+ * AMPR-487: with no threshold the receptor has no judge (`PerceiveCadence.WhenMoved`). The
+ * first two rules hold as they are, anything else that moved is violated as "moved: n
+ * changes", and the transport is never asked.
  */
 class DriftReceptorTest {
 
@@ -207,12 +211,91 @@ class DriftReceptorTest {
     }
 
     // ========================================================================
+    // No judge (AMPR-487)
+    // ========================================================================
+
+    @Test
+    fun `with no judge an empty delta holds with no call`() = runTest {
+        val judge = ScriptedJudge(pTrue = 1.0)
+
+        val verdict = receptor(judge, moveAbove = null).evaluate(drift(emptyDelta()))
+
+        val holds = assertIs<Verdict.Holds>(verdict)
+        assertEquals("nothing moved since cycle 2", holds.reason)
+        assertEquals(0, judge.requests.size)
+    }
+
+    @Test
+    fun `with no judge a delta of only protected rows is moved behind sensitivity`() = runTest {
+        val judge = ScriptedJudge(pTrue = 0.0)
+        val delta = emptyDelta().copy(
+            beliefsAdded = listOf(belief(SECRET, Sensitivity.PROTECTED)),
+            protectedLeftOut = 1,
+        )
+
+        val verdict = receptor(judge, moveAbove = null).evaluate(drift(delta))
+
+        val violated = assertIs<Verdict.Violated>(verdict)
+        assertTrue(violated.reason.startsWith("moved behind sensitivity: 1 protected entry"), violated.reason)
+        assertTrue(!violated.reason.contains(SECRET), "nothing a protected row holds reaches the reason")
+        assertEquals(0, judge.requests.size)
+    }
+
+    @Test
+    fun `with no judge anything else that moved is violated and nobody is asked`() = runTest {
+        val judge = ScriptedJudge(pTrue = 0.0)
+        val one = emptyDelta().copy(beliefsAdded = listOf(belief("the uploader retries twice")))
+        val three = emptyDelta().copy(
+            beliefsAdded = listOf(belief("the uploader retries twice"), belief(SECRET, Sensitivity.PROTECTED)),
+            observationsAdded = listOf(observation("the queue drained", Sensitivity.PUBLIC)),
+            protectedLeftOut = 1,
+        )
+
+        val receptor = receptor(judge, moveAbove = null)
+        val single = assertIs<Verdict.Violated>(receptor.evaluate(drift(one)))
+        val mixed = assertIs<Verdict.Violated>(receptor.evaluate(drift(three)))
+
+        assertEquals("moved: 1 change since cycle 2", single.reason)
+        assertEquals(
+            "moved: 3 changes since cycle 2",
+            mixed.reason,
+            "a protected row beside a showable one is counted, and still never rendered",
+        )
+        assertEquals(0, judge.requests.size, "a judge that would have acquitted was never asked")
+        assertTrue(receptor.judgments.isEmpty(), "no request, so nothing handed back")
+    }
+
+    @Test
+    fun `with no judge a transport that would throw is never reached`() = runTest {
+        val delta = emptyDelta().copy(beliefsAdded = listOf(belief("the uploader retries twice")))
+
+        val verdict = receptor(BrokenJudge, moveAbove = null).evaluate(drift(delta))
+
+        assertIs<Verdict.Violated>(verdict, "no call, so nothing to be undetermined about")
+    }
+
+    @Test
+    fun `a receptor with no judge refuses a question to carry`() {
+        val reasoning = reasoning(ScriptedJudge(pTrue = 0.5))
+
+        assertEquals(ProbeId("perception-drift"), DriftReceptor(reasoning, moveAbove = null, clip = 400).id)
+        assertFailsWith<IllegalArgumentException> {
+            DriftReceptor(
+                reasoning,
+                moveAbove = null,
+                clip = 400,
+                alsoAsk = mapOf(RunQuestions.LESSON_WORTH_KEEPING_ID to RunQuestions.lessonWorthKeeping),
+            )
+        }
+    }
+
+    // ========================================================================
     // Fixture
     // ========================================================================
 
     private fun receptor(
         client: UpstreamDecisionClient,
-        moveAbove: Double,
+        moveAbove: Double?,
         alsoAsk: Map<String, Question> = emptyMap(),
     ): DriftReceptor = DriftReceptor(reasoning(client), moveAbove = moveAbove, clip = CLIP, alsoAsk = alsoAsk)
 

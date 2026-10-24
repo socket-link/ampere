@@ -294,8 +294,11 @@ internal class RosterRunHost(
      * [PerceiveCadence.WhenDrifted] ask what moved in the Field, so they need a Field to have
      * moved — a [FieldScope.Off] policy or a host built with no `FieldService` would leave
      * the drift question unasked every cycle, silently, for the same reason, and under
-     * `WhenDrifted` would re-perceive every cycle as unchecked. [PerceiveCadence.EveryCycle]
-     * asks nothing and needs nothing.
+     * `WhenDrifted` would re-perceive every cycle as unchecked. [PerceiveCadence.WhenMoved]
+     * (AMPR-487) reads what moved with no judge, so it needs the Field and not the transport:
+     * without a world to move, every cycle would re-perceive as unchecked, which is
+     * [PerceiveCadence.EveryCycle] under another name. [PerceiveCadence.EveryCycle] asks nothing
+     * and needs nothing.
      *
      * The last is a blank caller-supplied run id (AMPR-385 row H27). The id is the only
      * thing that joins the run's events, its task lifecycle and its outcome, and a blank
@@ -335,10 +338,15 @@ internal class RosterRunHost(
             }
         }
         val perceiveCadence = policy.cadence.perceive
+        // The drift cadences that ask the transport, and the ones that read the Field: every
+        // drift question needs a world, and only a judged one needs a judge (AMPR-487).
         val driftCadence = when (perceiveCadence) {
             PerceiveCadence.Record -> "PerceiveCadence.Record"
             is PerceiveCadence.WhenDrifted -> "PerceiveCadence.WhenDrifted"
-            PerceiveCadence.OncePerRun, PerceiveCadence.EveryCycle -> null
+            PerceiveCadence.OncePerRun, PerceiveCadence.EveryCycle, PerceiveCadence.WhenMoved -> null
+        }
+        val fieldCadence = driftCadence ?: "PerceiveCadence.WhenMoved".takeIf {
+            perceiveCadence == PerceiveCadence.WhenMoved
         }
         val lessonCadence = when (policy.cadence.learn) {
             LearnCadence.Record -> "LearnCadence.Record"
@@ -353,15 +361,15 @@ internal class RosterRunHost(
                     "opted into, never inherited"
             }
         }
-        if (driftCadence != null) {
+        if (fieldCadence != null) {
             require(policy.observe.field != FieldScope.Off) {
-                "$driftCadence asks whether the world drifted since PERCEIVE, and " +
+                "$fieldCadence asks whether the world drifted since PERCEIVE, and " +
                     "ObservePolicy.field is FieldScope.Off; a drift question needs a world to " +
                     "have drifted, so observe the Field (FieldScope.Goal or Full) or keep the " +
                     "cadence at OncePerRun"
             }
             require(field != null) {
-                "$driftCadence asks whether the world drifted since PERCEIVE, and " +
+                "$fieldCadence asks whether the world drifted since PERCEIVE, and " +
                     "this host has no FieldService to read it from; a drift question needs a " +
                     "world to have drifted, so build the host with a Field (rosterRunHost(field = …)) " +
                     "or keep the cadence at OncePerRun"

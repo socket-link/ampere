@@ -100,7 +100,11 @@ import link.socket.ampere.util.logWith
  * Every phase is bracketed on the host seat's door, and a step's work is bracketed
  * again on the seat that did it — so a run's EXECUTE is one span in the trace with the
  * seats' spans inside it. Every event carries [runId] on its envelope (F4, row H2),
- * which is the whole of what makes `ArcTraceProjection.project(runId)` the run.
+ * which is the whole of what makes `ArcTraceProjection.project(runId)` the run. Every
+ * bracket also carries the cycle it belongs to (`CognitivePhaseEvent.cycle`, AMPR-487):
+ * [charge]'s four at 1, a later cycle's PERCEIVE, RECALL, OBSERVE and PLAN at that cycle's
+ * number, EXECUTE, the after-cycle OBSERVE and a cycle's LEARN at the cycle just executed,
+ * and the close-time LEARN at [RunResult.cyclesUsed]'s value.
  *
  * Nothing here blocks a thread and nothing here imposes a timeout: the phase services
  * are reached through each seat's suspending reasoning unit rather than through
@@ -133,7 +137,9 @@ import link.socket.ampere.util.logWith
  * `ProbeSuite` over the host's door, so its verdict is on the record beside the judgment — and
  * the loop reads the verdict, in the add-only direction: a `Violated` or an `Undetermined`
  * re-enters the next cycle at PERCEIVE instead of OBSERVE, a `Holds` leaves the run exactly as
- * it is today. [PerceiveCadence.EveryCycle] re-enters there without asking. A cycle that
+ * it is today. [PerceiveCadence.WhenMoved] (AMPR-487) evaluates the same receptor with no judge,
+ * so anything that moved re-enters there and no decision call is made for drift;
+ * [PerceiveCadence.EveryCycle] re-enters there without asking at all. A cycle that
  * re-entered at PERCEIVE runs RECALL again under [RecallCadence.WithPerceive], and its PLAN is
  * handed what moved as the "Observed since the last cycle" block — the first thing OBSERVE has
  * ever handed PLAN. Phase order is fixed: re-entry chooses where a cycle starts, never the order
@@ -486,9 +492,11 @@ internal class RosterHostedRun(
      * (AMPR-483): the snapshot is taken at the top, so a re-perceive sees the world as it is
      * now, and the prior cell's [Idea] rides in `Perception.ideas` so the seat reads the world
      * against what it last concluded. What it produces replaces [perceptionCell].
+     *
+     * The bracket and the cell carry [cycle], the cycle this PERCEIVE opens (AMPR-487).
      */
-    private suspend fun perceive() {
-        host.phases.withPhase(CognitivePhase.PERCEIVE, runId) {
+    private suspend fun perceive(cycle: Int = cyclesUsed + 1) {
+        host.phases.withPhase(CognitivePhase.PERCEIVE, runId, cycle) {
             if (observesField) {
                 perceivedField = snapshotField("perceive")
                 val section = perceivedField?.asPerceptionSection(
@@ -502,14 +510,14 @@ internal class RosterHostedRun(
                 host.world.section = section?.let { "\n" + it + "\n" }
             }
             try {
-                perceiveWithin()
+                perceiveWithin(cycle)
             } finally {
                 host.world.section = null
             }
         }
     }
 
-    private suspend fun perceiveWithin() {
+    private suspend fun perceiveWithin(cycle: Int) {
         // The stack is built and on the record before anything reasons with it: one
         // `SparkAppliedEvent` per spark as the seat was constructed, and this
         // snapshot of what they added up to.
@@ -531,7 +539,7 @@ internal class RosterHostedRun(
         val idea = host.agent.reasoningUnit.evaluatePerception(perception)
         host.agent.rememberNewIdea(idea)
         ideas = listOf(idea)
-        perceptionCell = PhaseCell(value = idea, inputDigest = inputDigest, cycle = cyclesUsed + 1)
+        perceptionCell = PhaseCell(value = idea, inputDigest = inputDigest, cycle = cycle)
     }
 
     /**
@@ -560,9 +568,12 @@ internal class RosterHostedRun(
      * re-run PERCEIVE under [RecallCadence.WithPerceive] (AMPR-483, row N4) — the same query
      * and scopes each time, so what changes between two RECALLs of one run is what the stores
      * hold, not what was asked. What it finds replaces [recallCell].
+     *
+     * The bracket and the cell carry [cycle] (AMPR-487): the cycle about to plan, or for a
+     * resumed run the held cycle it finishes.
      */
-    private suspend fun recall() {
-        host.phases.withPhase(CognitivePhase.RECALL, runId) {
+    private suspend fun recall(cycle: Int = cyclesUsed + 1) {
+        host.phases.withPhase(CognitivePhase.RECALL, runId, cycle) {
             val recallPolicy = policy.recall
             val scopes = host.descriptor.recallScopes
             val context = host.agent.recallContextForRun(
@@ -604,7 +615,7 @@ internal class RosterHostedRun(
                     scopes.sorted().joinToString(","),
                     context.taskType,
                 ),
-                cycle = cyclesUsed + 1,
+                cycle = cycle,
             )
             // The publish result is deliberately not folded into the run, as in
             // `ProbeSuite`: the door logs a persist failure and reports it on the bus,
@@ -649,7 +660,7 @@ internal class RosterHostedRun(
      * different fact from a phase the run skipped, and only the first one is true here.
      */
     private suspend fun observe(cycle: Int) {
-        host.phases.withPhase(CognitivePhase.OBSERVE, runId) {
+        host.phases.withPhase(CognitivePhase.OBSERVE, runId, cycle) {
             verifierSuite()?.evaluate(
                 subjectId = runId,
                 subject = RunObservation(
@@ -718,11 +729,11 @@ internal class RosterHostedRun(
      * after the work already done as the "Observed since the last cycle" block. Null, which
      * is every other cycle, renders nothing. A re-plan under the cap is handed the same text.
      */
-    private suspend fun planCycle(observed: String? = null): Unit =
-        host.phases.withPhase(CognitivePhase.PLAN, runId) {
+    private suspend fun planCycle(observed: String? = null) {
+        val cycle = cyclesUsed + 1
+        host.phases.withPhase(CognitivePhase.PLAN, runId, cycle) {
             aboutToShow(results)
             if (observed != null) shownExternal = true
-            val cycle = cyclesUsed + 1
             val bounded = withinBounds(generatePlan(cycle, ideas, observed), cycle, observed)
             val generated = bounded.plan
             host.agent.rememberNewPlan(generated)
@@ -765,6 +776,7 @@ internal class RosterHostedRun(
                 }
             }
         }
+    }
 
     private suspend fun generatePlan(cycle: Int, ideas: List<Idea>, observed: String?): Plan =
         host.agent.reasoningUnit.generatePlan(
@@ -997,7 +1009,7 @@ internal class RosterHostedRun(
         resumePoint = null
         cycleSeats.clear()
         lessonJudgment = null
-        val execution = host.phases.withPhase(CognitivePhase.EXECUTE, runId) {
+        val execution = host.phases.withPhase(CognitivePhase.EXECUTE, runId, cyclesUsed) {
             // The summary is the walk's (PlanExecutor's default), not the host seat's: the
             // seat is the door's identity on every pair, not an executor (AMPR-443).
             stepWalker().execute(
@@ -1082,7 +1094,8 @@ internal class RosterHostedRun(
      *
      * Under [PerceiveCadence.WhenDrifted] (AMPR-483) the drift question is the
      * [DriftReceptor]'s, and the one answer the loop reads: see [askReceptor]. Under
-     * [PerceiveCadence.EveryCycle] nothing is asked, but a run that observes still folds the
+     * [PerceiveCadence.WhenMoved] (AMPR-487) the receptor runs with no judge in the same place.
+     * Under [PerceiveCadence.EveryCycle] nothing is asked, but a run that observes still folds the
      * two snapshots here so the re-perceiving cycle's PLAN can be shown what moved.
      */
     private suspend fun assess() {
@@ -1096,10 +1109,11 @@ internal class RosterHostedRun(
         val perceiveCadence = policy.cadence.perceive
         val asksReceptor = perceiveCadence == PerceiveCadence.Record ||
             perceiveCadence is PerceiveCadence.WhenDrifted ||
+            perceiveCadence == PerceiveCadence.WhenMoved ||
             asksLesson
         if (!asksGoal && verifier == null && !observes && !asksReceptor) return
 
-        host.phases.withPhase(CognitivePhase.OBSERVE, runId) {
+        host.phases.withPhase(CognitivePhase.OBSERVE, runId, cyclesUsed) {
             if (observes) observedField = snapshotField("observe")
             if (asksGoal || verifier != null) {
                 val state = RunObservation(
@@ -1161,6 +1175,12 @@ internal class RosterHostedRun(
      * for the receptor to evaluate: the run logs once, treats the cycle as unchecked and
      * re-enters at PERCEIVE (convict-but-not-acquit), and the lesson question, if on, goes
      * alone over an empty `changes` as it does under `Record`.
+     *
+     * Under [PerceiveCadence.WhenMoved] (AMPR-487) the [DriftReceptor] is evaluated the same
+     * way, in the same suite, with no judge: anything that moved is `Violated` and re-enters at
+     * PERCEIVE, nothing moved is `Holds`, and no model is asked about drift. The lesson question,
+     * when the learn cadence asks it, then goes alone in a request of its own over the same
+     * [RunDrift] — so under `WhenMoved` it is asked after every executed cycle, moved or not.
      */
     private suspend fun askReceptor() {
         val (delta, names) = foldDrift()
@@ -1170,13 +1190,14 @@ internal class RosterHostedRun(
         } else {
             emptyMap()
         }
-        val asksDrift = perceiveCadence == PerceiveCadence.Record || perceiveCadence is PerceiveCadence.WhenDrifted
-        if (asksDrift && delta == null && !driftUnavailableLogged) {
+        val acts = perceiveCadence is PerceiveCadence.WhenDrifted || perceiveCadence == PerceiveCadence.WhenMoved
+        val readsDrift = acts || perceiveCadence == PerceiveCadence.Record
+        if (readsDrift && delta == null && !driftUnavailableLogged) {
             driftUnavailableLogged = true
             logWith("RosterHostedRun").w {
-                "Run $runId has no Field snapshot to fold, so perception_drift cannot be asked; " +
+                "Run $runId has no Field snapshot to fold, so drift cannot be read; " +
                     "the Field could not be read at PERCEIVE or after a cycle" +
-                    if (perceiveCadence is PerceiveCadence.WhenDrifted) ", and an unchecked cycle re-perceives" else ""
+                    if (acts) ", and an unchecked cycle re-perceives" else ""
             }
         }
 
@@ -1198,7 +1219,24 @@ internal class RosterHostedRun(
             }
             return
         }
-        if (perceiveCadence is PerceiveCadence.WhenDrifted) reentryAtPerceive = true
+        if (perceiveCadence == PerceiveCadence.WhenMoved && delta != null) {
+            // No judge, so no request and nothing shown to a model (AMPR-487): the verdict is
+            // whether anything moved. The lesson question, if asked, goes on below on its own.
+            val receptor = DriftReceptor(
+                reasoning = host.agent.reasoningUnit,
+                moveAbove = null,
+                clip = policy.judgmentResultClip,
+            )
+            val verdict = evaluateReceptor(receptor, runDrift(delta, names)) ?: return
+            if (verdict is Verdict.Holds) {
+                perceivedField = observedField
+            } else {
+                reentryAtPerceive = true
+                observedSinceLastCycle = delta.asObservedText(policy.observe, names)
+            }
+        } else if (acts) {
+            reentryAtPerceive = true
+        }
 
         val questions = buildMap<String, Question> {
             if (perceiveCadence == PerceiveCadence.Record && delta != null) {
@@ -1413,7 +1451,7 @@ internal class RosterHostedRun(
         aboutToShow(priorResults)
         val argumentGate = StepArgumentGate.forStep(step, policy.planGate)
         val result = try {
-            seat.phases.withPhase(CognitivePhase.EXECUTE, runId) {
+            seat.phases.withPhase(CognitivePhase.EXECUTE, runId, cyclesUsed) {
                 withContext(argumentGate ?: EmptyCoroutineContext) {
                     dispatchPlanStep(
                         agent = seat.agent,
@@ -1643,7 +1681,7 @@ internal class RosterHostedRun(
         )
 
         if (resolution is HoldResolution.Completed) {
-            recall()
+            recall(cycle = record.cycle)
             observe(cycle = record.cycle)
         }
 
@@ -1775,7 +1813,7 @@ internal class RosterHostedRun(
 
         val cycle = cyclesUsed
         val cyclePlan = gatedPlan
-        host.phases.withPhase(CognitivePhase.LEARN, runId) {
+        host.phases.withPhase(CognitivePhase.LEARN, runId, cycle) {
             cycleSeats.mapNotNull { seats[it] }.forEach { seat ->
                 seat.memory?.storeKnowledge(
                     knowledge = seat.agent.extractKnowledgeFromOutcome(outcome, goal, cyclePlan),
@@ -1855,7 +1893,7 @@ internal class RosterHostedRun(
      * before it — and the resumed run's LEARN is the one that closes it.
      */
     private suspend fun learn(cancelled: Boolean) {
-        host.phases.withPhase(CognitivePhase.LEARN, runId) {
+        host.phases.withPhase(CognitivePhase.LEARN, runId, cyclesUsed) {
             learnWithin(cancelled)
         }
     }
