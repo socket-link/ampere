@@ -51,9 +51,10 @@ in `ampere-core` alongside `ProcessGroups`, not in `ampere-cli`.
   its address.
 - Callers: `GitCliProvider.execute`, `GitHubCliProvider.executeGh`,
   `ProcessGroupGitRunner` and `GhMergeRequestLookup` (the reconciliation pass's git and
-  `gh`), `ToolRunTests.jvm.kt` (via `run`); `StdioProcessHandler.jvm.kt` and
-  `ampere-cli`'s `AmpereHelperProcess`, the on-device model helper (AMPR-375) (via `start`,
-  long-lived).
+  `gh`), `ToolRunTests.jvm.kt` and `GitWorkspaceObserver` (the harness executor's audit,
+  AMPR-493) (via `run`); `StdioProcessHandler.jvm.kt`, `StdioAcpTransport` (the ACP coding
+  harness, AMPR-493) and `ampere-cli`'s `AmpereHelperProcess`, the on-device model helper
+  (AMPR-375) (via `start`, long-lived).
 - `ampere-core/src/jvmTest/.../agents/execution/process/ProcessGroupsTest.kt` — behaviour
   pinned against real processes.
 

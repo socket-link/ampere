@@ -720,12 +720,15 @@ class ToolExecutionEngine(
     /**
      * The `Executor.id` that performs [tool] when this engine dispatches it (AMPR-443).
      *
-     * A [FunctionTool] runs through the injected [executor]. An [McpTool] runs through the MCP
-     * arm, which is not an [Executor] but does the same job, and is named by
-     * [MCP_EXECUTOR_ID]. Never [actorId]: the performer and the decider are two parties.
+     * A [FunctionTool] runs through the injected [executor], which names its performer for the
+     * tool itself ([Executor.performerFor], AMPR-491): its own id, or — for a
+     * [RoutedExecutor][link.socket.ampere.agents.execution.executor.RoutedExecutor] — the id of
+     * the executor it routes the tool to. An [McpTool] runs through the MCP arm, which is not
+     * an [Executor] but does the same job, and is named by [MCP_EXECUTOR_ID]. Never [actorId]:
+     * the performer and the decider are two parties.
      */
     private fun performerOf(tool: Tool<*>): ExecutorId = when (tool) {
-        is FunctionTool<*> -> executor.id
+        is FunctionTool<*> -> executor.performerFor(tool)
         is McpTool -> MCP_EXECUTOR_ID
     }
 

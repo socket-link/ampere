@@ -51,4 +51,16 @@ sealed interface Executor {
         request: ExecutionRequest<*>,
         tool: Tool<*>,
     ): Flow<ExecutionStatus>
+
+    /**
+     * The `Executor.id` that will perform [tool] when this executor is asked to [execute] it
+     * (AMPR-491).
+     *
+     * [id] for every executor that does its own work, which is the default. A composite
+     * executor — [RoutedExecutor], which sends each tool to the executor bound for it —
+     * answers with the id of the executor it routes to, so that what `ToolExecutionEngine`
+     * stamps on the tool-event pair, the dispatched context and the outcome row names the
+     * performer (AMPR-443) rather than the router in front of it.
+     */
+    fun performerFor(tool: Tool<*>): ExecutorId = id
 }

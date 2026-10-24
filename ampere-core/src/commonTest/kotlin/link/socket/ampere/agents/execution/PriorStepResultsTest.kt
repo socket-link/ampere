@@ -9,6 +9,8 @@ import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.outcome.ContentOrigin
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.outcome.StepOutcome
+import link.socket.ampere.agents.execution.results.ExecutionResult
+import link.socket.ampere.agents.execution.results.ExecutionResultCodeChanges
 
 /**
  * AMPR-408: what a plan's earlier steps produced, as prompt text.
@@ -255,6 +257,44 @@ class PriorStepResultsTest {
         assertContains(described, "Unresolved reference: frobnicate")
         assertContains(described, "src/Thing.kt")
     }
+
+    @Test
+    fun `a code change renders its files and the harness's own account of the change`() {
+        val outcome = codeChanged(
+            ExecutionResult(
+                codeChanges = ExecutionResultCodeChanges(
+                    filesChanged = emptyList(),
+                    commitMessage = "",
+                    diffSummary = "Renamed frobnicate to frob and updated its two callers.",
+                ),
+                compilation = null,
+                linting = null,
+                tests = null,
+            ),
+        )
+
+        assertEquals(
+            "changed files: src/Thing.kt, src/Caller.kt\nRenamed frobnicate to frob and updated its two callers.",
+            outcome.describeResult(),
+        )
+    }
+
+    @Test
+    fun `a code change with no account renders only its files`() {
+        val outcome = codeChanged(ExecutionResult(codeChanges = null, compilation = null, linting = null, tests = null))
+
+        assertEquals("changed files: src/Thing.kt, src/Caller.kt", outcome.describeResult())
+    }
+
+    private fun codeChanged(validation: ExecutionResult) = ExecutionOutcome.CodeChanged.Success(
+        executorId = "opencode",
+        ticketId = "ticket",
+        taskId = "task",
+        executionStartTimestamp = epoch,
+        executionEndTimestamp = epoch,
+        changedFiles = listOf("src/Thing.kt", "src/Caller.kt"),
+        validation = validation,
+    )
 
     private fun success(
         description: String,
