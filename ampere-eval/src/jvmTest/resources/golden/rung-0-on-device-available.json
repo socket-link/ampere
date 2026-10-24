@@ -52,7 +52,7 @@
                 },
                 "tier": "LOW",
                 "estimatedWattCost": 0.0,
-                "candidateCount": 31,
+                "candidateCount": 40,
                 "runnerUpProvider": "Google",
                 "runnerUpWattCost": 0.007,
                 "savingsVsRunnerUp": 0.007,
@@ -62,5 +62,5 @@
         }
     ],
     "droppedEventCount": 0,
-    "producerVersion": "0.17.0"
+    "producerVersion": "0.23.0"
 }
