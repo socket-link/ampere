@@ -13,7 +13,10 @@ import link.socket.ampere.plug.PlugId
  *
  * @property name A symbolic handle the Plug uses to refer to this wire, e.g.
  *   `"calendar"`. Mirrors [link.socket.ampere.plug.McpServerDependency.name].
- *   Required because a Plug can need two Links of the same [transport].
+ *   Required because a Plug can need two Links of the same [transport]. It
+ *   takes part in matching: a Link minted for a requirement
+ *   ([LinkId.forRequirement]) answers only a requirement of the same name, so
+ *   Plugs share such a Link by declaring the same name.
  * @property minimumScope The canon types that must be permitted for the Plug to
  *   function. A Link may allow more; it may not allow less.
  * @property role Which side the Plug acts as. Checked against the transport's

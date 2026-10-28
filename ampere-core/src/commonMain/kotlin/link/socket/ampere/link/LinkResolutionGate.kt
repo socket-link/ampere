@@ -22,17 +22,31 @@ package link.socket.ampere.link
  * 3. **Direction** — the Link points the wrong way.
  * 4. **Scope** — the Link points the right way but may not carry these types.
  *
- * When several Links share a transport, every candidate is tried and the first
- * one that passes wins. If none passes, the failure reported is the *first
- * candidate's*, in list order, so the result is deterministic.
+ * ## Which Links are candidates
+ *
+ * A candidate has the requirement's transport and answers to its name. A Link
+ * minted for a requirement ([LinkId.forRequirement], so it carries a
+ * [Link.requirementName]) answers only a requirement of that name; an opaque
+ * Link answers any requirement of its transport. Without the name, a Plug whose
+ * own `native_framework:workspace` Link was missing was asked to consent to
+ * `native_framework:calendar`, the first Link of the transport in the store,
+ * and a grant on another Plug's Link could resolve it.
+ *
+ * Candidates are tried in a fixed order: the Link minted for this requirement
+ * first, then the opaque ones, each group in list order. The first that passes
+ * wins. If none passes, the failure reported is the *first candidate's*, so the
+ * result is deterministic and names the Plug's own Link when it has one.
  *
  * ## Ungranted versus missing
  *
  * A Link the Plug was never granted is invisible: it cannot satisfy the
  * requirement. It is not, however, absent, and the two are reported apart.
- * [LinkResolutionFailure.MissingLink] means nothing of the transport exists at
- * all; [LinkResolutionFailure.UngrantedLink] means one does and carries its
- * [LinkId], so a caller can ask for consent instead of re-deriving the Link.
+ * [LinkResolutionFailure.UngrantedLink] means a candidate exists that would
+ * resolve once granted, and carries its [LinkId] so a caller can ask for consent
+ * instead of re-deriving the Link. [LinkResolutionFailure.MissingLink] means no
+ * candidate would: none exists, or every one would still fail a check. Granting
+ * a Link that `check` rejects records a grant that can never pass, so the gate
+ * never asks for one.
  */
 object LinkResolutionGate {
 
@@ -42,12 +56,12 @@ object LinkResolutionGate {
         grants: LinkGrants,
         platform: PlatformTarget,
     ): LinkResolution {
-        val matchingTransport = candidates.filter { it.transport == requirement.transport }
+        val matching = candidatesFor(requirement, candidates)
 
         // A Link the Plug was never granted is not a candidate at all — it is
         // invisible, not rejected. Revoked grants stay visible so the failure
         // can say "revoked" rather than "missing".
-        val visible = matchingTransport.filter { link ->
+        val visible = matching.filter { link ->
             grants.grantFor(link.id) != null
         }
 
@@ -55,7 +69,7 @@ object LinkResolutionGate {
             if (requirement.optional) return LinkResolution.Skipped(requirement)
             return LinkResolution.Failed(
                 requirement = requirement,
-                failure = nothingVisible(requirement, matchingTransport, grants, platform),
+                failure = nothingVisible(requirement, matching, grants, platform),
             )
         }
 
@@ -72,29 +86,33 @@ object LinkResolutionGate {
     }
 
     /**
+     * The Links that may satisfy [requirement], in the order they are tried:
+     * the one minted for it, then the opaque ones of its transport.
+     */
+    private fun candidatesFor(requirement: LinkRequirement, links: List<Link>): List<Link> {
+        val (minted, opaque) = links
+            .filter { link -> link.transport == requirement.transport }
+            .filter { link -> link.requirementName == null || link.requirementName == requirement.name }
+            .partition { link -> link.requirementName != null }
+        return minted + opaque
+    }
+
+    /**
      * The failure to report when no candidate is visible to this Plug.
      *
-     * Nothing of the transport exists at all — a misconfiguration, or a
-     * platform without this wire — and there is no Link to name. Otherwise
-     * every candidate is ungranted, which is a consent question, and the
-     * caller gets the [LinkId] it would have to ask about.
-     *
-     * With several ungranted candidates the one reported is the first, in list
-     * order, that *would* resolve once granted — so acting on the answer
-     * actually satisfies the requirement. If none would, the first candidate in
-     * list order stands in, keeping the gate's determinism rule intact.
+     * The first candidate, in [candidatesFor] order, that *would* resolve once
+     * granted is the consent question, and the caller gets the [LinkId] to ask
+     * about. With no such candidate the requirement is missing, whether nothing
+     * answers to it at all or everything that does would still fail a check:
+     * there is no Link to name whose grant would help.
      */
     private fun nothingVisible(
         requirement: LinkRequirement,
-        matchingTransport: List<Link>,
+        matching: List<Link>,
         grants: LinkGrants,
         platform: PlatformTarget,
     ): LinkResolutionFailure {
-        val grantable = matchingTransport.firstOrNull { link ->
-            check(requirement, link, grants, platform) == null
-        }
-
-        val ungranted = grantable ?: matchingTransport.firstOrNull()
+        val grantable = matching.firstOrNull { link -> check(requirement, link, grants, platform) == null }
             ?: return LinkResolutionFailure.MissingLink(
                 requirementName = requirement.name,
                 transport = requirement.transport,
@@ -103,7 +121,7 @@ object LinkResolutionGate {
 
         return LinkResolutionFailure.UngrantedLink(
             requirementName = requirement.name,
-            linkId = ungranted.id,
+            linkId = grantable.id,
         )
     }
 

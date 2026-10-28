@@ -7,7 +7,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/plug/PlugManifest.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/Links.sq
 related: [DomainCanon, PlugPermissions, EventSerialBus]
-last_verified: 2026-08-30
+last_verified: 2026-10-27
 ---
 
 # Link Layer
@@ -20,8 +20,9 @@ data-link layer. It carries a `Transport` (the wire), a `LinkDirection`
 (what may flow), and a `CredentialRef` (a pointer, never a secret).
 
 The grammar: *a Plug connects through a Link and powers Arcs.* A Plug declares
-`LinkRequirement`s — kinds of wire — and `LinkResolutionService` matches them to
-concrete Links at **Arc execution time**.
+`LinkRequirement`s — named kinds of wire — and `LinkResolutionService` matches
+them to concrete Links at **Arc execution time**, by transport and, for a Link
+minted for one requirement, by name.
 
 ## Why it exists
 
@@ -49,7 +50,7 @@ platform), exposed as `canProvide`/`canConsume` flags.
 ## Where it lives
 
 - `link/Link.kt` — `Link`, `EgressClass`, `CredentialRef`.
-- `link/LinkId.kt` — the shared identifier (moved here from `mcp/` in AMPR-223).
+- `link/LinkId.kt` — the shared identifier (moved here from `mcp/` in AMPR-223), and `LinkId.forRequirement`, the `<transport>:<name>` form a Link minted for one requirement carries.
 - `link/Transport.kt` — `Transport`, `PlatformTarget`, `TransportCapability`, `TransportRole`, and the capability table.
 - `link/LinkDirection.kt` — `LinkDirection`, `LinkOperation` (Perceive/Execute).
 - `link/LinkRequirement.kt` — `LinkRequirement`, `LinkResolution`, `ResolvedLinks`.
@@ -68,8 +69,9 @@ platform), exposed as `canProvide`/`canConsume` flags.
 - **Resolution never throws.** A missing Link is `Result.failure(LinkResolutionException(...))` carrying typed failures. `LinkResolutionGate` returns a sealed result and is side-effect-free.
 - **Revoked beats granted**, matching `PlugPermissionGate`. `LinkResolutionGate` checks revocation *first*, then transport capability, then direction, then scope — a revoked Link must not produce a scope-shaped error.
 - **Link revocation cascades; grant revocation does not.** Revoking a Link revokes every Plug's grant on it and reports the affected plug ids. Revoking one Plug's grant leaves the others working.
-- **A Link the Plug was never granted is invisible, not rejected** — it cannot satisfy the requirement, but it is reported as `UngrantedLink` carrying its `LinkId`, so a caller can drive just-in-time consent without re-deriving the Link. `MissingLink` means no Link of the transport exists at all. A *revoked* grant stays visible so the failure can say "revoked".
-- **The ungranted Link reported is one a grant would actually fix** — with several ungranted candidates, the first (in list order) that would resolve once granted; the first candidate overall if none would.
+- **A Link minted for a requirement answers only that requirement's name.** `LinkId.forRequirement` writes `<transport>:<name>`, `Link.requirementName` reads it back, and the gate matches such a Link only to a requirement of that name; an opaque id matches by transport alone. The name is derived from the id, never stored, so every row already written in that form (Socket's `NativeLinkSeeder` writes nothing else) is named with no migration. Plugs share a minted Link by declaring the same requirement name. A requirement's own minted Link is tried before any opaque one (AMPR-502).
+- **A Link the Plug was never granted is invisible, not rejected** — it cannot satisfy the requirement, but it is reported as `UngrantedLink` carrying its `LinkId`, so a caller can drive just-in-time consent without re-deriving the Link. A *revoked* grant stays visible so the failure can say "revoked".
+- **`UngrantedLink` names only a Link a grant would actually fix** — the first candidate (own Link, then opaque ones, each in list order) that would resolve once granted. When none would, the failure is `MissingLink`: no Link answers the requirement, or every one that does would still fail a check. A grant on a Link the gate rejects can never pass, so the gate never asks for one (AMPR-502).
 - **Transport capability is consulted before dispatch.** A consumer-role requirement on a transport whose platform capability is false fails with `TransportUnsupported`.
 - **Every resolution outcome reaches the bus.** A Plug that quietly does nothing because its Link was revoked is the opacity the glass brain exists to prevent.
 - **`Link` and `LinkResolutionFailure` are wire types** — stable `@SerialName`s; `Links.link_json` and trace payloads both depend on them.
@@ -79,6 +81,7 @@ platform), exposed as `canProvide`/`canConsume` flags.
 ## Common operations
 
 - **Declare a requirement** — add a `LinkRequirement(name, transport, direction, minimumScope)` to `PlugManifest.requiredLinks`. Names must be unique within a manifest, and scope must be non-empty and drawn from the Plug's declared canon types; `PlugManifestValidator` enforces all three.
+- **Mint a Link for one requirement** — give it `LinkId.forRequirement(requirement)`. It then answers only requirements of that name, in any Plug. A Link meant to serve differently named requirements (one Google OAuth Link for `calendar` and `mail`) takes an opaque id instead.
 - **Resolve at execution time** — `linkResolutionService.resolve(plugId, manifest)` → `ResolvedLinks`, indexed by requirement name.
 - **Check an operation against a resolved Link** — `LinkResolutionGate.permits(link, LinkOperation.PERCEIVE)`.
 - **Grant / revoke** — `service.grant(plugId, linkId)`, `service.revokeGrant(plugId, linkId)`, `service.revokeLink(linkId)` (cascading).
@@ -93,3 +96,6 @@ platform), exposed as `canProvide`/`canConsume` flags.
 - **Treating `UngrantedLink` as a configuration error.** It is the consent question — a Plug's first use of a seeded Link always lands there. Asking, recording the grant, and re-resolving is the remedy.
 - **Treating `MissingLink` as an error to throw.** Every resolution failure is a consent-shaped fact the user may be able to fix; it belongs in a `Result` and on the bus.
 - **Checking scope before revocation.** The reader is sent looking in the wrong place entirely.
+- **Matching a requirement by transport alone.** Every `NATIVE_FRAMEWORK` requirement then matches every `NATIVE_FRAMEWORK` Link: a Plug whose own Link is missing is asked to consent to the first stranger in the store (Socket showed "Calendar — used by Workspace"), and canon-external Plugs, whose empty `minimumScope` passes every scope check, resolve to each other's Links (AMPR-502).
+- **Reporting `UngrantedLink` for a Link that fails `check`.** The allow sheet's "yes" records a grant that is rejected on the very next resolution and misstates what the Plug reaches. Report `MissingLink`.
+- **Minting a `<transport>:<name>` id for a Link meant to be shared across names.** The gate reads the suffix as a requirement name, so `oauth_rest:google` would answer only a requirement named `google`, never `calendar` or `mail`.
