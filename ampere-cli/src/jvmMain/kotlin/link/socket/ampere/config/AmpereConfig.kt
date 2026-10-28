@@ -2,6 +2,7 @@ package link.socket.ampere.config
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import link.socket.ampere.agents.execution.executor.HarnessConfig
 
 /**
  * Root configuration for an Ampere environment.
@@ -25,6 +26,10 @@ import kotlinx.serialization.Serializable
  *   - role: qa-tester
  *
  * goal: "Build a user authentication system"
+ *
+ * harnesses:
+ *   opencode:
+ *     binary: opencode
  * ```
  */
 @Serializable
@@ -47,6 +52,13 @@ data class AmpereConfig(
 
     /** Optional MCP server configuration for external tool integration */
     val mcp: McpServersConfig? = null,
+
+    /**
+     * Coding harnesses bound behind the tools they name, keyed by name (AMPR-497). Each is an
+     * ACP agent the CLI routes those tools to, working in [workspace]; see [HarnessConfig]
+     * for an entry's fields. Empty, the default, routes nothing.
+     */
+    val harnesses: Map<String, HarnessConfig> = emptyMap(),
 )
 
 /**

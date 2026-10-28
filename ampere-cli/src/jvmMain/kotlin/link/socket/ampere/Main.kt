@@ -147,7 +147,7 @@ fun main(args: Array<String>) {
         rootCommand
             .subcommands(
                 ThreadCommand(api.threads),
-                StatusCommand(api),
+                StatusCommand(api, context.harnesses, context.harnessError),
                 OutcomesCommand(api.outcomes),
                 KnowledgeCommand(api.knowledge),
                 TraceCommand(api.events),

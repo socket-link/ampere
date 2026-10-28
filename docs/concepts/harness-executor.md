@@ -64,7 +64,12 @@ Three pressures fix the shape:
   statuses, the prompt, the before/after snapshot contract.
 - `ampere-core/src/jvmMain/.../executor/acp/StdioAcpTransport.kt` — the subprocess, through
   `ProcessGroups.start`; `GitWorkspaceObserver.kt` — `git status --porcelain -z` plus a
-  content digest; `../executor/OpenCodeExecutor.kt` — `openCode(...)`, id `opencode`.
+  content digest; `../executor/OpenCodeExecutor.kt` — `openCode(...)`, id `opencode`;
+  `../executor/HarnessConfig.kt` — one `harnesses:` YAML entry, `build` into `AcpCodeExecutor`s
+  and `routedOver` a default (AMPR-497).
+- `ampere-core/src/jvmMain/.../api/AmpereConfigYaml.kt` — `harnessesFromYaml(path)`, the SDK's
+  YAML route. The CLI reads its own `ampere-cli/.../config/AmpereConfig.kt` (`harnesses:`);
+  `AmpereContext` builds `executor` and `harnesses` from it, `StatusCommand` asks each its health.
 - `agents/execution/tools/ToolHarnessCodeChange.kt` — `harness_code_change`, the tool a
   planner nominates; its own function fails `TOOL_UNAVAILABLE` so an unbound declaration
   says so.
@@ -114,6 +119,13 @@ Three pressures fix the shape:
 - **No ACP type reaches an `ExecutionOutcome`.** Outcome variants stay tool-agnostic
   (MemoryProvenance); the harness's account rides in
   `validation.codeChanges.diffSummary`, which `describeResult()` renders for the next step.
+- **No section, no router.** A config with no `harnesses:` entries routes over nothing, and
+  `routedOver` returns the default executor itself — the CLI's `FunctionExecutor`, not an empty
+  `RoutedExecutor`. A section that cannot be bound (a problem in an entry, two entries on one
+  tool id, an unset `${NAME}`) binds no harness at all, and says why.
+- **Secrets come from the environment.** An `environment:` value written `${NAME}` is read from
+  the process environment when the executor is built; an unset name is an error naming the
+  variable, never a value. No harness's environment is logged.
 - **Nothing in `propel/` changes.** The router plugs into the existing `executor` parameter
   of `rosterRunHost` and `Ampere.fromEnvironment`; a hosted seat carries no workspace, so the
   harness is bound to its checkout at construction and a request's workspace wins when
@@ -132,6 +144,22 @@ Three pressures fix the shape:
   // the doer seat's RoleConfig.tools includes HARNESS_CODE_CHANGE_TOOL_ID, and the run's
   // `tools` includes ToolHarnessCodeChange(); the planner nominates `<doer>/harness_code_change`.
   ```
+- **Bind OpenCode from YAML, for the CLI** — the same router, built by `AmpereContext` over
+  `FunctionExecutor.create()` and bound to the CLI's workspace; `ampere status` lists each
+  harness with its health:
+  ```yaml
+  harnesses:
+    opencode:                       # `opencode acp`, recorded as `opencode`
+      binary: /opt/homebrew/bin/opencode
+      environment:
+        OPENCODE_API_KEY: ${OPENCODE_API_KEY}
+    my-agent:                       # any ACP agent, recorded under its key
+      kind: acp
+      binary: my-agent
+      tools: [scout/harness_code_change]
+  ```
+  An SDK consumer reads the same section with `harnessesFromYaml(path)` and hands
+  `.routedOver(FunctionExecutor.create(), workspace)` to `Ampere.fromEnvironment(executor = …)`.
 - **Narrow what the harness may write** — stack a `Spark` with a `fileAccessScope` on the
   seat; the request's scope reaches the fence unchanged (AMPR-414).
 - **Let the harness run shell commands** — `HarnessPolicy(shell = ShellAccess.Allow)`.
@@ -170,5 +198,11 @@ Three pressures fix the shape:
   engine publish it.
 - *Publishing the agent's message chunks as progress.* They produce no status on purpose;
   the harness's own account rides in the outcome's `diffSummary`.
+- *Adding a CLI config key to `api/AmpereConfigYaml.kt`.* That file is the SDK's `fromYaml`;
+  the CLI parses `ampere-cli/.../config/AmpereConfig.kt` through `ConfigParser`, so a section
+  only core knows about never reaches `AmpereContext`.
+- *Resolving a harness's secrets at parse time.* The parsed entry keeps `${NAME}` as written;
+  only `toExecutor` reads the environment, so a parsed config can be printed or re-encoded
+  without carrying a key.
 - *A `commonMain` subprocess.* `ProcessGroups` is JVM; the common half must stay behind
   `AcpTransport`, or the module stops compiling for Android, iOS, JS and wasmJs.

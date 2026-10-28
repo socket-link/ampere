@@ -172,6 +172,11 @@ System-wide status overview:
 ampere status
 ```
 
+When the configuration binds coding harnesses (see [Coding Harnesses](#coding-harnesses)),
+`status` ends with one line per harness: its id, its binary, and `available (<version>)` or
+`unavailable: <reason>`. Asking a harness its health starts the agent, so a harness that is
+installed but cannot start says so here.
+
 ### Reconcile Command
 
 Recover from an interrupted supervisor. Reaps the agent process groups a killed
@@ -507,6 +512,48 @@ ai:
 ```
 
 When Anthropic fails, OpenAI is tried. If OpenAI fails, Gemini is tried.
+
+### Coding Harnesses
+
+A `harnesses:` section hands a plan step's code change to an external coding agent that speaks
+the Agent Client Protocol (ACP), such as [OpenCode](https://opencode.ai). A planner reaches a
+harness through the `harness_code_change` tool; every other tool keeps running in-process.
+The harness works in the CLI's [agent workspace](#agent-workspace), and what it changed is
+checked against the agent's file access scope after every turn.
+
+```yaml
+harnesses:
+  opencode:                        # runs `opencode acp`, recorded as `opencode`
+    binary: /opt/homebrew/bin/opencode
+    prompt-timeout-seconds: 600
+    environment:
+      OPENCODE_API_KEY: ${OPENCODE_API_KEY}
+
+  my-agent:                        # any other ACP agent, recorded under its key
+    kind: acp
+    binary: my-agent
+    arguments: [--acp]
+    shell: allow
+    tools: [scout/harness_code_change]
+```
+
+| Field | Meaning | Default |
+|-------|---------|---------|
+| `kind` | `opencode`, or `acp` for any other ACP agent | `opencode` |
+| `id` | The id the harness is recorded under. Always `opencode` for `kind: opencode` | the key, for `kind: acp` |
+| `binary` | The executable: a name on the `PATH` or an absolute path | `opencode` for `kind: opencode`; required for `kind: acp` |
+| `arguments` | Arguments after the binary. For `kind: opencode` they must begin with `acp` | `[acp]` |
+| `shell` | `allow` lets the harness run shell commands | `deny` |
+| `cancel-grace-seconds` | How long a cancelled turn waits for the agent to stop | `5` |
+| `prompt-timeout-seconds` | How long one turn may run before it fails as a timeout | no limit |
+| `tools` | The tool ids routed to this harness, bare or one seat's (`scout/harness_code_change`) | `[harness_code_change]` |
+| `environment` | Variables added to the harness's environment | none |
+
+Keep secrets out of the file: an `environment` value written `${NAME}` is read from the
+CLI's own environment when the harness is bound, and is never logged. A variable that is not
+set, two harnesses binding one tool, or an entry missing what its kind needs binds no
+harness at all; the CLI says why at start and in `ampere status`, and runs every tool
+in-process. A configuration without the section changes nothing.
 
 ### Example Configurations
 

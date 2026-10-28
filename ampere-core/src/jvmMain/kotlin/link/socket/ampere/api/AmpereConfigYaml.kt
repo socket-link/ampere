@@ -4,6 +4,9 @@ import com.charleskorn.kaml.Yaml
 import com.charleskorn.kaml.YamlConfiguration
 import java.io.File
 import kotlinx.serialization.Serializable
+import link.socket.ampere.agents.execution.executor.HarnessConfig
+import link.socket.ampere.agents.execution.executor.harnessProblems
+import link.socket.ampere.agents.execution.executor.keyed
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
 import link.socket.ampere.domain.ai.model.AIModel_OpenAI
@@ -42,6 +45,37 @@ fun AmpereConfig.Builder.fromYaml(path: String) {
     provider(yamlConfig.ai.toProviderConfig())
 }
 
+/**
+ * Read the `harnesses:` section of a YAML configuration file (AMPR-497): the coding harnesses
+ * to bind behind the tools they name. [fromYaml] ignores the section, because an
+ * [AmpereConfig] has no executor; hand the result to `Ampere.fromEnvironment` instead:
+ * ```kotlin
+ * val executor = harnessesFromYaml("ampere.yaml")
+ *     .routedOver(FunctionExecutor.create(), ExecutionWorkspace("/path/to/checkout"))
+ * Ampere.fromEnvironment(…, executor = executor)
+ * ```
+ *
+ * The section's format is [HarnessConfig]'s. Each entry's id is filled from its key.
+ *
+ * @param path Absolute or relative path to the YAML configuration file
+ * @return The entries in file order; empty when the file has no `harnesses:` section
+ * @throws IllegalArgumentException if the file doesn't exist, can't be parsed, or the section
+ *   is inconsistent — an entry missing what its kind needs, or two entries binding one tool id
+ */
+fun harnessesFromYaml(path: String): List<HarnessConfig> {
+    val file = File(path)
+    require(file.exists()) { "Configuration file not found: ${file.absolutePath}" }
+    require(file.canRead()) { "Cannot read configuration file: ${file.absolutePath}" }
+    return decodeHarnesses(file.readText())
+}
+
+internal fun decodeHarnesses(content: String): List<HarnessConfig> {
+    val harnesses = yamlParser.decodeFromString(YamlHarnessSection.serializer(), content).harnesses.keyed()
+    val problems = harnesses.harnessProblems()
+    require(problems.isEmpty()) { problems.joinToString("; ") }
+    return harnesses
+}
+
 // ==================== Internal YAML model ====================
 
 private val yamlParser = Yaml(
@@ -51,6 +85,12 @@ private val yamlParser = Yaml(
 @Serializable
 internal data class YamlAmpereConfig(
     val ai: YamlAIProviderConfig,
+)
+
+/** The `harnesses:` section alone; every other key of the file is ignored. */
+@Serializable
+internal data class YamlHarnessSection(
+    val harnesses: Map<String, HarnessConfig> = emptyMap(),
 )
 
 @Serializable

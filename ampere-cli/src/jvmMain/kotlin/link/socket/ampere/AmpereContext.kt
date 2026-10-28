@@ -21,6 +21,12 @@ import link.socket.ampere.agents.execution.issue.CodeIssueWorkflow
 import link.socket.ampere.integrations.issues.IssueTrackerProvider
 import link.socket.ampere.agents.environment.EnvironmentService
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
+import link.socket.ampere.agents.execution.executor.BoundHarness
+import link.socket.ampere.agents.execution.executor.Executor
+import link.socket.ampere.agents.execution.executor.FunctionExecutor
+import link.socket.ampere.agents.execution.executor.build
+import link.socket.ampere.agents.execution.executor.keyed
+import link.socket.ampere.agents.execution.executor.routedOver
 import link.socket.ampere.agents.events.api.EventHandler
 import link.socket.ampere.agents.events.messages.DefaultThreadViewService
 import link.socket.ampere.agents.events.messages.ThreadViewService
@@ -101,6 +107,8 @@ class AmpereContext(
     val aiConfiguration: AIConfiguration? = null,
     /** Custom LLM provider for bypassing built-in providers, useful for testing and custom integrations */
     val llmProvider: LlmProvider? = null,
+    /** Where `${NAME}` in a harness's `environment:` is read from; the process's own by default. */
+    processEnvironment: Map<String, String> = System.getenv(),
 ) {
     /**
      * Database driver for SQLite operations.
@@ -185,6 +193,39 @@ class AmpereContext(
     }
 
     /**
+     * Why the `harnesses:` section of [userConfig] could not be bound, or null when it was
+     * (AMPR-497). A section that cannot be bound binds nothing: the CLI runs on [FunctionExecutor]
+     * alone, says so at start, and `ampere status` repeats it.
+     */
+    val harnessError: String?
+
+    /**
+     * The coding harnesses the `harnesses:` section of [userConfig] names, each an
+     * `AcpCodeExecutor` bound to [workspace] (AMPR-497). Nothing is spawned until a harness is
+     * first used or asked its health; [close] ends whatever was.
+     */
+    val harnesses: List<BoundHarness>
+
+    init {
+        val configured = userConfig?.harnesses.orEmpty().keyed()
+        var error: String? = null
+        harnesses = try {
+            configured.build(workspace, processEnvironment)
+        } catch (e: IllegalArgumentException) {
+            error = e.message ?: "the harnesses section could not be bound"
+            emptyList()
+        }
+        harnessError = error
+    }
+
+    /**
+     * What every tool this CLI's [ampereInstance] dispatches runs on: [FunctionExecutor] — and,
+     * when [harnesses] is not empty, a `RoutedExecutor` over it that sends each harness's tools
+     * to that harness. With no harnesses this is the `FunctionExecutor` itself.
+     */
+    val executor: Executor = harnesses.routedOver(FunctionExecutor.create())
+
+    /**
      * Public API surface backed by this context's infrastructure.
      *
      * CLI commands use this to access the 7 service interfaces (AgentService,
@@ -197,6 +238,7 @@ class AmpereContext(
             knowledgeRepository = knowledgeRepository,
             workspace = workspace.baseDirectory,
             database = database,
+            executor = executor,
         )
     }
 
@@ -354,6 +396,14 @@ class AmpereContext(
         // Said out loud on every start (AMPR-300): this is the only directory agents may write to.
         logger.logInfo("Agent workspace pinned to: ${workspace.baseDirectory}")
 
+        harnessError?.let { error -> logger.logError("Harnesses not bound: $error") }
+        harnesses.forEach { bound ->
+            logger.logInfo(
+                "Harness ${bound.executor.id} (${bound.config.resolvedBinary}) bound to: " +
+                    bound.config.tools.joinToString(),
+            )
+        }
+
         // Start the markdown monitoring system if enabled
         workspaceEventMapper?.startWithEventBus(environmentService.eventBus)
         fileSystemReceptor?.start()
@@ -438,6 +488,9 @@ class AmpereContext(
 
         // Stop the workspace monitoring system if enabled
         fileSystemReceptor?.stop()
+
+        // End every harness process a step or `ampere status` started, with its process group.
+        runBlocking { harnesses.forEach { it.executor.close() } }
 
         // Wait for in-flight coroutines (e.g. WorkspaceStateStore's event replay)
         // to actually stop before closing the driver out from under them —
