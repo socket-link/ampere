@@ -50,9 +50,22 @@ object OnDeviceInferenceProjection {
         event: Event,
         classifier: InferenceLocalityClassifier,
     ): InferenceLocality? = when (event) {
-        is TelemetryEvent -> classifier.localityOf(event.providerId, event.modelId)
+        // A transport-routed row's ids are the request's placeholder, not a model (AMPR-503),
+        // so they say nothing about where the call ran. The transport is a remote proxy, so
+        // the row is cloud; the completion that names what served stays the source of truth.
+        is TelemetryEvent ->
+            if (event.isTransportRouted()) {
+                InferenceLocality.CLOUD
+            } else {
+                classifier.localityOf(event.providerId, event.modelId)
+            }
         is RoutingEvent.RouteFallback -> classifier.localityOf(event.failedProvider, event.failedModel)
         else -> null
+    }
+
+    private fun TelemetryEvent.isTransportRouted(): Boolean = when (this) {
+        is ProviderCallStartedEvent -> transportChoosesModel
+        is ProviderCallCompletedEvent -> transportChoosesModel
     }
 
     /**

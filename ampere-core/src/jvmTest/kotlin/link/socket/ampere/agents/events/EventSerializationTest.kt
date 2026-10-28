@@ -337,6 +337,28 @@ class EventSerializationTest {
     }
 
     @Test
+    fun `a provider call pair the relay routed encodes without a transport-routed key`() {
+        // AMPR-503: every call a relay chose the model for must keep its stored shape.
+        listOf<Event>(providerCallStarted(), providerCallCompleted()).forEach { event ->
+            val encoded = json.encodeToJsonElement(Event.serializer(), event).jsonObject
+
+            assertFalse("transportChoosesModel" in encoded.keys, "${event.eventType} changed its wire shape")
+        }
+    }
+
+    @Test
+    fun `a transport-routed provider call pair round-trips its flag`() {
+        listOf<Event>(
+            providerCallStarted().copy(transportChoosesModel = true),
+            providerCallCompleted().copy(success = false, transportChoosesModel = true),
+        ).forEach { original ->
+            val decoded = json.decodeFromString(Event.serializer(), json.encodeToString(Event.serializer(), original))
+
+            assertEquals(original, decoded)
+        }
+    }
+
+    @Test
     fun `a provider call pair stored before the route existed still decodes`() {
         listOf<Event>(providerCallStarted(), providerCallCompleted()).forEach { original ->
             val stored = json.encodeToJsonElement(Event.serializer(), original).jsonObject - "via"

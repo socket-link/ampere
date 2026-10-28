@@ -55,6 +55,17 @@ data class ProviderCallStartedEvent(
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val via: ProviderId? = null,
+    /**
+     * The relay chose no model: the transport picks one server-side, and the
+     * configuration the relay returned is only a placeholder (AMPR-503). When true,
+     * [providerId] and [modelId] name that placeholder, not a model, and a reader must
+     * not show them; the paired [ProviderCallCompletedEvent] names what served.
+     *
+     * Never encoded while false, so every other call's stored row is byte-identical to
+     * one written before this field existed.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val transportChoosesModel: Boolean = false,
 ) : TelemetryEvent {
 
     override val eventType: EventType = EVENT_TYPE
@@ -63,7 +74,11 @@ data class ProviderCallStartedEvent(
         formatUrgency: (Urgency) -> String,
         formatSource: (EventSource) -> String,
     ): String = buildString {
-        append("LLM call started: $providerId/$modelId")
+        if (transportChoosesModel) {
+            append("LLM call started: model chosen by transport")
+        } else {
+            append("LLM call started: $providerId/$modelId")
+        }
         via?.let { append(" via $it") }
         cognitivePhase?.let { append(" [${it.name}]") }
         append(" (route: $routingReason)")
@@ -115,6 +130,18 @@ data class ProviderCallCompletedEvent(
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val via: ProviderId? = null,
+    /**
+     * The call was transport-routed (its start carried
+     * [ProviderCallStartedEvent.transportChoosesModel]) and the transport never said what
+     * served it (AMPR-503) — most often because it failed before anything did. When true,
+     * [providerId] and [modelId] are the request's placeholder, not a model, and a reader
+     * must not show them: a backend timeout is not "that model couldn't answer".
+     *
+     * Never encoded while false, so every other call's stored row is byte-identical to
+     * one written before this field existed.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val transportChoosesModel: Boolean = false,
 ) : TelemetryEvent {
 
     override val eventType: EventType = EVENT_TYPE
@@ -123,7 +150,12 @@ data class ProviderCallCompletedEvent(
         formatUrgency: (Urgency) -> String,
         formatSource: (EventSource) -> String,
     ): String = buildString {
-        append("LLM call ${if (success) "completed" else "failed"}: $providerId/$modelId")
+        when {
+            !transportChoosesModel ->
+                append("LLM call ${if (success) "completed" else "failed"}: $providerId/$modelId")
+            success -> append("LLM call completed: model not reported by transport")
+            else -> append("LLM call failed: no model served")
+        }
         via?.let { append(" via $it") }
         cognitivePhase?.let { append(" [${it.name}]") }
         append(" (")

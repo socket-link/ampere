@@ -56,10 +56,19 @@ interface CognitiveRelay {
 
 sealed interface RoutingResolution {
 
-    /** Routing succeeded; [configuration] is ready for use. */
+    /**
+     * Routing succeeded; [configuration] is ready for use.
+     *
+     * @property transportChoosesModel set by a relay that decides no model because its
+     *   [UpstreamLlmClient][link.socket.ampere.llm.UpstreamLlmClient] picks one server-side
+     *   — a consumer's proxy routing on a tier, say (AMPR-503). [configuration] is then only
+     *   the placeholder the request carries, and the call's telemetry says so rather than
+     *   naming it as the model.
+     */
     data class Success(
         val configuration: AIConfiguration,
         val reason: String,
+        val transportChoosesModel: Boolean = false,
     ) : RoutingResolution
 
     /**
