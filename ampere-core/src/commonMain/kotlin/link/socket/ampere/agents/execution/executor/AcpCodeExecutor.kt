@@ -23,6 +23,7 @@ import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
 import link.socket.ampere.agents.domain.status.ExecutionStatus
+import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.agents.environment.EnvironmentFileOperation
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.execution.executor.acp.ACP_PROTOCOL_VERSION
@@ -58,6 +59,7 @@ import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.results.ExecutionResult
 import link.socket.ampere.agents.execution.results.ExecutionResultCodeChanges
 import link.socket.ampere.agents.execution.results.FileChangeResult
+import link.socket.ampere.agents.execution.tools.HARNESS_CODE_CHANGE_TOOL_ID
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.health.ExecutorSystemHealth
 import link.socket.ampere.util.ioDispatcher
@@ -80,8 +82,11 @@ import okio.Path.Companion.toPath
  * access scope as prose and the earlier steps' results go to the agent as one text block
  * ([HarnessPrompt]); what the agent streams back becomes non-terminal [ExecutionStatus]es
  * ([HarnessTurn]); the turn's end becomes the terminal status — an
- * [ExecutionOutcome.CodeChanged] attributed to this executor's [id], or a
- * [ExecutionOutcome.NoChanges.Success] when the turn changed nothing (D3).
+ * [ExecutionOutcome.CodeChanged] attributed to this executor's [id]. A turn that changed
+ * nothing fails when the step asked for a code change — its task is a [Task.CodeChange] or
+ * its tool is `harness_code_change` — because the step has not done what the plan asked,
+ * whatever the agent said about why; otherwise it is a [ExecutionOutcome.NoChanges.Success]
+ * (D3, AMPR-507).
  *
  * The fence (D4) has five layers and this class is three of them. The session is rooted at
  * the workspace. Every `session/request_permission` is answered by a [HarnessFence] from the
@@ -251,7 +256,10 @@ class AcpCodeExecutor(
         val end = runTurn(live, sessionId, fence, turn, prompt)
 
         val after = observer.snapshot()
-        emit(settle(request, startedAt, live, fence, turn, end, before, after))
+        // A hosted run offers the tool seat-namespaced (`doer/harness_code_change`).
+        val askedForChange = request.context.task is Task.CodeChange ||
+            RoutedExecutor.bareIdOf(tool.id) == HARNESS_CODE_CHANGE_TOOL_ID
+        emit(settle(request, startedAt, live, fence, turn, end, before, after, askedForChange))
     }
 
     /** Ends the agent process, if any. No call spawns another afterwards. */
@@ -334,6 +342,7 @@ class AcpCodeExecutor(
         end: TurnEnd,
         before: Result<Map<String, Fingerprint>>,
         after: Result<Map<String, Fingerprint>>,
+        askedForChange: Boolean,
     ): ExecutionStatus {
         val observed = before.isSuccess && after.isSuccess
         val changed: List<String> = if (observed) {
@@ -354,7 +363,7 @@ class AcpCodeExecutor(
 
         return when (end) {
             is TurnEnd.Finished -> when (end.result.reason) {
-                StopReason.END_TURN -> settleEndTurn(request, startedAt, fence, turn, changed, summary)
+                StopReason.END_TURN -> settleEndTurn(request, startedAt, fence, turn, changed, summary, askedForChange)
                 StopReason.MAX_TOKENS, StopReason.MAX_TURN_REQUESTS -> failed(
                     request = request,
                     startedAt = startedAt,
@@ -458,6 +467,7 @@ class AcpCodeExecutor(
         turn: HarnessTurn,
         changed: List<String>,
         summary: List<String>,
+        askedForChange: Boolean,
     ): ExecutionStatus {
         val offenders = changed.mapNotNull { path ->
             (fence.checkWrite(path) as? HarnessFence.Verdict.Refused)?.let { path to it.reason }
@@ -473,6 +483,20 @@ class AcpCodeExecutor(
                 details = (offenders.map { (_, reason) -> reason } + summary).joinToString("\n"),
                 retryable = false,
                 partiallyChangedFiles = changed,
+            )
+        }
+        if (changed.isEmpty() && askedForChange) {
+            // AMPR-507: an agent that declines in prose ends the turn exactly as one that found
+            // the work already done. The audit decides, not the agent's words: the step asked
+            // for a change and none was made. The agent's account rides in `details`.
+            return failed(
+                request = request,
+                startedAt = startedAt,
+                type = ExecutionError.Type.UNEXPECTED,
+                message = "$displayName ended the turn without changing any file.",
+                details = summary.joinToString("\n").ifBlank { null },
+                retryable = true,
+                partiallyChangedFiles = emptyList(),
             )
         }
         val now = Clock.System.now()

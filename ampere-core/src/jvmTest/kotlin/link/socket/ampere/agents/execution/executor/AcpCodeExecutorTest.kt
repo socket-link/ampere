@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import kotlinx.datetime.Clock
+import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.cognition.FileAccessScope
 import link.socket.ampere.agents.domain.error.ExecutionError
 import link.socket.ampere.agents.domain.outcome.ExecutionOutcome
@@ -41,6 +42,8 @@ import link.socket.ampere.agents.execution.executor.acp.ToolKind
 import link.socket.ampere.agents.execution.executor.acp.WalkingWorkspaceObserver
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
+import link.socket.ampere.agents.execution.tools.FunctionTool
+import link.socket.ampere.agents.execution.tools.HARNESS_CODE_CHANGE_TOOL_ID
 import link.socket.ampere.agents.execution.tools.ToolHarnessCodeChange
 import link.socket.ampere.util.systemFileSystem
 import okio.Path.Companion.toPath
@@ -177,16 +180,71 @@ class AcpCodeExecutorTest {
     }
 
     @Test
-    fun `a turn that changes nothing is a NoChanges success carrying the agent's words`() = runTest {
+    fun `a code change step the agent declines in prose fails retryably with the agent's words`() = runTest {
+        // AMPR-498's live turn: the scope allows src/**, the step asks for README.md, and the
+        // agent ends the turn without trying.
+        val declined = "I need to append a line to README.md. **I cannot complete this task** because " +
+            "the file access rules only allow src/**."
+        val executor = executor({
+            say(declined)
+            StopReason.END_TURN
+        })
+
+        val failed = assertIs<ExecutionStatus.Failed>(executor.run(request(scope = kotlinUnderSrc)))
+
+        val failure = assertIs<ExecutionOutcome.CodeChanged.Failure>(failed.result)
+        assertEquals(EXECUTOR_ID, failure.executorId)
+        assertEquals(ExecutionError.Type.UNEXPECTED, failure.error.type)
+        assertTrue(failure.error.isRetryable)
+        assertEquals("Fake ACP ended the turn without changing any file.", failure.error.message)
+        assertEquals(declined, failure.error.details)
+        assertEquals(emptyList<String>(), failure.partiallyChangedFiles)
+    }
+
+    @Test
+    fun `a generic step nominating the harness tool that changes nothing fails the same way`() = runTest {
+        // A hosted run's steps are Task.Step, and it offers the tool seat-namespaced; the
+        // nominated tool is what asks for the change.
         val executor = executor({
             say("Nothing to do: the greeting already exists.")
             StopReason.END_TURN
         })
+        val step = Task.Step(
+            id = "step-1",
+            status = TaskStatus.Pending,
+            description = "Add a greeting",
+            toolId = "doer/$HARNESS_CODE_CHANGE_TOOL_ID",
+        )
 
-        val completed = assertIs<ExecutionStatus.Completed>(executor.execute(request(), tool).toList().last())
+        val seatTool = ToolHarnessCodeChange().copy(id = "doer/$HARNESS_CODE_CHANGE_TOOL_ID")
 
+        val failed = assertIs<ExecutionStatus.Failed>(executor.execute(request(task = step), seatTool).toList().last())
+
+        val failure = assertIs<ExecutionOutcome.CodeChanged.Failure>(failed.result)
+        assertTrue(failure.error.isRetryable)
+        assertEquals("Nothing to do: the greeting already exists.", failure.error.details)
+    }
+
+    @Test
+    fun `a step that asked for no code change and changed nothing is a NoChanges success`() = runTest {
+        val executor = executor({
+            say("The greeting reads well.")
+            StopReason.END_TURN
+        })
+        val review = FunctionTool<ExecutionContext.NoChanges>(
+            id = "review_code",
+            name = "Review code",
+            description = "Reviews the checkout",
+            requiredAgentAutonomy = AgentActionAutonomy.FULLY_AUTONOMOUS,
+            executionFunction = { error("routed to the harness, never called") },
+        )
+        val step = Task.Step(id = "step-1", status = TaskStatus.Pending, description = "Review", toolId = review.id)
+
+        val statuses = executor.execute(request(task = step), review).toList()
+
+        val completed = assertIs<ExecutionStatus.Completed>(statuses.last())
         val success = assertIs<ExecutionOutcome.NoChanges.Success>(completed.result)
-        assertEquals("Nothing to do: the greeting already exists.", success.message)
+        assertEquals("The greeting reads well.", success.message)
         assertEquals(EXECUTOR_ID, success.executorId)
     }
 
@@ -204,13 +262,13 @@ class AcpCodeExecutorTest {
             StopReason.END_TURN
         })
 
-        val completed = assertIs<ExecutionStatus.Completed>(executor.run(request(scope = kotlinUnderSrc)))
+        val failed = assertIs<ExecutionStatus.Failed>(executor.run(request(scope = kotlinUnderSrc)))
 
         assertEquals("reject", agents.single().permissionAnswers.single().outcome.optionId)
         assertFalse(exists("$root/README.md"))
-        val success = assertIs<ExecutionOutcome.NoChanges.Success>(completed.result)
-        assertTrue(success.message.contains("Refused 1 request"), success.message)
-        assertTrue(success.message.contains("README.md"), success.message)
+        val details = assertIs<ExecutionOutcome.CodeChanged.Failure>(failed.result).error.details.orEmpty()
+        assertTrue(details.contains("Refused 1 request"), details)
+        assertTrue(details.contains("README.md"), details)
     }
 
     @Test
@@ -388,6 +446,7 @@ class AcpCodeExecutorTest {
                 StopReason.END_TURN
             },
             {
+                writeDirectly("$root/src/Ok.kt", "ok")
                 say("all good now")
                 StopReason.END_TURN
             },
@@ -400,7 +459,7 @@ class AcpCodeExecutorTest {
         assertEquals(ExecutionError.Type.TOOL_UNAVAILABLE, failure.error.type)
         assertTrue(failure.error.isRetryable)
         assertEquals(2, transports.size, "the second call spawned again")
-        assertEquals("all good now", assertIs<ExecutionOutcome.NoChanges.Success>(second.result).message)
+        assertEquals(listOf("src/Ok.kt"), assertIs<ExecutionOutcome.CodeChanged.Success>(second.result).changedFiles)
     }
 
     @Test
@@ -506,6 +565,7 @@ class AcpCodeExecutorTest {
         scope: FileAccessScope? = null,
         runId: String? = "run-1",
         workspace: ExecutionWorkspace? = null,
+        task: Task = Task.CodeChange(id = "task-1", status = TaskStatus.Pending, description = "Add a greeting"),
     ): ExecutionRequest<ExecutionContext.NoChanges> {
         val now = Clock.System.now()
         return ExecutionRequest(
@@ -524,7 +584,7 @@ class AcpCodeExecutorTest {
                     createdAt = now,
                     updatedAt = now,
                 ),
-                task = Task.CodeChange(id = "task-1", status = TaskStatus.Pending, description = "Add a greeting"),
+                task = task,
                 instructions = "Add a greeting",
             ),
             runId = runId,

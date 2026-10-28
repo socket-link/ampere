@@ -110,8 +110,14 @@ Three pressures fix the shape:
   kind for this. Only a `cancelled` with nothing refused reads as the agent cancelling on
   its own, retryable. A turn that goes on to `end_turn` is still judged by the audit, with
   the refusals in its account.
-- **Zero changes is `NoChanges.Success`.** A turn that ended `end_turn` and touched nothing
-  returns the agent's words, not a `CodeChanged.Success` with an empty list.
+- **Zero changes fails a step that asked for a change.** A turn that ended `end_turn` and
+  touched nothing, on a step whose task is a `Task.CodeChange` or whose tool is
+  `harness_code_change` (bare or seat-namespaced), is a `CodeChanged.Failure(UNEXPECTED)`, retryable, with an empty
+  `partiallyChangedFiles` and the agent's words in `details` (AMPR-507). A harness that
+  declined in prose and one that found the work already done end the turn the same way, and
+  the step has not done what the plan asked either way. Any other step routed to the harness
+  that changes nothing is `NoChanges.Success` with the agent's words. Never a
+  `CodeChanged.Success` with an empty list.
 - **Every spawn goes through `ProcessGroups`.** `StdioAcpTransport` holds the
   `CancellationAddress` from spawn, closes stdin first, then `terminate()`s the group. No
   `ProcessBuilder.start()`, no `destroy()`.
@@ -216,6 +222,12 @@ Three pressures fix the shape:
   dispatch and holds the door, the `invocationId` and the performer; a second publisher
   beside it would be two producers of one call's trace (AMPR-495). Emit a status and let the
   engine publish it.
+- *Telling a decline from "already done" by reading the agent's message.* The wording is the
+  model's and changes with it; the audit's count of changed files is the deterministic signal,
+  and the message is carried for the planner to read, not parsed (AMPR-507).
+- *Deciding "asked for a change" by `Task.CodeChange` alone.* A hosted run's goal is a
+  `Task.Step`, so every step it plans is one too; the nominated `harness_code_change` tool is
+  what says the step wanted code changed (AMPR-507).
 - *Publishing the agent's message chunks as progress.* They produce no status on purpose;
   the harness's own account rides in the outcome's `diffSummary`.
 - *Adding a CLI config key to `api/AmpereConfigYaml.kt`.* That file is the SDK's `fromYaml`;
