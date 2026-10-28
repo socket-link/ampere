@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.execution.executor.Executor
 import link.socket.ampere.agents.execution.executor.FunctionExecutor
@@ -78,6 +79,13 @@ interface RunHost {
      *   the default — mints one. Uniqueness is checked against the runs *this host*
      *   has open and nothing else: an id a closed run used is accepted again, and no
      *   claim is made about ids in use by another host or another process.
+     * @param workspace The checkout this run works in (AMPR-496), or null for a run that
+     *   touches no files. One per run, never per seat: every seat of the run stamps it on
+     *   every step request it builds, so `write_code_file`, `read_code_file` and a harness
+     *   behind `harness_code_change` all find it on the request and work in the same tree.
+     *   A held run records it, and [resume] carries it on. Null — the default — stays null:
+     *   there is no default workspace, and a code tool asked to act without one refuses
+     *   rather than writing into the process's working directory (AMPR-300).
      * @throws IllegalArgumentException if no seat fills the roster's host, if a seat
      *   names a role the roster does not hold, if two seats share an agent id, if a
      *   seat is asked a question it has no decision transport to answer on —
@@ -94,6 +102,7 @@ interface RunHost {
         tools: Set<Tool<*>> = emptySet(),
         policy: RunPolicy = RunPolicy(),
         runId: RunId? = null,
+        workspace: ExecutionWorkspace? = null,
     ): HostedRun
 
     /**
@@ -111,6 +120,7 @@ interface RunHost {
         tools: Set<Tool<*>> = emptySet(),
         policy: RunPolicy = RunPolicy(),
         runId: RunId? = null,
+        workspace: ExecutionWorkspace? = null,
     ): HostedRun {
         return open(
             roster = roster,
@@ -119,6 +129,7 @@ interface RunHost {
             tools = tools,
             policy = policy,
             runId = runId,
+            workspace = workspace,
         )
     }
 
@@ -172,13 +183,20 @@ interface RunHost {
      * @param tools As for [open]: what the remaining steps may dispatch.
      * @param policy As for [open]. Its gate is not asked about the remaining steps; its
      *   cycle cap counts the cycles the run used before it held.
+     * @param workspace The checkout the run carries on in (AMPR-496). Null — the default —
+     *   is the one the run was opened with, as its record holds it, so a resumed run comes
+     *   back to the tree it held in. One given beside a recorded one must equal it, lease
+     *   and all: a run's steps so far were made in one checkout, and nothing can reconcile
+     *   carrying them on in another. One given for a run that recorded none is the run's
+     *   from here on.
      * @throws HeldRunUnavailableException if this host keeps no store
      *   ([NoStore][HeldRunUnavailableException.Why.NoStore]), a run with this id is still
      *   open on it ([StillOpen][HeldRunUnavailableException.Why.StillOpen]), no record is
      *   held under [runId] ([NotHeld][HeldRunUnavailableException.Why.NotHeld]), or the
      *   record was already taken up ([AlreadyClaimed][HeldRunUnavailableException.Why.AlreadyClaimed]).
-     * @throws IllegalArgumentException for what [open] refuses, or a roster whose host is
-     *   not the held run's — before the record is claimed.
+     * @throws IllegalArgumentException for what [open] refuses, a roster whose host is
+     *   not the held run's, or a [workspace] other than the one the run held in — before
+     *   the record is claimed.
      */
     suspend fun resume(
         runId: RunId,
@@ -187,6 +205,7 @@ interface RunHost {
         resolution: HoldResolution,
         tools: Set<Tool<*>> = emptySet(),
         policy: RunPolicy = RunPolicy(),
+        workspace: ExecutionWorkspace? = null,
     ): HostedRun = throw HeldRunUnavailableException(runId, HeldRunUnavailableException.Why.NoStore)
 
     /**
@@ -200,6 +219,7 @@ interface RunHost {
         resolution: HoldResolution,
         tools: Set<Tool<*>> = emptySet(),
         policy: RunPolicy = RunPolicy(),
+        workspace: ExecutionWorkspace? = null,
     ): HostedRun = resume(
         runId = runId,
         roster = roster,
@@ -207,6 +227,7 @@ interface RunHost {
         resolution = resolution,
         tools = tools,
         policy = policy,
+        workspace = workspace,
     )
 
     /**
