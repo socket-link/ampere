@@ -1,7 +1,6 @@
 package link.socket.ampere.api.service
 
 import link.socket.ampere.agents.definition.AgentId
-import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.api.model.AgentSnapshot
 import link.socket.ampere.api.model.AgentState
 import link.socket.ampere.dsl.team.AgentTeam
@@ -91,42 +90,6 @@ interface AgentService {
      *   rather than inherited (AMPR-236)
      */
     suspend fun pursue(goal: String): Result<String>
-
-    /**
-     * [pursue], in a checkout (AMPR-496): the run is opened with [workspace], so every seat
-     * stamps it on every step request it builds, and a code tool — `write_code_file`,
-     * `read_code_file`, a harness behind `harness_code_change` — works in that tree.
-     *
-     * An overload rather than a new parameter on [pursue], so an existing implementation of
-     * this interface still compiles. The default body hands a null [workspace] to [pursue]
-     * and refuses any other, because an implementation that does not know about the
-     * workspace would otherwise drop it — and a run that silently lost its checkout is a run
-     * whose code tools refuse for a reason nobody can see. The shipped service overrides it.
-     *
-     * ```
-     * val runId = ampere.agents.pursue(
-     *     "Add retry logic to payment auth",
-     *     workspace = ExecutionWorkspace(baseDirectory = "/abs/checkout"),
-     * ).getOrThrow()
-     * ```
-     *
-     * @param goal As for [pursue].
-     * @param workspace The checkout the run works in, or null for one that touches no files —
-     *   which is exactly [pursue]. There is no default workspace (AMPR-300).
-     * @return As for [pursue]; and a failure from an implementation that cannot carry a
-     *   workspace, when one is given.
-     */
-    suspend fun pursue(goal: String, workspace: ExecutionWorkspace?): Result<String> =
-        if (workspace == null) {
-            pursue(goal)
-        } else {
-            Result.failure(
-                UnsupportedOperationException(
-                    "This AgentService opens no run in a workspace; use AmpereInstance.runs, " +
-                        "whose open takes one.",
-                ),
-            )
-        }
 
     /**
      * Wake a dormant agent, making it available for work.

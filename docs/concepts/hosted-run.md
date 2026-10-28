@@ -455,9 +455,9 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     is accepted; one that differs — the whole value, lease included — is refused with an
     `IllegalArgumentException` before the claim, so the record is left unclaimed; one given
     for a run that recorded none becomes the run's, and a resumed run that holds again
-    records it. `AgentService.pursue(goal, workspace)` is the overload the one-line path
-    opens with; its default body refuses a non-null workspace, so an implementation that
-    predates it never drops one silently.
+    records it. `AgentService.pursue` takes no workspace: it runs over a `team {}` roster,
+    whose roles declare no tool ids, so its run can dispatch no code tool for a checkout to
+    reach. A run that changes code is opened through `AmpereInstance.runs`.
 
 ## How it composes
 
@@ -598,7 +598,7 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 
 `Ampere.fromEnvironment` exposes one as `AmpereInstance.runs`, and `agentScope` is
 documented as the caller's to own. `AgentService.team {}` declares the roster and
-`AgentService.pursue(goal)` opens a run over it — `pursue(goal, workspace)` in a checkout; `AgentService.listAll()` and
+`AgentService.pursue(goal)` opens a run over it; `AgentService.listAll()` and
 `inspect()` report the seats of open runs. With no run open they read the Subject
 registry (AMPR-416, `SubjectRegistry`): the first `pursue`, `inspect` or `listAll` after
 `team {}` registers the team as a `Subject.Group` under `AgentTeam.id` with one `MemberOf`
