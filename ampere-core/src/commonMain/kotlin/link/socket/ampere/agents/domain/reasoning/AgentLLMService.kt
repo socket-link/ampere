@@ -26,6 +26,7 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.api.model.TokenUsage
 import link.socket.ampere.domain.ai.model.AIModel
 import link.socket.ampere.domain.ai.pricing.ProviderPricingCalculator
+import link.socket.ampere.domain.ai.provider.AIProvider_OpenAI
 import link.socket.ampere.domain.ai.provider.ProviderId
 import link.socket.ampere.domain.llm.LlmProvider
 import link.socket.ampere.domain.util.toClientModelId
@@ -381,7 +382,12 @@ class AgentLLMService(
             messages = messages,
             // Omitted, not defaulted, for models that 400 on any sampling parameter.
             temperature = temperature.takeIf { model.features.supportsSamplingParameters },
-            maxTokens = maxTokens,
+            // OpenAI's reasoning models (the o-series, GPT-5 onward) 400 on `max_tokens`,
+            // and OpenAI deprecated it for `max_completion_tokens` on every model, so the
+            // direct OpenAI route sends that instead (AMPR-501). Other routes keep
+            // `max_tokens`: OpenRouter and Google's compatible endpoint document it.
+            maxTokens = maxTokens.takeUnless { route == AIProvider_OpenAI.id },
+            maxCompletionTokens = maxTokens.takeIf { route == AIProvider_OpenAI.id },
             // A thinking model spends its output cap on thought first (AMPR-488).
             reasoningEffort = ReasoningEffortPolicy.effortFor(
                 model = model,

@@ -138,13 +138,50 @@ class UpstreamLlmClientTest {
     }
 
     @Test
-    fun `models outside gemini 3 get no reasoning effort`() = runTest {
-        // OpenAI documents Chat Completions tool calls on gpt-5.5 onward only at
-        // effort `none`, so Ampere leaves effort to the model everywhere else.
+    fun `a quick openai reasoning call asks for low effort under max_completion_tokens`() = runTest {
+        // AMPR-501: gpt-6-luna defaults to `medium` and counts reasoning against the
+        // cap, and OpenAI's reasoning models reject `max_tokens`.
+        val recorder = RecordingUpstreamClient(cannedResponse = "ok")
+        val service = AgentLLMService(
+            agentConfiguration = config.copy(aiConfiguration = openAiConfiguration(AIModel_OpenAI.GPT_6_Luna)),
+            upstreamLlmClient = recorder,
+        )
+
+        service.call(prompt = "anything", maxTokens = 500)
+
+        val captured = assertNotNull(recorder.lastRequest)
+        assertEquals(Effort("low"), captured.reasoningEffort)
+        assertEquals(500, captured.maxCompletionTokens)
+        assertNull(captured.maxTokens)
+    }
+
+    @Test
+    fun `only the direct openai route swaps max_tokens for max_completion_tokens`() = runTest {
+        listOf(
+            config.aiConfiguration,
+            geminiConfiguration(AIModel_Gemini.Flash_3_8),
+        ).forEach { configuration ->
+            val recorder = RecordingUpstreamClient(cannedResponse = "ok")
+            val service = AgentLLMService(
+                agentConfiguration = config.copy(aiConfiguration = configuration),
+                upstreamLlmClient = recorder,
+            )
+
+            service.call(prompt = "anything", maxTokens = 500)
+
+            val captured = assertNotNull(recorder.lastRequest)
+            assertEquals(500, captured.maxTokens, configuration.model.name)
+            assertNull(captured.maxCompletionTokens, configuration.model.name)
+        }
+    }
+
+    @Test
+    fun `models without a default thinking level get no reasoning effort`() = runTest {
+        // gpt-5.4 defaults to effort `none`; Ampere never sends `none`.
         listOf(
             config.aiConfiguration,
             geminiConfiguration(AIModel_Gemini.Flash_2_5),
-            AIConfiguration_Default(provider = AIProvider_OpenAI, model = AIModel_OpenAI.GPT_6_Sol),
+            AIConfiguration_Default(provider = AIProvider_OpenAI, model = AIModel_OpenAI.GPT_5_4),
         ).forEach { configuration ->
             val recorder = RecordingUpstreamClient(cannedResponse = "ok")
             val service = AgentLLMService(
@@ -160,6 +197,9 @@ class UpstreamLlmClientTest {
 
     private fun geminiConfiguration(model: AIModel_Gemini): AIConfiguration =
         AIConfiguration_Default(provider = AIProvider_Google, model = model)
+
+    private fun openAiConfiguration(model: AIModel_OpenAI): AIConfiguration =
+        AIConfiguration_Default(provider = AIProvider_OpenAI, model = model)
 
     @Test
     fun `custom upstream client errors propagate`() = runTest {
