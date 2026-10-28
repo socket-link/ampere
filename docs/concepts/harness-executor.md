@@ -39,9 +39,15 @@ Three pressures fix the shape:
   that slot would be recorded as the performer. `Executor.performerFor(tool)` is the one
   default member that lets a composite executor answer with the executor it routes to.
 - **The fence.** OpenCode writes edits to disk from its own process even when the client
-  advertises `fs.writeTextFile` (anomalyco/opencode#38196). A gate on the client-side `fs/*`
-  methods is therefore a courtesy a cooperative agent honours, not the boundary. The boundary
-  is what actually changed on disk, read after the turn and checked against the scope.
+  advertises `fs.writeTextFile` (anomalyco/opencode#38196), and the client's
+  `fs/write_text_file` and `fs/read_text_file` are not called in 2.2.0, even with both
+  advertised and an edit allowed: AMPR-498's live run saw neither in eight turns, every
+  write landing inside OpenCode's process between the edit's `tool_call_update` `in_progress`
+  and `completed`. A gate on the client-side `fs/*` methods is therefore a courtesy a
+  cooperative agent honours, not the boundary, and for OpenCode it is never reached. The
+  boundary is what actually changed on disk, read after the turn and checked against the
+  scope. The `fs/…` handler and `HarnessTurn.servedWrites` stay for an ACP agent that does
+  use them.
 - **Hostability.** `CodeExecutor` is sealed, so its implementation has to be `commonMain`,
   and `propel/` must stay hostable everywhere. The protocol, the executor and the fence are
   common and written against an `AcpTransport` interface; the process and git are JVM.
@@ -205,12 +211,17 @@ Three pressures fix the shape:
 - *Reusing `write_code_file` for the harness.* Its `CodeParams.CodeWriting` strategy spends a
   model call generating file contents before the executor sees the request.
 - *Spawning OpenCode with its default permissions.* It then asks nothing: edits are written
-  and commands run from its own process, so `HarnessFence`, the `fs/…` gate and
-  `ShellAccess.Deny` are never reached and only the audit sees what happened (AMPR-498).
+  and commands run from its own process, so `HarnessFence` and `ShellAccess.Deny` are never
+  reached and only the audit sees what happened (AMPR-498). (The `fs/…` gate is never
+  reached either way: 2.2.0 does not call it, `ask` or not.)
   Spawn through `openCode(...)`, or set `permission` to `ask` yourself; never write an
   `opencode.json` into the person's checkout to do it.
-- *Trusting the `fs/*` gate as the fence.* OpenCode writes to disk directly; only the
-  post-turn audit sees that.
+- *Trusting the `fs/*` gate as the fence.* OpenCode writes to disk directly and, in 2.2.0,
+  never calls the client's `fs/write_text_file` (anomalyco/opencode#38196, not called in
+  2.2.0 per AMPR-498); only the post-turn audit sees its writes.
+- *Reading an edit's paths from its first `tool_call`.* OpenCode 2.2.0 sends `locations: []`
+  there; the paths arrive on the `in_progress` `tool_call_update` and on the
+  `session/request_permission` (AMPR-498), which `HarnessTurn.collect` already reads.
 - *Selecting `allow_always` because the agent offered it.* The next edit in the session
   would skip the gate; the audit could only report it, not prevent it.
 - *Reading the agent's `cancelled` as its own cancel.* After a fence rejection OpenCode

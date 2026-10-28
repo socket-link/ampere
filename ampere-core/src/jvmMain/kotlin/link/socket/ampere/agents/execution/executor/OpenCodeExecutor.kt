@@ -40,7 +40,9 @@ internal val OPENCODE_ASK_PERMISSIONS: JsonObject = buildJsonObject {
  * Spawns [binary] with `acp` through a [StdioAcpTransport] on first use, roots each session
  * at the step's workspace, and audits each turn with a [GitWorkspaceObserver] — the layer
  * that holds, because OpenCode writes edits to disk from its own process whether or not the
- * client advertised `fs.writeTextFile`. Permission options are matched by `kind`, never by
+ * client advertised `fs.writeTextFile` (anomalyco/opencode#38196): the client's
+ * `fs/write_text_file` and `fs/read_text_file` are not called in 2.2.0, even with an edit
+ * allowed (AMPR-498). Permission options are matched by `kind`, never by
  * OpenCode's own option ids.
  *
  * OpenCode asks no permission by default, so the agent is spawned with [OPENCODE_CONFIG_CONTENT]
