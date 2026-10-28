@@ -83,7 +83,12 @@ Three pressures fix the shape:
   appears as a performer.
 - **Allow once, never always.** `HarnessFence` answers a permission request with the option
   of kind `allow_once` or a `reject_*`; it never selects `allow_always`, and cancels the turn
-  when no `allow_once` is offered. Every request is decided on its own.
+  when no `allow_once` is offered. Every request is decided on its own. The fence is only
+  consulted when the harness is configured to ask: OpenCode's default asks for nothing, so
+  `openCode(...)` spawns it with `OPENCODE_CONFIG_CONTENT` carrying
+  `{"permission":{"edit":"ask","bash":"ask"}}`, merged under any config the caller passes
+  (AMPR-504). `bash` stays `ask` under `ShellAccess.Allow` too, so every command is on the
+  record as an `allow_once`.
 - **The audit decides, the agent informs.** The outcome's `changedFiles` is what the
   `WorkspaceObserver` saw change between the two snapshots. What the agent reported is the
   fallback only when the workspace could not be observed, and the outcome then says so.
@@ -131,6 +136,9 @@ Three pressures fix the shape:
   seat; the request's scope reaches the fence unchanged (AMPR-414).
 - **Let the harness run shell commands** — `HarnessPolicy(shell = ShellAccess.Allow)`.
   Denied by default.
+- **Pick OpenCode's model** — `openCode(environment = mapOf("OPENCODE_CONFIG_CONTENT" to
+  """{"model":"anthropic/claude-haiku-4-5"}"""))`; `opencode acp` has no `--model` flag. The
+  caller's JSON is merged over the permission asks, key by key, and wins on a collision.
 - **Bound a turn** — `HarnessPolicy(promptTimeout = 10.minutes)`; the step fails `TIMEOUT`,
   retryable, with whatever changed in `partiallyChangedFiles`.
 - **Add another harness** — a factory like `openCode` with its own `id` and command line;
@@ -145,6 +153,11 @@ Three pressures fix the shape:
   through that one executor; `ask_human` would reach a harness that cannot run it. Route.
 - *Reusing `write_code_file` for the harness.* Its `CodeParams.CodeWriting` strategy spends a
   model call generating file contents before the executor sees the request.
+- *Spawning OpenCode with its default permissions.* It then asks nothing: edits are written
+  and commands run from its own process, so `HarnessFence`, the `fs/…` gate and
+  `ShellAccess.Deny` are never reached and only the audit sees what happened (AMPR-498).
+  Spawn through `openCode(...)`, or set `permission` to `ask` yourself; never write an
+  `opencode.json` into the person's checkout to do it.
 - *Trusting the `fs/*` gate as the fence.* OpenCode writes to disk directly; only the
   post-turn audit sees that.
 - *Selecting `allow_always` because the agent offered it.* The next edit in the session
