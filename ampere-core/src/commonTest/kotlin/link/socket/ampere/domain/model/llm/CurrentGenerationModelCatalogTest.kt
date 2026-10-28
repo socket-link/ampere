@@ -148,13 +148,20 @@ class CurrentGenerationModelCatalogTest {
     }
 
     @Test
-    fun `gemini 3 and later name the thinking level they default to and nothing else does`() {
+    fun `gemini 3 and later and openai from gpt-5_5 name the thinking level they default to and nothing else does`() {
         val expected = mapOf(
             "gemini-3.1-pro-preview" to ThinkingLevel.HIGH,
             "gemini-3.8-flash" to ThinkingLevel.MEDIUM,
             "gemini-3.6-flash" to ThinkingLevel.MEDIUM,
             "gemini-3.5-flash-lite" to ThinkingLevel.MINIMAL,
             "gemini-4-argon" to ThinkingLevel.MEDIUM,
+            // AMPR-501: each model page documents `medium` as the default.
+            "gpt-5.5" to ThinkingLevel.MEDIUM,
+            "gpt-5.6-sol" to ThinkingLevel.MEDIUM,
+            "gpt-6-sol" to ThinkingLevel.MEDIUM,
+            "gpt-6-luna" to ThinkingLevel.MEDIUM,
+            "gpt-5.6-terra" to ThinkingLevel.MEDIUM,
+            "gpt-5.6-luna" to ThinkingLevel.MEDIUM,
         )
         val actual = allModels
             .mapNotNull { model -> model.features.defaultThinking?.let { model.name to it } }

@@ -132,9 +132,13 @@ sealed class AIModel_OpenAI(
     )
 
     /**
-     * Defaults to reasoning effort `medium`. From GPT-5.4 on, Chat Completions
-     * rejects tool calls at any effort other than `none`, and Ampere sends no
-     * effort — so use [GPT_5_4] for tool-calling agents.
+     * Defaults to reasoning effort `medium`, and Ampere sends a lower
+     * `reasoning_effort` when a call's output cap is small (AMPR-501; see
+     * [ReasoningEffortPolicy][link.socket.ampere.agents.domain.reasoning.ReasoningEffortPolicy]).
+     * Ampere never sends `none`. From GPT-5.4 on, OpenAI documents Chat
+     * Completions function calling only at effort `none`, so use [GPT_5_4] for
+     * tool-calling agents. Ampere sends no `tools` itself, so its own calls are
+     * unaffected.
      */
     data object GPT_5_5 : AIModel_OpenAI(
         name = GPT_5_5_NAME,
@@ -154,10 +158,11 @@ sealed class AIModel_OpenAI(
     )
 
     /**
-     * The GPT-6 and GPT-5.6 tiers below default to reasoning effort `medium`, and
-     * OpenAI documents Chat Completions function calling only at effort `none`.
-     * Ampere sends them no effort, so the same tool-calling caveat as [GPT_5_5]
-     * applies to each.
+     * The GPT-6 and GPT-5.6 tiers below default to reasoning effort `medium`,
+     * which Ampere lowers for a small output cap as it does for [GPT_5_5]. OpenAI
+     * documents Chat Completions function calling only at effort `none`, which
+     * Ampere never sends, so the same tool-calling caveat as [GPT_5_5] applies to
+     * each.
      */
     data object GPT_6_Sol : AIModel_OpenAI(
         name = GPT_6_Sol_NAME,
@@ -822,9 +827,13 @@ sealed class AIModel_OpenAI(
         )
 
         // GPT-5.2 onward accepts `temperature`/`top_p` only at reasoning effort
-        // `none`, and Ampere doesn't send an effort — so the per-model default
-        // decides. 5.4 and 5.4-mini default to `none` and keep sampling; 5.5 and
-        // 5.6 Sol default to `medium`, where the docs are silent, so they omit.
+        // `none`. 5.4 and 5.4-mini default to `none`, take no effort from Ampere,
+        // and keep sampling. 5.5 and 5.6 Sol default to `medium` and are never
+        // sent `none`, so they omit sampling.
+        //
+        // `defaultThinking` is each model page's documented default (read
+        // 2026-10-27). Every one of them accepts `low`, `medium` and `high`, and
+        // none of them takes `minimal`, which Ampere never sends.
         private val GPT_5_4_FEATURES = AIModelFeatures(
             availableTools = GPT_5_TOOLS,
             reasoningLevel = AIModelFeatures.RelativeReasoning.HIGH,
@@ -848,6 +857,7 @@ sealed class AIModel_OpenAI(
             supportedInputs = GPT_5_5_SUPPORTED_INPUTS,
             trainingCutoffDate = GPT_5_5_CUTOFF,
             supportsSamplingParameters = false,
+            defaultThinking = AIModelFeatures.ThinkingLevel.MEDIUM,
         )
 
         private val GPT_5_6_Sol_FEATURES = AIModelFeatures(
@@ -857,10 +867,12 @@ sealed class AIModel_OpenAI(
             supportedInputs = GPT_5_6_Sol_SUPPORTED_INPUTS,
             trainingCutoffDate = GPT_5_6_Sol_CUTOFF,
             supportsSamplingParameters = false,
+            defaultThinking = AIModelFeatures.ThinkingLevel.MEDIUM,
         )
 
         // GPT-6 and the GPT-5.6 tiers default to effort `medium`, like 5.5 and
-        // 5.6 Sol, so they omit sampling parameters for the same reason.
+        // 5.6 Sol, so they omit sampling parameters and take the same
+        // `defaultThinking` for the same reasons.
         private val GPT_6_Sol_FEATURES = AIModelFeatures(
             availableTools = GPT_5_TOOLS,
             reasoningLevel = AIModelFeatures.RelativeReasoning.HIGH,
@@ -868,6 +880,7 @@ sealed class AIModel_OpenAI(
             supportedInputs = GPT_6_Sol_SUPPORTED_INPUTS,
             trainingCutoffDate = GPT_6_Sol_CUTOFF,
             supportsSamplingParameters = false,
+            defaultThinking = AIModelFeatures.ThinkingLevel.MEDIUM,
         )
 
         private val GPT_6_Luna_FEATURES = AIModelFeatures(
@@ -877,6 +890,7 @@ sealed class AIModel_OpenAI(
             supportedInputs = GPT_6_Luna_SUPPORTED_INPUTS,
             trainingCutoffDate = GPT_6_Luna_CUTOFF,
             supportsSamplingParameters = false,
+            defaultThinking = AIModelFeatures.ThinkingLevel.MEDIUM,
         )
 
         private val GPT_5_6_Terra_FEATURES = AIModelFeatures(
@@ -886,6 +900,7 @@ sealed class AIModel_OpenAI(
             supportedInputs = GPT_5_6_Terra_SUPPORTED_INPUTS,
             trainingCutoffDate = GPT_5_6_Terra_CUTOFF,
             supportsSamplingParameters = false,
+            defaultThinking = AIModelFeatures.ThinkingLevel.MEDIUM,
         )
 
         private val GPT_5_6_Luna_FEATURES = AIModelFeatures(
@@ -895,6 +910,7 @@ sealed class AIModel_OpenAI(
             supportedInputs = GPT_5_6_Luna_SUPPORTED_INPUTS,
             trainingCutoffDate = GPT_5_6_Luna_CUTOFF,
             supportsSamplingParameters = false,
+            defaultThinking = AIModelFeatures.ThinkingLevel.MEDIUM,
         )
 
         // ---- Model Names ----

@@ -10,8 +10,9 @@ import link.socket.ampere.domain.ai.model.AIModelFeatures.RelativeReasoning
 import link.socket.ampere.domain.ai.model.AIModelFeatures.ThinkingLevel
 import link.socket.ampere.domain.ai.model.AIModel_Claude
 import link.socket.ampere.domain.ai.model.AIModel_Gemini
+import link.socket.ampere.domain.ai.model.AIModel_OpenAI
 
-/** Pins the `reasoning_effort` a call sends to a thinking Gemini model (AMPR-488). */
+/** Pins the `reasoning_effort` a call sends to a thinking Gemini (AMPR-488) or OpenAI (AMPR-501) model. */
 class ReasoningEffortPolicyTest {
 
     private val low = ThinkingLevel.LOW
@@ -93,8 +94,32 @@ class ReasoningEffortPolicyTest {
     }
 
     @Test
+    fun `openai reasoning models think at low under the PROPEL caps and medium by default`() {
+        listOf(
+            AIModel_OpenAI.GPT_5_5,
+            AIModel_OpenAI.GPT_5_6_Sol,
+            AIModel_OpenAI.GPT_6_Sol,
+            AIModel_OpenAI.GPT_6_Luna,
+            AIModel_OpenAI.GPT_5_6_Terra,
+            AIModel_OpenAI.GPT_5_6_Luna,
+        ).forEach { model ->
+            val askedHigh = RoutingContext(preferredReasoning = RelativeReasoning.HIGH)
+            assertEquals(low, ReasoningEffortPolicy.effortFor(model, 500, null), model.name)
+            assertEquals(low, ReasoningEffortPolicy.effortFor(model, 1000, null), model.name)
+            assertEquals(medium, ReasoningEffortPolicy.effortFor(model, 16_000, null), model.name)
+            assertEquals(high, ReasoningEffortPolicy.effortFor(model, 16_000, askedHigh), model.name)
+        }
+    }
+
+    @Test
     fun `models that take no effort from ampere are sent none`() {
-        listOf(AIModel_Gemini.Flash_2_5, AIModel_Claude.Opus_5_5).forEach { model ->
+        // gpt-5.4 defaults to `none` and keeps its sampling parameters there.
+        listOf(
+            AIModel_Gemini.Flash_2_5,
+            AIModel_Claude.Opus_5_5,
+            AIModel_OpenAI.GPT_5_4,
+            AIModel_OpenAI.GPT_4_1,
+        ).forEach { model ->
             assertNull(ReasoningEffortPolicy.effortFor(model, 500, null), model.name)
         }
     }

@@ -7,7 +7,8 @@ import link.socket.ampere.domain.ai.model.AIModelFeatures.ThinkingLevel
 
 /**
  * The `reasoning_effort` one call sends, for a model that takes one from Ampere
- * (AMPR-488).
+ * (AMPR-488): Gemini 3 and later, and OpenAI's GPT-5.5, GPT-5.6 and GPT-6
+ * (AMPR-501), which all default to `medium`.
  *
  * A thinking model's output cap includes its thought tokens. Gemini 3 and later
  * think by default (at `medium` on 3.8 Flash and Gemini 4 Argon, at `high` on 3.1
@@ -19,7 +20,13 @@ import link.socket.ampere.domain.ai.model.AIModelFeatures.ThinkingLevel
  * Lowering the effort was chosen over raising the caps: a raised cap pays for
  * thinking a short structured answer does not need, and moves every call's cost
  * and latency rather than only the calls that were truncated. Google's
- * OpenAI-compatible endpoint maps `reasoning_effort` onto `thinking_level`.
+ * OpenAI-compatible endpoint maps `reasoning_effort` onto `thinking_level`;
+ * OpenAI's Chat Completions takes it as is.
+ *
+ * `none` is never sent. OpenAI documents Chat Completions function calling on
+ * GPT-5.5 onward only at effort `none`, so a `tools` request to those models
+ * would need it. Ampere's own calls carry no `tools`, so nothing here depends on
+ * that today.
  *
  * The effort is the lower of two levels:
  *
