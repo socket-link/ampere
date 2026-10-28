@@ -13,10 +13,13 @@ import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.table.table
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import link.socket.ampere.agents.events.messages.ThreadSummary
+import link.socket.ampere.agents.execution.executor.BoundHarness
 import link.socket.ampere.agents.events.tickets.TicketSummary
 import link.socket.ampere.api.AmpereInstance
 import link.socket.ampere.terminal.TerminalFactory
@@ -28,6 +31,10 @@ import kotlin.time.Duration.Companion.hours
  */
 class StatusCommand(
     private val ampere: AmpereInstance,
+    /** The coding harnesses the config binds (AMPR-497); each is asked its health. */
+    private val harnesses: List<BoundHarness> = emptyList(),
+    /** Why the config's `harnesses:` section bound nothing, when it could not be bound. */
+    private val harnessError: String? = null,
 ) : CliktCommand(
     name = "status",
     help = "Show system-wide status dashboard"
@@ -44,6 +51,7 @@ class StatusCommand(
         val threadsDeferred = async { ampere.threads.list() }
         val ticketsDeferred = async { ampere.tickets.list() }
         val snapshotDeferred = async { ampere.status.snapshot() }
+        val harnessesDeferred = async { harnessStatuses(harnesses) }
 
         val threadsResult = threadsDeferred.await()
         val ticketsResult = ticketsDeferred.await()
@@ -51,6 +59,24 @@ class StatusCommand(
 
         // Human-readable dashboard
         outputDashboard(threadsResult, ticketsResult, verbose, workspace)
+        outputHarnesses(harnessesDeferred.await())
+    }
+
+    /**
+     * One line per configured harness (AMPR-497): its id, its binary, and available — with the
+     * agent's version when it gave one — or the reason it is not. Nothing when the config names
+     * no harnesses and bound them all.
+     */
+    private fun outputHarnesses(statuses: List<HarnessStatus>) {
+        if (statuses.isEmpty() && harnessError == null) return
+        terminal.println()
+        terminal.println(bold("🔌 Harnesses"))
+        harnessError?.let { error -> terminal.println("  ${red("✗")} ${red("not bound: $error")}") }
+        statuses.forEach { status ->
+            val mark = if (status.available) green("●") else red("✗")
+            val tools = gray("→ ${status.tools.joinToString()}")
+            terminal.println("  $mark ${cyan(status.id)}  ${status.binary}  ${status.health}  $tools")
+        }
     }
 
     /**
@@ -203,6 +229,49 @@ class StatusCommand(
         } else {
             terminal.println(dim("  No workspace pinned"))
         }
+    }
+
+    /** A configured harness as `ampere status` reports it. */
+    internal data class HarnessStatus(
+        val id: String,
+        val binary: String,
+        val tools: List<String>,
+        val available: Boolean,
+        /** `available`, `available (<version>)`, or `unavailable: <reason>`. */
+        val health: String,
+    ) {
+        /** The line without colour: `<id>  <binary>  <health>  → <tools>`. */
+        fun describe(): String = "$id  $binary  $health  → ${tools.joinToString()}"
+    }
+
+    companion object {
+        /**
+         * Asks every harness its health at once. A health check starts the agent and waits for it
+         * to answer `initialize`, so each is a real launch; the context's `close()` ends them.
+         */
+        internal suspend fun harnessStatuses(harnesses: List<BoundHarness>): List<HarnessStatus> =
+            coroutineScope {
+                harnesses.map { bound ->
+                    async {
+                        val checked = bound.executor.performHealthCheck()
+                        val health = checked.getOrNull()
+                        val available = health?.isAvailable == true
+                        val description = when {
+                            available -> bound.executor.agentInfo?.version
+                                ?.let { version -> "available ($version)" } ?: "available"
+                            health != null -> "unavailable: ${health.issues.joinToString().ifBlank { "no reason given" }}"
+                            else -> "unavailable: ${checked.exceptionOrNull()?.message ?: "the health check failed"}"
+                        }
+                        HarnessStatus(
+                            id = bound.executor.id,
+                            binary = bound.config.resolvedBinary.orEmpty(),
+                            tools = bound.config.tools,
+                            available = available,
+                            health = description,
+                        )
+                    }
+                }.awaitAll()
+            }
     }
 
     /**
