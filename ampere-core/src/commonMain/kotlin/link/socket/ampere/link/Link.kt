@@ -13,7 +13,8 @@ import link.socket.ampere.canon.CanonType
  * Gmail Plug. The user authenticates once; each Plug records its own grant
  * against the same [id], and revoking the Link cascades to every grant that
  * references it. That is why a Link carries no plug identity — it would be a
- * lie about the one-to-many relationship.
+ * lie about the one-to-many relationship. It may carry the name of the
+ * requirement it was minted for, in its [id]: see [requirementName].
  *
  * @property transport The wire. See [Transport] for why capability is
  *   per-platform rather than per-enum-member.
@@ -41,6 +42,19 @@ data class Link(
 ) {
     /** A revoked Link resolves for nobody, regardless of standing grants. */
     val isRevoked: Boolean get() = revokedAt != null
+
+    /**
+     * The [LinkRequirement.name] this Link was minted for, read out of an [id]
+     * of the [LinkId.forRequirement] form for its own [transport], or null for
+     * an opaque id.
+     *
+     * Derived rather than stored, so every Link already persisted in that form
+     * is named without a migration or a re-seed.
+     */
+    val requirementName: String?
+        get() = id.value
+            .removePrefix(LinkId.prefixOf(transport))
+            .takeIf { name -> name.length < id.value.length && name.isNotEmpty() }
 }
 
 /**

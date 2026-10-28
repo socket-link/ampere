@@ -166,6 +166,38 @@ class LinkResolutionServiceTest {
         assertTrue(store.grantsForPlug(PlugId("calendar-plug")).getOrThrow().grants.isEmpty())
     }
 
+    @Test
+    fun `a stale grant on another Plug's Link leaves the consent question on the Plug's own`() = runTest {
+        // The Socket symptom: Workspace was once asked for, and granted, the
+        // Calendar Link. Asking again must name the Workspace Link, and granting
+        // that is what resolves the Plug.
+        val workspace = LinkRequirement(
+            name = "workspace",
+            transport = Transport.NATIVE_FRAMEWORK,
+            direction = LinkDirection.READ_WRITE,
+        )
+        fun native(requirement: LinkRequirement) = Link(
+            id = LinkId.forRequirement(requirement),
+            transport = Transport.NATIVE_FRAMEWORK,
+            direction = LinkDirection.READ_WRITE,
+            egress = EgressClass.OnDevice,
+        )
+        val calendarLink = native(workspace.copy(name = "calendar"))
+        val workspaceLink = native(workspace)
+        val plug = PlugId("workspace-plug")
+        val store = InMemoryLinkStore(listOf(calendarLink, workspaceLink))
+        store.grant(plug, calendarLink.id, Instant.fromEpochMilliseconds(1))
+        val svc = service(store, platform = PlatformTarget.IOS)
+
+        val asked = assertIs<LinkResolutionException>(svc.resolve(plug, manifest(workspace)).exceptionOrNull())
+        val failure = assertIs<LinkResolutionFailure.UngrantedLink>(asked.failures.single())
+        assertEquals(workspaceLink.id, failure.linkId)
+
+        svc.grant(plug, failure.linkId).getOrThrow()
+
+        assertEquals(workspaceLink, svc.resolve(plug, manifest(workspace)).getOrThrow()["workspace"])
+    }
+
     // -----------------------------------------------------------------
     // Revocation cascade
     // -----------------------------------------------------------------

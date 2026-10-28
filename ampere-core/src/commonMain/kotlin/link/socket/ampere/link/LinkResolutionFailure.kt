@@ -18,12 +18,15 @@ sealed interface LinkResolutionFailure {
     val requirementName: String
 
     /**
-     * No Link of the required transport exists at all.
+     * No Link this Plug could be granted would satisfy the requirement.
      *
-     * A misconfiguration, or a Plug on a platform that has no such wire —
-     * there is nothing to grant, so there is no [LinkId] to report. When a
-     * Link of the transport *does* exist but this Plug holds no grant on it,
-     * the failure is [UngrantedLink] instead.
+     * Either no Link answers to it at all (none of the transport, or none but
+     * Links minted for other requirements), or every one that does would still
+     * fail a check once granted: revoked, unsupported on this platform, the
+     * wrong direction, too narrow a scope. A misconfiguration, or a Plug on a
+     * platform that has no such wire. There is nothing worth granting, so there
+     * is no [LinkId] to report. When a grant *would* fix it, the failure is
+     * [UngrantedLink] instead.
      */
     @Serializable
     @SerialName("link_failure.missing")
@@ -34,13 +37,15 @@ sealed interface LinkResolutionFailure {
     ) : LinkResolutionFailure
 
     /**
-     * A Link of the required transport exists, but this Plug has never been
-     * granted it.
+     * A Link exists that would satisfy the requirement, but this Plug has never
+     * been granted it.
      *
      * The consent-shaped failure: unlike every other variant, the remedy is to
      * ask the user rather than to fix a configuration. [linkId] is the Link to
      * request a grant on, so a caller driving just-in-time consent does not
      * have to re-derive it from the [LinkRequirement] and re-query the store.
+     * It answers to the requirement's name, and granting it resolves the
+     * requirement: the gate never names a Link its own checks would reject.
      *
      * A Plug's *first* use of a seeded Link — a `NATIVE_FRAMEWORK` wire that
      * models "this device has EventKit", say — always lands here.
@@ -142,8 +147,8 @@ class LinkResolutionException(
 /**
  * A [LinkId] was referenced that no [Link] exists for.
  *
- * Distinct from [LinkResolutionFailure.MissingLink], which means "no Link of
- * the required *kind* exists". This one means the caller named a Link that is
+ * Distinct from [LinkResolutionFailure.MissingLink], which means "no Link that
+ * would satisfy the requirement exists". This one means the caller named a Link that is
  * not in the store at all — a programming error or a
  * dangling reference, not a consent outcome.
  */

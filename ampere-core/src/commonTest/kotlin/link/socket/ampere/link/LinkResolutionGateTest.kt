@@ -161,7 +161,9 @@ class LinkResolutionGateTest {
     }
 
     @Test
-    fun `the first candidate in list order stands in when no grant would help`() {
+    fun `ungranted candidates that no grant would fix are missing rather than ungranted`() {
+        // Asking consent for either would record a grant the scope check
+        // rejects on the very next resolution.
         val narrow = googleLink.copy(id = LinkId("google-narrow"), scope = setOf(CanonType.PERSON))
         val alsoNarrow = googleLink.copy(id = LinkId("google-narrower"), scope = emptySet())
 
@@ -173,8 +175,22 @@ class LinkResolutionGateTest {
         )
 
         val failed = assertIs<LinkResolution.Failed>(result)
-        val failure = assertIs<LinkResolutionFailure.UngrantedLink>(failed.failure)
-        assertEquals(LinkId("google-narrow"), failure.linkId)
+        val failure = assertIs<LinkResolutionFailure.MissingLink>(failed.failure)
+        assertEquals("calendar", failure.requirementName)
+        assertEquals(Transport.OAUTH_REST, failure.transport)
+    }
+
+    @Test
+    fun `an ungranted revoked Link is missing rather than a consent question`() {
+        val result = LinkResolutionGate.resolve(
+            requirement = requirement(),
+            candidates = listOf(googleLink.copy(revokedAt = revokedAt)),
+            grants = LinkGrants.empty(PlugId("calendar-plug")),
+            platform = PlatformTarget.ANDROID,
+        )
+
+        val failed = assertIs<LinkResolution.Failed>(result)
+        assertIs<LinkResolutionFailure.MissingLink>(failed.failure)
     }
 
     @Test
@@ -204,6 +220,149 @@ class LinkResolutionGateTest {
         )
 
         assertIs<LinkResolution.Skipped>(result)
+    }
+
+    // -----------------------------------------------------------------
+    // Requirement names — a minted Link answers only its own requirement
+    // -----------------------------------------------------------------
+
+    /** A canon-external `NATIVE_FRAMEWORK` requirement: an empty scope passes every Link's. */
+    private fun nativeRequirement(name: String) = requirement(
+        name = name,
+        transport = Transport.NATIVE_FRAMEWORK,
+        direction = LinkDirection.READ_WRITE,
+        scope = emptySet(),
+    )
+
+    private fun nativeLink(name: String) = Link(
+        id = LinkId.forRequirement(nativeRequirement(name)),
+        transport = Transport.NATIVE_FRAMEWORK,
+        direction = LinkDirection.READ_WRITE,
+        egress = EgressClass.OnDevice,
+    )
+
+    private val calendarNative = nativeLink("calendar")
+    private val workspaceNative = nativeLink("workspace")
+
+    @Test
+    fun `a requirement whose own Link is absent is missing even beside another Plug's Link`() {
+        val result = LinkResolutionGate.resolve(
+            requirement = nativeRequirement("workspace"),
+            candidates = listOf(calendarNative),
+            grants = LinkGrants.empty(PlugId("workspace-plug")),
+            platform = PlatformTarget.IOS,
+        )
+
+        val failed = assertIs<LinkResolution.Failed>(result)
+        val failure = assertIs<LinkResolutionFailure.MissingLink>(failed.failure)
+        assertEquals("workspace", failure.requirementName)
+        assertEquals(Transport.NATIVE_FRAMEWORK, failure.transport)
+    }
+
+    @Test
+    fun `a grant on another requirement's Link does not resolve this one`() {
+        val result = LinkResolutionGate.resolve(
+            requirement = nativeRequirement("workspace"),
+            candidates = listOf(calendarNative),
+            grants = grants("workspace-plug", calendarNative.id),
+            platform = PlatformTarget.IOS,
+        )
+
+        val failed = assertIs<LinkResolution.Failed>(result)
+        assertIs<LinkResolutionFailure.MissingLink>(failed.failure)
+    }
+
+    @Test
+    fun `two Plugs granted each other's Links do not cross-resolve`() {
+        val candidates = listOf(calendarNative, workspaceNative)
+
+        val workspace = LinkResolutionGate.resolve(
+            requirement = nativeRequirement("workspace"),
+            candidates = candidates,
+            grants = grants("workspace-plug", calendarNative.id),
+            platform = PlatformTarget.IOS,
+        )
+        val calendar = LinkResolutionGate.resolve(
+            requirement = nativeRequirement("calendar"),
+            candidates = candidates,
+            grants = grants("calendar-plug", workspaceNative.id),
+            platform = PlatformTarget.IOS,
+        )
+
+        // Each is asked about its own Link, which a grant then resolves.
+        val workspaceFailure = assertIs<LinkResolutionFailure.UngrantedLink>(
+            assertIs<LinkResolution.Failed>(workspace).failure,
+        )
+        val calendarFailure = assertIs<LinkResolutionFailure.UngrantedLink>(
+            assertIs<LinkResolution.Failed>(calendar).failure,
+        )
+        assertEquals(workspaceNative.id, workspaceFailure.linkId)
+        assertEquals(calendarNative.id, calendarFailure.linkId)
+    }
+
+    @Test
+    fun `a stale grant on another Plug's Link does not hide the Plug's own`() {
+        val result = LinkResolutionGate.resolve(
+            requirement = nativeRequirement("workspace"),
+            candidates = listOf(calendarNative, workspaceNative),
+            grants = grants("workspace-plug", listOf(calendarNative.id, workspaceNative.id)),
+            platform = PlatformTarget.IOS,
+        )
+
+        assertEquals(workspaceNative.id, assertIs<LinkResolution.Resolved>(result).link.id)
+    }
+
+    @Test
+    fun `two Plugs that declare the same requirement name share its Link`() {
+        listOf("calendar-plug", "standup-plug").forEach { plug ->
+            val result = LinkResolutionGate.resolve(
+                requirement = nativeRequirement("calendar"),
+                candidates = listOf(workspaceNative, calendarNative),
+                grants = grants(plug, calendarNative.id),
+                platform = PlatformTarget.IOS,
+            )
+
+            assertEquals(calendarNative.id, assertIs<LinkResolution.Resolved>(result).link.id, plug)
+        }
+    }
+
+    @Test
+    fun `the Link minted for the requirement is tried before an opaque one`() {
+        val minted = googleLink.copy(id = LinkId.forRequirement(requirement()))
+        val candidates = listOf(googleLink, minted)
+
+        val ungranted = LinkResolutionGate.resolve(
+            requirement = requirement(),
+            candidates = candidates,
+            grants = LinkGrants.empty(PlugId("calendar-plug")),
+            platform = PlatformTarget.ANDROID,
+        )
+        val granted = LinkResolutionGate.resolve(
+            requirement = requirement(),
+            candidates = candidates,
+            grants = grants("calendar-plug", listOf(googleLink.id, minted.id)),
+            platform = PlatformTarget.ANDROID,
+        )
+
+        val failure = assertIs<LinkResolutionFailure.UngrantedLink>(
+            assertIs<LinkResolution.Failed>(ungranted).failure,
+        )
+        assertEquals(minted.id, failure.linkId)
+        assertEquals(minted.id, assertIs<LinkResolution.Resolved>(granted).link.id)
+    }
+
+    @Test
+    fun `an opaque Link still answers a requirement whose own Link fails`() {
+        val minted = googleLink.copy(id = LinkId.forRequirement(requirement()), revokedAt = revokedAt)
+
+        val result = LinkResolutionGate.resolve(
+            requirement = requirement(),
+            candidates = listOf(minted, googleLink),
+            grants = grants("calendar-plug", listOf(minted.id, googleLink.id)),
+            platform = PlatformTarget.ANDROID,
+        )
+
+        assertEquals(googleLink.id, assertIs<LinkResolution.Resolved>(result).link.id)
     }
 
     // -----------------------------------------------------------------
