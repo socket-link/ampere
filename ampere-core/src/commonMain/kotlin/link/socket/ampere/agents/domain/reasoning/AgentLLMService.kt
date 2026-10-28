@@ -364,6 +364,10 @@ class AgentLLMService(
                 bestAvailableRung = routingResolution.bestAvailableRung,
             )
         }
+        // The relay picked no model, so the configuration's ids are a placeholder until the
+        // transport says what served (AMPR-503). Every row that would otherwise name them
+        // carries this flag instead.
+        val transportChoosesModel = routingResolution.transportChoosesModel
 
         // The route is read before the model: a configuration with backups settles which of
         // its configurations answers on the provider read, and the model, the wire id and the
@@ -407,6 +411,7 @@ class AgentLLMService(
             modelId = model.name,
             routingReason = routingResolution.reason,
             via = resolved.via,
+            transportChoosesModel = transportChoosesModel,
         )
 
         val startedAt = Clock.System.now()
@@ -443,6 +448,7 @@ class AgentLLMService(
                     servedLatencyMs = served?.latencyMs,
                     servedRoutingReason = served?.routingReason,
                     via = served.viaOr(resolved.via),
+                    transportChoosesModel = transportChoosesModel && served == null,
                 )
             }
             throw cancellation
@@ -458,6 +464,7 @@ class AgentLLMService(
                 errorType = t::class.simpleName ?: "UnknownError",
                 causedBy = startedEventId,
                 via = resolved.via,
+                transportChoosesModel = transportChoosesModel,
             )
             throw t
         }
@@ -495,6 +502,7 @@ class AgentLLMService(
             servedLatencyMs = served?.latencyMs,
             servedRoutingReason = served?.routingReason,
             via = servedVia,
+            transportChoosesModel = transportChoosesModel && served == null,
         )
 
         val text = completion.choices.firstOrNull()?.message?.content
@@ -669,6 +677,7 @@ class AgentLLMService(
         modelId: String,
         routingReason: String,
         via: ProviderId?,
+        transportChoosesModel: Boolean = false,
     ): EventId? {
         val publishingAgentId = eventApi?.agentId ?: return null
         val eventId = generateUUID("llm-start", publishingAgentId)
@@ -685,6 +694,7 @@ class AgentLLMService(
                     modelId = modelId,
                     routingReason = routingReason,
                     via = via,
+                    transportChoosesModel = transportChoosesModel,
                 ),
                 runId = routingContext?.workflowId,
             )
@@ -712,6 +722,7 @@ class AgentLLMService(
         servedLatencyMs: Long? = null,
         servedRoutingReason: String? = null,
         via: ProviderId?,
+        transportChoosesModel: Boolean = false,
     ) {
         val publishingAgentId = eventApi?.agentId ?: return
         val completedAt = Clock.System.now()
@@ -732,6 +743,7 @@ class AgentLLMService(
                     errorType = errorType,
                     servedRoutingReason = servedRoutingReason,
                     via = via,
+                    transportChoosesModel = transportChoosesModel,
                 ),
                 causedBy = causedBy,
                 runId = routingContext?.workflowId,

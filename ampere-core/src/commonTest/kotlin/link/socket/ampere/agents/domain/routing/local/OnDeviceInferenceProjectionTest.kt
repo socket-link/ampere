@@ -227,6 +227,30 @@ class OnDeviceInferenceProjectionTest {
         assertEquals(InferenceLocality.CLOUD, locality)
     }
 
+    @Test
+    fun `a transport-routed start never counts as on the device whatever its placeholder names`() = runTest {
+        // The worst placeholder a consumer could pick: the on-device model's own ids (AMPR-503).
+        val placeholderStart = onDeviceStarted(at = 10).copy(transportChoosesModel = true)
+
+        assertEquals(InferenceLocality.CLOUD, OnDeviceInferenceProjection.classify(placeholderStart, classifier))
+
+        val state = fold(OnDeviceInferenceState(), placeholderStart)
+
+        assertFalse(state.isInUse)
+        assertTrue(state.inFlight.isEmpty())
+    }
+
+    @Test
+    fun `a transport-routed failure is not an on-device failure`() = runTest {
+        val placeholderFailure = onDeviceCompleted(at = 20, success = false, errorType = "Timeout")
+            .copy(transportChoosesModel = true)
+
+        val state = fold(OnDeviceInferenceState(), placeholderFailure)
+
+        assertEquals(0, state.failedOnDevice)
+        assertEquals(0, state.servedOnDevice)
+    }
+
     private suspend fun fold(state: OnDeviceInferenceState, event: Event): OnDeviceInferenceState =
         OnDeviceInferenceProjection.fold(state, event, classifier)
 
