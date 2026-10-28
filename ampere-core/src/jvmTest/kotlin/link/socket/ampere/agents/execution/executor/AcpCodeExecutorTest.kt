@@ -329,6 +329,57 @@ class AcpCodeExecutorTest {
     }
 
     @Test
+    fun `a turn the agent cancels after a path is refused is a workspace error naming the refusal`() = runTest {
+        // OpenCode 2.2.0 marks the rejected tool call failed and ends the turn `cancelled` (AMPR-505).
+        val executor = executor({
+            val answer = askPermission(edit("$root/README.md"))
+            if (answer.outcome.optionId == "allow") writeDirectly("$root/README.md", "nope")
+            StopReason.CANCELLED
+        })
+
+        val failed = assertIs<ExecutionStatus.Failed>(executor.run(request(scope = kotlinUnderSrc)))
+
+        assertEquals("reject", agents.single().permissionAnswers.single().outcome.optionId)
+        assertFalse(exists("$root/README.md"))
+        val failure = assertIs<ExecutionOutcome.CodeChanged.Failure>(failed.result)
+        assertEquals(ExecutionError.Type.WORKSPACE_ERROR, failure.error.type)
+        assertFalse(failure.error.isRetryable)
+        assertTrue(failure.error.message.contains("\"README.md\" no write pattern permits it"), failure.error.message)
+        assertFalse(failure.error.message.contains("on its own"), failure.error.message)
+        assertEquals(emptyList(), failure.partiallyChangedFiles)
+    }
+
+    @Test
+    fun `a turn the agent cancels after a shell command is refused is unexpected and not retryable`() = runTest {
+        val executor = executor({
+            askPermission(PermissionToolCall(toolCallId = "c1", kind = ToolKind.EXECUTE, title = "ls -la"))
+            StopReason.CANCELLED
+        })
+
+        val failed = assertIs<ExecutionStatus.Failed>(executor.execute(request(), tool).toList().last())
+
+        val failure = assertIs<ExecutionOutcome.CodeChanged.Failure>(failed.result)
+        assertEquals(ExecutionError.Type.UNEXPECTED, failure.error.type)
+        assertFalse(failure.error.isRetryable)
+        assertTrue(failure.error.message.contains("shell commands are not permitted"), failure.error.message)
+    }
+
+    @Test
+    fun `a turn the agent cancels with nothing refused is still an unexpected retryable cancel`() = runTest {
+        val executor = executor({
+            say("stopping")
+            StopReason.CANCELLED
+        })
+
+        val failed = assertIs<ExecutionStatus.Failed>(executor.execute(request(), tool).toList().last())
+
+        val failure = assertIs<ExecutionOutcome.CodeChanged.Failure>(failed.result)
+        assertEquals(ExecutionError.Type.UNEXPECTED, failure.error.type)
+        assertTrue(failure.error.isRetryable)
+        assertTrue(failure.error.message.contains("cancelled the turn on its own"), failure.error.message)
+    }
+
+    @Test
     fun `an agent that dies mid turn is TOOL_UNAVAILABLE and the next call spawns a fresh one`() = runTest {
         val executor = executor(
             {

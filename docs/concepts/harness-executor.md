@@ -91,6 +91,15 @@ Three pressures fix the shape:
   `allowsWrite` is a `CodeChanged.Failure(WORKSPACE_ERROR)` naming it, with every changed
   path in `partiallyChangedFiles`. Undoing writes in a person's checkout is not the
   executor's call.
+- **A refusal is reported as a refusal, whatever stop reason the agent answers with.** An
+  agent may end the turn instead of carrying on after the fence rejects a permission
+  request: OpenCode 2.2.0 marks the tool call `failed` and answers `cancelled` (AMPR-505).
+  A `cancelled` turn with a refusal on record is a failure that names the refusal and is
+  not retryable: `WORKSPACE_ERROR` when a path was refused, `UNEXPECTED` for a denied shell
+  command or an unacceptable set of options. `HarnessTurn.refusals` keeps each refusal's
+  kind for this. Only a `cancelled` with nothing refused reads as the agent cancelling on
+  its own, retryable. A turn that goes on to `end_turn` is still judged by the audit, with
+  the refusals in its account.
 - **Zero changes is `NoChanges.Success`.** A turn that ended `end_turn` and touched nothing
   returns the agent's words, not a `CodeChanged.Success` with an empty list.
 - **Every spawn goes through `ProcessGroups`.** `StdioAcpTransport` holds the
@@ -149,6 +158,9 @@ Three pressures fix the shape:
   post-turn audit sees that.
 - *Selecting `allow_always` because the agent offered it.* The next edit in the session
   would skip the gate; the audit could only report it, not prevent it.
+- *Reading the agent's `cancelled` as its own cancel.* After a fence rejection OpenCode
+  ends the turn `cancelled`; reporting that as a retryable agent-side cancel sends the
+  Breaker back into the same refusal (AMPR-505). Check `HarnessTurn.refusals` first.
 - *Reverting an out-of-scope write.* Destructive in a person's checkout; the failure names the
   path and the Breaker's or the person's decision follows.
 - *Giving the harness a door to publish its own progress.* The engine already brackets the

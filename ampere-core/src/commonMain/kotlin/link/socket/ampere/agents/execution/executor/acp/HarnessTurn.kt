@@ -33,7 +33,22 @@ class HarnessTurn(
     private val calls = mutableMapOf<String, CallState>()
     private val edited = linkedMapOf<String, EnvironmentFileOperation>()
     private val served = linkedSetOf<String>()
-    private val refusals = mutableListOf<String>()
+    private val recorded = mutableListOf<Refusal>()
+
+    /** What a refused permission request was refused for, so the outcome can say which error it is. */
+    enum class RefusalKind {
+        /** A path outside the workspace or the spark's file access scope. */
+        PATH,
+
+        /** A shell command the harness policy denies. */
+        SHELL,
+
+        /** No answer the client accepts was offered, such as no `allow_once`. */
+        PROTOCOL,
+    }
+
+    /** One refused permission request: why, and of which kind. */
+    data class Refusal(val reason: String, val kind: RefusalKind)
 
     /** Everything the agent said during the turn, trimmed. */
     val finalMessage: String
@@ -49,7 +64,11 @@ class HarnessTurn(
 
     /** The permission requests this turn refused, each with its reason. */
     val refusedRequests: List<String>
-        get() = refusals
+        get() = refusals.map { it.reason }
+
+    /** The permission requests this turn refused, each with its reason and kind. */
+    val refusals: List<Refusal>
+        get() = recorded
 
     /** The operation the agent reported for [relativePath], or null when it reported none. */
     fun operationFor(relativePath: String): EnvironmentFileOperation? = edited[relativePath]
@@ -59,8 +78,8 @@ class HarnessTurn(
         if (relativePath !in edited) edited[relativePath] = operation
     }
 
-    fun recordRefusal(reason: String) {
-        refusals += reason
+    fun recordRefusal(reason: String, kind: RefusalKind) {
+        recorded += Refusal(reason, kind)
     }
 
     /** The statuses [update] produces, in order; often none. */
