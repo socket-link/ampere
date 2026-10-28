@@ -226,6 +226,7 @@ enum class EventStreamFilter {
             is GitEvent,
             is PermissionDeniedEvent,
             is ToolEvent.ToolExecutionStarted,
+            is ToolEvent.ToolExecutionProgress,
             is ToolEvent.ToolExecutionCompleted,
             -> true
             else -> false

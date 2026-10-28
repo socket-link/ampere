@@ -237,6 +237,12 @@ class ArcTraceProjection(
             .filterIsInstance<ToolEvent.ToolExecutionStarted>()
             .associateBy { it.invocationId }
 
+        // In store order, which is the order the engine published them in (AMPR-495).
+        val progressByInvocation = events
+            .map { it.event }
+            .filterIsInstance<ToolEvent.ToolExecutionProgress>()
+            .groupBy(keySelector = { it.invocationId }, valueTransform = { it.toToolCallProgress() })
+
         val completedInvocationIds = mutableSetOf<String>()
         val completedCalls = events
             .map { it.event }
@@ -257,6 +263,7 @@ class ArcTraceProjection(
                     durationMs = completed.durationMs,
                     success = completed.success,
                     errorMessage = completed.errorMessage,
+                    progress = progressByInvocation[completed.invocationId].orEmpty(),
                 )
             }
 
@@ -269,11 +276,20 @@ class ArcTraceProjection(
                     toolId = started.toolId,
                     toolName = started.toolName,
                     startedAt = started.timestamp,
+                    progress = progressByInvocation[started.invocationId].orEmpty(),
                 )
             }
 
         return (completedCalls + pendingCalls).sortedBy { it.startedAt }
     }
+
+    private fun ToolEvent.ToolExecutionProgress.toToolCallProgress(): ToolCallProgress = ToolCallProgress(
+        kind = kind,
+        detail = detail,
+        timestamp = timestamp,
+        filePath = filePath,
+        operation = operation,
+    )
 
     private fun buildMemoryWrites(
         events: List<DecodedEvent>,
@@ -447,6 +463,8 @@ class ArcTraceProjection(
         is MemoryEvent.KnowledgeRecalled -> RECALL_PHASE
         is MemoryEvent.KnowledgeStored -> LEARN_PHASE
         is ToolEvent.ToolExecutionStarted -> default ?: EXECUTE_PHASE
+        // Sits between its pair, and is filed with it (AMPR-495).
+        is ToolEvent.ToolExecutionProgress -> default ?: EXECUTE_PHASE
         is ToolEvent.ToolExecutionCompleted -> default ?: EXECUTE_PHASE
         // A plan step is Execute's own unit of work (AMPR-389): `PlanExecutor` is the
         // Execute-phase service, so its pair is filed the same way the tool pair is —

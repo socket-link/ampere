@@ -179,6 +179,7 @@ class SignificanceAwareEventLogger(
         is ToolEvent.ToolUnregistered -> EventSignificance.ROUTINE
         is ToolEvent.ToolDiscoveryComplete -> EventSignificance.ROUTINE
         is ToolEvent.ToolExecutionStarted -> EventSignificance.ROUTINE
+        is ToolEvent.ToolExecutionProgress -> EventSignificance.ROUTINE
         is ToolEvent.ToolExecutionCompleted -> EventSignificance.ROUTINE
         is ProviderCallStartedEvent -> EventSignificance.ROUTINE
         is ProviderCallCompletedEvent -> if (event.success) EventSignificance.ROUTINE else EventSignificance.SIGNIFICANT

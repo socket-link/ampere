@@ -6,6 +6,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.last
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -25,6 +26,7 @@ import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepository
 import link.socket.ampere.agents.domain.reasoning.AgentLLMService
 import link.socket.ampere.agents.domain.routing.RoutingContext
 import link.socket.ampere.agents.domain.status.ExecutionStatus
+import link.socket.ampere.agents.environment.EnvironmentFileOperation
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
@@ -404,7 +406,8 @@ class ToolExecutionEngine(
         val invocationId = generateUUID("tool-invocation", tool.id, actorId)
         val dispatchedAt = Clock.System.now()
         publishToolStarted(tool, invocationId, dispatchedAt, dispatchRunId, performer)
-        val outcome = dispatch(tool, runScopedRequest, startTime, originalRequest)
+        val progress = ProgressScope(tool, invocationId, dispatchRunId, performer)
+        val outcome = dispatch(tool, runScopedRequest, startTime, originalRequest, progress)
         publishToolCompleted(tool, invocationId, dispatchedAt, outcome, dispatchRunId, performer)
         return outcome
     }
@@ -488,12 +491,18 @@ class ToolExecutionEngine(
      * [McpExecutor][link.socket.ampere.agents.execution.executor.McpExecutor] in the executor
      * framework is a third implementation of this dispatch that nothing constructs; it is not
      * used here.
+     *
+     * Every status a [FunctionTool]'s executor streams before its terminal one goes out as a
+     * [ToolEvent.ToolExecutionProgress] under [progress] (AMPR-495), so a harness's inner tool
+     * calls reach the trace; the terminal status is still the only one the outcome is read
+     * from.
      */
     private suspend fun dispatch(
         tool: Tool<*>,
         runScopedRequest: ExecutionRequest<*>,
         startTime: Instant,
         originalRequest: ExecutionRequest<*>,
+        progress: ProgressScope,
     ): ExecutionOutcome {
         return try {
             when (tool) {
@@ -505,7 +514,9 @@ class ToolExecutionEngine(
                     val typedRequest = runScopedRequest as ExecutionRequest<ExecutionContext>
 
                     val statusFlow = executor.execute(typedRequest, typedTool)
-                    val finalStatus = statusFlow.last()
+                    val finalStatus = statusFlow
+                        .onEach { status -> publishToolProgress(progress, status) }
+                        .last()
 
                     when (finalStatus) {
                         is ExecutionStatus.Completed -> finalStatus.result
@@ -595,6 +606,96 @@ class ToolExecutionEngine(
                 ),
                 runId = dispatchRunId,
             )
+        }
+    }
+
+    /**
+     * The dispatch a [ToolEvent.ToolExecutionProgress] belongs to: the pair's own tool,
+     * invocation, run and performer, so every progress event joins the pair it sits between.
+     */
+    private class ProgressScope(
+        val tool: Tool<*>,
+        val invocationId: String,
+        val dispatchRunId: RunId?,
+        val performer: ExecutorId,
+    ) {
+        /** How many progress events this dispatch has published, for each one's id. */
+        var published: Int = 0
+    }
+
+    /** What a [ToolEvent.ToolExecutionProgress] says about the status it came from. */
+    private class ProgressDescription(
+        val kind: String,
+        val detail: String,
+        val filePath: String? = null,
+        val operation: EnvironmentFileOperation? = null,
+    )
+
+    /**
+     * This status as progress, or null when it is not progress: the executor's `Started`,
+     * and every terminal status. Exhaustive on purpose, so a new status kind has to say
+     * which it is.
+     */
+    private fun ExecutionStatus.asProgress(): ProgressDescription? = when (this) {
+        is ExecutionStatus.Started -> null
+        is ExecutionStatus.Planning -> ProgressDescription(kind = "Planning", detail = strategy)
+        is ExecutionStatus.Analyzing -> ProgressDescription(kind = "Analyzing", detail = description)
+        is ExecutionStatus.Writing -> ProgressDescription(
+            kind = "Writing",
+            detail = filePath,
+            filePath = filePath,
+            operation = operation,
+        )
+        is ExecutionStatus.Testing -> ProgressDescription(
+            kind = "Testing",
+            detail = if (detail.isBlank()) testType else "$testType: $detail",
+        )
+        is ExecutionStatus.Linting -> ProgressDescription(kind = "Linting", detail = detail)
+        is ExecutionStatus.Completed,
+        is ExecutionStatus.Failed,
+        is ExecutionStatus.Blank,
+        is ExecutionStatus.Held,
+        -> null
+    }
+
+    /**
+     * One [status] the executor streamed between the pair, as a
+     * [ToolEvent.ToolExecutionProgress] (AMPR-495). Nothing for the executor's own `Started` —
+     * the pair's start already says it — nor for a terminal status, which the completion
+     * reports; and nothing without a door, as for the pair.
+     *
+     * Under [NonCancellable], like the pair: the executor has already done what the status
+     * says. Best-effort by contract — this runs inside the dispatch, so a publish that threw
+     * would otherwise turn a tool that ran into a failed one, and progress never changes
+     * what the dispatch reports.
+     */
+    private suspend fun publishToolProgress(progress: ProgressScope, status: ExecutionStatus) {
+        val door = eventApi ?: return
+        val described = status.asProgress() ?: return
+        val index = progress.published++
+        withContext(NonCancellable) {
+            try {
+                door.publish(
+                    ToolEvent.ToolExecutionProgress(
+                        eventId = generateUUID("tool-execution-progress", progress.invocationId, index.toString()),
+                        timestamp = status.timestamp,
+                        eventSource = EventSource.Agent(door.agentId),
+                        urgency = Urgency.LOW,
+                        invocationId = progress.invocationId,
+                        toolId = progress.tool.id,
+                        toolName = progress.tool.name,
+                        runId = progress.dispatchRunId,
+                        executorId = progress.performer,
+                        kind = described.kind,
+                        detail = described.detail,
+                        filePath = described.filePath,
+                        operation = described.operation,
+                    ),
+                    runId = progress.dispatchRunId,
+                )
+            } catch (_: Exception) {
+                // Deliberate; see the KDoc above.
+            }
         }
     }
 

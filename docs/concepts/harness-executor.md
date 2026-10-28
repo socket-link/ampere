@@ -6,7 +6,7 @@ tracked_sources:
   - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/executor/**
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/tools/ToolHarnessCodeChange.kt
 related: [PropelLoop, HostedRun, SparkSystem, CancellationAddress, CognitionTrace, MemoryProvenance]
-last_verified: 2026-10-24
+last_verified: 2026-10-27
 ---
 
 # HarnessExecutor
@@ -69,7 +69,8 @@ Three pressures fix the shape:
   planner nominates; its own function fails `TOOL_UNAVAILABLE` so an unbound declaration
   says so.
 - `ToolExecutionEngine.performerOf` — reads `executor.performerFor(tool)` for a
-  `FunctionTool`; the one engine change.
+  `FunctionTool`; AMPR-444's one engine change. `ToolExecutionEngine.publishToolProgress`
+  (AMPR-495) turns each streamed status into a `ToolEvent.ToolExecutionProgress`.
 - Tests: `commonTest/.../executor/acp/` (the wire, the connection, the fence, an in-memory
   `ScriptedAcpAgent`), `commonTest/.../executor/AcpCodeExecutorTest`, `RoutedExecutorTest`;
   `jvmTest/.../executor/` (a real `sh` fake agent, the git observer, the hosted-run proof).
@@ -98,6 +99,13 @@ Three pressures fix the shape:
 - **Cancellation is the ACP handshake.** A cancelled turn sends `session/cancel` under
   `NonCancellable`, waits `HarnessPolicy.cancelGrace` for the `cancelled` stop reason, and
   closes the connection if it does not come. The next call spawns a fresh agent.
+- **The harness's statuses are on the record, and the engine puts them there.** Each
+  `Planning`, `Analyzing` and `Writing` an `AcpCodeExecutor` streams is published by
+  `ToolExecutionEngine` as one `ToolEvent.ToolExecutionProgress` between the tool pair,
+  through the deciding agent's door, under the pair's `invocationId`, run and performer — a
+  `Writing` with its `filePath` and `operation` (AMPR-495). `ArcTraceProjection` folds them
+  into `ToolCallTrace.progress`. The executor publishes nothing itself: it has no door, and
+  the outcome is still read from the terminal status alone.
 - **No ACP type reaches an `ExecutionOutcome`.** Outcome variants stay tool-agnostic
   (MemoryProvenance); the harness's account rides in
   `validation.codeChanges.diffSummary`, which `describeResult()` renders for the next step.
@@ -143,8 +151,11 @@ Three pressures fix the shape:
   would skip the gate; the audit could only report it, not prevent it.
 - *Reverting an out-of-scope write.* Destructive in a person's checkout; the failure names the
   path and the Breaker's or the person's decision follows.
-- *Reading the engine's streamed statuses as the trace.* `ToolExecutionEngine` reads only
-  `statusFlow.last()`; the `Writing`/`Analyzing` statuses are the contract, not yet an event.
-  Publishing a harness's inner tool calls is a follow-up, and a new `Event` subtype.
+- *Giving the harness a door to publish its own progress.* The engine already brackets the
+  dispatch and holds the door, the `invocationId` and the performer; a second publisher
+  beside it would be two producers of one call's trace (AMPR-495). Emit a status and let the
+  engine publish it.
+- *Publishing the agent's message chunks as progress.* They produce no status on purpose;
+  the harness's own account rides in the outcome's `diffSummary`.
 - *A `commonMain` subprocess.* `ProcessGroups` is JVM; the common half must stay behind
   `AcpTransport`, or the module stops compiling for Android, iOS, JS and wasmJs.

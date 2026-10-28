@@ -159,6 +159,7 @@ object EventCategorizer {
         is TaskEvent.TaskStarted,
         is TaskEvent.TaskProgressed,
         is ToolEvent.ToolExecutionStarted,
+        is ToolEvent.ToolExecutionProgress,
         is ToolEvent.ToolExecutionCompleted,
         is ProviderCallStartedEvent,
         is RoutingEvent.RouteSelected,
