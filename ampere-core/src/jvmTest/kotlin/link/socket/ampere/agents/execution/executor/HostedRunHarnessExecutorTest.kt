@@ -21,12 +21,14 @@ import link.socket.ampere.agents.domain.event.Event
 import link.socket.ampere.agents.domain.event.PlanEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.domain.outcome.StepOutcome
+import link.socket.ampere.agents.environment.EnvironmentFileOperation
 import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.InMemoryEventDoor
 import link.socket.ampere.agents.events.StoredEvent
 import link.socket.ampere.agents.execution.executor.acp.InMemoryAcpTransport
 import link.socket.ampere.agents.execution.executor.acp.PermissionToolCall
 import link.socket.ampere.agents.execution.executor.acp.ScriptedAcpAgent
+import link.socket.ampere.agents.execution.executor.acp.SessionUpdate
 import link.socket.ampere.agents.execution.executor.acp.StopReason
 import link.socket.ampere.agents.execution.executor.acp.ToolCallLocation
 import link.socket.ampere.agents.execution.executor.acp.ToolKind
@@ -91,6 +93,14 @@ class HostedRunHarnessExecutorTest {
         val run = openRun(
             doerSparks = emptyList(),
             script = {
+                update(
+                    SessionUpdate.ToolCall(
+                        toolCallId = "c1",
+                        title = "Edit greeting",
+                        kind = ToolKind.EDIT,
+                        locations = listOf(ToolCallLocation(path("src/Greeting.kt"))),
+                    ),
+                )
                 val answer = askPermission(
                     PermissionToolCall(
                         toolCallId = "c1",
@@ -130,6 +140,21 @@ class HostedRunHarnessExecutorTest {
         assertTrue(completed.success)
         assertEquals(DOER_ID, started.eventSource.getIdentifier(), "the agent that decided is the source")
         assertEquals(started.invocationId, completed.invocationId)
+
+        // AMPR-495: what the harness did between the pair is on the run's record, as the harness.
+        val toolEvents = record.events<ToolEvent>()
+        val writing = record.events<ToolEvent.ToolExecutionProgress>().single { it.kind == "Writing" }
+        assertTrue(
+            toolEvents.indexOf(started) < toolEvents.indexOf(writing) &&
+                toolEvents.indexOf(writing) < toolEvents.indexOf(completed),
+            "the write sits between the pair: ${toolEvents.map { it.eventType }}",
+        )
+        assertEquals("src/Greeting.kt", writing.filePath)
+        assertEquals(EnvironmentFileOperation.MODIFY, writing.operation)
+        assertEquals(HARNESS_ID, writing.executorId, "attributed to the harness, not the router")
+        assertEquals(DOER_ID, writing.eventSource.getIdentifier(), "through the deciding seat's door")
+        assertEquals(started.invocationId, writing.invocationId)
+        assertEquals(result.runId, writing.runId)
 
         val prompt = agent.lastPromptText()
         assertTrue(prompt.contains("Add a greeting"), prompt)

@@ -31,6 +31,7 @@ import link.socket.ampere.agents.domain.routing.capability.CostPolicy
 import link.socket.ampere.agents.domain.routing.capability.InMemoryModelDescriptorRegistry
 import link.socket.ampere.agents.domain.routing.capability.ModelDescriptor
 import link.socket.ampere.agents.domain.routing.capability.ProviderCapability
+import link.socket.ampere.agents.environment.EnvironmentFileOperation
 import link.socket.ampere.agents.events.EventEnvelope
 import link.socket.ampere.agents.events.EventRepository
 import link.socket.ampere.agents.execution.results.ExecutionResult
@@ -262,6 +263,156 @@ class ArcTraceProjectionTest {
 
         assertEquals("phase=PLAN", invocation.routingReason)
     }
+
+    @Test
+    fun `a call's progress folds into its own tool call in the order it was published`() = runTest {
+        // AMPR-495: two calls in flight at once, their progress interleaved in the store. Each
+        // call keeps only its own, in store order; a call with none has an empty list.
+        val runId = "run-tool-progress"
+        val envelope = EventEnvelope(runId = runId)
+
+        suspend fun save(event: ToolEvent) = eventRepository.saveEvent(event, envelope = envelope).getOrThrow()
+
+        save(toolStarted(runId, invocationId = "harness-call", at = 1_000))
+        save(toolStarted(runId, invocationId = "quiet-call", at = 1_001))
+        save(toolProgress(runId, "harness-call", at = 1_100, kind = "Planning", detail = "Delegating the step"))
+        save(toolStarted(runId, invocationId = "pending-call", at = 1_150))
+        save(
+            toolProgress(
+                runId,
+                "harness-call",
+                at = 1_200,
+                kind = "Writing",
+                detail = "src/Greeting.kt",
+                filePath = "src/Greeting.kt",
+                operation = EnvironmentFileOperation.CREATE,
+            ),
+        )
+        save(toolProgress(runId, "pending-call", at = 1_250, kind = "Analyzing", detail = "Read build.gradle.kts"))
+        save(toolCompleted(runId, invocationId = "quiet-call", at = 1_300))
+        save(
+            toolProgress(
+                runId,
+                "harness-call",
+                at = 1_400,
+                kind = "Writing",
+                detail = "src/Main.kt",
+                filePath = "src/Main.kt",
+                operation = EnvironmentFileOperation.MODIFY,
+            ),
+        )
+        save(toolCompleted(runId, invocationId = "harness-call", at = 1_500))
+
+        val trace = projection.project(runId).getOrThrow()
+        val calls = assertNotNull(trace.phases.firstOrNull { it.name == "EXECUTE" }).toolCalls.associateBy {
+            it.invocationId
+        }
+
+        assertEquals(
+            listOf(
+                ToolCallProgress("Planning", "Delegating the step", Instant.fromEpochMilliseconds(1_100)),
+                ToolCallProgress(
+                    kind = "Writing",
+                    detail = "src/Greeting.kt",
+                    timestamp = Instant.fromEpochMilliseconds(1_200),
+                    filePath = "src/Greeting.kt",
+                    operation = EnvironmentFileOperation.CREATE,
+                ),
+                ToolCallProgress(
+                    kind = "Writing",
+                    detail = "src/Main.kt",
+                    timestamp = Instant.fromEpochMilliseconds(1_400),
+                    filePath = "src/Main.kt",
+                    operation = EnvironmentFileOperation.MODIFY,
+                ),
+            ),
+            assertNotNull(calls["harness-call"]).progress,
+        )
+        assertEquals(
+            emptyList<ToolCallProgress>(),
+            assertNotNull(calls["quiet-call"]).progress,
+            "a call that reported nothing",
+        )
+        val pending = assertNotNull(calls["pending-call"], "a start with no completion is still a call")
+        assertNull(pending.endedAt)
+        assertEquals(listOf("Analyzing"), pending.progress.map { it.kind }, "in-flight work shows its progress")
+        assertEquals(true, calls.getValue("harness-call").success, "progress never changes the pair's verdict")
+
+        val executeTypes = trace.phases.single { it.name == "EXECUTE" }.events.map { it.eventType }
+        assertEquals(
+            4,
+            executeTypes.count { it == ToolEvent.ToolExecutionProgress.EVENT_TYPE },
+            "every progress event is filed under the pair's phase; got $executeTypes",
+        )
+    }
+
+    @Test
+    fun `a tool call with no progress encodes exactly as it did before the field existed`() {
+        val call = ToolCallTrace(
+            invocationId = "call-1",
+            phaseName = "EXECUTE",
+            toolId = "write-code",
+            toolName = "Write Code",
+            startedAt = Instant.fromEpochMilliseconds(1_000),
+            endedAt = Instant.fromEpochMilliseconds(1_100),
+            durationMs = 100,
+            success = true,
+        )
+
+        val encoded = DEFAULT_JSON.encodeToString(ToolCallTrace.serializer(), call)
+
+        assertTrue("progress" !in encoded, "an empty progress list is not written: $encoded")
+        assertEquals(call, DEFAULT_JSON.decodeFromString(ToolCallTrace.serializer(), encoded))
+    }
+
+    private fun toolStarted(runId: String, invocationId: String, at: Long) = ToolEvent.ToolExecutionStarted(
+        eventId = "start-$invocationId",
+        timestamp = Instant.fromEpochMilliseconds(at),
+        eventSource = EventSource.Agent("code-agent"),
+        urgency = Urgency.LOW,
+        invocationId = invocationId,
+        toolId = "harness_code_change",
+        toolName = "Code Change (harness)",
+        runId = runId,
+        executorId = "opencode",
+    )
+
+    private fun toolProgress(
+        runId: String,
+        invocationId: String,
+        at: Long,
+        kind: String,
+        detail: String,
+        filePath: String? = null,
+        operation: EnvironmentFileOperation? = null,
+    ) = ToolEvent.ToolExecutionProgress(
+        eventId = "progress-$invocationId-$at",
+        timestamp = Instant.fromEpochMilliseconds(at),
+        eventSource = EventSource.Agent("code-agent"),
+        invocationId = invocationId,
+        toolId = "harness_code_change",
+        toolName = "Code Change (harness)",
+        runId = runId,
+        executorId = "opencode",
+        kind = kind,
+        detail = detail,
+        filePath = filePath,
+        operation = operation,
+    )
+
+    private fun toolCompleted(runId: String, invocationId: String, at: Long) = ToolEvent.ToolExecutionCompleted(
+        eventId = "complete-$invocationId",
+        timestamp = Instant.fromEpochMilliseconds(at),
+        eventSource = EventSource.Agent("code-agent"),
+        urgency = Urgency.LOW,
+        invocationId = invocationId,
+        toolId = "harness_code_change",
+        toolName = "Code Change (harness)",
+        success = true,
+        durationMs = at - 1_000,
+        runId = runId,
+        executorId = "opencode",
+    )
 
     @Test
     fun `two concurrent calls in one phase each pair with their own start`() = runTest {

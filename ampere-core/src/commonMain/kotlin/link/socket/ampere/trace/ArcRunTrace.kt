@@ -5,6 +5,7 @@ import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.RunId
+import link.socket.ampere.agents.environment.EnvironmentFileOperation
 import link.socket.ampere.domain.arc.CompletionRecord
 
 /** The identity of one Arc execution. Alias of [RunId] (see AMPR-240) — same value, trace-package name. */
@@ -101,6 +102,17 @@ data class MemoryWriteTrace(
     val learnings: String? = null,
 )
 
+/**
+ * One tool call: a `ToolExecutionStarted` joined to its `ToolExecutionCompleted` by
+ * [invocationId], or a start alone while the call is in flight.
+ *
+ * @property progress What the call was doing in between, in order: one entry per
+ *   `ToolExecutionProgress` under the same [invocationId] (AMPR-495) — for a coding harness,
+ *   its plan, each file it wrote and each other tool it ran. Empty for a call whose executor
+ *   reported nothing between the pair, and then not encoded, so a trace stored before the
+ *   field existed decodes and re-encodes unchanged.
+ */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class ToolCallTrace(
     val invocationId: String,
@@ -112,6 +124,24 @@ data class ToolCallTrace(
     val durationMs: Long? = null,
     val success: Boolean? = null,
     val errorMessage: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val progress: List<ToolCallProgress> = emptyList(),
+)
+
+/**
+ * One `ToolExecutionProgress` inside a [ToolCallTrace]: the status [kind] the executor
+ * reported, what it said, and — for a `Writing` — the path and the operation.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ToolCallProgress(
+    val kind: String,
+    val detail: String,
+    val timestamp: Instant,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val filePath: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val operation: EnvironmentFileOperation? = null,
 )
 
 @Serializable

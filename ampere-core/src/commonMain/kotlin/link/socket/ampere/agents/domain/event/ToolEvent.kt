@@ -6,6 +6,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.environment.EnvironmentFileOperation
 import link.socket.ampere.agents.execution.tools.ToolId
 
 /**
@@ -168,6 +169,72 @@ sealed interface ToolEvent : Event {
 
         companion object {
             const val EVENT_TYPE: EventType = "ToolExecutionStarted"
+        }
+    }
+
+    /**
+     * What a tool invocation was doing between its [ToolExecutionStarted] and its
+     * [ToolExecutionCompleted] (AMPR-495): one event per non-terminal `ExecutionStatus` the
+     * executor streamed, in the order it streamed them. For a coding harness this is its
+     * inner tool calls — the plan it made, each file it wrote, each other tool it ran — which
+     * would otherwise leave the trace as one opaque pair.
+     *
+     * Published by
+     * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine], the
+     * pair's producer, under the pair's [invocationId] and run; no executor publishes events
+     * of its own. The executor's own `Started` is not repeated here, because the pair's start
+     * already says it, and the terminal status is the completion. Always [Urgency.LOW], and it
+     * never changes the pair's `success`, `held` or `errorMessage`.
+     *
+     * @property invocationId The invocation this progress belongs to, matching its pair
+     * @property toolId The ID of the tool being executed
+     * @property toolName The name of the tool being executed
+     * @property runId The Arc run the dispatch belongs to, as on the pair. Null outside a run.
+     * @property executorId The `Executor.id` that performed the call, as on the pair (AMPR-443)
+     * @property kind The status this progress came from: `Planning`, `Analyzing`, `Writing`,
+     *   `Testing` or `Linting`
+     * @property detail What the status said: the strategy, the description, the path written,
+     *   the test run or the lint run
+     * @property filePath For a `Writing`, the path written; null otherwise, and then not encoded
+     * @property operation For a `Writing`, what was done to [filePath]; null otherwise, and
+     *   then not encoded
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @Serializable
+    data class ToolExecutionProgress(
+        override val eventId: EventId,
+        override val timestamp: Instant,
+        override val eventSource: EventSource,
+        override val urgency: Urgency = Urgency.LOW,
+        val invocationId: String,
+        val toolId: ToolId,
+        val toolName: String,
+        val runId: String? = null,
+        val executorId: String,
+        val kind: String,
+        val detail: String,
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        val filePath: String? = null,
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        val operation: EnvironmentFileOperation? = null,
+    ) : ToolEvent {
+
+        override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Tool progress: $toolName ($toolId) - $kind")
+            when {
+                operation != null && filePath != null -> append(": ${operation.name} $filePath")
+                detail.isNotBlank() -> append(": $detail")
+            }
+            append(" ${formatUrgency(urgency)}")
+        }
+
+        companion object {
+            const val EVENT_TYPE: EventType = "ToolExecutionProgress"
         }
     }
 
