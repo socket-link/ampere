@@ -85,10 +85,13 @@ import okio.Path.Companion.toPath
  * the workspace. Every `session/request_permission` is answered by a [HarnessFence] from the
  * request's `fileAccessScope`, `allow_once` or a rejection, never a standing grant. The
  * client-side `fs/read_text_file` and `fs/write_text_file` are advertised and served under
- * the same fence. And after the turn, what actually changed on disk — a [WorkspaceObserver]
- * snapshot before against one after — is checked path by path against the scope; a changed
- * path the scope does not permit fails the step, naming it, because a harness may write from
- * its own process without asking. Nothing is reverted: that is the person's call. The
+ * the same fence, for an agent that uses them; OpenCode does not (anomalyco/opencode#38196,
+ * not called in 2.2.0: AMPR-498 saw neither method in any turn, with both advertised and
+ * edits allowed), so for it that handler and `servedWrites` stay dormant. And after the turn,
+ * what actually changed on disk — a [WorkspaceObserver] snapshot before against one after —
+ * is checked path by path against the scope; a changed path the scope does not permit fails
+ * the step, naming it, because a harness may write from its own process without asking, as
+ * OpenCode always does. Nothing is reverted: that is the person's call. The
  * Breaker's admission of the step is the first layer and happens before this class is reached.
  *
  * The workspace is the request's when it names one, else [workspace], the checkout this
