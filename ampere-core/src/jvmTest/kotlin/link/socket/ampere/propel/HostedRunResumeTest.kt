@@ -31,6 +31,7 @@ import link.socket.ampere.agents.domain.outcome.OutcomeMemoryRepositoryImpl
 import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.InMemoryEventDoor
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
@@ -401,6 +402,84 @@ class HostedRunResumeTest {
         assertNull(heldStore.list().getOrThrow().single().claimedAt, "the record is left for a roster that fits")
     }
 
+    // ========================================================================
+    // The run's workspace (AMPR-496)
+    // ========================================================================
+
+    @Test
+    fun `a run held with a workspace records it and resumes into seats whose requests carry it`() =
+        runBlocking<Unit> {
+            val host = hostSeat { planJson(searchStep(), sendStep(), fileStep()) }
+            val runHost = runHost()
+            val held = openRun(host, runHost = runHost, workspace = CHECKOUT)
+            held.execute()
+            held.close()
+            assertEquals(CHECKOUT, searched.single().workspace, "a step before the hold ran in the checkout")
+            assertEquals(CHECKOUT, assertNotNull(heldStore.get(held.runId).getOrThrow()).workspace)
+
+            val resumed = resume(runHost, held.runId, host, HoldResolution.Completed(HELD_RESULT))
+            val result = resumed.execute()
+            resumed.close()
+
+            assertEquals(RunStatus.Succeeded, result.status)
+            assertEquals(CHECKOUT, filed.single().workspace, "the resume named none, and the record's carried on")
+        }
+
+    @Test
+    fun `a resume naming a workspace other than the held run's is refused before the claim`() =
+        runBlocking<Unit> {
+            val host = hostSeat { planJson(sendStep(), fileStep()) }
+            val runHost = runHost()
+            val held = openRun(host, runHost = runHost, workspace = CHECKOUT)
+            held.execute()
+            held.close()
+            val callsBefore = host.transport.callCount
+
+            val refused = assertIs<IllegalArgumentException>(
+                refusal {
+                    resume(
+                        runHost,
+                        held.runId,
+                        host,
+                        HoldResolution.Completed(HELD_RESULT),
+                        workspace = ExecutionWorkspace(baseDirectory = "/abs/another-checkout"),
+                    )
+                },
+            )
+            assertTrue(refused.message!!.contains("/abs/another-checkout"), refused.message)
+            assertNull(heldStore.list().getOrThrow().single().claimedAt, "the record is left for the right checkout")
+            assertEquals(callsBefore, host.transport.callCount)
+
+            val resumed = resume(runHost, held.runId, host, HoldResolution.Completed(HELD_RESULT), workspace = CHECKOUT)
+            assertEquals(RunStatus.Succeeded, resumed.execute().status, "the same checkout, named again, is accepted")
+            resumed.close()
+            assertEquals(CHECKOUT, filed.single().workspace)
+        }
+
+    @Test
+    fun `a run held without a workspace takes the one its resume names, and records it when it holds again`() =
+        runBlocking<Unit> {
+            val host = hostSeat { planJson(sendStep(), fileStep(), confirmStep()) }
+            val runHost = runHost()
+            val held = openRun(host, runHost = runHost)
+            held.execute()
+            held.close()
+            assertNull(assertNotNull(heldStore.get(held.runId).getOrThrow()).workspace)
+
+            val resumed = resume(runHost, held.runId, host, HoldResolution.Completed(HELD_RESULT), workspace = CHECKOUT)
+            val result = resumed.execute()
+            resumed.close()
+
+            assertEquals(RunStatus.Held, result.status, "the confirmation holds again")
+            assertEquals(CHECKOUT, filed.single().workspace)
+            assertEquals(CHECKOUT, confirmed.single().workspace)
+            assertEquals(
+                CHECKOUT,
+                assertNotNull(heldStore.get(held.runId).getOrThrow()).workspace,
+                "the second hold's record carries the checkout the run carried on in",
+            )
+        }
+
     @Test
     fun `a resumed run that holds again is resumable again, and its second resume continues after that step`() =
         runBlocking<Unit> {
@@ -719,6 +798,7 @@ class HostedRunResumeTest {
         runHost: RunHost = runHost(),
         policy: RunPolicy = RunPolicy(planGate = gate),
         runId: String? = null,
+        workspace: ExecutionWorkspace? = null,
     ): HostedRun = runHost.open(
         roster = roster(),
         seats = seats(host),
@@ -726,6 +806,7 @@ class HostedRunResumeTest {
         tools = tools(),
         policy = policy,
         runId = runId,
+        workspace = workspace,
     )
 
     private suspend fun resume(
@@ -735,6 +816,7 @@ class HostedRunResumeTest {
         resolution: HoldResolution,
         policy: RunPolicy = RunPolicy(planGate = gate),
         tools: Set<Tool<*>> = tools(),
+        workspace: ExecutionWorkspace? = null,
     ): HostedRun = runHost.resume(
         runId = runId,
         roster = roster(),
@@ -742,6 +824,7 @@ class HostedRunResumeTest {
         resolution = resolution,
         tools = tools,
         policy = policy,
+        workspace = workspace,
     )
 
     /** A tool whose action waits on a person: it records its request and holds. */
@@ -827,6 +910,7 @@ class HostedRunResumeTest {
         const val SHARED_RUN_ID = "run-ampr-431-shared"
         const val REASON = "waiting for the account owner to approve sending"
         const val REFERENCE = "approval-request-17"
+        val CHECKOUT = ExecutionWorkspace(baseDirectory = "/abs/checkout")
 
         val HOST_ROLE = RoleId("planner")
         val SCOUT_ROLE = RoleId("scout")

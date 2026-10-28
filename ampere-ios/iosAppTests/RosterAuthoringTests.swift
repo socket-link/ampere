@@ -97,4 +97,34 @@ final class RosterAuthoringTests: XCTestCase {
         let asInspector = call.withSeat(seat: makeInspector())
         XCTAssertTrue(asInspector.tags.isEmpty, "a seat that declares nothing tags nothing")
     }
+
+    /// A run's checkout, named from Swift (AMPR-496). `ExecutionWorkspace` is plain strings,
+    /// so it needs no factory; `openInCheckout` below is the call that hands it to a run.
+    func testAConsumerCanNameARunsCheckoutFromSwift() {
+        let checkout = ExecutionWorkspace(baseDirectory: "/abs/checkout", repository: nil, branch: nil, lease: nil)
+
+        XCTAssertEqual(checkout.baseDirectory, "/abs/checkout")
+        XCTAssertNil(checkout.lease, "a workspace named from a directory claims no owner")
+    }
+
+    /// Compiled, never called: what a consumer writes to open a run in a checkout. Its job is
+    /// to fail the Swift build if `workspace` stops reaching `RunHost.openSeats`'s export.
+    private func openInCheckout(
+        host: any RunHost,
+        roster: any Roster,
+        seats: [HostedAgent],
+        goal: any shared.Task,
+        policy: RunPolicy,
+        checkout: ExecutionWorkspace
+    ) async throws -> any HostedRun {
+        try await host.openSeats(
+            roster: roster,
+            seats: seats,
+            goal: goal,
+            tools: [],
+            policy: policy,
+            runId: nil,
+            workspace: checkout
+        )
+    }
 }

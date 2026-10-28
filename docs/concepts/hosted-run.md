@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/service/AgentService.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/internal/DefaultAgentService.kt
 related: [PropelLoop, TeamLayer, SparkSystem, MemoryProvenance, CognitionTrace, Probe, SubjectRegistry, PlugPermissions]
-last_verified: 2026-10-24
+last_verified: 2026-10-27
 ---
 
 # Hosted Run
@@ -16,7 +16,7 @@ last_verified: 2026-10-24
 ## What it is
 
 A **hosted run** is one PROPEL run a consumer opens for one goal, over a roster of
-seats, from the public API. `RunHost.open(roster, seats, goal, tools, policy, runId)` charges
+seats, from the public API. `RunHost.open(roster, seats, goal, tools, policy, runId, workspace)` charges
 PERCEIVE → RECALL → OBSERVE → PLAN on the roster's **host seat** and returns a
 `HostedRun` whose plan has already passed the consumer's `PlanGate`;
 `HostedRun.execute()` is EXECUTE plus a re-entry into OBSERVE → PLAN while cycles
@@ -126,7 +126,8 @@ that loop, moved into Ampere, so the consumer can delete its copy.
    outcome completes the goal. That is the same function, with the same deterministic
    default, that `FlowPhase` asks after each agent's tick. There is no second planner.
 10. **A non-code agent is first class.** No `CodeState`, no project directory, no
-    workspace required.
+    workspace required. A run that does change code names its checkout once, for the whole
+    run (invariant 29).
 11. **A judgment asked by the run is recorded and, with one add-only exception, never
     read** (AMPR-421, AMPR-481, AMPR-483). A cycle that executed may be asked whether the
     goal is met, the verifier seat may be asked its own declared questions, and the
@@ -440,6 +441,23 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     is logged (naming the run, never its content) and that boundary behaves as `Off`. `Off`, and
     a host with `field == null`, are byte-identical to before — prompts, events, `RunResult` —
     pinned by `PerceptionPromptGoldenTest` and `RosterHostedRunFieldTest`.
+29. **A run's workspace is the run's: one checkout, every seat, carried across a hold**
+    (AMPR-496). `RunHost.open(…, workspace)` and `openSeats` take an optional
+    `ExecutionWorkspace`; `RosterRunHost.buildSeat` pins every seat's `SparkBasedAgent` to
+    it (`_workspace`), so every step request any seat builds carries it as
+    `ExecutionRequest.workspace` — which is where `write_code_file`'s and `read_code_file`'s
+    strategies take their pin (AMPR-300) and where `AcpCodeExecutor` looks before its own
+    binding. Null stays null: no seat, no tool and no executor falls back to the process's
+    working directory, and a code tool refuses instead. A run that holds records the
+    workspace on `HeldRun.workspace` (`@EncodeDefault(NEVER)`, so a record with none — and
+    every record written before the field — is byte-identical). `RunHost.resume(…,
+    workspace)` with none carries the run on in the recorded one; one equal to the record
+    is accepted; one that differs — the whole value, lease included — is refused with an
+    `IllegalArgumentException` before the claim, so the record is left unclaimed; one given
+    for a run that recorded none becomes the run's, and a resumed run that holds again
+    records it. `AgentService.pursue(goal, workspace)` is the overload the one-line path
+    opens with; its default body refuses a non-null workspace, so an implementation that
+    predates it never drops one silently.
 
 ## How it composes
 
@@ -479,6 +497,7 @@ val run = ampere.runs!!.open(
         recall = RecallPolicy(sources = listOf(myDocumentCorpus)),
         quotas = RunQuotas(tokens = 200_000, wallClock = 15.minutes),
     ),
+    workspace = ExecutionWorkspace(baseDirectory = "/abs/checkout"),   // or none, for a run that touches no files
 )
 
 try {
@@ -554,7 +573,7 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 
 | Type | Role |
 |------|------|
-| `RunHost` | `open(…, runId: RunId? = null)`, `openSeats(roster, seats: List<HostedAgent>, …, runId)` (the Swift-friendly overload), `openRunSeats(): List<OpenSeat>`; `resume(runId, roster, seats, resolution, tools, policy)`, `resumeSeats(…)` and `heldRuns(): List<HeldRunSummary>` (AMPR-431), each with a default body — `resume` throws `NoStore`, `heldRuns` is empty. A supplied `runId` is `HostedRun.runId`, `RunResult.runId`, the envelope run id of every event, the task lifecycle's id and LEARN's outcome `ticketId`/`runId`; null mints one |
+| `RunHost` | `open(…, runId: RunId? = null, workspace: ExecutionWorkspace? = null)`, `openSeats(roster, seats: List<HostedAgent>, …, runId, workspace)` (the Swift-friendly overload), `openRunSeats(): List<OpenSeat>`; `resume(runId, roster, seats, resolution, tools, policy, workspace)`, `resumeSeats(…)` and `heldRuns(): List<HeldRunSummary>` (AMPR-431), each with a default body — `resume` throws `NoStore`, `heldRuns` is empty. A supplied `runId` is `HostedRun.runId`, `RunResult.runId`, the envelope run id of every event, the task lifecycle's id and LEARN's outcome `ticketId`/`runId`; null mints one. `workspace` is the run's checkout, stamped on every seat's step requests (invariant 29); null is none |
 | `HostedAgent` | Who fills a seat: id, role, sparks, charter, `AIConfiguration`, `CognitiveRelay?`, **required** `UpstreamLlmClient`, `MemoryStore?`, `recallScopes`, affinity, `probes`, `questions`, `UpstreamDecisionClient?`, `userGrants: (suspend (PlugManifest) -> UserGrants)?` (null denies) |
 | `HostedRun` | `runId`, `plan`, `readExternalContent`, `execute()`, `close()`. `readExternalContent` defaults to `true` on the interface, so an implementation that does not track it is assumed to have read something |
 | `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip`, `quotas`, `maxStepsPerCycle` (null = no cap), `observe`, `cadence` |
@@ -579,7 +598,7 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 
 `Ampere.fromEnvironment` exposes one as `AmpereInstance.runs`, and `agentScope` is
 documented as the caller's to own. `AgentService.team {}` declares the roster and
-`AgentService.pursue(goal)` opens a run over it; `AgentService.listAll()` and
+`AgentService.pursue(goal)` opens a run over it — `pursue(goal, workspace)` in a checkout; `AgentService.listAll()` and
 `inspect()` report the seats of open runs. With no run open they read the Subject
 registry (AMPR-416, `SubjectRegistry`): the first `pursue`, `inspect` or `listAll` after
 `team {}` registers the team as a `Subject.Group` under `AgentTeam.id` with one `MemberOf`
@@ -604,6 +623,7 @@ value:
 | `heldStepId`, `reason`, `reference` | The step that held, why, and the tool's opaque handle (the link to whoever owns the decision) |
 | `ideas`, `seatsThatRan` | PERCEIVE's ideas, and the roles that executed a step (LEARN's seats) |
 | `heldAt` | When the run held |
+| `workspace` | The checkout the run works in, or null (AMPR-496). Not encoded when null |
 
 `hold` inserts a record for a new run id; over an *unclaimed* record it succeeds only for
 an identical one (a writer's retry) and otherwise fails with `HeldRunInUseException`;
@@ -893,6 +913,18 @@ interrupted (`heldRuns()` lists it with its `claimedAt`).
   toward its one goal, and a goal per step would make every re-plan a new sub-goal tree, a
   stopped step an abandoned "goal", and `Field.goals` a plan log. The run's goal is its
   root and only its root (AMPR-473).
+- **Giving each seat its own workspace.** Per seat (a `HostedAgent.workspace`) was rejected
+  in AMPR-496: two seats of one run could then name two checkouts, and a step planned
+  against one tree would run in another — nothing can reconcile that. Per `RunPolicy` was
+  rejected too: the policy is about limits and cadence, and a checkout is the run's
+  identity. A consumer with two checkouts opens two runs.
+- **Binding the run's checkout on the executor.** An `AcpCodeExecutor` built with a
+  `workspace` fixes the harness's tree when the executor is built, so two runs on two
+  checkouts need two executors. Name the checkout on `open`; the executor's binding is the
+  fallback for a request that names none (see [HarnessExecutor](harness-executor.md)).
+- **Resuming a held run with a fresh lease on the same directory.** `resume` compares the
+  whole `ExecutionWorkspace`, lease included, and refuses a mismatch. Pass null to carry on
+  with the recorded value.
 - **Building the run's `GoalBranch` over a fresh door for the host's id.** The branch's
   holder is its door's agent, so it is built over the host seat's own door
   (`HostedSeat.door`) — the factory takes that door, not an id — and the run's goal events

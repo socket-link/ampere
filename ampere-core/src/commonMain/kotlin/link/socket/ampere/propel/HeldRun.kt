@@ -1,6 +1,8 @@
 package link.socket.ampere.propel
 
 import kotlinx.datetime.Instant
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
@@ -8,6 +10,7 @@ import link.socket.ampere.agents.domain.outcome.StepOutcome
 import link.socket.ampere.agents.domain.reasoning.Idea
 import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.api.AmpereStableApi
 
 /**
@@ -43,8 +46,13 @@ import link.socket.ampere.api.AmpereStableApi
  * @property seatsThatRan The roles, as id strings, of every seat that executed a step so far
  *   — the seats LEARN extracts from.
  * @property heldAt When the run held.
+ * @property workspace The checkout the run works in (AMPR-496), as `RunHost.open` was handed
+ *   it, or null for a run opened without one. `RunHost.resume` carries the run on in it. Null
+ *   is not encoded, so a record of a run with no workspace — and every record stored before
+ *   the field existed — reads and writes byte for byte as it did.
  */
 @AmpereStableApi
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class HeldRun(
     val runId: RunId,
@@ -60,6 +68,8 @@ data class HeldRun(
     val ideas: List<Idea> = emptyList(),
     val seatsThatRan: Set<String> = emptySet(),
     val heldAt: Instant,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val workspace: ExecutionWorkspace? = null,
 )
 
 /**

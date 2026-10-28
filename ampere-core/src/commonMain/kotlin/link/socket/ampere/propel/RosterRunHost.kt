@@ -16,6 +16,7 @@ import link.socket.ampere.agents.domain.reasoning.defaultPerceptionContext
 import link.socket.ampere.agents.domain.state.AgentState
 import link.socket.ampere.agents.domain.task.AssignedTo
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.api.AgentEventApi
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.executor.Executor
@@ -76,6 +77,7 @@ internal class RosterRunHost(
         tools: Set<Tool<*>>,
         policy: RunPolicy,
         runId: RunId?,
+        workspace: ExecutionWorkspace?,
     ): HostedRun {
         validate(roster, seats, policy, runId)
 
@@ -83,7 +85,7 @@ internal class RosterRunHost(
         register(id)
 
         val run = try {
-            val built = buildSeats(id, roster, seats, tools)
+            val built = buildSeats(id, roster, seats, tools, workspace)
             RosterHostedRun(
                 runId = id,
                 roster = roster,
@@ -94,6 +96,7 @@ internal class RosterRunHost(
                 heldRuns = heldRuns,
                 goalBranch = branchFor(roster, built),
                 field = field,
+                workspace = workspace,
             )
         } catch (throwable: Throwable) {
             release(id, holder = null)
@@ -116,10 +119,11 @@ internal class RosterRunHost(
     /**
      * The resume of a held run (AMPR-431). Everything that can refuse it does so before the
      * claim — the same validation [open] runs, the store, the id this host has open, and
-     * whether the roster's host is the one the run held under — and nothing is built or
-     * published until the claim has landed. A refusal after the claim cannot happen short
-     * of a record replaced between the read and the claim; that one leaves the record
-     * claimed, as an interrupted resume does.
+     * whether the roster's host is the one the run held under, and whether a workspace the
+     * caller names is the one it held in — and nothing is built or published until the
+     * claim has landed. A refusal after the claim cannot happen short of a record replaced
+     * between the read and the claim; that one leaves the record claimed, as an interrupted
+     * resume does.
      */
     override suspend fun resume(
         runId: RunId,
@@ -128,6 +132,7 @@ internal class RosterRunHost(
         resolution: HoldResolution,
         tools: Set<Tool<*>>,
         policy: RunPolicy,
+        workspace: ExecutionWorkspace?,
     ): HostedRun {
         validate(roster, seats, policy, runId)
         val store = heldRuns ?: throw HeldRunUnavailableException(runId, HeldRunUnavailableException.Why.NoStore)
@@ -139,8 +144,12 @@ internal class RosterRunHost(
             val stored = store.get(runId).getOrThrow()
                 ?: throw HeldRunUnavailableException(runId, HeldRunUnavailableException.Why.NotHeld)
             requireHost(stored, roster)
+            requireWorkspace(stored, workspace)
             when (val claim = store.claim(runId).getOrThrow()) {
-                is HeldRunClaim.Claimed -> claim.run.also { requireHost(it, roster) }
+                is HeldRunClaim.Claimed -> claim.run.also {
+                    requireHost(it, roster)
+                    requireWorkspace(it, workspace)
+                }
                 HeldRunClaim.NotHeld ->
                     throw HeldRunUnavailableException(runId, HeldRunUnavailableException.Why.NotHeld)
                 is HeldRunClaim.AlreadyClaimed ->
@@ -151,8 +160,11 @@ internal class RosterRunHost(
             throw throwable
         }
 
+        // The caller's when it named one — equal to the record's by now, or the first one a run
+        // that held without a checkout is given — and otherwise the one the run held in.
+        val carriedOn = workspace ?: record.workspace
         val run = try {
-            val built = buildSeats(runId, roster, seats, tools)
+            val built = buildSeats(runId, roster, seats, tools, carriedOn)
             RosterHostedRun(
                 runId = runId,
                 roster = roster,
@@ -163,6 +175,7 @@ internal class RosterRunHost(
                 heldRuns = store,
                 goalBranch = branchFor(roster, built),
                 field = field,
+                workspace = carriedOn,
             )
         } catch (throwable: Throwable) {
             release(runId, holder = null)
@@ -201,12 +214,31 @@ internal class RosterRunHost(
         }
     }
 
-    /** Every seat of a run, built under [runId]. */
+    /**
+     * Refuse a [workspace] the caller names that is not the one the run held in (AMPR-496).
+     *
+     * The steps so far were made in the recorded checkout, and the steps left were planned
+     * against it; carrying them on in another is a mix nothing can reconcile. Compared as a
+     * whole value — directory, repository, branch and lease — because a workspace is
+     * compared textually everywhere else too. A caller with nothing to add passes null and
+     * gets the recorded one; a record with none takes the caller's.
+     */
+    private fun requireWorkspace(record: HeldRun, workspace: ExecutionWorkspace?) {
+        val recorded = record.workspace ?: return
+        if (workspace == null) return
+        require(workspace == recorded) {
+            "run '${record.runId}' held working in $recorded, and the resume names $workspace; " +
+                "a held run carries on in the checkout it held in, so pass that workspace or none"
+        }
+    }
+
+    /** Every seat of a run, built under [runId], each pinned to the run's [workspace]. */
     private fun buildSeats(
         runId: RunId,
         roster: Roster,
         seats: Map<RoleId, HostedAgent>,
         tools: Set<Tool<*>>,
+        workspace: ExecutionWorkspace?,
     ): Map<RoleId, HostedSeat> = seats.mapValues { (role, descriptor) ->
         buildSeat(
             runId = runId,
@@ -214,6 +246,7 @@ internal class RosterRunHost(
             config = requireNotNull(roster.byId(role)) { "role '${role.value}' is not on the roster" },
             tools = tools,
             isHost = role == roster.host,
+            workspace = workspace,
         )
     }
 
@@ -394,8 +427,12 @@ internal class RosterRunHost(
      *
      * The agent is built with phase handling on (AMPR-385 row H3: brackets are on by
      * default *inside* a hosted run, where the default elsewhere stays off), with the
-     * run id so every event it publishes carries it (H2), and with the executor so a
-     * step naming a tool can actually run it (AMPR-405).
+     * run id so every event it publishes carries it (H2), with the executor so a
+     * step naming a tool can actually run it (AMPR-405), and with the run's workspace so
+     * every step request it builds carries the checkout a code tool or a harness works in
+     * (AMPR-496). The workspace is the run's, never the seat's: [HostedAgent] has no field
+     * for one, because two seats of one run naming two checkouts is a split nothing could
+     * reconcile.
      *
      * [HostedAgent.charter] is stacked as the seat's first spark rather than passed as
      * a prompt preamble: `AutonomousAgent.currentSystemPrompt` builds from the stack
@@ -415,6 +452,7 @@ internal class RosterRunHost(
         config: RoleConfig,
         tools: Set<Tool<*>>,
         isHost: Boolean,
+        workspace: ExecutionWorkspace?,
     ): HostedSeat {
         val door = createEventApi(descriptor.id)
         val world = PerceivedWorld()
@@ -451,6 +489,9 @@ internal class RosterRunHost(
             _cognitiveRelay = descriptor.cognitiveRelay,
             _executor = executor,
             _runId = runId,
+            // AMPR-496: the run's checkout, stamped on every step request this seat builds —
+            // or null, which stays null (AMPR-300: a code tool then refuses, never guesses).
+            _workspace = workspace,
             // Phases on, prompt injection on: a hosted run brackets all six phases and
             // lets each spark's `## When <Phase>` section reach the phase it names.
             _cognitiveConfig = CognitiveConfig(phaseSparks = PhaseSparkConfig(enabled = true)),

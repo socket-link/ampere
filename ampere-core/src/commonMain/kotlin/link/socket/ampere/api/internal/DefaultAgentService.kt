@@ -8,6 +8,7 @@ import link.socket.ampere.agents.domain.cognition.CognitiveAffinity
 import link.socket.ampere.agents.domain.routing.CognitiveRelay
 import link.socket.ampere.agents.domain.status.TaskStatus
 import link.socket.ampere.agents.domain.task.Task
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.tools.Tool
 import link.socket.ampere.agents.service.AgentActionService
@@ -99,7 +100,13 @@ internal class DefaultAgentService(
      * under `NonCancellable`, so a run abandoned part-way still records its outcome
      * rather than leaving the task mid-flight (row H6).
      */
-    override suspend fun pursue(goal: String): Result<String> {
+    override suspend fun pursue(goal: String): Result<String> = pursue(goal, workspace = null)
+
+    /**
+     * [pursue], with the run opened in [workspace] (AMPR-496): every seat of it stamps the
+     * checkout on its step requests. Null opens the run with none, as [pursue] does.
+     */
+    override suspend fun pursue(goal: String, workspace: ExecutionWorkspace?): Result<String> {
         val host = runHost ?: return Result.failure(
             IllegalStateException(
                 "This AMPERE instance cannot host a run (AmpereInstance.runs is null), so " +
@@ -129,6 +136,7 @@ internal class DefaultAgentService(
                     description = goal,
                 ),
                 tools = tools,
+                workspace = workspace,
             )
             try {
                 run.execute()

@@ -193,12 +193,45 @@ class HostedRunHarnessExecutorTest {
         assertTrue(completed.errorMessage!!.contains("notes/out.txt"), completed.errorMessage)
     }
 
+    @Test
+    fun `a harness bound to no workspace roots its session at the checkout the run was opened with`() =
+        runBlocking<Unit> {
+            // AMPR-496: the run carries the checkout, so the executor needs no binding of its own.
+            val run = openRun(
+                doerSparks = emptyList(),
+                harnessWorkspace = null,
+                runWorkspace = ExecutionWorkspace(baseDirectory = checkout.absolutePath),
+                script = {
+                    File(checkout, "src/Greeting.kt").writeText("fun greet() = \"hi\"\n")
+                    say("Added a greeting.")
+                    StopReason.END_TURN
+                },
+            )
+            val result = run.execute()
+            run.close()
+
+            assertEquals(RunStatus.Succeeded, result.status, "the step ran: ${result.stepOutcomes}")
+            val step = assertIs<StepOutcome.Success>(result.stepOutcomes.single())
+            assertTrue(step.details.contains("changed files: src/Greeting.kt"), step.details)
+            assertEquals(checkout.absolutePath, agent.sessions.single().cwd, "rooted at the run's checkout")
+            assertTrue(agent.lastPromptText().contains(checkout.absolutePath), agent.lastPromptText())
+            val completed = record(result.runId).events<ToolEvent.ToolExecutionCompleted>().single()
+            assertEquals(HARNESS_ID, completed.executorId, "the harness performed it")
+        }
+
     // ========================================================================
     // Fixture
     // ========================================================================
 
+    /**
+     * A run whose doer seat reaches the harness through a router. [harnessWorkspace] is the
+     * executor's own binding — the fallback for a request that names none — and
+     * [runWorkspace] the checkout the run is opened with, which every step request carries.
+     */
     private suspend fun openRun(
         doerSparks: List<Spark>,
+        harnessWorkspace: ExecutionWorkspace? = ExecutionWorkspace(baseDirectory = checkout.absolutePath),
+        runWorkspace: ExecutionWorkspace? = null,
         script: suspend ScriptedAcpAgent.ScriptedTurn.() -> StopReason,
     ): HostedRun {
         val transport = InMemoryAcpTransport()
@@ -208,7 +241,7 @@ class HostedRunHarnessExecutorTest {
             displayName = "Fake ACP",
             transportFactory = { transport },
             observerFactory = { WalkingWorkspaceObserver(systemFileSystem, checkout.absolutePath.toPath()) },
-            workspace = ExecutionWorkspace(baseDirectory = checkout.absolutePath),
+            workspace = harnessWorkspace,
             readerScope = scope,
         )
         val executor = RoutedExecutor(
@@ -246,6 +279,7 @@ class HostedRunHarnessExecutorTest {
             seats = mapOf(HOST_ROLE to host, DOER_ROLE to doer),
             goal = goal("Greet the user on start-up"),
             tools = setOf(ToolHarnessCodeChange()),
+            workspace = runWorkspace,
         )
     }
 

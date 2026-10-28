@@ -32,6 +32,7 @@ import link.socket.ampere.agents.domain.task.TaskId
 import link.socket.ampere.agents.domain.task.planStepDescription
 import link.socket.ampere.agents.domain.task.planStepSeat
 import link.socket.ampere.agents.domain.task.planStepToolId
+import link.socket.ampere.agents.environment.workspace.ExecutionWorkspace
 import link.socket.ampere.agents.events.api.TaskLifecycle
 import link.socket.ampere.agents.events.api.openTaskLifecycle
 import link.socket.ampere.agents.events.api.reattachTaskLifecycle
@@ -157,6 +158,10 @@ import link.socket.ampere.util.logWith
  * unmeasured one stores nothing. What a cycle stored is kept whatever the run's later end, and
  * the LEARN at [close] is untouched: one outcome row, Knowledge for a `Succeeded` run only.
  *
+ * The run's [workspace] (AMPR-496) is already on every seat — each was built pinned to it, so
+ * every step request carries it — and is kept here only so a run that holds records it, and a
+ * resumed run comes back to the same checkout.
+ *
  * One run, one driver: the fields below are not synchronised, and two coroutines
  * driving the same run would interleave its phases.
  */
@@ -171,6 +176,7 @@ internal class RosterHostedRun(
     private val heldRuns: HeldRunStore? = null,
     private val goalBranch: GoalBranch? = null,
     private val field: FieldService? = null,
+    private val workspace: ExecutionWorkspace? = null,
 ) : HostedRun {
 
     /** The seat that plans. Validated to exist before the run was constructed. */
@@ -1561,9 +1567,10 @@ internal class RosterHostedRun(
      *
      * Everything [resume] needs to carry on is in the record: the goal, the cycle, the
      * plan as the gate approved it — with any arguments the gate approved again since —
-     * every result so far, the held step and what it waits on, the host seat's ideas and
-     * the seats that ran. Written under [NonCancellable], like the rest of a run's record
-     * of itself: a hold that happened and was not recorded cannot be carried on.
+     * every result so far, the held step and what it waits on, the host seat's ideas, the
+     * seats that ran, and the checkout the run works in. Written under [NonCancellable],
+     * like the rest of a run's record of itself: a hold that happened and was not recorded
+     * cannot be carried on.
      *
      * A failed write does not fail the run. It is still held — that is what happened — and
      * merely not resumable; the failure is logged, and is not thrown, because the caller
@@ -1593,6 +1600,7 @@ internal class RosterHostedRun(
             ideas = ideas,
             seatsThatRan = seatsThatRan.mapTo(mutableSetOf()) { it.value },
             heldAt = Clock.System.now(),
+            workspace = workspace,
         )
         val written = try {
             withContext(NonCancellable) { store.hold(record) }

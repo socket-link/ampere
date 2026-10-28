@@ -126,24 +126,32 @@ Three pressures fix the shape:
 - **Secrets come from the environment.** An `environment:` value written `${NAME}` is read from
   the process environment when the executor is built; an unset name is an error naming the
   variable, never a value. No harness's environment is logged.
-- **Nothing in `propel/` changes.** The router plugs into the existing `executor` parameter
-  of `rosterRunHost` and `Ampere.fromEnvironment`; a hosted seat carries no workspace, so the
-  harness is bound to its checkout at construction and a request's workspace wins when
-  present.
+- **The request's workspace first; the constructor's is the fallback.** The router plugs into
+  the existing `executor` parameter of `rosterRunHost` and `Ampere.fromEnvironment`, and the
+  checkout arrives on the request: since AMPR-496 a hosted run is opened with
+  `RunHost.open(…, workspace)` and every seat stamps it on every step request, so one
+  executor serves runs on different checkouts, a session per `(workspace, run)`. The
+  `workspace` an `AcpCodeExecutor` is built with is used only for a request that names none,
+  and with neither the step fails `WORKSPACE_ERROR` without spawning anything — there is no
+  default workspace (AMPR-300).
 
 ## Common operations
 
 - **Bind OpenCode behind the tool, for a hosted run** —
   ```kotlin
-  val harness = AcpCodeExecutor.openCode(workspace = ExecutionWorkspace("/abs/checkout"))
+  val harness = AcpCodeExecutor.openCode()   // no checkout of its own: each run names one
   val executor = RoutedExecutor(
       default = FunctionExecutor.create(),
       bindings = mapOf(HARNESS_CODE_CHANGE_TOOL_ID to harness),
   )
   val host = rosterRunHost(createEventApi = env::createEventApi, agentScope = scope, executor = executor)
+  val run = host.open(roster, seats, goal, tools, workspace = ExecutionWorkspace("/abs/checkout"))
   // the doer seat's RoleConfig.tools includes HARNESS_CODE_CHANGE_TOOL_ID, and the run's
   // `tools` includes ToolHarnessCodeChange(); the planner nominates `<doer>/harness_code_change`.
   ```
+  An `openCode` with no `workspace` starts the agent process in the host process's working
+  directory. That is where the binary runs, not where it works: every session is opened with
+  `cwd` set to the request's checkout, and the audit observes that checkout.
 - **Bind OpenCode from YAML, for the CLI** — the same router, built by `AmpereContext` over
   `FunctionExecutor.create()` and bound to the CLI's workspace; `ampere status` lists each
   harness with its health:
@@ -204,5 +212,9 @@ Three pressures fix the shape:
 - *Resolving a harness's secrets at parse time.* The parsed entry keeps `${NAME}` as written;
   only `toExecutor` reads the environment, so a parsed config can be printed or re-encoded
   without carrying a key.
+- *Binding the harness to a checkout to make a hosted run work.* Before AMPR-496 a hosted seat
+  carried no workspace and this was the only way in; now it pins every run through that
+  executor to one tree. Open the run with its `workspace` and leave the executor unbound, or
+  bound only as the fallback.
 - *A `commonMain` subprocess.* `ProcessGroups` is JVM; the common half must stay behind
   `AcpTransport`, or the module stops compiling for Android, iOS, JS and wasmJs.
