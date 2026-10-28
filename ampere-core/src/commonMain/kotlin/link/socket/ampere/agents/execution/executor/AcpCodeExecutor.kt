@@ -43,6 +43,7 @@ import link.socket.ampere.agents.execution.executor.acp.HarnessTurn
 import link.socket.ampere.agents.execution.executor.acp.Implementation
 import link.socket.ampere.agents.execution.executor.acp.JsonRpcError
 import link.socket.ampere.agents.execution.executor.acp.PermissionOutcome
+import link.socket.ampere.agents.execution.executor.acp.PermissionToolCall
 import link.socket.ampere.agents.execution.executor.acp.PromptResult
 import link.socket.ampere.agents.execution.executor.acp.ReadTextFileParams
 import link.socket.ampere.agents.execution.executor.acp.ReadTextFileResult
@@ -50,6 +51,7 @@ import link.socket.ampere.agents.execution.executor.acp.RequestPermissionParams
 import link.socket.ampere.agents.execution.executor.acp.RequestPermissionResult
 import link.socket.ampere.agents.execution.executor.acp.SessionUpdate
 import link.socket.ampere.agents.execution.executor.acp.StopReason
+import link.socket.ampere.agents.execution.executor.acp.ToolKind
 import link.socket.ampere.agents.execution.executor.acp.WorkspaceObserver
 import link.socket.ampere.agents.execution.executor.acp.WriteTextFileParams
 import link.socket.ampere.agents.execution.request.ExecutionRequest
@@ -371,15 +373,35 @@ class AcpCodeExecutor(
                     retryable = false,
                     partiallyChangedFiles = changed,
                 )
-                StopReason.CANCELLED -> failed(
-                    request = request,
-                    startedAt = startedAt,
-                    type = ExecutionError.Type.UNEXPECTED,
-                    message = "$displayName cancelled the turn on its own.",
-                    details = summary.joinToString("\n").ifBlank { null },
-                    retryable = true,
-                    partiallyChangedFiles = changed,
-                )
+                // An agent may end the turn rather than carry on after the fence refuses it
+                // (OpenCode 2.2.0 answers `cancelled`, AMPR-505). The refusal is why the step
+                // stopped, and a retry would meet it again.
+                StopReason.CANCELLED -> if (turn.refusals.isNotEmpty()) {
+                    failed(
+                        request = request,
+                        startedAt = startedAt,
+                        type = if (turn.refusals.any { it.kind == HarnessTurn.RefusalKind.PATH }) {
+                            ExecutionError.Type.WORKSPACE_ERROR
+                        } else {
+                            ExecutionError.Type.UNEXPECTED
+                        },
+                        message = "$displayName ended the turn after it was refused: " +
+                            turn.refusedRequests.joinToString("; ") + ".",
+                        details = summary.joinToString("\n").ifBlank { null },
+                        retryable = false,
+                        partiallyChangedFiles = changed,
+                    )
+                } else {
+                    failed(
+                        request = request,
+                        startedAt = startedAt,
+                        type = ExecutionError.Type.UNEXPECTED,
+                        message = "$displayName cancelled the turn on its own.",
+                        details = summary.joinToString("\n").ifBlank { null },
+                        retryable = true,
+                        partiallyChangedFiles = changed,
+                    )
+                }
                 null -> failed(
                     request = request,
                     startedAt = startedAt,
@@ -610,13 +632,13 @@ class AcpCodeExecutor(
                 is HarnessFence.Decision.Select -> {
                     decision.refusedBecause?.let { reason ->
                         logger.i { "Refusing '${params.toolCall.title ?: params.toolCall.toolCallId}': $reason" }
-                        active.turn.recordRefusal(reason)
+                        active.turn.recordRefusal(reason, active.fence.refusalKindOf(params.toolCall))
                     }
                     RequestPermissionResult(PermissionOutcome.selected(decision.optionId))
                 }
                 is HarnessFence.Decision.CancelTurn -> {
                     logger.w { "Cancelling the turn on ${params.sessionId}: ${decision.reason}" }
-                    active.turn.recordRefusal(decision.reason)
+                    active.turn.recordRefusal(decision.reason, active.fence.refusalKindOf(params.toolCall))
                     runCatching { live?.connection?.cancel(params.sessionId) }
                     RequestPermissionResult(PermissionOutcome.cancelled())
                 }
@@ -656,6 +678,17 @@ class AcpCodeExecutor(
         private suspend fun activeTurn(sessionId: String): ActiveTurn =
             turnsLock.withLock { turns[sessionId] }
                 ?: throw AcpRequestRefused(JsonRpcError.INVALID_REQUEST, "no turn is open on session $sessionId")
+
+        /**
+         * The kind of refusal [call] met: what the fence refuses an `execute` call for is the
+         * shell policy, and any other call a path. A call the fence would allow was refused
+         * for the options it came with.
+         */
+        private fun HarnessFence.refusalKindOf(call: PermissionToolCall): HarnessTurn.RefusalKind = when {
+            refusalFor(call) == null -> HarnessTurn.RefusalKind.PROTOCOL
+            call.kind == ToolKind.EXECUTE -> HarnessTurn.RefusalKind.SHELL
+            else -> HarnessTurn.RefusalKind.PATH
+        }
 
         private fun HarnessFence.Verdict.refuse() {
             if (this is HarnessFence.Verdict.Refused) throw AcpRequestRefused(JsonRpcError.FENCE_REFUSED, reason)
