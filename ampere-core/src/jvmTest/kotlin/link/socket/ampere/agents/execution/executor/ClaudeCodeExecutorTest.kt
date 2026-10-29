@@ -128,7 +128,7 @@ class ClaudeCodeExecutorTest {
         val dump = File(root, "spawn.txt")
         val d = "$"
         val agent = scripts.agent(
-            preamble = "printf '%s\\n%s\\n' \"${d}ANTHROPIC_API_KEY\" \"${d}*\" > \"${dump.absolutePath}\"",
+            preamble = "printf '%s\\n%s\\n' \"${d}ANTHROPIC_API_KEY\" \"$d*\" > \"${dump.absolutePath}\"",
         )
         val executor = executor(
             command = listOf(agent.absolutePath, "--flag"),
