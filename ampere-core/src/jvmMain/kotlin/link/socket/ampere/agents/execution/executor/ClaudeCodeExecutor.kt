@@ -23,7 +23,7 @@ internal val CLAUDE_CODE_ACP_COMMAND: List<String> = listOf("npx", "@zed-industr
  * The same [AcpCodeExecutor] as [openCode], with its own id and command line: [command] is
  * spawned through a [StdioAcpTransport] on first use, each session is rooted at the step's
  * workspace, and each turn is audited with a [GitWorkspaceObserver]. The audit is the layer
- * that holds whatever the adapter does with the client's `fs/*` methods and its permission
+ * that holds whatever the adapter does with the client's `fs/…` methods and its permission
  * requests; permission options are matched by `kind`, never by the adapter's option ids.
  *
  * `npx` is a wrapper that starts the adapter as its child, and the adapter starts Claude Code
