@@ -6,7 +6,7 @@ tracked_sources:
   - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/executor/**
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/tools/ToolHarnessCodeChange.kt
 related: [PropelLoop, HostedRun, SparkSystem, CancellationAddress, CognitionTrace, MemoryProvenance]
-last_verified: 2026-10-27
+last_verified: 2026-10-29
 ---
 
 # HarnessExecutor
@@ -17,7 +17,9 @@ A third-party coding harness as an `Executor`: a plan step whose work is a code 
 handed to an external agent process over the Agent Client Protocol (ACP), admitted by the
 Breaker like any other step, bounded by the spark's `FileAccessScope`, and recorded with the
 harness as the performer. `AcpCodeExecutor` is the first `CodeExecutor` implementation, and
-`AcpCodeExecutor.openCode(...)` binds it to OpenCode (`opencode acp`). A planner reaches it
+`AcpCodeExecutor.openCode(...)` binds it to OpenCode (`opencode acp`);
+`AcpCodeExecutor.claudeCode(...)` binds it to Claude Code through Zed's ACP adapter
+(`npx @zed-industries/claude-code-acp`). A planner reaches it
 through one built-in tool, `harness_code_change`, and a `RoutedExecutor` in front of the
 engine's single executor slot sends that tool to the harness and everything else to the
 in-process `FunctionExecutor`.
@@ -71,6 +73,7 @@ Three pressures fix the shape:
 - `ampere-core/src/jvmMain/.../executor/acp/StdioAcpTransport.kt` — the subprocess, through
   `ProcessGroups.start`; `GitWorkspaceObserver.kt` — `git status --porcelain -z` plus a
   content digest; `../executor/OpenCodeExecutor.kt` — `openCode(...)`, id `opencode`;
+  `../executor/ClaudeCodeExecutor.kt` — `claudeCode(...)`, id `claude-code` (AMPR-499);
   `../executor/HarnessConfig.kt` — one `harnesses:` YAML entry, `build` into `AcpCodeExecutor`s
   and `routedOver` a default (AMPR-497).
 - `ampere-core/src/jvmMain/.../api/AmpereConfigYaml.kt` — `harnessesFromYaml(path)`, the SDK's
@@ -173,6 +176,15 @@ Three pressures fix the shape:
   An `openCode` with no `workspace` starts the agent process in the host process's working
   directory. That is where the binary runs, not where it works: every session is opened with
   `cwd` set to the request's checkout, and the audit observes that checkout.
+- **Bind Claude Code** — the same router, with
+  `AcpCodeExecutor.claudeCode(environment = mapOf("ANTHROPIC_API_KEY" to key))` as the
+  harness. The command defaults to `npx @zed-industries/claude-code-acp`; pass `command` for an
+  installed adapter or a pinned version. The key goes in `environment`, never in `command`,
+  where `ps` shows it. `npx` stays alive as the adapter's parent, which is why the spawn goes
+  through `ProcessGroups`: `close()` ends the group, adapter included. There is no
+  `kind: claude-code` in the YAML yet; a `claude-code:` entry with `kind: acp`, `binary: npx`
+  and `arguments: ["@zed-industries/claude-code-acp"]` (the default `[acp]` would be wrong)
+  binds the same command under the same id.
 - **Bind OpenCode from YAML, for the CLI** — the same router, built by `AmpereContext` over
   `FunctionExecutor.create()` and bound to the CLI's workspace; `ampere status` lists each
   harness with its health:
@@ -198,8 +210,9 @@ Three pressures fix the shape:
   caller's JSON is merged over the permission asks, key by key, and wins on a collision.
 - **Bound a turn** — `HarnessPolicy(promptTimeout = 10.minutes)`; the step fails `TIMEOUT`,
   retryable, with whatever changed in `partiallyChangedFiles`.
-- **Add another harness** — a factory like `openCode` with its own `id` and command line;
-  nothing else changes. `junie` and `claude-code` are the ids `Executor.kt` already names.
+- **Add another harness** — a factory like `openCode` or `claudeCode` with its own `id` and
+  command line; nothing else changes. `junie` is the id `Executor.kt` names that is still
+  unbound.
 - **Test against a fake agent** — `commonTest`'s `InMemoryAcpTransport` + `ScriptedAcpAgent`
   drive the whole executor without a process; `jvmTest`'s `FakeAcpAgentScript` is a real `sh`
   process for the transport and the git audit.
