@@ -189,7 +189,7 @@ top of an interrupted run of itself.
 ampere reconcile                                       # Journal, worktrees, branches
 ampere reconcile --repository ~/code/ampere            # Repair a specific checkout
 ampere reconcile --skip-worktrees                      # Claims only, no git surgery
-ampere reconcile --work-source https://mcp.example/sse # Release stale claims too
+ampere reconcile --work-source https://mcp.example/mcp # Release stale claims too
 ```
 
 A deletion is authorised by the supervisor's journal, never by the flags: the pass
@@ -197,9 +197,72 @@ only touches a worktree path or a branch name that a supervisor recorded *before
 creating it, so pointing `--repository` at an unrelated checkout finds nothing to do.
 Uncommitted and unpushed work is held and reported, never deleted.
 
-Releasing a claim is a write to the issue tracker, so `--work-source` needs a token
-in `$AMPERE_WORK_SOURCE_TOKEN`. Without it the pass still runs every local step and
-reports the claims it could not reach.
+Releasing a claim is a write to the issue tracker, so `--work-source` needs a
+credential. It comes from the keychain, where [`ampere credential seed`](#credential-command)
+put it, and is refreshed as it nears expiry, so nothing has to be set in the environment.
+`$AMPERE_WORK_SOURCE_TOKEN`, when set, overrides the keychain with a static token for that
+one run (not refreshed, not stored): for a probe with a hand-minted token, or a host
+without a supported keychain. Without `--work-source` the pass still runs every local step
+and reports the claims it could not reach.
+
+### Credential Command
+
+Seed, inspect and clear a Link's credential in the macOS keychain. Every subcommand
+defaults to the work-source Link (`mcp:work-source`); `--link` names another.
+
+```bash
+ampere credential seed --work-source <uri> --token-endpoint <url> --client-id <id>  # token response on stdin
+ampere credential status --work-source <uri>   # what is stored and when it expires, never the token
+ampere credential clear --work-source <uri>    # remove it
+```
+
+The credential is one keychain item: a generic password whose service is the Link's alias,
+`ampere.link:<link id>`, and whose account is the MCP server URI. It holds the access token,
+the refresh token, the expiry and the OAuth client. Commands that use it refresh the access
+token when it is within five minutes of expiry and once after a 401, and write each rotated
+refresh token back to the keychain before the old one is let go. The store is macOS-only for
+now; elsewhere, use `$AMPERE_WORK_SOURCE_TOKEN`.
+
+#### Seeding the work-source credential
+
+Run once on a new machine, and again only if the issuer ever refuses the refresh token. The
+authorization step in the browser stays manual; nothing after it is. No step writes a token
+or a secret to a file, an argument list ampere sees, or shell history (zsh shown; in bash,
+`read -rsp 'prompt: ' VAR` and `printf %s`):
+
+```bash
+# 0. Typed without echo, kept in shell variables only.
+read -rs 'AMPERE_OAUTH_CLIENT_SECRET?OAuth client secret: '; echo; export AMPERE_OAUTH_CLIENT_SECRET
+CLIENT_ID=<the OAuth app's client id>
+TOKEN_ENDPOINT=<the issuer's token endpoint>
+REDIRECT_URI=<the redirect URI registered on the app>
+WORK_SOURCE=<the work source's MCP URI>
+
+# 1. Authorize the app in a browser, then paste the `code` parameter from the redirect.
+read -rs 'CODE?authorization code: '; echo
+
+# 2. Exchange the code and seed the keychain in one pipe. The client secret reaches curl on
+#    its stdin (client_secret@-), and the tokens go from curl to ampere without touching disk.
+print -rn -- "$AMPERE_OAUTH_CLIENT_SECRET" | curl -sS "$TOKEN_ENDPOINT" \
+    --data-urlencode grant_type=authorization_code \
+    --data-urlencode "code=$CODE" \
+    --data-urlencode "redirect_uri=$REDIRECT_URI" \
+    --data-urlencode "client_id=$CLIENT_ID" \
+    --data-urlencode client_secret@- \
+  | ampere credential seed --work-source "$WORK_SOURCE" \
+      --token-endpoint "$TOKEN_ENDPOINT" --client-id "$CLIENT_ID"
+
+# 3. Check it without printing it, then forget the variables.
+ampere credential status --work-source "$WORK_SOURCE"
+unset AMPERE_OAUTH_CLIENT_SECRET CODE
+```
+
+`seed` reads the client secret from `$AMPERE_OAUTH_CLIENT_SECRET` and stores it with the
+refresh token, since every refresh presents both; a public (PKCE) client has none, so leave
+the variable unset. The authorization code does sit on curl's command line for the moment
+the exchange takes; it is single-use and spent by that exchange. If `seed` refuses the
+response (an `error` body, or one with no `access_token`), nothing is stored and the code is
+spent: authorize again. To re-seed, run the same sequence; `seed` replaces the item.
 
 ### Outcomes Command
 
@@ -638,6 +701,8 @@ Additional configuration via environment variables:
 | `ANTHROPIC_API_KEY` | Anthropic API key | — |
 | `OPENAI_API_KEY` | OpenAI API key | — |
 | `GOOGLE_API_KEY` | Google/Gemini API key | — |
+| `AMPERE_WORK_SOURCE_TOKEN` | Static work-source token that overrides the keychain credential for one run | — |
+| `AMPERE_OAUTH_CLIENT_SECRET` | OAuth client secret `ampere credential seed` stores with the refresh token | — |
 
 ### Database
 

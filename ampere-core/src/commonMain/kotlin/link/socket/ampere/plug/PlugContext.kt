@@ -11,6 +11,7 @@ import link.socket.ampere.link.LinkResolutionService
 import link.socket.ampere.mcp.McpClient
 import link.socket.ampere.mcp.McpCredential
 import link.socket.ampere.mcp.McpCredentialBinding
+import link.socket.ampere.mcp.McpCredentialRefresher
 import link.socket.ampere.mcp.defaultHttpConnection
 
 /**
@@ -42,6 +43,11 @@ import link.socket.ampere.mcp.defaultHttpConnection
  * and reaches this plug's MCP servers through [mcpServerManager]. Since AMPR-401
  * that is the only tool-dispatch path; the second entry point it used to share
  * with `propel/ExecuteStep` is gone.
+ *
+ * Pass a [McpCredentialRefresher] to [create] for a Link whose credential is a
+ * short-lived OAuth token: every [McpClient] it opens then refreshes on connect
+ * when the token is due, and once after a 401 (AMPR-464). Without one, a
+ * credential is used as bound until the server refuses it.
  *
  * [mcpClientFor] is the other door, and it is not a tool dispatch: an adapter
  * *implementing* a plug calls its own pinned tools by name over its resolved
@@ -110,6 +116,7 @@ class PlugContext private constructor(
             nativeTools: List<Tool<*>> = emptyList(),
             connectionFactory: (McpServerDependency, McpCredential?) -> McpServerConnection =
                 ::defaultHttpConnection,
+            credentialRefresher: McpCredentialRefresher? = null,
         ): Result<PlugContext> {
             val validation = PlugManifestValidator.validate(manifest)
             if (validation is ManifestValidationResult.Invalid) {
@@ -140,6 +147,7 @@ class PlugContext private constructor(
                     credentialBinding = credentialBinding,
                     linkId = link.id,
                     connectionFactory = connectionFactory,
+                    credentialRefresher = credentialRefresher,
                 )
 
                 val connectResult = client.connect()

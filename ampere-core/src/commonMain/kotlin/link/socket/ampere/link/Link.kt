@@ -92,6 +92,11 @@ sealed interface EgressClass {
  * puts a token string on this class, the Link becomes a secret and every trace
  * that recorded one becomes a breach.
  *
+ * A Link Ampere mints takes its alias from [forLink]: `ampere.link:<link id>`.
+ * The persistent MCP credential binding derives the same alias from the
+ * [LinkId] it is handed, so the alias is computable without a lookup table
+ * and two Links cannot share one (AMPR-464).
+ *
  * @property revokedAt Set when the credential itself is revoked, as distinct
  *   from a Plug's grant being revoked. Both surface as
  *   [LinkResolutionFailure.RevokedCredential]; they differ in blast radius.
@@ -102,6 +107,23 @@ data class CredentialRef(
     val revokedAt: Instant? = null,
 ) {
     val isRevoked: Boolean get() = revokedAt != null
+
+    companion object {
+
+        /** What every alias under the convention starts with. */
+        const val ALIAS_PREFIX: String = "ampere.link:"
+
+        /**
+         * The alias for [linkId]'s credentials: [ALIAS_PREFIX], then the id
+         * verbatim. The prefix is fixed and the id is the Link's identity, so
+         * distinct Links get distinct aliases. `mcp:work-source` becomes
+         * `ampere.link:mcp:work-source`.
+         */
+        fun aliasFor(linkId: LinkId): String = ALIAS_PREFIX + linkId.value
+
+        /** A reference to [linkId]'s credentials under the alias convention. */
+        fun forLink(linkId: LinkId): CredentialRef = CredentialRef(keychainAlias = aliasFor(linkId))
+    }
 }
 
 /**
