@@ -19,7 +19,8 @@ Breaker like any other step, bounded by the spark's `FileAccessScope`, and recor
 harness as the performer. `AcpCodeExecutor` is the first `CodeExecutor` implementation, and
 `AcpCodeExecutor.openCode(...)` binds it to OpenCode (`opencode acp`);
 `AcpCodeExecutor.claudeCode(...)` binds it to Claude Code through Zed's ACP adapter
-(`npx @zed-industries/claude-code-acp`). A planner reaches it
+(`npx @zed-industries/claude-code-acp`); and `AcpCodeExecutor.junie(...)` binds it to
+JetBrains' Junie CLI (`junie --acp=true`, AMPR-500). A planner reaches it
 through one built-in tool, `harness_code_change`, and a `RoutedExecutor` in front of the
 engine's single executor slot sends that tool to the harness and everything else to the
 in-process `FunctionExecutor`.
@@ -74,6 +75,7 @@ Three pressures fix the shape:
   `ProcessGroups.start`; `GitWorkspaceObserver.kt` — `git status --porcelain -z` plus a
   content digest; `../executor/OpenCodeExecutor.kt` — `openCode(...)`, id `opencode`;
   `../executor/ClaudeCodeExecutor.kt` — `claudeCode(...)`, id `claude-code` (AMPR-499);
+  `../executor/JunieExecutor.kt` — `junie(...)`, id `junie` (AMPR-500);
   `../executor/HarnessConfig.kt` — one `harnesses:` YAML entry, `build` into `AcpCodeExecutor`s
   and `routedOver` a default (AMPR-497).
 - `ampere-core/src/jvmMain/.../api/AmpereConfigYaml.kt` — `harnessesFromYaml(path)`, the SDK's
@@ -102,7 +104,11 @@ Three pressures fix the shape:
   `openCode(...)` spawns it with `OPENCODE_CONFIG_CONTENT` carrying
   `{"permission":{"edit":"ask","bash":"ask"}}`, merged under any config the caller passes
   (AMPR-504). `bash` stays `ask` under `ShellAccess.Allow` too, so every command is on the
-  record as an `allow_once`.
+  record as an `allow_once`. Junie has no per-process equivalent: its approvals come from the
+  person's `~/.junie/allowlist.json` and brave mode, and by default it asks before terminal
+  commands, MCP tools and edits outside the project or to build scripts. Its docs do not say
+  whether it asks before an ordinary in-project edit, so for those the audit is the fence
+  (AMPR-500).
 - **The audit decides, the agent informs.** The outcome's `changedFiles` is what the
   `WorkspaceObserver` saw change between the two snapshots. What the agent reported is the
   fallback only when the workspace could not be observed, and the outcome then says so.
@@ -210,9 +216,13 @@ Three pressures fix the shape:
   caller's JSON is merged over the permission asks, key by key, and wins on a collision.
 - **Bound a turn** — `HarnessPolicy(promptTimeout = 10.minutes)`; the step fails `TIMEOUT`,
   retryable, with whatever changed in `partiallyChangedFiles`.
-- **Add another harness** — a factory like `openCode` or `claudeCode` with its own `id` and
-  command line; nothing else changes. `junie` is the id `Executor.kt` names that is still
-  unbound.
+- **Bind Junie** — `AcpCodeExecutor.junie(environment = mapOf("JUNIE_API_KEY" to key))`,
+  launched as the ACP registry's `junie` entry launches it, `junie --acp=true`. Pick the model
+  with `extraArguments = listOf("--model", …)` or `JUNIE_MODEL`. YAML has no `kind: junie`
+  yet. Until it does, a `kind: acp` entry keyed `junie` with `binary: junie` and
+  `arguments: ["--acp=true"]` builds the same command line and id.
+- **Add another harness** — a factory like `openCode`, `claudeCode` or `junie` with its own
+  `id` and command line; nothing else changes.
 - **Test against a fake agent** — `commonTest`'s `InMemoryAcpTransport` + `ScriptedAcpAgent`
   drive the whole executor without a process; `jvmTest`'s `FakeAcpAgentScript` is a real `sh`
   process for the transport and the git audit.
@@ -229,6 +239,10 @@ Three pressures fix the shape:
   reached either way: 2.2.0 does not call it, `ask` or not.)
   Spawn through `openCode(...)`, or set `permission` to `ask` yourself; never write an
   `opencode.json` into the person's checkout to do it.
+- *Making Junie ask by writing its allowlist.* `~/.junie/allowlist.json` is the person's own
+  file, and pointing `JUNIE_HOME` at a scratch directory with an ask-everything allowlist
+  moves Junie's login, config and sessions with it. `junie(...)` writes neither; the audit
+  covers what Junie does not ask about (AMPR-500).
 - *Trusting the `fs/*` gate as the fence.* OpenCode writes to disk directly and, in 2.2.0,
   never calls the client's `fs/write_text_file` (anomalyco/opencode#38196, not called in
   2.2.0 per AMPR-498); only the post-turn audit sees its writes.
