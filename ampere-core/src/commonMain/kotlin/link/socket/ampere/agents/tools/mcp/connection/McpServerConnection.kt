@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.tools.mcp.connection
 
+import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.json.JsonElement
 import link.socket.ampere.agents.tools.mcp.protocol.InitializeResult
 import link.socket.ampere.agents.tools.mcp.protocol.McpToolDescriptor
@@ -110,7 +111,35 @@ interface McpServerConnection {
  * Connection errors are about transport failures (network, process crashes, etc.)
  * while protocol errors are about invalid MCP messages or semantics.
  */
-class McpConnectionException(
+open class McpConnectionException(
     message: String,
     cause: Throwable? = null,
 ) : Exception(message, cause)
+
+/**
+ * The server refused the request's credential: it answered HTTP 401.
+ *
+ * Its own type because it is the one connection failure a caller can do
+ * something about without a person: [link.socket.ampere.mcp.McpClient]
+ * refreshes the credential once and retries once on it (AMPR-464). A 403 is
+ * not this — the credential was accepted and the request is still not allowed,
+ * so a fresh token would be refused the same way.
+ */
+class McpUnauthorizedException(
+    message: String,
+) : McpConnectionException(message)
+
+/**
+ * The failure an [HttpClientHandler] throws for a non-success [status]:
+ * [McpUnauthorizedException] for a 401, [McpConnectionException] otherwise.
+ *
+ * @param action What was being attempted, e.g. "HTTP request".
+ */
+internal fun httpStatusFailure(action: String, status: HttpStatusCode): McpConnectionException {
+    val message = "$action failed: ${status.value} ${status.description}"
+    return if (status == HttpStatusCode.Unauthorized) {
+        McpUnauthorizedException(message)
+    } else {
+        McpConnectionException(message)
+    }
+}

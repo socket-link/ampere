@@ -28,12 +28,9 @@ import link.socket.ampere.link.EgressClass
 import link.socket.ampere.link.InMemoryLinkStore
 import link.socket.ampere.link.Link
 import link.socket.ampere.link.LinkDirection
-import link.socket.ampere.link.LinkId
 import link.socket.ampere.link.LinkResolutionService
 import link.socket.ampere.link.PlatformTarget
 import link.socket.ampere.link.Transport
-import link.socket.ampere.mcp.InMemoryMcpCredentialBinding
-import link.socket.ampere.mcp.McpCredential
 import link.socket.ampere.plug.PlugContext
 import link.socket.ampere.terminal.TerminalFactory
 import link.socket.ampere.work.linear.LinearClaimRegistry
@@ -58,22 +55,27 @@ import link.socket.ampere.work.linear.SupervisorInstanceId
  * `--repository` at an unrelated checkout finds nothing to do rather than finding
  * things to delete. A path the repository does not know is reported, never removed.
  *
- * ### Why the work source is opt-in
+ * ### The work source
  *
- * `--work-source` plus `AMPERE_WORK_SOURCE_TOKEN` is the only way step 4 can run,
- * because Ampere has no persistent credential store yet: the Link grant and the
- * token this command builds live in memory for the length of the command and are
- * gone when it exits. Without it the pass still does every local step and reports
- * the claims it could not reach, rather than reporting success it did not achieve.
+ * Step 4 runs only with `--work-source`. Without it the pass still does every
+ * local step and reports the claims it could not reach, rather than reporting
+ * success it did not achieve.
+ *
+ * The credential comes from the keychain, where `ampere credential seed` put it
+ * (AMPR-464), and is refreshed as it nears expiry, so the command needs nothing
+ * in the environment. `$AMPERE_WORK_SOURCE_TOKEN`, when set, overrides it with a
+ * static token for one run. See [WorkSourceCredentials]. The Link grant is still
+ * built in memory for the length of the command.
  *
  * ```
  * ampere reconcile
- * ampere reconcile --repository ~/code/ampere --work-source https://mcp.example/sse
+ * ampere reconcile --repository ~/code/ampere --work-source https://mcp.example/mcp
  * ampere reconcile --skip-worktrees            # claims only
  * ```
  */
 class ReconcileCommand(
     private val contextProvider: () -> AmpereContext,
+    private val workSourceCredentials: WorkSourceCredentials = WorkSourceCredentials(),
 ) : CliktCommand(
     name = "reconcile",
     help = "Recover from an interrupted supervisor: reap orphans, repair worktrees, release claims",
@@ -98,7 +100,8 @@ class ReconcileCommand(
 
     private val workSourceUri by option(
         "--work-source",
-        help = "MCP work-source URI; the token comes from \$AMPERE_WORK_SOURCE_TOKEN",
+        help = "MCP work-source URI; the credential comes from the keychain (`ampere credential seed`), " +
+            "or from \$AMPERE_WORK_SOURCE_TOKEN when set",
     )
 
     private val releaseUnjournaledClaims by option(
@@ -122,9 +125,10 @@ class ReconcileCommand(
         val workSourceLabel = workSourceUri ?: dim("(not configured — step 4 reported, not run)")
         terminal.println("  Work source: $workSourceLabel")
         terminal.println("  Instance:    $instanceId")
-        terminal.println()
 
+        // Opened before the header closes, so the credential line sits under the work source.
         val claims = workSourceUri?.let { uri -> openWorkSource(uri) }
+        terminal.println()
         val eventApi = context.environmentService.createEventApi(RECONCILER_AGENT_ID)
 
         val outcome = StartupReconciler(
@@ -146,25 +150,28 @@ class ReconcileCommand(
     }
 
     /**
-     * Build the work-source adapter for this one command.
-     *
-     * The Link is granted in memory and the credential never touches disk, which is
-     * deliberate: wiring a *persistent* work source is the supervisor's (AMPR-308),
-     * and inventing a credential store here would pre-empt that decision.
+     * Build the work-source adapter for this one command, on the credential
+     * [workSourceCredentials] opens: the seeded keychain item by default, refreshed
+     * as it nears expiry, or `$AMPERE_WORK_SOURCE_TOKEN` as an explicit override.
      */
     private suspend fun openWorkSource(uri: String): ClaimRegistry {
-        val token = System.getenv(TOKEN_ENV)?.takeIf { it.isNotBlank() }
-            ?: throw PrintMessage(
-                "--work-source needs a token in \$$TOKEN_ENV; releasing a claim is a write.",
+        val manifest = LinearWorkSource.manifest(uri)
+        val linkId = WorkSourceCredentials.linkIdFor(uri)
+
+        val credentials = workSourceCredentials.open(linkId, uri).getOrElse { cause ->
+            throw PrintMessage(
+                "--work-source: ${cause.message} Releasing a claim is a write.",
                 statusCode = 1,
                 printError = true,
             )
-
-        val manifest = LinearWorkSource.manifest(uri)
-        val linkId = LinkId("work-source-reconcile")
-
-        val credentials = InMemoryMcpCredentialBinding()
-        credentials.bind(linkId, uri, McpCredential(authToken = token)).getOrThrow()
+        }
+        if (credentials.origin == WorkSourceCredentials.Origin.ENVIRONMENT_OVERRIDE) {
+            terminal.println(
+                yellow("  Credential:  \$${WorkSourceCredentials.TOKEN_ENV} (override; not refreshed, not stored)"),
+            )
+        } else {
+            terminal.println("  Credential:  keychain ${dim("(${CredentialRef.aliasFor(linkId)})")}")
+        }
 
         val links = InMemoryLinkStore(
             links = listOf(
@@ -174,7 +181,7 @@ class ReconcileCommand(
                     direction = LinkDirection.READ_WRITE,
                     egress = EgressClass.ThirdParty(provider = LinearWorkSource.DEPENDENCY_NAME),
                     scope = manifest.emits,
-                    credentialRef = CredentialRef(keychainAlias = "work-source-reconcile"),
+                    credentialRef = CredentialRef.forLink(linkId),
                 ),
             ),
         )
@@ -182,12 +189,23 @@ class ReconcileCommand(
 
         val plugContext = PlugContext.create(
             manifest = manifest,
-            credentialBinding = credentials,
+            credentialBinding = credentials.binding,
             linkResolutionService = LinkResolutionService(
                 linkStore = links,
                 platform = PlatformTarget.JVM_DESKTOP,
             ),
+            credentialRefresher = credentials.refresher,
         ).getOrThrow()
+
+        // A server that never came up leaves no tools, which `open` would report as schema
+        // drift. Say what actually happened — a refused or unrefreshable credential, usually.
+        plugContext.serverFailures.firstOrNull()?.let { failure ->
+            throw PrintMessage(
+                "--work-source: could not connect to $uri: ${failure.cause?.message ?: "unknown failure"}",
+                statusCode = 1,
+                printError = true,
+            )
+        }
 
         val workSource = LinearWorkSource.open(
             plugContext = plugContext,
@@ -262,7 +280,5 @@ class ReconcileCommand(
 
         /** Attribution for the events the pass publishes. */
         const val RECONCILER_AGENT_ID = "startup-reconciler"
-
-        const val TOKEN_ENV = "AMPERE_WORK_SOURCE_TOKEN"
     }
 }

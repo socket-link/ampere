@@ -10,7 +10,7 @@ tracked_sources:
   - ampere-cli/src/jvmMain/kotlin/link/socket/ampere/ReconcileCommand.kt
   - ampere-work-linear/src/commonMain/kotlin/link/socket/ampere/work/linear/LinearClaimRegistry.kt
 related: [DispatchJournal, CancellationAddress, ChassisSpi, TicketConventions]
-last_verified: 2026-10-09
+last_verified: 2026-10-29
 ---
 
 # StartupReconciliation
@@ -131,8 +131,12 @@ decision.
   ).reconcile()
   if (!outcome.isSettled) report(outcome.held)
   ```
-- **From the CLI** — `ampere reconcile`, plus `--repository`, `--work-source`
-  (with `$AMPERE_WORK_SOURCE_TOKEN`), `--skip-worktrees`.
+- **From the CLI** — `ampere reconcile`, plus `--repository`, `--work-source`,
+  `--skip-worktrees`. The work-source credential comes from the keychain, seeded once
+  with `ampere credential seed` and refreshed as it nears expiry (AMPR-464);
+  `$AMPERE_WORK_SOURCE_TOKEN`, when set, overrides it with a static token for one run.
+  A credential the server refuses fails the command with that reason, never as an
+  empty tool surface.
 - **Decide whether a redispatch may open a merge request** —
   `DispatchDisposition.mayOpenMergeRequest`. Null means the question was not asked,
   which is not a yes.
