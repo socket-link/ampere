@@ -1,5 +1,6 @@
 package link.socket.ampere.agents.execution.dispatch
 
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
@@ -29,6 +30,19 @@ import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.agents.execution.process.CancellationAddress
 import link.socket.ampere.agents.execution.process.ProcessGroups
 import link.socket.ampere.agents.execution.process.TerminationOutcome
+import link.socket.ampere.agents.execution.verify.GateListener
+import link.socket.ampere.agents.execution.verify.GateOutcome
+import link.socket.ampere.agents.execution.verify.GateRecord
+import link.socket.ampere.agents.execution.verify.GateResult
+import link.socket.ampere.agents.execution.verify.GateRunner
+import link.socket.ampere.agents.execution.verify.GateStep
+import link.socket.ampere.agents.execution.verify.ManifestGate
+import link.socket.ampere.agents.execution.verify.ManifestInvalid
+import link.socket.ampere.agents.execution.verify.ManifestMissing
+import link.socket.ampere.agents.execution.verify.ManifestSource
+import link.socket.ampere.agents.execution.verify.VerificationReport
+import link.socket.ampere.agents.execution.verify.VerificationVerdict
+import link.socket.ampere.agents.execution.verify.VerifyManifest
 
 /**
  * What a Switchboard is configured with, beyond its collaborators.
@@ -42,6 +56,9 @@ import link.socket.ampere.agents.execution.process.TerminationOutcome
  * @property pollInterval How long `--watch` waits between passes.
  * @property maxAgents At most this many dispatches held at once; null for no limit.
  * @property shutdownGrace How long a terminated agent group gets between SIGTERM and SIGKILL.
+ * @property maxRepairAttempts How many times an agent-attributable verification failure
+ *   is fed back to the agent before the dispatch escalates (AMPR-309, rule 5). A host
+ *   failure never spends one.
  */
 data class SwitchboardConfig(
     val wave: String,
@@ -51,12 +68,33 @@ data class SwitchboardConfig(
     val pollInterval: Duration = 5.minutes,
     val maxAgents: Int? = null,
     val shutdownGrace: Duration = ProcessGroups.DEFAULT_GRACE,
+    val maxRepairAttempts: Int = DEFAULT_MAX_REPAIR_ATTEMPTS,
 ) {
     init {
         require(wave.isNotBlank()) { "A wave id is required" }
         require(maxAgents == null || maxAgents > 0) { "maxAgents must be positive" }
+        require(maxRepairAttempts >= 0) { "maxRepairAttempts must not be negative" }
+    }
+
+    companion object {
+        /** The ratified bound: two repair attempts, then escalate (AMPR-309, rule 5). */
+        const val DEFAULT_MAX_REPAIR_ATTEMPTS: Int = 2
     }
 }
+
+/**
+ * How the Switchboard verifies an agent's finished work before anything is surfaced
+ * for review — the Breaker (AMPR-309).
+ *
+ * @property manifests Where the definition of done comes from. In production the
+ *   repository's base revision ([link.socket.ampere.agents.execution.verify.BaseRevisionManifestSource]),
+ *   never the agent's worktree.
+ * @property runner Executes the manifest's gates in the worktree.
+ */
+class SwitchboardVerification(
+    val manifests: ManifestSource,
+    val runner: GateRunner = GateRunner(),
+)
 
 /** What a Switchboard tells its operator as it works. Every method defaults to doing nothing. */
 interface SwitchboardListener {
@@ -66,6 +104,9 @@ interface SwitchboardListener {
     fun onDispatched(ticketId: String, plan: WorktreePlan, model: ModelChoice, address: CancellationAddress) {}
     fun onStopped(ticketId: String, run: AgentRun) {}
     fun onSettled(ticketId: String, phase: DispatchPhase?, detail: String) {}
+    fun onGateSettled(ticketId: String, attempt: Int, result: GateResult) {}
+    fun onVerified(ticketId: String, attempt: Int, report: VerificationReport) {}
+    fun onRepairing(ticketId: String, attempt: Int, address: CancellationAddress) {}
 
     companion object {
         val NONE: SwitchboardListener = object : SwitchboardListener {}
@@ -116,9 +157,15 @@ data class SwitchboardReport(
  * 6. **Leave it alone until it stops** ([RunSupervisor]), with one automated kill: ten
  *    silent minutes terminates the group and escalates.
  *
- * Then it settles the dispatch. A run that opened a merge request is journaled
- * `MR_OPENED` and `DONE` and left for a person to review and merge. Anything else — a
- * failure, a silence kill, a run with no merge request — is escalated: an `esc:`
+ * Then it settles the dispatch. A clean exit with a merge request open for the branch
+ * goes to the Breaker (AMPR-309): the repository's own verification gates run in the
+ * worktree, journaled `VERIFYING` gate by gate. Only a fully green run surfaces the
+ * work — the ticket moves to review with the merge request linked, journaled
+ * `MR_OPENED` and `DONE`, and left for a person to review and merge. An agent-
+ * attributable failure is fed back to the agent, in the same worktree, for at most
+ * [SwitchboardConfig.maxRepairAttempts] repairs, and each repair is verified again. A
+ * host failure, a refused or incomplete run, an exhausted budget — and anything else:
+ * a failure, a silence kill, a run with no merge request — is escalated: an `esc:`
  * comment saying what happened and what decision is needed, plus `gate:escalated`, and
  * journaled `ESCALATED`. A `research` ticket always ends at escalation, after
  * `gate:awaiting-verdict` is applied.
@@ -133,6 +180,9 @@ data class SwitchboardReport(
  *   immediately before the claim.
  * - **It never merges** — nothing it holds can: [MergeRequestLookup] only reads, and
  *   the git it runs is worktree and branch bookkeeping.
+ * - **Nothing is surfaced unverified** — [DispatchWorkSource.surfaceForReview] is
+ *   called from one place, after a [VerificationVerdict.GREEN] run, and a Switchboard
+ *   without [SwitchboardVerification] escalates every clean exit instead.
  *
  * ### Graceful shutdown
  *
@@ -144,9 +194,8 @@ data class SwitchboardReport(
  *
  * ### What it does not do
  *
- * Run the verification gate (the Breaker, a later wave), reconcile a crashed
- * predecessor's residue (`ampere reconcile`), or plan, create or order tickets beyond
- * the ready rule.
+ * Reconcile a crashed predecessor's residue (`ampere reconcile`), plan, create or order
+ * tickets beyond the ready rule, or trust anything an agent says about its own work.
  */
 class Switchboard(
     private val config: SwitchboardConfig,
@@ -156,6 +205,7 @@ class Switchboard(
     private val launcher: AgentLauncher,
     private val supervisor: RunSupervisor = RunSupervisor(),
     private val mergeRequests: MergeRequestLookup? = null,
+    private val verification: SwitchboardVerification? = null,
     private val eventApi: AgentEventApi? = null,
     private val listener: SwitchboardListener = SwitchboardListener.NONE,
     private val eventSource: EventSource = EventSource.Agent(DEFAULT_SOURCE_ID),
@@ -207,6 +257,9 @@ class Switchboard(
         @Volatile var launched: Boolean = false
 
         @Volatile var shutdownTermination: TerminationOutcome? = null
+
+        /** Repair runs launched so far; also the attempt number of the next verification. */
+        @Volatile var repairs: Int = 0
     }
 
     /**
@@ -458,29 +511,36 @@ class Switchboard(
         return true
     }
 
-    private suspend fun supervise(dispatch: Dispatch, gated: GatedAgent) {
+    /**
+     * Watch [first] until it stops and settle the dispatch — and, while verification
+     * hands back a repair run, watch and settle that one too, in the same worktree.
+     */
+    private suspend fun supervise(dispatch: Dispatch, first: GatedAgent) {
+        var gated = first
         try {
-            val observed = supervisor.supervise(gated.grouped, logFile(dispatch)) { stopping }
-            val run = if (observed.stop == AgentStop.SHUTDOWN) {
-                observed.copy(termination = dispatch.shutdownTermination ?: observed.termination)
-            } else {
-                observed
+            while (true) {
+                val observed = supervisor.supervise(gated.grouped, logFile(dispatch)) { stopping }
+                val run = if (observed.stop == AgentStop.SHUTDOWN) {
+                    observed.copy(termination = dispatch.shutdownTermination ?: observed.termination)
+                } else {
+                    observed
+                }
+                listener.onStopped(dispatch.id, run)
+                publish(
+                    SupervisorEvent.AgentRunStopped(
+                        eventId = idGenerator(),
+                        eventSource = eventSource,
+                        timestamp = now(),
+                        instanceId = instanceId,
+                        ticketId = dispatch.id,
+                        stop = run.stop,
+                        exitCode = run.exitCode,
+                        processGroupId = gated.grouped.address.processGroupId,
+                        termination = run.termination,
+                    ),
+                )
+                gated = withContext(NonCancellable) { settle(dispatch, run) } ?: break
             }
-            listener.onStopped(dispatch.id, run)
-            publish(
-                SupervisorEvent.AgentRunStopped(
-                    eventId = idGenerator(),
-                    eventSource = eventSource,
-                    timestamp = now(),
-                    instanceId = instanceId,
-                    ticketId = dispatch.id,
-                    stop = run.stop,
-                    exitCode = run.exitCode,
-                    processGroupId = gated.grouped.address.processGroupId,
-                    termination = run.termination,
-                ),
-            )
-            withContext(NonCancellable) { settle(dispatch, run) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -491,8 +551,11 @@ class Switchboard(
         }
     }
 
-    /** End a dispatch whose agent stopped: a merge request found, or an escalation. */
-    private suspend fun settle(dispatch: Dispatch, run: AgentRun) {
+    /**
+     * End a dispatch whose agent stopped — verified and surfaced, or escalated — or hand
+     * back the repair run verification launched instead.
+     */
+    private suspend fun settle(dispatch: Dispatch, run: AgentRun): GatedAgent? {
         val branch = dispatch.plan.branch
         val research = workSource.conventions.researchLabel in dispatch.ticket.labels
 
@@ -517,32 +580,169 @@ class Switchboard(
                 escalate(dispatch, Escalations.research(gated))
             }
 
-            else -> settleByMergeRequest(dispatch, branch)
+            else -> return settleByVerification(dispatch, branch)
+        }
+        return null
+    }
+
+    /**
+     * A clean exit is settled by asking the forge, never by trusting the agent — query
+     * by head branch, as the AMPR-291 verdict requires before anything is created — and
+     * then by running the repository's own gates against the work (AMPR-309). The
+     * forge goes first because it is the cheap question: a run with no merge request
+     * escalates without spending an hour of gates on it.
+     *
+     * @return the repair run launched for an agent-attributable failure, or null when
+     *   the dispatch is settled (or owed).
+     */
+    private suspend fun settleByVerification(dispatch: Dispatch, branch: String): GatedAgent? {
+        val request = mergeRequestFor(dispatch, branch) ?: return null
+        val verifier = verification
+        if (verifier == null) {
+            escalate(dispatch, Escalations.unverifiable(branch))
+            return null
+        }
+        val attempt = dispatch.repairs
+        if (!advance(dispatch, DispatchPhase.VERIFYING)) {
+            active.remove(dispatch.id)
+            owed[dispatch.id] = "the journal could not record the start of verification"
+            return null
+        }
+
+        val manifest = verifier.manifests.load(dispatch.plan.path).getOrElse { error ->
+            note("could not read the verification manifest for ${dispatch.id}: ${error.describe()}")
+            escalate(dispatch, Escalations.manifest(branch, error))
+            return null
+        }
+        val report = verify(dispatch, manifest, verifier.runner, attempt) ?: return null
+
+        return when (report.verdict) {
+            VerificationVerdict.GREEN -> {
+                surface(dispatch, request, report, attempt)
+                null
+            }
+
+            VerificationVerdict.AGENT_FAILURE -> if (attempt < config.maxRepairAttempts) {
+                repair(dispatch, manifest, report)
+            } else {
+                escalate(dispatch, Escalations.verificationFailed(report, attempt, branch))
+                null
+            }
+
+            VerificationVerdict.INTERRUPTED -> {
+                escalate(dispatch, Escalations.interrupted(branch))
+                null
+            }
+
+            VerificationVerdict.REFUSED -> {
+                escalate(dispatch, Escalations.verificationRefused(report, branch))
+                null
+            }
+
+            VerificationVerdict.HOST_FAILURE -> {
+                escalate(dispatch, Escalations.hostFailure(report, branch))
+                null
+            }
+
+            VerificationVerdict.INCOMPLETE -> {
+                escalate(dispatch, Escalations.verificationIncomplete(report, branch))
+                null
+            }
         }
     }
 
     /**
-     * A clean exit is settled by asking the forge, never by trusting the agent: query
-     * by head branch, as the AMPR-291 verdict requires before anything is created. A
-     * closed request does not count — it is not work a person can merge.
+     * The open merge request for [branch], or null after escalating. A closed request
+     * does not count — it is not work a person can merge.
      */
-    private suspend fun settleByMergeRequest(dispatch: Dispatch, branch: String) {
+    private suspend fun mergeRequestFor(dispatch: Dispatch, branch: String): MergeRequestRef? {
         val lookup = mergeRequests
         if (lookup == null) {
             escalate(dispatch, Escalations.unconfirmed(branch))
-            return
+            return null
         }
         val requests = lookup.forHeadBranch(branch).getOrElse { error ->
             note("could not look up a merge request for $branch: ${error.describe()}")
             escalate(dispatch, Escalations.unconfirmed(branch))
-            return
+            return null
         }
-        val request = requests.firstOrNull { it.state != MergeRequestState.CLOSED }
-        if (request == null) {
+        return requests.firstOrNull { it.state != MergeRequestState.CLOSED } ?: run {
             escalate(dispatch, Escalations.noMergeRequest(branch))
+            null
+        }
+    }
+
+    /**
+     * Run [manifest]'s gates in the dispatch's worktree, journaling each gate as it
+     * starts (with its process group, so a crash leaves the reconciliation pass
+     * something to stop) and as it settles (with its [GateRecord]). Null when the
+     * journal refused a record, in which case the dispatch is owed.
+     */
+    private suspend fun verify(
+        dispatch: Dispatch,
+        manifest: VerifyManifest,
+        runner: GateRunner,
+        attempt: Int,
+    ): VerificationReport? {
+        var journaled = true
+        val gateListener = object : GateListener {
+            override suspend fun onGateStarted(gate: ManifestGate, step: GateStep, address: CancellationAddress) {
+                if (journaled) journaled = advance(dispatch, DispatchPhase.VERIFYING, agentAddress = address)
+            }
+
+            override suspend fun onGateSettled(result: GateResult) {
+                if (journaled) journaled = advance(dispatch, DispatchPhase.VERIFYING, gate = result.record(attempt))
+                listener.onGateSettled(dispatch.id, attempt, result)
+            }
+        }
+        val report = runner.run(
+            manifest = manifest,
+            root = dispatch.plan.path,
+            logDirectory = verificationLogs(dispatch, attempt),
+            listener = gateListener,
+            stopping = { stopping },
+        )
+        listener.onVerified(dispatch.id, attempt, report)
+        publish(
+            SupervisorEvent.VerificationCompleted(
+                eventId = idGenerator(),
+                eventSource = eventSource,
+                timestamp = now(),
+                instanceId = instanceId,
+                ticketId = dispatch.id,
+                attempt = attempt,
+                verdict = report.verdict,
+                passed = report.count(GateOutcome.PASSED),
+                failedGates = report.withOutcome(GateOutcome.FAILED).map { it.gateId },
+                infrastructureGates = report.withOutcome(GateOutcome.INFRASTRUCTURE).map { it.gateId },
+                notExecutedGates = report.withOutcome(GateOutcome.NOT_EXECUTED).map { it.gateId },
+            ),
+        )
+        if (!journaled) {
+            active.remove(dispatch.id)
+            owed[dispatch.id] = "the journal could not record a verification gate"
+            return null
+        }
+        return report
+    }
+
+    /**
+     * The one transition after the claim: a green run moves the ticket to review with
+     * its merge request linked, and only then is the dispatch journaled done.
+     */
+    private suspend fun surface(
+        dispatch: Dispatch,
+        request: MergeRequestRef,
+        report: VerificationReport,
+        attempt: Int,
+    ) {
+        val summary = "All ${report.gates.size} verification gates passed on the supervisor host" +
+            if (attempt == 0) "." else " after $attempt repair attempt${if (attempt == 1) "" else "s"}."
+        workSource.surfaceForReview(dispatch.id, request.url, summary).getOrElse { error ->
+            note("could not surface ${dispatch.id} for review: ${error.describe()}")
+            escalate(dispatch, Escalations.unsurfaced(dispatch.plan.branch))
             return
         }
-
         val recorded = advance(dispatch, DispatchPhase.MR_OPENED, mergeRequestUrl = request.url) &&
             advance(dispatch, DispatchPhase.DONE)
         if (recorded) {
@@ -551,6 +751,64 @@ class Switchboard(
             active.remove(dispatch.id)
             owed[dispatch.id] = "the journal could not record the merge request ${request.url}"
         }
+    }
+
+    /**
+     * Feed an agent-attributable failure back to the agent: write the report into the
+     * worktree and launch the agent again there, behind the same gate and journaled the
+     * same way as its first run. Null after escalating when it could not be started.
+     */
+    private suspend fun repair(dispatch: Dispatch, manifest: VerifyManifest, report: VerificationReport): GatedAgent? {
+        val branch = dispatch.plan.branch
+        dispatch.repairs += 1
+        val attempt = dispatch.repairs
+        val relative = "$REPAIR_DIRECTORY/attempt-$attempt.md"
+        runCatching {
+            withContext(Dispatchers.IO) {
+                val file = dispatch.plan.path.resolve(relative)
+                Files.createDirectories(file.parent)
+                val text = RepairReports.render(dispatch.id, manifest, report, attempt, config.maxRepairAttempts)
+                Files.writeString(file, text)
+            }
+        }.onFailure { error ->
+            note("could not write the verification report for ${dispatch.id}: ${error.describe()}")
+            escalate(dispatch, Escalations.verificationFailed(report, attempt - 1, branch))
+            return null
+        }
+
+        val launch = AgentLaunch(
+            ticketId = dispatch.id,
+            worktree = dispatch.plan.path,
+            contextPath = context.relativePath(dispatch.ticket),
+            model = dispatch.model,
+            attachments = listOf(relative),
+        )
+        val gated = runCatching { withContext(Dispatchers.IO) { launcher.startGated(launch) } }.getOrElse { error ->
+            note("could not start the repair run for ${dispatch.id}: ${error.describe()}")
+            escalate(dispatch, Escalations.spawn(branch))
+            return null
+        }
+        dispatch.agent = gated
+        if (!advance(dispatch, DispatchPhase.AGENT_RUNNING, agentAddress = gated.grouped.address)) {
+            withContext(Dispatchers.IO) { gated.grouped.terminate(config.shutdownGrace) }
+            active.remove(dispatch.id)
+            owed[dispatch.id] = "the journal could not record the repair run's process group"
+            return null
+        }
+
+        val opened: Result<Boolean> = synchronized(lock) {
+            if (stopping) Result.success(false) else runCatching { gated.release() }.map { true }
+        }
+        if (opened.getOrDefault(false)) {
+            listener.onRepairing(dispatch.id, attempt, gated.grouped.address)
+            return gated
+        }
+        opened.exceptionOrNull()?.let { error ->
+            note("the repair run for ${dispatch.id} exited before it could be released: ${error.describe()}")
+        }
+        withContext(Dispatchers.IO) { gated.grouped.terminate(config.shutdownGrace) }
+        escalate(dispatch, if (opened.isFailure) Escalations.spawn(branch) else Escalations.interrupted(branch))
+        return null
     }
 
     // -----------------------------------------------------------------
@@ -654,6 +912,7 @@ class Switchboard(
         phase: DispatchPhase,
         agentAddress: CancellationAddress? = null,
         mergeRequestUrl: String? = null,
+        gate: GateRecord? = null,
     ): Boolean = append(
         dispatch,
         dispatch.record.copy(
@@ -661,6 +920,7 @@ class Switchboard(
             recordedAt = now(),
             agentAddress = agentAddress ?: dispatch.record.agentAddress,
             mergeRequestUrl = mergeRequestUrl ?: dispatch.record.mergeRequestUrl,
+            gate = gate,
         ),
     )
 
@@ -701,6 +961,11 @@ class Switchboard(
     private fun logFile(dispatch: Dispatch): Path =
         config.logDirectory.resolve(instanceId).resolve("${dispatch.plan.path.fileName}.log")
 
+    private fun verificationLogs(dispatch: Dispatch, attempt: Int): Path =
+        config.logDirectory.resolve(instanceId)
+            .resolve("${dispatch.plan.path.fileName}.verify")
+            .resolve("attempt-$attempt")
+
     private fun ClaimRelease.describe(): String = when (this) {
         is ClaimRelease.Released -> revertedTo?.let { "returned to '$it'" } ?: (reason ?: "retracted")
         is ClaimRelease.NotHeld -> "this instance held no claim"
@@ -713,6 +978,9 @@ class Switchboard(
 
         /** Attribution for the events a Switchboard publishes. */
         const val DEFAULT_SOURCE_ID: String = "ampere.switchboard"
+
+        /** Where a repair run's verification report is written, relative to the worktree. */
+        const val REPAIR_DIRECTORY: String = ".context/verification"
 
         /**
          * Tickets in identifier order — team prefix, then number — so the earlier-filed
@@ -839,6 +1107,119 @@ internal object Escalations {
         "Nothing; a research ticket stops at a person, and recording the verdict is a human-only write.",
         "A human verdict on the findings.",
     )
+
+    fun unverifiable(branch: String): String = body(
+        "The agent exited cleanly and a pull request is open for branch `$branch`, but this supervisor has no " +
+            "verification configured, so the work was not checked and is not surfaced for review.",
+        "Nothing; the Breaker never surfaces unverified work.",
+        "A person to verify the branch, or to run the supervisor with verification.",
+    )
+
+    fun manifest(branch: String, error: Throwable): String = body(
+        when (error) {
+            is ManifestMissing ->
+                "The repository declares no `${VerifyManifest.PATH}` at the base revision, so the work on branch " +
+                    "`$branch` has no definition of done to be verified against."
+
+            is ManifestInvalid ->
+                "The repository's `${VerifyManifest.PATH}` at the base revision is not valid schema v1, so the work " +
+                    "on branch `$branch` could not be verified:\n" +
+                    error.violations.take(MAX_LISTED).joinToString("\n") { "- `${it.field}`: ${it.message}" } +
+                    overflow(error.violations.size)
+
+            else ->
+                "The repository's `${VerifyManifest.PATH}` could not be read, so the work on branch `$branch` " +
+                    "could not be verified."
+        },
+        "Nothing; no gate ran, and the agent's repair budget is unspent.",
+        "A person to fix the manifest on the base branch, then redispatch.",
+    )
+
+    fun verificationFailed(report: VerificationReport, repairs: Int, branch: String): String {
+        val failed = report.withOutcome(GateOutcome.FAILED)
+        val attempts = if (repairs == 1) "1 repair attempt" else "$repairs repair attempts"
+        return body(
+            "Verification failed on branch `$branch`: ${failed.size} of ${report.gates.size} gates failed" +
+                (if (repairs > 0) " after $attempts" else "") + ".\n\n" +
+                gateLines(failed, withExcerpt = true),
+            if (repairs > 0) {
+                "Fed the failing gates back to the agent: $attempts, the configured bound."
+            } else {
+                "Nothing further; repair attempts are disabled or could not be started."
+            },
+            "A person to inspect branch `$branch` and decide whether to fix it or redispatch.",
+        )
+    }
+
+    fun hostFailure(report: VerificationReport, branch: String): String {
+        val host = report.withOutcome(GateOutcome.INFRASTRUCTURE)
+        val failed = report.withOutcome(GateOutcome.FAILED)
+        val alsoFailed = if (failed.isEmpty()) {
+            ""
+        } else {
+            "\n\nAlso failed on this run, not charged to the agent while the host is suspect:\n" +
+                gateLines(failed, withExcerpt = false)
+        }
+        return body(
+            "The verification gates could not produce a verdict on the supervisor host, so the work on branch " +
+                "`$branch` was not judged. This is about the machine, not the agent.\n\n" +
+                gateLines(host, withExcerpt = false) + alsoFailed,
+            "Re-checked each gate's preconditions and re-ran retry-safe failures; the agent's repair budget is " +
+                "unspent.",
+            "A person to fix the supervisor host, then re-verify or redispatch.",
+        )
+    }
+
+    fun verificationRefused(report: VerificationReport, branch: String): String = body(
+        "The verification run for branch `$branch` was refused: a hard precondition is absent on the supervisor " +
+            "host, so no gate ran.\n" +
+            report.refusedBy.entries.joinToString("\n") { (id, why) -> "- `$id`: $why" },
+        "Nothing; the agent's work was not judged and its repair budget is unspent.",
+        "A person to provide the missing precondition on the supervisor host, then re-verify or redispatch.",
+    )
+
+    fun verificationIncomplete(report: VerificationReport, branch: String): String {
+        val skipped = report.withOutcome(GateOutcome.NOT_EXECUTED)
+        return body(
+            "Every gate that ran on branch `$branch` passed, but ${skipped.size} could not run on the supervisor " +
+                "host, and a run with absent evidence is not green.\n\n" + gateLines(skipped, withExcerpt = false),
+            "Nothing; the work is not surfaced for review.",
+            "A person to provide the missing facility and re-verify, or to review the branch knowing the gap.",
+        )
+    }
+
+    fun unsurfaced(branch: String): String = body(
+        "Every verification gate passed on branch `$branch`, but moving the ticket to review failed.",
+        "Surfacing the ticket for review once.",
+        "A person to move the ticket to review and link its pull request.",
+    )
+
+    /**
+     * One line per gate — id, step, outcome reason, baseline — and, for a failure, its
+     * anchored excerpt. Everything here is a manifest identifier, fixed text or a
+     * sanitised anchor line ([link.socket.ampere.agents.execution.verify.LogExcerpts]).
+     */
+    private fun gateLines(results: List<GateResult>, withExcerpt: Boolean): String =
+        results.take(MAX_LISTED).joinToString("\n") { result ->
+            buildString {
+                append("- `${result.gateId}`")
+                result.step?.let { append(" (step `$it`)") }
+                append(": ${result.reason}")
+                append("; baseline ${result.baseline.wire}")
+                if (withExcerpt && result.excerpt.isNotEmpty()) {
+                    append("\n  ```\n")
+                    result.excerpt.forEach { append("  ").append(it.replace(FENCE, "'''")).append('\n') }
+                    append("  ```")
+                }
+            }
+        } + overflow(results.size)
+
+    private fun overflow(size: Int): String = if (size > MAX_LISTED) "\n- …and ${size - MAX_LISTED} more" else ""
+
+    /** An escalation names at most this many gates or violations; the rest are counted. */
+    private const val MAX_LISTED = 10
+
+    private const val FENCE = "```"
 
     private fun body(what: String, tried: String, needs: String): String =
         "$what\n\nTried: $tried\nNeeds: $needs"

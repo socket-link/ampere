@@ -128,4 +128,25 @@ class AgentLauncherTest {
             "the kickoff is the attachment line and nothing else",
         )
     }
+
+    @Test
+    fun `a repair run's prompt attaches the verification report after the ticket, and nothing else`() {
+        val launcher = AgentLauncher(AgentLaunchSpec.claudeCode())
+        val prompt = launcher.prompt(
+            AgentLaunch(
+                ticketId = "AMPR-1",
+                worktree = Path.of("/tmp/worktree"),
+                contextPath = ".context/attachments/linear-1/[LINEAR]-AMPR-1.md",
+                model = ModelChoice("opus", "high"),
+                attachments = listOf(".context/verification/attempt-1.md"),
+            ),
+        )
+
+        assertEquals(
+            "The user has attached these files. Read them before proceeding.\n" +
+                "- .context/attachments/linear-1/[LINEAR]-AMPR-1.md\n" +
+                "- .context/verification/attempt-1.md",
+            prompt,
+        )
+    }
 }

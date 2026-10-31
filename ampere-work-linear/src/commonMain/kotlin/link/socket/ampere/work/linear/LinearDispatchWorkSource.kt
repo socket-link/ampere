@@ -23,12 +23,12 @@ import link.socket.ampere.plug.spi.PerceiveQuery
  * It is the narrowing that makes the Switchboard's trust boundaries structural.
  * [LinearWorkSource] can remove labels, write any state and post any comment; this
  * class exposes none of that. Its writes are [LinearWorkSource.claim],
- * [LinearWorkSource.release] (for this instance's own claim), [LinearWorkSource.escalate]
- * and [LinearWorkSource.requestVerdict] — the last of which *adds*
- * [WorkSourceLabels.GATE_AWAITING_VERDICT] and, as a stop, removes no gate
- * ([SupervisoryStatusMapping.gateEdit]). So no path from the Switchboard reaches a
- * gate removal or a Done transition, and `LinearDispatchWorkSourceTest` pins that on
- * the wire.
+ * [LinearWorkSource.release] (for this instance's own claim), [LinearWorkSource.escalate],
+ * [LinearWorkSource.requestVerdict] — which *adds* [WorkSourceLabels.GATE_AWAITING_VERDICT]
+ * and, as a stop, removes no gate ([SupervisoryStatusMapping.gateEdit]) — and
+ * [LinearWorkSource.surfaceForReview], a raw move to review that touches no label. So
+ * no path from the Switchboard reaches a gate removal or a Done transition, and
+ * `LinearDispatchWorkSourceTest` pins that on the wire.
  *
  * ### Reads
  *
@@ -144,6 +144,9 @@ class LinearDispatchWorkSource(
 
     override suspend fun requestVerdict(ticketId: String): Result<Unit> =
         workSource.requestVerdict(ticketId).map { }
+
+    override suspend fun surfaceForReview(ticketId: String, mergeRequestUrl: String, summary: String): Result<Unit> =
+        workSource.surfaceForReview(ticketId, mergeRequestUrl, summary).map { }
 
     private fun WorkSourceIssue.toDispatchTicket(): DispatchTicket = DispatchTicket(
         identifier = identifier,

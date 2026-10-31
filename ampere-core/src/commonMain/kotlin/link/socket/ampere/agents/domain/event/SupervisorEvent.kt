@@ -12,6 +12,7 @@ import link.socket.ampere.agents.execution.dispatch.ReconciliationSource
 import link.socket.ampere.agents.execution.dispatch.RefusalReason
 import link.socket.ampere.agents.execution.dispatch.WorktreeVerdict
 import link.socket.ampere.agents.execution.process.TerminationOutcome
+import link.socket.ampere.agents.execution.verify.VerificationVerdict
 
 /**
  * What the supervisor's claim-record journal wrote, carried on the `EventSerialBus`
@@ -342,6 +343,53 @@ sealed interface SupervisorEvent : Event {
 
         companion object {
             const val EVENT_TYPE: EventType = "AgentRunStopped"
+        }
+    }
+
+    /**
+     * A dispatch's verification run finished (AMPR-309): the repository's gates ran
+     * against the agent's work and reached a verdict.
+     *
+     * Each gate's own result is on the record as a [DispatchRecorded] whose record
+     * carries it; this is the run's verdict, which decides what happens next — a
+     * surfaced merge request, a repair attempt, or an escalation.
+     *
+     * @property attempt 0 after the agent's first run, n after its n-th repair.
+     * @property failedGates Gates that failed (agent-attributable), by id.
+     * @property infrastructureGates Gates the host could not run to a verdict, by id.
+     * @property notExecutedGates Gates a precondition kept from running, by id.
+     */
+    @Serializable
+    data class VerificationCompleted(
+        override val eventId: EventId,
+        override val eventSource: EventSource,
+        override val timestamp: Instant,
+        override val instanceId: String,
+        val ticketId: String,
+        val attempt: Int,
+        val verdict: VerificationVerdict,
+        val passed: Int,
+        val failedGates: List<String> = emptyList(),
+        val infrastructureGates: List<String> = emptyList(),
+        val notExecutedGates: List<String> = emptyList(),
+        override val urgency: Urgency = if (verdict == VerificationVerdict.GREEN) Urgency.LOW else Urgency.HIGH,
+    ) : SupervisorEvent {
+
+        override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Verified $ticketId (attempt $attempt): ${verdict.name}, $passed passed")
+            if (failedGates.isNotEmpty()) append("; failed ${failedGates.joinToString()}")
+            if (infrastructureGates.isNotEmpty()) append("; host ${infrastructureGates.joinToString()}")
+            if (notExecutedGates.isNotEmpty()) append("; not run ${notExecutedGates.joinToString()}")
+            append(" [$instanceId]")
+        }
+
+        companion object {
+            const val EVENT_TYPE: EventType = "VerificationCompleted"
         }
     }
 }

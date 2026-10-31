@@ -152,4 +152,20 @@ class SupervisoryCommentTest {
         assertEquals("claim:", SupervisoryComment.CLAIM_PREFIX)
         assertEquals("esc:", SupervisoryComment.ESCALATION_PREFIX)
     }
+
+    @Test
+    fun `a verified comment renders its header then the link and round-trips`() {
+        val verified = SupervisoryComment.Verified(
+            issue = "AMPR-309",
+            instanceId = SupervisorInstanceId("supervisor-7f3a"),
+            body = "https://github.com/socket-link/ampere/pull/12\n\nAll 19 verification gates passed.",
+        )
+
+        assertEquals(
+            "verified:AMPR-309:supervisor-7f3a\n\nhttps://github.com/socket-link/ampere/pull/12\n\n" +
+                "All 19 verification gates passed.",
+            verified.render(),
+        )
+        assertEquals(verified, SupervisoryComment.parse(verified.render()))
+    }
 }

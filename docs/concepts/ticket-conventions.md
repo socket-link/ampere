@@ -72,10 +72,10 @@ not name.
 ## Where it lives
 
 - `docs/templates/ticket-description.md` — the template to copy. The section order there is load-bearing (see *Invariants*).
-- `ampere-work-linear/.../SupervisoryComment.kt` — `SupervisoryComment.Claim` / `.Release` / `.Escalation`, their `render`/`parse`, and the `claim:` / `release:` / `esc:` prefix constants. The authority for M5 and M6.
+- `ampere-work-linear/.../SupervisoryComment.kt` — `SupervisoryComment.Claim` / `.Release` / `.Escalation` / `.Verified`, their `render`/`parse`, and the `claim:` / `release:` / `esc:` / `verified:` prefix constants. The authority for M5 and M6, and for the `verified:` surfacing comment.
 - `ampere-work-linear/.../SupervisoryLifecycle.kt` — `WorkSourceLabels.WAVE_PREFIX`, `GATE_AWAITING_VERDICT`, `GATE_ESCALATED`, `GATES`, and `SupervisoryStatusMapping`. The authority for M2 and M3.
 - `ampere-work-linear/.../WorkSourceIssueSource.kt` — `readyQueueRule`, the predicate list a ticket has to satisfy to be offered.
-- `.ampere/verify.yml` — where the verification manifest *will* live, per decision D3 on AMPR-286. **No such file exists in this repo yet**, and M4 is the convention that no ticket ever points at it.
+- `.ampere/verify.yml` — the verification manifest, per decision D3 on AMPR-286 ([VerificationManifest](verification-manifest.md)). M4 is the convention that no ticket ever points at it; the Breaker reads it from the base revision, never from a ticket (AMPR-309).
 - `ampere-core`'s [Switchboard](switchboard.md) is the one reader outside the adapter (AMPR-308): `TicketScope.kt` parses M1, `ModelRecommendation.kt` the model/effort line, and `HumanVerdicts.kt` the verdict header below. It takes the labels' spelling from the adapter, through `DispatchConventions`, and never spells one itself.
 - `WorkSourceLabels.RESEARCH` — the `research` label, read by two Switchboard rules: a `research` blocker satisfies the ready rule only when it is Done **and** carries a recorded human verdict, and a dispatched `research` ticket always ends at the verdict gate and an escalation.
 
@@ -160,6 +160,21 @@ escalation record: what failed, what was tried, what decision is needed. Posted
 together with the `gate:escalated` label — the label is what a query can filter
 on, the body is what the human needs to act.
 
+### `verified:` — work surfaced for review
+
+```
+verified:AMPR-309:supervisor-7f3a
+
+https://github.com/socket-link/ampere/pull/12
+
+All 19 verification gates passed on the supervisor host.
+```
+
+Not a dispatch convention a ticket author writes: the comment the Breaker posts
+when it surfaces a ticket (AMPR-309), after a fully green verification run, just
+before moving it to In Review. Same header shape, so it cannot read as a human
+verdict; nothing parses it as protocol — it is the link a reviewer follows.
+
 ### Recorded human verdict
 
 Not a convention a supervisor writes, and never one it may write: the comment a
@@ -173,7 +188,7 @@ person leaves when a STOP gate is decided. Its first line opens with
 Every write shares one API identity, so the author field cannot tell a person's
 verdict from an agent's findings; the opening line is the only evidence. The
 Switchboard's strict research-blocker rule reads it (`HumanVerdicts.isVerdict`), and
-every comment a supervisor writes opens with `claim:`, `release:` or `esc:` instead,
+every comment a supervisor writes opens with `claim:`, `release:`, `esc:` or `verified:` instead,
 which is what keeps that evidence unforgeable from the supervisor's side.
 
 ### Model + effort recommendation

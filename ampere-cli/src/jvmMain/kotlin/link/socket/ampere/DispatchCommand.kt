@@ -37,9 +37,16 @@ import link.socket.ampere.agents.execution.dispatch.SwitchboardConfig
 import link.socket.ampere.agents.execution.dispatch.SwitchboardListener
 import link.socket.ampere.agents.execution.dispatch.SwitchboardReport
 import link.socket.ampere.agents.execution.dispatch.SwitchboardShutdownHook
+import link.socket.ampere.agents.execution.dispatch.SwitchboardVerification
 import link.socket.ampere.agents.execution.dispatch.WorktreePlan
 import link.socket.ampere.agents.execution.dispatch.WorktreeProvisioner
 import link.socket.ampere.agents.execution.process.CancellationAddress
+import link.socket.ampere.agents.execution.verify.BaseRevisionManifestSource
+import link.socket.ampere.agents.execution.verify.GateOutcome
+import link.socket.ampere.agents.execution.verify.GateResult
+import link.socket.ampere.agents.execution.verify.GateRunner
+import link.socket.ampere.agents.execution.verify.VerificationReport
+import link.socket.ampere.agents.execution.verify.VerificationVerdict
 import link.socket.ampere.integrations.git.RepositoryDetector
 import link.socket.ampere.integrations.issues.github.GhMergeRequestLookup
 import link.socket.ampere.terminal.TerminalFactory
@@ -56,7 +63,10 @@ import link.socket.ampere.work.linear.LinearDispatchWorkSource
  *
  * One pass evaluates the ready queue, claims and launches every ready ticket, then
  * stays to supervise those runs until each agent stops, and exits once they are
- * settled. `--watch` repeats the pass every `--poll` seconds while supervising, until
+ * settled. A run that exits cleanly with a pull request open is verified first (the
+ * Breaker, AMPR-309): the base branch's `.ampere/verify.yml` gates run in its
+ * worktree, a failure is fed back to the agent for up to `--max-repairs` attempts, and
+ * only a fully green run moves the ticket to review. `--watch` repeats the pass every `--poll` seconds while supervising, until
  * SIGINT or SIGTERM — which terminates the running agents' process groups, escalates
  * those interrupted runs, gives back the claims of any that had not started, and
  * writes the journal's clean-shutdown marker.
@@ -145,6 +155,11 @@ class DispatchCommand(
 
     private val maxAgents by option("--max-agents", help = "Hold at most this many dispatches at once").int()
 
+    private val maxRepairs by option(
+        "--max-repairs",
+        help = "Feed a failed verification back to the agent at most this many times before escalating",
+    ).int().default(SwitchboardConfig.DEFAULT_MAX_REPAIR_ATTEMPTS)
+
     private val instanceId by option("--instance", help = "This supervisor's instance id")
         .default("switchboard-${ProcessHandle.current().pid()}-${UUID.randomUUID().toString().take(8)}")
 
@@ -156,6 +171,9 @@ class DispatchCommand(
         }
         if (pollSeconds <= 0 || silenceMinutes <= 0) {
             throw PrintMessage("--poll and --silence-minutes must be positive", statusCode = 2, printError = true)
+        }
+        if (maxRepairs < 0) {
+            throw PrintMessage("--max-repairs must not be negative", statusCode = 2, printError = true)
         }
         val slug = repoSlug ?: if (repository == null) RepositoryDetector.detectRepository() else null
         val home = File(System.getProperty("user.home") ?: ".").toPath()
@@ -170,6 +188,7 @@ class DispatchCommand(
         terminal.println("  Repository:  $repoPath${slug?.let { dim(" ($it)") } ?: ""}")
         terminal.println("  Worktrees:   $worktrees ${dim("from $base")}")
         terminal.println("  Agent:       $agentBinary ${dim("(default $defaultModel, $defaultEffort; $permissionMode)")}")
+        terminal.println("  Verify:      $base:.ampere/verify.yml ${dim("(up to $maxRepairs repair attempts)")}")
         terminal.println("  Work source: $workSourceUri")
         terminal.println("  Instance:    $instanceId")
 
@@ -194,6 +213,7 @@ class DispatchCommand(
                 defaultModel = ModelChoice(model = defaultModel, effort = defaultEffort),
                 pollInterval = pollSeconds.seconds,
                 maxAgents = maxAgents,
+                maxRepairAttempts = maxRepairs,
             ),
             workSource = LinearDispatchWorkSource(workSource, project = project),
             journal = journal,
@@ -201,6 +221,10 @@ class DispatchCommand(
             launcher = AgentLauncher(AgentLaunchSpec.claudeCode(binary = agentBinary, permissionMode = permissionMode)),
             supervisor = RunSupervisor(silenceLimit = silenceMinutes.minutes),
             mergeRequests = GhMergeRequestLookup(repoPath, repository = slug),
+            verification = SwitchboardVerification(
+                manifests = BaseRevisionManifestSource(repository = repoPath, base = base),
+                runner = GateRunner(),
+            ),
             eventApi = eventApi,
             listener = ConsoleListener(),
         )
@@ -272,6 +296,34 @@ class DispatchCommand(
                 AgentStop.SHUTDOWN -> "stopped by shutdown; group ${run.termination?.name ?: "?"}"
             }
             terminal.println("  ■ ${bold(ticketId)} $how")
+        }
+
+        override fun onGateSettled(ticketId: String, attempt: Int, result: GateResult) {
+            val mark = when (result.outcome) {
+                GateOutcome.PASSED -> green("✓")
+                GateOutcome.FAILED -> red("✗")
+                GateOutcome.INFRASTRUCTURE -> yellow("!")
+                GateOutcome.NOT_EXECUTED -> dim("–")
+            }
+            val detail = "${result.reason} (${result.duration.inWholeSeconds}s)"
+            terminal.println("    $mark $ticketId ${result.gateId} ${dim(detail)}")
+        }
+
+        override fun onVerified(ticketId: String, attempt: Int, report: VerificationReport) {
+            val verdict = report.verdict.name
+            val colored = when (report.verdict) {
+                VerificationVerdict.GREEN -> green(verdict)
+                VerificationVerdict.AGENT_FAILURE -> yellow(verdict)
+                else -> red(verdict)
+            }
+            terminal.println("  ◆ ${bold(ticketId)} verification attempt $attempt: $colored")
+        }
+
+        override fun onRepairing(ticketId: String, attempt: Int, address: CancellationAddress) {
+            terminal.println(
+                yellow("  ↻ ") + bold(ticketId) + " repair attempt $attempt " +
+                    dim("(pgid ${address.processGroupId ?: "none"})"),
+            )
         }
 
         override fun onSettled(ticketId: String, phase: DispatchPhase?, detail: String) {

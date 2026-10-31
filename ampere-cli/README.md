@@ -228,8 +228,14 @@ printed with its reason.
 
 A run is left alone until it stops, with one automated kill: ten minutes of no output
 (`--silence-minutes`) terminates its process group and escalates the ticket. A clean
-exit with an open pull request for the branch is done; anything else is escalated with
-an `esc:` comment and `gate:escalated`. A `research` ticket always ends at
+exit with an open pull request for the branch is verified (the Breaker): the base
+branch's `.ampere/verify.yml` gates run in the worktree, one at a time, and only a fully
+green run moves the ticket to In Review with a `verified:` comment linking the pull
+request. A gate the agent's change broke is fed back to it, in the same worktree, up to
+`--max-repairs` times (default 2); a host problem — a timeout, a missing tool or
+precondition, a failure that does not reproduce — escalates at once without spending a
+repair. Gate logs are under `~/.ampere/supervisor/runs/<instance>/<ticket>.verify/`.
+Anything else is escalated with an `esc:` comment and `gate:escalated`. A `research` ticket always ends at
 `gate:awaiting-verdict` and an escalation. The Switchboard never removes a gate, closes
 a ticket, records a verdict or merges a pull request.
 
