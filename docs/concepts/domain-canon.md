@@ -6,7 +6,7 @@ tracked_sources:
   - ampere-bindings-apple/src/commonMain/kotlin/link/socket/ampere/bindings/apple/**
   - ampere-bindings-android/src/commonMain/kotlin/link/socket/ampere/bindings/android/**
 related: [Probe, LinkLayer, PlugPermissions, AgentSurface, CognitionTrace]
-last_verified: 2026-10-11
+last_verified: 2026-10-30
 ---
 
 # Domain Canon
@@ -33,7 +33,10 @@ kind of thing. With the IR, Ampere *knows* it, with provenance.
 The platform asymmetry is the load-bearing rationale. Apple ships a canonical
 schema registry, so there the IR partly duplicates it and integration is a
 mapping table. Android's AppFunctions has **no** noun catalogue — per-app data
-classes reconciled by an LLM at runtime. That void is the shape of this IR.
+classes reconciled by an LLM at runtime. That void is the shape of this IR, and
+it is measured, not assumed: `androidx.appfunctions` 1.0.0-beta01 defines the
+`@AppFunctionSchemaDefinition` mechanism but ships no schema that uses it
+(AMPR-510).
 
 An SDK pass against iPhoneOS 26.5 (`docs/ampr-222-domain-type-canon-v1.md`)
 found Apple's catalogue narrower than expected: 15 domains, 26 entity schemas,
@@ -68,7 +71,7 @@ vocabulary is a *binding*, declared in an edge module that depends on
 - `canon/CanonType.kt` — the closed enum; each member carries its `wireName` and `ring`.
 - `canon/CanonRing.kt` — `INTERCHANGE` / `PLATFORM` / `SERVICE`, defined vendor-neutrally — see [Ring definitions](#ring-definitions) below.
 - `ampere-bindings-apple/.../bindings/apple/AppleCanonBindingRegistry.kt` — every `CanonType`'s binding onto Apple's assistant-schema vocabulary (`AppleSchemaBinding`: entity schema or system value type), keyed by `CanonType`.
-- `ampere-bindings-android/.../bindings/android/AndroidCanonBindingRegistry.kt` — the Android equivalent (`AndroidSchemaBinding`); every entry is `PendingSdkVerification` until an AppFunctions SDK pass happens.
+- `ampere-bindings-android/.../bindings/android/AndroidCanonBindingRegistry.kt` — the Android equivalent (`AndroidSchemaBinding`). Every entry is `None`, enumerated against the artifact named by `AndroidCanonBindingRegistry.VERIFIED_AGAINST` (1.0.0-beta01, AMPR-510): the verdict is that the artifact ships no predefined schema at all, so it holds for every type and the map derives from `CanonType.entries`. `PendingSdkVerification` stays as a variant for a binding nobody has checked; no registry entry carries it.
 - `canon/CanonProvenance.kt` — `CanonId`, `SourceHandle`, `NativePayload`, `CanonProvenance`.
 - `canon/NativeSchema.kt` — the value class wrapping a native shape identifier (`EKEvent`, `MailMessageEntity`); referenced by both `ReadableCanonAdapter.nativeSchema` and `NativePayload.schema` so the two cannot drift into a runtime-only `SchemaMismatch`.
 - `canon/CanonEntity.kt` — the sealed hierarchy, and the package comment declaring the canon the Field's Environment branch (F7); `CanonRing1Entities.kt`, `CanonRing2Entities.kt`, `CanonRing3Entities.kt`.
@@ -156,6 +159,7 @@ vocabulary is a *binding*, declared in an edge module that depends on
 - **Declaring a wide `ownedFields` "to be safe".** Over-declaring re-opens the clobber path; under-declaring merely means the field is never written.
 - **Parsing `nativeId` to extract structure.** It is opaque by design.
 - **Deriving a nested entity's id from its array position, or giving it the parent's provenance verbatim.** An index-derived id (`"$eventId:attendee:0"`) changes when the provider reorders the collection; a reused parent provenance hands the child the parent's `nativeId` and `nativePayload`, so e.g. a `CanonPerson` extracted from a `CanonCalendarEvent` claims to *be* an `EKEvent`. Use `childNativeId`/`forChild` from `CanonChildren.kt`.
+- **Binding a canon type to an Android `Predefined` schema on the strength of the platform `AppFunctionManager` KDoc.** Its "the SDK provides predefined function schemas" describes the `@AppFunctionSchemaDefinition` mechanism; beta01 publishes no schema, and the ones on `androidx-main` (`createNote`/`myNotes`, `findNotes`/`Notes`) are test fixtures and KDoc examples, so a `Predefined` entry needs a schema found in a published artifact.
 - **Reading bindings via annotations/reflection.** `kotlin-reflect` is JVM-only and Kotlin/Native cannot read annotations reflectively; bindings are data for exactly this reason.
 - **Building a resolver SPI for a `CanonId` cross-reference (`mailboxId`, `projectId`, `documentId`) before a real consumer needs one.** Assessed and rejected by AMPR-266 — see the cross-reference invariant above for why it is not the cheap mirror of `AssetResolver` it looks like.
 - **Re-proposing `SPREADSHEET`, `ROADMAP`, or `INITIATIVE`.** All three were assessed by the AMPR-262 wave and the rationale is recorded in `docs/ampr-262-knowledge-work-canon-wave.md` so it is not re-litigated per request. `SPREADSHEET` is a duplicate — the file is `CanonDocument(kind = SPREADSHEET)` and the missing concept was the grid, admitted as `CanonTable`. `ROADMAP` is a view, not a noun: a rendering of projects and milestones over time, and therefore a Phosphor surface over `CanonProject`/`CanonMilestone`. `INITIATIVE` is deferred, not rejected — only Linear ships a durable object above the project; its re-admission trigger is a second provider doing the same with a non-configurable hierarchy level.

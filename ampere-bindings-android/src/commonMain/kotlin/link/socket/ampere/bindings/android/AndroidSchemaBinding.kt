@@ -6,12 +6,12 @@ import kotlinx.serialization.Serializable
 /**
  * How a canon type reaches Android's AppFunctions vocabulary.
  *
- * [PendingSdkVerification] is the honest default and the current state of every
- * canon type. `androidx.appfunctions` is not on this repo's classpath, so
- * `AppFunctionSchemaDefinition` could not be enumerated during recon — see the
- * "Recon caveats" section of `docs/ampr-222-domain-type-canon-v1.md`.
- * Modelling the gap as a variant rather than a `null` keeps "we have not looked"
- * distinguishable from "we looked and there is nothing".
+ * [PendingSdkVerification] is the honest default for a binding nobody has
+ * checked. [AndroidCanonBindingRegistry] no longer carries it: the AMPR-510
+ * pass enumerated `androidx.appfunctions` 1.0.0-beta01, found no predefined
+ * schema at all, and set every canon type to [None]. Modelling the gap as a
+ * variant rather than a `null` keeps "we have not looked" distinguishable from
+ * "we looked and there is nothing".
  */
 @Serializable
 sealed interface AndroidSchemaBinding {
