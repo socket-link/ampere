@@ -8,6 +8,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalTime
 import link.socket.ampere.agents.config.AgentActionAutonomy
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.tools.FunctionTool
@@ -115,6 +116,13 @@ class BreakerAdmitDetailedTest {
             Breaker.ruleName(Rule.Deadline(due = Instant.fromEpochMilliseconds(0)), tool = null),
         )
         assertEquals("Cadence", Breaker.ruleName(Rule.Cadence(every = 10.minutes), tool = null))
+        assertEquals(
+            "Window",
+            Breaker.ruleName(
+                Rule.Window(from = LocalTime(22, 0), until = LocalTime(7, 0), timezone = "America/Chicago"),
+                tool = PLAIN_TOOL,
+            ),
+        )
     }
 
     @Test
