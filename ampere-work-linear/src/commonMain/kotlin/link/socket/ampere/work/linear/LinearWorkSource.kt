@@ -550,6 +550,25 @@ class LinearWorkSource(
     }
 
     /**
+     * Put a ticket in front of a person for review after its work passed verification
+     * (AMPR-309): a [SupervisoryComment.Verified] carrying [mergeRequestUrl] and
+     * [summary], then [SupervisoryState.VERIFYING]'s state.
+     *
+     * The comment goes first so a ticket never reads as in review without the link a
+     * reviewer needs. The transition is the raw state write, not [markStatus]: moving
+     * to review is not a stop, so [markStatus] would clear every gate label the ticket
+     * carries, and a gate a person applied while the run was in flight must stand.
+     * Nothing here adds or removes a label.
+     */
+    suspend fun surfaceForReview(issue: String, mergeRequestUrl: String, summary: String): Result<ExecuteReceipt> {
+        val identifier = readIssue(issue).getOrElse { return Result.failure(it) }.identifier
+        val body = listOf(mergeRequestUrl, summary).filter { it.isNotBlank() }.joinToString("\n\n")
+        postComment(issue, SupervisoryComment.Verified(identifier, instanceId, body).render())
+            .getOrElse { return Result.failure(it) }
+        return transition(issue, requireNotNull(SupervisoryState.VERIFYING.workSourceState))
+    }
+
+    /**
      * Mark a ticket as waiting on a human verdict:
      * [SupervisoryState.VERDICT_REQUESTED]'s state plus its gate label.
      */

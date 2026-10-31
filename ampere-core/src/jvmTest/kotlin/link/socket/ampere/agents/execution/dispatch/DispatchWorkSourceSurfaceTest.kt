@@ -32,11 +32,18 @@ class DispatchWorkSourceSurfaceTest {
                 "release",
                 "escalate",
                 "requestVerdict",
+                "surfaceForReview",
             ),
             methodsOf(DispatchWorkSource::class.java),
         )
     }
 
+    /**
+     * `surfaceForReview` is the one state write after the claim (AMPR-309): it moves a
+     * ticket to review, never to Done, and adds or removes no label. Its name passes
+     * this filter deliberately; what keeps it honest is that only a green verification
+     * reaches it, which `SwitchboardTest` pins.
+     */
     @Test
     fun `no operation on it removes a label, writes a state, closes a ticket or merges`() {
         val forbidden = Regex("(?i)remove|label|transition|status|state|done|close|merge|comment(?!s$)|post|write")

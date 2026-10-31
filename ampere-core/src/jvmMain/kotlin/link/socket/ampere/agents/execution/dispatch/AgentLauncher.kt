@@ -65,12 +65,19 @@ data class AgentLaunchSpec(
     }
 }
 
-/** Everything one launch needs to know about its dispatch. */
+/**
+ * Everything one launch needs to know about its dispatch.
+ *
+ * @property attachments Further files for the agent to read, relative to the worktree,
+ *   after the ticket. A repair run (AMPR-309) attaches the verification report it is
+ *   repairing.
+ */
 data class AgentLaunch(
     val ticketId: String,
     val worktree: Path,
     val contextPath: String,
     val model: ModelChoice,
+    val attachments: List<String> = emptyList(),
 )
 
 /**
@@ -128,13 +135,16 @@ class GatedAgent internal constructor(val grouped: GroupedProcess) {
  * ### No kickoff prose
  *
  * The prompt is a pointer to the attached ticket and nothing else (operator answer
- * 5 on AMPR-288): the same attachment line an agent dispatched by hand receives.
+ * 5 on AMPR-288): the same attachment line an agent dispatched by hand receives. A
+ * repair run gets one more attachment line, for the verification report, and still no
+ * prose: what failed and what is needed is in the report.
  */
 class AgentLauncher(private val spec: AgentLaunchSpec) {
 
     /** The kickoff prompt for [launch]. */
     fun prompt(launch: AgentLaunch): String =
-        "The user has attached these files. Read them before proceeding.\n- ${launch.contextPath}"
+        "The user has attached these files. Read them before proceeding." +
+            (listOf(launch.contextPath) + launch.attachments).joinToString("") { "\n- $it" }
 
     /** The process [launch] runs, not yet started, ungated. */
     fun builder(launch: AgentLaunch): ProcessBuilder {

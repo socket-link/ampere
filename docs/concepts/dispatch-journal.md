@@ -16,7 +16,7 @@ last_verified: 2026-10-31
 The supervisor's claim-record journal: an append-only local file, one per supervisor
 instance, holding one `DispatchRecord` per phase a dispatch reaches
 (`{ticketId, supervisorInstanceId, worktreePath, branchName, phase, recordedAt,
-agentAddress, mergeRequestUrl}`) and optionally ending in a terminal marker. A read
+agentAddress, mergeRequestUrl, gate}`) and optionally ending in a terminal marker. A read
 gives back the records, which marker is there if any, and every line that could not
 be parsed. It stores facts; it decides nothing.
 
@@ -46,7 +46,12 @@ to mean "nothing is owed" and its absence has to mean "assume everything is".
 
 - `agents/execution/dispatch/DispatchRecord.kt` (common) — the schema: `DispatchRecord`
   and `DispatchPhase` (`CLAIMED`, `WORKTREE_CREATED`, `AGENT_RUNNING`, `VERIFYING`,
-  `MR_OPENED`, `DONE`, `ESCALATED`; the last two are `isTerminal`).
+  `MR_OPENED`, `DONE`, `ESCALATED`; the last two are `isTerminal`). A dispatch the
+  Breaker verifies (AMPR-309) writes several `VERIFYING` records: one as verification
+  starts, one as each gate command starts — its `agentAddress` is then the *gate's*
+  process group, so a crash mid-gate leaves the reconciliation pass the build to stop —
+  and one as each gate settles, carrying a `GateRecord` (gate id, outcome, exit code,
+  duration, attempt) in `gate`. Never a command's output.
 - `agents/execution/dispatch/DispatchJournal.kt` (JVM) — `open`, `append`,
   `markCleanShutdown`, `markReconciled`, `readAll`, `scanAll`, plus `JournalRead`
   (`entries`, `cleanShutdownAt`, `reconciliation`, `quarantined`,
@@ -57,8 +62,8 @@ to mean "nothing is owed" and its absence has to mean "assume everything is".
 - `agents/domain/event/SupervisorEvent.kt` (common) — `DispatchRecorded`,
   `CleanShutdownMarked`, `JournalLineQuarantined` on the bus. The same sealed family
   carries the reconciliation pass's events and the [Switchboard](switchboard.md)'s
-  `DispatchRefused` and `AgentRunStopped`, which are not journal events and have no
-  journal line behind them.
+  `DispatchRefused`, `AgentRunStopped` and `VerificationCompleted`, which are not
+  journal events and have no journal line behind them.
 - `ampere-core/src/jvmTest/.../execution/dispatch/DispatchJournalTest.kt` — the
   contract; `DispatchJournalKillTest.kt` + `JournalWriterProcess.kt` — a real JVM
   writer, SIGKILLed mid-append.
@@ -95,7 +100,11 @@ serializable data a non-JVM reader could legitimately want.
   launder the evidence away.
 - **The record is written before the work it describes.** A `CancellationAddress`
   recorded after the agent is spawned is lost by a crash in between — the window this
-  mechanism exists to close.
+  mechanism exists to close. A verification gate's group (AMPR-309) is the one
+  record written just *after* its spawn, without a gate in front: it is a build the
+  supervisor runs, not an agent, it writes nothing but build outputs in a worktree
+  already recorded, and its worst case in that window is a build that finishes on its
+  own.
 - **No policy.** Whether to spawn, kill, release a claim or adopt a worktree is the
   caller's decision (the [Switchboard](switchboard.md), the M-C reconciliation pass).
   `suspectDispatches()` reports; it does not act.

@@ -42,6 +42,7 @@ import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.events.subscription.Subscription
 import link.socket.ampere.agents.execution.dispatch.AgentStop
+import link.socket.ampere.agents.execution.verify.VerificationVerdict
 import link.socket.ampere.domain.arc.TerminationReason
 import link.socket.ampere.probe.Verdict
 
@@ -236,6 +237,13 @@ class SignificanceAwareEventLogger(
         is SupervisorEvent.DispatchRefused -> EventSignificance.ROUTINE
         is SupervisorEvent.AgentRunStopped ->
             if (event.stop == AgentStop.EXITED) EventSignificance.SIGNIFICANT else EventSignificance.CRITICAL
+
+        // The Breaker (AMPR-309) - a green run surfaces work for review; anything else is
+        // a repair attempt or an escalation, and an escalation is a person's to act on.
+        is SupervisorEvent.VerificationCompleted -> when (event.verdict) {
+            VerificationVerdict.GREEN -> EventSignificance.SIGNIFICANT
+            else -> EventSignificance.CRITICAL
+        }
 
         // Startup reconciliation (AMPR-310) - settling a dead supervisor's journal is the
         // positive signal that its residue is gone; a dispatch the pass could not settle

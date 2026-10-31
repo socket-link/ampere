@@ -79,7 +79,7 @@ internal fun List<WorkSourceComment>.liveClaimsFor(identifier: String): List<Cla
                     live.removeAll { it.instanceId == parsed.instanceId }
                 }
 
-            is SupervisoryComment.Escalation, null -> Unit
+            is SupervisoryComment.Escalation, is SupervisoryComment.Verified, null -> Unit
         }
     }
     return live

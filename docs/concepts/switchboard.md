@@ -13,9 +13,10 @@ tracked_sources:
   - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/dispatch/TicketContext.kt
   - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/dispatch/AgentLauncher.kt
   - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/dispatch/RunSupervisor.kt
+  - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/dispatch/RepairReports.kt
   - ampere-work-linear/src/commonMain/kotlin/link/socket/ampere/work/linear/LinearDispatchWorkSource.kt
   - ampere-cli/src/jvmMain/kotlin/link/socket/ampere/DispatchCommand.kt
-related: [DispatchJournal, CancellationAddress, StartupReconciliation, TicketConventions, ChassisSpi]
+related: [DispatchJournal, CancellationAddress, StartupReconciliation, TicketConventions, ChassisSpi, VerificationManifest]
 last_verified: 2026-10-31
 ---
 
@@ -29,6 +30,14 @@ its own git worktree and the ticket as context, launched in its own process grou
 journaled at every phase, and left alone until it stops — with one automated kill.
 It replaces the operator's manual path from "this ticket is ready" to "an agent is
 working on it", step for step as the AMPR-288 dispatch ethnography traced it.
+
+When an agent stops cleanly with a merge request open, the Switchboard hands the
+work to the Breaker (AMPR-309): the repository's own `.ampere/verify.yml` gates,
+read from the base revision and run in the worktree ([VerificationManifest](verification-manifest.md)).
+Only a fully green run surfaces the work — the ticket moves to In Review with a
+`verified:` comment linking the merge request. An agent-attributable failure is fed
+back to the agent in the same worktree, at most `maxRepairAttempts` times (default
+2); a host failure, a refused or incomplete run, or an exhausted budget escalates.
 
 ## Why it exists
 
@@ -66,17 +75,26 @@ past what operators could reach.
   `TicketContext.kt` — the ticket file at `.context/attachments/…`.
   `AgentLauncher.kt` — the launch template, the gate, the worktree pin.
   `RunSupervisor.kt` — the silence rule.
+- `Switchboard.settleByVerification` — the Breaker's place in the loop: forge lookup,
+  `VERIFYING` gate by gate, then surface, repair or escalate. `SwitchboardVerification`
+  carries the `ManifestSource` and the `GateRunner` (both in `agents/execution/verify/`,
+  see [VerificationManifest](verification-manifest.md)). `RepairReports.kt` — the
+  report a repair run reads, written to `.context/verification/attempt-<n>.md`.
 - `ampere-work-linear/.../LinearDispatchWorkSource.kt` — binds the adapter to the port.
 - `ampere-cli/.../DispatchCommand.kt` — `ampere dispatch`; `WorkSourceConnection.kt`
   opens the adapter (shared with `ampere reconcile`).
-- Events: `SupervisorEvent.DispatchRefused` and `.AgentRunStopped`, beside the
-  journal's `DispatchRecorded` (one per phase).
+- Events: `SupervisorEvent.DispatchRefused`, `.AgentRunStopped` and
+  `.VerificationCompleted` (one per verification, with its verdict), beside the
+  journal's `DispatchRecorded` (one per phase, and one per gate while verifying).
 - Tests (`ampere-core/src/jvmTest/.../dispatch/`): `ReadyQueueEvaluatorTest` (every
   refusal), `SwitchboardTest` (the pipeline against a real repository and real process
   groups), `SwitchboardShutdownProcessTest` (a real SIGTERM to a child JVM),
   `AgentLauncherTest` (the gate, the pin), `DispatchWorkSourceSurfaceTest` (the trust
   boundaries as a method set), `TicketScopesTest`, `ModelRecommendationsTest`,
-  `HumanVerdictsTest`; `LinearDispatchWorkSourceTest` (the wire).
+  `HumanVerdictsTest`; `LinearDispatchWorkSourceTest` (the wire). `SwitchboardTest` also
+  drives the Breaker end to end: green surfaces, a broken change is repaired exactly
+  the bound and escalated with its anchored excerpt, a host failure escalates without
+  a relaunch.
 
 ## Invariants
 
@@ -109,14 +127,27 @@ past what operators could reach.
   whose Ampere config points the workspace outside it is refused (AMPR-300's F2).
 - **One automated kill.** Ten minutes of no output terminates the group and
   escalates; nothing else interrupts a run.
-- **A clean exit is settled by asking the forge, not the agent.** An open or merged
-  request for the branch journals `MR_OPENED` then `DONE`; anything else escalates.
-  The ticket is never transitioned after the claim.
+- **A clean exit is settled by asking the forge, not the agent, and then by the
+  repository's own gates.** No open or merged request for the branch escalates before
+  any gate runs. With one, the Breaker verifies; only `VerificationVerdict.GREEN`
+  calls `surfaceForReview` and journals `MR_OPENED` then `DONE`.
+- **The one transition after the claim is the surfacing**, to In Review, with a
+  `verified:` comment linking the request. Never Done, no label added or removed — so
+  a gate a person applied mid-run still stands. A Switchboard built without
+  `SwitchboardVerification` escalates every clean exit instead of surfacing it.
+- **A host failure never spends a repair attempt.** Only `AGENT_FAILURE` relaunches the
+  agent; `HOST_FAILURE`, `REFUSED`, `INCOMPLETE` and `INTERRUPTED` escalate at once.
+- **A repair run is a dispatch run**: same worktree, same gate, `AGENT_RUNNING` with its
+  new address journaled before it starts, the same silence rule, then verified again.
 - **The clean-shutdown marker means nothing is owed.** Every dispatch is settled
   (escalated, merged-request-backed, or released unstarted) before it is written;
   one that cannot be leaves the journal unmarked for `ampere reconcile`.
-- **Escalation bodies are public and composed** — fixed text, a branch name, numbers.
-  Never a local path, a command's output, or anything the agent wrote.
+- **Escalation bodies are public and composed** — fixed text, a branch name, numbers,
+  manifest identifiers. Never a local path, a command's output, or anything the agent
+  wrote. The one log text a verification escalation quotes is the anchored excerpt
+  (`LogExcerpts`): Gradle's `> Task :x FAILED`, the line after `What went wrong:` with
+  paths and URL credentials stripped, xcodebuild's `** … **` markers. The verbatim
+  tail goes only to the repairing agent, in its worktree.
 
 ## Common operations
 
@@ -132,8 +163,10 @@ past what operators could reach.
   `ReadyQueueEvaluator.evaluate`, in the order the enum states; the candidate is
   refused for the first rule it fails. Never a work-source write.
 - **Add a way a run can end** — a branch in `Switchboard.settle` that ends in
-  `escalate` or a forge-confirmed `DONE`, and an `Escalations` body. Never a ticket
-  transition.
+  `escalate` or a verified `DONE`, and an `Escalations` body. Never a ticket
+  transition of its own; surfacing stays the one.
+- **Change the repair bound** — `SwitchboardConfig.maxRepairAttempts`, or
+  `ampere dispatch --max-repairs <n>`; `0` escalates the first agent failure.
 
 ## Anti-patterns
 
@@ -153,3 +186,11 @@ past what operators could reach.
   failure it was.
 - *Reading "Done" as "verdict recorded" for a research blocker* — that is the operator
   practice the stricter rule replaced.
+- *Verifying against the worktree's own `.ampere/verify.yml`* — the agent writes the
+  worktree, so an agent that deleted its red gate would pass it. The manifest comes
+  from the base revision (`BaseRevisionManifestSource`).
+- *Surfacing with `markStatus(VERIFYING)`* — moving to review is not a stop, so
+  `markStatus` clears every gate label; `surfaceForReview` is a raw transition that
+  leaves labels alone.
+- *Running the gates before asking the forge* — a run with no merge request would
+  spend a full verification only to escalate anyway.
