@@ -473,6 +473,8 @@ class Breaker(
          *   [RunQuotas.STEPS], the one label a run's record has anything to count for.
          * - `Transition` — no: a plan step proposes no status change ([admitTransition]).
          * - `Requirements` — no: a post-condition, checked by verification.
+         * - `Window` — yes, when its zone is one this platform can resolve; an unresolvable
+         *   zone is the one thing that makes [evaluateWindow] throw.
          * - `Dependency`, `Deadline`, `Cadence` — not yet.
          *
          * Beside [ruleName], and a `when` with no `else` like it, so a `Rule` case added later
@@ -488,6 +490,12 @@ class Breaker(
             is Rule.Dependency -> false
             is Rule.Deadline -> false
             is Rule.Cadence -> false
+            is Rule.Window -> try {
+                TimeZone.of(rule.timezone)
+                true
+            } catch (e: IllegalArgumentException) {
+                false
+            }
         }
 
         /**

@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/service/AgentService.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/internal/DefaultAgentService.kt
 related: [PropelLoop, TeamLayer, SparkSystem, MemoryProvenance, CognitionTrace, Probe, SubjectRegistry, PlugPermissions]
-last_verified: 2026-10-30
+last_verified: 2026-10-31
 ---
 
 # Hosted Run
@@ -473,7 +473,8 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     them. A Soft breach is a `Resist` and the step runs. `RunHost.open` and `resume` refuse,
     with an `IllegalArgumentException` naming the rule's kind and its origin, any rule for
     which `Breaker.canEvaluate` is false (`Transition`, `Requirements`, `Dependency`,
-    `Deadline`, `Cadence`, and a `Quota.Count` over anything but `steps`) — before an id is
+    `Deadline`, `Cadence`, a `Quota.Count` over anything but `steps`, and a `Window` in a
+    zone the platform cannot resolve) — before an id is
     reserved or a seat is built. Handed through, such a rule would throw inside every
     admission, and every step would fail closed as "not admitted". `rules` empty, the
     default, is the run as it was.
