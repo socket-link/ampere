@@ -12,6 +12,14 @@
 > and `domain-canon.md` — pointed at nothing for anyone but the original author.
 > Content is verbatim apart from those paths being rewritten to their new homes.
 
+> **Android column filled 2026-10-30 (AMPR-510).** Recon task 3 has now run against
+> `androidx.appfunctions` 1.0.0-beta01. **Beta01 ships no predefined AppFunction
+> schema**, so every row of the Android column reads `none` and every
+> `AndroidCanonBindingRegistry` entry is `AndroidSchemaBinding.None`. The extraction is
+> in [Appendix C](#c-enumerating-the-androidxappfunctions-predefined-schemas). There is
+> no `docs/recon/` TSV for the Android side, because a TSV of zero rows records
+> nothing that sentence does not.
+
 ---
 
 ## Executive Summary
@@ -62,7 +70,7 @@ Read this before treating any table below as gospel.
 |---|---|---|
 | 1. Xcode 27 pass — enumerate shipped App Schema domains/entities/actions | **Done against Xcode 26.6 / iPhoneOS 26.5 SDK** | Xcode 27 is not installed (`xcodebuild -version` → 26.6; `xcrun --show-sdk-version` → 26.5). Re-run the extraction command in the Appendix when 27 lands and diff the TSV. |
 | 2. Enumerate Apple system value types | **Done** | Complete `_IntentValue` conformer list, extracted from the SDK `.swiftinterface`. |
-| 3. Check `AppFunctionSchemaDefinition` for predefined Android schemas | **NOT VERIFIED** | `androidx.appfunctions` is not a dependency of this repo and no Android SDK artifact on this machine contains it. Nothing in the Android column below is SDK-verified; it is marked `?` throughout. The ticket already defers Android AppFunctions runtime integration to fast-follow, so this does not block Phase 2 — but **do not ship an `androidSchema` binding value on the strength of this document.** |
+| 3. Check `AppFunctionSchemaDefinition` for predefined Android schemas | **Done against `androidx.appfunctions` 1.0.0-beta01 (AMPR-510, 2026-10-30)** | Originally not verified: `androidx.appfunctions` was not a dependency of this repo and no local artifact contained it, so the column read `?`. AMPR-510 read the published beta01 artifacts in a scratch directory (they are still not a dependency). They define the `@AppFunctionSchemaDefinition` annotation but ship **no interface carrying it**, so the Android column is `none` throughout. See [Appendix C](#c-enumerating-the-androidxappfunctions-predefined-schemas). |
 | 4. Draft binding table, flag lossy + failing candidates | **Done** | §2, §3. |
 | 5. STOP — human review | **PENDING** | §3 (ring membership) and §5 (open questions) are the review surface. |
 
@@ -153,7 +161,14 @@ These are the cross-app interchange currency — usable via
 
 ## 2. Binding table: canon type ↔ Apple ↔ Android
 
-`?` in the Android column means **not SDK-verified** (see [caveats](#recon-caveats)).
+`none` in the Android column means **verified absent**: `androidx.appfunctions`
+1.0.0-beta01 ships no predefined AppFunction schema for any noun (see
+[Appendix C](#c-enumerating-the-androidxappfunctions-predefined-schemas)). It is the
+`AndroidSchemaBinding.None` value in `AndroidCanonBindingRegistry`. With no Android
+projection there is no Android lossy axis to record; on Android, the whole entity is
+the "dropped" part, carried only as each app's own `@AppFunctionSerializable` data
+class.
+
 Lossy axes are the fields the projection *drops* — these are exactly the fields the
 preserve-and-merge write-back contract has to protect.
 
@@ -161,18 +176,18 @@ preserve-and-merge write-back contract has to protect.
 
 | Canon type | Apple binding | Android | Lossy axis (dropped on projection) |
 |---|---|---|---|
-| `Person` | system value type `IntentPerson`; also `photos.recognizedPerson` when photo-scoped | ? | Contact relationships, multiple handles, org/title, per-source ranking. `IntentPerson` is handle+display-name shaped. |
-| `EmailMessage` | `mail.message` (`MailMessageEntity`) | ? | MIME structure, headers, threading identifiers, per-provider labels, attachment bytes. |
-| `EmailDraft` | `mail.draft` (`MailDraftEntity`) | ? | Same as above + send-state. |
-| `Mailbox` | `mail.mailbox` (`MailboxEntity`) | ? | Provider folder semantics (Gmail label vs IMAP folder). |
-| `Photo` | `photos.asset` (`PhotoEntity`) | ? | Edit stack, adjustment data, live-photo pair, burst identity, original vs rendered. |
-| `PhotoAlbum` | `photos.album` (`PhotoAlbumEntity`) | ? | Smart-album predicates, shared-album participants. |
-| `Document` | `files.file` (`FileEntity`) + system value type `IntentFile`; **fans out** to `wordProcessor.document`, `reader.document`, `spreadsheet.document`, `presentation.document`, `whiteboard.board` | ? | **The 1→N fan-out is itself the lossy axis.** Canon `Document` carries a `documentKind` discriminator; a projection that loses `documentKind` cannot round-trip to the right Apple schema. |
-| `Place` | system value type `CLPlacemark` | ? | Venue identity, hours, category, rating, provider place-id. `CLPlacemark` is a postal address + coordinate. |
-| `JournalEntry` | `journal.entry` (`JournalEntity`) | ? | Attached media, mood/health suggestions metadata. |
-| `Book` | `books.book` (`BookEntity`) | ? | Reading position, annotations, DRM/asset identity. |
-| `WebBookmark` | `browser.bookmark` (`BookmarkEntity`) | ? | Folder hierarchy, sync state, favicon. |
-| `BrowserTab` | `browser.tab` (`TabEntity`) | ? | Back-forward history, window/group membership, scroll state. |
+| `Person` | system value type `IntentPerson`; also `photos.recognizedPerson` when photo-scoped | none | Contact relationships, multiple handles, org/title, per-source ranking. `IntentPerson` is handle+display-name shaped. |
+| `EmailMessage` | `mail.message` (`MailMessageEntity`) | none | MIME structure, headers, threading identifiers, per-provider labels, attachment bytes. |
+| `EmailDraft` | `mail.draft` (`MailDraftEntity`) | none | Same as above + send-state. |
+| `Mailbox` | `mail.mailbox` (`MailboxEntity`) | none | Provider folder semantics (Gmail label vs IMAP folder). |
+| `Photo` | `photos.asset` (`PhotoEntity`) | none | Edit stack, adjustment data, live-photo pair, burst identity, original vs rendered. |
+| `PhotoAlbum` | `photos.album` (`PhotoAlbumEntity`) | none | Smart-album predicates, shared-album participants. |
+| `Document` | `files.file` (`FileEntity`) + system value type `IntentFile`; **fans out** to `wordProcessor.document`, `reader.document`, `spreadsheet.document`, `presentation.document`, `whiteboard.board` | none | **The 1→N fan-out is itself the lossy axis.** Canon `Document` carries a `documentKind` discriminator; a projection that loses `documentKind` cannot round-trip to the right Apple schema. |
+| `Place` | system value type `CLPlacemark` | none | Venue identity, hours, category, rating, provider place-id. `CLPlacemark` is a postal address + coordinate. |
+| `JournalEntry` | `journal.entry` (`JournalEntity`) | none | Attached media, mood/health suggestions metadata. |
+| `Book` | `books.book` (`BookEntity`) | none | Reading position, annotations, DRM/asset identity. |
+| `WebBookmark` | `browser.bookmark` (`BookmarkEntity`) | none | Folder hierarchy, sync state, favicon. |
+| `BrowserTab` | `browser.tab` (`TabEntity`) | none | Back-forward history, window/group membership, scroll state. |
 
 `Book`, `WebBookmark`, and `BrowserTab` are **additions** surfaced by the SDK pass —
 they were not in the ticket's candidate list but they satisfy the Ring 1 rule cleanly.
@@ -181,17 +196,17 @@ they were not in the ticket's candidate list but they satisfy the Ring 1 rule cl
 
 | Canon type | Apple native framework | Android | Why not Ring 1 |
 |---|---|---|---|
-| `CalendarEvent` | EventKit `EKEvent` | ? | **No calendar assistant-schema domain exists.** `Calendar.RecurrenceRule`/`Date` are field-level system value types, not an entity binding. |
-| `Reminder` | EventKit `EKReminder` | ? | No reminders domain. |
-| `Alarm` | AlarmKit | ? | No clock/alarm domain. |
-| `MediaItem` | MediaPlayer `MPMediaItem` | ? | Only `books.audiobook` exists; no music/video noun. |
-| `HealthSample` | HealthKit | n/a | Never was Ring 1. `Measurement` binds the value, not the sample. |
-| `HomeAccessory` | HomeKit | ? | |
-| `Transaction` | FinanceKit; `IntentCurrencyAmount`/`IntentPaymentMethod` bind the money fields only | ? | |
-| `Pass` | PassKit | ? | |
-| `WeatherForecast` | WeatherKit | ? | |
-| `BluetoothPeripheral` | CoreBluetooth | ? | |
-| `MotionSample` | CoreMotion | n/a | |
+| `CalendarEvent` | EventKit `EKEvent` | none | **No calendar assistant-schema domain exists.** `Calendar.RecurrenceRule`/`Date` are field-level system value types, not an entity binding. |
+| `Reminder` | EventKit `EKReminder` | none | No reminders domain. |
+| `Alarm` | AlarmKit | none | No clock/alarm domain. |
+| `MediaItem` | MediaPlayer `MPMediaItem` | none | Only `books.audiobook` exists; no music/video noun. |
+| `HealthSample` | HealthKit | none | Never was Ring 1. `Measurement` binds the value, not the sample. |
+| `HomeAccessory` | HomeKit | none | |
+| `Transaction` | FinanceKit; `IntentCurrencyAmount`/`IntentPaymentMethod` bind the money fields only | none | |
+| `Pass` | PassKit | none | |
+| `WeatherForecast` | WeatherKit | none | |
+| `BluetoothPeripheral` | CoreBluetooth | none | |
+| `MotionSample` | CoreMotion | none | |
 
 ### Ring 3 — Service (arrives via a non-OS Link)
 
@@ -293,6 +308,12 @@ of the SPI. That is the "not left to individual adapters to remember" property.
    "who is in this photo" and "who did I email" wants the same type.
 4. **Android column is unverified.** Approve shipping `appleSchema` bindings now and
    `androidSchema` as a follow-up once `androidx.appfunctions` is on the classpath?
+   *Resolved by AMPR-510:* beta01 ships no predefined schema, so every
+   `androidSchema` is `None`. This argues for no ring move: Ring 1 needs an
+   interchange schema on at least one platform, and every Ring 1 type keeps its Apple
+   one. It does mean that **Ring 1 is Apple-only in fact**: on Android a Ring 1 type
+   crosses app boundaries no better than a Ring 2 type does. An Arc author should not
+   read Ring 1 as "interchange works on Android".
 5. **Re-run on Xcode 27.** Who owns the diff, and is a canon change gated on it?
 
 ---
@@ -350,6 +371,68 @@ Raw output committed at `docs/recon/apple-assistant-schemas-ios265.tsv`.
 | Value-class identifier | `mcp/McpCredentialBinding.kt:15-17` (`LinkId`) |
 | Serialization-stability test | `agents/events/EventSerializationTest.kt` |
 
+### C. Enumerating the `androidx.appfunctions` predefined schemas
+
+Run 2026-10-30 for AMPR-510 against the artifacts on Google's Maven repository. They
+are read in a scratch directory and are not a dependency of any module here.
+
+```bash
+V=1.0.0-beta01
+B=https://dl.google.com/android/maven2/androidx/appfunctions
+W=$(mktemp -d)   # untrusted downloads: their own empty directory
+cd "$W"
+
+# 1. every artifact in the group: no appfunctions-schema* is published
+curl -sS "$B/group-index.xml"
+
+# 2. fetch the binaries and sources the schemas could live in, and unpack them
+for a in appfunctions appfunctions-testing; do
+  curl -sSO "$B/$a/$V/$a-$V.aar" && mkdir "$a" && unzip -qo "$a-$V.aar" -d "$a" \
+    && mkdir "$a-classes" && unzip -qo "$a/classes.jar" -d "$a-classes"
+done
+a=appfunctions-compiler
+curl -sSO "$B/$a/$V/$a-$V.jar" && mkdir "$a-classes" && unzip -qo "$a-$V.jar" -d "$a-classes"
+for a in appfunctions appfunctions-compiler appfunctions-testing; do
+  curl -sSO "$B/$a/$V/$a-$V-sources.jar" && mkdir "$a-src" && unzip -qo "$a-$V-sources.jar" -d "$a-src"
+done
+
+# 3. classes annotated with @AppFunctionSchemaDefinition. Retention is BINARY, so a
+#    shipped schema carries it in RuntimeInvisibleAnnotations. Use javap, not grep:
+#    under a UTF-8 locale grep silently skips binary .class files.
+find ./*-classes -name '*.class' | xargs javap -v 2>/dev/null > javap.txt
+grep -cE '^\s+androidx\.appfunctions\.AppFunctionSchemaDefinition\(' javap.txt  # schemas
+grep -cE '^\s+androidx\.annotation\.RestrictTo\(' javap.txt                     # control
+
+# 4. source declarations annotated with it (KDoc examples start with " *")
+grep -rn '@AppFunctionSchemaDefinition(' ./*-src | grep -vE ':[0-9]+: *\*'
+```
+
+Output, and what it settles:
+
+| Step | Result |
+|---|---|
+| 1. Group index | Four artifacts: `appfunctions`, `appfunctions-compiler`, `appfunctions-testing` (all at 1.0.0-beta01) and `appfunctions-service` (abandoned at 1.0.0-alpha09). No schema artifact. |
+| 3. Annotated classes | **0** across 518 class files. The control finds 112 `@RestrictTo` uses with the same pattern, so the method sees class annotations. |
+| 4. Annotated source declarations | **None.** The only occurrences are the annotation's own declaration, its KDoc example (`findNotes`, category `Notes`), and the compiler's processor code. |
+
+**Finding: beta01 ships no predefined AppFunction schema.** `AppFunctionSchemaDefinition`
+is a mechanism, not a catalogue: its KDoc says agent developers "can define and share these
+annotated App Function schemas as an SDK with app developers". The platform
+`AppFunctionManager` KDoc's "the SDK provides predefined function schemas for common use
+cases" describes that mechanism; no such schema is published.
+
+Two cross-checks, so the absence is not an artifact of one release:
+
+- The `appfunctions` sources jars for 1.0.0-alpha01, -alpha04, -alpha07, -alpha10 and
+  -alpha13 carry the same four schema-related files (the annotation,
+  `AppFunctionSchemaCapability`, `SchemaAppFunctionInventory`, `AppFunctionSchemaMetadata`)
+  and no annotated interface, and `appfunctions-service` 1.0.0-alpha09 has none either.
+- On `androidx-main` (2026-10-31), the only interfaces annotated with it are test
+  fixtures that are not published: `appfunctions-testing/src/test/.../NoteSchema.kt`,
+  `integration-tests/shared-schema/.../NoteSchema.kt` (`createNote`, category
+  `myNotes`), and the compiler's `src/test/test-data/input/schema/`. The API files
+  there already name 1.0.0-rc01, which is the next version to re-check.
+
 ---
 
 ## Next Steps
@@ -363,7 +446,11 @@ Raw output committed at `docs/recon/apple-assistant-schemas-ios265.tsv`.
 5. Re-run the extraction on Xcode 27 and diff `apple-assistant-schemas-ios265.tsv`;
    file a follow-up if any of the six demoted types gains a domain.
 6. Fill the Android column once `androidx.appfunctions` is on the classpath
-   (AMPR-226 / socket-link/ampere#590).
+   (AMPR-226 / socket-link/ampere#590). *(done in AMPR-510 against 1.0.0-beta01, from
+   a scratch read rather than the classpath: `none` throughout)*
+7. Re-run Appendix C when `AndroidCanonBindingRegistry.VERIFIED_AGAINST` would move
+   past 1.0.0-beta01 (the androidx-main API files already name 1.0.0-rc01), and flip
+   an entry to `Predefined` only for a schema that ships in a published artifact.
 
 ---
 
