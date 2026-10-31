@@ -36,6 +36,7 @@ import link.socket.ampere.agents.domain.event.SupervisorEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
+import link.socket.ampere.agents.execution.dispatch.AgentStop
 import link.socket.ampere.domain.arc.TerminationReason
 import link.socket.ampere.probe.Verdict
 
@@ -100,6 +101,11 @@ object EventCategorizer {
             } else {
                 EventSignificance.SIGNIFICANT
             }
+
+        // The Switchboard (AMPR-308): an agent the supervisor had to stop — silent past
+        // the kill rule, or cut off by a shutdown — is a run a person now has to look at.
+        is SupervisorEvent.AgentRunStopped ->
+            if (event.stop == AgentStop.EXITED) EventSignificance.SIGNIFICANT else EventSignificance.CRITICAL
 
         // Significant events represent state changes worth noting
         is TaskEvent.TaskCompleted,
@@ -178,7 +184,9 @@ object EventCategorizer {
         is SubjectEvent,
         // The Goal branch (AMPR-419): the run's goal tree on the record, not a decision.
         is GoalEvent,
-        is SupervisorEvent.DispatchRecorded -> EventSignificance.ROUTINE
+        is SupervisorEvent.DispatchRecorded,
+        // A refusal is the ready rule doing its job (AMPR-308).
+        is SupervisorEvent.DispatchRefused -> EventSignificance.ROUTINE
 
         is RoutingEvent.RouteFallback,
         // A supervisor that marked a clean exit owes no recovery — the only positive

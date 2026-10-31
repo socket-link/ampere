@@ -6,7 +6,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/dispatch/DispatchRecord.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/domain/event/SupervisorEvent.kt
 related: [CancellationAddress, EventSerialBus, StartupReconciliation]
-last_verified: 2026-10-09
+last_verified: 2026-10-31
 ---
 
 # DispatchJournal
@@ -55,7 +55,10 @@ to mean "nothing is owed" and its absence has to mean "assume everything is".
   `ReconciliationMark`, the `reconciled` marker's payload. Owned by
   [StartupReconciliation](startup-reconciliation.md); the journal only stores it.
 - `agents/domain/event/SupervisorEvent.kt` (common) — `DispatchRecorded`,
-  `CleanShutdownMarked`, `JournalLineQuarantined` on the bus.
+  `CleanShutdownMarked`, `JournalLineQuarantined` on the bus. The same sealed family
+  carries the reconciliation pass's events and the [Switchboard](switchboard.md)'s
+  `DispatchRefused` and `AgentRunStopped`, which are not journal events and have no
+  journal line behind them.
 - `ampere-core/src/jvmTest/.../execution/dispatch/DispatchJournalTest.kt` — the
   contract; `DispatchJournalKillTest.kt` + `JournalWriterProcess.kt` — a real JVM
   writer, SIGKILLed mid-append.
@@ -94,8 +97,8 @@ serializable data a non-JVM reader could legitimately want.
   recorded after the agent is spawned is lost by a crash in between — the window this
   mechanism exists to close.
 - **No policy.** Whether to spawn, kill, release a claim or adopt a worktree is the
-  caller's decision (Switchboard, the M-C reconciliation pass). `suspectDispatches()`
-  reports; it does not act.
+  caller's decision (the [Switchboard](switchboard.md), the M-C reconciliation pass).
+  `suspectDispatches()` reports; it does not act.
 
 ## Common operations
 
@@ -103,9 +106,14 @@ serializable data a non-JVM reader could legitimately want.
   ```kotlin
   val journal = DispatchJournal.open(stateDir, instanceId, eventApi = api)
   journal.append(record.copy(phase = DispatchPhase.CLAIMED))
-  val grouped = ProcessGroups.start(agentBuilder)
-  journal.append(record.copy(phase = DispatchPhase.AGENT_RUNNING, agentAddress = grouped.address))
+  val gated = launcher.startGated(launch)          // spawned, held before the agent runs
+  journal.append(record.copy(phase = DispatchPhase.AGENT_RUNNING, agentAddress = gated.grouped.address))
+  gated.release()                                   // only now does the agent start
   ```
+  The gate is what makes "written before the work it describes" true for the agent
+  itself: `ProcessGroups.start` can only report an address once a process exists, so
+  the Switchboard spawns a one-line `sh` gate that `exec`s the agent after `go`
+  ([Switchboard](switchboard.md), AMPR-308).
 - **Exit gracefully** — `journal.markCleanShutdown()`, after releasing claims.
 - **Recover at startup** — `journal.scanAll()`, then for each read where
   `!cleanShutdown`, iterate `suspectDispatches()` and `ProcessGroups.terminate(it.agentAddress)`.

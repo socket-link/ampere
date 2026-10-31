@@ -54,6 +54,18 @@ object WorkSourceLabels {
      */
     val GATES: Set<String> = setOf(GATE_AWAITING_VERDICT, GATE_ESCALATED)
 
+    /**
+     * `research` — a recon or spike ticket, whose deliverable is findings and a human
+     * verdict rather than a merge.
+     *
+     * Two Switchboard rules read it (AMPR-308). A `research` *blocker* satisfies the
+     * ready rule only when it is Done **and** carries a recorded human verdict, because
+     * a recon ticket closed with no verdict is the failure the rule was ratified to
+     * stop. And a dispatched `research` ticket always ends at the verdict gate and an
+     * escalation, never at Done.
+     */
+    const val RESEARCH: String = "research"
+
     /** The label marking membership of wave [id]. */
     fun wave(id: String): String = WAVE_PREFIX + id
 

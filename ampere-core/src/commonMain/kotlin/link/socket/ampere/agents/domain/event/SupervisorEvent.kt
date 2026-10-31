@@ -3,11 +3,13 @@ package link.socket.ampere.agents.domain.event
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.domain.Urgency
+import link.socket.ampere.agents.execution.dispatch.AgentStop
 import link.socket.ampere.agents.execution.dispatch.BranchVerdict
 import link.socket.ampere.agents.execution.dispatch.ClaimVerdict
 import link.socket.ampere.agents.execution.dispatch.DispatchPhase
 import link.socket.ampere.agents.execution.dispatch.DispatchRecord
 import link.socket.ampere.agents.execution.dispatch.ReconciliationSource
+import link.socket.ampere.agents.execution.dispatch.RefusalReason
 import link.socket.ampere.agents.execution.dispatch.WorktreeVerdict
 import link.socket.ampere.agents.execution.process.TerminationOutcome
 
@@ -264,6 +266,82 @@ sealed interface SupervisorEvent : Event {
 
         companion object {
             const val EVENT_TYPE: EventType = "ReconciliationCompleted"
+        }
+    }
+
+    /**
+     * The Switchboard refused to dispatch a candidate (AMPR-308).
+     *
+     * Published when a ticket's refusal first appears or changes, not on every poll:
+     * a blocked ticket is refused for the same reason every pass until its blocker
+     * closes, and the trace needs the change, not the repetition.
+     *
+     * @property detail What the rule saw — the open blocker, the overlapping ticket and
+     *   path. Composed from ticket identifiers and declared globs only.
+     */
+    @Serializable
+    data class DispatchRefused(
+        override val eventId: EventId,
+        override val eventSource: EventSource,
+        override val timestamp: Instant,
+        override val instanceId: String,
+        val ticketId: String,
+        val reason: RefusalReason,
+        val detail: String,
+        override val urgency: Urgency = Urgency.LOW,
+    ) : SupervisorEvent {
+
+        override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = "Not dispatching $ticketId: ${reason.name} — $detail [$instanceId]"
+
+        companion object {
+            const val EVENT_TYPE: EventType = "DispatchRefused"
+        }
+    }
+
+    /**
+     * A dispatched agent stopped (AMPR-308).
+     *
+     * The run's end as the supervisor saw it, before the dispatch is settled: the
+     * settlement — a merge request found, an escalation posted — follows as a
+     * [DispatchRecorded].
+     *
+     * @property exitCode The agent's exit status, when one could be read.
+     * @property termination What stopping the group did, when the supervisor stopped
+     *   it ([AgentStop.SILENCED] or [AgentStop.SHUTDOWN]).
+     */
+    @Serializable
+    data class AgentRunStopped(
+        override val eventId: EventId,
+        override val eventSource: EventSource,
+        override val timestamp: Instant,
+        override val instanceId: String,
+        val ticketId: String,
+        val stop: AgentStop,
+        val exitCode: Int? = null,
+        val processGroupId: Long? = null,
+        val termination: TerminationOutcome? = null,
+        override val urgency: Urgency = if (stop == AgentStop.EXITED) Urgency.LOW else Urgency.HIGH,
+    ) : SupervisorEvent {
+
+        override val eventType: EventType = EVENT_TYPE
+
+        override fun getSummary(
+            formatUrgency: (Urgency) -> String,
+            formatSource: (EventSource) -> String,
+        ): String = buildString {
+            append("Agent for $ticketId stopped: ${stop.name}")
+            exitCode?.let { append(" (exit $it)") }
+            termination?.let { append(", group ${it.name}") }
+            append(" [$instanceId]")
+        }
+
+        companion object {
+            const val EVENT_TYPE: EventType = "AgentRunStopped"
         }
     }
 }

@@ -154,6 +154,8 @@ object EventRegistry {
         SupervisorEvent.JournalReconciled.EVENT_TYPE,
         SupervisorEvent.DispatchReconciled.EVENT_TYPE,
         SupervisorEvent.ReconciliationCompleted.EVENT_TYPE,
+        SupervisorEvent.DispatchRefused.EVENT_TYPE,
+        SupervisorEvent.AgentRunStopped.EVENT_TYPE,
 
         // TelemetryEvent types
         ProviderCallStartedEvent.EVENT_TYPE,

@@ -205,6 +205,40 @@ one run (not refreshed, not stored): for a probe with a hand-minted token, or a 
 without a supported keychain. Without `--work-source` the pass still runs every local step
 and reports the claims it could not reach.
 
+### Dispatch Command
+
+The Switchboard: drain a wave's ready queue into agent runs. Each ready ticket is
+claimed on the issue tracker (which moves it to In Progress), given its own git worktree
+on the tracker's suggested branch name, written into that worktree at
+`.context/attachments/…` the way a hand-dispatched agent receives it, and handed to an
+agent launched in its own process group, pinned to the worktree, with the model and
+effort the ticket's recommendation line names.
+
+```bash
+ampere dispatch --wave w1 --work-source https://mcp.example/mcp            # one pass, then supervise
+ampere dispatch --wave w1 --work-source https://mcp.example/mcp --watch    # poll until Ctrl+C
+ampere dispatch --wave w1 --work-source <uri> -C ~/code/ampere --max-agents 2
+```
+
+A ticket is dispatched only when it carries `wave:<id>`, sits in the queued state,
+carries no `gate:` label, has no open blocker, has no `research` blocker lacking a
+recorded human verdict, and declares an `ampere-scope` that overlaps nothing in flight.
+A ticket with no scope block runs only when nothing else is in flight. Every refusal is
+printed with its reason.
+
+A run is left alone until it stops, with one automated kill: ten minutes of no output
+(`--silence-minutes`) terminates its process group and escalates the ticket. A clean
+exit with an open pull request for the branch is done; anything else is escalated with
+an `esc:` comment and `gate:escalated`. A `research` ticket always ends at
+`gate:awaiting-verdict` and an escalation. The Switchboard never removes a gate, closes
+a ticket, records a verdict or merges a pull request.
+
+Ctrl+C or SIGTERM terminates the running agents' process groups, escalates those
+interrupted runs, gives back the claims of any that had not started, and marks the
+journal clean. Each run's output is in `~/.ampere/supervisor/runs/<instance>/`. The
+agent defaults to Claude Code (`--agent`, `--permission-mode`, `--default-model`,
+`--default-effort`). The credential is the same one `ampere reconcile` uses.
+
 ### Credential Command
 
 Seed, inspect and clear a Link's credential in the macOS keychain. Every subcommand

@@ -41,6 +41,7 @@ import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.events.subscription.Subscription
+import link.socket.ampere.agents.execution.dispatch.AgentStop
 import link.socket.ampere.domain.arc.TerminationReason
 import link.socket.ampere.probe.Verdict
 
@@ -228,6 +229,13 @@ class SignificanceAwareEventLogger(
         is SupervisorEvent.DispatchRecorded -> EventSignificance.ROUTINE
         is SupervisorEvent.CleanShutdownMarked -> EventSignificance.SIGNIFICANT
         is SupervisorEvent.JournalLineQuarantined -> EventSignificance.CRITICAL
+
+        // The Switchboard (AMPR-308) - a refusal is the ready rule doing its job; an agent
+        // the supervisor had to stop (the silence rule, or a shutdown) is a run a person
+        // now has to look at.
+        is SupervisorEvent.DispatchRefused -> EventSignificance.ROUTINE
+        is SupervisorEvent.AgentRunStopped ->
+            if (event.stop == AgentStop.EXITED) EventSignificance.SIGNIFICANT else EventSignificance.CRITICAL
 
         // Startup reconciliation (AMPR-310) - settling a dead supervisor's journal is the
         // positive signal that its residue is gone; a dispatch the pass could not settle

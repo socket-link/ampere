@@ -1,7 +1,6 @@
 package link.socket.ampere
 
 import com.github.ajalt.clikt.core.CliktCommand
-import com.github.ajalt.clikt.core.PrintMessage
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
@@ -23,19 +22,8 @@ import link.socket.ampere.agents.execution.dispatch.ReconciliationSource
 import link.socket.ampere.agents.execution.dispatch.StartupReconciler
 import link.socket.ampere.agents.execution.dispatch.WorktreeRepair
 import link.socket.ampere.integrations.issues.github.GhMergeRequestLookup
-import link.socket.ampere.link.CredentialRef
-import link.socket.ampere.link.EgressClass
-import link.socket.ampere.link.InMemoryLinkStore
-import link.socket.ampere.link.Link
-import link.socket.ampere.link.LinkDirection
-import link.socket.ampere.link.LinkResolutionService
-import link.socket.ampere.link.PlatformTarget
-import link.socket.ampere.link.Transport
-import link.socket.ampere.plug.PlugContext
 import link.socket.ampere.terminal.TerminalFactory
 import link.socket.ampere.work.linear.LinearClaimRegistry
-import link.socket.ampere.work.linear.LinearWorkSource
-import link.socket.ampere.work.linear.SupervisorInstanceId
 
 /**
  * `ampere reconcile` — the startup reconciliation pass (AMPR-310, AMPR-291
@@ -149,72 +137,16 @@ class ReconcileCommand(
         report(outcome)
     }
 
-    /**
-     * Build the work-source adapter for this one command, on the credential
-     * [workSourceCredentials] opens: the seeded keychain item by default, refreshed
-     * as it nears expiry, or `$AMPERE_WORK_SOURCE_TOKEN` as an explicit override.
-     */
-    private suspend fun openWorkSource(uri: String): ClaimRegistry {
-        val manifest = LinearWorkSource.manifest(uri)
-        val linkId = WorkSourceCredentials.linkIdFor(uri)
-
-        val credentials = workSourceCredentials.open(linkId, uri).getOrElse { cause ->
-            throw PrintMessage(
-                "--work-source: ${cause.message} Releasing a claim is a write.",
-                statusCode = 1,
-                printError = true,
-            )
-        }
-        if (credentials.origin == WorkSourceCredentials.Origin.ENVIRONMENT_OVERRIDE) {
-            terminal.println(
-                yellow("  Credential:  \$${WorkSourceCredentials.TOKEN_ENV} (override; not refreshed, not stored)"),
-            )
-        } else {
-            terminal.println("  Credential:  keychain ${dim("(${CredentialRef.aliasFor(linkId)})")}")
-        }
-
-        val links = InMemoryLinkStore(
-            links = listOf(
-                Link(
-                    id = linkId,
-                    transport = Transport.MCP,
-                    direction = LinkDirection.READ_WRITE,
-                    egress = EgressClass.ThirdParty(provider = LinearWorkSource.DEPENDENCY_NAME),
-                    scope = manifest.emits,
-                    credentialRef = CredentialRef.forLink(linkId),
-                ),
-            ),
-        )
-        links.grant(manifest.id, linkId).getOrThrow()
-
-        val plugContext = PlugContext.create(
-            manifest = manifest,
-            credentialBinding = credentials.binding,
-            linkResolutionService = LinkResolutionService(
-                linkStore = links,
-                platform = PlatformTarget.JVM_DESKTOP,
-            ),
-            credentialRefresher = credentials.refresher,
-        ).getOrThrow()
-
-        // A server that never came up leaves no tools, which `open` would report as schema
-        // drift. Say what actually happened — a refused or unrefreshable credential, usually.
-        plugContext.serverFailures.firstOrNull()?.let { failure ->
-            throw PrintMessage(
-                "--work-source: could not connect to $uri: ${failure.cause?.message ?: "unknown failure"}",
-                statusCode = 1,
-                printError = true,
-            )
-        }
-
-        val workSource = LinearWorkSource.open(
-            plugContext = plugContext,
-            linkId = linkId,
-            instanceId = SupervisorInstanceId(instanceId),
-        ).getOrThrow()
-
-        return LinearClaimRegistry(workSource)
-    }
+    /** The work-source adapter for this one command, bound to the reconciliation pass's port. */
+    private suspend fun openWorkSource(uri: String): ClaimRegistry = LinearClaimRegistry(
+        WorkSourceConnection.open(
+            uri = uri,
+            instanceId = instanceId,
+            credentials = workSourceCredentials,
+            terminal = terminal,
+            why = "Releasing a claim is a write.",
+        ),
+    )
 
     private fun report(outcome: ReconciliationOutcome) {
         terminal.println(
