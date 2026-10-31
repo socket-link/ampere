@@ -4,6 +4,8 @@ import kotlinx.serialization.json.JsonElement
 import link.socket.ampere.agents.domain.reasoning.Plan
 import link.socket.ampere.agents.domain.task.Task
 import link.socket.ampere.api.AmpereStableApi
+import link.socket.ampere.field.Hardness
+import link.socket.ampere.field.Rule
 import link.socket.ampere.memory.RecallSource
 
 /**
@@ -58,6 +60,15 @@ import link.socket.ampere.memory.RecallSource
  *   [RecallCadence.WithPerceive] re-runs RECALL beside it;
  *   [LearnCadence.WhenLesson] and [LearnCadence.EveryCycle] let a successful cycle store its
  *   deterministic lesson before the loop decides (AMPR-484, row N8).
+ * @property rules The consumer's own rules, each a [RunRule] (AMPR-512). The Breaker admits
+ *   every step of the run against them beside [quotas] — after the quotas, in the order
+ *   given — and a step's `PlanEvent.StepAdmitted` names any that breached by
+ *   `Breaker.ruleName`. A Hard trip on one is an ordinary step failure, which skips only
+ *   the step's dependents (AMPR-450), even when the rule is itself a `Rule.Quota`: only
+ *   [quotas] make a failure critical, and theirs is unchanged. A Soft breach adds
+ *   resistance and the step runs. `RunHost.open` refuses a rule whose kind the Breaker has
+ *   no evaluation for (`Breaker.canEvaluate`), naming it and its origin, rather than open a
+ *   run whose every step would fail closed. The default holds none.
  */
 @AmpereStableApi
 data class RunPolicy(
@@ -71,6 +82,7 @@ data class RunPolicy(
     val maxStepsPerCycle: Int? = null,
     val observe: ObservePolicy = ObservePolicy(),
     val cadence: PhaseCadence = PhaseCadence(),
+    val rules: List<RunRule> = emptyList(),
 ) {
 
     init {
@@ -83,6 +95,36 @@ data class RunPolicy(
         }
     }
 }
+
+/**
+ * One rule a consumer puts on every step of its run (AMPR-512): the `(Rule, Hardness)` pair
+ * the Breaker folds, and whose rule it is.
+ *
+ * This is the caller `Breaker`'s KDoc describes, without the store: a consumer that keeps
+ * rules of its own — the person's quiet window, a team policy — keeps them in its own
+ * database and hands the run the pairs at `open`. Nothing here is persisted, and no
+ * `Constraint` is formed (AMPR-328).
+ *
+ * Which kinds a step can be admitted against is `Breaker.canEvaluate`: a `Rule.AccessPolicy`
+ * and a `Rule.Quota` the Breaker can count, today. A `Rule.AccessPolicy` is checked against
+ * the tool each step nominates, through the same gate as the tool's own access rule, so it
+ * adds nothing on a plug tool, and fails closed on a step whose tool carries no plug
+ * manifest or that nominates no tool.
+ *
+ * @property rule What the step must not breach.
+ * @property hardness Whether a breach trips the step or adds resistance to it.
+ * @property origin On whose authority the rule binds, as a label — `"principal"`, `"group"`,
+ *   an Arc id — so a reader of the record can say whose rule stopped a step. Carried, never
+ *   interpreted, and not on the record itself: a `StepAdmitted` names the rule by
+ *   `Breaker.ruleName`, and the consumer that handed the pair in maps that back to its
+ *   origin. The run reads it only to name the rule when `open` refuses one.
+ */
+@AmpereStableApi
+data class RunRule(
+    val rule: Rule,
+    val hardness: Hardness,
+    val origin: String,
+)
 
 /**
  * Whether a hosted run asks whether it met its goal (AMPR-421, AMPR-381 row J9).

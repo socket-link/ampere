@@ -63,7 +63,9 @@ import link.socket.ampere.plug.permission.UserGrants
  *   against it. Verification checks it; handed here, it cannot be evaluated.
  *
  * Every other rule (`Dependency`, `Deadline`, `Cadence`) has no evaluation yet. A rule this
- * Breaker cannot evaluate fails the admission, which is never read as a pass.
+ * Breaker cannot evaluate fails the admission, which is never read as a pass. [canEvaluate]
+ * says which kinds those are, so a caller handed rules from outside — a hosted run's
+ * `RunPolicy.rules` — can refuse one before any step depends on it.
  *
  * @param userGrants The consent a plug tool is checked against — the same provider the
  *   agent's `ToolExecutionEngine` was built with, so the Breaker and the engine can never
@@ -402,6 +404,33 @@ class Breaker(
             is Rule.Dependency -> "Dependency"
             is Rule.Deadline -> "Deadline"
             is Rule.Cadence -> "Cadence"
+        }
+
+        /**
+         * Whether [admit] has an evaluation for [rule]'s kind (AMPR-512), so a caller can
+         * refuse a rule up front rather than have every step it guards fail closed.
+         *
+         * - `AccessPolicy` — yes, against the step's tool; a step that nominates no tool, or
+         *   whose tool carries no plug manifest, still cannot be checked against one.
+         * - `Quota.Tokens`, `Quota.Time` — yes. `Quota.Count` — only when it counts
+         *   [RunQuotas.STEPS], the one label a run's record has anything to count for.
+         * - `Transition` — no: a plan step proposes no status change ([admitTransition]).
+         * - `Requirements` — no: a post-condition, checked by verification.
+         * - `Dependency`, `Deadline`, `Cadence` — not yet.
+         *
+         * Beside [ruleName], and a `when` with no `else` like it, so a `Rule` case added later
+         * is given an answer in both before this compiles.
+         */
+        fun canEvaluate(rule: Rule): Boolean = when (rule) {
+            is Rule.AccessPolicy -> true
+            is Rule.Quota.Tokens -> true
+            is Rule.Quota.Time -> true
+            is Rule.Quota.Count -> rule.of == RunQuotas.STEPS
+            is Rule.Transition -> false
+            is Rule.Requirements -> false
+            is Rule.Dependency -> false
+            is Rule.Deadline -> false
+            is Rule.Cadence -> false
         }
 
         /**

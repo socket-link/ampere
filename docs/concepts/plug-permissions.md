@@ -9,7 +9,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/ToolExecutionEngine.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/propel/Breaker.kt
 related: [SparkSystem, AgentSurface, EventSerialBus, LinkLayer, PropelLoop]
-last_verified: 2026-10-20
+last_verified: 2026-10-30
 ---
 
 # Plug Permissions
@@ -93,7 +93,7 @@ Two design pressures shaped the gate:
 - **Report OS authorization state** — for a `DeviceCapability`, use `NativeAuthorizationStatus`, not `GateResult`. `GateResult` only says whether Ampere's own grant bookkeeping allows the call; it cannot represent `Restricted` or `EntitlementMissing`.
 - **Grant / revoke** — `UserGrantStore.grant(permission)` / `revoke(permission)`. These persist to `PlugGrants` and emit grant events.
 - **Give a hosted seat its grants** — set `HostedAgent.userGrants` (or the `userGrants` parameter of `HostedAgent.of`) to a `suspend (PlugManifest) -> UserGrants`, typically one that reads the consumer's `UserGrantStore`. `RosterRunHost` passes it to the seat's `SparkBasedAgent` as `_userGrantProvider`, which installs it on that seat's `ToolExecutionEngine` and hands it to the seat's Breaker; it is called on every dispatch of a tool with a `plugManifest` — on a plan step once by the Breaker and once more by the engine, and a third time by the engine when a hosted step went back to its plan gate because its arguments changed (AMPR-454), since that review may have waited on a person — so a revocation takes effect on the next call. Null leaves the engine's deny-all default, and one seat's provider never covers another seat (AMPR-423).
-- **Gate a tool dispatch** — `ToolExecutionEngine` calls `PlugPermissionGate.check(toolCall, manifest, userGrants)`. On `Deny*`, emit `PermissionDeniedEvent` (through `publishPermissionDenied`) and surface a `Confirmation` to the user via `AgentSurface`. A plan step is gated earlier as well: `Breaker.admit(tool, Breaker.rulesFor(tool) + runRules)` at `executePlanStep`, where `runRules` is empty except on a hosted run with quotas.
+- **Gate a tool dispatch** — `ToolExecutionEngine` calls `PlugPermissionGate.check(toolCall, manifest, userGrants)`. On `Deny*`, emit `PermissionDeniedEvent` (through `publishPermissionDenied`) and surface a `Confirmation` to the user via `AgentSurface`. A plan step is gated earlier as well: `Breaker.admit(tool, Breaker.rulesFor(tool) + runRules)` at `executePlanStep`, where `runRules` is empty except on a hosted run with quotas or consumer rules (`RunPolicy.rules`, AMPR-512).
 - **Audit grants** — read `PlugGrants` directly; rows are append-only. The user's current state is the most recent grant/revoke per permission.
 
 ## Anti-patterns
