@@ -27,6 +27,7 @@ internal class FakeDispatchWorkSource(
         data class Release(override val ticketId: String) : Write
         data class Escalate(override val ticketId: String, val reason: String) : Write
         data class RequestVerdict(override val ticketId: String) : Write
+        data class Surface(override val ticketId: String, val mergeRequestUrl: String, val summary: String) : Write
     }
 
     private val lock = Any()
@@ -127,6 +128,14 @@ internal class FakeDispatchWorkSource(
                     statusName = "In Review",
                 )
             }
+            return Result.success(Unit)
+        }
+    }
+
+    override suspend fun surfaceForReview(ticketId: String, mergeRequestUrl: String, summary: String): Result<Unit> {
+        synchronized(lock) {
+            writes += Write.Surface(ticketId, mergeRequestUrl, summary)
+            tickets[ticketId] = current(ticketId).copy(status = CanonWorkStatus.VERIFYING, statusName = "In Review")
             return Result.success(Unit)
         }
     }

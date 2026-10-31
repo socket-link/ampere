@@ -21,9 +21,10 @@ import link.socket.ampere.canon.CanonWorkStatus
  *
  * The writes that remain are each a protocol the adapter already ratified:
  * [claim] (comment-arbitrated, AMPR-305), [release] (the retraction AMPR-310 added),
- * [escalate] (`esc:` comment plus `gate:escalated`) and [requestVerdict] (the
+ * [escalate] (`esc:` comment plus `gate:escalated`), [requestVerdict] (the
  * review state plus `gate:awaiting-verdict` — a gate the Switchboard may *apply* and
- * never lift).
+ * never lift) and [surfaceForReview] (the review state plus a `verified:` comment,
+ * reached only through a green verification run, AMPR-309).
  *
  * ### Why reads come back as facts, not verdicts
  *
@@ -87,6 +88,21 @@ interface DispatchWorkSource {
      * lifting it is a verdict, and no method here can.
      */
     suspend fun requestVerdict(ticketId: String): Result<Unit>
+
+    /**
+     * Put [ticketId] in front of a person for review, with [mergeRequestUrl] linked
+     * (AMPR-309): the lifecycle's review state, plus a supervisory `verified:` comment
+     * carrying the link and [summary].
+     *
+     * Called only by the verification step, only after a fully green, honestly
+     * executed gate run — that ordering is the Breaker's whole guarantee, and it is the
+     * one transition the Switchboard makes after the claim. It is not Done and not a
+     * merge: it adds no label and removes none, so a gate a person applied while the
+     * run was in flight still stands.
+     *
+     * @param summary Fixed text and numbers — how many gates passed, on which attempt.
+     */
+    suspend fun surfaceForReview(ticketId: String, mergeRequestUrl: String, summary: String): Result<Unit>
 }
 
 /**

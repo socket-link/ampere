@@ -5,8 +5,8 @@ and a person read the same list. One manifest per repository, at
 `.ampere/verify.yml`.
 
 The manifest is **data**. It does not run anything. The runner that executes it
-— the Breaker — is a separate wave; this document fixes the contract the Breaker
-will read and the obligations it inherits from each field.
+— the Breaker, `GateRunner` since AMPR-309 — is separate; this document fixes the
+contract it reads and the obligations it inherits from each field.
 
 Schema v1 is the ratified revision of the v0 draft produced by the
 [AMPR-290](https://github.com/socket-link/ampere/issues/702) feasibility recon,
@@ -377,3 +377,10 @@ What that check establishes: both manifests parse, every gate id is unique, ever
 exactly one of `run`/`steps`, and the echoed command lines are the intended
 inventory. What it does not establish: that any gate passes. These manifests
 describe gates; running them is the Breaker's job.
+
+The production parser and runner landed in AMPR-309
+(`ampere-core/.../agents/execution/verify/`). The parser enforces everything above
+and refuses an unknown key anywhere, an unimplemented `version`, an unquoted shell
+operator, any interpolation but `${env.VAR}`, and a command naming more than one
+Gradle task or xcodebuild action — each violation reported with the field it is
+about.

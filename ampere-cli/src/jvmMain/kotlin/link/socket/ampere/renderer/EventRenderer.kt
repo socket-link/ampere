@@ -52,6 +52,7 @@ import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.execution.dispatch.AgentStop
+import link.socket.ampere.agents.execution.verify.VerificationVerdict
 import link.socket.ampere.domain.arc.TerminationReason
 import link.socket.ampere.probe.Verdict
 
@@ -235,6 +236,13 @@ class EventRenderer(
             // and one the supervisor had to stop is red.
             is SupervisorEvent.DispatchRefused -> "🔌" to gray
             is SupervisorEvent.AgentRunStopped -> "🔌" to if (event.stop == AgentStop.EXITED) blue else red
+            // The Breaker (AMPR-309): green surfaces, an agent failure is a repair attempt
+            // (yellow), and everything else escalates.
+            is SupervisorEvent.VerificationCompleted -> "🧪" to when (event.verdict) {
+                VerificationVerdict.GREEN -> green
+                VerificationVerdict.AGENT_FAILURE -> yellow
+                else -> red
+            }
             // The event store refused a write, so something that happened has no row. Red: the
             // pane is the only place it will ever appear.
             is EventStoreEvent.PersistenceFailed -> "🧯" to red

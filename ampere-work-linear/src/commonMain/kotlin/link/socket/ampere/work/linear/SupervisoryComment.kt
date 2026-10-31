@@ -26,8 +26,14 @@ package link.socket.ampere.work.linear
  * The verification gate needs a decision a machine must not make.
  * ```
  *
- * [Escalation] may carry a body after one blank line; [Claim] and [Release] never
- * do. All three round-trip exactly: `parse(render(comment)) == comment` for every
+ * ```
+ * verified:AMPR-305:supervisor-7f3a
+ *
+ * https://github.com/owner/repo/pull/12
+ * ```
+ *
+ * [Escalation] and [Verified] may carry a body after one blank line; [Claim] and
+ * [Release] never do. All three round-trip exactly: `parse(render(comment)) == comment` for every
  * constructible value, including a body with leading, trailing or repeated
  * newlines, because [render] separates the header from the body with the first
  * `"\n\n"` in the text and [parse] splits on that same first occurrence.
@@ -141,6 +147,36 @@ sealed interface SupervisoryComment {
         }
     }
 
+    /**
+     * "This ticket's work passed verification and is ready for review." Posted when
+     * the Breaker surfaces a ticket (AMPR-309), after a fully green gate run, with
+     * the merge request's link and a one-line summary in the body.
+     *
+     * A supervisory header for the same reason an escalation has one: a comment the
+     * supervisor writes must never read as a human verdict, whose test is the first
+     * line. Nothing reads it back as protocol — it is the link a reviewer follows.
+     *
+     * @property body The merge request's URL, then the summary. Composed from a URL,
+     *   fixed text and numbers.
+     */
+    data class Verified(
+        override val issue: String,
+        override val instanceId: SupervisorInstanceId,
+        val body: String = "",
+    ) : SupervisoryComment {
+
+        init {
+            validateIssue(issue)
+        }
+
+        override val prefix: String get() = VERIFIED_PREFIX
+
+        override fun render(): String {
+            val header = "$VERIFIED_PREFIX$issue$FIELD_SEPARATOR$instanceId"
+            return if (body.isEmpty()) header else header + BODY_SEPARATOR + body
+        }
+    }
+
     companion object {
 
         const val FIELD_SEPARATOR: String = ":"
@@ -150,6 +186,8 @@ sealed interface SupervisoryComment {
         const val RELEASE_PREFIX: String = "release$FIELD_SEPARATOR"
 
         const val ESCALATION_PREFIX: String = "esc$FIELD_SEPARATOR"
+
+        const val VERIFIED_PREFIX: String = "verified$FIELD_SEPARATOR"
 
         /** One blank line between the header and an [Escalation]'s body. */
         const val BODY_SEPARATOR: String = "\n\n"
@@ -185,6 +223,7 @@ sealed interface SupervisoryComment {
                 CLAIM_PREFIX -> if (rest.isEmpty()) Claim(issue, SupervisorInstanceId(instance)) else null
                 RELEASE_PREFIX -> if (rest.isEmpty()) Release(issue, SupervisorInstanceId(instance)) else null
                 ESCALATION_PREFIX -> Escalation(issue, SupervisorInstanceId(instance), rest)
+                VERIFIED_PREFIX -> Verified(issue, SupervisorInstanceId(instance), rest)
                 else -> null
             }
         }

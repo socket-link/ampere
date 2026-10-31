@@ -4,8 +4,17 @@ status: experimental
 tracked_sources:
   - .ampere/verify.yml
   - docs/verify-manifest.md
-related: [Probe, CancellationAddress, LifecycleTypes, PropelLoop]
-last_verified: 2026-10-11
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/verify/VerifyManifest.kt
+  - ampere-core/src/commonMain/kotlin/link/socket/ampere/agents/execution/verify/GateOutcome.kt
+  - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/verify/VerifyManifestParser.kt
+  - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/verify/GateCommand.kt
+  - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/verify/GateRunner.kt
+  - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/verify/GateClassifier.kt
+  - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/verify/Preconditions.kt
+  - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/verify/LogExcerpts.kt
+  - ampere-core/src/jvmMain/kotlin/link/socket/ampere/agents/execution/verify/ManifestSource.kt
+related: [Probe, CancellationAddress, LifecycleTypes, PropelLoop, Switchboard, DispatchJournal]
+last_verified: 2026-10-31
 ---
 
 # VerificationManifest
@@ -18,9 +27,14 @@ code. A gate carries the metadata a runner needs to execute it and to classify
 what happened — `fresh`, `timeout_minutes`, `retry_safe`, `side_effects`,
 `parallel_safe`, `requires`/`needs`, `baseline` — and nothing else.
 
-The manifest does not run. The runner that executes it (the Breaker) is separate
-work; the manifest is the contract it reads. Schema v1 and the per-field reference
-are in [`docs/verify-manifest.md`](../verify-manifest.md).
+The manifest does not run. The runner that executes it is `GateRunner` (AMPR-309),
+which the [Switchboard](switchboard.md) calls after a dispatched agent stops; the
+manifest is the contract it reads. Schema v1 and the per-field reference are in
+[`docs/verify-manifest.md`](../verify-manifest.md).
+
+AMPR-309's ticket calls the whole verification gate "the Breaker" — breakers
+protect. In code it is the runner here plus `Switchboard.settleByVerification`, and
+nothing in it is `propel/Breaker`, which stays admission only (F14).
 
 Every gate reports exactly one of four outcomes: `passed`, `failed`
 (agent-attributable), `infrastructure` (host-attributable, escalates about the
@@ -122,11 +136,21 @@ for something that execution broke.
   deliberately *not* a gate, and the provenance of every committed gate.
 - Repo B's own `.ampere/verify.yml` — 11 gates, exactly its five required status
   checks split one-per-task plus its two architectural-isolation tasks.
-- No runner. The v1 structural check is a throwaway Python interpreter in the
-  AMPR-304 workspace under `.context/ampr-304/`, deliberately uncommitted. When
-  a production runner is built it is verification's, run on finished work — not
-  the Breaker's: F14 (locked 2026-10-11) keeps post-conditions out of admission.
-  See "Where `Rule.Requirements` lands" below.
+- `agents/execution/verify/` (AMPR-309) — the runner. `VerifyManifest.kt` and
+  `GateOutcome.kt` (common): the parsed manifest, the four outcomes, the run's
+  `VerificationVerdict`, and the `GateRecord` the dispatch journal stores.
+  `VerifyManifestParser.kt` (JVM): schema v1, every violation reported with its field
+  path. `GateCommand.kt`: a `run` as an argument vector, the one-task rule, `${env.VAR}`,
+  the Gradle `fresh` mechanism. `Preconditions.kt`: the four predicates on this host.
+  `GateRunner.kt`: execution. `GateClassifier.kt`: the infra-versus-agent step.
+  `LogExcerpts.kt`: the anchored lines an escalation may quote. `ManifestSource.kt`:
+  the manifest from the base revision. Verification of finished work, not admission:
+  F14 (locked 2026-10-11) keeps post-conditions out of the admission Breaker. See
+  "Where `Rule.Requirements` lands" below.
+- Tests: `ampere-core/src/jvmTest/.../execution/verify/` — `VerifyManifestParserTest`
+  (both committed manifests' shapes, every violation), `GateRunnerTest` (real
+  processes, a fake `gradlew` for `fresh`), `GateClassifierTest`, `GateCommandTest`,
+  `LogExcerptsTest`, `BaseRevisionManifestSourceTest`.
 
 ## Where `Rule.Requirements` lands
 
@@ -148,10 +172,37 @@ which fails the step closed; it never passes it.
 What this does not do yet: nothing reads a `Rule.Requirements` and selects gates
 from it. The mapping above is the routing F14 decided; evaluating a requirement
 against a manifest — and a requirement naming a gate the manifest lacks, as
-`allowBreakingChanges` would today — belongs to the runner, which does not exist.
+`allowBreakingChanges` would today — belongs to the runner, which exists since AMPR-309 but reads no
+`Rule.Requirements` yet.
 Admission and verification stay separate questions: admission asks whether a
 step may start, verification whether finished work is done, and a rule answers
 only one of them.
+
+## The runner's invariants (AMPR-309)
+
+- **The manifest comes from the base revision, never the worktree.** The agent writes
+  the worktree; an agent that deleted its red gate from its own copy would pass the
+  gate it deleted. `BaseRevisionManifestSource` reads `<base>:.ampere/verify.yml`.
+- **No shell.** A gate's command runs as an argument vector; the parser refuses
+  unquoted shell operators and every interpolation but `${env.VAR}`, which is
+  substituted per argument after splitting.
+- **One gate at a time per repository**, in listed order, every one of them, even when
+  `parallel_safe: true` — Gradle daemon and lock contention (the AMPR-290 recon).
+- **`fresh` on Gradle is `--no-build-cache`, the gate's own results deleted, and
+  `--rerun` on its one task.** `--rerun` is the per-task `--rerun-tasks`: the verdict
+  task executes, upstream compilation may still come from the cache.
+- **A failure is examined before it is charged**, structurally: the gate's own
+  preconditions are re-checked, and a `retry_safe` gate (not `side_effects: network`)
+  is re-run once. Then `GateClassifier` decides, by the order its KDoc lists — exit 0;
+  interrupted; never started; timed out; exit 126/127; a precondition broke; did not
+  reproduce; otherwise the agent's. Unknown is the agent's: only `passed` surfaces
+  anything, so no misclassification can surface a bad merge request.
+- **A timeout terminates the gate's whole process group** before it reports, and each
+  gate's group is journaled while it runs, so a crashed supervisor's build is
+  reapable.
+- **The run's verdict has a precedence**: `refused` > `interrupted` > `host_failure` >
+  `agent_failure` > `incomplete` > `green`. Any infrastructure gate makes the whole run
+  untrustworthy, so the agent is not charged for a failure beside it.
 
 ## Common operations
 
@@ -200,6 +251,10 @@ only one of them.
   gate is in the manifest because that repository's merge-blocking definition of
   done contains it. Repo B's three non-required CI jobs are named in a comment
   there and left out, because widening another team's DoD is that team's call.
+- **Classifying by `baseline`.** A red `baseline: ci` gate is environment-suspect,
+  but confirming the off-host green needs a forge, and the v1 runner is local-host
+  only; it records the baseline in every result and escalation and decides nothing
+  with it.
 - **Letting a gate outlive its `timeout_minutes` because the runner has no way to
   stop it.** A Gradle daemon or a booted simulator survives the process that
   spawned it; a timeout that cannot actually kill the work is a timeout that

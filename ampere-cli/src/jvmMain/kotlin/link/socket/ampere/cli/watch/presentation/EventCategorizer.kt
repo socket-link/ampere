@@ -37,6 +37,7 @@ import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
 import link.socket.ampere.agents.execution.dispatch.AgentStop
+import link.socket.ampere.agents.execution.verify.VerificationVerdict
 import link.socket.ampere.domain.arc.TerminationReason
 import link.socket.ampere.probe.Verdict
 
@@ -106,6 +107,13 @@ object EventCategorizer {
         // the kill rule, or cut off by a shutdown — is a run a person now has to look at.
         is SupervisorEvent.AgentRunStopped ->
             if (event.stop == AgentStop.EXITED) EventSignificance.SIGNIFICANT else EventSignificance.CRITICAL
+
+        // The Breaker (AMPR-309): green surfaces work for review; anything else is a repair
+        // attempt or an escalation a person now owns.
+        is SupervisorEvent.VerificationCompleted -> when (event.verdict) {
+            VerificationVerdict.GREEN -> EventSignificance.SIGNIFICANT
+            else -> EventSignificance.CRITICAL
+        }
 
         // Significant events represent state changes worth noting
         is TaskEvent.TaskCompleted,

@@ -147,6 +147,32 @@ class LinearDispatchWorkSourceTest {
     }
 
     @Test
+    fun `surfacing moves a verified ticket to review with its merge request linked and touches no label`() = runTest {
+        val fake = FakeWorkSource().apply {
+            add(started("AMPR-1", "In Progress", "wave:w1", WorkSourceLabels.GATE_AWAITING_VERDICT))
+        }
+
+        port(fake).surfaceForReview(
+            "AMPR-1",
+            "https://github.com/socket-link/ampere/pull/12",
+            "All 19 verification gates passed on the supervisor host.",
+        ).getOrThrow()
+
+        assertEquals(WorkSourceStates.IN_REVIEW, fake.issue("AMPR-1").status)
+        assertTrue(
+            WorkSourceLabels.GATE_AWAITING_VERDICT in fake.issue("AMPR-1").labels,
+            "a gate a person applied mid-run must stand",
+        )
+        val comment = fake.comments("AMPR-1").last().body
+        val verified = assertIs<SupervisoryComment.Verified>(SupervisoryComment.parse(comment))
+        assertEquals(instance, verified.instanceId)
+        assertTrue(verified.body.startsWith("https://github.com/socket-link/ampere/pull/12"), verified.body)
+        fake.callsTo(WorkSourceToolPins.SAVE_ISSUE).forEach { call ->
+            assertTrue((call.arguments["removeLabels"] as? JsonArray).isNullOrEmpty(), "surfacing removed a label")
+        }
+    }
+
+    @Test
     fun `no operation removes a label or closes a ticket or posts a free-form comment`() = runTest {
         val fake = FakeWorkSource().apply {
             add(done("AMPR-9", WorkSourceLabels.RESEARCH))
@@ -177,6 +203,7 @@ class LinearDispatchWorkSourceTest {
         switchboard.requestVerdict("AMPR-2").getOrThrow()
         switchboard.escalate("AMPR-2", "Research findings are ready for a human verdict.").getOrThrow()
         switchboard.escalate("AMPR-3", "Still stopped.").getOrThrow()
+        switchboard.surfaceForReview("AMPR-3", "https://example.invalid/pull/3", "All gates passed.").getOrThrow()
         switchboard.release("AMPR-1").getOrThrow()
 
         val issueWrites = fake.callsTo(WorkSourceToolPins.SAVE_ISSUE)

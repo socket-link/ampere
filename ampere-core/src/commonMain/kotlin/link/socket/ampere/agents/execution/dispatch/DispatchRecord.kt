@@ -3,6 +3,7 @@ package link.socket.ampere.agents.execution.dispatch
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import link.socket.ampere.agents.execution.process.CancellationAddress
+import link.socket.ampere.agents.execution.verify.GateRecord
 
 /**
  * One claim record: what a supervisor had done about one dispatch, at one moment.
@@ -37,9 +38,14 @@ import link.socket.ampere.agents.execution.process.CancellationAddress
  *   plus the leader PID and start time that let `ProcessGroups.terminate` refuse a
  *   recycled PID instead of signalling an innocent process. Null until the agent is
  *   spawned, which is also why [DispatchPhase.AGENT_RUNNING] onwards should carry one.
+ *   During [DispatchPhase.VERIFYING] it is the running gate command's group instead
+ *   (AMPR-309): whatever is working in the worktree on the dispatch's behalf is what a
+ *   recovery pass has to stop.
  * @property mergeRequestUrl The merge/pull request, once the dispatch opened one.
  *   Null before [DispatchPhase.MR_OPENED]; a recovery pass uses it to tell work that
  *   reached a reviewable artifact from work that has to be redone.
+ * @property gate One verification gate's result, on the [DispatchPhase.VERIFYING]
+ *   record written when that gate settled (AMPR-309). Null on every other record.
  */
 @Serializable
 data class DispatchRecord(
@@ -51,6 +57,7 @@ data class DispatchRecord(
     val recordedAt: Instant,
     val agentAddress: CancellationAddress? = null,
     val mergeRequestUrl: String? = null,
+    val gate: GateRecord? = null,
 )
 
 /**
@@ -70,7 +77,11 @@ enum class DispatchPhase {
     /** The agent subprocess is running and may be writing to the worktree. */
     AGENT_RUNNING,
 
-    /** The agent finished; verification (tests, lint) is running. */
+    /**
+     * The agent finished; the repository's verification gates are running (AMPR-309).
+     * One record when verification starts, one as each gate starts, and one carrying
+     * [DispatchRecord.gate] as each gate settles.
+     */
     VERIFYING,
 
     /** A merge request is open; see [DispatchRecord.mergeRequestUrl]. */
