@@ -333,6 +333,12 @@ internal class RosterRunHost(
      * [PerceiveCadence.EveryCycle] under another name. [PerceiveCadence.EveryCycle] asks nothing
      * and needs nothing.
      *
+     * A consumer rule the Breaker has no evaluation for is refused too (AMPR-512). Handed
+     * through, it would throw inside every admission, and every step would fail closed as
+     * "not admitted": a run where nothing runs, and no step says why in advance. The
+     * refusal names the rule's kind and its origin, so the consumer can tell which of its
+     * rules to take out. A kind is judged by `Breaker.canEvaluate`, never by this list.
+     *
      * The last is a blank caller-supplied run id (AMPR-385 row H27). The id is the only
      * thing that joins the run's events, its task lifecycle and its outcome, and a blank
      * one joins them to nothing a reader can query by. Whether the id is already *open*
@@ -415,6 +421,14 @@ internal class RosterRunHost(
                     "${verifier.questions.keys.joinToString()} and carries no " +
                     "upstreamDecisionClient; a decision transport is opted into, never inherited"
             }
+        }
+        policy.rules.firstOrNull { !Breaker.canEvaluate(it.rule) }?.let { unevaluable ->
+            throw IllegalArgumentException(
+                "RunPolicy.rules holds a ${Breaker.ruleName(unevaluable.rule, tool = null)} rule " +
+                    "from '${unevaluable.origin}' that the Breaker has no evaluation for " +
+                    "(${unevaluable.rule}); every step admitted against it would fail closed, " +
+                    "so take it out of the policy",
+            )
         }
         require(runId == null || runId.isNotBlank()) {
             "a supplied run id is what every event of the run is filed under, so it cannot " +

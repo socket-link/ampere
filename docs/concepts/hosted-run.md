@@ -8,7 +8,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/service/AgentService.kt
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/api/internal/DefaultAgentService.kt
 related: [PropelLoop, TeamLayer, SparkSystem, MemoryProvenance, CognitionTrace, Probe, SubjectRegistry, PlugPermissions]
-last_verified: 2026-10-27
+last_verified: 2026-10-30
 ---
 
 # Hosted Run
@@ -289,7 +289,8 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     the seat that runs it (AMPR-472), and a step a quota tripped carries the quota on its
     outcome as `StepOutcome.Failure.tripped` (`Quota.Count:steps`, `Quota.Tokens`,
     `Quota.Time`). The run's own second question once a step has failed — `quotaReached`,
-    which keeps the failure critical — is not an admission and records nothing.
+    which keeps the failure critical — is not an admission and records nothing, and asks
+    `RunPolicy.quotas` only, never `RunPolicy.rules` (invariant 30).
 20. **A held run's record is kept beside its events, and bookkeeping never decodes it**
     (AMPR-430, row H30). `HeldRunStore` keeps one `HeldRun` per run id — what the run
     *was going to do*, which no event carries — in the `HeldRunStore` table (`14.sqm`).
@@ -458,6 +459,24 @@ that loop, moved into Ampere, so the consumer can delete its copy.
     records it. `AgentService.pursue` takes no workspace: it runs over a `team {}` roster,
     whose roles declare no tool ids, so its run can dispatch no code tool for a checkout to
     reach. A run that changes code is opened through `AmpereInstance.runs`.
+30. **Consumer rules are admitted after the quotas and never make a failure critical; a kind
+    the Breaker cannot evaluate is refused at `open`** (AMPR-512). `RunPolicy.rules` is a
+    list of `RunRule(rule, hardness, origin)` the consumer keeps in its own store and hands
+    the run — there is no `Constraint` store (AMPR-328), and nothing here persists one. The
+    run's rules are `quotas.asRules()` followed by `rules`, in the order given, and that one
+    list is what `dispatchPlanStep` hands the seat's Breaker; the fold is the Breaker's (F13).
+    Every admission is on the record as `PlanEvent.StepAdmitted`, naming a breached consumer
+    rule by `Breaker.ruleName` exactly as a quota is named. A Hard trip on a consumer rule is
+    an ordinary step failure (invariant 17) even when the rule is itself a `Rule.Quota`,
+    because `quotaReached` asks the policy's quotas only: so a consumer quota that is reached
+    trips each later step in turn, each with its own `StepAdmitted`, where a run quota skips
+    them. A Soft breach is a `Resist` and the step runs. `RunHost.open` and `resume` refuse,
+    with an `IllegalArgumentException` naming the rule's kind and its origin, any rule for
+    which `Breaker.canEvaluate` is false (`Transition`, `Requirements`, `Dependency`,
+    `Deadline`, `Cadence`, and a `Quota.Count` over anything but `steps`) — before an id is
+    reserved or a seat is built. Handed through, such a rule would throw inside every
+    admission, and every step would fail closed as "not admitted". `rules` empty, the
+    default, is the run as it was.
 
 ## How it composes
 
@@ -576,7 +595,8 @@ type is a label on a summary, not a row in `KnowledgeStore`.
 | `RunHost` | `open(…, runId: RunId? = null, workspace: ExecutionWorkspace? = null)`, `openSeats(roster, seats: List<HostedAgent>, …, runId, workspace)` (the Swift-friendly overload), `openRunSeats(): List<OpenSeat>`; `resume(runId, roster, seats, resolution, tools, policy, workspace)`, `resumeSeats(…)` and `heldRuns(): List<HeldRunSummary>` (AMPR-431), each with a default body — `resume` throws `NoStore`, `heldRuns` is empty. A supplied `runId` is `HostedRun.runId`, `RunResult.runId`, the envelope run id of every event, the task lifecycle's id and LEARN's outcome `ticketId`/`runId`; null mints one. `workspace` is the run's checkout, stamped on every seat's step requests (invariant 29); null is none |
 | `HostedAgent` | Who fills a seat: id, role, sparks, charter, `AIConfiguration`, `CognitiveRelay?`, **required** `UpstreamLlmClient`, `MemoryStore?`, `recallScopes`, affinity, `probes`, `questions`, `UpstreamDecisionClient?`, `userGrants: (suspend (PlugManifest) -> UserGrants)?` (null denies) |
 | `HostedRun` | `runId`, `plan`, `readExternalContent`, `execute()`, `close()`. `readExternalContent` defaults to `true` on the interface, so an implementation that does not track it is assumed to have read something |
-| `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip`, `quotas`, `maxStepsPerCycle` (null = no cap), `observe`, `cadence` |
+| `RunPolicy` | `cycles`, `learn`, `planGate`, `recall`, `goalCheck`, `judgmentResultClip`, `quotas`, `maxStepsPerCycle` (null = no cap), `observe`, `cadence`, `rules` (empty by default; invariant 30) |
+| `RunRule` | `rule: Rule`, `hardness: Hardness`, `origin: String` — one consumer rule every step of the run is admitted against (AMPR-512). `origin` (`"principal"`, `"group"`, an Arc id) is carried, never interpreted, and not on the record: `StepAdmitted` names the rule by `Breaker.ruleName`. `Breaker.canEvaluate(rule)` says which kinds `open` accepts |
 | `PhaseCadence` / `PerceiveCadence` / `RecallCadence` / `LearnCadence` | When PERCEIVE, RECALL and LEARN run again inside a run (AMPR-481, row N4; AMPR-483, rows N3–N5; AMPR-484, row N8). `PerceiveCadence { OncePerRun, Record, WhenDrifted(moveAbove), EveryCycle, WhenMoved }` and `LearnCadence { AtClose, Record, WhenLesson(keepAbove), EveryCycle }` are sealed so acting values arrive without a break; `RecallCadence { OncePerRun, WithPerceive }`. `Record` is one decision call per executed cycle on the host seat carrying up to two questions; nothing moves and `RunResult` is identical. `WhenDrifted(moveAbove)` — `moveAbove` strictly in (0, 1), no default — is the same one call, read by `DriftReceptor`, plus one PERCEIVE model call for every cycle whose verdict was not `Holds`; `PerceiveCadence.EveryCycle` is one PERCEIVE per executed cycle with no judge; `PerceiveCadence.WhenMoved` — the recommended first acting value (AMPR-487) — is no decision call for drift and one PERCEIVE for every cycle after which the Field moved, its verdict from the judgeless `DriftReceptor`, with the lesson question, if asked, in a request of its own; `WithPerceive` is one RECALL beside every re-run PERCEIVE. `LearnCadence.WhenLesson(keepAbove)` — `keepAbove` strictly in (0, 1), no default — is the same one call again, the lesson question riding in the receptor's request, plus one deterministic knowledge row per seat that ran in a successful cycle whose `p(true)` reached the threshold, tagged `cycle:<n>`; `LearnCadence.EveryCycle` is those rows after every successful cycle with no judge. Neither touches the close-time LEARN. `open` refuses `Record`, `WhenDrifted` and `WhenLesson` on a host seat with no transport, and `Record`, `WhenDrifted` and `WhenMoved` with `FieldScope.Off` or a host with no `FieldService`; `WhenMoved` needs no transport, and the two `EveryCycle`s need nothing |
 | `DriftReceptor` | `internal class DriftReceptor(reasoning, moveAbove: Double?, clip, alsoAsk) : Probe<RunDrift>` (`propel/DriftReceptor.kt`, AMPR-483): the decision-backed probe of AMPR-381 J6. `evaluate` is `Holds` with no call for an empty delta, `Violated` with no call for a delta of only `PROTECTED` rows, else one `decide` under OBSERVE read against `moveAbove` — `Violated` at or above, `Holds` below — and `Undetermined(EVIDENCE_UNREADABLE)` for a self-reported or missing distribution or a transport that threw. Evaluated inside a `ProbeSuite` over the host's door under the run id; the lesson question rides in `alsoAsk` and comes back on `judgments`. A null `moveAbove` is no judge (`WhenMoved`, AMPR-487): the first two rules hold, any other non-empty delta is `Violated("moved: n changes …")`, nothing is asked, and `alsoAsk` must be empty |
 | `PhaseCell<T>` | `internal data class PhaseCell<T>(value, inputDigest, cycle)` (`propel/PhaseCell.kt`, AMPR-483 row N11): what PERCEIVE (`Idea`) and RECALL (`RecalledContext`) last produced, the SHA-256 of the input they ran over, and the cycle. In memory only; `PhaseCell.digest(parts…)` is `stateDigest` over the NUL-joined parts |
@@ -668,6 +688,13 @@ interrupted (`heldRuns()` lists it with its `claimedAt`).
 
 ## Anti-patterns
 
+- **Handing a consumer `Rule.AccessPolicy` to `RunPolicy.rules` as if it added a check.**
+  `Breaker.canEvaluate` is true for it, so `open` accepts it, but it is checked through the
+  same `PlugPermissionGate` call as the tool's own access rule, so it adds nothing on a plug
+  tool, and it fails closed on a reasoning step or a tool without a plug manifest.
+- **Expecting a consumer Hard rule to stop only the step it first breaches.** Every kind a
+  step can breach today is a quota, and a spend never goes back down, so each later step
+  trips on it too; the failures are ordinary (invariant 30), not a stopped walk.
 - **Reaching the phase services through the agent's `runLLMTo*` lambdas.** They are
   the same services wrapped in `runBlockingCompat` and a 60 s timeout. A hosted run
   uses `SparkBasedAgent.reasoningUnit`, which is `internal` for exactly this reason:

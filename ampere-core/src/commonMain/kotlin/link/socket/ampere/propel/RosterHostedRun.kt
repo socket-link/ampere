@@ -1388,19 +1388,28 @@ internal class RosterHostedRun(
     }
 
     /**
-     * The rules this run puts on every step, whichever seat runs it: the policy's quotas,
-     * each a Hard `Rule.Quota` (AMPR-445). The seat's Breaker reads the run's spend from the
-     * events filed under [runId] — every seat's door writes to the one store — so a quota
-     * counts what all the seats spent, not only the seat that is about to spend more.
+     * The run's quotas as the Breaker's rules, each a Hard `Rule.Quota` (AMPR-445). The
+     * seat's Breaker reads the run's spend from the events filed under [runId] — every
+     * seat's door writes to the one store — so a quota counts what all the seats spent, not
+     * only the seat that is about to spend more.
      */
-    private val runRules = policy.quotas.asRules()
+    private val quotaRules = policy.quotas.asRules()
 
     /**
-     * The same quotas, asked at the run's level when a step fails, so [dispatch] can tell a
-     * reached quota from one step's fault (AMPR-445). Null when the run set no quota, which
-     * is the default and reads nothing.
+     * The rules this run puts on every step, whichever seat runs it: [quotaRules], then the
+     * consumer's own [RunPolicy.rules] in the order given (AMPR-512). The fold is the
+     * Breaker's; this only lengthens the list it is handed. `open` has already refused any
+     * rule the Breaker could not evaluate.
      */
-    private val quotaCheck: Breaker? = if (runRules.isEmpty()) {
+    private val runRules = quotaRules + policy.rules.map { it.rule to it.hardness }
+
+    /**
+     * The quotas — and only the quotas — asked at the run's level when a step fails, so
+     * [dispatch] can tell a reached quota from one step's fault (AMPR-445). A consumer rule
+     * is never asked here, so a trip on one stays an ordinary failure (AMPR-512). Null when
+     * the run set no quota, which is the default and reads nothing.
+     */
+    private val quotaCheck: Breaker? = if (quotaRules.isEmpty()) {
         null
     } else {
         Breaker(userGrants = { UserGrants() }, eventApi = host.door, actorId = host.id, runId = runId)
@@ -1513,7 +1522,7 @@ internal class RosterHostedRun(
      * closed on the same read, so nothing is let through on it.
      */
     private suspend fun quotaReached(): Boolean =
-        quotaCheck?.admit(tool = null, rules = runRules)?.getOrNull() is Admission.Trip
+        quotaCheck?.admit(tool = null, rules = quotaRules)?.getOrNull() is Admission.Trip
 
     /**
      * The failed step [step] cannot run without, or null when it can run (AMPR-450).
