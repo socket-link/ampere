@@ -1,7 +1,9 @@
 package link.socket.ampere.field
 
 import kotlin.time.Duration
+import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalTime
 
 /**
  * A [Rule] bound to a subject, with a hardness and an origin.
@@ -138,4 +140,34 @@ sealed interface Rule {
      *   constraint's [Provenance.createdAt].
      */
     data class Cadence(val every: Duration, val anchor: Instant? = null) : Rule
+
+    /**
+     * Not between these hours. Evaluated against the Breaker's clock in [timezone] (F29) —
+     * the door's clock, read in the rule's own zone, never the device's. The predicate is
+     * derived at probe time like every other rule's: "inside" is decided from these fields
+     * and the clock when a step is admitted, and nothing here computes it.
+     *
+     * What the rule applies to is carried as labels, as [AccessPolicy.required] carries
+     * permissions, because this package cannot name a tool. A consumer that wants thinking
+     * and reading to go on while acting stops puts its acting tools' ids in [appliesTo];
+     * which tools act is the consumer's knowledge, not Ampere's.
+     *
+     * @property from When the window opens, inclusive.
+     * @property until When it closes, exclusive. One earlier than [from], or equal to it,
+     *   wraps midnight: the window runs from [from] on one day to [until] on the next.
+     * @property timezone The IANA zone [from] and [until] are read in. A zone the platform
+     *   cannot resolve is a rule the Breaker cannot evaluate, never one that holds.
+     * @property days The days the window opens on — the day [from] falls on, so a window
+     *   from 22:00 to 07:00 on Friday covers Saturday's early morning too.
+     * @property appliesTo The tool ids the window stops, as labels. Empty means every
+     *   step, including one that nominates no tool; a step with no tool is never inside a
+     *   non-empty selector.
+     */
+    data class Window(
+        val from: LocalTime,
+        val until: LocalTime,
+        val timezone: String,
+        val days: Set<DayOfWeek> = DayOfWeek.entries.toSet(),
+        val appliesTo: Set<String> = emptySet(),
+    ) : Rule
 }

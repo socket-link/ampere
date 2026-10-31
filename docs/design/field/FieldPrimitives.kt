@@ -23,6 +23,8 @@
 //   - `Belief` carries a required `kind: BeliefKind` (AMPR-448, F21).
 //   - `Action.reversibility` and `Action.cost` are nullable (`null` = unknown), and `Action`
 //     carries `result: ActionResult?`, set only on a `TAKEN` Action (AMPR-448, F20).
+//   - `Rule.Window`, a recurring time-of-day window over tool-id labels, which the Breaker
+//     evaluates against the door's clock in the rule's own zone (AMPR-511).
 
 package link.socket.ampere.field
 
@@ -140,6 +142,7 @@ sealed interface Rule {
     data class Dependency(val dependsOn: Set<Ref<Goal>>) : Rule
     data class Deadline(val due: Instant) : Rule
     data class Cadence(val every: Duration, val anchor: Instant? = null) : Rule
+    data class Window(val from: LocalTime, val until: LocalTime, val timezone: String, val days: Set<DayOfWeek> = DayOfWeek.entries.toSet(), val appliesTo: Set<String> = emptySet()) : Rule
 }
 
 // ---- Action: Proposed → Admitted → Taken; actor ≠ executor (F17) -------------------

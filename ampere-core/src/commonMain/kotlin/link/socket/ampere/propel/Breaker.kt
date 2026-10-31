@@ -3,6 +3,11 @@ package link.socket.ampere.propel
 import kotlin.time.Duration
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
+import kotlinx.datetime.toLocalDateTime
 import link.socket.ampere.agents.definition.AgentId
 import link.socket.ampere.agents.domain.RunId
 import link.socket.ampere.agents.domain.event.PermissionDeniedReason
@@ -11,6 +16,7 @@ import link.socket.ampere.agents.domain.event.ProviderCallCompletedEvent
 import link.socket.ampere.agents.events.DecodedRows
 import link.socket.ampere.agents.events.StoredEvent
 import link.socket.ampere.agents.events.api.AgentEventApi
+import link.socket.ampere.agents.execution.executor.RoutedExecutor
 import link.socket.ampere.agents.execution.permissionDeniedMessage
 import link.socket.ampere.agents.execution.publishPermissionDenied
 import link.socket.ampere.agents.execution.tools.Tool
@@ -58,6 +64,9 @@ import link.socket.ampere.plug.permission.UserGrants
  *   limit. See [RunQuotas].
  * - `Rule.Transition` — a status change, checked by [admitTransition]. A plan step proposes
  *   no status change, so one handed to [admit] cannot be evaluated.
+ * - `Rule.Window` — a recurring time-of-day window, read on [clock] in the rule's own zone
+ *   and never the device's, over the tool ids it names. A step with no tool is inside a
+ *   window only when the window names no tools. See [evaluateWindow].
  * - `Rule.Requirements` is not the Breaker's. It states what a finished execution must
  *   satisfy — tests, lint, compatibility — and nothing that has not run yet can be checked
  *   against it. Verification checks it; handed here, it cannot be evaluated.
@@ -78,8 +87,9 @@ import link.socket.ampere.plug.permission.UserGrants
  *   any run — makes a quota unevaluable.
  * @param runEvents Reads the events persisted under a run, in sequence order. Defaults to
  *   [eventApi]'s [AgentEventApi.getRunEvents]: the door is the record.
- * @param clock What "now" is for a `Rule.Quota.Time` — by default [eventApi]'s own clock,
- *   the one that stamped the `recorded_at` the run's elapsed time is measured from (F29).
+ * @param clock What "now" is for a `Rule.Quota.Time` and a `Rule.Window` — by default
+ *   [eventApi]'s own clock, the one that stamped the `recorded_at` the run's elapsed time is
+ *   measured from (F29).
  */
 class Breaker(
     private val userGrants: suspend (PlugManifest) -> UserGrants,
@@ -201,6 +211,7 @@ class Breaker(
             "Requirements are post-conditions on a finished execution and are checked by verification, " +
                 "not before a step runs",
         )
+        is Rule.Window -> evaluateWindow(tool, rule)
         else -> throw UnsupportedOperationException(
             "the Breaker has no evaluation for ${rule::class.simpleName} yet",
         )
@@ -262,6 +273,51 @@ class Breaker(
 
     private fun requireRunId(): RunId =
         runId ?: error("a quota is read from a run's record, and this Breaker admits steps for no run")
+
+    /**
+     * Whether running [tool] now falls inside [rule]'s window: [clock] read in the rule's
+     * own zone, never the device's (F29).
+     *
+     * - The selector first. An empty [Rule.Window.appliesTo] makes every step a candidate,
+     *   one with no tool included. Otherwise only a tool named in it is — by its own id or,
+     *   for a hosted run's `<seat>/<tool>`, by the bare id the consumer handed the run — and
+     *   a step with no tool never is, so a run-level check that admits `tool = null` reads a
+     *   Window over named tools as holding, and its trip stays one step's failure.
+     * - Then the window. When `from < until`, inside is `from <= time < until` on a day in
+     *   `days`. When `until <= from` it wraps midnight: `time >= from` on a day in `days`, or
+     *   `time < until` on the day after one.
+     *
+     * A zone the platform cannot resolve throws, which [admit] reports as a failure.
+     */
+    private fun evaluateWindow(tool: Tool<*>?, rule: Rule.Window): Breach? {
+        val zone = try {
+            TimeZone.of(rule.timezone)
+        } catch (e: IllegalArgumentException) {
+            throw IllegalArgumentException("'${rule.timezone}' is not a time zone this platform can resolve", e)
+        }
+        val candidate = when {
+            rule.appliesTo.isEmpty() -> true
+            tool == null -> false
+            else -> tool.id in rule.appliesTo || RoutedExecutor.bareIdOf(tool.id) in rule.appliesTo
+        }
+        if (!candidate) return null
+
+        val now = clock.now().toLocalDateTime(zone)
+        val time = now.time
+        val inside = if (rule.from < rule.until) {
+            time >= rule.from && time < rule.until && now.dayOfWeek in rule.days
+        } else {
+            (time >= rule.from && now.dayOfWeek in rule.days) ||
+                (time < rule.until && now.date.minus(1, DateTimeUnit.DAY).dayOfWeek in rule.days)
+        }
+        if (!inside) return null
+
+        val what = if (tool == null) "this step" else "'${tool.id}'"
+        return Breach(
+            "quiet window: it is ${time.clockText()} ${rule.timezone}, " +
+                "inside ${rule.from.clockText()}–${rule.until.clockText()}; $what may not run",
+        )
+    }
 
     /**
      * One admission's read of the run's record: made on the first quota that needs it and
@@ -385,7 +441,7 @@ class Breaker(
          *   a tool with no manifest cannot breach, and is `AccessPolicy` alone.
          * - `Quota.Tokens`, `Quota.Time`, and `Quota.Count:<what is counted>` —
          *   `Quota.Count:steps` for a run's [RunQuotas.steps].
-         * - `Transition`, `Requirements`, `Dependency`, `Deadline`, `Cadence`.
+         * - `Transition`, `Requirements`, `Dependency`, `Deadline`, `Cadence`, `Window`.
          *
          * Each name is written out here rather than read off the class, so renaming a case
          * does not rename what a consumer matches on. A limit is never part of a name: it
@@ -402,6 +458,7 @@ class Breaker(
             is Rule.Dependency -> "Dependency"
             is Rule.Deadline -> "Deadline"
             is Rule.Cadence -> "Cadence"
+            is Rule.Window -> "Window"
         }
 
         /**
@@ -421,6 +478,12 @@ class Breaker(
             if (to in allowed) return Admission.Pass
             val instead = if (allowed.isEmpty()) "nothing" else allowed.joinToString()
             return Admission.Trip("transition not allowed: '$from' may not move to '$to'; it may move to $instead")
+        }
+
+        /** `22:14`, or `22:14:30` when there are seconds: what a clock face would show. */
+        private fun LocalTime.clockText(): String {
+            val hhmm = "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
+            return if (second == 0) hhmm else "$hhmm:${second.toString().padStart(2, '0')}"
         }
 
         private fun Tool<*>?.describe(): String =
