@@ -6,6 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalTime
 import link.socket.ampere.field.Rule
 
 /**
@@ -35,6 +36,12 @@ class BreakerCanEvaluateTest {
         assertFalse(Breaker.canEvaluate(Rule.Quota.Count(limit = 3, of = "files")))
     }
 
+    @Test
+    fun `a window in a zone this platform cannot resolve cannot be evaluated`() {
+        val window = Rule.Window(from = LocalTime(22, 0), until = LocalTime(7, 0), timezone = "Mars/Olympus")
+        assertFalse(Breaker.canEvaluate(window), "a zone that cannot resolve would fail every step it guards")
+    }
+
     private fun sealedLeaves(root: KClass<*>): List<KClass<*>> =
         if (root.isSealed) root.sealedSubclasses.flatMap(::sealedLeaves) else listOf(root)
 
@@ -52,6 +59,7 @@ class BreakerCanEvaluateTest {
             Rule.Dependency(dependsOn = emptySet()) to false,
             Rule.Deadline(due = DUE) to false,
             Rule.Cadence(every = 10.minutes) to false,
+            Rule.Window(from = LocalTime(22, 0), until = LocalTime(7, 0), timezone = "America/Chicago") to true,
         )
     }
 }

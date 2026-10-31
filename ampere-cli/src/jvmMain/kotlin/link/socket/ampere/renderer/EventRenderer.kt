@@ -51,6 +51,7 @@ import link.socket.ampere.agents.domain.event.SupervisorEvent
 import link.socket.ampere.agents.domain.event.TaskEvent
 import link.socket.ampere.agents.domain.event.TicketEvent
 import link.socket.ampere.agents.domain.event.ToolEvent
+import link.socket.ampere.agents.execution.dispatch.AgentStop
 import link.socket.ampere.domain.arc.TerminationReason
 import link.socket.ampere.probe.Verdict
 
@@ -230,6 +231,10 @@ class EventRenderer(
             is SupervisorEvent.DispatchReconciled -> "🧹" to if (event.settled) blue else red
             is SupervisorEvent.ReconciliationCompleted ->
                 "🧹" to if (event.held > 0 || event.quarantinedLines > 0) red else green
+            // The Switchboard (AMPR-308): a refusal is routine, an agent that exited is blue,
+            // and one the supervisor had to stop is red.
+            is SupervisorEvent.DispatchRefused -> "🔌" to gray
+            is SupervisorEvent.AgentRunStopped -> "🔌" to if (event.stop == AgentStop.EXITED) blue else red
             // The event store refused a write, so something that happened has no row. Red: the
             // pane is the only place it will ever appear.
             is EventStoreEvent.PersistenceFailed -> "🧯" to red

@@ -6,7 +6,7 @@ tracked_sources:
   - ampere-work-linear/src/commonMain/kotlin/link/socket/ampere/work/linear/SupervisoryComment.kt
   - ampere-work-linear/src/commonMain/kotlin/link/socket/ampere/work/linear/SupervisoryLifecycle.kt
 related: [ChassisSpi, LifecycleTypes, DomainCanon]
-last_verified: 2026-10-09
+last_verified: 2026-10-31
 ---
 
 # Ticket Conventions
@@ -63,9 +63,11 @@ decides who owns a ticket and the state transition follows. The assignee field
 cannot do it — every write this adapter makes shares one API identity, so the
 work source cannot say *which* supervisor claimed a ticket.
 
-The model/effort line has a weaker justification and is honest about it: nothing
-in this repo parses it. It is advice from the agent that had the context to the
-agent or human that will not.
+The model/effort line has a weaker justification and is honest about it: it is
+advice from the agent that had the context to the agent or human that will not. The
+[Switchboard](switchboard.md) reads it (AMPR-308) to choose the model and effort it
+launches with, and falls back to a configured default for either half the line does
+not name.
 
 ## Where it lives
 
@@ -74,7 +76,8 @@ agent or human that will not.
 - `ampere-work-linear/.../SupervisoryLifecycle.kt` — `WorkSourceLabels.WAVE_PREFIX`, `GATE_AWAITING_VERDICT`, `GATE_ESCALATED`, `GATES`, and `SupervisoryStatusMapping`. The authority for M2 and M3.
 - `ampere-work-linear/.../WorkSourceIssueSource.kt` — `readyQueueRule`, the predicate list a ticket has to satisfy to be offered.
 - `.ampere/verify.yml` — where the verification manifest *will* live, per decision D3 on AMPR-286. **No such file exists in this repo yet**, and M4 is the convention that no ticket ever points at it.
-- Nothing in `ampere-core` reads any of this. The vocabulary is the adapter's and the authoring rules are this file's.
+- `ampere-core`'s [Switchboard](switchboard.md) is the one reader outside the adapter (AMPR-308): `TicketScope.kt` parses M1, `ModelRecommendation.kt` the model/effort line, and `HumanVerdicts.kt` the verdict header below. It takes the labels' spelling from the adapter, through `DispatchConventions`, and never spells one itself.
+- `WorkSourceLabels.RESEARCH` — the `research` label, read by two Switchboard rules: a `research` blocker satisfies the ready rule only when it is Done **and** carries a recorded human verdict, and a dispatched `research` ticket always ends at the verdict gate and an escalation.
 
 ## The seven conventions
 
@@ -156,6 +159,22 @@ Same header, then one blank line, then free-form markdown. The body *is* the
 escalation record: what failed, what was tried, what decision is needed. Posted
 together with the `gate:escalated` label — the label is what a query can filter
 on, the body is what the human needs to act.
+
+### Recorded human verdict
+
+Not a convention a supervisor writes, and never one it may write: the comment a
+person leaves when a STOP gate is decided. Its first line opens with
+`**Human verdict`, as on AMPR-288 and AMPR-291:
+
+```
+**Human verdict — recorded 2026-08-23 (operator answers relayed by the recon agent).**
+```
+
+Every write shares one API identity, so the author field cannot tell a person's
+verdict from an agent's findings; the opening line is the only evidence. The
+Switchboard's strict research-blocker rule reads it (`HumanVerdicts.isVerdict`), and
+every comment a supervisor writes opens with `claim:`, `release:` or `esc:` instead,
+which is what keeps that evidence unforgeable from the supervisor's side.
 
 ### Model + effort recommendation
 
@@ -287,7 +306,7 @@ appear under two repos and mean two different sets of files.
 - **Mark a verdict gate** — add `gate:awaiting-verdict`; move the ticket to the review state. Leave the wave label alone.
 - **Give a ticket back** — post `release:<issue>:<instance>` and then revert the state to the queued one, in that order: the comment is the durable half, so a process killed in between finds its own release on the next run and finishes the revert rather than commenting twice. `LinearWorkSource.release` is the whole protocol.
 - **Escalate** — post `esc:<issue>:<instance>` with a body that answers *what failed*, *what was tried*, *what decision is needed*, and add `gate:escalated`. Do not change the state: a ticket escalates from wherever it stopped, and overwriting the state destroys the record of where that was.
-- **Check whether a ticket is ready** — `wave:` label present, state is the queued one, neither member of `WorkSourceLabels.GATES` present, no open blocking relation. The first two push down to the server; the rest are client-side.
+- **Check whether a ticket is ready** — `wave:` label present, state is the queued one, neither member of `WorkSourceLabels.GATES` present, no open blocking relation. The first two push down to the server; the rest are client-side. The [Switchboard](switchboard.md) adds two of its own: every `research` blocker Done with a recorded verdict, and a scope that overlaps nothing in flight.
 
 ## Anti-patterns
 

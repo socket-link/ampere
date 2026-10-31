@@ -61,6 +61,7 @@ class FakeWorkSource(
         var teamName: String? = "Ampere",
         var dueDate: String? = null,
         var description: String? = null,
+        var branchName: String? = null,
     ) {
         val uuid: String = "uuid-$identifier"
         val history: MutableList<Span> = mutableListOf()
@@ -273,6 +274,7 @@ class FakeWorkSource(
         issue.projectName?.let { put("project", it) }
         put("dueDate", issue.dueDate?.let { JsonPrimitive(it) } ?: JsonNull)
         issue.description?.let { put("description", it) }
+        issue.branchName?.let { put("gitBranchName", it) }
         if (!omitStateHistory) {
             putJsonArray("stateHistory") {
                 issue.history.forEach { span ->
