@@ -7,7 +7,7 @@ tracked_sources:
   - ampere-core/src/commonMain/kotlin/link/socket/ampere/plug/PlugManifest.kt
   - ampere-core/src/commonMain/sqldelight/link/socket/ampere/db/Links.sq
 related: [DomainCanon, PlugPermissions, EventSerialBus]
-last_verified: 2026-10-29
+last_verified: 2026-11-22
 ---
 
 # Link Layer
@@ -18,6 +18,12 @@ A `Link` is the binding between a capability and its concrete medium — Socket'
 data-link layer. It carries a `Transport` (the wire), a `LinkDirection`
 (read/write/both), an `EgressClass` (where data goes), a `scope` of `CanonType`s
 (what may flow), and a `CredentialRef` (a pointer, never a secret).
+
+`EgressClass` has four members, and a consent surface is derived from which one
+a Link declares: `OnDevice` (never leaves the device), `FirstParty` (a
+Socket-operated service and nothing else), `ThirdParty(provider)` (a named
+external provider), and `ExternallyGoverned(app)` (an app the person runs, and
+from there wherever that app decides; AMPR-517).
 
 The grammar: *a Plug connects through a Link and powers Arcs.* A Plug declares
 `LinkRequirement`s — named kinds of wire — and `LinkResolutionService` matches
@@ -49,7 +55,7 @@ platform), exposed as `canProvide`/`canConsume` flags.
 
 ## Where it lives
 
-- `link/Link.kt` — `Link`, `EgressClass`, `CredentialRef`, and the alias convention `CredentialRef.aliasFor` / `forLink`.
+- `link/Link.kt` — `Link`, `EgressClass` (`egress.on_device`, `egress.first_party`, `egress.third_party`, `egress.externally_governed`), `CredentialRef`, and the alias convention `CredentialRef.aliasFor` / `forLink`.
 - `link/LinkId.kt` — the shared identifier (moved here from `mcp/` in AMPR-223), and `LinkId.forRequirement`, the `<transport>:<name>` form a Link minted for one requirement carries.
 - `link/Transport.kt` — `Transport`, `PlatformTarget`, `TransportCapability`, `TransportRole`, and the capability table.
 - `link/LinkDirection.kt` — `LinkDirection`, `LinkOperation` (Perceive/Execute).
@@ -79,6 +85,8 @@ platform), exposed as `canProvide`/`canConsume` flags.
 - **Transport capability is consulted before dispatch.** A consumer-role requirement on a transport whose platform capability is false fails with `TransportUnsupported`.
 - **Every resolution outcome reaches the bus.** A Plug that quietly does nothing because its Link was revoked is the opacity the glass brain exists to prevent.
 - **`Link` and `LinkResolutionFailure` are wire types** — stable `@SerialName`s; `Links.link_json` and trace payloads both depend on them.
+- **An `EgressClass` a reader does not know is an undecodable row, never another member.** The set is sealed and stored by `@SerialName`, so a build that predates a member (a `v0.26.0` reader meeting `egress.externally_governed`) gets a `SerializationException` from the sealed serializer: `SqlDelightLinkStore.list` / `listByTransport` skip the row and announce a `StoreRowUndecodableEvent`, `get` fails with `UndecodableLinkException`, and the Plug that needed the Link sees `MissingLink`. Nothing defaults to `OnDevice`: a wrong egress is a false statement on a consent sheet. Rows written before a member existed are untouched by its addition and decode as they did. No event carries an `EgressClass`, so no trace is affected either way.
+- **`ExternallyGoverned` claims the first hop and nothing after it.** The host chose the app; the app chooses the provider, may hand work to a second one, and can be reconfigured mid-run. The member therefore carries the app's name and no provider. A provider the host requested when it started a run is a fact about that run, recorded by the host with the run, never on the shared, long-lived Link. The member enforces nothing.
 - **Agents never touch `LinkStore` directly.** They go through `LinkResolutionService`.
 - **`PlugManifest.isCanonExternal` exempts `emits` only.** A canon-external Plug's *observations* are outside canon, but it may still declare `consumes` / `optionalConsumes`, and every `CanonType` in a `LinkRequirement.minimumScope` must appear in one of them. Only a canon-external Plug that consumes no canon at all keeps the wholesale carve-out from the empty-scope and undeclared-scope rules (AMPR-320).
 
@@ -91,6 +99,8 @@ platform), exposed as `canProvide`/`canConsume` flags.
 - **Grant / revoke** — `service.grant(plugId, linkId)`, `service.revokeGrant(plugId, linkId)`, `service.revokeLink(linkId)` (cascading).
 - **Give a Link a credential** — mint it with `credentialRef = CredentialRef.forLink(id)`, bind through `KeychainMcpCredentialBinding` (the in-memory twin in tests), and pass a `McpCredentialRefresher` to `PlugContext.create` when the credential is a short-lived OAuth token: the client then refreshes on connect when the token is within five minutes of expiry, and once after a 401, then reports `McpCredentialException.Rejected`.
 - **Seed the work-source credential** — `ampere credential seed`, reading the OAuth code exchange's response on stdin; `ampere-cli/README.md` has the command sequence. `ampere credential status` shows what is stored without showing it.
+- **Declare a Link to an app that routes work itself** — `egress = EgressClass.ExternallyGoverned(app = "<the app's name>")`. A host renders it as "this app decides where your data goes; choose your providers there", and tells it from the other three by type.
+- **Add an egress class** — add the member to the sealed `EgressClass` with a stable `@SerialName`, pin it in `LinkSerializationTest`, and say in the release notes that a consumer's exhaustive `when` over `EgressClass` stops compiling until it handles the member. That break is the prompt to write its consent copy.
 - **Add a transport** — add the enum member, add its per-platform row to `Transport.CAPABILITIES`, and pin the row in `TransportCapabilityTest`. Unlisted combinations default to `TransportCapability.NONE`.
 
 ## Anti-patterns
@@ -108,3 +118,7 @@ platform), exposed as `canProvide`/`canConsume` flags.
 - **Giving an MCP Link a hand-picked `keychainAlias`** (the old `"work-source-reconcile"`). The MCP credential binding never reads the field: it derives the alias from the `LinkId`, so a credential seeded under any other name is never found.
 - **Keying a long-lived credential to an opaque, per-command Link id.** The alias follows the id, so a command that mints its own id (as `ampere reconcile` did, with `work-source-reconcile`) cannot find what another command seeded. Every work-source command uses the id minted for the requirement, `mcp:work-source`.
 - **Minting a `<transport>:<name>` id for a Link meant to be shared across names.** The gate reads the suffix as a requirement name, so `oauth_rest:google` would answer only a requirement named `google`, never `calendar` or `mail`.
+- **Declaring `ThirdParty(provider)` for an app that picks the provider itself.** The Link names one provider and is wrong whenever the app routes elsewhere, which the host can neither see nor prevent: no tool takes an allow-list, and the person can change the provider in the app. Declare `ExternallyGoverned(app)`.
+- **Declaring `OnDevice` because the app runs on the person's machine.** The first hop is local; the work is then forwarded to a model provider. `OnDevice` means the data never leaves the device, and for an orchestrating app that is false on every run.
+- **Putting the requested provider on an `ExternallyGoverned` Link.** It would be stale by the next run and would read as a destination. Keep it with the run, and word it as a request ("started on X; the app may route elsewhere").
+- **Giving a reader a default `EgressClass` for a member it does not know.** Tempting as "graceful" version skew, and it turns an unreadable row into a consent sheet that says `OnDevice` about data bound for a third party. The skip and its `StoreRowUndecodableEvent` are the graceful path.

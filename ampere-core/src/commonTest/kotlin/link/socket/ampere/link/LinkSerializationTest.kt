@@ -2,8 +2,10 @@ package link.socket.ampere.link
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlinx.datetime.Instant
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import link.socket.ampere.agents.domain.event.EventRegistry
 import link.socket.ampere.agents.domain.event.EventSource
@@ -50,9 +52,34 @@ class LinkSerializationTest {
             EgressClass.OnDevice,
             EgressClass.FirstParty,
             EgressClass.ThirdParty("uber"),
+            EgressClass.ExternallyGoverned("orchestrator"),
         ).forEach { egress ->
             val encoded = json.encodeToString(EgressClass.serializer(), egress)
             assertEquals(egress, json.decodeFromString(EgressClass.serializer(), encoded))
+        }
+    }
+
+    @Test
+    fun `an externally governed egress is its own wire value and names only the app`() {
+        val encoded = json.encodeToString(
+            EgressClass.serializer(),
+            EgressClass.ExternallyGoverned("orchestrator"),
+        )
+
+        // A host tells this case from the other three by the discriminator, never by matching a
+        // provider name, and the value carries no provider to mistake for a destination.
+        assertEquals("""{"type":"egress.externally_governed","app":"orchestrator"}""", encoded)
+    }
+
+    @Test
+    fun `an egress class this build does not know fails to decode rather than becoming another`() {
+        // What an older reader does with a member added after it shipped: the discriminator is
+        // not in its sealed scope. Falling back to OnDevice would be a false consent statement.
+        assertFailsWith<SerializationException> {
+            json.decodeFromString(
+                EgressClass.serializer(),
+                """{"type":"egress.from_a_newer_build","app":"orchestrator"}""",
+            )
         }
     }
 
@@ -65,6 +92,14 @@ class LinkSerializationTest {
         assertTrue(
             json.encodeToString(EgressClass.serializer(), EgressClass.ThirdParty("uber"))
                 .contains("\"type\":\"egress.third_party\""),
+        )
+        assertTrue(
+            json.encodeToString(EgressClass.serializer(), EgressClass.FirstParty)
+                .contains("\"type\":\"egress.first_party\""),
+        )
+        assertTrue(
+            json.encodeToString(EgressClass.serializer(), EgressClass.ExternallyGoverned("orchestrator"))
+                .contains("\"type\":\"egress.externally_governed\""),
         )
     }
 
