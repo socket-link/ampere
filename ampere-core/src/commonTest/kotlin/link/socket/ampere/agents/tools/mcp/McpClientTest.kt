@@ -3,11 +3,16 @@ package link.socket.ampere.agents.tools.mcp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import link.socket.ampere.agents.tools.mcp.protocol.McpClient
+import link.socket.ampere.agents.tools.mcp.protocol.McpProtocolException
+import link.socket.ampere.agents.tools.mcp.protocol.McpProtocolVersion
+import link.socket.ampere.agents.tools.mcp.protocol.McpProtocolVersionException
+import link.socket.ampere.agents.tools.mcp.protocol.McpServerMessage
 
 /**
  * Tests for McpClient - MCP protocol implementation.
@@ -342,5 +347,135 @@ class McpClientTest {
 
         assertFalse(errorResponse.isSuccess())
         assertTrue(errorResponse.isError())
+    }
+
+    private fun initializeResponse(protocolVersion: String) = """
+        {
+            "jsonrpc": "2.0",
+            "id": "test-123",
+            "result": {
+                "protocolVersion": "$protocolVersion",
+                "serverInfo": {"name": "TestServer", "version": "1.0.0"},
+                "capabilities": {"tools": {"listChanged": true}}
+            }
+        }
+    """.trimIndent()
+
+    @Test
+    fun `initialize offers the newest revision this client implements`() {
+        val serialized = mcpClient.serializeRequest(mcpClient.createInitializeRequest())
+
+        assertEquals("2025-06-18", McpProtocolVersion.LATEST)
+        assertTrue(serialized.contains("\"protocolVersion\":\"2025-06-18\""), serialized)
+    }
+
+    @Test
+    fun `every supported revision is accepted from a server and remembered`() {
+        McpProtocolVersion.SUPPORTED.forEach { version ->
+            val client = McpClient()
+            val response = client.deserializeResponse(initializeResponse(version)).getOrThrow()
+
+            val result = client.processInitializeResponse(response).getOrThrow()
+
+            assertEquals(version, result.protocolVersion)
+            assertEquals(version, client.protocolVersion)
+            assertTrue(client.isInitialized)
+        }
+    }
+
+    @Test
+    fun `a revision this client does not implement fails the handshake and names both`() {
+        val response = mcpClient.deserializeResponse(initializeResponse("2026-07-28")).getOrThrow()
+
+        val failure = mcpClient.processInitializeResponse(response).exceptionOrNull()
+
+        val typed = assertIs<McpProtocolVersionException>(failure)
+        assertEquals("2025-06-18", typed.offered)
+        assertEquals("2026-07-28", typed.answered)
+        assertTrue("2025-06-18" in typed.message.orEmpty(), typed.message)
+        assertTrue("2026-07-28" in typed.message.orEmpty(), typed.message)
+        assertFalse(mcpClient.isInitialized)
+        assertEquals(null, mcpClient.protocolVersion)
+    }
+
+    @Test
+    fun `only revisions from the header onward require the protocol version header`() {
+        assertFalse(McpProtocolVersion.requiresHttpVersionHeader("2024-11-05"))
+        assertFalse(McpProtocolVersion.requiresHttpVersionHeader("2025-03-26"))
+        assertTrue(McpProtocolVersion.requiresHttpVersionHeader("2025-06-18"))
+    }
+
+    @Test
+    fun `a request without params serializes without the member`() {
+        val initialized = McpClient()
+        initialized.processInitializeResponse(
+            initialized.deserializeResponse(initializeResponse("2025-06-18")).getOrThrow(),
+        ).getOrThrow()
+
+        val listed = initialized.serializeRequest(initialized.createToolsListRequest())
+        val notified = initialized.serializeNotification(initialized.createInitializedNotification())
+        val called = initialized.serializeRequest(initialized.createToolCallRequest("echo", null))
+
+        assertFalse("params" in listed, listed)
+        assertEquals("""{"jsonrpc":"2.0","method":"notifications/initialized"}""", notified)
+        assertTrue("\"params\":{\"name\":\"echo\"}" in called, called)
+    }
+
+    @Test
+    fun `server messages are sorted into responses notifications and requests`() {
+        val response = mcpClient.parseServerMessages(
+            """{"jsonrpc":"2.0","id":"call-1","result":{}}""",
+        ).getOrThrow().single()
+        val numbered = mcpClient.parseServerMessages(
+            """{"jsonrpc":"2.0","id":7,"result":{}}""",
+        ).getOrThrow().single()
+        val unaddressed = mcpClient.parseServerMessages(
+            """{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}""",
+        ).getOrThrow().single()
+        val notification = mcpClient.parseServerMessages(
+            """{"jsonrpc":"2.0","method":"notifications/progress","params":{"progress":1}}""",
+        ).getOrThrow().single()
+        val request = mcpClient.parseServerMessages(
+            """{"jsonrpc":"2.0","id":"srv-1","method":"ping"}""",
+        ).getOrThrow().single()
+
+        assertEquals("call-1", assertIs<McpServerMessage.Response>(response).id)
+        assertEquals("7", assertIs<McpServerMessage.Response>(numbered).id)
+        assertEquals(null, assertIs<McpServerMessage.Response>(unaddressed).id)
+        assertEquals("notifications/progress", assertIs<McpServerMessage.Notification>(notification).method)
+        assertEquals("ping", assertIs<McpServerMessage.Request>(request).method)
+    }
+
+    @Test
+    fun `a JSON array is read as the messages it holds`() {
+        val messages = mcpClient.parseServerMessages(
+            """[{"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info","data":"x"}},""" +
+                """{"jsonrpc":"2.0","id":"call-1","result":{}}]""",
+        ).getOrThrow()
+
+        assertEquals(2, messages.size)
+        assertIs<McpServerMessage.Notification>(messages[0])
+        assertIs<McpServerMessage.Response>(messages[1])
+    }
+
+    @Test
+    fun `text that is not a JSON-RPC message is a protocol failure`() {
+        assertIs<McpProtocolException>(mcpClient.parseServerMessages("not json").exceptionOrNull())
+        assertIs<McpProtocolException>(mcpClient.parseServerMessages("42").exceptionOrNull())
+    }
+
+    @Test
+    fun `a tool that gives no description decodes with an empty one`() {
+        val initialized = McpClient()
+        initialized.processInitializeResponse(
+            initialized.deserializeResponse(initializeResponse("2025-06-18")).getOrThrow(),
+        ).getOrThrow()
+        val listing = initialized.deserializeResponse(
+            """{"jsonrpc":"2.0","id":"l","result":{"tools":[{"name":"bare","inputSchema":{"type":"object"}}]}}""",
+        ).getOrThrow()
+
+        val tools = initialized.processToolsListResponse(listing).getOrThrow().tools
+
+        assertEquals("", tools.single().description)
     }
 }

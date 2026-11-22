@@ -2,90 +2,33 @@ package link.socket.ampere.agents.tools.mcp.connection
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.request.get
-import io.ktor.client.request.header
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.isSuccess
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import java.util.concurrent.TimeUnit
 
 /**
- * JVM implementation of HttpClientHandler using Ktor.
+ * JVM implementation of HttpClientHandler: [KtorMcpHttpTransport] over the OkHttp engine.
  *
- * Uses OkHttp engine for HTTP communication.
+ * OkHttp's own timeouts are switched off (zero means none). Its defaults would give up on a
+ * response after ten seconds without a byte, which a quiet event stream or a slow tool call
+ * exceeds; the request's own time limit is the one clock.
  */
-actual class HttpClientHandler {
-    private var httpClient: HttpClient? = null
+actual class HttpClientHandler : McpHttpTransport {
 
-    actual suspend fun validateEndpoint(
-        url: String,
-        authToken: String?,
-        timeoutMs: Long,
-    ): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            // Create HTTP client if not already created
-            if (httpClient == null) {
-                httpClient = HttpClient(OkHttp) {
-                    engine {
-                        config {
-                            connectTimeout(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
-                            readTimeout(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
-                        }
-                    }
+    private val transport = KtorMcpHttpTransport {
+        HttpClient(OkHttp) {
+            engine {
+                config {
+                    connectTimeout(0, TimeUnit.MILLISECONDS)
+                    readTimeout(0, TimeUnit.MILLISECONDS)
+                    writeTimeout(0, TimeUnit.MILLISECONDS)
                 }
-            }
-
-            // Send a simple GET request to validate accessibility
-            val response: HttpResponse = httpClient!!.get(url) {
-                if (authToken != null) {
-                    header(HttpHeaders.Authorization, "Bearer $authToken")
-                }
-            }
-
-            // Check for successful response
-            if (!response.status.isSuccess()) {
-                throw httpStatusFailure("Endpoint validation", response.status)
             }
         }
     }
 
-    actual suspend fun sendRequest(
-        url: String,
-        body: String,
-        authToken: String?,
-        timeoutMs: Long,
-    ): Result<String> = withContext(Dispatchers.IO) {
-        runCatching {
-            val client = httpClient ?: throw McpConnectionException("Client not initialized")
+    actual override suspend fun <T> exchange(
+        request: McpHttpRequest,
+        handle: suspend (McpHttpResponse) -> T,
+    ): Result<T> = transport.exchange(request, handle)
 
-            // Send POST request with JSON body
-            val response: HttpResponse = client.post(url) {
-                header(HttpHeaders.ContentType, ContentType.Application.Json)
-                if (authToken != null) {
-                    header(HttpHeaders.Authorization, "Bearer $authToken")
-                }
-                setBody(body)
-            }
-
-            // Check for successful response
-            if (!response.status.isSuccess()) {
-                throw httpStatusFailure("HTTP request", response.status)
-            }
-
-            // Return response body
-            response.bodyAsText()
-        }
-    }
-
-    actual suspend fun close(): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            httpClient?.close()
-            httpClient = null
-        }
-    }
+    actual override suspend fun close(): Result<Unit> = transport.close()
 }

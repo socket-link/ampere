@@ -134,15 +134,10 @@ team:
 #       autonomy: ask-before-action
 #       timeout-ms: 60000
 #
-#     # Streaming MCP server via SSE
-#     - id: code-analysis
-#       name: Code Analysis
-#       protocol: sse
-#       endpoint: https://analysis.example.com/mcp
-#       autonomy: fully-autonomous
-#       auto-reconnect: true
-#
-# Supported protocols: stdio, http, sse
+# Supported protocols: stdio, http
+#   http is the Streamable HTTP transport: it reads a JSON answer or a
+#   server-sent event stream, whichever the server sends. There is no
+#   separate "sse" protocol; a configuration that named one should say http.
 # Supported autonomy levels:
 #   - ask-before-action: Agent proposes, waits for human approval
 #   - act-with-notification: Agent acts immediately, notifies human

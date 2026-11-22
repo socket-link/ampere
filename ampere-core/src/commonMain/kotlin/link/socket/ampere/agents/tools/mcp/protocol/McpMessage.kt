@@ -1,5 +1,7 @@
 package link.socket.ampere.agents.tools.mcp.protocol
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -31,13 +33,17 @@ sealed interface McpMessage {
  *
  * @property id Unique identifier for this request (used to match responses)
  * @property method The RPC method name (e.g., "initialize", "tools/list")
- * @property params Optional parameters for the method
+ * @property params Optional parameters for the method. Left out of the JSON
+ *   when null: JSON-RPC allows `params` to be absent, and a present one must be
+ *   an object or an array, which `null` is not.
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class McpRequest(
     override val jsonrpc: String = "2.0",
     val id: String,
     val method: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     val params: JsonElement? = null,
 ) : McpMessage
 
@@ -97,19 +103,96 @@ data class McpError(
 }
 
 /**
- * MCP Notification - A one-way notification from server to client.
+ * MCP Notification - A one-way message, in either direction.
  *
  * Notifications don't have an id and don't expect a response.
  *
  * @property method The notification method name
- * @property params Optional parameters
+ * @property params Optional parameters. Left out of the JSON when null, as
+ *   for [McpRequest].
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class McpNotification(
     override val jsonrpc: String = "2.0",
     val method: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     val params: JsonElement? = null,
 ) : McpMessage
+
+/**
+ * One JSON-RPC message a server sent, sorted by what it is.
+ *
+ * A server's stream can carry more than the response a request is waiting
+ * for: notifications about the work in progress, and requests of its own.
+ * Sorting them is the first step in giving each somewhere to go.
+ */
+sealed interface McpServerMessage {
+
+    /**
+     * An answer to a request.
+     *
+     * @property id The id of the request it answers, as text, or null for an
+     *   error the server could not tie to a request.
+     * @property payload The whole response object.
+     */
+    data class Response(val id: String?, val payload: JsonObject) : McpServerMessage
+
+    /** A one-way message, e.g. `notifications/progress` or `notifications/message`. */
+    data class Notification(val method: String, val params: JsonElement?) : McpServerMessage
+
+    /** A request the server makes of the client, e.g. `ping`. */
+    data class Request(val id: String, val method: String, val params: JsonElement?) : McpServerMessage
+}
+
+/**
+ * The revisions of the MCP specification this client speaks (AMPR-514).
+ *
+ * A revision is named by the date of its last backwards-incompatible change,
+ * so revisions order as their names do.
+ *
+ * The client offers [LATEST] in `initialize` and accepts any of [SUPPORTED] in
+ * the server's answer. What each one changes for a tools-only client:
+ *
+ * - [V2024_11_05]: the handshake, `tools/list`, `tools/call`.
+ * - [V2025_03_26]: the Streamable HTTP transport, and JSON-RPC batches, which
+ *   this client never sends and reads when a server does.
+ * - [V2025_06_18]: no batches, and an `MCP-Protocol-Version` header on every
+ *   HTTP request after the handshake.
+ *
+ * Two newer revisions exist and are deliberately not offered, because offering
+ * a revision is a promise to behave as it says:
+ *
+ * - `2025-11-25` lets a server close a response's event stream before it has
+ *   answered and expects the client to resume it with a `GET` and
+ *   `Last-Event-ID`. This client does not resume streams.
+ * - `2026-07-28` replaces the handshake and the session with per-request
+ *   metadata. That is a different client, not a newer header.
+ *
+ * A server that speaks only one of those answers with it, and the handshake
+ * fails with [McpProtocolVersionException] naming both sides.
+ */
+object McpProtocolVersion {
+
+    const val V2024_11_05: String = "2024-11-05"
+    const val V2025_03_26: String = "2025-03-26"
+    const val V2025_06_18: String = "2025-06-18"
+
+    /** The newest revision this client implements, and the one it offers. */
+    const val LATEST: String = V2025_06_18
+
+    /** Every revision this client accepts from a server, newest first. */
+    val SUPPORTED: List<String> = listOf(V2025_06_18, V2025_03_26, V2024_11_05)
+
+    fun isSupported(version: String): Boolean = version in SUPPORTED
+
+    /**
+     * Whether HTTP requests after the handshake must carry the
+     * `MCP-Protocol-Version` header under [version]. The header arrived with
+     * [V2025_06_18]; an older server was never told to expect it.
+     */
+    fun requiresHttpVersionHeader(version: String): Boolean = version >= V2025_06_18
+}
 
 // ==================== MCP-Specific Request Types ====================
 
@@ -124,7 +207,7 @@ data class McpNotification(
  */
 @Serializable
 data class InitializeParams(
-    val protocolVersion: String = "2024-11-05", // MCP protocol version
+    val protocolVersion: String = McpProtocolVersion.LATEST,
     val clientInfo: ClientInfo,
     val capabilities: ClientCapabilities = ClientCapabilities(),
 )
@@ -139,16 +222,21 @@ data class ClientInfo(
 )
 
 /**
- * Client capabilities - what the client supports.
+ * Client capabilities - the optional features this client offers a server.
  *
- * For now, this is minimal, but can be extended to support:
- * - Sampling (LLM-powered agent interactions)
- * - Resources (file/data access)
- * - Prompts (pre-defined prompt templates)
+ * It offers none: no roots, no sampling, no elicitation. That is the empty
+ * object `{}` on the wire, which is what this class encodes to. Calling tools
+ * is not a client capability; a server declares `tools`, a client just calls
+ * them.
+ *
+ * @property experimental Non-standard capabilities, by name. Left out of the
+ *   JSON when null, since a server may reject a `null` where an object belongs.
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class ClientCapabilities(
-    val tools: ToolCapabilities = ToolCapabilities(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val experimental: JsonObject? = null,
 )
 
 /**
@@ -205,13 +293,15 @@ data class ToolsListResult(
  * It gets converted to our internal McpTool type.
  *
  * @property name The tool's unique name
- * @property description Human-readable description of what the tool does
+ * @property description Human-readable description of what the tool does.
+ *   Optional in the protocol, so a tool that gives none has an empty one here
+ *   rather than failing the whole `tools/list`.
  * @property inputSchema JSON schema describing the tool's input parameters
  */
 @Serializable
 data class McpToolDescriptor(
     val name: String,
-    val description: String,
+    val description: String = "",
     val inputSchema: JsonObject? = null,
 )
 
@@ -221,11 +311,14 @@ data class McpToolDescriptor(
  * Sent to invoke a specific tool on the MCP server.
  *
  * @property name The name of the tool to invoke
- * @property arguments The input arguments (must match the tool's inputSchema)
+ * @property arguments The input arguments (must match the tool's inputSchema).
+ *   Left out of the JSON when null.
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class ToolCallParams(
     val name: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     val arguments: JsonElement? = null,
 )
 
