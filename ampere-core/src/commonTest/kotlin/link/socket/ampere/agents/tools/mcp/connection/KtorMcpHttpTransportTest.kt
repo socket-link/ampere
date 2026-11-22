@@ -15,17 +15,28 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 
 /**
  * [KtorMcpHttpTransport] over a mock engine: what it hands Ktor, and what it
  * hands back (AMPR-514). What a real engine adds or strips is the JVM fixture
  * test's question; this one runs on every platform.
+ *
+ * Bodies run on [Dispatchers.Default], off `runTest`'s virtual clock. The mock
+ * engine answers on a dispatcher of its own, so to the test scheduler the wait
+ * for it looks like idleness, and virtual time would jump straight past the
+ * exchange's time limit before the answer arrived.
  */
 class KtorMcpHttpTransportTest {
 
     private class Sent(val request: HttpRequestData, val body: String)
+
+    private fun onRealClock(body: suspend () -> Unit) = runTest {
+        withContext(Dispatchers.Default) { body() }
+    }
 
     private val sent = mutableListOf<Sent>()
 
@@ -59,7 +70,7 @@ class KtorMcpHttpTransportTest {
     )
 
     @Test
-    fun `a post carries its headers and its body as JSON`() = runTest {
+    fun `a post carries its headers and its body as JSON`() = onRealClock {
         transport().exchange(post()) { }.getOrThrow()
 
         val request = sent.single()
@@ -73,7 +84,7 @@ class KtorMcpHttpTransportTest {
     }
 
     @Test
-    fun `a delete carries its headers and no body`() = runTest {
+    fun `a delete carries its headers and no body`() = onRealClock {
         val delete = McpHttpRequest(
             method = McpHttpMethod.DELETE,
             url = "https://mcp.example.test/mcp",
@@ -93,7 +104,7 @@ class KtorMcpHttpTransportTest {
     }
 
     @Test
-    fun `response headers are found whatever their case`() = runTest {
+    fun `response headers are found whatever their case`() = onRealClock {
         val transport = transport(
             headers = mapOf(
                 "Content-Type" to "Text/Event-Stream; charset=utf-8",
@@ -109,7 +120,7 @@ class KtorMcpHttpTransportTest {
     }
 
     @Test
-    fun `a body is read a line at a time and then ends`() = runTest {
+    fun `a body is read a line at a time and then ends`() = onRealClock {
         val transport = transport(
             headers = mapOf("Content-Type" to "text/event-stream"),
             body = "event: message\ndata: one\n\ndata: two\n\n",
@@ -125,7 +136,7 @@ class KtorMcpHttpTransportTest {
     }
 
     @Test
-    fun `a body is read whole as text`() = runTest {
+    fun `a body is read whole as text`() = onRealClock {
         val text = transport(body = """{"jsonrpc":"2.0","id":"1","result":{}}""")
             .exchange(post()) { response -> response.body.readText() }
             .getOrThrow()
@@ -134,7 +145,7 @@ class KtorMcpHttpTransportTest {
     }
 
     @Test
-    fun `any status is a response and reaches the handler`() = runTest {
+    fun `any status is a response and reaches the handler`() = onRealClock {
         val transport = transport(
             status = HttpStatusCode.Unauthorized,
             headers = mapOf("WWW-Authenticate" to "Bearer resource_metadata=\"https://mcp.example.test/meta\""),
@@ -148,7 +159,7 @@ class KtorMcpHttpTransportTest {
     }
 
     @Test
-    fun `a media type is null when the response declares none`() = runTest {
+    fun `a media type is null when the response declares none`() = onRealClock {
         val mediaType = transport(status = HttpStatusCode.Accepted, headers = emptyMap(), body = "")
             .exchange(post()) { response -> response.mediaType }
             .getOrThrow()
@@ -157,7 +168,7 @@ class KtorMcpHttpTransportTest {
     }
 
     @Test
-    fun `what the handler throws is the failure`() = runTest {
+    fun `what the handler throws is the failure`() = onRealClock {
         val thrown = McpConnectionException("the handler did not like it")
 
         val failure = transport().exchange<Unit>(post()) { throw thrown }.exceptionOrNull()
@@ -166,7 +177,7 @@ class KtorMcpHttpTransportTest {
     }
 
     @Test
-    fun `an exchange that outlives its limit is a request timeout`() = runTest {
+    fun `an exchange that outlives its limit is a request timeout`() = onRealClock {
         val transport = KtorMcpHttpTransport { HttpClient(MockEngine { awaitCancellation() }) }
 
         val failure = transport.exchange(post(timeoutMs = 200)) { }.exceptionOrNull()
