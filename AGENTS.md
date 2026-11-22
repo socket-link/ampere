@@ -288,10 +288,28 @@ pre-flight, which covers what PR CI does not. `main` always carries the *next*,
 unreleased version, so the number to release is the one already in
 `gradle.properties` and the tag goes on a commit from before the next bump.
 
-Agents never push tags and never run a `publish*` task, `publishToMavenLocal` included: Socket's
-build resolves `mavenLocal()` on this Mac, so a local publish silently changes what every Socket
-workspace compiles against. Don't run `scripts/bump-version.sh` or edit a version unless the
-ticket is the bump. A ticket that needs a release is a reason to ask (see "When you need Miley").
+**Cutting a release is something agents do.** When Miley asks for a release ("create a new
+release", "cut 0.28.0"), carry it out end to end per [docs/RELEASING.md](docs/RELEASING.md); don't
+hand the steps back and don't stop to ask whether you may. Miley's request is the authorisation for
+all of these:
+
+- create `local.properties` if the checkout lacks it (see "Safety Boundaries" for its contents);
+- run `scripts/release-preflight.sh <version>` on the exact commit you will tag;
+- push the `v<version>` tag, which is the release;
+- watch the publish run, then open the next-cycle bump PR with `scripts/bump-version.sh`
+  (RELEASING.md steps 4 to 6).
+
+Unless Miley names a commit, the release commit is the tip of `origin/main`. Two gates still apply,
+because they protect something permanent. Wait for CI to be green on that exact SHA (a run still in
+progress is a reason to wait, not to ask). And never tag past a failed pre-flight: a red
+pre-flight is fixed on a normal PR and the release restarts from the new `main`. Stop and ask only
+if one of those cannot be met, or if the publish step fails (the version may be burned; see
+RELEASING.md step 4).
+
+Without a release request from Miley, agents don't push tags or edit a version. Agents never run a
+`publish*` task, `publishToMavenLocal` included: Socket's build resolves `mavenLocal()` on this
+Mac, so a local publish silently changes what every Socket workspace compiles against. The tag push
+is what publishes, from CI.
 
 ### CLI
 ```bash
@@ -440,9 +458,18 @@ git worktrees sharing a single `.git` directory. Some refs and state are
 
 ## Safety Boundaries
 
-- **Never** modify `local.properties` (contains API keys)
+- **Never** overwrite or edit a `local.properties` that already exists (it may hold real API
+  keys). A checkout that has none gets one with CI's placeholders, which is enough to compile and
+  test, and which is gitignored:
+  ```
+  anthropic_api_key=placeholder
+  google_api_key=placeholder
+  openai_api_key=placeholder
+  sdk.dir=<Android SDK path, usually ~/Library/Android/sdk>
+  ```
 - **Never** push directly to `main`
-- **Never** push a tag or run a `publish*` task (see "Release")
+- **Never** push a tag except to cut a release Miley asked for, and never run a `publish*` task
+  (see "Release")
 - **Never** delete SQLDelight migration files
 - **Never** commit API keys, tokens, or secrets
 - **Always** run one narrow local validation pass before pushing, and leave the full matrix to CI
@@ -452,9 +479,11 @@ git worktrees sharing a single `.git` directory. Some refs and state are
 ## Permissions
 
 - **File read:** any file in the repository
-- **File write:** `src/`, `test/`, `docs/`, config files (not `local.properties`)
+- **File write:** `src/`, `test/`, `docs/`, config files, and a new `local.properties` where none
+  exists (never an existing one)
 - **Git:** branch creation, commits, and pushing your workspace branch (`--force-with-lease`
-  after a rebase). Never `main`, never a tag.
+  after a rebase). Never `main`. Tags only for a release Miley asked for: `v<version>` on the
+  commit the pre-flight passed on.
 - **GitHub (`gh`):** open and update your own branch's PR; read and re-run its workflow runs and
   read their logs; delete its own Actions caches. Nothing else: no merges unless asked, no
   edits to branch protection, rulesets, workflows or secrets
