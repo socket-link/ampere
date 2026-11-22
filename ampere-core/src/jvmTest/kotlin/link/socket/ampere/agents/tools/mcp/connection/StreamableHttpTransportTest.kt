@@ -317,10 +317,10 @@ class StreamableHttpTransportTest {
 
         val failure = client.connect().exceptionOrNull()
 
-        // With no refresher, the facade reports a 401 as a rejected credential: the path that
-        // refreshes and retries when there is one starts from the same exception.
-        val rejected = assertIs<McpCredentialException.Rejected>(failure)
-        val refusal = assertIs<McpUnauthorizedException>(rejected.cause)
+        // A bearer with nothing to refresh it ends in "authorize again" (AMPR-516), and the
+        // transport's 401 is its cause: the challenge a host hands to discovery is still there.
+        val reauthorize = assertIs<McpCredentialException.ReauthorizationRequired>(failure)
+        val refusal = assertIs<McpUnauthorizedException>(reauthorize.cause)
         assertEquals(ScriptedMcpServer.CHALLENGE, refusal.wwwAuthenticate)
     }
 

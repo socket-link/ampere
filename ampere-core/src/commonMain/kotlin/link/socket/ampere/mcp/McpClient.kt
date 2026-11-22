@@ -1,7 +1,9 @@
 package link.socket.ampere.mcp
 
+import kotlin.time.Duration
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonElement
 import link.socket.ampere.agents.tools.mcp.McpProtocol
 import link.socket.ampere.agents.tools.mcp.McpServerConfiguration
@@ -48,6 +50,16 @@ import link.socket.ampere.plug.McpServerDependency
  *   land twice.
  *
  * Without one, a 401 is reported as [McpCredentialException.Rejected] at once.
+ *
+ * ### A credential with no refresh token (AMPR-516)
+ *
+ * An authorization server may issue an access token and nothing to renew it
+ * with. Such a credential ends in [McpCredentialException.ReauthorizationRequired],
+ * with or without a [credentialRefresher]: at [connect] when its stated expiry
+ * has passed, before anything is sent, and after a 401 otherwise. Before
+ * reporting a 401 that way the client re-reads the binding, so a Link the
+ * person authorized again in the meantime — [McpOAuthAuthorizer] replaces the
+ * stored credential in one step — is reopened on the new credential instead.
  */
 class McpClient(
     private val dependency: McpServerDependency,
@@ -56,6 +68,7 @@ class McpClient(
     private val connectionFactory: (McpServerDependency, McpCredential?) -> McpServerConnection =
         ::defaultHttpConnection,
     private val credentialRefresher: McpCredentialRefresher? = null,
+    private val clock: Clock = Clock.System,
 ) {
     private val mutex = Mutex()
     private var connection: McpServerConnection? = null
@@ -113,6 +126,18 @@ class McpClient(
         var credential = credentialBinding.resolve(linkId, dependency.uri)
             .getOrElse { return Result.failure(it) }
 
+        // Expired, with no refresh token to replace it: say so before spending a request on it.
+        if (credential != null && credential.needsReauthorization(clock.now())) {
+            return Result.failure(
+                McpCredentialException.ReauthorizationRequired(
+                    linkId = linkId,
+                    mcpUri = dependency.uri,
+                    reason = McpCredentialException.ReauthorizationRequired.Reason.EXPIRED,
+                    expiredAt = credential.expiresAt,
+                ),
+            )
+        }
+
         if (credentialRefresher != null && credential != null && credentialRefresher.isDue(credential)) {
             credential = credentialRefresher.refresh(linkId, dependency.uri, stale = credential)
                 .getOrElse { return Result.failure(it) }
@@ -165,7 +190,7 @@ class McpClient(
 
         val second = operation(reopened)
         val refusedAgain = second.exceptionOrNull() as? McpUnauthorizedException ?: return second
-        return Result.failure(McpCredentialException.Rejected(linkId, refreshed = true, cause = refusedAgain))
+        return Result.failure(refusedAfterReopen(refusedAgain))
     }
 
     /**
@@ -174,6 +199,9 @@ class McpClient(
      * credential. Must be called holding [mutex].
      */
     private suspend fun reopenAfter(refused: McpUnauthorizedException): Result<McpServerConnection> {
+        val carried = connectionCredential
+        if (carried?.authToken != null && !carried.isRefreshable) return reopenOnReplacement(carried, refused)
+
         val refresher = credentialRefresher
             ?: return Result.failure(McpCredentialException.Rejected(linkId, refreshed = false, cause = refused))
 
@@ -186,8 +214,52 @@ class McpClient(
 
         val reopened = open(refreshed)
         val refusedAgain = reopened.exceptionOrNull() as? McpUnauthorizedException ?: return reopened
-        return Result.failure(McpCredentialException.Rejected(linkId, refreshed = true, cause = refusedAgain))
+        return Result.failure(refusedAfterReopen(refusedAgain))
     }
+
+    /**
+     * After [refused], for a credential no refresh can replace (AMPR-516): the only way
+     * forward is a credential authorized since [carried] was read, by the person just now
+     * or by another process. Open on that one if the binding holds it; otherwise the Link
+     * needs authorizing again. Must be called holding [mutex].
+     */
+    private suspend fun reopenOnReplacement(
+        carried: McpCredential,
+        refused: McpUnauthorizedException,
+    ): Result<McpServerConnection> {
+        val stored = credentialBinding.resolve(linkId, dependency.uri).getOrNull()
+            ?: return Result.failure(reauthorizationRequired(refused))
+        val replaced = stored.authToken != null &&
+            stored.authToken != carried.authToken &&
+            !stored.expiresWithin(Duration.ZERO, clock.now())
+        if (!replaced) return Result.failure(reauthorizationRequired(refused))
+
+        connection?.disconnect()
+        connection = null
+        connectionCredential = null
+
+        val reopened = open(stored)
+        val refusedAgain = reopened.exceptionOrNull() as? McpUnauthorizedException ?: return reopened
+        return Result.failure(refusedAfterReopen(refusedAgain))
+    }
+
+    /** What a second 401 means, on the credential the reopened connection carries. */
+    private fun refusedAfterReopen(refusedAgain: McpUnauthorizedException): McpCredentialException {
+        val carried = connectionCredential
+        return if (carried?.authToken != null && !carried.isRefreshable) {
+            reauthorizationRequired(refusedAgain)
+        } else {
+            McpCredentialException.Rejected(linkId, refreshed = true, cause = refusedAgain)
+        }
+    }
+
+    private fun reauthorizationRequired(refused: McpUnauthorizedException) =
+        McpCredentialException.ReauthorizationRequired(
+            linkId = linkId,
+            mcpUri = dependency.uri,
+            reason = McpCredentialException.ReauthorizationRequired.Reason.REFUSED,
+            cause = refused,
+        )
 
     /** Build a connection on [credential], cache it, and run the transport connect and the handshake. */
     private suspend fun open(credential: McpCredential?): Result<McpServerConnection> {
