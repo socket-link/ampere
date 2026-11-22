@@ -44,6 +44,13 @@ interface McpHttpTransport {
      * The result is a failure when no response arrived, when [handle] threw, or
      * when the whole exchange outlived [McpHttpRequest.timeoutMs], which is
      * [McpRequestTimeoutException]. Cancelling the caller cancels the exchange.
+     *
+     * [handle] runs in the caller's own coroutine, and a
+     * [CancellationException][kotlinx.coroutines.CancellationException] it
+     * throws is rethrown as it is, never turned into a failure. A caller that
+     * emits to a flow from inside [handle] depends on both: the emission is in
+     * the collector's context, and a collector that has seen enough stops the
+     * exchange by the usual means.
      */
     suspend fun <T> exchange(
         request: McpHttpRequest,
@@ -146,7 +153,29 @@ class KtorMcpHttpTransport(
     override suspend fun <T> exchange(
         request: McpHttpRequest,
         handle: suspend (McpHttpResponse) -> T,
-    ): Result<T> = try {
+    ): Result<T> {
+        // Whether the response has been handed to `handle`: from then on a cancellation is the
+        // handler's own business, or the caller's.
+        var handing = false
+        return try {
+            send(request, handle, onResponse = { handing = true })
+        } catch (e: CancellationException) {
+            if (handing) throw e
+            // Cancelled by the caller: stop. Cancelled from inside, because the engine gave up on
+            // the call, is a failure like any other; rethrowing it would end the caller as if it
+            // had been cancelled.
+            currentCoroutineContext().ensureActive()
+            Result.failure(McpConnectionException("The HTTP exchange was abandoned: ${e.message}", e))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun <T> send(
+        request: McpHttpRequest,
+        handle: suspend (McpHttpResponse) -> T,
+        onResponse: () -> Unit,
+    ): Result<T> {
         val http = clientLock.withLock { client ?: clientFactory().also { client = it } }
 
         val handled = withTimeoutOrNull(request.timeoutMs) {
@@ -166,6 +195,7 @@ class KtorMcpHttpTransport(
             // block returns, which is what makes the body a stream rather than a buffer.
             val value = statement.execute { response ->
                 val body = KtorBody(response)
+                onResponse()
                 try {
                     handle(McpHttpResponse(response.status.value, response.headerMap(), body))
                 } finally {
@@ -175,19 +205,11 @@ class KtorMcpHttpTransport(
             Handled(value)
         }
 
-        if (handled == null) {
+        return if (handled == null) {
             Result.failure(McpRequestTimeoutException(request.timeoutMs))
         } else {
             Result.success(handled.value)
         }
-    } catch (e: CancellationException) {
-        // Cancelled by the caller: stop. Cancelled from inside, because the engine gave up on the
-        // call, is a failure like any other; rethrowing it would end the caller as if it had
-        // been cancelled.
-        currentCoroutineContext().ensureActive()
-        Result.failure(McpConnectionException("The HTTP exchange was abandoned: ${e.message}", e))
-    } catch (e: Exception) {
-        Result.failure(e)
     }
 
     override suspend fun close(): Result<Unit> = clientLock.withLock {
@@ -210,6 +232,9 @@ class KtorMcpHttpTransport(
                 body.drain()
                 true
             } ?: false
+        } catch (e: McpConnectionException) {
+            // The body broke while being drained. There is nothing left to wait for, and the
+            // handler's own outcome is the one that counts.
         } finally {
             // Also reached when the caller was cancelled mid-drain: the body is dropped either way.
             if (!ended) response.cancel()
@@ -230,12 +255,25 @@ class KtorMcpHttpTransport(
         var ended = false
             private set
 
-        override suspend fun readLine(): String? {
+        override suspend fun readLine(): String? = reading {
             val open = channel ?: response.bodyAsChannel().also { channel = it }
-            return open.readUTF8Line().also { line -> if (line == null) ended = true }
+            open.readUTF8Line().also { line -> if (line == null) ended = true }
         }
 
-        override suspend fun readText(): String = response.bodyAsText().also { ended = true }
+        override suspend fun readText(): String = reading {
+            response.bodyAsText().also { ended = true }
+        }
+
+        /**
+         * A read that the engine cancels while the reader itself is not cancelled is a broken
+         * body, and is reported as one. Left as a cancellation it would pass for the reader's own.
+         */
+        private suspend inline fun <R> reading(read: () -> R): R = try {
+            read()
+        } catch (e: CancellationException) {
+            currentCoroutineContext().ensureActive()
+            throw McpConnectionException("The response body was cut off: ${e.message}", e)
+        }
 
         suspend fun drain() {
             while (readLine() != null) {

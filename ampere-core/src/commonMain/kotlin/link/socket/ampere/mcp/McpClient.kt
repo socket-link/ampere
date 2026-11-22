@@ -1,6 +1,8 @@
 package link.socket.ampere.mcp
 
 import kotlin.time.Duration
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
@@ -9,6 +11,8 @@ import link.socket.ampere.agents.tools.mcp.McpProtocol
 import link.socket.ampere.agents.tools.mcp.McpServerConfiguration
 import link.socket.ampere.agents.tools.mcp.connection.HttpClientHandler
 import link.socket.ampere.agents.tools.mcp.connection.HttpMcpConnection
+import link.socket.ampere.agents.tools.mcp.connection.McpCallEvent
+import link.socket.ampere.agents.tools.mcp.connection.McpCallOptions
 import link.socket.ampere.agents.tools.mcp.connection.McpServerConnection
 import link.socket.ampere.agents.tools.mcp.connection.McpUnauthorizedException
 import link.socket.ampere.agents.tools.mcp.protocol.InitializeResult
@@ -32,7 +36,7 @@ import link.socket.ampere.plug.McpServerDependency
  * Lifecycle:
  * 1. [connect] — resolve credential, build the connection, run handshake.
  * 2. [listTools] — query tool descriptors from the server.
- * 3. [callTool] — invoke a remote tool.
+ * 3. [callTool] — invoke a remote tool; [callToolStreaming] to watch it run.
  * 4. [close] — disconnect and release transport resources.
  *
  * ### Credential refresh (AMPR-464)
@@ -50,6 +54,12 @@ import link.socket.ampere.plug.McpServerDependency
  *   land twice.
  *
  * Without one, a 401 is reported as [McpCredentialException.Rejected] at once.
+ *
+ * [callToolStreaming] keeps the same promise with one condition added
+ * (AMPR-515): the refresh and the second attempt happen only when the 401 is
+ * the first thing the call yields. A call that has already reported progress
+ * has been accepted and may have acted, so nothing that follows makes this
+ * class send it again.
  *
  * ### A credential with no refresh token (AMPR-516)
  *
@@ -114,6 +124,12 @@ class McpClient(
         override suspend fun invokeTool(toolName: String, arguments: JsonElement?): Result<ToolCallResult> =
             callTool(toolName, arguments)
 
+        override fun invokeToolStreaming(
+            toolName: String,
+            arguments: JsonElement?,
+            options: McpCallOptions,
+        ): Flow<McpCallEvent> = callToolStreaming(toolName, arguments, options)
+
         override suspend fun disconnect(): Result<Unit> = close()
     }
 
@@ -156,6 +172,71 @@ class McpClient(
 
     suspend fun callTool(name: String, arguments: JsonElement?): Result<ToolCallResult> =
         withCredentialRetry("callTool()") { it.invokeTool(name, arguments) }
+
+    /**
+     * Invoke a remote tool and watch it run: the server's progress and log
+     * messages as they arrive, then exactly one terminal event.
+     *
+     * The flow is cold, and each collection is its own call. It asks the server
+     * for progress, runs under [options]' time limit, and tells the server when
+     * the collector is cancelled or the limit runs out; see
+     * [McpServerConnection.invokeToolStreaming]. A failure is the terminal
+     * [McpCallEvent.Failed], with the cause [callTool] would have failed with.
+     *
+     * This is the call for an adapter that *is* the plug (see
+     * [PlugContext.mcpClientFor][link.socket.ampere.plug.PlugContext.mcpClientFor]).
+     * A tool an agent dispatches goes through
+     * [ToolExecutionEngine][link.socket.ampere.agents.execution.ToolExecutionEngine],
+     * which does not surface progress in this release.
+     */
+    fun callToolStreaming(
+        name: String,
+        arguments: JsonElement?,
+        options: McpCallOptions = McpCallOptions.Default,
+    ): Flow<McpCallEvent> = flow {
+        val active = connection
+        if (active == null) {
+            emit(McpCallEvent.Failed(notConnected("callToolStreaming()")))
+            return@flow
+        }
+
+        // A 401 can only be acted on while it is the first thing the call has said: held back
+        // here, it is replaced by a second attempt; after any other event it is passed on as it is.
+        var yielded = false
+        var refused: McpUnauthorizedException? = null
+        active.invokeToolStreaming(name, arguments, options).collect { event ->
+            val refusal = (event as? McpCallEvent.Failed)?.cause as? McpUnauthorizedException
+            if (refusal != null && !yielded) {
+                refused = refusal
+            } else {
+                yielded = true
+                emit(event)
+            }
+        }
+        val firstRefusal = refused ?: return@flow
+
+        val reopened = mutex.withLock {
+            // Another caller's 401 may already have reopened the connection; use theirs.
+            val current = connection
+            if (current != null && current !== active) {
+                Result.success(current)
+            } else {
+                reopenAfter(firstRefusal)
+            }
+        }.getOrElse { failure ->
+            emit(McpCallEvent.Failed(failure))
+            return@flow
+        }
+
+        reopened.invokeToolStreaming(name, arguments, options).collect { event ->
+            val refusedAgain = (event as? McpCallEvent.Failed)?.cause as? McpUnauthorizedException
+            if (refusedAgain != null) {
+                emit(McpCallEvent.Failed(refusedAfterReopen(refusedAgain)))
+            } else {
+                emit(event)
+            }
+        }
+    }
 
     suspend fun close(): Result<Unit> = mutex.withLock {
         val active = connection ?: return Result.success(Unit)

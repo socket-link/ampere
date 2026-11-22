@@ -1,8 +1,13 @@
 package link.socket.ampere.agents.tools.mcp.connection
 
 import co.touchlab.kermit.Logger
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
 import link.socket.ampere.agents.tools.mcp.McpServerConfiguration
 import link.socket.ampere.agents.tools.mcp.protocol.InitializeResult
@@ -24,9 +29,10 @@ import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
  * - `Content-Type: application/json`: the body is the response.
  * - `Content-Type: text/event-stream`: the body is a stream of server-sent
  *   events, read as it arrives until the event that answers this request. The
- *   server may send other messages first (notifications about the work, requests
- *   of its own). They are sorted and handed on rather than dropped; nothing
- *   listens for them yet, so they are logged at debug.
+ *   server may send other messages first. Progress about a tool call and the
+ *   server's log messages become [McpCallEvent]s for a caller that collects
+ *   [invokeToolStreaming]; anything else (a request of the server's own,
+ *   progress for another call) is logged at debug.
  *
  * What the transport requires of a client, and where this class does it:
  *
@@ -53,6 +59,24 @@ import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
  * Requests are not serialized against each other: a tool call that takes
  * minutes does not hold up a second call on the same connection. Only the
  * handshake and the session it produces are guarded.
+ *
+ * ### Tool calls (AMPR-515)
+ *
+ * [invokeTool] and [invokeToolStreaming] are one call. The streaming form asks
+ * the server for progress and yields what arrives; the plain form does not ask
+ * and returns only the ending. Both:
+ *
+ * - **Run under a time limit of the caller's choosing** ([McpCallOptions]),
+ *   defaulting to [McpServerConfiguration.timeoutMs]. It is a ceiling on the
+ *   whole call, so a tool that runs for minutes is called with minutes.
+ * - **Tell the server when the answer is no longer wanted.** If the caller is
+ *   cancelled, or the limit runs out, the connection sends
+ *   `notifications/cancelled` for the request and waits at most
+ *   [CANCEL_GRACE_MS] for it to be delivered, so a dead server cannot hold a
+ *   cancellation. Dropping the HTTP request is not a cancellation by the
+ *   transport's rules; a server keeps working until it is told. The response
+ *   stream itself cannot be held open past the cancellation (the HTTP engine
+ *   lets go of it at once), so the notification travels as its own `POST`.
  *
  * Nothing here logs a credential. The bearer token is only ever a header value,
  * and a session id is logged as its first characters and its length.
@@ -125,7 +149,8 @@ class HttpMcpConnection(
 
         logger.i { "Listing tools from ${config.displayName}..." }
 
-        return call(mcpClient.createToolsListRequest(), current)
+        val request = mcpClient.createToolsListRequest()
+        return call(request, current, config.timeoutMs) { message -> logUnrouted(request, message) }
             .mapCatching { response -> mcpClient.processToolsListResponse(response).getOrThrow() }
             .map { result ->
                 logger.i { "Discovered ${result.tools.size} tools from ${config.displayName}" }
@@ -136,19 +161,48 @@ class HttpMcpConnection(
     }
 
     /**
-     * Invokes a tool.
+     * Invokes a tool and returns how it ended. No progress is asked for. See
+     * "Tool calls" on the class for what it shares with [invokeToolStreaming].
      */
     override suspend fun invokeTool(
         toolName: String,
         arguments: JsonElement?,
-    ): Result<ToolCallResult> {
+    ): Result<ToolCallResult> =
+        toolCall(toolName, arguments, McpCallOptions.Default, wantsProgress = false).awaitResult()
+
+    /**
+     * Invokes a tool, asking the server for progress, and yields what it
+     * reports until the one terminal event. See "Tool calls" on the class.
+     */
+    override fun invokeToolStreaming(
+        toolName: String,
+        arguments: JsonElement?,
+        options: McpCallOptions,
+    ): Flow<McpCallEvent> = toolCall(toolName, arguments, options, wantsProgress = true)
+
+    private fun toolCall(
+        toolName: String,
+        arguments: JsonElement?,
+        options: McpCallOptions,
+        wantsProgress: Boolean,
+    ): Flow<McpCallEvent> = flow {
         val current = currentSession("invokeTool()")
+        val request = mcpClient.createToolCallRequest(toolName, arguments, wantsProgress)
+        val timeoutMs = options.timeoutMs ?: config.timeoutMs
 
         logger.i { "Invoking tool '$toolName' on ${config.displayName}..." }
 
-        return call(mcpClient.createToolCallRequest(toolName, arguments), current)
-            .mapCatching { response -> mcpClient.processToolCallResponse(response).getOrThrow() }
-            .onSuccess { result ->
+        // The session the request last went out in: where a cancellation has to be sent.
+        var sentIn = current
+        var answered = false
+        try {
+            val outcome = call(request, current, timeoutMs, onSession = { sentIn = it }) { message ->
+                val event = mcpClient.callEventFor(request, message)
+                if (event != null) emit(event) else logUnrouted(request, message)
+            }.mapCatching { response -> mcpClient.processToolCallResponse(response).getOrThrow() }
+            answered = true
+
+            outcome.onSuccess { result ->
                 logger.i {
                     "Tool '$toolName' execution completed " +
                         "(${result.content.size} content items, error=${result.isError})"
@@ -156,6 +210,17 @@ class HttpMcpConnection(
             }.onFailure { error ->
                 logger.e(error) { "Tool '$toolName' execution failed" }
             }
+            if (outcome.exceptionOrNull() is McpRequestTimeoutException) {
+                // The limit ran out with the server still working: stop waiting, and say so.
+                tellServerCancelled(request, sentIn, "no answer within $timeoutMs ms")
+            }
+            emit(terminalEventOf(outcome))
+        } catch (e: CancellationException) {
+            if (!answered) {
+                withContext(NonCancellable) { tellServerCancelled(request, sentIn, "the caller cancelled the call") }
+            }
+            throw e
+        }
     }
 
     /**
@@ -192,8 +257,14 @@ class HttpMcpConnection(
      * Send [request] in [current], and once more in a new session if the server
      * says [current] has ended.
      */
-    private suspend fun call(request: McpRequest, current: Session): Result<McpResponse> {
-        val first = roundTrip(request, current)
+    private suspend fun call(
+        request: McpRequest,
+        current: Session,
+        timeoutMs: Long,
+        onSession: (Session) -> Unit = {},
+        onMessage: suspend (McpServerMessage) -> Unit,
+    ): Result<McpResponse> {
+        val first = roundTrip(request, current, timeoutMs, onMessage)
         if (first.exceptionOrNull() !is SessionEnded) return first.map { it.response }
 
         logger.i { "${config.displayName} ended the session; opening a new one" }
@@ -224,7 +295,8 @@ class HttpMcpConnection(
             }
         }
 
-        val second = roundTrip(request, renewed)
+        onSession(renewed)
+        val second = roundTrip(request, renewed, timeoutMs, onMessage)
         if (second.exceptionOrNull() !is SessionEnded) return second.map { it.response }
 
         return Result.failure(
@@ -241,7 +313,8 @@ class HttpMcpConnection(
      */
     private suspend fun handshake(replacing: Session?): Result<Pair<Session, InitializeResult>> {
         // `initialize` opens a session, so it never carries the id of one.
-        val answered = roundTrip(mcpClient.createInitializeRequest(), within = null)
+        val initialize = mcpClient.createInitializeRequest()
+        val answered = roundTrip(initialize, within = null, config.timeoutMs) { logUnrouted(initialize, it) }
             .getOrElse { return Result.failure(it) }
         val result = mcpClient.processInitializeResponse(answered.response)
             .getOrElse { return Result.failure(it) }
@@ -275,7 +348,7 @@ class HttpMcpConnection(
     private suspend fun notifyInitialized(opened: Session): Result<Unit> {
         val body = mcpClient.serializeNotification(mcpClient.createInitializedNotification())
 
-        return httpHandler.exchange<Unit>(post(body, opened)) { response ->
+        return httpHandler.exchange<Unit>(post(body, opened, config.timeoutMs)) { response ->
             if (response.status == HTTP_UNAUTHORIZED) {
                 throw httpStatusFailure(INITIALIZED, response.status, response.header(WWW_AUTHENTICATE))
             }
@@ -285,9 +358,18 @@ class HttpMcpConnection(
         }
     }
 
-    /** `POST` [request] and read its response, whichever shape the server answers in. */
-    private suspend fun roundTrip(request: McpRequest, within: Session?): Result<Answer> =
-        httpHandler.exchange(post(mcpClient.serializeRequest(request), within)) { response ->
+    /**
+     * `POST` [request] and read its response, whichever shape the server answers
+     * in. [onMessage] is given every other message the server sends on the way,
+     * in the caller's own coroutine.
+     */
+    private suspend fun roundTrip(
+        request: McpRequest,
+        within: Session?,
+        timeoutMs: Long,
+        onMessage: suspend (McpServerMessage) -> Unit,
+    ): Result<Answer> =
+        httpHandler.exchange(post(mcpClient.serializeRequest(request), within, timeoutMs)) { response ->
             when {
                 response.status == HTTP_NOT_FOUND && within?.id != null -> throw SessionEnded()
 
@@ -296,8 +378,8 @@ class HttpMcpConnection(
             }
 
             val answer = when (response.mediaType) {
-                MEDIA_TYPE_JSON -> readJson(request, response)
-                MEDIA_TYPE_EVENT_STREAM -> readEventStream(request, response.body)
+                MEDIA_TYPE_JSON -> readJson(request, response, onMessage)
+                MEDIA_TYPE_EVENT_STREAM -> readEventStream(request, response.body, onMessage)
                 else -> throw McpConnectionException(
                     "${config.displayName} answered ${request.method} with status ${response.status} and " +
                         "content type '${response.mediaType ?: "none"}'; a response is $MEDIA_TYPE_JSON or " +
@@ -307,21 +389,29 @@ class HttpMcpConnection(
             Answer(answer, sessionId = response.header(SESSION_ID_HEADER))
         }
 
-    private suspend fun readJson(request: McpRequest, response: McpHttpResponse): McpResponse {
+    private suspend fun readJson(
+        request: McpRequest,
+        response: McpHttpResponse,
+        onMessage: suspend (McpServerMessage) -> Unit,
+    ): McpResponse {
         val messages = mcpClient.parseServerMessages(response.body.readText()).getOrThrow()
-        return pickResponse(request, messages)
+        return pickResponse(request, messages, onMessage)
             ?: throw McpProtocolException(
                 "${config.displayName} answered ${request.method} with JSON that holds no response to it",
             )
     }
 
-    private suspend fun readEventStream(request: McpRequest, body: McpHttpBody): McpResponse {
+    private suspend fun readEventStream(
+        request: McpRequest,
+        body: McpHttpBody,
+        onMessage: suspend (McpServerMessage) -> Unit,
+    ): McpResponse {
         val parser = SseParser()
         while (true) {
             val line = body.readLine()
             val event = if (line == null) parser.finish() else parser.feed(line)
             if (event != null) {
-                responseIn(request, event)?.let { return it }
+                responseIn(request, event, onMessage)?.let { return it }
             }
             if (line == null) break
         }
@@ -331,7 +421,11 @@ class HttpMcpConnection(
     }
 
     /** The response to [request] carried by [event], if it carries one. Everything else in it is handed on. */
-    private fun responseIn(request: McpRequest, event: SseEvent): McpResponse? {
+    private suspend fun responseIn(
+        request: McpRequest,
+        event: SseEvent,
+        onMessage: suspend (McpServerMessage) -> Unit,
+    ): McpResponse? {
         // MCP messages travel as `message` events. An event of another type, or one with no data
         // (a server may send an id on its own), carries no message.
         if (event.type != SseParser.DEFAULT_EVENT_TYPE || event.data.isBlank()) return null
@@ -340,17 +434,21 @@ class HttpMcpConnection(
             logger.w { "${config.displayName} sent an event that is not a JSON-RPC message: ${malformed.message}" }
             return null
         }
-        return pickResponse(request, messages)
+        return pickResponse(request, messages, onMessage)
     }
 
     /**
      * The response to [request] among [messages], or null when it is not there.
-     * Every other message is handed on.
+     * Every other message goes to [onMessage].
      *
      * An error the server could not tie to a request has no id. Answering a
      * single request with one can only be about that request, so it fails it.
      */
-    private fun pickResponse(request: McpRequest, messages: List<McpServerMessage>): McpResponse? {
+    private suspend fun pickResponse(
+        request: McpRequest,
+        messages: List<McpServerMessage>,
+        onMessage: suspend (McpServerMessage) -> Unit,
+    ): McpResponse? {
         var picked: McpResponse? = null
         for (message in messages) {
             when {
@@ -362,17 +460,18 @@ class HttpMcpConnection(
                         "${config.displayName} refused ${request.method}: ${message.payload["error"]}",
                     )
 
-                else -> handOn(request, message)
+                else -> onMessage(message)
             }
         }
         return picked
     }
 
     /**
-     * A message that arrived while waiting for the response to [request] and is
-     * not that response. Nothing listens for these yet.
+     * A message that arrived while waiting for the response to [request] and
+     * that nobody is listening for: a request of the server's own, progress for
+     * another call, a notification during the handshake.
      */
-    private fun handOn(request: McpRequest, message: McpServerMessage) {
+    private fun logUnrouted(request: McpRequest, message: McpServerMessage) {
         logger.d {
             val what = when (message) {
                 is McpServerMessage.Notification -> "notification '${message.method}'"
@@ -407,12 +506,31 @@ class HttpMcpConnection(
             }
     }
 
-    private fun post(body: String, within: Session?): McpHttpRequest = McpHttpRequest(
+    /**
+     * Tell the server the answer to [request] is no longer wanted. Best effort,
+     * and bounded: the notification gets [CANCEL_GRACE_MS] to be delivered and
+     * its outcome changes nothing for the caller.
+     */
+    private suspend fun tellServerCancelled(request: McpRequest, within: Session, reason: String) {
+        val body = mcpClient.serializeNotification(mcpClient.createCancelledNotification(request, reason))
+
+        httpHandler.exchange(post(body, within, CANCEL_GRACE_MS)) { response -> response.status }
+            .onSuccess { status ->
+                logger.d { "Told ${config.displayName} that ${request.method} was cancelled ($reason): $status" }
+            }
+            .onFailure { error ->
+                logger.d {
+                    "Could not tell ${config.displayName} that ${request.method} was cancelled: ${error.message}"
+                }
+            }
+    }
+
+    private fun post(body: String, within: Session?, timeoutMs: Long): McpHttpRequest = McpHttpRequest(
         method = McpHttpMethod.POST,
         url = config.endpoint,
         headers = headers(within, accept = ACCEPT_JSON_OR_EVENT_STREAM),
         body = body,
-        timeoutMs = config.timeoutMs,
+        timeoutMs = timeoutMs,
     )
 
     private fun headers(within: Session?, accept: String?): Map<String, String> = buildMap {
@@ -481,6 +599,12 @@ class HttpMcpConnection(
 
         /** Ending a session is a courtesy: it does not get to hold a disconnect for the full request timeout. */
         private const val END_SESSION_TIMEOUT_MS = 5_000L
+
+        /**
+         * How long a cancellation waits for the server to take its `notifications/cancelled`.
+         * Long enough for a live server, short enough that a dead one does not hold the caller.
+         */
+        const val CANCEL_GRACE_MS: Long = 2_000L
     }
 }
 
