@@ -315,7 +315,7 @@ class McpServerManager(
                 logger = logger,
             )
 
-            McpProtocol.HTTP, McpProtocol.SSE -> HttpMcpConnection(
+            McpProtocol.HTTP -> HttpMcpConnection(
                 config = config,
                 httpHandler = HttpClientHandler(),
                 logger = logger,

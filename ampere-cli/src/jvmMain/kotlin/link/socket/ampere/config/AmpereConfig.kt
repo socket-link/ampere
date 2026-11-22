@@ -174,9 +174,9 @@ data class McpServersConfig(
  *
  * @property id Unique identifier for this server (used for tool namespacing)
  * @property name Human-readable display name
- * @property protocol Transport protocol: stdio, http, or sse
- * @property endpoint Connection endpoint (path for stdio, URL for http/sse)
- * @property authToken Optional authentication token for http/sse
+ * @property protocol Transport protocol: stdio or http (Streamable HTTP)
+ * @property endpoint Connection endpoint (path for stdio, URL for http)
+ * @property authToken Optional authentication token for http
  * @property autonomy Required agent autonomy level for tools from this server
  * @property timeoutMs Request timeout in milliseconds (default: 30000)
  * @property autoReconnect Whether to auto-reconnect on connection loss
@@ -189,7 +189,7 @@ data class McpServerConfigYaml(
     /** Human-readable display name */
     val name: String,
 
-    /** Transport protocol: stdio, http, or sse */
+    /** Transport protocol: stdio or http */
     val protocol: String,
 
     /** Connection endpoint */

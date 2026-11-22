@@ -110,7 +110,10 @@ object ConfigParser {
             if (server.id.isBlank()) {
                 errors.add("MCP server[$index]: 'id' must not be blank")
             }
-            if (server.protocol.lowercase() !in SUPPORTED_MCP_PROTOCOLS) {
+            if (server.protocol.lowercase() == REMOVED_SSE_PROTOCOL) {
+                // Accepted until AMPR-514, and always behaved as http: say what to write instead.
+                errors.add("MCP server '${server.id}': protocol 'sse' was removed; it never had its own transport and always behaved as 'http'. Use 'http'")
+            } else if (server.protocol.lowercase() !in SUPPORTED_MCP_PROTOCOLS) {
                 errors.add("MCP server '${server.id}': unknown protocol '${server.protocol}'. Supported: ${SUPPORTED_MCP_PROTOCOLS.joinToString()}")
             }
             if (server.endpoint.isBlank()) {
@@ -167,7 +170,9 @@ object ConfigParser {
         "technical-writer",
     )
 
-    private val SUPPORTED_MCP_PROTOCOLS = setOf("stdio", "http", "sse")
+    private val SUPPORTED_MCP_PROTOCOLS = setOf("stdio", "http")
+
+    private const val REMOVED_SSE_PROTOCOL = "sse"
 
     private val SUPPORTED_AUTONOMY_LEVELS = setOf(
         "ask-before-action",

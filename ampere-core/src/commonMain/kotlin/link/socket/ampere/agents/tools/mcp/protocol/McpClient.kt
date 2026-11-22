@@ -1,6 +1,11 @@
 package link.socket.ampere.agents.tools.mcp.protocol
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import link.socket.ampere.agents.events.utils.generateUUID
 import link.socket.ampere.data.DEFAULT_JSON
 
@@ -49,7 +54,15 @@ class McpClient(
         private set
 
     /**
-     * Creates an initialize request.
+     * The protocol revision the handshake settled on: the server's answer to
+     * the [McpProtocolVersion.LATEST] this client offered. Null until
+     * initialize succeeds.
+     */
+    var protocolVersion: String? = null
+        private set
+
+    /**
+     * Creates an initialize request, offering [McpProtocolVersion.LATEST].
      *
      * This should be the first request sent after connecting to an MCP server.
      */
@@ -74,6 +87,13 @@ class McpClient(
      *
      * Validates the response and updates internal state if successful.
      *
+     * The server answers with the revision it will speak: the one offered if it
+     * has it, otherwise one of its own. An answer outside
+     * [McpProtocolVersion.SUPPORTED] is a failure, a
+     * [McpProtocolVersionException] naming both revisions, and leaves this
+     * client uninitialized: carrying on would mean speaking a revision whose
+     * rules this client does not know.
+     *
      * @param response The response from the server
      * @return Result containing the InitializeResult or error
      */
@@ -93,10 +113,20 @@ class McpClient(
                 response.result!!,
             )
 
+            if (!McpProtocolVersion.isSupported(result.protocolVersion)) {
+                return Result.failure(
+                    McpProtocolVersionException(
+                        offered = McpProtocolVersion.LATEST,
+                        answered = result.protocolVersion,
+                    ),
+                )
+            }
+
             // Update state
             isInitialized = true
             serverInfo = result.serverInfo
             serverCapabilities = result.capabilities
+            protocolVersion = result.protocolVersion
 
             Result.success(result)
         } catch (e: Exception) {
@@ -108,6 +138,19 @@ class McpClient(
                 ),
             )
         }
+    }
+
+    /**
+     * Creates the `notifications/initialized` notification: the client's half
+     * of the handshake, sent once the server's initialize response has been
+     * accepted and before any other request.
+     *
+     * @throws IllegalStateException if not initialized
+     */
+    fun createInitializedNotification(): McpNotification {
+        check(isInitialized) { "Must initialize before sending notifications/initialized" }
+
+        return McpNotification(method = "notifications/initialized")
     }
 
     /**
@@ -231,6 +274,70 @@ class McpClient(
     }
 
     /**
+     * Serializes an MCP notification to JSON string.
+     */
+    fun serializeNotification(notification: McpNotification): String {
+        return json.encodeToString(McpNotification.serializer(), notification)
+    }
+
+    /**
+     * Reads one HTTP body or one event's data as the server messages it holds.
+     *
+     * Usually that is one message. A [McpProtocolVersion.V2025_03_26] server
+     * may send several as a JSON array, so this always returns a list. Each is
+     * sorted by shape, as JSON-RPC defines it: a `method` and an `id` is a
+     * request, a `method` alone is a notification, and anything else is a
+     * response.
+     */
+    fun parseServerMessages(jsonString: String): Result<List<McpServerMessage>> {
+        return try {
+            val messages = when (val parsed = json.parseToJsonElement(jsonString)) {
+                is JsonArray -> parsed.map(::toServerMessage)
+                else -> listOf(toServerMessage(parsed))
+            }
+            Result.success(messages)
+        } catch (e: Exception) {
+            Result.failure(
+                McpProtocolException(
+                    "Failed to read a message from the server: ${e.message}",
+                    null,
+                    e,
+                ),
+            )
+        }
+    }
+
+    private fun toServerMessage(element: JsonElement): McpServerMessage {
+        val message = element as? JsonObject
+            ?: throw IllegalArgumentException("a JSON-RPC message must be an object")
+        val id = (message["id"] as? JsonPrimitive)?.takeUnless { it is JsonNull }?.content
+        val method = (message["method"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+        return when {
+            method != null && id != null -> McpServerMessage.Request(id, method, message["params"])
+            method != null -> McpServerMessage.Notification(method, message["params"])
+            else -> McpServerMessage.Response(id, message)
+        }
+    }
+
+    /**
+     * Decodes a [McpServerMessage.Response] that [answers][McpServerMessage.Response.id] a request.
+     */
+    fun decodeResponse(message: McpServerMessage.Response): Result<McpResponse> {
+        return try {
+            Result.success(json.decodeFromJsonElement(McpResponse.serializer(), message.payload))
+        } catch (e: Exception) {
+            Result.failure(
+                McpProtocolException(
+                    "Failed to deserialize response: ${e.message}",
+                    null,
+                    e,
+                ),
+            )
+        }
+    }
+
+    /**
      * Deserializes a JSON string to an MCP response.
      */
     fun deserializeResponse(jsonString: String): Result<McpResponse> {
@@ -255,6 +362,7 @@ class McpClient(
         isInitialized = false
         serverInfo = null
         serverCapabilities = null
+        protocolVersion = null
     }
 
     /**
@@ -272,8 +380,26 @@ class McpClient(
  * @property mcpError The MCP error details, if available
  * @property cause The underlying cause, if any
  */
-class McpProtocolException(
+open class McpProtocolException(
     message: String,
     val mcpError: McpError? = null,
     cause: Throwable? = null,
 ) : Exception(message, cause)
+
+/**
+ * The server answered `initialize` with a protocol revision this client does
+ * not implement (AMPR-514).
+ *
+ * The message names both revisions, and what this client does speak, so
+ * whoever reads it can tell which side has to move.
+ *
+ * @property offered The revision this client asked for.
+ * @property answered The revision the server said it would speak.
+ */
+class McpProtocolVersionException(
+    val offered: String,
+    val answered: String,
+) : McpProtocolException(
+    "The MCP server answered with protocol revision $answered, which this client does not implement. " +
+        "It offered $offered and can speak ${McpProtocolVersion.SUPPORTED.joinToString(", ")}.",
+)
