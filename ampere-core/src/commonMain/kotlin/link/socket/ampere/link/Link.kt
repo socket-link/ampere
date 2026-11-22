@@ -64,6 +64,15 @@ data class Link(
  * calendar" means something very different for [OnDevice] EventKit than for a
  * [ThirdParty] sync service, and the type keeps the distinction from collapsing
  * into prose.
+ *
+ * The set is closed and each member is a wire value: a stored `Links.link_json`
+ * row names its member by `@SerialName`. A reader that does not know a member
+ * cannot decode the row and says so (`SqlDelightLinkStore` skips it from a list
+ * and announces a `StoreRowUndecodableEvent`; a `get` is an
+ * `UndecodableLinkException`). It never falls back to another member, because a
+ * wrong egress is a false statement on a consent sheet. A consumer's exhaustive
+ * `when` over this type stops compiling when a member is added, which is the
+ * intended prompt to write the new member's consent copy.
  */
 @Serializable
 sealed interface EgressClass {
@@ -82,6 +91,43 @@ sealed interface EgressClass {
     @Serializable
     @SerialName("egress.third_party")
     data class ThirdParty(val provider: String) : EgressClass
+
+    /**
+     * Reaches an app the person runs, and from there wherever that app decides
+     * (AMPR-517).
+     *
+     * For a Link to an orchestrating app: one that takes work over the Link and
+     * forwards it to a model provider of its own choosing. The host picked the
+     * first hop, [app], and nothing after it. The app may route to any provider
+     * it has enabled, may hand part of the work to a second one, and may be
+     * reconfigured by the person while a run is in flight; a Link cannot bind
+     * any of that.
+     *
+     * What the member claims: data sent through this Link reaches [app], and
+     * [app] governs where it goes next. What it does not claim, and what a
+     * consent surface built from it must not say: that the data stays on the
+     * device (the first hop being local does not make this [OnDevice]), or
+     * which provider finally receives it. The truthful sentence is of the form
+     * "[app] decides where this goes; choose your providers there".
+     *
+     * It carries no requested provider, on purpose. A host may ask the app for
+     * one when it starts a run, but that is a fact about the run: it differs
+     * between runs over the same Link, the app is free to depart from it, and a
+     * Link is shared and long-lived. Stored here it would be a stale claim on
+     * every later run and would read as a destination. A host that wants to say
+     * "started on X; the app may route elsewhere" takes X from its own record
+     * of the run.
+     *
+     * Declaring this member enforces nothing. It lets a Link tell the truth
+     * about a destination it does not control.
+     *
+     * @property app The app that decides, named as loosely as
+     *   [ThirdParty.provider] names a provider. A label for the consent
+     *   surface, not an identifier anything resolves.
+     */
+    @Serializable
+    @SerialName("egress.externally_governed")
+    data class ExternallyGoverned(val app: String) : EgressClass
 }
 
 /**
