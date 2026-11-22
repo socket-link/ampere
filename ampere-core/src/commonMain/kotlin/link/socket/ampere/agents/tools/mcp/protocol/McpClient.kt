@@ -211,25 +211,70 @@ class McpClient(
      *
      * @param toolName The name of the tool to invoke
      * @param arguments The tool's input arguments (JSON)
+     * @param wantsProgress Whether to ask the server for progress about this
+     *   call. When true the request carries its own id as the progress token
+     *   in `_meta`, and [progressFor] recognizes the notifications that answer it.
      * @throws IllegalStateException if not initialized
      */
     fun createToolCallRequest(
         toolName: String,
-        arguments: kotlinx.serialization.json.JsonElement?,
+        arguments: JsonElement?,
+        wantsProgress: Boolean = false,
     ): McpRequest {
         check(isInitialized) { "Must initialize before calling tools" }
 
+        val id = generateRequestId("tool-call-$toolName")
         return McpRequest(
-            id = generateRequestId("tool-call-$toolName"),
+            id = id,
             method = "tools/call",
             params = json.encodeToJsonElement(
                 ToolCallParams.serializer(),
                 ToolCallParams(
                     name = toolName,
                     arguments = arguments,
+                    meta = if (wantsProgress) RequestMeta(progressToken = id) else null,
                 ),
             ),
         )
+    }
+
+    /**
+     * Creates the `notifications/cancelled` that tells the server the answer to
+     * [request] is no longer wanted.
+     *
+     * @param reason Why, for the server's log. Written by this client, never
+     *   taken from a server or a tool.
+     */
+    fun createCancelledNotification(request: McpRequest, reason: String): McpNotification =
+        McpNotification(
+            method = "notifications/cancelled",
+            params = json.encodeToJsonElement(
+                CancelledParams.serializer(),
+                CancelledParams(requestId = request.id, reason = reason),
+            ),
+        )
+
+    /**
+     * The progress [notification] reports about [request], or null when it is
+     * not a progress notification, is malformed, or is about another request.
+     *
+     * Progress is matched by token, and the token of a request made with
+     * `wantsProgress` is its id. A notification with another token, or with
+     * none, belongs to someone else and is never attributed to [request].
+     */
+    fun progressFor(request: McpRequest, notification: McpServerMessage.Notification): ProgressParams? {
+        if (notification.method != "notifications/progress") return null
+        val params = notification.params ?: return null
+        val progress = runCatching { json.decodeFromJsonElement(ProgressParams.serializer(), params) }
+            .getOrNull() ?: return null
+        return progress.takeIf { it.progressToken.content == request.id }
+    }
+
+    /** The log message [notification] carries, or null when it is not a well-formed `notifications/message`. */
+    fun logMessageIn(notification: McpServerMessage.Notification): LoggingMessageParams? {
+        if (notification.method != "notifications/message") return null
+        val params = notification.params ?: return null
+        return runCatching { json.decodeFromJsonElement(LoggingMessageParams.serializer(), params) }.getOrNull()
     }
 
     /**

@@ -2,9 +2,12 @@ package link.socket.ampere.agents.tools.mcp.protocol
 
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * MCP Protocol Messages - JSON-RPC 2.0 based message types for MCP communication.
@@ -313,6 +316,8 @@ data class McpToolDescriptor(
  * @property name The name of the tool to invoke
  * @property arguments The input arguments (must match the tool's inputSchema).
  *   Left out of the JSON when null.
+ * @property meta The request's `_meta`: where a caller that wants progress
+ *   says so. Left out of the JSON when null.
  */
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
@@ -320,6 +325,71 @@ data class ToolCallParams(
     val name: String,
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val arguments: JsonElement? = null,
+    @SerialName("_meta")
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val meta: RequestMeta? = null,
+)
+
+/**
+ * A request's `_meta`, as far as this client uses it.
+ *
+ * @property progressToken Asks the server for `notifications/progress` about
+ *   this request, each carrying this token. A server is not obliged to send
+ *   any. Must be unique among the requests in flight; this client uses the
+ *   request's own id.
+ */
+@Serializable
+data class RequestMeta(
+    val progressToken: String,
+)
+
+/**
+ * The params of a `notifications/cancelled`: the sender no longer wants the
+ * answer to a request it made.
+ *
+ * @property requestId The id of the request being cancelled.
+ * @property reason Why, for the receiver's log.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class CancelledParams(
+    val requestId: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val reason: String? = null,
+)
+
+/**
+ * The params of a `notifications/progress`.
+ *
+ * @property progressToken The token of the request the progress is about. A
+ *   string or a number on the wire; kept as the primitive it arrived as.
+ * @property progress How far along, in whatever unit the server counts. It
+ *   only ever increases.
+ * @property total What [progress] is counting towards, when the server knows.
+ * @property message What is happening, in the server's words.
+ */
+@Serializable
+data class ProgressParams(
+    val progressToken: JsonPrimitive,
+    val progress: Double,
+    val total: Double? = null,
+    val message: String? = null,
+)
+
+/**
+ * The params of a `notifications/message`: one log message from the server.
+ *
+ * @property level One of the syslog severities (`debug`, `info`, `notice`,
+ *   `warning`, `error`, `critical`, `alert`, `emergency`). Kept as text, so a
+ *   level this client has not heard of is still delivered.
+ * @property logger The name of the server-side logger, if it gave one.
+ * @property data The message: any JSON the server chose to send.
+ */
+@Serializable
+data class LoggingMessageParams(
+    val level: String,
+    val logger: String? = null,
+    val data: JsonElement = JsonNull,
 )
 
 /**

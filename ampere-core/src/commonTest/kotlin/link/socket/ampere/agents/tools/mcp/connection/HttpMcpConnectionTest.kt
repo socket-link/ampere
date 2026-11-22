@@ -145,14 +145,15 @@ class HttpMcpConnectionTest {
         val connection = connection().open()
 
         val tools = connection.listTools().getOrThrow()
-        // The stream carries a comment and an event with no data and a log notification first.
+        // The stream carries a comment, an event with no data, a log message and progress for
+        // other calls before the response.
         val called = connection.invokeTool("echo", null).getOrThrow()
 
         assertEquals(listOf("echo", "undescribed"), tools.map { it.name })
         assertEquals("called echo", called.content.single().text)
         assertTrue(
-            logLines.any { "notification 'notifications/message'" in it },
-            "the notification on the stream was dropped without a trace: $logLines",
+            logLines.any { "notification 'notifications/progress'" in it },
+            "progress that belongs to no one was dropped without a trace: $logLines",
         )
     }
 

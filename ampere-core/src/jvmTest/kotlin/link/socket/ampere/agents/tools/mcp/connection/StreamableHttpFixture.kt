@@ -64,6 +64,8 @@ internal class StreamableHttpFixture(
             return
         }
 
+        if (reply.delayMs > 0) Thread.sleep(reply.delayMs)
+
         reply.headers.forEach { (name, value) -> exchange.responseHeaders.add(name, value) }
 
         val events = reply.events

@@ -2,6 +2,7 @@ package link.socket.ampere.agents.tools.mcp.connection
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -59,6 +60,7 @@ internal class ScriptedMcpServer(
      * @property holdOpen For a stream: leave it open after the last event, as a
      *   server may. Only the HTTP fixture can act on this.
      * @property stall Send nothing at all, so the request runs into its time limit.
+     * @property delayMs Wait this long before answering.
      */
     class Reply(
         val status: Int,
@@ -67,6 +69,7 @@ internal class ScriptedMcpServer(
         val events: List<String>? = null,
         val holdOpen: Boolean = false,
         val stall: Boolean = false,
+        val delayMs: Long = 0,
     )
 
     /** Every request received, in order. */
@@ -102,6 +105,24 @@ internal class ScriptedMcpServer(
 
     /** Answer `tools/call` with this HTTP status and no body. */
     var toolCallStatus: Int? = null
+
+    /** Take this long to answer `tools/call` (AMPR-515). */
+    var toolCallDelayMs = 0L
+
+    /**
+     * In [Mode.EVENT_STREAM], report progress on a `tools/call` and then go quiet:
+     * no response, and the stream left open. What a long-running tool looks like
+     * to a caller that is about to give up on it.
+     */
+    var goesQuietAfterProgress = false
+
+    /** Never answer a `notifications/cancelled`, as a server that has stopped responding does not. */
+    var stallsCancellations = false
+
+    /** The request ids the server has been told are cancelled, in order. */
+    fun cancelledRequestIds(): List<String> = received("notifications/cancelled").map { cancelled ->
+        cancelled.message!!["params"]!!.jsonObject["requestId"]!!.jsonPrimitive.content
+    }
 
     /** Forget the live session without telling the client, as a server restart does. */
     fun endSession() {
@@ -140,6 +161,7 @@ internal class ScriptedMcpServer(
         val id = request.rpcId
         return when {
             rpcMethod == "notifications/initialized" -> Reply(202)
+            rpcMethod == "notifications/cancelled" && stallsCancellations -> Reply(202, stall = true)
             id == null -> Reply(202)
             rpcMethod == "tools/list" -> respond(response(id, TOOLS))
             rpcMethod == "tools/call" -> toolCall(id, request)
@@ -218,16 +240,41 @@ internal class ScriptedMcpServer(
         }
         val answer = response(id, result)
 
-        if (mode == Mode.JSON) return respond(answer)
+        if (mode == Mode.JSON) return respond(answer, delayMs = toolCallDelayMs)
 
+        // Progress is reported only to a caller that asked for it, under the token it gave.
+        val token = params["_meta"]?.jsonObject?.get("progressToken")?.jsonPrimitive?.content
+        val quiet = goesQuietAfterProgress
         val events = buildList {
             // A comment, and an event that carries only an id: neither is a message.
             add(": keep-alive\n\n")
             add("id: fixture-event-0\ndata:\n\n")
+            if (token != null) add(event(progress(token, 1.0, "one of two")))
+            // Progress about some other call, and progress about none: not this caller's.
+            add(event(progress("someone-elses-token", 50.0, "not yours")))
+            add(event(progress(null, 99.0, "nobody's")))
             add(event(LOG_NOTIFICATION))
-            if (!closesStreamBeforeResponse) add(event(answer))
+            if (token != null) add(event(progress(token, 2.0, "two of two")))
+            if (!closesStreamBeforeResponse && !quiet) add(event(answer))
         }
-        return Reply(200, mapOf("Content-Type" to "text/event-stream"), events = events, holdOpen = holdsStreamOpen)
+        return Reply(
+            status = 200,
+            headers = mapOf("Content-Type" to "text/event-stream"),
+            events = events,
+            holdOpen = holdsStreamOpen || quiet,
+            delayMs = toolCallDelayMs,
+        )
+    }
+
+    private fun progress(token: String?, progress: Double, message: String): JsonObject = buildJsonObject {
+        put("jsonrpc", "2.0")
+        put("method", "notifications/progress")
+        putJsonObject("params") {
+            if (token != null) put("progressToken", token)
+            put("progress", progress)
+            put("total", 2.0)
+            put("message", message)
+        }
     }
 
     private fun delete(request: Received): Reply = when {
@@ -239,10 +286,14 @@ internal class ScriptedMcpServer(
         }
     }
 
-    private fun respond(message: JsonObject, headers: Map<String, String> = emptyMap()): Reply = when (mode) {
+    private fun respond(
+        message: JsonObject,
+        headers: Map<String, String> = emptyMap(),
+        delayMs: Long = 0,
+    ): Reply = when (mode) {
         Mode.JSON -> {
             val body: JsonElement = if (batchesResponses) buildJsonArray { add(message) } else message
-            Reply(200, headers + ("Content-Type" to "application/json"), body = body.toString())
+            Reply(200, headers + ("Content-Type" to "application/json"), body = body.toString(), delayMs = delayMs)
         }
 
         Mode.EVENT_STREAM ->
@@ -321,12 +372,17 @@ internal class ScriptedMcpTransport(private val server: ScriptedMcpServer) : Mcp
         requests += request
         val contentType = if (request.body == null) emptyMap() else mapOf("Content-Type" to "application/json")
         val reply = server.handle(request.method.name, request.headers + contentType, request.body)
-        if (reply.stall) {
-            // The contract of a real transport: an exchange that outlives its limit is a timeout.
-            withTimeoutOrNull(request.timeoutMs) { awaitCancellation() }
+
+        // The contract of a real transport: an exchange that outlives its limit is a timeout.
+        val handled = withTimeoutOrNull(request.timeoutMs) {
+            if (reply.stall) awaitCancellation()
+            delay(reply.delayMs)
+            Handled(handle(reply.asResponse()))
+        }
+        if (handled == null) {
             Result.failure(McpRequestTimeoutException(request.timeoutMs))
         } else {
-            Result.success(handle(reply.asResponse()))
+            Result.success(handled.value)
         }
     } catch (e: CancellationException) {
         throw e
@@ -339,6 +395,8 @@ internal class ScriptedMcpTransport(private val server: ScriptedMcpServer) : Mcp
         return Result.success(Unit)
     }
 
+    private class Handled<T>(val value: T)
+
     private fun ScriptedMcpServer.Reply.asResponse(): McpHttpResponse {
         val text = body ?: events.orEmpty().joinToString("")
         // A stream's text ends with a newline, so its last "line" is the empty remainder.
@@ -347,7 +405,10 @@ internal class ScriptedMcpTransport(private val server: ScriptedMcpServer) : Mcp
             status = status,
             headers = headers,
             body = object : McpHttpBody {
-                override suspend fun readLine(): String? = lines.removeFirstOrNull()
+                // A stream the server holds open has no end to read: the reader waits.
+                override suspend fun readLine(): String? =
+                    lines.removeFirstOrNull() ?: if (holdOpen) awaitCancellation() else null
+
                 override suspend fun readText(): String = text
             },
         )

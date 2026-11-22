@@ -2,10 +2,15 @@ package link.socket.ampere.plug
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.JsonElement
@@ -24,8 +29,14 @@ import link.socket.ampere.agents.execution.request.ExecutionConstraints
 import link.socket.ampere.agents.execution.request.ExecutionContext
 import link.socket.ampere.agents.execution.request.ExecutionRequest
 import link.socket.ampere.agents.execution.tools.McpTool
+import link.socket.ampere.agents.tools.mcp.McpProtocol
+import link.socket.ampere.agents.tools.mcp.McpServerConfiguration
 import link.socket.ampere.agents.tools.mcp.ServerManager
+import link.socket.ampere.agents.tools.mcp.connection.HttpMcpConnection
+import link.socket.ampere.agents.tools.mcp.connection.McpCallEvent
 import link.socket.ampere.agents.tools.mcp.connection.McpServerConnection
+import link.socket.ampere.agents.tools.mcp.connection.ScriptedMcpServer
+import link.socket.ampere.agents.tools.mcp.connection.ScriptedMcpTransport
 import link.socket.ampere.agents.tools.mcp.protocol.ContentItem
 import link.socket.ampere.agents.tools.mcp.protocol.InitializeResult
 import link.socket.ampere.agents.tools.mcp.protocol.McpToolDescriptor
@@ -49,6 +60,8 @@ import link.socket.ampere.link.Transport
 import link.socket.ampere.mcp.InMemoryMcpCredentialBinding
 import link.socket.ampere.plug.permission.PlugPermission
 import link.socket.ampere.plug.permission.UserGrants
+import link.socket.ampere.util.ioDispatcher
+import link.socket.ampere.util.runBlockingCompat
 
 /**
  * The plug execute path, end to end: manifest -> Link resolution -> MCP handshake ->
@@ -178,6 +191,75 @@ class PlugContextEndToEndTest {
         assertTrue(failure.message.contains("without an MCP ServerManager"), failure.message)
         assertTrue(mock.invocations.isEmpty())
     }
+
+    // --- Streaming and the agent's dispatch (AMPR-515). These go through the real engine and
+    // --- the real HTTP connection, answered by a scripted Streamable HTTP server.
+
+    @Test
+    fun `an agent dispatched tool asks the server for no progress`() = runTest {
+        val server = ScriptedMcpServer(mode = ScriptedMcpServer.Mode.EVENT_STREAM)
+        val context = plugContext(scriptedConnection(server))
+
+        val outcome = engine(
+            context = context,
+            grants = UserGrants.granted(PlugPermission.MCPServer(mcpUri)),
+        ).execute(context.echoTool(), request())
+
+        // The decision recorded on ToolExecutionEngine.dispatch: the plain call, so no token.
+        assertEquals("called echo", assertIs<ExecutionOutcome.NoChanges.Success>(outcome).message)
+        assertFalse("_meta" in server.received("tools/call").single().body!!)
+    }
+
+    @Test
+    fun `a dispatch cancelled under the blocking bridge tells the server to stop`() = runTest {
+        val server = ScriptedMcpServer(mode = ScriptedMcpServer.Mode.EVENT_STREAM)
+        server.goesQuietAfterProgress = true
+        val context = plugContext(scriptedConnection(server))
+        val engine = engine(context = context, grants = UserGrants.granted(PlugPermission.MCPServer(mcpUri)))
+        val tool = context.echoTool()
+        val request = request()
+
+        // How an agent's plan step is dispatched: blocking, on the IO dispatcher, under a limit.
+        assertFailsWith<TimeoutCancellationException> {
+            runBlockingCompat(ioDispatcher) {
+                withTimeout(500) { engine.execute(tool, request) }
+            }
+        }
+
+        // The limit cancelled the dispatch mid-call, and the cancellation was not lost on the
+        // way down: the server was told which request to stop.
+        assertEquals(listOf(server.received("tools/call").single().rpcId), server.cancelledRequestIds())
+    }
+
+    @Test
+    fun `a streamed call collected under the blocking bridge reports and completes`() = runTest {
+        val server = ScriptedMcpServer(mode = ScriptedMcpServer.Mode.EVENT_STREAM)
+        val context = plugContext(scriptedConnection(server))
+        val client = assertNotNull(context.mcpClientFor(context.echoTool()))
+
+        // What a tool body that is the plug does: collect the stream where it stands.
+        val events = runBlockingCompat(ioDispatcher) {
+            withTimeout(10_000) { client.callToolStreaming("echo", null).toList() }
+        }
+
+        assertEquals(4, events.size, "$events")
+        assertEquals(2, events.filterIsInstance<McpCallEvent.Progress>().size)
+        assertIs<McpCallEvent.Completed>(events.last())
+    }
+
+    private fun scriptedConnection(server: ScriptedMcpServer): HttpMcpConnection = HttpMcpConnection(
+        config = McpServerConfiguration(
+            id = mcpUri,
+            displayName = "GitHub",
+            protocol = McpProtocol.HTTP,
+            endpoint = "https://mcp.example.test/mcp",
+        ),
+        httpHandler = ScriptedMcpTransport(server),
+    )
+
+    /** The scripted server's `echo` tool, as the plug context discovered it. */
+    private fun PlugContext.echoTool(): McpTool =
+        availableTools().filterIsInstance<McpTool>().single { it.remoteToolName == "echo" }
 
     private var llmCalls = 0
 

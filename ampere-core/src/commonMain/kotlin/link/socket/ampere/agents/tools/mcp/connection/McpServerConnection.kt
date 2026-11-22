@@ -1,6 +1,8 @@
 package link.socket.ampere.agents.tools.mcp.connection
 
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.JsonElement
 import link.socket.ampere.agents.tools.mcp.protocol.InitializeResult
 import link.socket.ampere.agents.tools.mcp.protocol.McpToolDescriptor
@@ -18,7 +20,7 @@ import link.socket.ampere.agents.tools.mcp.protocol.ToolCallResult
  * 1. connect() - Establish the underlying transport connection
  * 2. initialize() - Perform MCP handshake and exchange capabilities
  * 3. listTools() - Query available tools
- * 4. invokeTool() - Execute tools (can be called multiple times)
+ * 4. invokeTool() / invokeToolStreaming() - Execute tools (can be called multiple times)
  * 5. disconnect() - Clean up and close the connection
  *
  * All methods return Result<T> for explicit error handling.
@@ -88,6 +90,45 @@ interface McpServerConnection {
         toolName: String,
         arguments: JsonElement?,
     ): Result<ToolCallResult>
+
+    /**
+     * Invokes a tool and reports on it while it runs (AMPR-515).
+     *
+     * The returned flow is cold: nothing is sent until it is collected, and
+     * each collection is its own call. It yields the server's progress and log
+     * messages about the call as they arrive and then exactly one terminal
+     * event, [McpCallEvent.Completed] or [McpCallEvent.Failed]. It does not
+     * throw for a failed call.
+     *
+     * What a connection that implements this does, beyond [invokeTool]:
+     *
+     * - **Asks for progress.** The request carries a progress token, which is
+     *   what makes this the call to collect when something should be shown
+     *   while it runs. [invokeTool] sends none.
+     * - **Honours [options].** The call's time limit is the caller's choice.
+     * - **Tells the server when the collector goes away.** Cancelling the
+     *   collecting coroutine sends `notifications/cancelled` for the request
+     *   before the cancellation completes, waiting a short, bounded time for it
+     *   to be delivered. The same is sent when the time limit runs out.
+     *   [invokeTool] does this too: it is the same call without the progress.
+     *
+     * The default here is for a connection with nothing to stream, which is
+     * every fake and any implementation written before this existed: it runs
+     * [invokeTool] and yields its outcome as the one terminal event, ignoring
+     * [options]. That is also all a server that answers in a single JSON body
+     * ever yields.
+     *
+     * @param toolName The name of the tool to invoke
+     * @param arguments The tool's input arguments as JSON
+     * @param options How this call differs from the connection's defaults
+     */
+    fun invokeToolStreaming(
+        toolName: String,
+        arguments: JsonElement?,
+        options: McpCallOptions = McpCallOptions.Default,
+    ): Flow<McpCallEvent> = flow {
+        emit(terminalEventOf(invokeTool(toolName, arguments)))
+    }
 
     /**
      * Closes the connection and cleans up resources.
