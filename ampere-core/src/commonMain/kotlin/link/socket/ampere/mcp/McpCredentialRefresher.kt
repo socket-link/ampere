@@ -173,6 +173,10 @@ class McpCredentialRefresher(
             refreshToken = answer.refreshToken ?: refreshToken,
             // An answer with no expiry gives none; keeping the old one would make the new token look spent.
             expiresAt = answer.expiresIn?.let { now + it.seconds },
+            // A refresh that states its scope has restated the grant; one that says nothing left it as it was.
+            grantedScope = answer.scopes
+                ?.let { stated -> McpGrantedScope(stated, grantedScope?.requested.orEmpty(), statedByServer = true) }
+                ?: grantedScope,
         )
 
     companion object {

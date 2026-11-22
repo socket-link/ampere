@@ -16,10 +16,11 @@ import link.socket.ampere.work.linear.LinearWorkSource
  * Where a command that talks to the work source gets its credential (AMPR-464):
  * `ampere reconcile` today, the dispatch loop (AMPR-308) next.
  *
- * - **By default, the keychain.** The credential `ampere credential seed` stored
- *   for the work-source Link, with a [McpCredentialRefresher] so a short-lived
- *   OAuth token is refreshed on connect and after a 401, and every rotated
- *   refresh token is written back before the old one is let go.
+ * - **By default, the keychain.** The credential `ampere credential authorize`
+ *   or `ampere credential seed` stored for the work-source Link, with a
+ *   [McpCredentialRefresher] so a short-lived OAuth token is refreshed on connect
+ *   and after a 401, and every rotated refresh token is written back before the
+ *   old one is let go.
  * - **`$AMPERE_WORK_SOURCE_TOKEN`, when set, overrides it** for one run: a static
  *   bearer, bound in memory, never refreshed and never stored. It is for a probe
  *   with a hand-minted token, or a host without a supported keychain. A token
@@ -72,7 +73,8 @@ class WorkSourceCredentials(
             return Result.failure(
                 WorkSourceCredentialException(
                     "No work-source credential is seeded for $uri (keychain service $alias, account $uri). " +
-                        "Seed one with `ampere credential seed --work-source $uri …` (see ampere-cli/README.md), " +
+                        "Run `ampere credential authorize --work-source $uri`, or seed one with " +
+                        "`ampere credential seed --work-source $uri …` (see ampere-cli/README.md), " +
                         "or set \$$TOKEN_ENV to use a token for this run.",
                 ),
             )

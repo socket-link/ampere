@@ -33,6 +33,78 @@ class McpCredentialTest {
     }
 
     @Test
+    fun `a credential written before the grant fields still decodes`() {
+        // What `main` wrote before AMPR-516: nulls left out, no grantedScope, a three-field client.
+        val writtenBefore = """
+            {"authToken":"fake-access-0","refreshToken":"fake-refresh-0","expiresAt":"2026-10-30T12:00:00Z",
+             "oauthClient":{"tokenEndpoint":"https://issuer.invalid/oauth/token","clientId":"fake-client-id",
+             "clientSecret":"fake-client-secret"}}
+        """.trimIndent()
+
+        val decoded = json.decodeFromString(McpCredential.serializer(), writtenBefore)
+
+        assertEquals(oauth, decoded)
+        assertNull(decoded.grantedScope)
+        assertNull(decoded.oauthClient?.revocationEndpoint)
+        assertNull(decoded.oauthClient?.redirectUri)
+        assertTrue(decoded.isRefreshable)
+    }
+
+    @Test
+    fun `a credential with its grant round-trips`() {
+        val granted = oauth.copy(
+            refreshToken = null,
+            oauthClient = fakeClient.copy(
+                clientSecret = null,
+                revocationEndpoint = "https://issuer.invalid/oauth/revoke",
+                redirectUri = FAKE_REDIRECT_URI,
+            ),
+            grantedScope = McpGrantedScope(setOf("read", "operate"), setOf("read"), statedByServer = true),
+        )
+        val encoded = json.encodeToString(McpCredential.serializer(), granted)
+
+        assertEquals(granted, json.decodeFromString(McpCredential.serializer(), encoded))
+        assertTrue("\"grantedScope\"" in encoded, encoded)
+    }
+
+    @Test
+    fun `the grant is readable without the token`() {
+        val seeded = oauth.grant
+        val granted = oauth.copy(
+            refreshToken = null,
+            oauthClient = fakeClient.copy(revocationEndpoint = "https://issuer.invalid/oauth/revoke"),
+            grantedScope = McpGrantedScope(setOf("read", "operate"), setOf("read"), statedByServer = true),
+        ).grant
+
+        assertNull(seeded.scopes, "nobody recorded a scope for a hand-seeded credential")
+        assertTrue(seeded.renewable)
+        assertFalse(seeded.revocable)
+        assertNull(seeded.stopsWorkingAt, "a renewable grant does not stop at its access token's expiry")
+
+        assertEquals(setOf("read", "operate"), granted.scopes)
+        assertEquals(setOf("operate"), granted.beyondRequest)
+        assertTrue(granted.withheld.isEmpty())
+        assertTrue(granted.differsFromRequest)
+        assertFalse(granted.renewable)
+        assertTrue(granted.revocable)
+        assertEquals(oauth.expiresAt, granted.stopsWorkingAt)
+        assertFalse("fake-" in granted.toString(), granted.toString())
+    }
+
+    @Test
+    fun `only an expired credential that cannot be refreshed needs authorizing again`() {
+        val expired = now + 1.minutes
+        val bare = McpCredential(authToken = "fake-access-0", expiresAt = now)
+
+        assertTrue(bare.needsReauthorization(expired))
+        assertFalse(bare.needsReauthorization(now - 1.minutes))
+        assertFalse(bare.copy(expiresAt = null).needsReauthorization(expired), "no stated expiry: only a 401 can tell")
+        assertFalse(oauth.copy(expiresAt = now).needsReauthorization(expired), "a refresh replaces it")
+        assertTrue(oauth.copy(expiresAt = now, oauthClient = null).needsReauthorization(expired))
+        assertFalse(McpCredential().needsReauthorization(expired))
+    }
+
+    @Test
     fun `an OAuth credential round-trips through JSON`() {
         val encoded = json.encodeToString(McpCredential.serializer(), oauth)
 
