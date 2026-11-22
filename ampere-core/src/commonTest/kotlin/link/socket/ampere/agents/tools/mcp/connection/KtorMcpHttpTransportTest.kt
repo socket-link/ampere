@@ -14,7 +14,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
-import kotlin.test.assertSame
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
@@ -169,11 +168,15 @@ class KtorMcpHttpTransportTest {
 
     @Test
     fun `what the handler throws is the failure`() = onRealClock {
-        val thrown = McpConnectionException("the handler did not like it")
+        val failure = transport()
+            .exchange<Unit>(post()) { throw McpHttpStatusException(418, "the handler did not like it") }
+            .exceptionOrNull()
 
-        val failure = transport().exchange<Unit>(post()) { throw thrown }.exceptionOrNull()
-
-        assertSame(thrown, failure)
+        // Type and fields, not identity: on the JVM a coroutine may hand back a copy of an
+        // exception so that its stack trace reads from the caller.
+        val typed = assertIs<McpHttpStatusException>(failure)
+        assertEquals(418, typed.status)
+        assertEquals("the handler did not like it", typed.message)
     }
 
     @Test
