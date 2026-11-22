@@ -8,7 +8,10 @@ Maven Central is **permanent**. A published coordinate can never be replaced or
 withdrawn, so the tag push is the point of no return — everything before it is
 reversible and everything after it is not. That is what step 2 is for.
 
-Work through the steps in order.
+Work through the steps in order. When Miley asks an agent for a release, the agent does all six
+steps itself, including creating `local.properties` where it is missing and pushing the tag: the
+request is the authorisation ([AGENTS.md](../AGENTS.md#release)). The two gates that stay are
+green CI on the exact commit and a passing pre-flight.
 
 | Step | Command | Proceed only if |
 |------|---------|-----------------|
@@ -67,7 +70,8 @@ git log --oneline -1 origin/main
 gh run list --branch main -L 3
 ```
 
-Releases are cut from `main`. Confirm CI is green **on that exact SHA**, then
+Releases are cut from `main`; unless a commit is named, that is the tip of `origin/main`. Confirm
+CI is green **on that exact SHA** (wait for a run still in progress), then
 check it out so the pre-flight validates the tree you are about to tag:
 
 ```bash
@@ -79,6 +83,10 @@ git checkout <commit>
 ```bash
 scripts/release-preflight.sh 0.15.0
 ```
+
+A checkout without `local.properties` cannot compile anything, so create it first with CI's
+placeholders (`anthropic_api_key`, `google_api_key` and `openai_api_key`, each `=placeholder`, plus
+`sdk.dir`); the file is gitignored and never overwritten if present.
 
 Pass the version you intend to release. The script refuses to go further unless
 it matches `gradle.properties`, the two version declarations agree, the tree is
