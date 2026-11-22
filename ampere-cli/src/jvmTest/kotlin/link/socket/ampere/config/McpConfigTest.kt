@@ -177,7 +177,6 @@ class McpConfigTest {
     fun `test protocol string conversion`() {
         assertEquals(McpProtocol.STDIO, ConfigConverter.toMcpProtocol("stdio"))
         assertEquals(McpProtocol.HTTP, ConfigConverter.toMcpProtocol("http"))
-        assertEquals(McpProtocol.SSE, ConfigConverter.toMcpProtocol("sse"))
         assertEquals(McpProtocol.HTTP, ConfigConverter.toMcpProtocol("HTTP"))
     }
 
@@ -213,10 +212,11 @@ class McpConfigTest {
     }
 
     /**
-     * Test SSE protocol conversion.
+     * `sse` named a transport that never existed and always behaved as `http` (AMPR-514).
+     * A configuration that still says it is told what to write instead.
      */
     @Test
-    fun `test SSE protocol converted correctly`() {
+    fun `the removed sse protocol is refused with the migration`() {
         val mcpConfig = McpServersConfig(
             servers = listOf(
                 McpServerConfigYaml(
@@ -229,8 +229,31 @@ class McpConfigTest {
             ),
         )
 
+        val refusal = assertThrows<IllegalArgumentException> {
+            ConfigConverter.toMcpServerConfigurations(mcpConfig)
+        }
+        assertTrue(refusal.message!!.contains("Use 'http'"), refusal.message)
+    }
+
+    /**
+     * The autonomy level that only the removed `sse` case used to cover.
+     */
+    @Test
+    fun `self-correcting autonomy is converted on an http server`() {
+        val mcpConfig = McpServersConfig(
+            servers = listOf(
+                McpServerConfigYaml(
+                    id = "streaming",
+                    name = "Streaming Server",
+                    protocol = "http",
+                    endpoint = "https://stream.example.com/mcp",
+                    autonomy = "self-correcting",
+                ),
+            ),
+        )
+
         val configs = ConfigConverter.toMcpServerConfigurations(mcpConfig)
-        assertEquals(McpProtocol.SSE, configs[0].protocol)
+        assertEquals(McpProtocol.HTTP, configs[0].protocol)
         assertEquals(AgentActionAutonomy.SELF_CORRECTING, configs[0].requiredAgentAutonomy)
     }
 }

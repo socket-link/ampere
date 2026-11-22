@@ -46,6 +46,39 @@ class KeychainMcpCredentialBindingTest {
     }
 
     @Test
+    fun `an item written before the grant fields existed still resolves`() = runTest {
+        // Byte for byte what the binding on `main` stored before AMPR-516 for this credential.
+        val store = InMemorySecretStore()
+        store.items["ampere.link:mcp:work-source" to mcpUri] =
+            """{"authToken":"fake-access-0","refreshToken":"fake-refresh-0","expiresAt":"2026-10-30T12:00:00Z",""" +
+            """"oauthClient":{"tokenEndpoint":"https://issuer.invalid/oauth/token","clientId":"fake-client-id",""" +
+            """"clientSecret":"fake-client-secret"}}"""
+
+        val resolved = KeychainMcpCredentialBinding(store).resolve(linkId, mcpUri).getOrThrow()
+
+        assertEquals(credential, resolved)
+        assertNull(resolved?.grantedScope)
+        assertNull(resolved?.grant?.scopes)
+    }
+
+    @Test
+    fun `a credential with its grant is stored and read back whole`() = runTest {
+        val store = InMemorySecretStore()
+        val granted = credential.copy(
+            refreshToken = null,
+            oauthClient = fakeClient.copy(revocationEndpoint = "https://issuer.invalid/oauth/revoke"),
+            grantedScope = McpGrantedScope(setOf("read", "operate"), setOf("read"), statedByServer = true),
+        )
+
+        KeychainMcpCredentialBinding(store).bind(linkId, mcpUri, granted).getOrThrow()
+
+        val binding = KeychainMcpCredentialBinding(store)
+        assertEquals(granted, binding.resolve(linkId, mcpUri).getOrThrow())
+        assertEquals(granted.grant, binding.grantFor(linkId, mcpUri).getOrThrow())
+        assertNull(binding.grantFor(LinkId("mcp:elsewhere"), mcpUri).getOrThrow())
+    }
+
+    @Test
     fun `the item survives the binding that wrote it`() = runTest {
         val store = InMemorySecretStore()
         KeychainMcpCredentialBinding(store).bind(linkId, mcpUri, credential).getOrThrow()

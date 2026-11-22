@@ -164,6 +164,28 @@ class McpCredentialRefresherTest {
     }
 
     @Test
+    fun `a refresh that restates the scope updates the grant and one that says nothing keeps it`() = runTest {
+        val granted = expired.copy(grantedScope = McpGrantedScope(setOf("read"), setOf("read"), statedByServer = false))
+        val binding = seeded(granted)
+        var answer = OAuthTokenResult.Issued("fake-access-1", "fake-refresh-1", 3600, scopes = setOf("read", "operate"))
+        val refresher = McpCredentialRefresher(binding, ScriptedTokenEndpoint { answer }, clock)
+
+        val widened = refresher.refresh(linkId, mcpUri, granted).getOrThrow()
+
+        assertEquals(
+            McpGrantedScope(setOf("read", "operate"), setOf("read"), statedByServer = true),
+            widened.grantedScope,
+        )
+        assertEquals(widened, binding.resolve(linkId, mcpUri).getOrThrow())
+
+        clock.advance(2.hours)
+        answer = OAuthTokenResult.Issued("fake-access-2", "fake-refresh-2", 3600)
+        val silent = refresher.refresh(linkId, mcpUri, widened).getOrThrow()
+
+        assertEquals(widened.grantedScope, silent.grantedScope)
+    }
+
+    @Test
     fun `a credential with no refresh token is NotRefreshable`() = runTest {
         val bare = McpCredential(authToken = "fake-access-0", expiresAt = clock.now() - 1.minutes)
         val binding = seeded(bare)

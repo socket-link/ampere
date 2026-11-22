@@ -175,13 +175,20 @@ object ConfigConverter {
 
     /**
      * Convert a protocol string to an McpProtocol enum value.
+     *
+     * `sse` is refused with its own message: it was accepted until AMPR-514 and
+     * always meant `http`, so a configuration that names it needs a one-word edit,
+     * not a search for what replaced it.
      */
     fun toMcpProtocol(protocol: String): McpProtocol = when (protocol.lowercase()) {
         "stdio" -> McpProtocol.STDIO
         "http" -> McpProtocol.HTTP
-        "sse" -> McpProtocol.SSE
+        "sse" -> throw IllegalArgumentException(
+            "MCP protocol 'sse' was removed: it never had its own transport and always behaved as 'http'. " +
+                "Use 'http', which reads an event stream whenever the server answers with one.",
+        )
         else -> throw IllegalArgumentException(
-            "Unknown MCP protocol: '$protocol'. Supported: stdio, http, sse",
+            "Unknown MCP protocol: '$protocol'. Supported: stdio, http",
         )
     }
 

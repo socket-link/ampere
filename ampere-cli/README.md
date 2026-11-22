@@ -247,26 +247,76 @@ agent defaults to Claude Code (`--agent`, `--permission-mode`, `--default-model`
 
 ### Credential Command
 
-Seed, inspect and clear a Link's credential in the macOS keychain. Every subcommand
-defaults to the work-source Link (`mcp:work-source`); `--link` names another.
+Authorize, seed, inspect and clear a Link's credential in the macOS keychain. Every subcommand
+defaults to the work-source Link (`mcp:work-source`); `--link` names another, and `--server`
+is another name for `--work-source`.
 
 ```bash
+ampere credential authorize --work-source <uri>   # the server's own authorization page, in your browser
 ampere credential seed --work-source <uri> --token-endpoint <url> --client-id <id>  # token response on stdin
-ampere credential status --work-source <uri>   # what is stored and when it expires, never the token
-ampere credential clear --work-source <uri>    # remove it
+ampere credential status --work-source <uri>   # what is stored, what it grants and when it expires, never the token
+ampere credential clear --work-source <uri>    # remove it, and revoke it at the issuer when the issuer offers that
 ```
 
 The credential is one keychain item: a generic password whose service is the Link's alias,
 `ampere.link:<link id>`, and whose account is the MCP server URI. It holds the access token,
-the refresh token, the expiry and the OAuth client. Commands that use it refresh the access
-token when it is within five minutes of expiry and once after a 401, and write each rotated
-refresh token back to the keychain before the old one is let go. The store is macOS-only for
-now; elsewhere, use `$AMPERE_WORK_SOURCE_TOKEN`.
+the refresh token when there is one, the expiry, the OAuth client and the scope that was
+granted. Commands that use it refresh the access token when it is within five minutes of
+expiry and once after a 401, and write each rotated refresh token back to the keychain before
+the old one is let go. The store is macOS-only for now; elsewhere, use
+`$AMPERE_WORK_SOURCE_TOKEN`.
+
+#### Authorizing a Link
+
+```bash
+ampere credential authorize --work-source "$WORK_SOURCE"
+```
+
+`authorize` needs only the MCP server's URI. It asks the endpoint who authorizes for it (the
+`resource_metadata` of its 401, else the well-known path), reads that authorization server's
+metadata, registers a client when the server offers registration, and prints the authorization
+URL and opens it in your browser. It then waits for the redirect on `127.0.0.1`, on a port the
+OS picks, takes that one request and closes the listener. PKCE (`S256`), the `state` check and
+the issuer check all happen without you; no code is copied by hand, and nothing reaches an
+argument list, a file or shell history.
+
+| Option | |
+|---|---|
+| `--scope <scope>` | A scope to ask for; repeat for several. Default: what the server says it needs |
+| `--client-id <id>` | Use a client already registered with the issuer instead of registering one. Its secret, if it has one, comes from `$AMPERE_OAUTH_CLIENT_SECRET` |
+| `--no-browser` | Print the authorization URL and do not try to open it |
+| `--timeout <minutes>` | How long to wait for the redirect (default: 5) |
+
+What it reports is what the server granted, which is not always what was asked for:
+
+```
+Authorized Link mcp:work-source at <uri>
+  Keychain:     service ampere.link:mcp:work-source, account <uri>
+  Granted:      read operate
+                more than was asked for: operate
+  Expires:      2026-12-22T09:14:03Z (in 720h 0m)
+  Refresh:      no
+  Revocation:   not offered by the issuer. `ampere credential clear` removes it here only; the grant stays in force until it expires or you remove it in the other app
+  This credential cannot be refreshed: run `ampere credential authorize` again when it expires.
+```
+
+- **No refresh token.** Some servers issue an access token and nothing to renew it with. The
+  credential then works until the stated expiry, after which a command that uses it fails
+  saying the Link needs authorizing again. Run `authorize` again; it replaces the stored
+  credential in one step.
+- **`clear` does not always revoke.** When the issuer advertises a revocation endpoint,
+  `clear` revokes the tokens there and says so. When it does not, `clear` removes the
+  credential from this machine and says that the grant itself is still in force, until it
+  expires or you remove it in the app that issued it.
+- **A server `authorize` cannot drive.** One that publishes no OAuth metadata, or offers
+  neither registration nor a client you can name with `--client-id`, fails saying which piece
+  was missing, and stores nothing. `seed`, below, still works for those.
 
 #### Seeding the work-source credential
 
-Run once on a new machine, and again only if the issuer ever refuses the refresh token. The
-authorization step in the browser stays manual; nothing after it is. No step writes a token
+The path for an issuer `authorize` cannot drive. Run once on a new machine, and again only if
+the issuer ever refuses the refresh token. The authorization step in the browser is manual
+here; nothing after it is. No step writes a token
 or a secret to a file, an argument list ampere sees, or shell history (zsh shown; in bash,
 `read -rsp 'prompt: ' VAR` and `printf %s`):
 
@@ -742,7 +792,7 @@ Additional configuration via environment variables:
 | `OPENAI_API_KEY` | OpenAI API key | — |
 | `GOOGLE_API_KEY` | Google/Gemini API key | — |
 | `AMPERE_WORK_SOURCE_TOKEN` | Static work-source token that overrides the keychain credential for one run | — |
-| `AMPERE_OAUTH_CLIENT_SECRET` | OAuth client secret `ampere credential seed` stores with the refresh token | — |
+| `AMPERE_OAUTH_CLIENT_SECRET` | OAuth client secret `ampere credential seed`, or `authorize --client-id`, stores with the credential | — |
 
 ### Database
 

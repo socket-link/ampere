@@ -22,6 +22,11 @@ import link.socket.ampere.agents.tools.mcp.protocol.ContentItem
  * - Converting MCP ToolCallResult to the internal Outcome type
  * - Graceful error handling for connection failures, server errors, and timeouts
  *
+ * It makes the plain call, `McpServerConnection.invokeTool`, on purpose (AMPR-515): an
+ * agent-dispatched tool asks the server for no progress and reports none. The streaming call is for a holder of the plug's own client in this release; see
+ * `ToolExecutionEngine.dispatch` for why. The call still runs under the connection's time
+ * limit, and a cancelled dispatch still tells the server to stop.
+ *
  * @property serverManager The manager that tracks active MCP server connections
  * @property logger Logger for observability
  */

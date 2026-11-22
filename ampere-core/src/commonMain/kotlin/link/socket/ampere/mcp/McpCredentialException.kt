@@ -1,5 +1,6 @@
 package link.socket.ampere.mcp
 
+import kotlinx.datetime.Instant
 import link.socket.ampere.agents.tools.mcp.connection.McpUnauthorizedException
 import link.socket.ampere.link.LinkId
 
@@ -71,9 +72,53 @@ sealed class McpCredentialException(
     )
 
     /**
+     * The credential has stopped working and nothing but a new authorization
+     * brings it back (AMPR-516): it carries no refresh token, and it has
+     * expired or the MCP server refused it with a 401.
+     *
+     * Distinct from [Rejected], where a credential that could be refreshed was
+     * refused all the same, and from a transport failure, which is no
+     * [McpCredentialException] at all. A host answers this one with a single
+     * "authorize again" action — [McpOAuthAuthorizer.authorize] — rather than
+     * an error; the client picks the new credential up on its next call.
+     *
+     * @property reason Whether the clock or the server ended it.
+     * @property expiredAt The stated expiry, for [Reason.EXPIRED].
+     */
+    class ReauthorizationRequired(
+        override val linkId: LinkId,
+        val mcpUri: String,
+        val reason: Reason,
+        val expiredAt: Instant? = null,
+        cause: McpUnauthorizedException? = null,
+    ) : McpCredentialException(
+        when (reason) {
+            Reason.EXPIRED ->
+                "The credential for Link ${linkId.value} at $mcpUri expired" +
+                    (expiredAt?.let { " at $it" } ?: "") +
+                    " and has no refresh token. Authorize the Link again."
+            Reason.REFUSED ->
+                "The MCP server at $mcpUri refused the credential for Link ${linkId.value}, which has no " +
+                    "refresh token. Authorize the Link again."
+        },
+        cause,
+    ) {
+
+        enum class Reason {
+
+            /** The access token's stated expiry has passed. Nothing was sent to the server. */
+            EXPIRED,
+
+            /** The server answered a 401 before the stated expiry, or no expiry was stated. */
+            REFUSED,
+        }
+    }
+
+    /**
      * The MCP server refused the credential with a 401 and a refresh did not
-     * change that: the refreshed credential was refused too, or there was no
-     * way to refresh it.
+     * change that: the refreshed credential was refused too, or the client was
+     * given no [McpCredentialRefresher] to refresh it with. A credential with
+     * no refresh token ends in [ReauthorizationRequired] instead.
      */
     class Rejected(
         override val linkId: LinkId,

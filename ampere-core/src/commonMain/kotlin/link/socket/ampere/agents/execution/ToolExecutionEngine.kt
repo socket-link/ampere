@@ -496,6 +496,17 @@ class ToolExecutionEngine(
      * [ToolEvent.ToolExecutionProgress] under [progress] (AMPR-495), so a harness's inner tool
      * calls reach the trace; the terminal status is still the only one the outcome is read
      * from.
+     *
+     * An [McpTool] reports no progress on this path (AMPR-515). An MCP connection can stream
+     * a call (`McpServerConnection.invokeToolStreaming`), and in this release that is for a
+     * caller that holds the plug's own client
+     * ([PlugContext.mcpClientFor][link.socket.ampere.plug.PlugContext.mcpClientFor]), not for a
+     * tool an agent dispatches: the arm below makes the plain call, which sends no progress
+     * token. Nothing on the agent side reads progress yet, and publishing it would put text a
+     * server wrote onto the bus once per tick, which wants its own decision about trust and
+     * volume. What the dispatch does inherit from the streaming work is the part that is
+     * about correctness rather than display: when it is cancelled, or the connection's time
+     * limit runs out, the server is told to stop instead of being left running.
      */
     private suspend fun dispatch(
         tool: Tool<*>,

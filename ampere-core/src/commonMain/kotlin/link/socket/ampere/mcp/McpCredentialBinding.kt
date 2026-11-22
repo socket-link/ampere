@@ -15,7 +15,8 @@ import link.socket.ampere.link.LinkId
  * takes to mint the next one (AMPR-464): the [refreshToken], the [oauthClient]
  * that presents it, and the [expiresAt] the access token was issued with.
  * Every OAuth field is optional and defaults to null, so a payload written
- * before they existed — `{"authToken":"…"}` — still decodes.
+ * before they existed — `{"authToken":"…"}` — still decodes. [grantedScope]
+ * and the two newer [McpOAuthClient] fields (AMPR-516) follow the same rule.
  *
  * The access token is derived output; the refresh token and the client are the
  * durable secrets. [McpCredentialRefresher] persists a rotated refresh token
@@ -29,7 +30,9 @@ import link.socket.ampere.link.LinkId
  * @property refreshToken Presented to [McpOAuthClient.tokenEndpoint] for the
  *   next access token. Null for a credential that cannot be refreshed.
  * @property expiresAt When [authToken] stops working, if the issuer said.
- * @property oauthClient The OAuth client the refresh token was issued to.
+ * @property oauthClient The OAuth client the tokens were issued to.
+ * @property grantedScope The scope the tokens were granted, as the server
+ *   stated it. Null when nobody recorded one. Not a secret.
  */
 @Serializable
 data class McpCredential(
@@ -37,6 +40,7 @@ data class McpCredential(
     val refreshToken: String? = null,
     val expiresAt: Instant? = null,
     val oauthClient: McpOAuthClient? = null,
+    val grantedScope: McpGrantedScope? = null,
 ) {
 
     /** Whether a refresh can mint a new [authToken]: it takes a refresh token and a client to present it. */
@@ -49,28 +53,60 @@ data class McpCredential(
         return now >= expiry - margin
     }
 
+    /**
+     * Whether [authToken] has stopped working at [now] with no refresh to
+     * replace it: only a new authorization brings the Link back.
+     */
+    fun needsReauthorization(now: Instant): Boolean =
+        authToken != null && !isRefreshable && expiresWithin(Duration.ZERO, now)
+
+    /**
+     * What this credential grants and when that stops, with no token in it:
+     * the value a host shows and compares with what it asked for.
+     */
+    val grant: McpGrant
+        get() = McpGrant(
+            scopes = grantedScope?.granted,
+            requestedScopes = grantedScope?.requested,
+            scopesStatedByServer = grantedScope?.statedByServer == true,
+            expiresAt = expiresAt,
+            renewable = isRefreshable,
+            revocable = oauthClient?.revocationEndpoint != null,
+        )
+
     override fun toString(): String =
         "McpCredential(authToken=${redacted(authToken)}, refreshToken=${redacted(refreshToken)}, " +
-            "expiresAt=$expiresAt, oauthClient=$oauthClient)"
+            "expiresAt=$expiresAt, oauthClient=$oauthClient, grantedScope=$grantedScope)"
 }
 
 /**
- * The OAuth 2.0 client a refresh token was issued to, and where to present it.
+ * The OAuth 2.0 client a Link's tokens were issued to, and where to present
+ * them. A client registered dynamically (RFC 7591) by [McpOAuthAuthorizer] is
+ * stored here exactly as one an operator supplied is.
  *
  * @property tokenEndpoint The issuer's token endpoint (RFC 6749 §3.2).
  * @property clientId The client identifier. Not a secret by the RFC, but it
  *   names an operator's app, so [toString] keeps it out of logs too.
  * @property clientSecret Null for a public client, e.g. one that used PKCE.
+ * @property revocationEndpoint The issuer's revocation endpoint (RFC 7009), or
+ *   null when it advertises none. Recorded at authorization so that letting the
+ *   credential go later, in another process, needs no second discovery.
+ * @property redirectUri The redirect URI the client was registered or used
+ *   with. A later authorization reuses the client only on the same one, since
+ *   an issuer may hold a registered client to its registered redirect URIs.
  */
 @Serializable
 data class McpOAuthClient(
     val tokenEndpoint: String,
     val clientId: String,
     val clientSecret: String? = null,
+    val revocationEndpoint: String? = null,
+    val redirectUri: String? = null,
 ) {
     override fun toString(): String =
         "McpOAuthClient(tokenEndpoint=$tokenEndpoint, clientId=${redacted(clientId)}, " +
-            "clientSecret=${redacted(clientSecret)})"
+            "clientSecret=${redacted(clientSecret)}, revocationEndpoint=$revocationEndpoint, " +
+            "redirectUri=$redirectUri)"
 }
 
 /** What a credential field's `toString` shows: whether it is set, never its value. */
